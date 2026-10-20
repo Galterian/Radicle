@@ -3,7 +3,7 @@
 // hashgraph envelopes, resolver, radicle lottery) runs in the peer processes.
 
 import { createRenderer } from './renderer.js';
-import { pixelToHex } from './hex.js';
+import { pixelToHex, hexDistance } from './hex.js';
 
 const PEER_URL = `ws://127.0.0.1:${new URL(location.href).searchParams.get('peer') || '7401'}/`;
 
@@ -17,6 +17,7 @@ const state = {
   entities: [],
   hand: [],
   queued: [],         // [] | [slotIndex] | ['EMPTY']
+  queuedIsAuto: true, // false once the player has deliberately picked a slot this planning phase
   willDiscard: new Set(),
   target: null,       // peer_id | {q,r} | null
   locked: false,
@@ -28,10 +29,24 @@ const state = {
 // "Save image…" because the stage is a canvas.
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-function logUI(text, kind = 'evt') {
+function logUI(text, kind = 'evt', opts = null) {
   const li = document.createElement('li');
-  li.textContent = text;
   li.className = kind;
+  if (opts?.link) {
+    // Build the row from a prefix + a clickable <a>. textContent-based
+    // construction keeps the user-supplied strings out of innerHTML and avoids
+    // injection even though both inputs here are server-generated.
+    li.appendChild(document.createTextNode(opts.prefix || ''));
+    const a = document.createElement('a');
+    a.href = opts.link;
+    a.textContent = opts.linkText || opts.link;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    li.appendChild(a);
+    if (opts.suffix) li.appendChild(document.createTextNode(opts.suffix));
+  } else {
+    li.textContent = text;
+  }
   const log = document.getElementById('log');
   log.prepend(li);
   while (log.children.length > 80) log.lastChild.remove();
@@ -94,6 +109,7 @@ function autoselectFirstHandCard() {
   const firstIdx = state.hand.findIndex(c => !!c);
   if (firstIdx >= 0) state.queued = [firstIdx];
   else state.queued = ['EMPTY'];
+  state.queuedIsAuto = true;
   send({ kind: 'queue', slots: state.queued });
 }
 
@@ -181,7 +197,10 @@ function connect() {
           logUI(`contact d=${c.distance}: ${c.a.name}[${c.a.action}] × ${c.b.name}[${c.b.action}]${veto}`, 'phase');
         }
       }
-      if (m.kind === 'radicle') logUI(`radicle push → ${m.commit.slice(0,10)} on ${m.branch}`, 'phase');
+      if (m.kind === 'radicle') {
+        const url = m.url || `/commit/${m.commit}`;
+        logUI('', 'phase', { prefix: 'radicle push → ', link: url, linkText: m.commit.slice(0,10), suffix: ` on ${m.branch}` });
+      }
     } catch (e) { console.error(e); }
   };
 }
@@ -209,6 +228,7 @@ function queueSlot(key) {
   } else {
     state.queued = [key];
   }
+  state.queuedIsAuto = false;
   send({ kind: 'queue', slots: state.queued });
   renderDeck();
 }
@@ -235,7 +255,6 @@ function wireInput() {
   });
 
   const canvas = document.getElementById('stage');
-  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   const renderer = createRenderer(canvas, {
     get entities() {
@@ -270,6 +289,36 @@ function wireInput() {
       logUI(`target → tile (${t.q},${t.r})`, 'phase');
     }
     send({ kind: 'target', target: state.target });
+  });
+
+  // Right-click on an adjacent empty tile = "just walk there." Overrides the
+  // queued pick only when it's unsafe-to-override absent: either the player
+  // left the auto-selected default alone, or they picked Attack but the tile
+  // is empty (so Attack would resolve into empty space anyway). Non-Attack
+  // deliberate picks (Block, Posture, Move onto a peer, etc.) are preserved.
+  canvas.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    if (state.phase !== 'planning' || state.locked) return;
+    const rect = canvas.getBoundingClientRect();
+    const t = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
+    if (!t) return;
+    const me = state.entities.find(p => p.peer_id === state.myPeerId);
+    if (!me || typeof me.tile_q !== 'number') return;
+    if (hexDistance({ q: me.tile_q, r: me.tile_r }, t) !== 1) return;
+    const occupied = state.entities.some(p => p.life > 0 && p.tile_q === t.q && p.tile_r === t.r);
+    if (occupied) return;
+    const q0 = state.queued[0];
+    const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
+    const isAttackQueued = queuedCode === 'A';
+    if (!isAttackQueued && !state.queuedIsAuto) return;
+    state.queued = ['EMPTY'];
+    state.queuedIsAuto = false;
+    state.target = { q: t.q, r: t.r };
+    state.ui.selectedTarget = t;
+    send({ kind: 'queue', slots: state.queued });
+    send({ kind: 'target', target: state.target });
+    logUI(`quick-walk → tile (${t.q},${t.r}) [EM]`, 'phase');
+    renderDeck();
   });
 
   // Phase timer tick (visual only — peers own real timing).

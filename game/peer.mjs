@@ -781,7 +781,13 @@ async function radicleLottery() {
       [`ActiveDimensions/${DIM_NAME}/doors/${DOOR_ID}.json`]: doorDoc,
       [`ActiveDimensions/${DIM_NAME}/rules_snapshot_commit`]: 'local-rules-snapshot',
     });
-    if (r.pushed) { console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch}`); broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch }); await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '' } }); }
+    if (r.pushed) {
+      const uiPort = process.env.UI_PORT || 7357;
+      const url = `http://127.0.0.1:${uiPort}/commit/${r.commit}`;
+      console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch} — ${url}`);
+      broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url });
+      await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '' } });
+    }
   } catch (e) { console.warn(`[${PEER_LABEL}] radicle push failed: ${e.message}`); }
 }
 setInterval(() => radicleLottery().catch(() => {}), RADICLE_PUSH_SEC * 1000);
