@@ -1,0 +1,842 @@
+{
+  "collection": "rules",
+  "notes": "Paper-rule numbering previously had duplicates (Rule 0 ×2, Rule 14 ×3). Both are now unified: rule_0_setup (Phase A deck + Phase B tileset) and rule_14 (Part A acquisition/trade + Part B life + Part C adjacency). No numbering collisions remain.",
+  "entries": [
+    {
+      "id": "rule_0_setup",
+      "name": "Rule 0 (Initial setup — tileset + character deck)",
+      "tags": [
+        "setup",
+        "tileset",
+        "deckbuild"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "superseded",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "Original paper text. Two separate Rule 0 paragraphs existed (tileset rule, character deck rule); Rule 25 was a third, later setup paragraph. Superseded by v1.1.0 which merges all three.",
+          "data": {
+            "number": "0",
+            "scope": "setup",
+            "text": "Rule 0 (Initial setup tileset rule): The standard 3x4 tileset from the deck of the effects, depose two cards face down in each field. Depose on each tile one creature or one skill card at random. Randomly depose two class cards over the tiles occupied by monsters.\n\nRule 0 (Initial setup character deck rule): For each player\n- Draw two character cards, choose one and discard the other (Your character card enters the tileset).\n- Deal 10 effect cards and 4 skill cards: You may put any of them in your deck and the rest in your archives.\n- Deal 2 class cards: discard one and put the other one initially on board over your face up archive column.\n- Draw as many Attack, Block / Move / Posture cards as you want to create a deck of minimum 15 cards.",
+            "cross_refs": [
+              "rule_1_actions_per_round",
+              "rule_10_draw",
+              "rule_11_archive",
+              "rule_25_tileset_initial_deploy"
+            ]
+          }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": "1.0.0",
+          "rebalance_links": [
+            "rule_25_tileset_initial_deploy"
+          ],
+          "vote_log": [],
+          "notes": "Folded Rule 25 into Phase A of this rule on 2026-10-19 per author decision; Rule 25 is now superseded. Author-written text used verbatim.",
+          "data": {
+            "number": "0",
+            "scope": "setup",
+            "text": "Rule 0 (Initial setup: tileset rule and character deck rule).\n\nTileset. Over a tile-set 3x4 (4x4 or 5x5, depending on the count of the players):\n- First distribute two effects on each tile as traps.\n- Then shuffle the monsters and skills cards in one pile and distribute at random one more card of them over each tile.\n- Finally each player may choose its starting entry point in order determined by the Will stat. Every next player cannot choose a location that is nearby any other non-ally player. Remember that you cannot choose an entry point that has a monster (green) card deposed already, and you still have to resolve the entry point traps.\nThen you choose on which trap to depose your character clockwise, starting with the character with the highest Will (the character is counted as a Move action, and you may play Instants during this action). The player puts his character on a tile at least two tiles away from the enemy. If you put your character on a monster-occupied tile, you are in immediate combat with it: apply the effects as traps and put them face up on that tile simulating the monster's hand.\n\nCharacter deck.\n- Draw two character cards, choose one and discard the other (your character card enters the tileset).\n- Deal 10 effect cards and 4 skill cards: you may put any of them in your deck and the rest in your archives.\n- Deal 2 class cards: discard one and put the other one initially on board over your face-up archive column.\n- Draw as many Attack / Block / Move / Posture cards as you want to create a deck of minimum 15 cards.",
+            "cross_refs": [
+              "rule_1_actions_per_round",
+              "rule_10_draw",
+              "rule_11_archive",
+              "rule_15_target_follow",
+              "rule_25_tileset_initial_deploy"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_1_actions_per_round",
+      "name": "Rule 1 (Action / Round)",
+      "tags": [
+        "turn-economy"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_7_turn_round_sequence",
+            "rule_6_empty_posture_move"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "1",
+            "scope": "turn-economy",
+            "text": "Each character has three actions (turns) per round chosen from Attack, Block, Move, Posture. Monsters have their own action count written on the card; monsters with four actions per round force the player to replace one action with Empty Posture. A player may decide which round to enter the Dimension tileset; permanents may be cast outside the dimension so their effects are ready on the entry tile.",
+            "cross_refs": [
+              "action_attack",
+              "action_block",
+              "action_move",
+              "action_posture",
+              "action_empty_posture"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_2_discover_tile",
+      "name": "Rule 2 (Discover tile)",
+      "tags": [
+        "tile",
+        "trap"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_4_traps",
+            "rule_3_monster"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "2",
+            "scope": "exploration",
+            "text": "Once a tile is Attacked or Moved towards, it turns face up and becomes 'open'. If there is a creature there, it awakens. If there are only effects there, the tile is a trap set with 20 power for each element used in the effects. All effects on the tile activate once as traps.",
+            "cross_refs": [
+              "rule_4_traps",
+              "rule_3_monster"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_3_monster",
+      "name": "Rule 3 (Monster behavior)",
+      "tags": [
+        "monster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_5_monster_dice"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "3",
+            "scope": "monster",
+            "text": "An awakened creature defends its tile and never leaves it. It attacks any character in contact. If there is an awakened creature on a tile, all effects there go into that defender's hand. All defenders use D6 randomized actions. Monsters regenerate if no enemy is in contact with them. The next enemy player controls the monster (the player after the one currently in contact).",
+            "cross_refs": [
+              "rule_5_monster_dice"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_4_traps",
+      "name": "Rule 4 (Traps)",
+      "tags": [
+        "trap"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_18_element_emit"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "4",
+            "scope": "trap",
+            "text": "To disable a trap, at some point all the effects on it must fail to kill you (you survive the damage) or fail to lock you (because of high stats). It is enough for one element of an effect not to work for the whole effect to fail. If a trap or monster kills or locks your character, you lose one time and may re-enter the Dimension once again fighting for a draw (Remi). All traps are resolved in one round.",
+            "cross_refs": [
+              "rule_18_element_emit"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_5_monster_dice",
+      "name": "Rule 5 (Monster D6 actions)",
+      "tags": [
+        "monster",
+        "dice"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "5",
+            "scope": "monster",
+            "text": "Each monster in contact with a character typically throws 4 D6 to determine its current action: green=Block, blue/white=Move, red=Attack, black=Posture. Some monsters have custom patterns (BAAPM, AAAM) and throw those D6 combinations each action. When the Posture score is highest, the monster may choose the proper effect from its hand and skips throwing dice until all the effect's elements are emitted.",
+            "cross_refs": [
+              "rule_3_monster"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_6_empty_posture_move",
+      "name": "Rule 6 (Empty Posture / Empty Move)",
+      "tags": [
+        "action",
+        "empty"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_8_card_declare_sequence"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "6",
+            "scope": "action-economy",
+            "text": "If the hero cannot or does not want to act, they play an empty action called Empty Posture. Empty Posture does not grant Posture's benefits (does not beat Move). Effects may still be made during Empty Posture. The Empty Posture card may alternatively be played as Empty Move (declared first). For combat calculations, the enemy chooses which empty-type to treat it as (Posture enemy picks Empty Move; Attack enemy picks Empty Posture). The Empty Posture card always returns to the hand after action evaluation.",
+            "cross_refs": [
+              "action_empty_posture",
+              "action_empty_move"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_7_turn_round_sequence",
+      "name": "Rule 7 (Turn / round sequence)",
+      "tags": [
+        "turn",
+        "simultaneous"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_1_actions_per_round",
+            "rule_8_card_declare_sequence"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "7",
+            "scope": "turn-structure",
+            "text": "Characters act simultaneously each turn (cards face-down). Sequence: (1) all characters/creatures in contact put their cards face down each turn; (2) cards flip face up and actions resolve — instants and skills may still be played before resolution; target is pointed out and damage is attempted. Characters/creatures in contact may play effects on their Posture or Empty Posture actions. After the final turn of a round, characters may discard remaining cards and draw up to five. Monsters do not discard. If an opponent has more actions per round than you, you may be forced to play Empty Posture (it cannot be converted to Empty Move when forced).",
+            "cross_refs": [
+              "rule_10_draw"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_8_card_declare_sequence",
+      "name": "Rule 8 (Card type declaration sequence)",
+      "tags": [
+        "declaration"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "8",
+            "scope": "declaration",
+            "text": "Each action within the round the player declares in order: (1) Empty Move (special way of playing Empty Posture — move halfway toward target, declared first); (2) turn up an action card (A/B/M/P/EP); (3) play Effects — effect declaration binds the current action to emit a specific element (first as ordered in effect description). There is NO stack — all skills and effects apply; if some effect/skill prohibits an action or emission it is applied finally as a replacement; (4) play skills / instants / class-card per-round abilities, OR point-buy an element/color to try to destroy a token.",
+            "cross_refs": [
+              "rule_17_skills"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_9_class_card",
+      "name": "Rule 9 (Class card)",
+      "tags": [
+        "class"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_24_destroy_permanent_token",
+            "rule_12_permanent_types"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "9",
+            "scope": "class",
+            "text": "You enter the dimension with your class card as a permanent. It is always cast with tokens of value 6 for each color. Some classes trigger once per round; some have a static always-on ability; some have a rechargeable ability that requires tapping the class card. To untap, emit each color of the class (count of elements of the same color is irrelevant). Untapping can span different rounds.",
+            "cross_refs": [
+              "rule_24_destroy_permanent_token"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_10_draw",
+      "name": "Rule 10 (Draw)",
+      "tags": [
+        "deck",
+        "draw"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_11_archive"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "10",
+            "scope": "deck",
+            "text": "Each round the hero draws cards until their hand reaches 5. Used cards go to the character's deck discard pile. If deck is empty, reshuffle the discard pile into deck. A player may choose not to reshuffle.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_11_archive",
+      "name": "Rule 11 (Archive)",
+      "tags": [
+        "deck",
+        "archive"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "11",
+            "scope": "deck",
+            "text": "A character may leave used cards in the archive instead of discarding (for deck refinement). Defeated monsters also go to the deck archive and may be used by effects like necromancy, summoning (substituting for a random library creature), possess, link — as outer-dimension allies. When the ally monster enters this dimension, it enters on your tile, moves with you, and acts as a player-managed monster for decision-making. You may always move an archived card to the discard pile.",
+            "cross_refs": [
+              "effect_summoning",
+              "effect_possess_phylactery",
+              "effect_resurrect_death_ward"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_12_permanent_types",
+      "name": "Rule 12 (Permanent types & tokens)",
+      "tags": [
+        "permanent",
+        "token"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_24_destroy_permanent_token"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "12",
+            "scope": "token",
+            "text": "Played cards go to the discard pile. A permanent-type card goes in front of the deck until destroyed; you must point-buy (roll dice summing ≤ your stat; place the highest die as a defense token with that color; you may repeat the roll if unhappy). Place over the permanent a small neutral die with value equal to the lowest color value. Tile token = big colored die placed to the right side of the tile (character card is a rectangle), set by point-buy, adds as a bonus to each creature on the tile. Permanent token = colored die positioned over a specific stat on the character card, applied as stat bonus. Stat penalty token = wooden die, same rule but placed below the stat number and subtracted.",
+            "cross_refs": [
+              "rule_24_destroy_permanent_token"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_13_evaluation",
+      "name": "Rule 13 (Evaluation)",
+      "tags": [
+        "resolution"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_21_effect_damage"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "13",
+            "scope": "resolution",
+            "text": "Each turn (from the round) you oppose your actions, effects and skills to evaluate benefits and damage. Effect evaluation happens after emitting or point-buying all the effect's elements. Combo evaluation happens when all actions of it are performed. For each turn/action the sum is rounded at mathematical principle (round-half-up at the nearest multiple of 10) and applied as damage — see Rule 21.",
+            "cross_refs": [
+              "rule_16_combo",
+              "rule_21_effect_damage"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_14",
+      "name": "Rule 14 (Acquisition / trade, Life, Adjacency)",
+      "tags": [
+        "loot",
+        "trade",
+        "life",
+        "token",
+        "geometry"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_11_archive",
+            "rule_21_effect_damage"
+          ],
+          "vote_log": [],
+          "notes": "Unified from the three prior Rule 14 entries (acquisition/trade, life, adjacency) on 2026-10-19 per author decision.",
+          "data": {
+            "number": "14",
+            "scope": "mixed",
+            "text": "Rule 14 covers three closely-related mechanics.\n\nPart A — Acquisition / trade. Acquiring effects/skills happens via conquering a field with an effect, or obtaining one from a defeated character's deck. Place the acquired card in discard or archive pile. You may spend an action to trade archives with an adjacent character if one of you moves towards the other. With an adjacent hero you may also discard your cards into their discard pile, or place a just-played card in their discard pile instead of your own.\n\nPart B — Life. Life of each creature/character = Σ Stats ÷ 10, rounded at mathematical principle (see Rule 21). All characters have Σ Stats = 40 → 4 life tokens. Monsters have varying Σ Stats (e.g. Dragon = 80 → 8 life tokens). Damage by effect is rounded at the same principle when the effect is cast. The total life token is a small neutral die, recalculated whenever damage is done or a new token of any kind of value ≥ 5 is added/updated over the tile or character.\n\nPart C — Adjacency. Characters can be attacked only by another character or creature in the 8 surrounding tiles (horizontal, vertical, diagonal).",
+            "cross_refs": [
+              "rule_11_archive",
+              "rule_21_effect_damage"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_15_target_follow",
+      "name": "Rule 15 (Target / follow)",
+      "tags": [
+        "targeting"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "15",
+            "scope": "targeting",
+            "text": "With every action the hero can target a field (Move) and/or an enemy (Attack/Move). Block does not target; it deals 1 damage to each enemy who attacked you. Empty Posture cannot perform targeting with effect or skill. If two characters target the same tile for a Move: only the one actually using Move moves there; on mirrored actions no one moves. Using Attack, you MAY follow (optional) the targeted hero if they move, as if performing a Move targeting the enemy's tile. You may also stay on your tile if you target the enemy/tile with Attack/Move (e.g. channeling an effect via point-buy).",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_16_combo",
+      "name": "Rule 16 (Combo)",
+      "tags": [
+        "combo"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "16",
+            "scope": "combo",
+            "text": "Each character has a special combo (sequence of trained actions in a specific order). If you complete your combo and have contact with an enemy, you deal +1 bonus damage. Damage applies only while in contact. Combos are announced on full execution. Combo structure: 1st → 2nd → 3rd → {4th}. Combos are on the character card. 'Adept' means the character uses a specific element with power 20. Characters have an a-priori combo but may find other combo cards during play.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_17_skills",
+      "name": "Rule 17 (Skills as instants)",
+      "tags": [
+        "skill"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "17",
+            "scope": "skill",
+            "text": "Skills may be played as instants (trick, bluff, intimidation, tripping, …) when a specified action is played, and may change the outcome. Multiple skills may be used over one action. Carefully pick the number of skills in the deck to avoid holding 5 skills with no action to play.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_18_element_emit",
+      "name": "Rule 18 (Element emit)",
+      "tags": [
+        "casting"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_21_effect_damage"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "18",
+            "scope": "casting",
+            "text": "Each effect comprises one or more elements. The caster emits each element with power equal to their Stat for that element. Enemy resists with their Stat. (Except point-buy effects, which cannot be resisted.) If any element's power ≤ enemy's stat power, the effect is not successful (enemy saves) or deals zero on that element.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_19_effect_cast",
+      "name": "Rule 19 (Effect cast — contiguous Postures)",
+      "tags": [
+        "casting"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "19",
+            "scope": "casting",
+            "text": "To cast, elements are emitted via contiguous Postures — one Posture emits one element in order. If the sequence is interrupted the cast fails. After casting, the effect goes to discard unless it is a Channeled or Permanent effect. Channeling may continue as long as the character stays on the same tile (uses environment to channel). Casting a permanent effect places it in front of the deck. Instant effects are the exception (see Rule 20). Postures must be contiguous — a two-element effect cannot be cast with Posture → Block → Posture.",
+            "cross_refs": [
+              "rule_20_effect_types"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_20_effect_types",
+      "name": "Rule 20 (Effect types)",
+      "tags": [
+        "casting",
+        "types"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "20",
+            "scope": "casting",
+            "text": "Effect types: Point-buy — damage done via point-buy rather than stat-emit comparison. Damage — summarized damage by stat comparison per element spent. Instant — castable with any action, not only Posture. Shield token — add point-buy as colorless die (rounded up) in the emitted color over the tile; acts as tile-based extra life, cumulative. Non-Damage / Instant effects — put a value-1 die in the emitted element color over the castable card until cast or the condition expires. Point-buy mechanic — roll dice summing ≤ stat, keep highest. Apply as defense token / stat penalty by color on permanent/character/tile, OR as damage if the effect is Damage type. If sum exceeds stat (fail), you can repeat next action as a contiguous action (slower casting). Channeling — continuously cast the same effect next turn(s), even next round, as temporary permanent with point-buy defense tokens. Goes to discard when you stop channeling or when the last defense token is destroyed. Stat buy — effects summarize points spent to emit elements until some total is reached across multiple rounds.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_21_effect_damage",
+      "name": "Rule 21 (Effect damage math)",
+      "tags": [
+        "math"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_13_evaluation",
+            "rule_14"
+          ],
+          "vote_log": [],
+          "notes": "'Rounded up at mathematical principle' = round-half-up at the nearest multiple of 10 (0.5→1, 0.4→0). Not ceiling.",
+          "data": {
+            "number": "21",
+            "scope": "math",
+            "text": "If the effect does Damage, the difference in Stats (yours − enemy's) per element equals the stat damage. The effect's Stat Damage is divided by 10 and rounded at mathematical principle (round-half-up), calculated each turn for completed effects when the defender has no tokens to destroy (defender chooses which token is destroyed). Example 1: fire delta 3 + water delta 2 = 5 points → rounded up to 10 → 1 damage. Example 2: instant effect does 2 points, then 2 more next action = 4 points → rounded down to 0 → 0 stat damage.",
+            "formula": "damage = round_half_up(sum_of_stat_deltas / 10)   // 0.5 rounds up, 0.4 rounds down",
+            "cross_refs": [
+              "rule_13_evaluation",
+              "rule_14"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_22_multicast",
+      "name": "Rule 22 (Multicast)",
+      "tags": [
+        "casting",
+        "combo"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_23_double_cast"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "22",
+            "scope": "casting",
+            "text": "Different effects can be cast simultaneously as long as they require the same elements. If two effects share a common element, the character casts in three steps: emit the first uncommon element + announce effect 1 → emit the shared element + announce effect 2 (effect 1 succeeds) → emit the second uncommon element (effect 2 succeeds). You may superimpose multiple effects with shared elements simultaneously, or chain them.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_23_double_cast",
+      "name": "Rule 23 (Double cast / ∀ bonus)",
+      "tags": [
+        "casting",
+        "double"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "23",
+            "scope": "casting",
+            "text": "Two effects with the same name may be cast together using multicast. In some doubled effects a special rule marked with the ∀ ('every') symbol applies — 'every' here means at least two.",
+            "cross_refs": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_24_destroy_permanent_token",
+      "name": "Rule 24 (Destroy permanent / token)",
+      "tags": [
+        "destroy"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_9_class_card",
+            "rule_12_permanent_types"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "number": "24",
+            "scope": "destroy",
+            "text": "Any permanent effect can be destroyed by point-buying one of its elements with a die ≥ the token's value. Any token can be destroyed by point-buy. You cannot target more than one permanent/token at once (unless you have an Aura permanent). You choose EITHER to emit an element OR target one permanent/token, but not both (unless you have Aura). Only the class card requires destroying all its colors (ignoring count-per-color) against value 6.",
+            "cross_refs": [
+              "effect_aura"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule_25_tileset_initial_deploy",
+      "name": "Rule 25 (Tile-set initial deploy) — SUPERSEDED",
+      "tags": [
+        "setup",
+        "superseded"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "superseded",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_0_setup"
+          ],
+          "vote_log": [],
+          "notes": "Folded into rule_0_setup v1.1.0 on 2026-10-19. The engine should ignore this entry; its content is now in rule_0_setup Tileset section.",
+          "data": {
+            "number": "25",
+            "scope": "setup",
+            "text": "[SUPERSEDED — see rule_0_setup v1.1.0] Over a 3x4 (or 4x4 / 5x5 by player count) tileset: distribute two effects face-down on each tile as traps; then shuffle monsters and skills together and distribute one more card over each tile; each player chooses their starting entry point in the order determined by Will stat; every subsequent player cannot pick a tile adjacent to a non-ally player. You cannot pick a tile that already has a (green) monster card. Entry-point traps still have to be resolved.",
+            "superseded_by": "rule_0_setup",
+            "cross_refs": [
+              "rule_0_setup"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,227 @@
+{
+  "collection": "sync_protocol",
+  "notes": "Machine-readable contract for the peer-to-peer Dimension sync model: hashgraph-style gossip between players who share map regions, once-per-turn sync inside a Dimension, and a once-per-interval Radicle git push as the only (decentralized) central point. Every entry is a VersionedEntry so the protocol parameters themselves are voteable.",
+  "entries": [
+    {
+      "id": "sync_region_tiers",
+      "name": "Region reference tiers (strong / reachable / far)",
+      "tags": ["p2p", "regions", "hashgraph"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_handshake_per_action", "sync_turn_commit", "rule_14"],
+          "vote_log": [],
+          "notes": "Derived from Rule 14 Part C (8-neighbour adjacency) and the author's region concept: players in strongly referenced regions share the same turn state and handshake every action; players that can reach each other within one real-time sync interval share the same map hashgraph to avoid collisions on first contact; far players sync once per turn or only at the Radicle push.",
+          "data": {
+            "tile_adjacency": "8-neighbour (horizontal, vertical, diagonal)",
+            "tiers": [
+              {
+                "tier": "strong",
+                "label": "Contact region",
+                "membership": "players/creatures whose tiles are adjacent or within strong_radius_tiles of each other, or that currently target each other (attack/move/follow)",
+                "strong_radius_tiles": 2,
+                "shared_state": ["turn_state", "face_down_declarations", "effect_tokens_on_tiles", "life_tokens", "traps_on_tiles"],
+                "sync_mode": "handshake_per_action",
+                "consensus": "every action is a signed hashgraph event; the action resolves only when all strong-region members have gossiped it (virtual voting, no leader)",
+                "failure_mode": "a member that does not answer the handshake within handshake_timeout_s is treated as playing Empty Posture for that action (rule_6) and marked lagging"
+              },
+              {
+                "tier": "reachable",
+                "label": "One-interval reach region",
+                "membership": "players that could enter each other's strong region before the next Radicle push (max move distance x actions x rounds per radicle_push_interval_s)",
+                "reach_formula": "reach_tiles = move_tiles_per_action(1) * actions_per_round(3) * rounds_per_interval",
+                "shared_state": ["map_tiles_revealed", "tile_owners", "permanents_on_tiles", "player_positions"],
+                "sync_mode": "turn_commit",
+                "consensus": "members exchange a signed TurnCommit at the end of each turn so that the shared map hashgraph is identical before any first contact",
+                "failure_mode": "missing commits are filled on first contact via hashgraph merge (see sync_divergence_merge)"
+              },
+              {
+                "tier": "far",
+                "label": "Unmet / distant region",
+                "membership": "everyone else inside the Dimension, including clans and new players that have never met",
+                "shared_state": ["dimension_descriptor", "turn_counter", "door_ids"],
+                "sync_mode": "radicle_push",
+                "consensus": "none in real time; the Radicle branch ActiveDimensions/<DimensionName>/ is the eventual rendezvous point",
+                "failure_mode": "state is allowed to diverge; divergence is reconciled on first contact or at the next push"
+              }
+            ],
+            "tier_promotion": "a far/reachable peer is promoted to strong as soon as a position event places it inside strong_radius_tiles; promotion triggers a full state handshake (sync_join_flow step adopt_hashgraph_part)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync_handshake_per_action",
+      "name": "Per-action handshake (strong regions)",
+      "tags": ["p2p", "handshake", "turn-state"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_7_turn_round_sequence", "rule_8_card_declare_sequence", "rule_13_evaluation", "battle_system_core"],
+          "vote_log": [],
+          "notes": "Mirrors the paper's simultaneous action rule (Rule 7) and the declaration sequence (Rule 8). Commit/reveal keeps face-down cards secret until everyone in the strong region has committed.",
+          "data": {
+            "phases": [
+              { "phase": 1, "name": "commit",   "payload": "hash(action_card + effects + skills + salt) per actor", "rule_ref": "rule_8_card_declare_sequence", "all_members_required": true },
+              { "phase": 2, "name": "reveal",   "payload": "the plaintext declaration + salt; peers verify the hash", "rule_ref": "rule_8_card_declare_sequence", "all_members_required": true },
+              { "phase": 3, "name": "instants", "payload": "optional Skills/instants/class abilities/point-buy responses, same commit-reveal in a mini-round", "rule_ref": "rule_17_skills", "all_members_required": false },
+              { "phase": 4, "name": "evaluate", "payload": "each peer runs the deterministic resolver (battle_system_core) locally and signs the resulting state hash", "rule_ref": "rule_13_evaluation", "all_members_required": true },
+              { "phase": 5, "name": "finalize", "payload": "action event is final when the state hashes of all members match; mismatch -> dispute (see sync_divergence_merge)", "rule_ref": null, "all_members_required": true }
+            ],
+            "handshake_timeout_s": 30,
+            "max_retries": 2,
+            "dice": "D6 rolls (Rule 5 monsters, point buy) are produced by combining every member's revealed salt: roll = 1 + (sha256(concat(salts) + roll_index) mod 6). No peer can bias the roll alone.",
+            "monster_control": "The monster's actions are generated by the peer that currently controls it per Rule 3, but the dice come from the shared salt so the result is verifiable by all.",
+            "transport_for_now": "plain JSON messages over the P2P channel (WebRTC data channel or Radicle node link); binary encoding is a later optimisation",
+            "message_envelope": {
+              "type": "string (one of the ids in hashgraph_events.json)",
+              "dimension_id": "string",
+              "door_id": "string",
+              "turn": "int", "round": "int", "action_index": "int (0..actions_per_round-1)",
+              "actor_peer_id": "string",
+              "self_parent": "hash of the actor's previous event",
+              "other_parent": "hash of the most recent event received from another peer",
+              "payload": "object (phase-specific)",
+              "timestamp": "ISO-8601",
+              "signature": "detached signature over the whole envelope minus signature"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync_turn_commit",
+      "name": "Once-per-turn sync (reachable regions / whole Dimension)",
+      "tags": ["p2p", "turn", "gossip"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_region_tiers", "rule_10_draw"],
+          "vote_log": [],
+          "notes": "Players who do not share a strong region do not need every action; they need the turn boundary so turn counters stay aligned and the map hashgraph stays mergeable.",
+          "data": {
+            "when": "after the last action of a turn is finalized in the player's strong region (or after Empty Posture when alone)",
+            "payload": {
+              "turn": "int",
+              "region_state_hash": "hash of the strong region's finalized state",
+              "map_delta": "list of tile changes since previous TurnCommit (revealed tiles, token changes, owner changes, new permanents)",
+              "positions": "{ peer_id: {x,y} } for the region's members",
+              "hashgraph_head": "hash of the latest finalized event"
+            },
+            "gossip_fanout": 3,
+            "gossip_ttl_hops": 6,
+            "turn_counter_rule": "a Dimension-wide turn is the max turn seen; peers that are behind receive the missing TurnCommits before acting (they cannot skip turns, see rule_6 for Empty Posture catch-up)",
+            "far_region_notification": "when a TurnCommit or Radicle poll reveals previously unknown map items (new clans, new DoorIds, long-distance permanents) the client raises the disturbance_in_the_force UI event and applies the delta to unrevealed tiles only"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync_radicle_push",
+      "name": "Interval Radicle push (the single decentralized rendezvous)",
+      "tags": ["radicle", "git", "interval"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_join_flow", "governance_branch_layout"],
+          "vote_log": [],
+          "notes": "The author's design: one random active player holding a DoorId pushes the merged DoorId.json every interval. Everyone else polls git. This is the only centralization point and it is itself a decentralized Radicle repo.",
+          "data": {
+            "radicle_push_interval_s": 3600,
+            "poll_interval_s": 300,
+            "branch": "ActiveDimensions/<DimensionName>",
+            "paths": {
+              "dimension_descriptor": "ActiveDimensions/<DimensionName>/dimension.json",
+              "door": "ActiveDimensions/<DimensionName>/doors/<DoorId>.json",
+              "rules_snapshot": "ActiveDimensions/<DimensionName>/rules_snapshot_commit (commit hash of data/ used by this session)"
+            },
+            "pusher_election": {
+              "method": "deterministic lottery among the active members of the DoorId's hashgraph: pusher = member with min( sha256(peer_id + hashgraph_head + interval_index) )",
+              "fallback": "if the elected pusher does not push within pusher_grace_s, the next-lowest hash pushes; duplicate pushes are harmless because the merge is additive",
+              "pusher_grace_s": 300
+            },
+            "commit_content": "doors/<DoorId>.json = { magnet_id, turn, hashgraph_head, members, map_summary (revealed tiles count, owned towers/crystals/mines), last_push_at } - see dimension_session.json for the exact shape",
+            "merge_policy": "git merge on the branch is additive: doors/ files from different clans never conflict (one file per DoorId); dimension.json conflicts resolve to the higher turn counter",
+            "git_poll_effect": "on poll, if a new/changed doors/<DoorId>.json is seen that is not in the local hashgraph, the client schedules a background reconciliation and raises disturbance_in_the_force"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync_join_flow",
+      "name": "Joining a Dimension (open / follow a friend / new location)",
+      "tags": ["join", "door", "magnet"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_0_setup", "rule_1_actions_per_round", "item_nexus", "item_dimension_door"],
+          "vote_log": [],
+          "notes": "The DoorId behaves like a magnet URI: it names a hashgraph head and the peers that hold it, not a server. Three ways in: open a new Dimension, join a friend/clan (adopt their hashgraph part), or appear at a brand-new location from an old push.",
+          "data": {
+            "door_id_format": "magnet:?xt=urn:dim:<DimensionName>&dn=<DoorLabel>&xs=<hashgraph_head_hash>&tr=rad:<RadicleRepoId>&pe=<peer_id>[&pe=<peer_id>...]",
+            "flows": [
+              {
+                "flow": "open_dimension",
+                "steps": [
+                  "generate DimensionName/Id and the initial tileset per rule_0_setup (size by expected player count)",
+                  "create the local hashgraph genesis event with rules_snapshot_commit",
+                  "publish ActiveDimensions/<DimensionName>/dimension.json + doors/<first DoorId>.json to Radicle (the opening players now own the Dimension)",
+                  "optionally register the DoorId in the Firebase directory for discovery only"
+                ]
+              },
+              {
+                "flow": "join_near_friend",
+                "steps": [
+                  "pick ActiveDimensions/<DimensionName>/doors/<DoorId> of the friend or clan",
+                  "connect to the pe= peers of the magnet and request the hashgraph part they hold (adopt_hashgraph_part)",
+                  "verify the chain from genesis to hashgraph_head against signatures and the rules snapshot",
+                  "enter on a free tile inside the friend's reachable region per rule_0_setup entry-point constraints (not adjacent to a non-ally; traps still resolve)",
+                  "become a holder of that DoorId; you may now be elected as its Radicle pusher"
+                ]
+              },
+              {
+                "flow": "join_new_location",
+                "steps": [
+                  "pick a DoorId whose last push is older than the current interval (state is known to be stale)",
+                  "allocate a fresh map region: extend the tileset by one block (same size as the initial tileset, rule_0_setup) adjacent to the existing bounds and seed it with traps/monsters/skills/classes per rule_0_setup",
+                  "mint a new DoorId for the new region with its own hashgraph branch rooted at the pushed head",
+                  "push doors/<newDoorId>.json immediately so active players learn about it on their next poll",
+                  "play on the stale snapshot; reconciliation with the live clan happens on first contact (sync_divergence_merge)"
+                ]
+              }
+            ],
+            "leave_dimension": "a LeaveEvent is gossiped; the character card stays on its tile as a map item until the next Radicle push records the departure",
+            "firebase_role": "discovery/coordination only: list of DimensionNames with their Radicle repo ids and last push time. Never game state."
+          }
+        }
+      ]
+    },
+    {
+      "id": "sync_divergence_merge",
+      "name": "Reconciling divergent map parts on first contact",
+      "tags": ["hashgraph", "merge", "conflict"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_region_tiers", "rule_2_discover_tile", "rule_24_destroy_permanent_token"],
+          "vote_log": [],
+          "notes": "Two clans that never met hold two hashgraph parts that may disagree about tiles neither has actually touched. Merge rules keep the game fair without a server.",
+          "data": {
+            "trigger": "a TurnCommit or position event places two peers from different hashgraph parts inside each other's reachable region, or a Radicle poll shows a new DoorId",
+            "algorithm": [
+              "exchange hashgraph heads and find the common ancestor (the Radicle push both parts descend from)",
+              "replay both event sets in consensus order (virtual voting timestamps: median of received-times across members)",
+              "tiles touched by only one part: take that part's state as-is",
+              "tiles touched by both parts: apply the deterministic resolver turn by turn in consensus order; tokens that cannot both exist (two owners of one tower) go to the earlier consensus timestamp, the later owner's cards return to their discard pile",
+              "hidden/unrevealed tiles: keep the seed from the Radicle genesis so both parts reveal identical traps/monsters (rule_2)",
+              "turn counters: the merged region adopts max(turn); the lagging part plays Empty Posture for the skipped actions (rule_6)",
+              "emit a MergeEvent signed by all strong-region members; the merged part becomes one DoorId holder set (old DoorIds remain as aliases)"
+            ],
+            "dispute": "if the resolver hashes differ at any step, the minority peers replay with the majority's events; a peer that still differs after max_retries is marked desynced and must rejoin via join_near_friend",
+            "cheat_resistance": "only signed events in a validated chain are replayed; a peer cannot introduce cards it never drew because draws (rule_10) are events with shared-salt randomness"
+          }
+        }
+      ]
+    }
+  ]
+}

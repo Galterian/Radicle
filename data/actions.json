@@ -1,0 +1,125 @@
+{
+  "collection": "actions",
+  "entries": [
+    {
+      "id": "action_attack",
+      "name": "Attack",
+      "tags": ["basic"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["action_block", "action_posture", "action_move"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "A", "text": "Aggression in all forms toward its goal. Dimensions does not track weapon type; attack skills specify weapon uniqueness.", "rps_wins_against": ["P"], "rps_loses_against": ["B"], "can_cast_non_instant_effects": false, "targets_enemy": true, "targets_tile": false }
+      }]
+    },
+    {
+      "id": "action_block",
+      "name": "Block",
+      "tags": ["basic"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["action_attack", "action_move"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "B", "text": "Any defensive action. Deals 1 damage to each enemy who attacked you. Does not target.", "rps_wins_against": ["A"], "rps_loses_against": ["M"], "can_cast_non_instant_effects": false, "targets_enemy": false, "targets_tile": false }
+      }]
+    },
+    {
+      "id": "action_move",
+      "name": "Move",
+      "tags": ["basic"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["action_block", "action_posture"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "M", "text": "Body movement and / or movement on the tileset. One tile per Move. Move skills describe maneuver or body interaction.", "rps_wins_against": ["B"], "rps_loses_against": ["P"], "can_cast_non_instant_effects": false, "targets_enemy": true, "targets_tile": true }
+      }]
+    },
+    {
+      "id": "action_posture",
+      "name": "Posture",
+      "tags": ["basic", "casting"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["action_move", "action_attack"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "P", "text": "Mental states, waiting / skill / effect / aiming. Only during Posture can non-instant effects be made. Posture skills impact enemy mentally.", "rps_wins_against": ["M"], "rps_loses_against": ["A"], "can_cast_non_instant_effects": true, "targets_enemy": false, "targets_tile": false }
+      }]
+    },
+    {
+      "id": "action_empty_posture",
+      "name": "Empty Posture",
+      "tags": ["basic", "empty"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["action_empty_move"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "EP", "text": "No action card played; can still cast effects. Doesn't gain Posture's benefits. Can be converted to Empty Move (declared first). Always returns to hand after resolution.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": true, "targets_enemy": false, "targets_tile": false }
+      }]
+    },
+    {
+      "id": "action_empty_move",
+      "name": "Empty Move",
+      "tags": ["basic", "empty"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["action_empty_posture"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "EM", "text": "Special way of playing Empty Posture; declared first; moves character halfway toward target tile.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": true, "targets_enemy": false, "targets_tile": true }
+      }]
+    },
+    {
+      "id": "action_combo",
+      "name": "Combo (meta)",
+      "tags": ["meta"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": [],
+        "vote_log": [], "notes": "",
+        "data": { "code": "COMBO", "text": "Character-card-defined sequence; completing it with enemy contact grants +1 bonus damage.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": false }
+      }]
+    },
+    {
+      "id": "action_trade",
+      "name": "Trade (meta)",
+      "tags": ["meta"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["rule_14"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "TRADE", "text": "Spend an action to swap archives with an adjacent character moving toward you.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": false }
+      }]
+    },
+    {
+      "id": "action_enter_dimension",
+      "name": "Enter Dimension (meta)",
+      "tags": ["meta", "transition"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["rule_0_setup"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "ENTER", "text": "Drop onto starting tile; counts as a Move action; Instants may be cast during entry.", "rps_wins_against": [], "rps_loses_against": [] }
+      }]
+    },
+    {
+      "id": "action_travel_door",
+      "name": "Travel through Dimension Door (meta)",
+      "tags": ["meta", "transition"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["item_dimension_door"],
+        "vote_log": [], "notes": "",
+        "data": { "code": "DOOR", "text": "Immediate with ally agreement; otherwise channel 'dimension value' rounds to open.", "rps_wins_against": [], "rps_loses_against": [] }
+      }]
+    }
+  ]
+}

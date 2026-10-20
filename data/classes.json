@@ -1,0 +1,1158 @@
+{
+    "collection": "classes",
+    "entries": [
+        {
+            "id": "class_weapon_master",
+            "name": "Weapon master",
+            "tags": [
+                "warrior"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "once_per_round",
+                        "colors": [
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_concentration"
+                        ],
+                        "text": "You draw an extra card."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_warrior",
+                        "class_kensei"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_animator",
+            "name": "Animator",
+            "tags": [
+                "trap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_souls",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "You may move a nearby trap card to your or nearby location as a trap."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_ranger",
+                        "class_alchemist"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_druid",
+            "name": "Druid",
+            "tags": [
+                "nature"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_water",
+                            "elem_earth"
+                        ],
+                        "text": "Point buy: put a point-buy defense token over this location for any color."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_healer",
+                        "class_shaman"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_enchanter",
+            "name": "Enchanter",
+            "tags": [
+                "caster"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "once_per_round",
+                        "colors": [
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_time",
+                            "elem_space"
+                        ],
+                        "text": "Emit an element during your non-Posture action."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_elementalist"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_elementalist",
+            "name": "Elementalist",
+            "tags": [
+                "caster"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_harmony"
+                        ],
+                        "text": "Each time you emit an element you may take an element token and add it to effects as point-buy damage."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_enchanter",
+                        "class_transmuter"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_transmuter",
+            "name": "Transmuter",
+            "tags": [
+                "caster",
+                "support"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "You may cast the effect of a nearby ally or provide such castable by nearby players."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_bard"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_alchemist",
+            "name": "Alchemist",
+            "tags": [
+                "trap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Draw an effect card from the Library, look at it, depose it to your or nearby location as a trap."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_animator",
+                        "class_ranger"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_summoner",
+            "name": "Summoner",
+            "tags": [
+                "summon"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_time",
+                            "elem_space",
+                            "elem_souls",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Stat buy (channeling) in all character colors. Summon a creature from the Library at this location as an ally. On removal: creatures go to your archive."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_summoning",
+                        "class_necromancer"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_illusionist",
+            "name": "Illusionist",
+            "tags": [
+                "support"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_air",
+                            "elem_space",
+                            "elem_concentration"
+                        ],
+                        "text": "Ignore one damage done to nearby creatures and yourself this action."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_invisibility"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_healer",
+            "name": "Healer",
+            "tags": [
+                "support"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_water"
+                        ],
+                        "text": "Restore one life token to a nearby creature or yourself."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_noble",
+                        "class_druid"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_priest",
+            "name": "Priest",
+            "tags": [
+                "control"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_harmony",
+                            "elem_concentration"
+                        ],
+                        "text": "Target nearby player discards a card chosen by you (Instants have priority)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_witch"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_prophet",
+            "name": "Prophet",
+            "tags": [
+                "scout"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_time",
+                            "elem_space",
+                            "elem_souls",
+                            "elem_harmony",
+                            "elem_concentration"
+                        ],
+                        "text": "Look at the top five cards of a nearby target player's deck."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_seeker",
+                        "effect_vision"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_seeker",
+            "name": "Seeker",
+            "tags": [
+                "scout"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_time",
+                            "elem_space",
+                            "elem_souls",
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire"
+                        ],
+                        "text": "Choose a non-action card from your hand; reveal where this card is located in this Dimension. If it exists in Dimension Library, place it on top of an unknown location as a trap."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_prophet"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_paladin",
+            "name": "Paladin",
+            "tags": [
+                "recovery"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_water"
+                        ],
+                        "text": "Return an action card from your deck discard pile to your hand."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_shaman",
+                        "class_kensei"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_cleric",
+            "name": "Cleric",
+            "tags": [
+                "anti-trap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_time",
+                            "elem_space",
+                            "elem_souls"
+                        ],
+                        "text": "Disable a nearby trap (becomes revealed/disabled). If character/monster is on that tile, put it in their discard pile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_invisibility"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_guardian",
+            "name": "Guardian",
+            "tags": [
+                "sustain"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_harmony"
+                        ],
+                        "text": "When you stay on one tile for a whole round, restore one life token."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_overlord"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_manipulator",
+            "name": "Manipulator",
+            "tags": [
+                "control"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "once_per_round",
+                        "colors": [
+                            "elem_souls",
+                            "elem_air",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Force a player to act as a monster: draw a random Action card from their hand (not deck for monsters) and force them to use it."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_witch",
+                        "class_priest"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_bard",
+            "name": "Bard",
+            "tags": [
+                "support"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_time",
+                            "elem_space",
+                            "elem_souls",
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire",
+                            "elem_harmony"
+                        ],
+                        "text": "When you use a skill, any player around uses it if possible."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_transmuter"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_shaman",
+            "name": "Shaman",
+            "tags": [
+                "recovery"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire"
+                        ],
+                        "text": "Return an effect card from your deck discard pile to your hand."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_paladin",
+                        "class_kensei"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_necromancer",
+            "name": "Necromancer",
+            "tags": [
+                "summon"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "text": "Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_summoner",
+                        "effect_resurrect_death_ward"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_witch",
+            "name": "Witch",
+            "tags": [
+                "control"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_air",
+                            "elem_water"
+                        ],
+                        "text": "Target nearby player puts up to three cards from hand to discard pile; you choose by color."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_priest",
+                        "class_manipulator"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_restaurateur",
+            "name": "Restaurateur",
+            "tags": [
+                "utility"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_space",
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire"
+                        ],
+                        "text": "Instead of destroying tokens you may put them under your control on the same tile or over your permanent (as replacement if applicable)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_warrior",
+            "name": "Warrior",
+            "tags": [
+                "warrior"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_air",
+                            "elem_water",
+                            "elem_earth",
+                            "elem_fire"
+                        ],
+                        "text": "You may relocate a nearby player or yourself one tile around at end of round."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_weapon_master",
+                        "class_barbarian"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_ranger",
+            "name": "Ranger",
+            "tags": [
+                "trap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_space",
+                            "elem_earth"
+                        ],
+                        "text": "Put any effect from your hand as a trap on your location."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_animator",
+                        "class_alchemist"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_kensei",
+            "name": "Kensei",
+            "tags": [
+                "recovery"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Return a skill card from your deck discard pile to your hand."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_paladin",
+                        "class_shaman"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_reaver",
+            "name": "Reaver",
+            "tags": [
+                "warrior"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "text": "Your Empty Posture is treated as an Attack action. You may emit elements during your Attack."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_barbarian",
+                        "class_monk"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_barbarian",
+            "name": "Barbarian",
+            "tags": [
+                "warrior"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_fire"
+                        ],
+                        "text": "Your Empty Posture is treated as a Block action. You may emit elements during your Block."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_reaver",
+                        "class_monk"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_overlord",
+            "name": "Overlord",
+            "tags": [
+                "support"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_space",
+                            "elem_souls",
+                            "elem_earth",
+                            "elem_harmony"
+                        ],
+                        "text": "A nearby ally or yourself gains +1 life token (armor bonus, non-cumulative but reusable once lost)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_guardian"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_rogue",
+            "name": "Rogue",
+            "tags": [
+                "stealth"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "tap",
+                        "colors": [
+                            "elem_space",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Once per round your Move does not trigger any trap; stepping over unrevealed tile doesn't reveal and monsters don't wake."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_assassin",
+                        "class_cleric"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_avenger",
+            "name": "Avenger",
+            "tags": [
+                "info"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_fire",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Reveal two of nearby enemy's cards in hand (you may identify skills/action/effect cards by card backs)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_prophet",
+                        "class_seeker"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_monk",
+            "name": "Monk",
+            "tags": [
+                "mobility"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_time",
+                            "elem_space",
+                            "elem_souls",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_reaver",
+                        "class_barbarian"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_noble",
+            "name": "Noble",
+            "tags": [
+                "sustain"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_water",
+                            "elem_harmony"
+                        ],
+                        "text": "When you deal combat damage, you heal the same amount."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_healer"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "class_assassin",
+            "name": "Assassin",
+            "tags": [
+                "damage"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "ability_kind": "static",
+                        "colors": [
+                            "elem_time",
+                            "elem_space",
+                            "elem_fire",
+                            "elem_concentration",
+                            "elem_harmony"
+                        ],
+                        "text": "If you have dealt combat damage this round, you deal +1 extra damage."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "class_rogue"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [
+                    ],
+                    "weight": 1.0
+                }
+            ]
+        }
+    ],
+    "notes": "Class cards enter as permanents with tokens of value 6 per color. Destroy cost = point-buy ALL listed colors (count-per-color irrelevant) against value 6. ability_kind ∈ { once_per_round | static | tap }. Untap by emitting each listed color once."
+}
