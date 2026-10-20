@@ -225,8 +225,8 @@ if (entity.kind === 'character') {
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
 const hand = []; while (hand.length < 5 && deck.length) hand.push(deck.shift());
 const discard = [];
-let queued = [];           // slot indices
-let target = null;         // other peer_id
+let queued = [];           // one element: slot index (int) | 'EP' | 'EM'
+let target = null;         // peer_id string | { q, r } tile object | null
 let locked = false;
 
 // -------- hashgraph state --------
@@ -380,16 +380,34 @@ async function enterPhase(name) {
   if (name === 'cleanup')     await doCleanup();
 }
 
+function targetTag(t) {
+  if (typeof t === 'string') return t;
+  if (t && typeof t === 'object' && 'q' in t && 'r' in t) return `tile:${t.q},${t.r}`;
+  return '';
+}
+
+function wrapTarget(t) {
+  if (typeof t === 'string') return { kind: 'character', ref: t };
+  if (t && typeof t === 'object' && 'q' in t && 'r' in t) return { kind: 'tile', ref: { q: t.q, r: t.r } };
+  return null;
+}
+
 async function doPlanningEnd() {
   // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
   if (ALLIANCE !== 'player') await npcPlan();
 
-  // Produce a face-down commitment and broadcast evt_action_commit.
-  const slot = queued[0];
-  const card = slot != null ? hand[slot] : null;
-  const code = card ? card.code : 'EP';
+  // Decode the single queued pick. The queue can hold either a hand slot index
+  // or one of the Empty-type markers 'EP' / 'EM'. Nothing picked → Empty Posture
+  // default (rule 6 fallback).
+  const q0 = queued[0];
+  let card = null;
+  let code = 'EP';
+  if (q0 === 'EP') code = 'EP';
+  else if (q0 === 'EM') code = 'EM';
+  else if (typeof q0 === 'number' && hand[q0]) { card = hand[q0]; code = card.code; }
+
   myLastSalt = randomBytes(12).toString('hex');
-  const commitHash = sha256Hex(`${code}::${target || ''}::${myLastSalt}`);
+  const commitHash = sha256Hex(`${code}::${targetTag(target)}::${myLastSalt}`);
   myLastReveal = { code, target, salt: myLastSalt, cardId: card ? card.card_id : null };
   await emitEnvelope({
     type: 'evt_action_commit',
@@ -404,7 +422,7 @@ async function doReveal() {
     payload: {
       action: myLastReveal.code,
       effects: [], skills: [], class_ability_tapped: false,
-      target: target ? { kind: 'character', ref: target } : null,
+      target: wrapTarget(myLastReveal.target),
       combo_step: null,
       salt: myLastReveal.salt,
     },
@@ -421,48 +439,68 @@ async function doResolution() {
   const edgeMap = {};
   for (const e of edges) (edgeMap[e.actor] ||= {})[e.defender] = e.bonus_damage_to_actor;
 
-  const participants = [...peersPublic.values()].filter(p => p && p.life > 0);
   const revealsThisTurn = [];
-  // Pull reveals for this turn out of the tape.
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn) continue;
-    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target?.ref || null });
+    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null });
   }
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
-    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: myLastReveal.target });
+    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target) });
   }
 
-  // Movement intents.
+  // Resolve a target object into the tile the target occupies / points at. A
+  // character target reads the peer's current public tile; a tile target is
+  // just a {q, r}.
+  const tileOf = (targ) => {
+    if (!targ) return null;
+    if (targ.kind === 'tile' && targ.ref) return { q: targ.ref.q, r: targ.ref.r };
+    if (targ.kind === 'character' && targ.ref) {
+      const p = peersPublic.get(targ.ref);
+      return p ? { q: p.tile_q, r: p.tile_r } : null;
+    }
+    return null;
+  };
+
+  // Movement intents. Move/Empty-Move step one tile toward the target tile.
+  // Supports both character targets (step toward the peer) and tile targets
+  // (step toward a bare hex) — the latter is what empty-tile clicks produce.
   const nextTiles = new Map();
   for (const r of revealsThisTurn) {
-    if (r.action !== 'M' || !r.target) continue;
-    const actor = peersPublic.get(r.actor); const tgt = peersPublic.get(r.target);
-    if (!actor || !tgt) continue;
-    const next = stepToward({ q: actor.tile_q, r: actor.tile_r }, { tile_q: tgt.tile_q, tile_r: tgt.tile_r });
+    if (r.action !== 'M' && r.action !== 'EM') continue;
+    const actor = peersPublic.get(r.actor);
+    if (!actor) continue;
+    const tgtT = tileOf(r.target);
+    if (!tgtT) continue;
+    const next = stepToward({ q: actor.tile_q, r: actor.tile_r }, { tile_q: tgtT.q, tile_r: tgtT.r });
     nextTiles.set(r.actor, next);
   }
 
-  // Damage pass.
+  // Damage pass. Attack still requires a character target so there's a
+  // defender to score damage against; tile-target Attacks are no-ops.
   const damage = new Map();
   for (const r of revealsThisTurn) {
-    if (r.action === 'A' && r.target) {
-      const atk = peersPublic.get(r.actor), def = peersPublic.get(r.target);
+    if (r.action === 'A') {
+      const defId = r.target?.kind === 'character' ? r.target.ref : null;
+      if (!defId) continue;
+      const atk = peersPublic.get(r.actor), def = peersPublic.get(defId);
       if (!atk || !def) continue;
       const atkPost = nextTiles.get(r.actor) ? { tile_q: nextTiles.get(r.actor).q, tile_r: nextTiles.get(r.actor).r } : atk;
-      const defPost = nextTiles.get(r.target) ? { tile_q: nextTiles.get(r.target).q, tile_r: nextTiles.get(r.target).r } : def;
+      const defPost = nextTiles.get(defId)  ? { tile_q: nextTiles.get(defId).q,  tile_r: nextTiles.get(defId).r  } : def;
       if (hexDistance(atkPost, defPost) > 1) continue;
-      const defReveal = revealsThisTurn.find(x => x.actor === r.target);
+      const defReveal = revealsThisTurn.find(x => x.actor === defId);
       let defCode = defReveal?.action || 'EP';
-      if (defCode === 'EP') defCode = { A: 'P', P: 'M', M: 'EP', B: 'EP' }[r.action] || defCode;
-      if (defCode === 'EM') defCode = { A: 'EM', P: 'EM', M: 'EM', B: 'M' }[r.action] || defCode;
+      if (defCode === 'EP') defCode = { A: 'P',  P: 'M',  M: 'EP', B: 'EP' }[r.action] || defCode;
+      if (defCode === 'EM') defCode = { A: 'EM', P: 'EM', M: 'EM', B: 'M'  }[r.action] || defCode;
       const bonus = edgeMap[r.action]?.[defCode] ?? 0;
       const dmg = Math.max(0, 1 + bonus);
-      damage.set(r.target, (damage.get(r.target) || 0) + dmg);
+      damage.set(defId, (damage.get(defId) || 0) + dmg);
     }
     if (r.action === 'B') {
       for (const q of revealsThisTurn) {
-        if (q.action === 'A' && q.target === r.actor) damage.set(q.actor, (damage.get(q.actor) || 0) + 1);
+        if (q.action === 'A' && q.target?.kind === 'character' && q.target.ref === r.actor) {
+          damage.set(q.actor, (damage.get(q.actor) || 0) + 1);
+        }
       }
     }
   }
@@ -472,6 +510,9 @@ async function doResolution() {
   if (myMove) entity.tile = myMove;
   const myDmg = damage.get(PEER_ID_STRING) || 0;
   if (myDmg) entity.life = Math.max(0, entity.life - myDmg);
+  // Publish immediately so the browser UI sees damage / movement at reveal
+  // time, not only after cleanup fires a few seconds later.
+  if (myMove || myDmg) await publishPublicState();
 
   // Deterministic state hash over the whole region (every peer must compute the same).
   const regionState = [...peersPublic.values()]
@@ -607,10 +648,23 @@ wss.on('connection', (ws) => {
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
-      if (m.kind === 'queue')  { if (!locked) queued = m.slots.filter(i => i >= 0 && i < hand.length); broadcastUI({ kind: 'hand', hand, queued }); }
-      if (m.kind === 'target') { target = m.target; }
-      if (m.kind === 'lock')   { locked = true; }
-      if (m.kind === 'emptyPosture') { queued = []; }
+      if (m.kind === 'queue') {
+        if (locked) return;
+        // Rule 1 + Rule 7: one action card per turn. Accept at most one slot;
+        // either a valid hand index or the Empty-type marker 'EP' / 'EM'.
+        const picks = (m.slots || []).slice(0, 1).filter(s =>
+          s === 'EP' || s === 'EM' || (typeof s === 'number' && s >= 0 && s < hand.length)
+        );
+        queued = picks;
+        broadcastUI({ kind: 'hand', hand, queued });
+      }
+      if (m.kind === 'target') {
+        const t = m.target;
+        if (typeof t === 'string') target = t;
+        else if (t && typeof t === 'object' && typeof t.q === 'number' && typeof t.r === 'number') target = { q: t.q, r: t.r };
+        else target = null;
+      }
+      if (m.kind === 'lock') { locked = true; }
     } catch {}
   });
   ws.on('close', () => uiClients.delete(ws));
