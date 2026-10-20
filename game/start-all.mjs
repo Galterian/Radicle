@@ -1,33 +1,39 @@
-// Launches discovery + ui-server + 4 peers. Each peer is a real Node process with
-// its own libp2p mesh node, GunDB relay, and hashgraph tape. The browser UI talks
-// to peer-player-1 (which is also the human-controlled entity).
+// Thin bootstrapper. Spawns discovery + ui-server so the browser can take over.
+// The user picks "host a new Dimension" or "join an existing one" from the
+// launcher page served by ui-server.mjs at http://127.0.0.1:7357 — ui-server
+// then spawns the peer processes on demand.
+//
+// Flags: --list    print published dimensions and exit (for scripts)
 
 import { spawn } from 'node:child_process';
-import { ensureBare, RADICLE_BARE } from './radicle-adapter.mjs';
+import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+import { ensureBare, listPublishedDimensions, radicleEnv, RADICLE_BARE } from './radicle-adapter.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const argv = process.argv.slice(2);
 
 await ensureBare();
 console.log(`[launcher] radicle bare repo ready at ${RADICLE_BARE}`);
 
-const DIM_NAME = 'Ashfall-Micro';
-const DIM_ID   = 'dim-ashfall-micro';
-const DOOR_ID  = 'door-primary';
+if (argv.includes('--list')) {
+  if (!radicleEnv.enabled) { console.error(`[launcher] cannot fetch published dimensions: ${radicleEnv.reason}`); process.exit(1); }
+  try {
+    const items = await listPublishedDimensions();
+    if (!items.length) console.log('(no ActiveDimensions/* branches published yet)');
+    const ageMin = (iso) => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 60000));
+    for (const d of items) for (const door of d.doors) console.log(`  ${d.dimension_name} / ${door.door_id}  (push ${ageMin(door.last_push?.at)} min ago)`);
+  } catch (e) { console.error(`[launcher] ${e.message}`); process.exit(1); }
+  process.exit(0);
+}
 
-// Set PEER_PUBLIC_IP (e.g. your Tailscale 100.x address) to let players on
-// other machines join via `node game/join.mjs`. Unset = loopback-only demo.
 const PEER_PUBLIC_IP = process.env.PEER_PUBLIC_IP || '';
 const netEnv = PEER_PUBLIC_IP
   ? { PEER_PUBLIC_IP, BIND_HOST: '0.0.0.0', PUBLIC_DISCOVERY_URL: `http://${PEER_PUBLIC_IP}:7350` }
   : {};
 console.log(`[launcher] network: ${PEER_PUBLIC_IP ? `public at ${PEER_PUBLIC_IP}` : 'loopback only (set PEER_PUBLIC_IP to allow remote joiners)'}`);
-
-// Peer specs — one per entity. Each peer owns its own ports and GunDB relay URL.
-const peers = [
-  { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 }, libp2p: 7410, http: 7401, gun: 7501 },
-  { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 }, libp2p: 7411, http: 7402, gun: 7502 },
-  { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, libp2p: 7412, http: 7403, gun: 7503 },
-  { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, libp2p: 7413, http: 7404, gun: 7504 },
-];
 
 const children = [];
 function run(name, cmd, args, extraEnv = {}) {
@@ -37,40 +43,17 @@ function run(name, cmd, args, extraEnv = {}) {
     windowsHide: true,
   });
   child._name = name;
-  child.stdout.on('data', (b) => process.stdout.write(`${b}`));
-  child.stderr.on('data', (b) => process.stderr.write(`${b}`));
-  child.on('exit', (code) => console.log(`[launcher] ${name} exited (${code})`));
+  child.stdout.on('data', b => process.stdout.write(b));
+  child.stderr.on('data', b => process.stderr.write(b));
+  child.on('exit', c => console.log(`[launcher] ${name} exited (${c})`));
   children.push(child);
+  return child;
 }
 
-run('discovery', 'node', ['discovery.mjs'], netEnv);
-run('ui',        'node', ['ui-server.mjs']);
+run('discovery', 'node', [path.join(__dirname, 'discovery.mjs')], netEnv);
+// LAUNCHER_MODE tells ui-server.mjs to enable /api/dimensions and /api/launch
+// and to spawn peer processes on demand when the browser POSTs a choice.
+run('ui',        'node', [path.join(__dirname, 'ui-server.mjs')], { LAUNCHER_MODE: '1', ...netEnv });
 
-// Give discovery a head start, then spawn peers with cross-pointing Gun peer URLs.
-await new Promise(r => setTimeout(r, 1500));
-
-const allGunUrls = peers.map(p => `http://127.0.0.1:${p.gun}/gun`);
-for (const p of peers) {
-  const others = allGunUrls.filter(u => !u.includes(`:${p.gun}/`));
-  run(`peer:${p.label}`, 'node', ['peer.mjs'], {
-    PEER_LABEL:        p.label,
-    ALLIANCE:          p.alliance,
-    ENTITY_NAME:       p.name,
-    CHARACTER_ID:      p.character,
-    CREATURE_ID:       p.creature,
-    START_TILE:        JSON.stringify(p.tile),
-    PEER_PORT_LIBP2P:  String(p.libp2p),
-    PEER_PORT_HTTP:    String(p.http),
-    PEER_PORT_GUN:     String(p.gun),
-    DIM_NAME, DIM_ID, DOOR_ID,
-    PEER_GUN_URLS:     others.join(','),
-    RADICLE_PUSH_SEC:  '60',
-    ...netEnv,
-  });
-  // Stagger so libp2p ports don't race.
-  await new Promise(r => setTimeout(r, 800));
-}
-
-console.log('[launcher] all processes up. UI → http://127.0.0.1:7357');
-
+console.log('[launcher] open http://127.0.0.1:7357 to choose a dimension');
 process.on('SIGINT', () => { for (const c of children) try { c.kill('SIGINT'); } catch {}; process.exit(0); });
