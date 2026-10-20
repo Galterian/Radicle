@@ -16,6 +16,7 @@
 import express from 'express';
 
 const PORT = Number(process.env.DISCOVERY_PORT || 7350);
+const BIND_HOST = process.env.BIND_HOST || '127.0.0.1';
 const DIMENSIONS = new Map();  // dimension_id -> { dimension_name, created_at, peers: Map(peer_id -> entry), reveals: Map(turn -> Map(peer_id -> reveal)) }
 const STALE_MS = 2 * 60 * 1000;
 
@@ -109,6 +110,6 @@ app.get('/peers/:dim', (req, res) => {
   res.json({ ok: true, dimension_name: dim.dimension_name, peers });
 });
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[discovery] firebase-stub directory  → http://127.0.0.1:${PORT}`);
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`[discovery] firebase-stub directory  → http://${BIND_HOST}:${PORT}`);
 });

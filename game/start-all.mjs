@@ -13,6 +13,14 @@ const DIM_NAME = 'Ashfall-Micro';
 const DIM_ID   = 'dim-ashfall-micro';
 const DOOR_ID  = 'door-primary';
 
+// Set PEER_PUBLIC_IP (e.g. your Tailscale 100.x address) to let players on
+// other machines join via `node game/join.mjs`. Unset = loopback-only demo.
+const PEER_PUBLIC_IP = process.env.PEER_PUBLIC_IP || '';
+const netEnv = PEER_PUBLIC_IP
+  ? { PEER_PUBLIC_IP, BIND_HOST: '0.0.0.0', PUBLIC_DISCOVERY_URL: `http://${PEER_PUBLIC_IP}:7350` }
+  : {};
+console.log(`[launcher] network: ${PEER_PUBLIC_IP ? `public at ${PEER_PUBLIC_IP}` : 'loopback only (set PEER_PUBLIC_IP to allow remote joiners)'}`);
+
 // Peer specs — one per entity. Each peer owns its own ports and GunDB relay URL.
 const peers = [
   { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 }, libp2p: 7410, http: 7401, gun: 7501 },
@@ -35,7 +43,7 @@ function run(name, cmd, args, extraEnv = {}) {
   children.push(child);
 }
 
-run('discovery', 'node', ['discovery.mjs']);
+run('discovery', 'node', ['discovery.mjs'], netEnv);
 run('ui',        'node', ['ui-server.mjs']);
 
 // Give discovery a head start, then spawn peers with cross-pointing Gun peer URLs.
@@ -56,7 +64,8 @@ for (const p of peers) {
     PEER_PORT_GUN:     String(p.gun),
     DIM_NAME, DIM_ID, DOOR_ID,
     PEER_GUN_URLS:     others.join(','),
-    RADICLE_PUSH_SEC:  '45',
+    RADICLE_PUSH_SEC:  '60',
+    ...netEnv,
   });
   // Stagger so libp2p ports don't race.
   await new Promise(r => setTimeout(r, 800));

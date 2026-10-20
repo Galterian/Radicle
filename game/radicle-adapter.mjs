@@ -99,6 +99,7 @@ export const radicleEnv = await (async () => {
   return {
     enabled: true,
     rid,
+    nid: pushUrl.split('/')[3] || null,
     alias: alias || null,
     remoteUrl: pushUrl,
     explorerBase,
@@ -239,6 +240,52 @@ export async function fetchDimension(peerId, dimensionName) {
   }
 }
 
+// Read every ActiveDimensions/* branch published by the repo's delegates.
+// Canonical rad://<RID> only exposes the default branch, so dimension state has
+// to be fetched per-namespace (rad://<RID>/<NID>). Returns
+//   [{ nid, dimension_name, ref, dimension, doors: [{ door_id, ...doc }] }]
+export async function listPublishedDimensions() {
+  if (!radicleEnv.enabled) throw new Error(radicleEnv.reason);
+  const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
+  const radBin = path.join(RAD_BIN_DIR, 'rad');
+  let nids = [];
+  try {
+    const { stdout } = await pexec(radBin, ['inspect', '--delegates'], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv });
+    nids = [...stdout.matchAll(/did:key:(z6Mk[1-9A-HJ-NP-Za-km-z]+)/g)].map(m => m[1]);
+  } catch (e) { throw new Error(`rad inspect --delegates failed: ${e.stderr || e.message}`); }
+  if (!nids.length) throw new Error('repo has no delegates?');
+
+  const out = [];
+  for (const nid of nids) {
+    const remoteName = `rad-ns-${nid.slice(-8)}`;
+    const refspec = `+refs/heads/ActiveDimensions/*:refs/remotes/${remoteName}/ActiveDimensions/*`;
+    try {
+      await pexec('git', ['-C', PROJECT_ROOT, 'fetch', '--quiet', `rad://${radicleEnv.rid}/${nid}`, refspec], { windowsHide: true, env: radEnv, maxBuffer: 16 * 1024 * 1024 });
+    } catch (e) {
+      console.warn(`[radicle] fetch namespace ${nid.slice(0, 12)}… failed: ${(e.stderr || e.message).toString().split('\n')[0]}`);
+      continue;
+    }
+    let refs = '';
+    try { refs = (await pexec('git', ['-C', PROJECT_ROOT, 'for-each-ref', '--format=%(refname)', `refs/remotes/${remoteName}/ActiveDimensions/`], { windowsHide: true })).stdout; } catch {}
+    for (const ref of refs.split('\n').filter(Boolean)) {
+      const dimensionName = ref.slice(`refs/remotes/${remoteName}/ActiveDimensions/`.length);
+      const base = `ActiveDimensions/${dimensionName}`;
+      const show = async (rel) => JSON.parse((await pexec('git', ['-C', PROJECT_ROOT, 'show', `${ref}:${base}/${rel}`], { windowsHide: true })).stdout);
+      let dimension;
+      try { dimension = await show('dimension.json'); } catch { continue; }
+      const doors = [];
+      try {
+        const { stdout } = await pexec('git', ['-C', PROJECT_ROOT, 'ls-tree', '--name-only', `${ref}:${base}/doors`], { windowsHide: true });
+        for (const f of stdout.split('\n').filter(f => f.endsWith('.json'))) {
+          try { doors.push(await show(`doors/${f}`)); } catch {}
+        }
+      } catch {}
+      out.push({ nid, dimension_name: dimensionName, ref, dimension, doors });
+    }
+  }
+  return out;
+}
+
 // Elect the hourly pusher. Deterministic lottery per spec:
 //   pusher = member with min( sha256(peer_id + hashgraph_head + interval_index) )
 import { createHash } from 'node:crypto';
@@ -252,7 +299,7 @@ export function electPusher(peers, hashgraphHead, intervalIndex) {
 }
 
 // CLI entry: `node radicle-adapter.mjs init`
-if (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}` || process.argv[1].endsWith('radicle-adapter.mjs')) {
+if (process.argv[1] && (import.meta.url === `file://${process.argv[1].replace(/\\/g, '/')}` || process.argv[1].endsWith('radicle-adapter.mjs'))) {
   const cmd = process.argv[2];
   if (cmd === 'init') {
     await ensureBare();

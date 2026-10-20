@@ -33,7 +33,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
 
-import { pushDimension, fetchDimension, electPusher } from './radicle-adapter.mjs';
+import { pushDimension, fetchDimension, electPusher, radicleEnv } from './radicle-adapter.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,6 +46,14 @@ const DIM_NAME          = process.env.DIM_NAME         || 'Ashfall-Micro';
 const DIM_ID            = process.env.DIM_ID           || 'dim-ashfall-micro';
 const DOOR_ID           = process.env.DOOR_ID          || 'door-primary';
 const DISCOVERY_URL     = process.env.DISCOVERY_URL    || 'http://127.0.0.1:7350';
+// Networking for remote players. BIND_HOST is the interface libp2p + the Gun
+// relay listen on; PEER_PUBLIC_IP is the address other machines dial us at
+// (e.g. your Tailscale 100.x address). Leaving both unset keeps everything on
+// loopback exactly as before. The browser-UI socket always stays on loopback —
+// it can command this peer, so it must never be reachable from the network.
+const BIND_HOST         = process.env.BIND_HOST        || (process.env.PEER_PUBLIC_IP ? '0.0.0.0' : '127.0.0.1');
+const PEER_PUBLIC_IP    = process.env.PEER_PUBLIC_IP   || '127.0.0.1';
+const PUBLIC_DISCOVERY_URL = process.env.PUBLIC_DISCOVERY_URL || DISCOVERY_URL.replace('127.0.0.1', PEER_PUBLIC_IP);
 const CHARACTER_ID      = process.env.CHARACTER_ID     || '';
 const CREATURE_ID       = process.env.CREATURE_ID      || '';
 const ENTITY_NAME       = process.env.ENTITY_NAME      || PEER_LABEL;
@@ -87,7 +95,10 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures']) {
 const privateKey = await generateKeyPair('Ed25519');
 const libp2p = await createLibp2p({
   privateKey,
-  addresses: { listen: [`/ip4/127.0.0.1/tcp/${PEER_PORT_LIBP2P}`] },
+  addresses: {
+    listen: [`/ip4/${BIND_HOST}/tcp/${PEER_PORT_LIBP2P}`],
+    announce: [`/ip4/${PEER_PUBLIC_IP}/tcp/${PEER_PORT_LIBP2P}`],
+  },
   transports: [tcp()],
   connectionEncrypters: [noise()],
   streamMuxers: [yamux()],
@@ -101,19 +112,22 @@ await libp2p.start();
 const TOPIC_STRONG = `/chaos/${DIM_ID}/strong`;
 await libp2p.services.pubsub.subscribe(TOPIC_STRONG);
 
-const myMaddrs = libp2p.getMultiaddrs().map(a => a.toString());
+// Advertise the announce address explicitly so remote peers get the dialable
+// public form, regardless of how libp2p chooses to render its own listen set.
+const myMaddrs = [`/ip4/${PEER_PUBLIC_IP}/tcp/${PEER_PORT_LIBP2P}/p2p/${libp2p.peerId.toString()}`];
+const myGunUrl = `http://${PEER_PUBLIC_IP}:${PEER_PORT_GUN}/gun`;
 console.log(`[${PEER_LABEL}] libp2p peer id = ${libp2p.peerId.toString()}`);
-console.log(`[${PEER_LABEL}] listening on: ${myMaddrs.join(', ')}`);
+console.log(`[${PEER_LABEL}] bound ${BIND_HOST}:${PEER_PORT_LIBP2P}; advertising ${myMaddrs.join(', ')}`);
 
 // Dial bootstrap peers.
 for (const addr of BOOTSTRAP_MADDRS) {
-  try { await libp2p.dial(addr); console.log(`[${PEER_LABEL}] dialed ${addr}`); }
+  try { await libp2p.dial(multiaddr(addr)); console.log(`[${PEER_LABEL}] dialed ${addr}`); }
   catch (e) { console.warn(`[${PEER_LABEL}] dial ${addr} failed: ${e.message}`); }
 }
 
 // -------- GunDB relay (per peer) --------
 const gunHttp = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('gun relay'); });
-gunHttp.listen(PEER_PORT_GUN, '127.0.0.1');
+gunHttp.listen(PEER_PORT_GUN, BIND_HOST);
 const gunDir = path.join(__dirname, 'gun-data', PEER_LABEL);
 await fs.mkdir(gunDir, { recursive: true });
 const gun = Gun({
@@ -123,7 +137,7 @@ const gun = Gun({
   axe: false,
   multicast: false,
 });
-console.log(`[${PEER_LABEL}] gun relay on ws://127.0.0.1:${PEER_PORT_GUN}/gun; peers = ${PEER_GUN_URLS.join(', ') || '(none yet)'}`);
+console.log(`[${PEER_LABEL}] gun relay on ${myGunUrl}; peers = ${PEER_GUN_URLS.join(', ') || '(none yet)'}`);
 
 const dimRoot = gun.get('chaosd6').get('dimensions').get(DIM_ID);
 const myNode  = dimRoot.get('doors').get(DOOR_ID).get('members').get(PEER_ID_STRING);
@@ -247,6 +261,11 @@ const hg = {
   round: 0,
 };
 
+// Phase clock lives up here because the public-state snapshot (published
+// before the FSM section) reports it to joining peers.
+let currentPhase = 'planning';
+let phaseEndsAt = Date.now() + 10_000;
+
 function sha256Hex(s) { return createHash('sha256').update(s).digest('hex'); }
 function digestObj(o) { return sha256Hex(JSON.stringify(o)); }
 
@@ -335,6 +354,10 @@ function currentStateSnapshot() {
     peer_id: PEER_ID_STRING, character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: ALLIANCE, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
+    // Live clock + network hints so a joining peer can align its turn counter
+    // and dial the mesh. Gun rejects arrays in nested puts, hence the CSV.
+    turn: hg.turn, phase: currentPhase, phase_ends_at: phaseEndsAt,
+    gun_url: myGunUrl, multiaddrs_csv: myMaddrs.join(','),
   };
 }
 
@@ -396,8 +419,6 @@ setTimeout(pullDiscoveryState, 1200);
 // -------- phase FSM --------
 // planning (10s normal / 6s combat heartbeat) → reveal (5s) → resolution (5s) → cleanup
 const PHASES = ['planning', 'reveal', 'resolution', 'cleanup'];
-let currentPhase = 'planning';
-let phaseEndsAt = Date.now() + 10_000;
 let myLastSalt = null;
 let myLastReveal = null;
 
@@ -733,6 +754,29 @@ function inboxApply(env) {
   if (env.type === 'evt_action_reveal') revealedByPeer.set(env.actor_peer_id, env);
 }
 
+// -------- join sync --------
+// Reveals are matched by turn number, so a peer that boots into a running
+// Dimension must adopt the mesh's clock or it will never see anyone's reveal
+// for "its" turn. Take the most-advanced live peer as the reference.
+async function syncClockFromMesh() {
+  try {
+    const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
+    const j = await r.json();
+    const others = (j.peers || []).filter(p => p.peer_id !== PEER_ID_STRING && p.state && typeof p.state.turn === 'number');
+    if (!others.length) { console.log(`[${PEER_LABEL}] join sync: no live peers, starting fresh at turn 0`); return; }
+    others.sort((a, b) => (b.state.turn - a.state.turn) || ((b.state.phase_ends_at || 0) - (a.state.phase_ends_at || 0)));
+    const ref = others[0].state;
+    hg.turn = ref.turn; hg.round = ref.turn;
+    if (PHASES.includes(ref.phase)) currentPhase = ref.phase;
+    // Their phase_ends_at is wall-clock; if it's already stale, fall into
+    // planning on the next tick rather than waiting out a dead window.
+    phaseEndsAt = (typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) ? ref.phase_ends_at : Date.now();
+    console.log(`[${PEER_LABEL}] join sync: adopted turn ${hg.turn} / ${currentPhase} from ${others[0].peer_id}`);
+    await publishPublicState();
+  } catch (e) { console.warn(`[${PEER_LABEL}] join sync failed (${e.message}); starting at turn 0`); }
+}
+await syncClockFromMesh();
+
 // -------- phase ticker --------
 async function tick() {
   if (Date.now() < phaseEndsAt) return;
@@ -762,19 +806,49 @@ async function radicleLottery() {
   console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: ${peers.length} peers, winner=${winner}, me=${PEER_ID_STRING}`);
   if (winner !== PEER_ID_STRING) return;
   try {
+    const now = new Date().toISOString();
+    const radRepo = radicleEnv.enabled ? `rad:${radicleEnv.rid}` : 'rad:local-bare';
+    const members = [...peersPublic.values()].filter(p => p && p.peer_id);
+    // Mesh entry points for joiners: every live peer's libp2p multiaddr and Gun
+    // relay. Discovery holds the freshest multiaddrs; Gun/peersPublic carries
+    // the CSV form each peer publishes about itself. Union the two.
+    const bootstrap = new Set();
+    const gunRelays = new Set();
+    for (const p of members) {
+      for (const a of (p.multiaddrs_csv || '').split(',').filter(Boolean)) bootstrap.add(a);
+      if (p.gun_url) gunRelays.add(p.gun_url);
+    }
+    try {
+      const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
+      const j = await r.json();
+      for (const p of j.peers || []) for (const a of p.multiaddrs || []) bootstrap.add(a);
+    } catch {}
+    const occupied = members.filter(p => p.life > 0).map(p => ({ q: p.tile_q, r: p.tile_r }));
     const dimensionDoc = {
-      dimension_id: DIM_ID, dimension_name: DIM_NAME, radicle_repo: 'rad:local-bare',
-      game_mode: 'mode_mmorpg', created_at: new Date().toISOString(), owners: ['peer:player-1'],
+      dimension_id: DIM_ID, dimension_name: DIM_NAME, radicle_repo: radRepo,
+      radicle_branch: `ActiveDimensions/${DIM_NAME}`,
+      radicle_namespace: radicleEnv.enabled ? radicleEnv.nid : null,
+      game_mode: 'mode_mmorpg', created_at: now, owners: ['peer:player-1'],
       tileset: { initial_size: '5x5', bounds: { min_x: 0, min_y: 0, max_x: 4, max_y: 4 }, map_seed: '0xdeadbeef', extended_blocks: [] },
-      turn: { max_seen: hg.turn, updated_at: new Date().toISOString() },
-      doors: [DOOR_ID], description: 'Micro-dimension sandbox', last_push: { peer_id: PEER_ID_STRING, at: new Date().toISOString(), commit: 'pending' },
+      turn: { max_seen: hg.turn, updated_at: now },
+      doors: [DOOR_ID], description: 'Micro-dimension sandbox',
+      join: { command: 'node game/join.mjs', placements: ['nearby', 'random'], note: 'Reads doors/*.json for bootstrap + discovery, then dials the live mesh.' },
+      last_push: { peer_id: PEER_ID_STRING, at: now, commit: 'pending' },
     };
     const doorDoc = {
-      door_id: DOOR_ID, magnet_id: `magnet:?xt=urn:dim:${DIM_NAME}&xs=${hg.head || ''}&tr=rad:local-bare&pe=${PEER_ID_STRING}`,
+      door_id: DOOR_ID, magnet_id: `magnet:?xt=urn:dim:${DIM_NAME}&xs=${hg.head || ''}&tr=${radRepo}&pe=${PEER_ID_STRING}`,
       label: 'primary strong-region', status: 'active', hashgraph_head: hg.head || '',
-      turn: hg.turn, members: [...peersPublic.values()].map(p => ({ peer_id: p.peer_id, character_id: p.character_id, creature_id: p.creature_id, tile: { x: p.tile_q, y: p.tile_r }, clan: p.alliance })),
-      region: { center: { x: 2, y: 2 }, strong_radius_tiles: 2, reach_tiles: 4 },
-      last_push: { interval_index: intervalIndex, peer_id: PEER_ID_STRING, at: new Date().toISOString(), commit: 'pending' },
+      turn: hg.turn, phase: currentPhase, clock_at: now,
+      members: members.map(p => ({ peer_id: p.peer_id, name: p.name, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, clan: p.alliance, life: p.life, life_max: p.life_max })),
+      region: { center: { q: 2, r: 2 }, strong_radius_tiles: 2, reach_tiles: 4, size: 5 },
+      tiles: { occupied },
+      network: {
+        discovery_url: PUBLIC_DISCOVERY_URL,
+        bootstrap: [...bootstrap],
+        gun_relays: [...gunRelays],
+        topic: TOPIC_STRONG,
+      },
+      last_push: { interval_index: intervalIndex, peer_id: PEER_ID_STRING, at: now, commit: 'pending' },
     };
     const r = await pushDimension(PEER_ID_STRING, DIM_NAME, {
       [`ActiveDimensions/${DIM_NAME}/dimension.json`]: dimensionDoc,
