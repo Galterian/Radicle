@@ -461,6 +461,19 @@ function wrapTarget(t) {
   return null;
 }
 
+// Which actions actually consume a target. actions.json has
+// targets_enemy/targets_tile per card; this stays in sync with that data for
+// the four basics + the Empty variants.
+function stripTargetFor(code, target) {
+  switch (code) {
+    case 'A':  return typeof target === 'string' ? target : null; // Attack needs an enemy peer
+    case 'M':  return target || null;                             // Move accepts either enemy or tile
+    case 'EM': return target && typeof target === 'object' ? target : null; // Empty-Move needs a tile
+    // Block, Posture, Empty Posture — no target.
+    default:   return null;
+  }
+}
+
 async function doPlanningEnd() {
   // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
   if (ALLIANCE !== 'player') await npcPlan();
@@ -479,9 +492,15 @@ async function doPlanningEnd() {
   else if (q0 === 'EM') code = 'EM';
   else if (typeof q0 === 'number' && hand[q0]) { card = hand[q0]; code = card.code; }
 
+  // Normalise target against the action's actual needs. Block / Posture / EP
+  // never target; Attack ignores a bare-tile click (treated as "no target");
+  // Empty Move only accepts a tile. This stops a stale selection from one
+  // turn leaking into a Block commit as a bogus target.
+  const normTarget = stripTargetFor(code, target);
+
   myLastSalt = randomBytes(12).toString('hex');
-  const commitHash = sha256Hex(`${code}::${targetTag(target)}::${myLastSalt}`);
-  myLastReveal = { code, target, salt: myLastSalt, cardId: card ? card.card_id : null };
+  const commitHash = sha256Hex(`${code}::${targetTag(normTarget)}::${myLastSalt}`);
+  myLastReveal = { code, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null };
   await emitEnvelope({
     type: 'evt_action_commit',
     payload: { commitment: commitHash, empty_move_announced: code === 'EM' },
@@ -554,9 +573,8 @@ async function doResolution() {
   };
 
   // Movement intents. Move/Empty-Move step one tile toward the target tile.
-  // Supports both character targets (step toward the peer) and tile targets
-  // (step toward a bare hex) — the latter is what empty-tile clicks produce.
-  const nextTiles = new Map();
+  // Supports both character targets (step toward the peer) and tile targets.
+  const movesByActor = new Map();
   for (const r of revealsThisTurn) {
     if (r.action !== 'M' && r.action !== 'EM') continue;
     const actor = peersPublic.get(r.actor);
@@ -564,8 +582,52 @@ async function doResolution() {
     const tgtT = tileOf(r.target);
     if (!tgtT) continue;
     const next = stepToward({ q: actor.tile_q, r: actor.tile_r }, { tile_q: tgtT.q, tile_r: tgtT.r });
-    nextTiles.set(r.actor, next);
+    movesByActor.set(r.actor, next);
   }
+  // Collision veto: a Mover may not step onto a hex another living entity
+  // currently occupies — that's the "forbidden thing": Move toward an enemy
+  // engages them in opposition on your current tiles, it does not walk onto
+  // their hex. Also veto two Movers claiming the same destination (lower
+  // peer_id wins deterministically so every peer agrees).
+  const occupiedNow = new Map();
+  for (const p of peersPublic.values()) {
+    if (!p || p.life <= 0) continue;
+    occupiedNow.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
+  }
+  const claimedBy = new Map();
+  const nextTiles = new Map();
+  const vetoed = new Map();   // actor -> reason string
+  const sortedMovers = [...movesByActor.keys()].sort();
+  for (const actor of sortedMovers) {
+    const dest = movesByActor.get(actor);
+    const key = `${dest.q},${dest.r}`;
+    const occupant = occupiedNow.get(key);
+    if (occupant && occupant !== actor) { vetoed.set(actor, `tile occupied by ${occupant}`); continue; }
+    if (claimedBy.has(key)) { vetoed.set(actor, `tile also claimed by ${claimedBy.get(key)}`); continue; }
+    claimedBy.set(key, actor);
+    nextTiles.set(actor, dest);
+  }
+
+  // Contact log: broadcast every pair of adjacent cross-side revealers so the
+  // UI can show exactly what opposed what, after both commits are revealed.
+  const contacts = [];
+  for (let i = 0; i < revealsThisTurn.length; i++) {
+    for (let j = i + 1; j < revealsThisTurn.length; j++) {
+      const a = revealsThisTurn[i], b = revealsThisTurn[j];
+      const pa = peersPublic.get(a.actor);
+      const pb = peersPublic.get(b.actor);
+      if (!pa || !pb) continue;
+      if (sideOf(pa.alliance) === sideOf(pb.alliance)) continue;
+      const d = hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r });
+      if (d > 1) continue;
+      contacts.push({
+        a: { peer_id: a.actor, name: pa.name, action: a.action, vetoed: vetoed.get(a.actor) || null },
+        b: { peer_id: b.actor, name: pb.name, action: b.action, vetoed: vetoed.get(b.actor) || null },
+        distance: d,
+      });
+    }
+  }
+  if (contacts.length) broadcastUI({ kind: 'contact', contacts, turn: hg.turn });
 
   // Damage pass. Attack still requires a character target so there's a
   // defender to score damage against; tile-target Attacks are no-ops.
