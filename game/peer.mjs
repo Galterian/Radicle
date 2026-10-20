@@ -783,10 +783,12 @@ async function radicleLottery() {
     });
     if (r.pushed) {
       const uiPort = process.env.UI_PORT || 7357;
-      const url = `http://127.0.0.1:${uiPort}/commit/${r.commit}`;
-      console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch} — ${url}`);
-      broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url });
-      await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '' } });
+      const localUrl = `http://127.0.0.1:${uiPort}/commit/${r.commit}`;
+      const explorerUrl = r.explorerUrl || null;
+      const remoteNote = r.remote?.published ? '' : ` (remote: ${r.remote?.reason || 'skipped'})`;
+      console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch} — ${explorerUrl || localUrl}${remoteNote}`);
+      broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url: explorerUrl || localUrl, localUrl, explorerUrl, published: !!explorerUrl });
+      await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '', explorer_url: explorerUrl } });
     }
   } catch (e) { console.warn(`[${PEER_LABEL}] radicle push failed: ${e.message}`); }
 }
