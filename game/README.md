@@ -13,6 +13,49 @@ Open http://127.0.0.1:7357
 
 Requires Node ≥ 18 (uses `node:fs/promises` and native `fetch` is not needed on the server side).
 
+## Multiplayer: hosting and joining over Radicle
+
+The host runs the mesh (`node start-all.mjs`). Once a minute the lottery winner
+pushes `ActiveDimensions/<Dimension>/` — `dimension.json` plus one
+`doors/<DoorId>.json` per door — to the host's Radicle namespace. Each door
+doc carries the live mesh entry points (`network.bootstrap` libp2p multiaddrs,
+`network.gun_relays`, `network.discovery_url`), the current turn/phase and the
+occupied tiles. Radicle is the directory; play happens over libp2p + Gun.
+
+**Host** (needs `rad` on PATH, `rad auth` done, node running):
+
+```
+# other machines must be able to reach you at this address — a Tailscale
+# 100.x address is the easy option; unset = loopback-only demo
+export PEER_PUBLIC_IP=100.64.1.5
+cd game && node start-all.mjs
+```
+
+**Player** (needs Node ≥ 18, `rad`, and a running `rad node`):
+
+```
+rad clone rad:zqZmP6itceBMqYwi1K1n8phQqCaj && cd chaosD6
+(cd game && npm install)
+node game/join.mjs --list          # what's published, which doors are live
+node game/join.mjs                 # interactive: door → character → side → placement
+```
+
+`join.mjs` fetches `ActiveDimensions/*` from the delegates' namespaces (the
+canonical `rad://<RID>` only exposes `master`), probes each door's discovery URL
+to tell live doors from stale pushes, then spawns a regular `peer.mjs` for you
+plus the browser UI. Placement is **nearby** (a free hex adjacent to your side)
+or **random** (a free hex outside everyone's strong radius — "unrevealed").
+The new peer adopts the mesh's turn clock on boot so it lines up with the
+running game. Non-interactive example:
+
+```
+node game/join.mjs --dimension Ashfall-Micro --door door-primary \
+  --as player-2 --character char_oran_rief --side player --placement random
+```
+
+Your own public address is auto-detected (Tailscale range preferred); override
+with `--public-ip`. The browser UI socket always stays on loopback.
+
 ## What it does
 
 - Loads every collection listed in `data/index.json`, picks the active version per entry (highest-weight non-rejected `VersionedEntry`).
