@@ -44,3 +44,22 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 10px; padding: 10px
 .slot.locked { border-color: #ffb66e; box-shadow: 0 0 0 1px #ffb66e44 inset; }
 #hint { max-width: 920px; margin: 6px auto 0; font-size: 11px; color: #6a7a92; text-align: center; }
 #hint b { color: #c8d4e3; font-weight: 600; }
+
+/* --- launcher --- */
+#launcher { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+.launcher-card { background: #0f131b; border: 1px solid #1a1f29; border-radius: 8px; padding: 20px 24px; width: 100%; max-width: 640px; }
+.launcher-card h1 { margin: 0 0 8px; font-size: 18px; color: #e8ecf1; font-weight: 600; }
+.launcher-card .hint { font-size: 12px; color: #8aa0bf; margin-bottom: 16px; }
+.launcher-card fieldset { border: 1px solid #1a2130; border-radius: 6px; padding: 10px 12px; margin: 0 0 12px; }
+.launcher-card legend { color: #8aa0bf; font-size: 12px; padding: 0 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.launcher-card label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #d2dae7; padding: 4px 0; }
+.launcher-card input[type="radio"] { accent-color: #6ad99f; }
+.launcher-card input[type="text"], .launcher-card select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 5px 8px; font: inherit; flex: 1 1 240px; min-width: 180px; }
+.launcher-card .mode-panel { padding: 6px 2px 10px; }
+.launcher-card .mode-panel[hidden] { display: none; }
+.launcher-card .join-opts label { flex-wrap: wrap; }
+.launcher-card .join-opts[hidden] { display: none; }
+.launcher-card .actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.launcher-card #go { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
+.launcher-card #go[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
+.launcher-card #launch-msg { font-size: 12px; color: #8aa0bf; }

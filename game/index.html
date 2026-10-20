@@ -6,7 +6,57 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <header id="hud">
+  <section id="launcher" hidden>
+    <div class="launcher-card">
+      <h1>ChaosD6 — pick a dimension</h1>
+      <div id="launcher-status" class="hint">loading published dimensions…</div>
+
+      <fieldset class="mode-group">
+        <legend>What do you want to do?</legend>
+        <label><input type="radio" name="mode" value="join-door" disabled> Join an existing Dimension at a <b>specific door</b></label>
+        <label><input type="radio" name="mode" value="join-random" disabled> Join an existing Dimension at a <b>random unknown place</b></label>
+        <label><input type="radio" name="mode" value="host" checked> Create a <b>NEW Dimension</b> (host locally)</label>
+      </fieldset>
+
+      <div class="mode-panel" data-for="join-door">
+        <label>Door<select id="pick-door"></select></label>
+      </div>
+
+      <div class="mode-panel" data-for="join-random">
+        <label>Dimension<select id="pick-dim"></select></label>
+      </div>
+
+      <div class="mode-panel" data-for="host">
+        <label>Dimension name<input type="text" id="host-name" value="Ashfall-Micro" maxlength="40"></label>
+      </div>
+
+      <fieldset class="join-opts" hidden>
+        <legend>Your peer</legend>
+        <label>Side
+          <select id="pick-side">
+            <option value="player">player (fights with npc_a)</option>
+            <option value="npc_a">npc_a (allies of player)</option>
+            <option value="npc_b">npc_b (opposition)</option>
+          </select>
+        </label>
+        <label>Play as
+          <select id="pick-kind">
+            <option value="character">character</option>
+            <option value="creature">creature</option>
+          </select>
+        </label>
+        <label>Who<select id="pick-who"></select></label>
+        <label>Label (your peer id)<input type="text" id="pick-label" placeholder="auto"></label>
+      </fieldset>
+
+      <div class="actions">
+        <button id="go" type="button" disabled>Launch</button>
+        <span id="launch-msg" class="hint"></span>
+      </div>
+    </div>
+  </section>
+
+  <header id="hud" hidden>
     <div class="row">
       <span class="pill" id="dim-name">dimension: —</span>
       <span class="pill" id="turn">turn 0</span>
@@ -17,7 +67,7 @@
     </div>
   </header>
 
-  <main>
+  <main hidden>
     <canvas id="stage" width="920" height="620"></canvas>
     <aside id="panel">
       <div id="roster"></div>
@@ -26,7 +76,7 @@
     </aside>
   </main>
 
-  <footer id="deck-bar">
+  <footer id="deck-bar" hidden>
     <div id="slots">
       <div class="slot" data-slot="0"><div class="k">1</div><div class="card"></div></div>
       <div class="slot" data-slot="1"><div class="k">2</div><div class="card"></div></div>
@@ -40,6 +90,6 @@
     </div>
   </footer>
 
-  <script type="module" src="/js/main.js"></script>
+  <script type="module" src="/js/launcher.js"></script>
 </body>
 </html>
