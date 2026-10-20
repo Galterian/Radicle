@@ -1,0 +1,111 @@
+{
+  "collection": "dimension_session",
+  "notes": "Shapes of the live-session artefacts stored on the Radicle branch ActiveDimensions/<DimensionName>/ and in each client's local store. These are NOT paper rules; they are the runtime contracts the Godot (.NET) client reads/writes. They are versioned like everything else so the community can evolve them. A concrete filled-in example lives in examples/ActiveDimensions/.",
+  "entries": [
+    {
+      "id": "session_dimension_descriptor",
+      "name": "dimension.json (ActiveDimensions/<DimensionName>/dimension.json)",
+      "tags": ["radicle", "session", "shape"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_radicle_push", "sync_join_flow", "mode_mmorpg"],
+          "vote_log": [],
+          "notes": "One per Dimension. Written at open_dimension, updated by any pusher; conflicts resolve to the higher turn.",
+          "data": {
+            "shape": {
+              "dimension_id": "string (uuid or radicle object id)",
+              "dimension_name": "string (human label; also the branch path segment)",
+              "radicle_repo": "rad:<RepoId>",
+              "rules_snapshot_commit": "git commit hash of data/ frozen for this session (index.json notes)",
+              "game_mode": "mode_* id from game_modes.json (mode_mmorpg by default)",
+              "created_at": "ISO-8601",
+              "owners": ["peer_id of the opening players"],
+              "tileset": {
+                "initial_size": "WxH per rule_0_setup",
+                "bounds": { "min_x": "int", "min_y": "int", "max_x": "int", "max_y": "int" },
+                "map_seed": "hex; all hidden placement derives from it",
+                "extended_blocks": [ { "door_id": "string", "origin": {"x":"int","y":"int"}, "size": "WxH", "seed": "hex" } ]
+              },
+              "turn": { "max_seen": "int", "updated_at": "ISO-8601" },
+              "doors": ["DoorId strings; one file each under doors/"],
+              "description": "free text that pushers may change (in-game changeable descriptions)",
+              "last_push": { "peer_id": "string", "at": "ISO-8601", "commit": "git hash" }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session_door",
+      "name": "doors/<DoorId>.json (one per connected hashgraph part / clan entry point)",
+      "tags": ["radicle", "session", "shape", "magnet"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_radicle_push", "sync_join_flow", "sync_divergence_merge"],
+          "vote_log": [],
+          "notes": "A DoorId is a magnet-style identifier for a hashgraph head plus the peers holding it. Joiners read this file, connect to the peers, and adopt the part. Many DoorIds per Dimension are expected until clans meet and merge.",
+          "data": {
+            "shape": {
+              "door_id": "string (short id; also the file name)",
+              "magnet_id": "magnet:?xt=urn:dim:<DimensionName>&dn=<DoorLabel>&xs=<hashgraph_head>&tr=rad:<RepoId>&pe=<peer_id>...",
+              "label": "string shown in the join list (clan name, friend name, 'new frontier')",
+              "status": "active | stale | merged_into:<DoorId> | closed",
+              "hashgraph_head": "sha256 of the latest finalized event in this part",
+              "genesis_or_root": "sha256 of evt_genesis or the evt_map_extend this part is rooted at",
+              "turn": "int (this part's turn at last push)",
+              "members": [ { "peer_id": "string", "character_id": "char_* id", "class_id": "class_* id", "tile": {"x":"int","y":"int"}, "clan": "string | null", "last_seen": "ISO-8601" } ],
+              "region": { "center": {"x":"int","y":"int"}, "strong_radius_tiles": "int", "reach_tiles": "int" },
+              "map_summary": {
+                "tiles_revealed": "int",
+                "owned_items": [ { "item_id": "tower_* | crystal_* | mine_* | item_*", "tile": {"x":"int","y":"int"}, "owner_peer_id": "string" } ],
+                "awake_creatures": [ { "creature_id": "mon_*", "tile": {"x":"int","y":"int"}, "life_left": "int" } ]
+              },
+              "last_push": { "interval_index": "int", "peer_id": "string", "at": "ISO-8601", "commit": "git hash" },
+              "pending_votes": "int (governance votes gossiped but not yet batched to proposals/*)"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "session_local_state",
+      "name": "Local client state (never pushed as-is)",
+      "tags": ["client", "shape"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_10_draw", "rule_11_archive", "rule_12_permanent_types", "rule_14"],
+          "vote_log": [],
+          "notes": "What the Godot client holds in memory/on disk for the part of the hashgraph it owns. The hand is private; only its commitment is ever gossiped.",
+          "data": {
+            "shape": {
+              "peer_id": "string (Radicle node id / signing key)",
+              "dimension_id": "string",
+              "door_ids_held": ["string"],
+              "hashgraph": { "events": "append-only store of signed envelopes", "head": "sha256", "finalized_turn": "int" },
+              "character": {
+                "character_id": "char_* id", "class_id": "class_* id", "tile": {"x":"int","y":"int"},
+                "stats": { "vitality": "int", "world": "int", "matter": "int", "will": "int" },
+                "life_tokens": "int (rule_14 Part B: sum(stats)/10)",
+                "element_tokens": [ { "element": "elem_*", "value": "int 1..6", "source": "point_buy | tower | effect_*", "penalty": "bool" } ],
+                "combo": ["A|B|M|P x3 (rule_16)"], "combo_progress": "int"
+              },
+              "cards": {
+                "hand": ["card ids, max 5 (rule_10)"],
+                "deck_order_commitment": "hash gossiped at join",
+                "discard": ["card ids"],
+                "archive": ["card ids (rule_11; face-up column)"],
+                "permanents_in_play": [ { "card_id": "string", "tapped": "bool", "tokens": ["..."] } ]
+              },
+              "known_map": { "tiles": { "x,y": { "revealed": "bool", "traps": ["effect_* | hidden"], "creature": "mon_* | null", "items": ["..."], "owner": "peer_id | null", "occupants": ["peer_id | mon_*"] } } },
+              "region_peers": { "strong": ["peer_id"], "reachable": ["peer_id"], "far_known_doors": ["DoorId"] },
+              "pending_disturbances": [ { "from_door_id": "string", "summary": "string", "received_at": "ISO-8601" } ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

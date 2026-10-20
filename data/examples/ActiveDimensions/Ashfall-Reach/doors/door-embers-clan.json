@@ -1,0 +1,21 @@
+{
+  "door_id": "door-embers-clan",
+  "magnet_id": "magnet:?xt=urn:dim:Ashfall-Reach&dn=Embers%20clan&xs=3b5d5c3712955042212316173ccf37be&tr=rad:z3gqcJUoA1n9HbHKUfP4PxKjhY1xV&pe=peer_A1&pe=peer_B7",
+  "label": "Embers clan",
+  "status": "active",
+  "hashgraph_head": "3b5d5c3712955042212316173ccf37be",
+  "genesis_or_root": "d41d8cd98f00b204e9800998ecf8427e",
+  "turn": 42,
+  "members": [
+    { "peer_id": "peer_A1", "character_id": "char_cynder_pyromancer", "class_id": "class_elementalist", "tile": { "x": 1, "y": 2 }, "clan": "Embers", "last_seen": "2026-10-19T13:59:40Z" },
+    { "peer_id": "peer_B7", "character_id": "char_akki_coalfinger",   "class_id": "class_barbarian",    "tile": { "x": 2, "y": 2 }, "clan": "Embers", "last_seen": "2026-10-19T14:00:00Z" }
+  ],
+  "region": { "center": { "x": 1, "y": 2 }, "strong_radius_tiles": 2, "reach_tiles": 9 },
+  "map_summary": {
+    "tiles_revealed": 11,
+    "owned_items": [ { "item_id": "tower_fire", "tile": { "x": 0, "y": 3 }, "owner_peer_id": "peer_A1" } ],
+    "awake_creatures": [ { "creature_id": "mon_hellkite_hatchling", "tile": { "x": 3, "y": 1 }, "life_left": 5 } ]
+  },
+  "last_push": { "interval_index": 497222, "peer_id": "peer_B7", "at": "2026-10-19T14:00:00Z", "commit": "f00dbabe00000000000000000000000000000001" },
+  "pending_votes": 1
+}

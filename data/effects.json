@@ -1,0 +1,2380 @@
+{
+    "_defaults": {
+        "author_peer_id": "",
+        "created_at": "2026-10-19",
+        "notes": "",
+        "origin": "paper_rules",
+        "parent_version": null,
+        "status": "canonical",
+        "version": "1.0.0",
+        "vote_log": [],
+        "weight": 1.0
+    },
+    "collection": "effects",
+    "entries": [
+        {
+            "id": "effect_super_sense",
+            "name": "Super sense",
+            "tags": [
+                "point_buy",
+                "permanent",
+                "scout"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "point_buy",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_vitality"
+                        ],
+                        "text": "Look at a neighboring location without activating the trap and reveal its contents to others. Remove the Super Sense permanent to evade one damage."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_vision"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_super_force",
+            "name": "Super force",
+            "tags": [
+                "damage",
+                "push"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_vitality"
+                        ],
+                        "text": "You or a creature moves forcefully to a neighboring tile. Variants: super throw, super leap, super push."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_throw"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_harm",
+            "name": "Harm",
+            "tags": [
+                "damage",
+                "instant",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "instant",
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_vitality"
+                        ],
+                        "text": "Permanent until round-end. Put a temporary Vitality token as a defense token every action until contact with target; calculate damage each action."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_drain",
+                        "effect_turn_life"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_sound_wave",
+            "name": "Sound wave",
+            "tags": [
+                "damage",
+                "range"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_air",
+                            "elem_space"
+                        ],
+                        "text": "Damage from a distance. Deal damage with sound at some place."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_meteor_shower"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_summoning",
+            "name": "Summoning",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_souls"
+                        ],
+                        "every_bonus": "Summon unknown creature from the tileset.",
+                        "permanent_power": 6,
+                        "text": "Perform summoning of your archived creature or Library's top creature until Stat spent is rounded to the creature's Stats. On destruction: creature returns to your archives."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_resurrect_death_ward",
+                        "effect_elementals_air"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_aura",
+            "name": "Aura",
+            "tags": [
+                "permanent",
+                "mass"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_souls"
+                        ],
+                        "every_bonus": "Each Permanent you cast may affect any known targets on the tileset chosen by you.",
+                        "text": "Each effect you cast becomes a mass effect, affecting all neighboring targets of your choice. Emit-an-element may target tokens/permanents and perform casting at the same time."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "rule_24_destroy_permanent_token"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_drain",
+            "name": "Drain",
+            "tags": [
+                "damage",
+                "heal",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_harmony"
+                        ],
+                        "text": "Channel: draw Vitality and Harmony tokens every action until contact; at each resolution calculate damage. You gain the same calculated points as life tokens. Inverse option: convert the life gain into point-buy damage."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_turn_life",
+                        "effect_harm"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_spirit_link",
+            "name": "Spirit link",
+            "tags": [
+                "permanent",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_souls"
+                        ],
+                        "every_bonus": "Connect all elements.",
+                        "text": "Connect two Stats of two friendly subjects (draw the chosen element value as dice and put over the card). The sum becomes the new Stat value."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_blessing_curse",
+            "name": "Blessing / Curse",
+            "tags": [
+                "permanent",
+                "meta"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_time"
+                        ],
+                        "every_bonus": "Remove one of your Blessings to instantly negate an enemy effect.",
+                        "text": "Turn target effect into a permanent effect (put target effect under Blessing/Curse)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_banish",
+            "name": "Banish",
+            "tags": [
+                "relocate"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "relocate"
+                        ],
+                        "element_cost": [
+                            "elem_space",
+                            "elem_souls"
+                        ],
+                        "every_bonus": "Relocate a tile against its will anywhere onto an unknown (closed) tile or known tile.",
+                        "text": "Relocate a subject against their will anywhere onto a known (open) tile or unknown tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_teleportation"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_oblivion",
+            "name": "Oblivion",
+            "tags": [
+                "permanent",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_time",
+                            "elem_souls"
+                        ],
+                        "text": "Target cannot play an action for the rest of the round; next rounds may play only Empty Posture (may destroy the permanent)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_sleep",
+                        "effect_confusion"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_teleportation",
+            "name": "Teleportation",
+            "tags": [
+                "relocate"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "relocate"
+                        ],
+                        "element_cost": [
+                            "elem_space"
+                        ],
+                        "every_bonus": "Instant. You or a subject teleport willingly to an unknown location.",
+                        "text": "You or a subject teleport willingly to a known location."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_banish"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_sleep",
+            "name": "Sleep",
+            "tags": [
+                "trap",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "trap",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_souls",
+                            "elem_concentration"
+                        ],
+                        "text": "Set as a trap on your location. Enemy cannot cast effects while in contact. On trap resolve: effect becomes Permanent targeting trapped character with power 20 point-buy."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_oblivion",
+                        "effect_confusion"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_aging",
+            "name": "Aging",
+            "tags": [
+                "damage",
+                "penalty",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_time",
+                            "elem_souls"
+                        ],
+                        "text": "Draw time and souls tokens and apply as enemy's stat-penalty permanents. + Put a bonus effect from the Library over a known location."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_space_bending",
+            "name": "Space-bending",
+            "tags": [
+                "damage",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_space",
+                            "elem_souls"
+                        ],
+                        "text": "Target loses next action cumulatively (loses one action per Space-bending cast). + Put a bonus effect from the Library over an unknown tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_delay_time"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_emotions_bombard",
+            "name": "Emotions bombard",
+            "tags": [
+                "permanent",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_harmony"
+                        ],
+                        "every_bonus": "Instant — cast as two sequencing instant actions in one go.",
+                        "text": "Enemy cannot cast effects while in contact with you."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_delay_time",
+            "name": "Delay time",
+            "tags": [
+                "permanent",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_time",
+                            "elem_time"
+                        ],
+                        "text": "All affected adjacent enemies perform one less action per round until someone destroys the effect. At first contact enemies still finish their current action; enemies perform at least one action per round."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_haste"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_potion_brew",
+            "name": "Potion brew",
+            "tags": [
+                "permanent",
+                "buff"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "point_buy"
+                        ],
+                        "element_cost": [
+                            "elem_vitality"
+                        ],
+                        "text": "Create a distributive potion; the target puts an element token over their hero as a permanent bonus until someone destroys it by point-buy."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_artifice",
+                        "effect_mutate"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_artifice",
+            "name": "Artifice",
+            "tags": [
+                "permanent",
+                "buff"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "point_buy"
+                        ],
+                        "element_cost": [
+                            "elem_earth"
+                        ],
+                        "text": "Put an element token in front of your deck as a permanent bonus until destroyed by damage or effect. Alt: put the element token over nearby or your location."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_potion_brew"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_invisibility",
+            "name": "Invisibility",
+            "tags": [
+                "permanent",
+                "stealth"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_fire",
+                            "elem_space"
+                        ],
+                        "every_bonus": "Permanent until you make damage.",
+                        "text": "Hero is untouchable. Visible only to other invisible characters, Vision effect, and the Cleric's class skill. Permanent until you attack or emit."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_phantom",
+                        "class_rogue",
+                        "class_cleric"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_mutate",
+            "name": "Mutate",
+            "tags": [
+                "permanent",
+                "swap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "point_buy"
+                        ],
+                        "element_cost": [
+                            "elem_water",
+                            "elem_harmony"
+                        ],
+                        "text": "Choose an element: put the lowest element token upside-down as a penalty, then put the highest element token as a permanent bonus. May target yourself, ally, or enemy."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_nature_embrace"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_lightning",
+            "name": "Lightning",
+            "tags": [
+                "damage",
+                "lock",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_fire",
+                            "elem_air"
+                        ],
+                        "text": "Target loses next N actions, where N = number of Lightnings cast."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_fireball",
+                        "effect_dark_matter"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_fireball",
+            "name": "Fireball",
+            "tags": [
+                "damage",
+                "token",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "channeling",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_fire",
+                            "elem_fire"
+                        ],
+                        "text": "Put a permanent fire token for each cast Fireball over a tile. The token vanishes when a character passes over it, dealing the point-buy damage."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_lightning",
+                        "effect_balefire"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_shield",
+            "name": "Shield",
+            "tags": [
+                "instant",
+                "permanent",
+                "counter"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "instant",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_concentration"
+                        ],
+                        "every_bonus": "Permanent. Take an element token and put it over these two permanent cards.",
+                        "text": "Invulnerability of the chosen element until end of round (playable as a counter action)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_disable",
+                        "effect_light_darkness"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_empower",
+            "name": "Empower",
+            "tags": [
+                "instant",
+                "permanent"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "instant",
+                            "permanent",
+                            "point_buy"
+                        ],
+                        "element_cost": [
+                            "elem_concentration"
+                        ],
+                        "text": "Remove this permanent to immediately gain one bonus action spendable only for emitting an element (speed up casting)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_haste"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_nature_embrace",
+            "name": "Nature embrace",
+            "tags": [
+                "channeling",
+                "buff"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_vitality"
+                        ],
+                        "text": "Choose an element: put lowest element token upside-down as penalty, then highest as permanent bonus."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_mutate",
+                        "effect_potion_brew"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_disable",
+            "name": "Disable",
+            "tags": [
+                "instant",
+                "permanent",
+                "counter"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "instant",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_concentration"
+                        ],
+                        "every_bonus": "Globally no one can make effects with this element for the round.",
+                        "text": "Put any element as a permanent defense token. Target cannot make effects with this element for a round (counter action)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_shield",
+                        "skill_counter_spell"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_throw",
+            "name": "Throw",
+            "tags": [
+                "damage"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_air"
+                        ],
+                        "text": "You may also throw a location-token permanent (yours or a nearby location's) to a nearby location (point-buy ability): must beat the permanent token element with your point-buy die for that element."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_super_force"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_elementals_air",
+            "name": "Elementals — Air",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_harmony",
+                            "elem_concentration"
+                        ],
+                        "stat_buy_total": 30,
+                        "text": "Summon creature until Σstat spent rounds to 30. Air elemental stats V/W/M/Wi = 5/5/20/0. 3 hits, 1 action. Follows you and stays on your tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_elementals_water",
+                        "effect_elementals_earth",
+                        "effect_summoning"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_elementals_water",
+            "name": "Elementals — Water",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_harmony",
+                            "elem_concentration"
+                        ],
+                        "stat_buy_total": 30,
+                        "text": "Σstat 30. Water elemental stats 5/20/5/0. 3 hits, 1 action."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_elementals_air",
+                        "effect_elementals_earth"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_elementals_earth",
+            "name": "Elementals — Earth",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_harmony",
+                            "elem_concentration"
+                        ],
+                        "stat_buy_total": 30,
+                        "text": "Σstat 30. Earth elemental stats 20/5/5/0. 3 hits, 1 action."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_elementals_air",
+                        "effect_elementals_water"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_balefire",
+            "name": "Fiery Beam / Balefire",
+            "tags": [
+                "damage"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_fire",
+                            "elem_harmony",
+                            "elem_time"
+                        ],
+                        "text": "On successful cast, earn an extra round just for you (only you may take new actions during it)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_fireball"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_golems_earth",
+            "name": "Golems — Earth",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "stat_buy_total": 24,
+                        "text": "Permanent. Stat buy (channeling). Perform summoning a creature until the sum of your Stats spent can be rounded to 24. The creature always follows you and stays onto your tile. Earth golem stats 10/5/9/0. 2 hits, 2 actions."
+                    },
+                    "notes": "Author-side rule revision 2026-10-19 unified Golems to Σ=24 across variants and clarified locomotion.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_golems_water",
+                        "effect_golems_air"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_golems_water",
+            "name": "Golems — Water",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "stat_buy_total": 24,
+                        "text": "Permanent. Stat buy (channeling). Perform summoning a creature until the sum of your Stats spent can be rounded to 24. The creature always follows you and stays onto your tile. Water golem stats 10/9/5/0. 2 hits, 2 actions."
+                    },
+                    "notes": "Author-side rule revision 2026-10-19 unified Golems to Σ=24 across variants and clarified locomotion.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_golems_earth",
+                        "effect_golems_air"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_golems_air",
+            "name": "Golems — Air",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "stat_buy_total": 24,
+                        "text": "Permanent. Stat buy (channeling). Perform summoning a creature until the sum of your Stats spent can be rounded to 24. The creature always follows you and stays onto your tile. Air golem stats 9/5/10/0. 2 hits, 2 actions."
+                    },
+                    "notes": "Author-side rule revision 2026-10-19 unified Golems to Σ=24 (was 30 in paper draft) and clarified locomotion.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_golems_earth",
+                        "effect_golems_water"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_awake",
+            "name": "Awake",
+            "tags": [
+                "channeling",
+                "move"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_harmony"
+                        ],
+                        "every_bonus": "Permanent — combine both Awakes into one permanent — add the target's Stat to your Stat.",
+                        "text": "Move around a terrain card, wall token, ally, or yourself. Channel: draw a Harmony token every action until contact."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_resurrect_death_ward",
+            "name": "Resurrect / Death Ward",
+            "tags": [
+                "permanent",
+                "stat_buy",
+                "ally"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "stat_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_vitality"
+                        ],
+                        "text": "Start spawning an archived creature as an ally until Stat spent rounds to that creature's Stats. When creature vanishes it goes back to archives. Alt (Death Ward): on target's death, move it out of dimension with 1 life."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_summoning",
+                        "effect_possess_phylactery"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_creation",
+            "name": "Creation",
+            "tags": [
+                "permanent",
+                "wall"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_earth"
+                        ],
+                        "text": "Place an impassable (for low-Matter creatures) adjacent wall token with power 20 × number of Creations cast. To destroy, enemy must emit Earth > wall/2× wall. + Put an Earth token on that tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_fossilization",
+                        "effect_ice_blast"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_ice_blast",
+            "name": "Ice blast",
+            "tags": [
+                "damage",
+                "token",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "point_buy",
+                            "channeling",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_water",
+                            "elem_fire"
+                        ],
+                        "text": "+ You may put a Water AND Fire permanent bonus token on your tile. + Also put a damage-shield Water or Fire token on your tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_fireball",
+                        "effect_fossilization"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_combustion",
+            "name": "Combustion",
+            "tags": [
+                "instant",
+                "penalty",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "instant",
+                            "permanent",
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_harmony"
+                        ],
+                        "text": "Channel: put an element token every action until contact; put it in front of enemy's deck upside-down as stat penalty + defense token over this effect for duration."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_fossilization",
+            "name": "Fossilization",
+            "tags": [
+                "permanent",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_earth",
+                            "elem_vitality"
+                        ],
+                        "text": "Target misses actions until end of round. + You may put an Earth or Vitality permanent bonus token on your tile. + Also put a damage-shield Earth token on your tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_oblivion"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_the_void",
+            "name": "The Void",
+            "tags": [
+                "channeling",
+                "defense"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_concentration"
+                        ],
+                        "every_bonus": "Instant.",
+                        "text": "You take no damage this action. Channel: put a Concentration token every action over the effect for the action's duration."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_shield"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_metaphysics",
+            "name": "Metaphysics",
+            "tags": [
+                "damage",
+                "map"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_space",
+                            "elem_earth"
+                        ],
+                        "text": "Damage by changing the mass of the subject's body. + Unite two unknown tiles into one tile. If you beat the creature's stats, you may unite known tiles."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_disruption",
+                        "effect_mind_blast"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_confusion",
+            "name": "Confusion",
+            "tags": [
+                "trap",
+                "lock"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "trap",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_space",
+                            "elem_souls"
+                        ],
+                        "text": "Set as trap on your location. Target cannot perform any basic action except Empty Posture (not even Empty Move). On trap resolve: becomes Permanent with power 20 point-buy."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_sleep",
+                        "effect_oblivion"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_inner_fire",
+            "name": "Inner Fire",
+            "tags": [
+                "permanent",
+                "buff"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_fire"
+                        ],
+                        "text": "When you make one non-effect damage, you deal two damage instead."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_blizzard",
+            "name": "Blizzard",
+            "tags": [
+                "damage",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_air",
+                            "elem_water"
+                        ],
+                        "text": "After casting, no one — not even you (except Blizzard effects) — can deal any damage at adjacent tiles and your tile until end of round."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_light_darkness"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_vision",
+            "name": "Vision",
+            "tags": [
+                "scout"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "scout"
+                        ],
+                        "element_cost": [
+                            "elem_time"
+                        ],
+                        "every_bonus": "Take a chosen effect from the Dimension Library and put into your discard pile.",
+                        "text": "Look at any unknown tile from the tileset or look at the enemy's hand (stat vs stat)."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_super_sense"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_light_darkness",
+            "name": "Light / Darkness",
+            "tags": [
+                "defense",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_fire"
+                        ],
+                        "every_bonus": "Instant.",
+                        "text": "Until end of round, no one may deal damage to adjacent tiles and your tile. Channel: draw Fire token every action."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_blizzard",
+                        "effect_shield"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_phantom",
+            "name": "Phantom",
+            "tags": [
+                "permanent",
+                "clone"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_souls",
+                            "elem_space"
+                        ],
+                        "text": "Destroyed upon taking damage. Create a mirror of yourself to act as you while you remain on your tile. +: Option to enter the mirror character at any time."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_invisibility",
+                        "effect_possess_phylactery"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_meteor_shower",
+            "name": "Meteor shower",
+            "tags": [
+                "damage",
+                "range",
+                "aoe"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "point_buy"
+                        ],
+                        "element_cost": [
+                            "elem_earth",
+                            "elem_concentration",
+                            "elem_space"
+                        ],
+                        "text": "Damages all known creatures at once."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_sound_wave"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_traps_mastery",
+            "name": "Traps mastery",
+            "tags": [
+                "permanent",
+                "trap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_space"
+                        ],
+                        "text": "Put an effect beneath this card as a trap (cast with power 20 × number of times this effect has been cast). It will not trigger from your character but from an approaching enemy."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_possess_phylactery",
+            "name": "Possess / Phylactery",
+            "tags": [
+                "permanent",
+                "swap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "point_buy"
+                        ],
+                        "element_cost": [
+                            "elem_vitality"
+                        ],
+                        "text": "Swap yourself with any creature from your archives, put your character into archives. On Possess destruction, swap back (also usable with Golems and Elementals). + Phylactery alt: destroy one permanent effect any time."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_phantom",
+                        "effect_resurrect_death_ward"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_dark_matter",
+            "name": "Dark matter",
+            "tags": [
+                "damage",
+                "token"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "point_buy",
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_space",
+                            "elem_fire"
+                        ],
+                        "text": "Damage by colliding the target with the inverted target. + Also put a damage-shield Space AND Fire token on your tile."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_lightning"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_poison",
+            "name": "Poison",
+            "tags": [
+                "damage",
+                "trap"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "trap"
+                        ],
+                        "element_cost": [
+                            "elem_water",
+                            "elem_vitality"
+                        ],
+                        "text": "Leave this card as a trap on your tile after casting."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_disruption",
+            "name": "Disruption",
+            "tags": [
+                "damage",
+                "map"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "text": "Damage by trying to split an object into two. + Split an unknown tile into two tiles (choose any cards and put them in adjacent tile face-down). If you beat the creature's Stats, you may split known tiles."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_metaphysics",
+                        "effect_mind_blast"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_mind_blast",
+            "name": "Mind Blast",
+            "tags": [
+                "damage",
+                "instant"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "instant",
+                            "point_buy",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_concentration"
+                        ],
+                        "text": "You take the same amount of damage you dealt. + Switch two unknown tiles. If you beat the creature's Stats at known tiles, you may switch known tiles."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_disruption",
+                        "effect_metaphysics"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_haste",
+            "name": "Haste",
+            "tags": [
+                "permanent",
+                "economy"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_time",
+                            "elem_time"
+                        ],
+                        "every_bonus": "Draw an additional card each round.",
+                        "text": "Draw an additional card and gain +1 bonus action per Haste you cast."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_delay_time",
+                        "effect_empower"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_turn_life",
+            "name": "Turn life",
+            "tags": [
+                "damage",
+                "heal",
+                "instant"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "data": {
+                        "effect_types": [
+                            "damage",
+                            "instant"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_harmony"
+                        ],
+                        "text": "Damage by spreading inverted vital energy. Alt: restore life = Vitality stat after calculations instead of dealing damage."
+                    },
+                    "notes": "",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "rebalance_links": [
+                        "effect_drain",
+                        "effect_harm"
+                    ],
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0
+                }
+            ]
+        },
+        {
+            "id": "effect_earthquake",
+            "name": "Earthquake",
+            "tags": [
+                "creature_innate",
+                "damage"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Ruinous Minotaur, Canyon Minotaur). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_fossilization",
+                        "effect_metaphysics"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "damage"
+                        ],
+                        "element_cost": [
+                            "elem_earth"
+                        ],
+                        "text": "Damages all adjacent enemies.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_love",
+            "name": "Love",
+            "tags": [
+                "creature_innate",
+                "permanent"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Bant Battlemage 3P). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_awe",
+                        "effect_fear",
+                        "effect_anger"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_water",
+                            "elem_harmony"
+                        ],
+                        "text": "The target cannot deal damage to you until they visit their tower.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_awe",
+            "name": "Awe",
+            "tags": [
+                "creature_innate",
+                "permanent"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Angel of Mercy). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_love",
+                        "effect_fear",
+                        "effect_anger"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_air",
+                            "elem_harmony"
+                        ],
+                        "text": "The target cannot deal damage to you until they visit their tower.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_domination",
+            "name": "Domination",
+            "tags": [
+                "creature_innate",
+                "permanent",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Selftower Sphynx). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_possess_phylactery",
+                        "effect_confusion"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_souls",
+                            "elem_harmony"
+                        ],
+                        "text": "You control the target while you are in contact.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_anger",
+            "name": "Anger",
+            "tags": [
+                "creature_innate",
+                "permanent"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Rakewalk Gargantuan, Summit Apes). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_love",
+                        "effect_awe",
+                        "effect_fear"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_fire",
+                            "elem_harmony"
+                        ],
+                        "text": "The target cannot deal damage to anyone other than you until they visit their tower.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_mists",
+            "name": "Mists",
+            "tags": [
+                "creature_innate",
+                "instant"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Nacatl Hunt-Pride, Bonebreaker Giant). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_blizzard",
+                        "effect_sleep"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "instant"
+                        ],
+                        "element_cost": [
+                            "elem_water"
+                        ],
+                        "text": "No affected adjacent creature can attack this round while you are in contact with it.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_petrify",
+            "name": "Petrify",
+            "tags": [
+                "creature_innate",
+                "permanent",
+                "channeling"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Greater Basilisk). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_fossilization",
+                        "effect_sleep"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "permanent",
+                            "channeling"
+                        ],
+                        "element_cost": [
+                            "elem_vitality",
+                            "elem_harmony"
+                        ],
+                        "text": "Turn the target into stone while you are in contact.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        },
+        {
+            "id": "effect_fear",
+            "name": "Fear",
+            "tags": [
+                "creature_innate",
+                "permanent"
+            ],
+            "versions": [
+                {
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "notes": "Listed in the paper only on creature cards (Etherium Abomination, Infectious Horror). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
+                    "origin": "paper_rules",
+                    "parent_version": null,
+                    "status": "canonical",
+                    "version": "1.0.0",
+                    "vote_log": [],
+                    "weight": 1.0,
+                    "rebalance_links": [
+                        "effect_love",
+                        "effect_awe",
+                        "effect_anger"
+                    ],
+                    "data": {
+                        "effect_types": [
+                            "permanent"
+                        ],
+                        "element_cost": [
+                            "elem_air",
+                            "elem_harmony"
+                        ],
+                        "text": "The target character cannot do any damage until reaching their tower.",
+                        "creature_innate": true,
+                        "in_player_deck": false
+                    }
+                }
+            ]
+        }
+    ],
+    "notes": "All effects start at version 1.0.0 / weight 1.0 / status canonical / origin paper_rules. rebalance_links tie effects that share element costs or thematic domain — the rebalance script will use these to propose counter-weights. Eight creature-innate effects (tag creature_innate) are defined here but flagged in_player_deck=false."
+}

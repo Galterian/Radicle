@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Game runtime / downloaded content
+game/node_modules/
+game/gun-data/
+game/sessions/
+game/radicle-work/
+game/radicle.git/
+
+# Windows Zone.Identifier metadata (NTFS alternate data streams)
+*:Zone.Identifier

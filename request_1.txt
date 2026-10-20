@@ -1,0 +1,6 @@
+1. Identified Data Layer JSON Structures
+
+Based on your exact design criteria, the game state must be translated into highly structured JSON payloads to support local execution, peer-to-peer verification, and decentralized branch versioning.
+
+2. Generate the JSONs and create the rules with versions and weight of each version in the object (I want to have a voting fro the Rule modification/addition later on in a git branch manner, the whole conception of the game is to be hosted in firebase as a coordinator but to be peer to peer game that users can enter the dimention with some coordinates and sync its actions with the other players in neadr by locations (and the whole map and items over it, like your character for example), whe close regions will have strong reference to each other like syncing the "turn state" between the players that share the same part of the map in this dimention. Most importantly to have the handshake between the closer player to exctange the simultaneous actions and update the map state.
+The idea of the regions with string referece is that they needs to be synced with handshake each action and update based on the rules the game/map stage. 

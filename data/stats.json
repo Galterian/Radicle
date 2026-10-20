@@ -1,0 +1,73 @@
+{
+  "collection": "stats",
+  "entries": [
+    {
+      "id": "stat_vitality",
+      "name": "Vitality",
+      "tags": ["pillar", "physical"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["stat_world", "stat_matter", "stat_will"],
+        "vote_log": [], "notes": "",
+        "data": {
+          "code": "V",
+          "pillar_role": "physical",
+          "zero_in": ["undead", "astral"],
+          "elements": ["elem_vitality"]
+        }
+      }]
+    },
+    {
+      "id": "stat_world",
+      "name": "World (Souls / Spiritual)",
+      "tags": ["pillar", "spiritual"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["stat_vitality", "stat_matter", "stat_will"],
+        "vote_log": [], "notes": "Manipulation of time-space continuum.",
+        "data": {
+          "code": "W",
+          "pillar_role": "spiritual",
+          "zero_in": ["ordinary_objects", "plants"],
+          "elements": ["elem_souls", "elem_time", "elem_space"]
+        }
+      }]
+    },
+    {
+      "id": "stat_matter",
+      "name": "Matter (Ethereality)",
+      "tags": ["pillar", "emotional"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["stat_vitality", "stat_world", "stat_will"],
+        "vote_log": [], "notes": "Manipulation of matter and energy through elements.",
+        "data": {
+          "code": "M",
+          "pillar_role": "emotional",
+          "zero_in": ["non_magical_objects"],
+          "elements": ["elem_air", "elem_water", "elem_earth", "elem_fire"]
+        }
+      }]
+    },
+    {
+      "id": "stat_will",
+      "name": "Will",
+      "tags": ["pillar", "mental"],
+      "versions": [{
+        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
+        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+        "rebalance_links": ["stat_vitality", "stat_world", "stat_matter"],
+        "vote_log": [], "notes": "Self-control and mental states.",
+        "data": {
+          "code": "Wi",
+          "pillar_role": "mental",
+          "zero_in": ["plants", "most_non_sentient"],
+          "elements": ["elem_concentration", "elem_harmony"]
+        }
+      }]
+    }
+  ]
+}

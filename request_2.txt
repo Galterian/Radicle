@@ -1,0 +1,6 @@
+Now generate me a simple real time 2d isometric PC game (via godot .net) with one hero entering into the 5x5 hex map dimension
+  keeping its session in radicle repo and in that dimension to have the monsters, one NPC ally hero, and two NPC
+  opponents iin theri own alliance.  
+  
+  Important!!!: knowing all my /data json specification, and most importantly
+  following the requirements described in the @chaosD6_request_phase1_extract_jsons_2.txt .
