@@ -57,6 +57,14 @@ const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 60);           
 
 const PEER_ID_STRING    = `peer:${PEER_LABEL}`;
 
+// Hoisted so publishPublicState's broadcastUI calls can safely fire before the
+// WebSocket server comes up later in the file. Client set populates lazily.
+const uiClients = new Set();
+function broadcastUI(msg) {
+  const payload = JSON.stringify(msg);
+  for (const ws of uiClients) { try { ws.send(payload); } catch {} }
+}
+
 // -------- data layer (loaded directly from the shared folder) --------
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
 async function loadJson(name) {
@@ -318,22 +326,72 @@ setInterval(() => {
 }, 15_000);
 
 // Shared state via Gun: positions / HP are published on each cleanup.
-async function publishPublicState() {
-  myNode.put({
+// Also mirrored to the discovery server so peers can see each other even when
+// the Gun CRDT or the gossipsub mesh hasn't converged yet (common on localhost
+// during the first few turns, which previously caused resolver no-ops and the
+// "ally marker disappears" flicker in the UI).
+function currentStateSnapshot() {
+  return {
     peer_id: PEER_ID_STRING, character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: ALLIANCE, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
-  });
+  };
+}
+
+// Known-peers map seeded with self so the resolver always has an actor entry
+// even if nothing has sync'd yet.
+const peersPublic = new Map();
+peersPublic.set(PEER_ID_STRING, currentStateSnapshot());
+
+async function postJson(url, body) {
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (!r.ok) throw new Error(`${r.status}`);
+    return await r.json();
+  } catch (e) { /* best-effort; log at caller */ return null; }
+}
+
+async function publishPublicState() {
+  const snap = currentStateSnapshot();
+  myNode.put(snap);
+  peersPublic.set(PEER_ID_STRING, snap);
+  await postJson(`${DISCOVERY_URL}/state`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, state: snap });
+  broadcastUI({ kind: 'peers', peers: [...peersPublic.values()] });
 }
 await publishPublicState();
 
-// Pull every other peer's public state live from Gun.
-const peersPublic = new Map();        // peer_id -> {tile_q, tile_r, life, alliance, name}
+// Also pull every other peer's public state live from Gun (slow-tier CRDT).
 dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m, k) => {
   if (!m || typeof m !== 'object' || !m.peer_id) return;
-  peersPublic.set(m.peer_id, m);
+  // Merge rather than replace so a partial Gun echo (which sometimes drops
+  // fields) doesn't wipe tile/life.
+  const prev = peersPublic.get(m.peer_id) || {};
+  peersPublic.set(m.peer_id, { ...prev, ...m });
   broadcastUI({ kind: 'peers', peers: [...peersPublic.values()] });
 });
+
+// Discovery is the reliable fallback: pull everyone's registered state and
+// merge into peersPublic. Runs on the same cadence as peer-dial polling.
+async function pullDiscoveryState() {
+  try {
+    const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
+    const j = await r.json();
+    let changed = false;
+    for (const p of j.peers || []) {
+      if (!p.state) continue;
+      const prev = peersPublic.get(p.peer_id) || {};
+      // Prefer any field we already have from Gun/local if the discovery copy
+      // doesn't carry it, so faster sources don't get clobbered.
+      const merged = { ...prev, ...p.state };
+      peersPublic.set(p.peer_id, merged);
+      changed = true;
+    }
+    if (changed) broadcastUI({ kind: 'peers', peers: [...peersPublic.values()] });
+  } catch {}
+}
+setInterval(pullDiscoveryState, 2500);
+// Seed quickly after startup so the first planning phase already sees peers.
+setTimeout(pullDiscoveryState, 1200);
 
 // -------- phase FSM --------
 // planning (10s normal / 6s combat heartbeat) → reveal (5s) → resolution (5s) → cleanup
@@ -343,10 +401,21 @@ let phaseEndsAt = Date.now() + 10_000;
 let myLastSalt = null;
 let myLastReveal = null;
 
+// Alliances in the Ashfall-Micro demo collapse into two sides: the player and
+// their npc_a ally fight together, npc_b creatures are the opposition. Treat
+// anything we don't recognise as its own side so additional factions could
+// be added without breaking existing checks.
+function sideOf(alliance) {
+  if (alliance === 'player' || alliance === 'npc_a') return 'A';
+  if (alliance === 'npc_b') return 'B';
+  return alliance;
+}
+const MY_SIDE = sideOf(ALLIANCE);
+
 function anyAdjacentOpponents() {
   const me = peersPublic.get(PEER_ID_STRING) || { tile_q: entity.tile.q, tile_r: entity.tile.r, alliance: ALLIANCE };
   for (const p of peersPublic.values()) {
-    if (!p || p.peer_id === PEER_ID_STRING || p.alliance === ALLIANCE) continue;
+    if (!p || p.peer_id === PEER_ID_STRING || sideOf(p.alliance) === MY_SIDE) continue;
     if (hexDistance(me, p) <= 1) return true;
   }
   return false;
@@ -397,12 +466,16 @@ async function doPlanningEnd() {
   if (ALLIANCE !== 'player') await npcPlan();
 
   // Decode the single queued pick. The queue can hold either a hand slot index
-  // or one of the Empty-type markers 'EP' / 'EM'. Nothing picked → Empty Posture
-  // default (rule 6 fallback).
+  // or one of the Empty-type markers. 'EMPTY' is the combined slot — rule 6
+  // says Empty Move must be "declared first", which we interpret as: EM when a
+  // tile target was selected before commit, else EP. Nothing picked → EP.
   const q0 = queued[0];
   let card = null;
   let code = 'EP';
-  if (q0 === 'EP') code = 'EP';
+  if (q0 === 'EMPTY') {
+    const hasTileTarget = target && typeof target === 'object' && 'q' in target && 'r' in target;
+    code = hasTileTarget ? 'EM' : 'EP';
+  } else if (q0 === 'EP') code = 'EP';
   else if (q0 === 'EM') code = 'EM';
   else if (typeof q0 === 'number' && hand[q0]) { card = hand[q0]; code = card.code; }
 
@@ -417,15 +490,22 @@ async function doPlanningEnd() {
 
 async function doReveal() {
   if (!myLastReveal) return;
+  const targetObj = wrapTarget(myLastReveal.target);
   await emitEnvelope({
     type: 'evt_action_reveal',
     payload: {
       action: myLastReveal.code,
       effects: [], skills: [], class_ability_tapped: false,
-      target: wrapTarget(myLastReveal.target),
+      target: targetObj,
       combo_step: null,
       salt: myLastReveal.salt,
     },
+  });
+  // Mirror to discovery so other peers' resolvers can pick it up even if
+  // gossipsub hasn't propagated the subscription yet.
+  await postJson(`${DISCOVERY_URL}/reveal`, {
+    dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.turn,
+    action: myLastReveal.code, target: targetObj,
   });
 }
 
@@ -448,6 +528,17 @@ async function doResolution() {
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
     revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target) });
   }
+  // Pull any reveals the discovery server has for this turn and merge in — this
+  // is the gossipsub-didn't-propagate fallback. Peers' resolvers all converge
+  // on the same input set this way.
+  try {
+    const r = await fetch(`${DISCOVERY_URL}/reveals/${DIM_ID}/${hg.turn}`);
+    const j = await r.json();
+    for (const d of j.reveals || []) {
+      if (revealsThisTurn.find(x => x.actor === d.peer_id)) continue;
+      revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null });
+    }
+  } catch {}
 
   // Resolve a target object into the tile the target occupies / points at. A
   // character target reads the peer's current public tile; a tile target is
@@ -555,7 +646,7 @@ async function doCleanup() {
 }
 
 async function npcPlan() {
-  const enemies = [...peersPublic.values()].filter(p => p && p.peer_id !== PEER_ID_STRING && p.alliance !== ALLIANCE && p.life > 0);
+  const enemies = [...peersPublic.values()].filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
   if (!enemies.length) { queued = []; target = null; return; }
   enemies.sort((a, b) => hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, a) - hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, b));
   const nearest = enemies[0];
@@ -641,7 +732,6 @@ const uiHttp = http.createServer(async (req, res) => {
   res.writeHead(404); res.end();
 });
 const wss = new WebSocketServer({ server: uiHttp });
-const uiClients = new Set();
 wss.on('connection', (ws) => {
   uiClients.add(ws);
   ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, turn: hg.turn, peers: [...peersPublic.values()] }));
@@ -651,9 +741,13 @@ wss.on('connection', (ws) => {
       if (m.kind === 'queue') {
         if (locked) return;
         // Rule 1 + Rule 7: one action card per turn. Accept at most one slot;
-        // either a valid hand index or the Empty-type marker 'EP' / 'EM'.
+        // either a valid hand index or the Empty-type marker. 'EMPTY' is the
+        // combined slot that resolves to EM when a tile target is set, EP
+        // otherwise (rule 6: Empty Move is declared first). Historic 'EP' and
+        // 'EM' are still accepted so older clients keep working.
         const picks = (m.slots || []).slice(0, 1).filter(s =>
-          s === 'EP' || s === 'EM' || (typeof s === 'number' && s >= 0 && s < hand.length)
+          s === 'EMPTY' || s === 'EP' || s === 'EM' ||
+          (typeof s === 'number' && s >= 0 && s < hand.length)
         );
         queued = picks;
         broadcastUI({ kind: 'hand', hand, queued });
@@ -669,10 +763,6 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => uiClients.delete(ws));
 });
-function broadcastUI(msg) {
-  const payload = JSON.stringify(msg);
-  for (const ws of uiClients) { try { ws.send(payload); } catch {} }
-}
 uiHttp.listen(PEER_PORT_HTTP, '127.0.0.1', () => {
   console.log(`[${PEER_LABEL}] UI socket on ws://127.0.0.1:${PEER_PORT_HTTP}/`);
 });
