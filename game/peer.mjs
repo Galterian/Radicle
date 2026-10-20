@@ -62,6 +62,18 @@ const START_TILE        = JSON.parse(process.env.START_TILE || '{"q":1,"r":2}');
 const PEER_GUN_URLS     = (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
 const BOOTSTRAP_MADDRS  = (process.env.BOOTSTRAP || '').split(',').filter(Boolean);        // libp2p peers
 const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 60);            // demo: 60s instead of 3600s
+// Round/turn clock. A round is one simultaneous action (declare → commit →
+// reveal → resolve); ROUNDS_PER_TURN rounds make a turn, and only at turn end
+// do characters discard leftovers and draw back to 5 (rule 7 / rule 10;
+// battle_system_core.turn_structure.actions_per_round_pc = 3). The commit and
+// reveal handshakes are event-driven — they complete as soon as every strong-
+// region member has answered — with short caps so a silent peer can't stall
+// the mesh (sync_region_tiers.failure_mode → treated as Empty Posture).
+const ROUND_SEC         = Number(process.env.ROUND_SEC        || 6);
+const ROUNDS_PER_TURN   = Number(process.env.ROUNDS_PER_TURN  || 3);
+const COMMIT_WAIT_MS    = Number(process.env.COMMIT_WAIT_MS   || 800);
+const REVEAL_WAIT_MS    = Number(process.env.REVEAL_WAIT_MS   || 1500);
+const HAND_SIZE         = 5;
 
 const PEER_ID_STRING    = `peer:${PEER_LABEL}`;
 
@@ -245,13 +257,17 @@ if (entity.kind === 'character') {
 }
 // Shuffle.
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
-const hand = []; while (hand.length < 5 && deck.length) hand.push(deck.shift());
+const hand = []; while (hand.length < HAND_SIZE && deck.length) hand.push(deck.shift());
 const discard = [];
 let queued = [];           // one element: slot index (int) | 'EP' | 'EM'
 let target = null;         // peer_id string | { q, r } tile object | null
 let locked = false;
+const willDiscard = new Set();   // card_ids the player marked to drop at turn end (rule 7: characters MAY discard leftovers)
 
 // -------- hashgraph state --------
+// turn/round are the envelope fields; `action` is the global round counter
+// (turn * ROUNDS_PER_TURN + round) used wherever we need a single monotonic key
+// (discovery reveal buckets, handshake bookkeeping, join sync).
 const hg = {
   selfParent: null,
   otherParent: null,
@@ -259,17 +275,19 @@ const hg = {
   tape: [],
   turn: 0,
   round: 0,
+  action: 0,
 };
+const actionKey = (turn, round) => turn * ROUNDS_PER_TURN + round;
 
 // Phase clock lives up here because the public-state snapshot (published
 // before the FSM section) reports it to joining peers.
 let currentPhase = 'planning';
-let phaseEndsAt = Date.now() + 10_000;
+let phaseEndsAt = Date.now() + ROUND_SEC * 1000;
 
 function sha256Hex(s) { return createHash('sha256').update(s).digest('hex'); }
 function digestObj(o) { return sha256Hex(JSON.stringify(o)); }
 
-async function emitEnvelope({ type, payload, actionIndex = 0 }) {
+async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
   const env = {
     type,
     dimension_id: DIM_ID,
@@ -356,7 +374,7 @@ function currentStateSnapshot() {
     alliance: ALLIANCE, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
     // Live clock + network hints so a joining peer can align its turn counter
     // and dial the mesh. Gun rejects arrays in nested puts, hence the CSV.
-    turn: hg.turn, phase: currentPhase, phase_ends_at: phaseEndsAt,
+    turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt,
     gun_url: myGunUrl, multiaddrs_csv: myMaddrs.join(','),
   };
 }
@@ -459,15 +477,52 @@ function stepToward(from, to) {
   return best || from;
 }
 
-async function enterPhase(name) {
+// Rounds end on a fixed ROUND_SEC cadence: each declaration deadline is the
+// previous one + ROUND_SEC, so the commit/reveal handshake eats into the next
+// window instead of stretching the round. Reveal / resolution are gated on the
+// other members' envelopes and only use their ms budget as a cap.
+let roundDeadline = phaseEndsAt;
+function enterPhase(name) {
   currentPhase = name;
-  const heartbeat = anyAdjacentOpponents();
-  const secs = name === 'planning' ? (heartbeat ? 6 : 10) : name === 'reveal' ? 5 : name === 'resolution' ? 5 : 2;
-  phaseEndsAt = Date.now() + secs * 1000;
-  broadcastUI({ kind: 'phase', name, seconds: secs, heartbeat });
-  if (name === 'reveal')      await doReveal();
-  if (name === 'resolution')  await doResolution();
-  if (name === 'cleanup')     await doCleanup();
+  let ms;
+  if (name === 'planning') {
+    // Keep at least a 1s declaration window if a handshake ran long.
+    roundDeadline = Math.max(roundDeadline + ROUND_SEC * 1000, Date.now() + 1000);
+    phaseEndsAt = roundDeadline;
+    ms = phaseEndsAt - Date.now();
+  } else {
+    ms = name === 'reveal' ? COMMIT_WAIT_MS : REVEAL_WAIT_MS;
+    phaseEndsAt = Date.now() + ms;
+  }
+  broadcastUI({ kind: 'phase', name, seconds: Math.round(ms / 100) / 10, heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
+}
+
+// Handshake bookkeeping: which strong-region members have committed / revealed
+// for a given action. Fed by the pubsub inbox and (for reveals) by discovery.
+const commitsSeen = new Map();   // actionKey -> Set(peer_id)
+const revealsSeen = new Map();   // actionKey -> Set(peer_id)
+function noteSeen(map, env) {
+  const k = actionKey(env.turn, env.round);
+  if (!map.has(k)) map.set(k, new Set());
+  map.get(k).add(env.actor_peer_id);
+  if (map.size > 16) for (const key of [...map.keys()].sort((a, b) => a - b).slice(0, map.size - 16)) map.delete(key);
+}
+function expectedMembers() {
+  const cutoff = Date.now() - 20_000;
+  return [...peersPublic.values()].filter(p =>
+    p && p.peer_id !== PEER_ID_STRING && p.life > 0 && Date.parse(p.last_seen || 0) > cutoff
+  ).map(p => p.peer_id);
+}
+function allIn(map) {
+  const seen = map.get(hg.action) || new Set();
+  return expectedMembers().every(id => seen.has(id));
+}
+async function pullFromDiscovery(kind, map) {
+  try {
+    const r = await fetch(`${DISCOVERY_URL}/${kind}/${DIM_ID}/${hg.action}`);
+    const j = await r.json();
+    for (const d of j[kind] || []) noteSeen(map, { turn: hg.turn, round: hg.round, actor_peer_id: d.peer_id });
+  } catch {}
 }
 
 function targetTag(t) {
@@ -527,6 +582,7 @@ async function doPlanningEnd() {
     type: 'evt_action_commit',
     payload: { commitment: commitHash, empty_move_announced: code === 'EM' },
   });
+  await postJson(`${DISCOVERY_URL}/commit`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action, commitment: commitHash });
 }
 
 async function doReveal() {
@@ -544,36 +600,33 @@ async function doReveal() {
   });
   // Mirror to discovery so other peers' resolvers can pick it up even if
   // gossipsub hasn't propagated the subscription yet.
+  // Discovery buckets reveals by the global action index (its `turn` field).
   await postJson(`${DISCOVERY_URL}/reveal`, {
-    dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.turn,
+    dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action,
     action: myLastReveal.code, target: targetObj,
   });
 }
 
-const revealedByPeer = new Map();
 async function doResolution() {
-  // Wait briefly for other peers' reveals (we received them via pubsub earlier).
-  await new Promise(r => setTimeout(r, 500));
-
-  // Deterministic resolver over all revealed actions this turn.
+  // Deterministic resolver over all revealed actions this round.
   const edges = data.battle_system.battle_system_core.data.resolution_matrix.edges;
   const edgeMap = {};
   for (const e of edges) (edgeMap[e.actor] ||= {})[e.defender] = e.bonus_damage_to_actor;
 
   const revealsThisTurn = [];
   for (const env of hg.tape) {
-    if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn) continue;
+    if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
     revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null });
   }
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
     revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target) });
   }
-  // Pull any reveals the discovery server has for this turn and merge in — this
-  // is the gossipsub-didn't-propagate fallback. Peers' resolvers all converge
-  // on the same input set this way.
+  // Pull any reveals the discovery server has for this action and merge in —
+  // this is the gossipsub-didn't-propagate fallback. Peers' resolvers all
+  // converge on the same input set this way.
   try {
-    const r = await fetch(`${DISCOVERY_URL}/reveals/${DIM_ID}/${hg.turn}`);
+    const r = await fetch(`${DISCOVERY_URL}/reveals/${DIM_ID}/${hg.action}`);
     const j = await r.json();
     for (const d of j.reveals || []) {
       if (revealsThisTurn.find(x => x.actor === d.peer_id)) continue;
@@ -703,24 +756,36 @@ async function doResolution() {
   await emitEnvelope({ type: 'evt_state_hash', payload: { state_hash: stateHash, damage_applied: [...damage.entries()].map(([t, a]) => ({ target: t, amount: a, source: 'action' })), tokens_changed: [] } });
 }
 
-async function doCleanup() {
-  // Discard played + will_discard; draw back to 5.
-  const consumed = new Set(queued);
-  const kept = [];
-  for (let i = 0; i < hand.length; i++) {
-    if (consumed.has(i)) discard.push(hand[i]);
-    else kept.push(hand[i]);
+function reshuffleIfEmpty() {
+  if (deck.length || !discard.length) return;
+  for (const c of discard.splice(0)) deck.push(c);
+  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+}
+
+// End of one action: the played card leaves the hand (no draw yet — rule 10
+// refills only at turn end), buffers reset, counters advance.
+async function endRound() {
+  const played = typeof queued[0] === 'number' ? hand[queued[0]] : null;
+  if (played) { discard.push(played); hand.splice(queued[0], 1); }
+  queued = []; target = null; locked = false; myLastReveal = null;
+  hg.round += 1; hg.action += 1;
+  if (hg.round >= ROUNDS_PER_TURN) await endTurn();
+  else broadcastUI({ kind: 'hand', hand, turn: hg.turn, round: hg.round });
+}
+
+// End of a turn (ROUNDS_PER_TURN actions): characters may discard the cards
+// they flagged, everyone draws back to HAND_SIZE, and the slow-tier TurnCommit
+// goes out. Monsters never discard leftovers (rule 7).
+async function endTurn() {
+  if (entity.kind === 'character' && willDiscard.size) {
+    for (let i = hand.length - 1; i >= 0; i--) if (willDiscard.has(hand[i].card_id)) discard.push(...hand.splice(i, 1));
   }
-  hand.length = 0; for (const c of kept) hand.push(c);
-  while (hand.length < 5 && deck.length) hand.push(deck.shift());
-  if (!deck.length && discard.length) { for (const c of discard.splice(0)) deck.push(c); for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; } }
+  willDiscard.clear();
+  const before = hand.length;
+  while (hand.length < HAND_SIZE) { reshuffleIfEmpty(); if (!deck.length) break; hand.push(deck.shift()); }
 
-  queued = []; target = null; locked = false;
-  hg.turn += 1; hg.round += 1;
-  entity.tile = entity.tile; // keep
+  hg.round = 0; hg.turn += 1;
   await publishPublicState();
-
-  // evt_turn_commit on the Gun layer — slow-tier gossip.
   await emitEnvelope({
     type: 'evt_turn_commit',
     payload: {
@@ -728,11 +793,10 @@ async function doCleanup() {
       region_state_hash: hg.tape.filter(e => e.type === 'evt_state_hash').at(-1)?.payload.state_hash || '',
       positions: Object.fromEntries([...peersPublic.values()].map(p => [p.peer_id, { q: p.tile_q, r: p.tile_r }])),
       hashgraph_head: hg.head,
-      draws: [{ peer_id: PEER_ID_STRING, cards_drawn: 5 - hand.length }],
+      draws: [{ peer_id: PEER_ID_STRING, cards_drawn: hand.length - before }],
     },
   });
-
-  broadcastUI({ kind: 'hand', hand });
+  broadcastUI({ kind: 'hand', hand, turn: hg.turn, round: hg.round, turn_end: true });
 }
 
 async function npcPlan() {
@@ -751,7 +815,8 @@ async function npcPlan() {
 }
 
 function inboxApply(env) {
-  if (env.type === 'evt_action_reveal') revealedByPeer.set(env.actor_peer_id, env);
+  if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
+  if (env.type === 'evt_action_reveal') noteSeen(revealsSeen, env);
 }
 
 // -------- join sync --------
@@ -764,36 +829,54 @@ async function syncClockFromMesh() {
     const j = await r.json();
     const others = (j.peers || []).filter(p => p.peer_id !== PEER_ID_STRING && p.state && typeof p.state.turn === 'number');
     if (!others.length) { console.log(`[${PEER_LABEL}] join sync: no live peers, starting fresh at turn 0`); return; }
-    others.sort((a, b) => (b.state.turn - a.state.turn) || ((b.state.phase_ends_at || 0) - (a.state.phase_ends_at || 0)));
+    const actOf = s => typeof s.action === 'number' ? s.action : actionKey(s.turn, s.round || 0);
+    others.sort((a, b) => (actOf(b.state) - actOf(a.state)) || ((b.state.phase_ends_at || 0) - (a.state.phase_ends_at || 0)));
     const ref = others[0].state;
-    hg.turn = ref.turn; hg.round = ref.turn;
-    if (PHASES.includes(ref.phase)) currentPhase = ref.phase;
-    // Their phase_ends_at is wall-clock; if it's already stale, fall into
-    // planning on the next tick rather than waiting out a dead window.
+    hg.action = actOf(ref);
+    hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
+    hg.round = hg.action % ROUNDS_PER_TURN;
+    // Only planning is safe to drop into: the handshake phases assume we
+    // committed. Joining mid-handshake means we sit this action out (rule 6).
+    currentPhase = ref.phase === 'planning' ? 'planning' : 'resolution';
     phaseEndsAt = (typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) ? ref.phase_ends_at : Date.now();
-    console.log(`[${PEER_LABEL}] join sync: adopted turn ${hg.turn} / ${currentPhase} from ${others[0].peer_id}`);
+    roundDeadline = currentPhase === 'planning' ? phaseEndsAt : Date.now();
+    console.log(`[${PEER_LABEL}] join sync: adopted turn ${hg.turn} round ${hg.round} / ${currentPhase} from ${others[0].peer_id}`);
     await publishPublicState();
   } catch (e) { console.warn(`[${PEER_LABEL}] join sync failed (${e.message}); starting at turn 0`); }
 }
 await syncClockFromMesh();
 
 // -------- phase ticker --------
+let ticking = false;
 async function tick() {
-  if (Date.now() < phaseEndsAt) return;
-  if (currentPhase === 'planning') {
-    await doPlanningEnd();
-    await enterPhase('reveal');
-  } else if (currentPhase === 'reveal')      await enterPhase('resolution');
-  else if (currentPhase === 'resolution')    await enterPhase('cleanup');
-  else if (currentPhase === 'cleanup') {
-    // Check win: look at Gun state.
-    const alive = [...peersPublic.values()].filter(p => p && p.life > 0);
-    const alliances = new Set(alive.map(a => a.alliance));
-    if (alliances.size <= 1) { broadcastUI({ kind: 'phase', name: 'game over', winner: [...alliances][0] }); return; }
-    await enterPhase('planning');
-  }
+  if (ticking) return;
+  ticking = true;
+  try {
+    const expired = Date.now() >= phaseEndsAt;
+    if (currentPhase === 'planning') {
+      if (!expired) return;
+      await doPlanningEnd();
+      enterPhase('reveal');
+    } else if (currentPhase === 'reveal') {
+      // Reveal once everyone has committed (so nobody adapts to an early
+      // reveal), or when the cap expires and stragglers are treated as EP.
+      if (!allIn(commitsSeen)) await pullFromDiscovery('commits', commitsSeen);
+      if (!allIn(commitsSeen) && !expired) return;
+      await doReveal();
+      enterPhase('resolution');
+    } else if (currentPhase === 'resolution') {
+      if (!allIn(revealsSeen)) await pullFromDiscovery('reveals', revealsSeen);
+      if (!allIn(revealsSeen) && !expired) return;
+      await doResolution();
+      await endRound();
+      const alive = [...peersPublic.values()].filter(p => p && p.life > 0);
+      const sides = new Set(alive.map(a => sideOf(a.alliance)));
+      if (sides.size <= 1) { currentPhase = 'game over'; broadcastUI({ kind: 'phase', name: 'game over', winner: alive[0]?.alliance || null }); return; }
+      enterPhase('planning');
+    }
+  } finally { ticking = false; }
 }
-setInterval(() => tick().catch(e => console.error(`[${PEER_LABEL}]`, e)), 250);
+setInterval(() => tick().catch(e => console.error(`[${PEER_LABEL}]`, e)), 100);
 
 // -------- Radicle lottery (hourly in prod; demo accelerates) --------
 let lotteryCount = 0;
@@ -838,7 +921,7 @@ async function radicleLottery() {
     const doorDoc = {
       door_id: DOOR_ID, magnet_id: `magnet:?xt=urn:dim:${DIM_NAME}&xs=${hg.head || ''}&tr=${radRepo}&pe=${PEER_ID_STRING}`,
       label: 'primary strong-region', status: 'active', hashgraph_head: hg.head || '',
-      turn: hg.turn, phase: currentPhase, clock_at: now,
+      turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC, phase: currentPhase, clock_at: now,
       members: members.map(p => ({ peer_id: p.peer_id, name: p.name, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, clan: p.alliance, life: p.life, life_max: p.life_max })),
       region: { center: { q: 2, r: 2 }, strong_radius_tiles: 2, reach_tiles: 4, size: 5 },
       tiles: { occupied },
@@ -877,7 +960,7 @@ const uiHttp = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       peer_id: PEER_ID_STRING, dimension: DIM_NAME, phase: currentPhase, phaseEndsIn: Math.max(0, phaseEndsAt - Date.now()),
-      entity, hand, queued, target, locked, turn: hg.turn, head: hg.head,
+      entity, hand, queued, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
       peers: [...peersPublic.values()],
       alliance: ALLIANCE,
     }));
@@ -888,7 +971,7 @@ const uiHttp = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, turn: hg.turn, peers: [...peersPublic.values()] }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: [...peersPublic.values()] }));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
@@ -913,6 +996,12 @@ wss.on('connection', (ws) => {
         else target = null;
       }
       if (m.kind === 'lock') { locked = true; }
+      if (m.kind === 'discard') {
+        // Slot indices → card ids, so the marks survive the hand shrinking as
+        // cards are played during the turn. Monsters never discard leftovers.
+        willDiscard.clear();
+        if (entity.kind === 'character') for (const i of m.slots || []) if (hand[i]) willDiscard.add(hand[i].card_id);
+      }
     } catch {}
   });
   ws.on('close', () => uiClients.delete(ws));

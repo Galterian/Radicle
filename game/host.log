@@ -1,0 +1,258 @@
+[radicle] remote push → rad://zqZmP6itceBMqYwi1K1n8phQqCaj/z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy via git-remote-rad; explorer base https://radicle.network
+[launcher] radicle bare repo ready at /home/galt/repo_radicle/chaosD6/game/radicle.git
+[launcher] network: public at 172.18.151.194
+[radicle] remote push → rad://zqZmP6itceBMqYwi1K1n8phQqCaj/z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy via git-remote-rad; explorer base https://radicle.network
+[ui-server] http://127.0.0.1:7357
+[discovery] firebase-stub directory  → http://0.0.0.0:7350
+Hello wonderful person! :) Thanks for using GUN, please ask for help on http://chat.gun.eco if anything takes you longer than 5min to figure out!
+[radicle] remote push → rad://zqZmP6itceBMqYwi1K1n8phQqCaj/z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy via git-remote-rad; explorer base https://radicle.network
+[player-1] libp2p peer id = 12D3KooWEt1bKoanDiouUQWBZSJ8hQNhDKm7qzf2qpgGawqVgSTV
+[player-1] bound 0.0.0.0:7410; advertising /ip4/172.18.151.194/tcp/7410/p2p/12D3KooWEt1bKoanDiouUQWBZSJ8hQNhDKm7qzf2qpgGawqVgSTV
+[player-1] gun relay on http://172.18.151.194:7501/gun; peers = http://127.0.0.1:7502/gun, http://127.0.0.1:7503/gun, http://127.0.0.1:7504/gun
+[discovery] register peer:player-1 @ Ashfall-Micro (1 addrs)
+[player-1] join sync: no live peers, starting fresh at turn 0
+[player-1] UI socket on ws://127.0.0.1:7401/
+Hello wonderful person! :) Thanks for using GUN, please ask for help on http://chat.gun.eco if anything takes you longer than 5min to figure out!
+[radicle] remote push → rad://zqZmP6itceBMqYwi1K1n8phQqCaj/z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy via git-remote-rad; explorer base https://radicle.network
+[ally-1] libp2p peer id = 12D3KooWAWosDU3ArM76Cs1zjYvzvqrpKmnNfyWWyWHDtzyE5Ski
+[ally-1] bound 0.0.0.0:7411; advertising /ip4/172.18.151.194/tcp/7411/p2p/12D3KooWAWosDU3ArM76Cs1zjYvzvqrpKmnNfyWWyWHDtzyE5Ski
+[ally-1] gun relay on http://172.18.151.194:7502/gun; peers = http://127.0.0.1:7501/gun, http://127.0.0.1:7503/gun, http://127.0.0.1:7504/gun
+[discovery] register peer:ally-1 @ Ashfall-Micro (1 addrs)
+[ally-1] join sync: adopted turn 0 round 0 / planning from peer:player-1
+[ally-1] UI socket on ws://127.0.0.1:7402/
+Hello wonderful person! :) Thanks for using GUN, please ask for help on http://chat.gun.eco if anything takes you longer than 5min to figure out!
+[radicle] remote push → rad://zqZmP6itceBMqYwi1K1n8phQqCaj/z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy via git-remote-rad; explorer base https://radicle.network
+[foe-1] libp2p peer id = 12D3KooWMZj7ztpBTE2wYPcMpJJNfdpK4sW78JUU5eUQRgw1RtMB
+[foe-1] bound 0.0.0.0:7412; advertising /ip4/172.18.151.194/tcp/7412/p2p/12D3KooWMZj7ztpBTE2wYPcMpJJNfdpK4sW78JUU5eUQRgw1RtMB
+[foe-1] gun relay on http://172.18.151.194:7503/gun; peers = http://127.0.0.1:7501/gun, http://127.0.0.1:7502/gun, http://127.0.0.1:7504/gun
+[discovery] register peer:foe-1 @ Ashfall-Micro (1 addrs)
+[foe-1] join sync: adopted turn 0 round 0 / planning from peer:player-1
+[foe-1] UI socket on ws://127.0.0.1:7403/
+[player-1] discovery poll #1: 2 other peers (dialled 0)
+[player-1] libp2p mesh ↔ peer:ally-1 (12D3KooWAWosDU…)
+[player-1] libp2p mesh ↔ peer:foe-1 (12D3KooWMZj7zt…)
+Hello wonderful person! :) Thanks for using GUN, please ask for help on http://chat.gun.eco if anything takes you longer than 5min to figure out!
+[radicle] remote push → rad://zqZmP6itceBMqYwi1K1n8phQqCaj/z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy via git-remote-rad; explorer base https://radicle.network
+[ally-1] discovery poll #1: 2 other peers (dialled 0)
+[ally-1] libp2p mesh ↔ peer:player-1 (12D3KooWEt1bKo…)
+[ally-1] libp2p mesh ↔ peer:foe-1 (12D3KooWMZj7zt…)
+[foe-2] libp2p peer id = 12D3KooWSBZYz7978DtcAFYBHeaJsAB1wJG9DDMtBQcg6ur7iT3H
+[foe-2] bound 0.0.0.0:7413; advertising /ip4/172.18.151.194/tcp/7413/p2p/12D3KooWSBZYz7978DtcAFYBHeaJsAB1wJG9DDMtBQcg6ur7iT3H
+[launcher] all processes up. UI → http://127.0.0.1:7357
+[foe-2] gun relay on http://172.18.151.194:7504/gun; peers = http://127.0.0.1:7501/gun, http://127.0.0.1:7502/gun, http://127.0.0.1:7503/gun
+[discovery] register peer:foe-2 @ Ashfall-Micro (1 addrs)
+[foe-2] join sync: adopted turn 0 round 0 / planning from peer:player-1
+[foe-2] UI socket on ws://127.0.0.1:7404/
+[foe-1] discovery poll #1: 3 other peers (dialled 0)
+[foe-1] libp2p mesh ↔ peer:player-1 (12D3KooWEt1bKo…)
+[foe-1] libp2p mesh ↔ peer:ally-1 (12D3KooWAWosDU…)
+[foe-1] libp2p mesh ↔ peer:foe-2 (12D3KooWSBZYz7…)
+[foe-2] discovery poll #1: 3 other peers (dialled 0)
+[foe-2] libp2p mesh ↔ peer:player-1 (12D3KooWEt1bKo…)
+[foe-2] libp2p mesh ↔ peer:ally-1 (12D3KooWAWosDU…)
+[foe-2] libp2p mesh ↔ peer:foe-1 (12D3KooWMZj7zt…)
+[player-1] libp2p mesh ↔ peer:foe-2 (12D3KooWSBZYz7…)
+[ally-1] libp2p mesh ↔ peer:foe-2 (12D3KooWSBZYz7…)
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #10: 3 other peers (dialled 3)
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] discovery poll #10: 3 other peers (dialled 3)
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] discovery poll #10: 3 other peers (dialled 3)
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] discovery poll #10: 3 other peers (dialled 3)
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #1: 4 peers, winner=peer:player-1, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #1: 4 peers, winner=peer:player-1, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #1: 4 peers, winner=peer:foe-2, me=peer:foe-1
+[player-1] radicle push → d2764aed42195b9896abe36de03e6f48147bac05 on ActiveDimensions/Ashfall-Micro
+[player-1]   commit: https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/commits/d2764aed42195b9896abe36de03e6f48147bac05
+[player-1]   tree:   https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/tree/d2764aed42195b9896abe36de03e6f48147bac05/ActiveDimensions/Ashfall-Micro
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #1: 4 peers, winner=peer:player-1, me=peer:foe-2
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #20: 3 other peers (dialled 3)
+[ally-1] discovery poll #20: 3 other peers (dialled 3)
+[foe-1] discovery poll #20: 3 other peers (dialled 3)
+[foe-2] discovery poll #20: 3 other peers (dialled 3)
+[player-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=3 subscribersOnStrong=0 rxCount=0
+[discovery] register peer:player-2 @ Ashfall-Micro (1 addrs)
+[player-1] libp2p mesh ↔ peer:player-2 (12D3KooWMrcNEs…)
+[ally-1] libp2p mesh ↔ peer:player-2 (12D3KooWMrcNEs…)
+[foe-1] libp2p mesh ↔ peer:player-2 (12D3KooWMrcNEs…)
+[foe-2] libp2p mesh ↔ peer:player-2 (12D3KooWMrcNEs…)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #2: 5 peers, winner=peer:player-2, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #2: 5 peers, winner=peer:player-2, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #2: 5 peers, winner=peer:ally-1, me=peer:foe-1
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #2: 5 peers, winner=peer:foe-1, me=peer:foe-2
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #30: 4 other peers (dialled 4)
+[ally-1] discovery poll #30: 4 other peers (dialled 4)
+[foe-1] discovery poll #30: 4 other peers (dialled 4)
+[foe-2] discovery poll #30: 4 other peers (dialled 4)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #3: 5 peers, winner=peer:foe-2, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #3: 5 peers, winner=peer:ally-1, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #3: 5 peers, winner=peer:foe-1, me=peer:foe-1
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #3: 5 peers, winner=peer:player-1, me=peer:foe-2
+[ally-1] radicle push → 331be303964f81a28a18b36241c0ce194b18ad60 on ActiveDimensions/Ashfall-Micro
+[ally-1]   commit: https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/commits/331be303964f81a28a18b36241c0ce194b18ad60
+[ally-1]   tree:   https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/tree/331be303964f81a28a18b36241c0ce194b18ad60/ActiveDimensions/Ashfall-Micro
+[foe-1] radicle push → bbdc4116fbb4834b2f050826dbe0320a02bdae4b on ActiveDimensions/Ashfall-Micro
+[foe-1]   commit: https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/commits/bbdc4116fbb4834b2f050826dbe0320a02bdae4b
+[foe-1]   tree:   https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/tree/bbdc4116fbb4834b2f050826dbe0320a02bdae4b/ActiveDimensions/Ashfall-Micro
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #40: 4 other peers (dialled 4)
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] discovery poll #40: 4 other peers (dialled 4)
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] discovery poll #40: 4 other peers (dialled 4)
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] discovery poll #40: 4 other peers (dialled 4)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #4: 5 peers, winner=peer:player-1, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #4: 5 peers, winner=peer:player-2, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #4: 5 peers, winner=peer:player-1, me=peer:foe-1
+[player-1] radicle push → e444b17c662d43b92f01f70b11c280e7515f27e6 on ActiveDimensions/Ashfall-Micro
+[player-1]   commit: https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/commits/e444b17c662d43b92f01f70b11c280e7515f27e6
+[player-1]   tree:   https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/tree/e444b17c662d43b92f01f70b11c280e7515f27e6/ActiveDimensions/Ashfall-Micro
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #4: 5 peers, winner=peer:ally-1, me=peer:foe-2
+[player-1] discovery poll #50: 4 other peers (dialled 4)
+[ally-1] discovery poll #50: 4 other peers (dialled 4)
+[foe-1] discovery poll #50: 4 other peers (dialled 4)
+[foe-2] discovery poll #50: 4 other peers (dialled 4)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #60: 4 other peers (dialled 4)
+[ally-1] discovery poll #60: 4 other peers (dialled 4)
+[foe-1] discovery poll #60: 4 other peers (dialled 4)
+[foe-2] discovery poll #60: 4 other peers (dialled 4)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #5: 5 peers, winner=peer:foe-2, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #5: 5 peers, winner=peer:player-1, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #5: 5 peers, winner=peer:player-2, me=peer:foe-1
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #5: 5 peers, winner=peer:player-1, me=peer:foe-2
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #70: 4 other peers (dialled 4)
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] discovery poll #70: 4 other peers (dialled 4)
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] discovery poll #70: 4 other peers (dialled 4)
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] discovery poll #70: 4 other peers (dialled 4)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #6: 5 peers, winner=peer:player-1, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #6: 5 peers, winner=peer:ally-1, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #6: 5 peers, winner=peer:player-1, me=peer:foe-1
+[player-1] radicle push → 16f5bec1f3137689a0656a76c023acd8fd1bb0b1 on ActiveDimensions/Ashfall-Micro
+[player-1]   commit: https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/commits/16f5bec1f3137689a0656a76c023acd8fd1bb0b1
+[player-1]   tree:   https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/tree/16f5bec1f3137689a0656a76c023acd8fd1bb0b1/ActiveDimensions/Ashfall-Micro
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #6: 5 peers, winner=peer:player-2, me=peer:foe-2
+[ally-1] radicle push → 56d9042f7327331179d71b25a2c548e99657d892 on ActiveDimensions/Ashfall-Micro
+[ally-1]   commit: https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/commits/56d9042f7327331179d71b25a2c548e99657d892
+[ally-1]   tree:   https://radicle.network/nodes/rosa.radicle.network/rad%3AzqZmP6itceBMqYwi1K1n8phQqCaj/tree/56d9042f7327331179d71b25a2c548e99657d892/ActiveDimensions/Ashfall-Micro
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #80: 4 other peers (dialled 4)
+[ally-1] discovery poll #80: 4 other peers (dialled 4)
+[foe-1] discovery poll #80: 4 other peers (dialled 4)
+[foe-2] discovery poll #80: 4 other peers (dialled 4)
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] lottery #7: 5 peers, winner=peer:foe-2, me=peer:player-1
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] lottery #7: 5 peers, winner=peer:foe-2, me=peer:ally-1
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] lottery #7: 5 peers, winner=peer:player-2, me=peer:foe-1
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] lottery #7: 5 peers, winner=peer:player-1, me=peer:foe-2
+[player-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[ally-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-1] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[foe-2] gossip state: topics=1 totalPeers=4 subscribersOnStrong=0 rxCount=0
+[player-1] discovery poll #90: 4 other peers (dialled 4)
+[ally-1] discovery poll #90: 4 other peers (dialled 4)
+[foe-1] discovery poll #90: 4 other peers (dialled 4)
+[foe-2] discovery poll #90: 4 other peers (dialled 4)

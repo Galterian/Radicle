@@ -77,6 +77,31 @@ app.post('/reveal', (req, res) => {
   res.json({ ok: true });
 });
 
+// Commit mirror: same shape as /reveal but only carries the commitment hash,
+// so peers can tell "everyone has committed" without waiting on gossipsub.
+app.post('/commit', (req, res) => {
+  const { dimension_id, peer_id, turn, commitment } = req.body || {};
+  if (!dimension_id || !peer_id || typeof turn !== 'number') return res.status(400).json({ ok: false });
+  const dim = getOrCreateDim(dimension_id);
+  dim.commits ||= new Map();
+  if (!dim.commits.has(turn)) dim.commits.set(turn, new Map());
+  dim.commits.get(turn).set(peer_id, { peer_id, commitment: commitment || null, at: Date.now() });
+  if (dim.commits.size > 32) {
+    const keep = [...dim.commits.keys()].sort((a, b) => a - b).slice(-32);
+    const next = new Map();
+    for (const k of keep) next.set(k, dim.commits.get(k));
+    dim.commits = next;
+  }
+  res.json({ ok: true });
+});
+
+app.get('/commits/:dim/:turn', (req, res) => {
+  const dim = DIMENSIONS.get(req.params.dim);
+  const turn = Number(req.params.turn);
+  const m = dim?.commits?.get(turn);
+  res.json({ ok: true, commits: m ? [...m.values()] : [] });
+});
+
 app.get('/reveals/:dim/:turn', (req, res) => {
   const dim = DIMENSIONS.get(req.params.dim);
   const turn = Number(req.params.turn);

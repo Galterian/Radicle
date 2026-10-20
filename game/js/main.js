@@ -13,12 +13,14 @@ const state = {
   seconds: 0,
   heartbeat: false,
   turn: 0,
+  round: 0,
+  roundsPerTurn: 3,
   myPeerId: null,
   entities: [],
   hand: [],
   queued: [],         // [] | [slotIndex] | ['EMPTY']
   queuedIsAuto: true, // false once the player has deliberately picked a slot this planning phase
-  willDiscard: new Set(),
+  willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
   target: null,       // peer_id | {q,r} | null
   locked: false,
   ui: { hoverTile: null, selectedTarget: null },
@@ -84,7 +86,7 @@ function renderDeck() {
       ? `<div class="nm">[${card.code}] ${card.action_name}</div><div class="cd">${card.card_id.slice(-6)}</div>`
       : `<div class="nm" style="opacity:.5">— empty slot —</div>`;
     slot.classList.toggle('queued', state.queued[0] === i);
-    slot.classList.toggle('discard', state.willDiscard.has(i));
+    slot.classList.toggle('discard', !!card && state.willDiscard.has(card.card_id));
     slot.classList.toggle('locked', state.locked && state.queued[0] === i);
   });
 }
@@ -113,15 +115,21 @@ function autoselectFirstHandCard() {
   send({ kind: 'queue', slots: state.queued });
 }
 
-function setPhase(name, seconds, heartbeat) {
+function setPhase(name, seconds, heartbeat, m = {}) {
   state.phase = name; state.seconds = seconds; state.heartbeat = heartbeat;
+  if (typeof m.turn === 'number') state.turn = m.turn;
+  if (typeof m.round === 'number') state.round = m.round;
+  if (typeof m.rounds_per_turn === 'number') state.roundsPerTurn = m.rounds_per_turn;
   document.getElementById('phase').textContent = name;
-  document.getElementById('heartbeat').textContent = `tier: ${heartbeat ? 'strong (6s heartbeat)' : (name === 'planning' ? 'reachable' : 'strong')}`;
-  logUI(`→ ${name} (${seconds}s)`, 'phase');
+  document.getElementById('heartbeat').textContent = `tier: ${heartbeat ? 'strong (contact)' : 'reachable'}`;
+  // Only the declaration window is worth a log line; the handshake phases
+  // flash by in well under a second when the mesh is healthy.
+  if (name === 'planning') logUI(`→ turn ${state.turn} · round ${state.round + 1}/${state.roundsPerTurn} (${seconds}s)`, 'phase');
+  else if (name === 'game over') logUI(`→ game over${m.winner ? ` — ${m.winner}` : ''}`, 'phase');
   if (name === 'planning') {
-    // Fresh turn — unlock, clear discard marks, auto-select slot 0.
+    // New action — unlock, drop the stale target, auto-select a card. Discard
+    // marks persist across the turn's rounds; the peer clears them at turn end.
     state.locked = false;
-    state.willDiscard.clear();
     state.target = null;
     state.ui.selectedTarget = null;
     autoselectFirstHandCard();
@@ -140,6 +148,9 @@ function connect() {
       if (m.kind === 'hello') {
         state.myPeerId = m.peer_id;
         state.hand = m.hand || [];
+        if (typeof m.turn === 'number') state.turn = m.turn;
+        if (typeof m.round === 'number') state.round = m.round;
+        if (typeof m.rounds_per_turn === 'number') state.roundsPerTurn = m.rounds_per_turn;
         // Merge rather than overwrite — the peer's initial hello may lag Gun's
         // own peer catalog.
         mergeEntities(m.peers || []);
@@ -152,10 +163,13 @@ function connect() {
           autoselectFirstHandCard();
         }
       }
-      if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat);
+      if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat, m);
       if (m.kind === 'hand')  {
         state.hand = m.hand || state.hand;
         if (Array.isArray(m.queued)) state.queued = m.queued;
+        if (typeof m.turn === 'number') state.turn = m.turn;
+        if (typeof m.round === 'number') state.round = m.round;
+        if (m.turn_end) { state.willDiscard.clear(); logUI(`turn end — hand refilled to ${state.hand.length}`, 'phase'); }
       }
       // Merge peer updates so a transient broadcast missing an entity doesn't
       // flicker it off the map / roster. The server never *removes* a peer
@@ -253,8 +267,11 @@ function queueSlot(key) {
 }
 
 function toggleDiscard(i) {
-  if (state.willDiscard.has(i)) state.willDiscard.delete(i);
-  else state.willDiscard.add(i);
+  const card = state.hand[i];
+  if (!card) return;
+  if (state.willDiscard.has(card.card_id)) state.willDiscard.delete(card.card_id);
+  else state.willDiscard.add(card.card_id);
+  send({ kind: 'discard', slots: state.hand.map((c, idx) => c && state.willDiscard.has(c.card_id) ? idx : -1).filter(idx => idx >= 0) });
   renderDeck();
 }
 
@@ -344,7 +361,7 @@ function wireInput() {
   setInterval(() => {
     state.seconds = Math.max(0, state.seconds - 0.25);
     document.getElementById('timer').textContent = `${state.seconds.toFixed(0)}s`;
-    document.getElementById('turn').textContent = `turn ${state.turn}`;
+    document.getElementById('turn').textContent = `turn ${state.turn} · round ${state.round + 1}/${state.roundsPerTurn}`;
   }, 250);
   function raf() {
     renderRoster();
