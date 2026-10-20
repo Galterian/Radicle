@@ -1,0 +1,57 @@
+{
+  "collection": "hashgraph_events",
+  "notes": "Event vocabulary of the local hashgraph every player keeps for the Dimension part they hold. Each event is wrapped in the message_envelope defined in sync_protocol.json (sync_handshake_per_action.data.message_envelope): self_parent + other_parent hashes give gossip-about-gossip, signatures give authorship, and the deterministic resolver (battle_system.json) gives every peer the same state hash. For now events are exchanged as plain JSON.",
+  "entries": [
+    { "id": "evt_genesis", "name": "Genesis", "tags": ["lifecycle"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_0_setup", "sync_join_flow"], "vote_log": [], "notes": "", "data": {
+      "scope": "dimension", "emitted_by": "opening players", "finality": "signed by all opening players",
+      "payload": { "dimension_id": "string", "dimension_name": "string", "rules_snapshot_commit": "git commit hash of data/", "tileset_size": "WxH", "map_seed": "hex (drives rule_0_setup hidden placement so every later part reveals identical traps/monsters)", "owners": ["peer_id"] } } } ] },
+
+    { "id": "evt_join", "name": "Join", "tags": ["lifecycle", "door"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_join_flow", "action_enter_dimension"], "vote_log": [], "notes": "", "data": {
+      "scope": "door", "emitted_by": "joining peer", "finality": "accepted by strong-region members of the entry tile (or self if alone)",
+      "payload": { "door_id": "string", "flow": "open_dimension | join_near_friend | join_new_location", "character_id": "char_* id", "class_id": "class_* id", "deck_commitment": "hash of the shuffled deck order (rule_0_setup, rule_10)", "entry_tile": { "x": "int", "y": "int" }, "adopted_head": "hashgraph head the peer synced from" } } } ] },
+
+    { "id": "evt_leave", "name": "Leave", "tags": ["lifecycle"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["action_travel_door"], "vote_log": [], "notes": "", "data": {
+      "scope": "door", "emitted_by": "leaving peer (or strong region on timeout)", "finality": "gossiped; recorded at next Radicle push",
+      "payload": { "reason": "voluntary | travel_door | timeout | desynced", "tile_left": { "x": "int", "y": "int" }, "character_card_stays_on_tile": true } } } ] },
+
+    { "id": "evt_action_commit", "name": "ActionCommit", "tags": ["turn", "handshake"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_handshake_per_action", "rule_8_card_declare_sequence"], "vote_log": [], "notes": "Phase 1 of the per-action handshake.", "data": {
+      "scope": "strong_region", "emitted_by": "each actor", "finality": "all strong-region members must emit one per action",
+      "payload": { "commitment": "sha256(action_code + effect_ids + skill_ids + target + salt)", "empty_move_announced": "bool (rule_6: Empty Move is declared openly before flipping)" } } } ] },
+
+    { "id": "evt_action_reveal", "name": "ActionReveal", "tags": ["turn", "handshake"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_handshake_per_action", "rule_15_target_follow", "rule_16_combo"], "vote_log": [], "notes": "Phase 2 of the per-action handshake. Peers verify sha256 against evt_action_commit.", "data": {
+      "scope": "strong_region", "emitted_by": "each actor", "finality": "verified by all strong-region members",
+      "payload": { "action": "A | B | M | P | EP | EM (actions.json codes)", "effects": ["effect_* ids being cast or channelled this action"], "skills": ["skill_* ids"], "class_ability_tapped": "bool", "target": { "kind": "tile | character | creature", "ref": "id or {x,y}" }, "combo_step": "int | null (rule_16)", "salt": "hex" } } } ] },
+
+    { "id": "evt_instant", "name": "InstantResponse", "tags": ["turn", "handshake"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_17_skills", "rule_24_destroy_permanent_token"], "vote_log": [], "notes": "Phase 3: skills played as instants, point-buy attempts to destroy permanents, class abilities.", "data": {
+      "scope": "strong_region", "emitted_by": "any strong-region member", "finality": "optional; window closes when every member sends InstantResponse or pass",
+      "payload": { "pass": "bool", "skill_id": "skill_* | null", "point_buy": { "target_token": "token id", "dice_count": "int" }, "class_ability": "class_* | null" } } } ] },
+
+    { "id": "evt_dice", "name": "DiceRoll", "tags": ["turn", "random"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_5_monster_dice", "rule_12_permanent_types"], "vote_log": [], "notes": "Not a separately rolled event: any D6 in the game is derived from the salts revealed in this action. This event only records the derivation for auditing.", "data": {
+      "scope": "strong_region", "emitted_by": "the peer that applies the roll (monster controller or point-buyer)", "finality": "verifiable by all",
+      "payload": { "purpose": "monster_action | point_buy | trap_power | other", "roll_index": "int", "inputs": ["salts used"], "result": ["ints 1..6"] } } } ] },
+
+    { "id": "evt_state_hash", "name": "StateHash", "tags": ["turn", "consensus"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_13_evaluation", "battle_system_core"], "vote_log": [], "notes": "Phase 4/5: the action is final when all strong-region StateHash payloads match.", "data": {
+      "scope": "strong_region", "emitted_by": "each member", "finality": "action finalized on unanimous match; otherwise dispute",
+      "payload": { "state_hash": "sha256 of the canonical region state after resolution", "damage_applied": [ { "target": "id", "amount": "int", "source": "action | effect_* | trap" } ], "tokens_changed": [ { "tile": {"x":"int","y":"int"}, "token": "element/permanent/life token descriptor", "op": "add | remove | flip | update" } ] } } } ] },
+
+    { "id": "evt_turn_commit", "name": "TurnCommit", "tags": ["turn", "gossip"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_turn_commit", "rule_10_draw"], "vote_log": [], "notes": "Once per turn, gossiped to reachable and far regions.", "data": {
+      "scope": "dimension", "emitted_by": "one elected member per strong region (lowest peer_id hash)", "finality": "gossip; merges additively",
+      "payload": { "turn": "int", "region_state_hash": "sha256", "map_delta": [ { "tile": {"x":"int","y":"int"}, "revealed": "bool", "owner": "peer_id | null", "permanents": ["effect_* / class_* / tower ids"], "creature": "mon_* | null" } ], "positions": { "peer_id": {"x":"int","y":"int"} }, "hashgraph_head": "sha256", "draws": [ { "peer_id": "string", "cards_drawn": "int (rule_10: up to 5 in hand)" } ] } } } ] },
+
+    { "id": "evt_map_extend", "name": "MapExtend", "tags": ["map", "door"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_join_flow", "rule_0_setup"], "vote_log": [], "notes": "Emitted by join_new_location: adds a block of tiles and a new DoorId.", "data": {
+      "scope": "dimension", "emitted_by": "new-location joiner", "finality": "pushed to Radicle immediately; accepted by others on poll",
+      "payload": { "new_door_id": "string", "block_origin": {"x":"int","y":"int"}, "block_size": "WxH", "block_seed": "hex (derived from map_seed + block_origin)", "rooted_at_head": "sha256 of the pushed head the joiner started from" } } } ] },
+
+    { "id": "evt_merge", "name": "MergeEvent", "tags": ["hashgraph", "merge"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_divergence_merge"], "vote_log": [], "notes": "Two previously unmet hashgraph parts become one.", "data": {
+      "scope": "dimension", "emitted_by": "all strong-region members present at first contact", "finality": "signed by all present",
+      "payload": { "heads_merged": ["sha256", "sha256"], "common_ancestor": "sha256", "door_ids_unified": ["string"], "conflicts_resolved": [ { "tile": {"x":"int","y":"int"}, "winner": "peer_id", "rule": "earlier_consensus_timestamp | resolver" } ], "turn_adopted": "int" } } } ] },
+
+    { "id": "evt_radicle_push", "name": "RadiclePush", "tags": ["radicle", "interval"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_radicle_push"], "vote_log": [], "notes": "Records which peer pushed which head for which interval, so the lottery can be audited.", "data": {
+      "scope": "door", "emitted_by": "elected pusher", "finality": "gossip",
+      "payload": { "interval_index": "int (floor(unix_time / radicle_push_interval_s))", "commit": "git commit hash on ActiveDimensions/<DimensionName>", "head_pushed": "sha256" } } } ] },
+
+    { "id": "evt_vote", "name": "GovernanceVote", "tags": ["governance", "vote"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["governance_voting", "governance_rebalance_script"], "vote_log": [], "notes": "A vote cast in-game is a hashgraph event first; the Radicle pusher batches votes into proposals/* branches at the interval. This is how in-Dimension usage telemetry can weight the vote.", "data": {
+      "scope": "dimension", "emitted_by": "any player", "finality": "gossip; tallied at governance interval",
+      "payload": { "entry_id": "any VersionedEntry id (effect_*, skill_*, class_*, rule_*, ...)", "version": "proposal version string", "signal": "+1 | -1 | abstain", "usage_evidence": { "times_used_in_dimension": "int", "turns_held": "int" }, "counter_proposal": "optional data payload the voter suggests instead" } } } ] }
+  ]
+}

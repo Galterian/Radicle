@@ -1,0 +1,17 @@
+{
+  "door_id": "door-frontier-01",
+  "magnet_id": "magnet:?xt=urn:dim:Ashfall-Reach&dn=New%20frontier&xs=8277e0910d750195b448797616e091ad&tr=rad:z3gqcJUoA1n9HbHKUfP4PxKjhY1xV&pe=peer_K2",
+  "label": "New frontier (east)",
+  "status": "active",
+  "hashgraph_head": "8277e0910d750195b448797616e091ad",
+  "genesis_or_root": "2c1743a391305fbf367df8e4f069f9f9",
+  "turn": 37,
+  "members": [
+    { "peer_id": "peer_K2", "character_id": "char_oran_rief", "class_id": "class_ranger", "tile": { "x": 6, "y": 1 }, "clan": null, "last_seen": "2026-10-19T13:05:00Z" }
+  ],
+  "region": { "center": { "x": 6, "y": 1 }, "strong_radius_tiles": 2, "reach_tiles": 9 },
+  "map_summary": { "tiles_revealed": 3, "owned_items": [], "awake_creatures": [] },
+  "last_push": { "interval_index": 497221, "peer_id": "peer_K2", "at": "2026-10-19T13:05:00Z", "commit": "f00dbabe00000000000000000000000000000000" },
+  "pending_votes": 0,
+  "_note": "Rooted at the 13:00 push (turn 37). Embers clan is at turn 42 and will see this door on their next poll ('disturbance in the Force'); the two parts merge on first contact per sync_divergence_merge."
+}

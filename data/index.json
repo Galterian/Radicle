@@ -1,0 +1,164 @@
+{
+  "schema_version": "0.2.0",
+  "name": "Dimensions (chaosD6) — Data Layer",
+  "paper_source": "DimentionsEN.docx.html",
+  "generated_at": "2026-10-19",
+  "collections": [
+    {
+      "id": "concept",
+      "file": "concept.json",
+      "entries": 1,
+      "writes": "rebalance-only",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "stats",
+      "file": "stats.json",
+      "entries": 4,
+      "writes": "paper-only",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "elements",
+      "file": "elements.json",
+      "entries": 10,
+      "writes": "paper-only",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "rules",
+      "file": "rules.json",
+      "entries": 26,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "battle_system",
+      "file": "battle_system.json",
+      "entries": 1,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "actions",
+      "file": "actions.json",
+      "entries": 10,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "effects",
+      "file": "effects.json",
+      "entries": 66,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "skills",
+      "file": "skills.json",
+      "entries": 14,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "classes",
+      "file": "classes.json",
+      "entries": 33,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "characters",
+      "file": "characters.json",
+      "entries": 12,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "creatures",
+      "file": "creatures.json",
+      "entries": 29,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "terrain_items",
+      "file": "terrain_items.json",
+      "entries": 41,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "game_modes",
+      "file": "game_modes.json",
+      "entries": 9,
+      "writes": "vote-driven",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "contradictions",
+      "file": "contradictions.json",
+      "entries": 6,
+      "writes": "resolution-vote",
+      "purpose": "paper rules"
+    },
+    {
+      "id": "sync_protocol",
+      "file": "sync_protocol.json",
+      "entries": 6,
+      "writes": "vote-driven",
+      "purpose": "runtime / P2P contract (point 2 of the game idea)"
+    },
+    {
+      "id": "hashgraph_events",
+      "file": "hashgraph_events.json",
+      "entries": 13,
+      "writes": "vote-driven",
+      "purpose": "runtime / P2P contract (point 2 of the game idea)"
+    },
+    {
+      "id": "dimension_session",
+      "file": "dimension_session.json",
+      "entries": 3,
+      "writes": "vote-driven",
+      "purpose": "runtime / P2P contract (point 2 of the game idea)"
+    },
+    {
+      "id": "governance",
+      "file": "governance.json",
+      "entries": 5,
+      "writes": "vote-driven",
+      "purpose": "runtime / P2P contract (point 2 of the game idea)"
+    }
+  ],
+  "load_order_for_engine": [
+    "concept",
+    "stats",
+    "elements",
+    "rules",
+    "battle_system",
+    "actions",
+    "effects",
+    "skills",
+    "classes",
+    "terrain_items",
+    "characters",
+    "creatures",
+    "game_modes",
+    "contradictions",
+    "governance",
+    "sync_protocol",
+    "hashgraph_events",
+    "dimension_session"
+  ],
+  "notes": [
+    "The engine loads each collection, resolves the highest-weight non-rejected version per entry, and freezes that view for the Dimension session.",
+    "Changes mid-session do not retroactively apply; a Dimension inherits the rules snapshot of the session it was opened under (recorded in ActiveDimensions/<id>/rules_snapshot_commit).",
+    "contradictions.json holds the FIRST governance proposals (status proposal) plus resolved history (status resolved, weight 0).",
+    "governance.json, sync_protocol.json, hashgraph_events.json and dimension_session.json are the machine-readable form of the P2P / Radicle / hashgraph game idea; concept.json keeps only the narrative summary.",
+    "Entry counts in `collections` are informational; the editor and engine must trust the files, not these numbers."
+  ],
+  "examples": {
+    "ActiveDimensions": "examples/ActiveDimensions/<DimensionName>/ - a filled-in dimension.json + doors/<DoorId>.json pair following dimension_session.json shapes"
+  }
+}

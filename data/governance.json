@@ -1,0 +1,151 @@
+{
+  "collection": "governance",
+  "notes": "How the players upgrade the game: any VersionedEntry (rule, effect, skill, class, creature, item, protocol parameter) can receive a proposal version on a Radicle branch; signed votes accumulate weight; a deterministic rebalance script measures the proposal and counter-proposes linked deltas within a tolerance; on success the branch merges to develop and clients load the new canonical version at their next session. Parameters here are themselves VersionedEntries so the governance can govern itself.",
+  "entries": [
+    {
+      "id": "governance_branch_layout",
+      "name": "Radicle repository layout",
+      "tags": ["radicle", "git", "layout"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["sync_radicle_push", "governance_voting"],
+          "vote_log": [],
+          "notes": "Supersedes the prose in schema.json sync_contract.radicle_branch_layout; schema.json now points here.",
+          "data": {
+            "branches": {
+              "main": { "content": "released data/ (what shipped clients load)", "writes": "merge from develop by the release script only" },
+              "develop": { "content": "accepted proposals waiting for the next release", "writes": "merge from proposals/* by the tally script when governance_voting thresholds pass" },
+              "proposals/<entry_id>-<unix_ts>": { "content": "one new version object appended to exactly one entry (or one linked set produced by the rebalance script)", "writes": "proposer + rebalance script counter-proposals + vote_log appends" },
+              "forks/<fork_name>": { "content": "a group's larger rule-set divergence (own data/ tree)", "writes": "fork owners; may open a proposals/* branch to merge back wholesale" },
+              "ActiveDimensions/<DimensionName>": { "content": "live session artefacts (dimension_session.json shapes)", "writes": "elected pushers (sync_radicle_push)" }
+            },
+            "release": {
+              "cadence_s": 604800,
+              "step": "tag data/ on main as data-vX.Y.Z; clients compare rules_snapshot_commit at session open and prompt to update; a running Dimension keeps its snapshot until it is closed or its owners vote to migrate"
+            },
+            "file_rules": [
+              "never edit a version object in place; append a new version with parent_version set",
+              "ids are never reused; a removed entry becomes status rejected with weight 0",
+              "proposals touch one entry unless produced by the rebalance script, which may touch the rebalance_links closure"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "governance_voting",
+      "name": "Voting and tally rules",
+      "tags": ["vote", "weight", "threshold"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["governance_rebalance_script", "evt_vote"],
+          "vote_log": [],
+          "notes": "Weight is the consensus confidence in a version, in [0,1]. The engine loads the highest-weight non-rejected version of each entry at session start.",
+          "data": {
+            "who_may_vote": "any peer with a signing key; weight of a vote scales with proven use of the entry (usage_evidence in evt_vote) so people who actually play with an effect/class decide its fate",
+            "vote_weight_formula": "w = base(0.01) * (1 + log2(1 + times_used_in_dimension)) * (1 + 0.1 * dimensions_played_in); capped at 0.10 per peer per proposal",
+            "proposal_lifecycle": [
+              { "status": "proposal",   "enter": "branch created with new version object at weight 0.0" },
+              { "status": "proposal",   "during": "vote_log appends; weight = clamp(sum(+1 w) - sum(-1 w), 0, 1); rebalance script may append counter-proposal versions" },
+              { "status": "canonical",  "enter": "at tally time weight >= accept_threshold AND distinct voters >= quorum AND age >= min_age_s AND rebalance_within_tolerance" },
+              { "status": "rejected",   "enter": "at tally time weight <= reject_threshold OR age > max_age_s without reaching quorum" },
+              { "status": "superseded", "enter": "automatically for the previous canonical version when a new one becomes canonical; its weight is set to the new version's weight minus 0.01 so it remains the fallback" }
+            ],
+            "tally_interval_s": 3600,
+            "quorum_voters": 7,
+            "accept_threshold": 0.6,
+            "reject_threshold": -0.3,
+            "min_age_s": 86400,
+            "max_age_s": 2592000,
+            "per_collection_overrides": {
+              "concept":   { "accept_threshold": 0.9, "quorum_voters": 25 },
+              "stats":     { "accept_threshold": 0.9, "quorum_voters": 25 },
+              "elements":  { "accept_threshold": 0.9, "quorum_voters": 25 },
+              "rules":     { "accept_threshold": 0.75, "quorum_voters": 15 },
+              "sync_protocol": { "accept_threshold": 0.75, "quorum_voters": 15 },
+              "governance":    { "accept_threshold": 0.8, "quorum_voters": 20 }
+            },
+            "in_dimension_voting": "votes cast inside an owned Dimension apply immediately to that Dimension's local snapshot if its owners agree (local override), and are forwarded as evt_vote to the global proposal; the rebalance script may counter-propose and the local override is replaced if the owners accept within tolerance",
+            "vote_integrity": "each vote is a signed hashgraph event; the tally script rejects duplicates per (peer_id, entry_id, version) and votes whose usage_evidence is not backed by TurnCommit history"
+          }
+        }
+      ]
+    },
+    {
+      "id": "governance_rebalance_script",
+      "name": "Rebalance script contract",
+      "tags": ["rebalance", "tolerance", "script"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["governance_voting", "rule_21_effect_damage", "battle_system_core"],
+          "vote_log": [],
+          "notes": "The author's intent: no class, skill or effect becomes too strong; a buff to one thing is paid for by respective changes elsewhere, or a nerf comes with a compensating property. The script is deterministic so every peer can re-run it and verify the counter-proposal.",
+          "data": {
+            "power_score": {
+              "effect": "expected_damage_per_action(rule_21 formula over the 12 characters' stat spreads) + 0.5*num_effect_types + 0.25*permanent_bonus + 0.5*channeling + 1.0*every_bonus(∀) - 0.3*element_cost_count",
+              "skill": "rps_advantage_edges + bonus_damage + permanent_flag*0.5",
+              "class": "colors_count*0.4 + ability_power(0..3 hand-tagged) + draw_bonus*0.5",
+              "creature": "life + actions_per_round*0.8 + innate_effect_power",
+              "character": "sum(stats)/10 + adept_bonus + combo_coverage"
+            },
+            "tolerance": {
+              "per_entry_relative": 0.15,
+              "per_collection_mean_drift": 0.05,
+              "explanation": "a proposal passes if its power_score stays within 15% of the pre-proposal score OR the linked counter-deltas bring the mean of the rebalance_links closure back within 5%"
+            },
+            "counter_proposal_algorithm": [
+              "compute delta = power_score(proposal) - power_score(current canonical)",
+              "if |delta| <= per_entry_relative * current: accept as-is",
+              "else walk rebalance_links (breadth-first, depth <= 2) and distribute -delta proportionally to each linked entry's current power_score, producing a new version per linked entry with origin rebalance_script and parent_version = their canonical",
+              "if the proposal is a nerf (delta < 0) prefer adding a compensating property on the same entry (e.g. extra every_bonus, lower element_cost) over touching linked entries, when such a property keeps |delta| within tolerance",
+              "attach the counter-proposals to the same proposals/* branch; the original proposer may accept (vote +1 on the set) or amend"
+            ],
+            "run_at": "every tally_interval_s and on every new proposal push",
+            "transparency": "the script writes rebalance_report.json next to the proposal with before/after power_score for every touched entry"
+          }
+        }
+      ]
+    },
+    {
+      "id": "governance_forks",
+      "name": "Forks and merging large changes back",
+      "tags": ["fork", "merge"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["governance_branch_layout", "governance_voting"],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "create": "forks/<name> starts as a copy of develop; Dimensions opened under a fork record rules_snapshot_commit from the fork and only players on that fork can join them",
+            "play": "fork owners vote with the same rules inside their fork; their tally script runs against the fork tree",
+            "merge_back": "a fork opens proposals/fork-<name>-<ts> containing the full diff; the global tally treats it as one proposal with accept_threshold of the strictest touched collection and quorum doubled",
+            "partial_merge": "the rebalance script may split a fork proposal into per-entry proposals when the fork owners allow it (split_allowed flag on the branch)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "governance_write_permissions",
+      "name": "Per-collection write policy",
+      "tags": ["policy"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["governance_voting"],
+          "vote_log": [],
+          "notes": "Replaces the writes column previously hard-coded in index.json collections (kept there for display).",
+          "data": {
+            "vote-driven":     { "collections": ["rules", "battle_system", "actions", "effects", "skills", "classes", "characters", "creatures", "terrain_items", "game_modes", "sync_protocol", "hashgraph_events", "dimension_session", "governance"], "policy": "proposals/* + governance_voting" },
+            "paper-only":      { "collections": ["stats", "elements"], "policy": "identity of the game; needs the concept-level thresholds (0.9 / 25 voters)" },
+            "rebalance-only":  { "collections": ["concept"], "policy": "text may be amended only alongside a rebalance report" },
+            "resolution-vote": { "collections": ["contradictions"], "policy": "each entry lists proposed_resolutions; the winning resolution becomes a new version on the source entries" }
+          }
+        }
+      ]
+    }
+  ]
+}

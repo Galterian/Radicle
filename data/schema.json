@@ -1,0 +1,75 @@
+{
+  "schema_version": "0.2.0",
+  "generated_at": "2026-10-19",
+  "description": "Versioned, voteable data-layer schema for the Dimensions RPG (chaosD6). Every entity (rule, effect, skill, class, character, creature, item, etc.) is a VersionedEntry. Governance = Radicle git branches propose new versions, peers sign votes, a rebalance pass updates weights, and the engine loads the highest-weight canonical version at session start.",
+  "entry_contract": {
+    "id": "stable kebab-case id, unique across the collection; never reused",
+    "collection": "which top-level file this entry lives in (see index.json collections)",
+    "name": "human-readable name",
+    "tags": [
+      "optional free-form tags used by the rebalance script to find related entries"
+    ],
+    "versions": [
+      {
+        "version": "semver-ish string; v1.0.0 is the paper-rules original",
+        "weight": "float in [0.0, 1.0] — current consensus confidence; the engine picks the highest-weight non-rejected version at session start",
+        "status": "canonical | proposal | superseded | rejected | resolved (contradictions only)",
+        "origin": "paper_rules | player_vote | rebalance_script | fork_merge | playtest_patch | runtime_contract",
+        "author_peer_id": "Radicle peer id of the proposer; empty for paper_rules",
+        "created_at": "ISO-8601 date",
+        "parent_version": "the version this one derives from, or null if root",
+        "rebalance_links": [
+          "list of entity ids that are mechanically coupled; if the rebalance script bumps this entry it will propose counter-balance deltas on these"
+        ],
+        "vote_log": [
+          {
+            "peer_id": "signed-vote author",
+            "signal": "+1 | -1 | abstain",
+            "weight_contribution": "float; signed to add/subtract from weight",
+            "signed_at": "ISO-8601",
+            "signature": "detached signature over {entry_id, version, signal}"
+          }
+        ],
+        "notes": "optional free-form rationale from the proposer",
+        "data": "the actual mechanical payload; shape depends on the collection"
+      }
+    ]
+  },
+  "collection_shapes": {
+    "rules": "data = { number, scope, text, cross_refs:[rule_id] }",
+    "effects": "data = { element_cost:[element_id], effect_types:[damage|instant|point_buy|permanent|channeling|stat_buy|shield_token], text, dispelable_by:[entry_id], every_bonus (for ∀ doubled casts) }",
+    "skills": "data = { action_type:A|B|M|P, is_permanent:bool, text, point_buy_stat }",
+    "classes": "data = { colors:[element_id], ability_kind: once_per_round|static|tap, text, destroy_cost:'point-buy each color at value 6' }",
+    "actions": "data = { code:A|B|M|P|EP|EM, text, rps_wins_against:[action_code], rps_loses_against:[action_code], can_cast_non_instant_effects:bool }",
+    "characters": "data = { combo:[action_code], adept_element, stats:{vitality, world, matter, will}, life:int, actions_per_round:int }",
+    "creatures": "data = { stats:{...}, life:int, actions_per_round:int, dice_pattern:'BAAPM|AAAM|BMAP', innate_effect:effect_id, on_action_rider:{action_code, bonus_damage} }",
+    "terrain_items": "data = { kind: tower|crystal|mine|nexus|trade_center|stash|door|library|wall|artifact, requirements:{...}, yields:{...} }",
+    "game_modes": "data = { tileset_size, player_count, win_condition, time_per_turn_s, special_rules_text }",
+    "contradictions": "data = { source_entries:[entry_id], description, evidence:[...], proposed_resolutions:[{resolution_id, text}], chosen_resolution? }",
+    "sync_protocol": "data = free-form protocol parameters per entry (tiers, phases, intervals, flows, algorithms); numbers are the tunables the community votes on",
+    "hashgraph_events": "data = { scope: dimension|door|strong_region, emitted_by, finality, payload:{field: type-description} }",
+    "dimension_session": "data = { shape: {field: type-description} } describing dimension.json / doors/<DoorId>.json / local client state",
+    "governance": "data = free-form per entry: branch layout, voting thresholds, rebalance script contract, fork policy, write permissions"
+  },
+  "sync_contract": {
+    "description": "How the data layer participates in the P2P / Radicle / hashgraph sync model.",
+    "write_boundary": "The engine NEVER mutates versions in place. All changes land as a new version appended to `versions`. The highest-weight non-rejected version is the active one at a given turn.",
+    "merge_strategy": "git merge is additive on the `versions` array; conflicting metadata on the same version (same id+version) picks the higher weight.",
+    "radicle_branch_layout": {
+      "note": "moved to governance.json#governance_branch_layout",
+      "main": "released data/",
+      "develop": "accepted proposals",
+      "proposals/<entry_id>-<ts>": "one proposal",
+      "forks/<name>": "group divergence",
+      "ActiveDimensions/<DimensionName>": "live session"
+    },
+    "rebalance_cycle": "A deterministic script walks `rebalance_links`; a buff above tolerance proposes equal-magnitude counters on linked entries; proposals go to proposals/<entry_id>-<ts>.",
+    "votes_in_dimension_vs_global": "A player's vote weight on an entry is scaled by their time-of-use with that entry inside their owned Dimension; measured from session telemetry.",
+    "see_also": {
+      "protocol": "sync_protocol.json",
+      "events": "hashgraph_events.json",
+      "session_shapes": "dimension_session.json",
+      "governance": "governance.json"
+    }
+  }
+}
