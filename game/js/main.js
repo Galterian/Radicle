@@ -198,8 +198,27 @@ function connect() {
         }
       }
       if (m.kind === 'radicle') {
-        const url = m.url || `/commit/${m.commit}`;
-        logUI('', 'phase', { prefix: 'radicle push → ', link: url, linkText: m.commit.slice(0,10), suffix: ` on ${m.branch}` });
+        const primary = m.explorerUrl || m.url || `/commit/${m.commit}`;
+        const li = document.createElement('li');
+        li.className = 'phase';
+        li.appendChild(document.createTextNode('radicle push → '));
+        const a = document.createElement('a');
+        a.href = primary; a.target = '_blank'; a.rel = 'noopener';
+        a.textContent = m.commit.slice(0,10);
+        li.appendChild(a);
+        li.appendChild(document.createTextNode(` on ${m.branch}`));
+        if (m.explorerUrl && m.localUrl) {
+          li.appendChild(document.createTextNode(' · '));
+          const b = document.createElement('a');
+          b.href = m.localUrl; b.target = '_blank'; b.rel = 'noopener';
+          b.textContent = 'local view';
+          li.appendChild(b);
+        } else if (!m.published) {
+          li.appendChild(document.createTextNode(' (local only)'));
+        }
+        const log = document.getElementById('log');
+        log.prepend(li);
+        while (log.children.length > 80) log.lastChild.remove();
       }
     } catch (e) { console.error(e); }
   };
