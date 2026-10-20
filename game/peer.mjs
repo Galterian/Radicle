@@ -785,10 +785,13 @@ async function radicleLottery() {
       const uiPort = process.env.UI_PORT || 7357;
       const localUrl = `http://127.0.0.1:${uiPort}/commit/${r.commit}`;
       const explorerUrl = r.explorerUrl || null;
+      const treeUrl = r.treeUrl || null;
       const remoteNote = r.remote?.published ? '' : ` (remote: ${r.remote?.reason || 'skipped'})`;
-      console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch} — ${explorerUrl || localUrl}${remoteNote}`);
-      broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url: explorerUrl || localUrl, localUrl, explorerUrl, published: !!explorerUrl });
-      await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '', explorer_url: explorerUrl } });
+      console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch}${remoteNote}`);
+      console.log(`[${PEER_LABEL}]   commit: ${explorerUrl || localUrl}`);
+      if (treeUrl) console.log(`[${PEER_LABEL}]   tree:   ${treeUrl}`);
+      broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url: explorerUrl || localUrl, localUrl, explorerUrl, treeUrl, published: !!explorerUrl });
+      await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '', explorer_url: explorerUrl, tree_url: treeUrl } });
     }
   } catch (e) { console.warn(`[${PEER_LABEL}] radicle push failed: ${e.message}`); }
 }

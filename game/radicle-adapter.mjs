@@ -216,8 +216,13 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath) {
   await git(['push', 'radicle', branch], dir);
   const head = await git(['rev-parse', 'HEAD'], dir);
   const remote = await pushToRadicle(dir, branch);
-  const explorerUrl = (remote.published && radicleEnv.enabled) ? radicleEnv.commitUrl(head) : null;
-  return { pushed: true, commit: head, branch, remote, explorerUrl };
+  const published = remote.published && radicleEnv.enabled;
+  const explorerUrl = published ? radicleEnv.commitUrl(head) : null;
+  // Point the tree link at the pushed branch's content root. Using the commit
+  // SHA (rather than the branch name) keeps the URL stable even if we later
+  // rewrite the branch, and sidesteps slash-encoding in the branch path.
+  const treeUrl = published ? radicleEnv.treeUrl(head, `ActiveDimensions/${dimensionName}`) : null;
+  return { pushed: true, commit: head, branch, remote, explorerUrl, treeUrl };
 }
 
 export async function fetchDimension(peerId, dimensionName) {
