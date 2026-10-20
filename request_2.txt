@@ -4,3 +4,4 @@ Now generate me a simple real time 2d isometric PC game (via godot .net) with on
   
   Important!!!: knowing all my /data json specification, and most importantly
   following the requirements described in the @chaosD6_request_phase1_extract_jsons_2.txt .
+  
