@@ -466,7 +466,7 @@ function wrapTarget(t) {
 // the four basics + the Empty variants.
 function stripTargetFor(code, target) {
   switch (code) {
-    case 'A':  return typeof target === 'string' ? target : null; // Attack needs an enemy peer
+    case 'A':  return target || null;                             // Attack: enemy peer, or an empty tile (interpreted as a move intent)
     case 'M':  return target || null;                             // Move accepts either enemy or tile
     case 'EM': return target && typeof target === 'object' ? target : null; // Empty-Move needs a tile
     // Block, Posture, Empty Posture — no target.
@@ -493,7 +493,8 @@ async function doPlanningEnd() {
   else if (typeof q0 === 'number' && hand[q0]) { card = hand[q0]; code = card.code; }
 
   // Normalise target against the action's actual needs. Block / Posture / EP
-  // never target; Attack ignores a bare-tile click (treated as "no target");
+  // never target; Attack keeps either an enemy peer or a tile (a tile target
+  // turns the Attack into a step toward that hex at resolution time);
   // Empty Move only accepts a tile. This stops a stale selection from one
   // turn leaking into a Block commit as a bogus target.
   const normTarget = stripTargetFor(code, target);
@@ -574,9 +575,14 @@ async function doResolution() {
 
   // Movement intents. Move/Empty-Move step one tile toward the target tile.
   // Supports both character targets (step toward the peer) and tile targets.
+  // Attack with a tile target (empty hex) also generates a step toward that
+  // tile — swinging into empty space advances you — but produces no damage
+  // (the damage pass below bails when there is no defender).
   const movesByActor = new Map();
   for (const r of revealsThisTurn) {
-    if (r.action !== 'M' && r.action !== 'EM') continue;
+    const isMove = r.action === 'M' || r.action === 'EM';
+    const isAttackIntoEmpty = r.action === 'A' && r.target?.kind === 'tile';
+    if (!isMove && !isAttackIntoEmpty) continue;
     const actor = peersPublic.get(r.actor);
     if (!actor) continue;
     const tgtT = tileOf(r.target);
@@ -630,7 +636,8 @@ async function doResolution() {
   if (contacts.length) broadcastUI({ kind: 'contact', contacts, turn: hg.turn });
 
   // Damage pass. Attack still requires a character target so there's a
-  // defender to score damage against; tile-target Attacks are no-ops.
+  // defender to score damage against; tile-target Attacks produce no damage
+  // (they're handled as a move intent above).
   const damage = new Map();
   for (const r of revealsThisTurn) {
     if (r.action === 'A') {
