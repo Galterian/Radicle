@@ -85,11 +85,15 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
-    // Entities.
+    // Entities. Dead entities render as a faded tombstone so a wiped ally still
+    // leaves a marker on the map (otherwise it looks like the piece vanished).
     for (const e of state.entities) {
-      if (e.life <= 0) continue;
+      const dead = e.life <= 0;
       const { x, y } = tilePx(e.tile.q, e.tile.r);
       const color = ALLIANCE_COLOR[e.alliance] || '#ccc';
+
+      ctx.save();
+      if (dead) ctx.globalAlpha = 0.35;
 
       // Shadow + body (iso-ish lozenge).
       ctx.beginPath();
@@ -101,13 +105,23 @@ export function createRenderer(canvas, state) {
       ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#0b0d12';
+      ctx.lineWidth = e.isSelf ? 3 : 2;
+      ctx.strokeStyle = e.isSelf ? '#ffe66e' : '#0b0d12';
       ctx.stroke();
 
+      if (dead) {
+        ctx.strokeStyle = '#e36666';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x - 12, y - 18); ctx.lineTo(x + 12, y + 6);
+        ctx.moveTo(x + 12, y - 18); ctx.lineTo(x - 12, y + 6);
+        ctx.stroke();
+      }
+
       // Health pips.
-      const lifePx = x - (e.lifeMax * 4 - 2);
-      for (let i = 0; i < e.lifeMax; i++) {
+      const lifeMax = Math.max(1, e.lifeMax || 1);
+      const lifePx = x - (lifeMax * 4 - 2);
+      for (let i = 0; i < lifeMax; i++) {
         ctx.fillStyle = i < e.life ? '#ffb0b0' : '#2a1a1a';
         ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
       }
@@ -118,18 +132,15 @@ export function createRenderer(canvas, state) {
       ctx.textAlign = 'center';
       ctx.fillText(e.name, x, y - 28);
 
-      // Queued-action chevron over head (only visible for the player while planning;
-      // locked actions show it face-down).
-      if (e.alliance === 'player' && e.queued.length) {
-        const codes = e.queued.map(i => e.hand[i]?.code || '?').join('·');
+      // Queued-action chip over the player's head during planning. Locked
+      // commits show a face-down marker instead.
+      if (e.isSelf && e.queuedCode) {
         ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
-        ctx.fillText(`[${e.locked ? '◆' : codes}]`, x, y - 40);
-      } else if (e.queued.length && e.locked) {
-        ctx.fillStyle = '#555';
-        ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
-        ctx.fillText(`[◆]`, x, y - 40);
+        ctx.fillText(`[${e.locked ? '◆' : e.queuedCode}]`, x, y - 40);
       }
+
+      ctx.restore();
     }
   }
 
