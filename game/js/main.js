@@ -150,21 +150,35 @@ function connect() {
         logUI(`${env.type} by ${env.actor_peer_id}${m.from_peer ? ' (mesh)' : ''}`, 'evt');
         if (env.type === 'evt_action_reveal') {
           const t = env.payload.target;
-          const tLabel = t ? (t.kind === 'tile' ? `tile (${t.ref.q},${t.ref.r})` : t.ref) : 'self';
+          const tLabel = t ? (t.kind === 'tile' ? `tile (${t.ref.q},${t.ref.r})` : t.ref) : '—';
           logUI(`  reveal: ${env.payload.action} → ${tLabel}`, 'evt');
         }
         if (env.type === 'evt_state_hash') {
+          // Every peer independently emits an evt_state_hash for the turn, so
+          // we'd log the same DMG line 4× without a dedupe. Key by (turn,
+          // target, amount, source).
+          state._loggedDmg ||= new Set();
           const dmg = env.payload.damage_applied || [];
-          // The resolver on every peer independently emits an evt_state_hash;
-          // only count damage once by keying off the actor peer. If this peer
-          // is the first to log damage for the turn, show it. Avoid logging
-          // "no damage dealt" for every peer's hash — only once per turn.
-          if (dmg.length) {
-            for (const d of dmg) {
-              const tgt = state.entities.find(e => e.peer_id === d.target);
-              logUI(`  DMG ${d.amount} → ${tgt?.name || d.target}`, 'damage');
-            }
+          for (const d of dmg) {
+            const key = `${env.turn}:${d.target}:${d.amount}:${d.source || ''}`;
+            if (state._loggedDmg.has(key)) continue;
+            state._loggedDmg.add(key);
+            const tgt = state.entities.find(e => e.peer_id === d.target);
+            logUI(`  DMG ${d.amount} → ${tgt?.name || d.target}`, 'damage');
           }
+          // Prune older turns periodically so the set doesn't grow forever.
+          if (state._loggedDmg.size > 500) state._loggedDmg = new Set([...state._loggedDmg].slice(-100));
+        }
+      }
+      if (m.kind === 'contact') {
+        // "A×B" pairs for every adjacent cross-side revealer. Shows what
+        // actually opposed what after both sides have revealed — the user
+        // asked for this specifically so they can read the resolution.
+        for (const c of m.contacts) {
+          const veto = c.a.vetoed || c.b.vetoed
+            ? `  (vetoed: ${c.a.vetoed ? c.a.name + ' ' + c.a.vetoed : ''}${c.a.vetoed && c.b.vetoed ? '; ' : ''}${c.b.vetoed ? c.b.name + ' ' + c.b.vetoed : ''})`
+            : '';
+          logUI(`contact d=${c.distance}: ${c.a.name}[${c.a.action}] × ${c.b.name}[${c.b.action}]${veto}`, 'phase');
         }
       }
       if (m.kind === 'radicle') logUI(`radicle push → ${m.commit.slice(0,10)} on ${m.branch}`, 'phase');
