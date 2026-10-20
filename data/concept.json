@@ -1,0 +1,279 @@
+{
+    "collection": "concept",
+    "entries": [
+        {
+            "id": "game_concept",
+            "name": "Dimensions — core concept",
+            "tags": [
+                "lore",
+                "overview"
+            ],
+            "versions": [
+                {
+                    "version": "1.0.2",
+                    "weight": 1,
+                    "status": "canonical",
+                    "origin": "playtest_patch",
+                    "author_peer_id": "",
+                    "created_at": "2026-10-20",
+                    "parent_version": "1.0.1",
+                    "rebalance_links": [],
+                    "vote_log": [],
+                    "notes": "forked from v1.0.1",
+                    "data": {
+                        "title": "Dimensions",
+                        "subtitle": "ChaosD6 open-rules RPG",
+                        "premise": "A tile-and-card RPG where every character is a four-pillar being traveling between bounded Dimensions. Each Dimension is a tileset of hidden traps, awakening creatures, class cards, towers and crystals that must be unraveled...",
+                        "pillars": [
+                            "vitality",
+                            "world",
+                            "matter",
+                            "will"
+                        ],
+                        "pillar_metaphor": {
+                            "physical": "vitality",
+                            "spiritual": "world",
+                            "emotional": "matter",
+                            "mental": "will"
+                        },
+                        "species_sum_rule": "Playable races have Σ(stats) = 40. Ordinary objects: 0 Vitality & 0 Will. Plants: 0 Will. Astral/undead: 0 Vitality. Magical/ethereal: non-zero World.",
+                        "world_structure": {
+                            "unit": "Dimension",
+                            "tileset_sizes": [
+                                "3x4",
+                                "4x4",
+                                "5x5",
+                                "8x8"
+                            ],
+                            "contents": [
+                                "face-down trap effects",
+                                "monsters",
+                                "class cards",
+                                "towers",
+                                "crystals",
+                                "libraries",
+                                "nexus",
+                                "doors",
+                                "mines",
+                                "stashes"
+                            ]
+                        },
+                        "entry_vectors": [
+                            "nexus_drop",
+                            "dimension_door",
+                            "new_game_library_spawn"
+                        ],
+                        "progression_model": "Lateral — no levels. Character value = count of non-action cards in deck. Long-term endgame = puzzle buildings assembled from parts (8.6).",
+                        "win_conditions": {
+                            "arena": "defeat opponents",
+                            "world": "control 12 monsters",
+                            "mmorpg": "no single global win; alliance territory, dimension control, puzzle completions"
+                        },
+                        "death_rule": "Return to tower (regenerate) OR replace character if no tower chosen.",
+                        "tone": "fantasy / elemental / dimensional / player-driven rules evolution",
+                        "p2p_extension": {
+                            "coordinator": "firebase (optional directory service)",
+                            "ledger": "radicle git — ActiveDimensions/<DimensionId>/*",
+                            "transport_metaphor": "magnet-uri style DoorId pointing to the active hashgraph head",
+                            "sync_tiers": [
+                                {
+                                    "tier": "contact",
+                                    "rate": "handshake per action",
+                                    "scope": "players sharing adjacent tiles"
+                                },
+                                {
+                                    "tier": "same-dimension",
+                                    "rate": "once per turn",
+                                    "scope": "all players inside the Dimension"
+                                },
+                                {
+                                    "tier": "radicle-push",
+                                    "rate": "~1h",
+                                    "scope": "all clans + unmet players; a random active player commits the merged DoorId.json"
+                                }
+                            ],
+                            "fog_of_war": "Clans that haven't met have divergent map state; divergence is reconciled at first meeting (hashgraph merge) and periodically via radicle push.",
+                            "voting_model": "Rebalance proposals land as proposals/<entry_id>-<ts>; votes signed by peer_id; weight accrues; rebalance_script may counter-propose linked deltas; on merge, the next session load picks up the new canonical version."
+                        }
+                    }
+                },
+                {
+                    "version": "1.0.1",
+                    "weight": 0.9,
+                    "status": "superseded",
+                    "origin": "playtest_patch",
+                    "author_peer_id": "",
+                    "created_at": "2026-10-20",
+                    "parent_version": "1.0.0",
+                    "rebalance_links": [],
+                    "vote_log": [],
+                    "notes": "forked from v1.0.0",
+                    "data": {
+                        "title": "Dimensions",
+                        "subtitle": "ChaosD6 open-rules RPG",
+                        "premise": "A tile-and-card RPG where every character is a four-pillar being traveling between bounded Dimensions. Each Dimension is a tileset of hidden traps, awakening creatures, class cards, towers and crystals that must be unraveled...",
+                        "pillars": [
+                            "vitality",
+                            "world",
+                            "matter",
+                            "will"
+                        ],
+                        "pillar_metaphor": {
+                            "physical": "vitality",
+                            "spiritual": "world",
+                            "emotional": "matter",
+                            "mental": "will"
+                        },
+                        "species_sum_rule": "Playable races have Σ(stats) = 40. Ordinary objects: 0 Vitality & 0 Will. Plants: 0 Will. Astral/undead: 0 Vitality. Magical/ethereal: non-zero World.",
+                        "world_structure": {
+                            "unit": "Dimension",
+                            "tileset_sizes": [
+                                "3x4",
+                                "4x4",
+                                "5x5",
+                                "8x8"
+                            ],
+                            "contents": [
+                                "face-down trap effects",
+                                "monsters",
+                                "class cards",
+                                "towers",
+                                "crystals",
+                                "libraries",
+                                "nexus",
+                                "doors",
+                                "mines",
+                                "stashes"
+                            ]
+                        },
+                        "entry_vectors": [
+                            "nexus_drop",
+                            "dimension_door",
+                            "new_game_library_spawn"
+                        ],
+                        "progression_model": "Lateral — no levels. Character value = count of non-action cards in deck. Long-term endgame = puzzle buildings assembled from parts (8.6).",
+                        "win_conditions": {
+                            "arena": "defeat opponents",
+                            "world": "control 12 monsters",
+                            "mmorpg": "no single global win; alliance territory, dimension control, puzzle completions"
+                        },
+                        "death_rule": "Return to tower (regenerate) OR replace character if no tower chosen.",
+                        "tone": "fantasy / elemental / dimensional / player-driven rules evolution",
+                        "p2p_extension": {
+                            "coordinator": "firebase (optional directory service)",
+                            "ledger": "radicle git — ActiveDimensions/<DimensionId>/*",
+                            "transport_metaphor": "magnet-uri style DoorId pointing to the active hashgraph head",
+                            "sync_tiers": [
+                                {
+                                    "tier": "contact",
+                                    "rate": "handshake per action",
+                                    "scope": "players sharing adjacent tiles"
+                                },
+                                {
+                                    "tier": "same-dimension",
+                                    "rate": "once per turn",
+                                    "scope": "all players inside the Dimension"
+                                },
+                                {
+                                    "tier": "radicle-push",
+                                    "rate": "~1h",
+                                    "scope": "all clans + unmet players; a random active player commits the merged DoorId.json"
+                                }
+                            ],
+                            "fog_of_war": "Clans that haven't met have divergent map state; divergence is reconciled at first meeting (hashgraph merge) and periodically via radicle push.",
+                            "voting_model": "Rebalance proposals land as proposals/<entry_id>-<ts>; votes signed by peer_id; weight accrues; rebalance_script may counter-propose linked deltas; on merge, the next session load picks up the new canonical version."
+                        }
+                    }
+                },
+                {
+                    "version": "1.0.0",
+                    "weight": 0.9,
+                    "status": "superseded",
+                    "origin": "paper_rules",
+                    "author_peer_id": "",
+                    "created_at": "2026-10-19",
+                    "parent_version": null,
+                    "rebalance_links": [],
+                    "vote_log": [],
+                    "notes": "Extracted from the paper rulebook.",
+                    "data": {
+                        "title": "Dimensions",
+                        "subtitle": "ChaosD6 open-rules RPG",
+                        "premise": "A tile-and-card RPG where every character is a four-pillar being traveling between bounded Dimensions. Each Dimension is a tileset of hidden traps, awakening creatures, class cards, towers and crystals that must be unraveled..",
+                        "pillars": [
+                            "vitality",
+                            "world",
+                            "matter",
+                            "will"
+                        ],
+                        "pillar_metaphor": {
+                            "physical": "vitality",
+                            "spiritual": "world",
+                            "emotional": "matter",
+                            "mental": "will"
+                        },
+                        "species_sum_rule": "Playable races have Σ(stats) = 40. Ordinary objects: 0 Vitality & 0 Will. Plants: 0 Will. Astral/undead: 0 Vitality. Magical/ethereal: non-zero World.",
+                        "world_structure": {
+                            "unit": "Dimension",
+                            "tileset_sizes": [
+                                "3x4",
+                                "4x4",
+                                "5x5",
+                                "8x8"
+                            ],
+                            "contents": [
+                                "face-down trap effects",
+                                "monsters",
+                                "class cards",
+                                "towers",
+                                "crystals",
+                                "libraries",
+                                "nexus",
+                                "doors",
+                                "mines",
+                                "stashes"
+                            ]
+                        },
+                        "entry_vectors": [
+                            "nexus_drop",
+                            "dimension_door",
+                            "new_game_library_spawn"
+                        ],
+                        "progression_model": "Lateral — no levels. Character value = count of non-action cards in deck. Long-term endgame = puzzle buildings assembled from parts (8.6).",
+                        "win_conditions": {
+                            "arena": "defeat opponents",
+                            "world": "control 12 monsters",
+                            "mmorpg": "no single global win; alliance territory, dimension control, puzzle completions"
+                        },
+                        "death_rule": "Return to tower (regenerate) OR replace character if no tower chosen.",
+                        "tone": "fantasy / elemental / dimensional / player-driven rules evolution",
+                        "p2p_extension": {
+                            "coordinator": "firebase (optional directory service)",
+                            "ledger": "radicle git — ActiveDimensions/<DimensionId>/*",
+                            "transport_metaphor": "magnet-uri style DoorId pointing to the active hashgraph head",
+                            "sync_tiers": [
+                                {
+                                    "tier": "contact",
+                                    "rate": "handshake per action",
+                                    "scope": "players sharing adjacent tiles"
+                                },
+                                {
+                                    "tier": "same-dimension",
+                                    "rate": "once per turn",
+                                    "scope": "all players inside the Dimension"
+                                },
+                                {
+                                    "tier": "radicle-push",
+                                    "rate": "~1h",
+                                    "scope": "all clans + unmet players; a random active player commits the merged DoorId.json"
+                                }
+                            ],
+                            "fog_of_war": "Clans that haven't met have divergent map state; divergence is reconciled at first meeting (hashgraph merge) and periodically via radicle push.",
+                            "voting_model": "Rebalance proposals land as proposals/<entry_id>-<ts>; votes signed by peer_id; weight accrues; rebalance_script may counter-propose linked deltas; on merge, the next session load picks up the new canonical version."
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

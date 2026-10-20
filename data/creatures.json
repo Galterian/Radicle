@@ -1,0 +1,1077 @@
+{
+  "collection": "creatures",
+  "notes": "Monsters. Life = ceil(Σstats/10). dice_pattern null = default BMAP 4d6 (Rule 5). innate_effect binds a themed effect that lives in the monster's hand once awakened. on_action_rider = +N damage on a specific action.",
+  "entries": [
+    {
+      "id": "mon_ruinous_minotaur",
+      "name": "Ruinous Minotaur",
+      "tags": [
+        "bruiser"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_canyon_minotaur"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 17,
+              "world": 10,
+              "matter": 15,
+              "will": 13
+            },
+            "life": 6,
+            "actions_per_round": 4,
+            "dice_pattern": null,
+            "innate_effect": "effect_earthquake",
+            "innate_effect_text": "Earthquake (Earth): damages all adjacent enemies",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_ridge_runnet_3a",
+      "name": "Ridge Runnet 3A",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_rhox_brute"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 10,
+              "matter": 10,
+              "will": 10
+            },
+            "life": 5,
+            "actions_per_round": 4,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "A",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_hellkite_hatchling",
+      "name": "Hellkite Hatchling",
+      "tags": [
+        "dragon-kin"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_dragon"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 20,
+              "matter": 20,
+              "will": 20
+            },
+            "life": 8,
+            "actions_per_round": 4,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_cloudhearth_drake_2a",
+      "name": "Cloudhearth Drake 2A",
+      "tags": [
+        "flyer"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_cliffy_serpent"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 13,
+              "world": 8,
+              "matter": 18,
+              "will": 15
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_harbor_serpent",
+      "name": "Harbor Serpent",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_steambeam_aquitect"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 18,
+              "world": 12,
+              "matter": 14,
+              "will": 14
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "M",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_tangle_spider_2b",
+      "name": "Tangle Spider 2B",
+      "tags": [
+        "caster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_ember_weaver"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 20,
+              "matter": 10,
+              "will": 20
+            },
+            "life": 4,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": "effect_creation",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_cliffy_serpent",
+      "name": "Cliffy Serpent",
+      "tags": [
+        "flyer"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_cloudhearth_drake_2a"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 12,
+              "world": 8,
+              "matter": 18,
+              "will": 15
+            },
+            "life": 5,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_bant_battlemage_3p",
+      "name": "Bant Battlemage 3P",
+      "tags": [
+        "caster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_angel_of_mercy"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 12,
+              "world": 20,
+              "matter": 16,
+              "will": 16
+            },
+            "life": 5,
+            "actions_per_round": 1,
+            "dice_pattern": null,
+            "innate_effect": "effect_love",
+            "innate_effect_text": "Love (Water, Harmony): target cannot deal damage to you until they visit their tower.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_angel_of_mercy",
+      "name": "Angel of Mercy",
+      "tags": [
+        "caster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_bant_battlemage_3p"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 17,
+              "world": 20,
+              "matter": 16,
+              "will": 16
+            },
+            "life": 7,
+            "actions_per_round": 1,
+            "dice_pattern": null,
+            "innate_effect": "effect_awe",
+            "innate_effect_text": "Awe (Air, Harmony): target cannot deal damage to you until they visit their tower.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_pathrazer_of_ulamog",
+      "name": "Pathrazer of Ulamog",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_rhox_brute"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 8,
+              "matter": 12,
+              "will": 15
+            },
+            "life": 5,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "P",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_dragon",
+      "name": "Dragon",
+      "tags": [
+        "boss"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_hellkite_hatchling"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 20,
+              "matter": 20,
+              "will": 20
+            },
+            "life": 8,
+            "actions_per_round": 4,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null,
+            "behavior": "heals to full when not in contact; plays with the deck of its attacker"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_canyon_minotaur",
+      "name": "Canyon Minotaur",
+      "tags": [
+        "bruiser"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_ruinous_minotaur"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 17,
+              "world": 10,
+              "matter": 15,
+              "will": 13
+            },
+            "life": 6,
+            "actions_per_round": 4,
+            "dice_pattern": null,
+            "innate_effect": "effect_earthquake",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_selftower_sphynx",
+      "name": "Selftower Sphynx",
+      "tags": [
+        "control"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 15,
+              "matter": 15,
+              "will": 15
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": "effect_domination",
+            "innate_effect_text": "Domination (Souls, Harmony): you control the target while in contact.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_sigiled_behemoth",
+      "name": "Sigiled Behemoth",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_cavern_thoctar"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 10,
+              "matter": 12,
+              "will": 12
+            },
+            "life": 5,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_rakewalk_gargantuan",
+      "name": "Rakewalk Gargantuan",
+      "tags": [
+        "bruiser"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_summit_apes"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 20,
+              "matter": 12,
+              "will": 10
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": "effect_anger",
+            "innate_effect_text": "Anger (Fire, Harmony): target can only deal damage to you until they visit their tower.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_nacatl_hunt_pride",
+      "name": "Nacatl Hunt-Pride",
+      "tags": [
+        "pack"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 10,
+              "world": 10,
+              "matter": 15,
+              "will": 5
+            },
+            "life": 4,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": "effect_mists",
+            "innate_effect_text": "Mists (Water): no affected adjacent creature can attack this round while in contact.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_rhox_brute",
+      "name": "Rhox Brute",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_ridge_runnet_3a"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 10,
+              "matter": 10,
+              "will": 10
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "A",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_everbark_shaman",
+      "name": "Everbark Shaman",
+      "tags": [
+        "defender"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_guardian_of_coverdell"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 15,
+              "matter": 10,
+              "will": 7
+            },
+            "life": 5,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "B",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_bonebreaker_giant",
+      "name": "Bonebreaker Giant",
+      "tags": [
+        "bruiser"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_pathrazer_of_ulamog"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 8,
+              "matter": 12,
+              "will": 15
+            },
+            "life": 5,
+            "actions_per_round": 4,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "P",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_steambeam_aquitect",
+      "name": "Steambeam Aquitect",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_harbor_serpent"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 18,
+              "world": 12,
+              "matter": 14,
+              "will": 14
+            },
+            "life": 6,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "M",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_greater_basilisk",
+      "name": "Greater Basilisk",
+      "tags": [
+        "lock"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_fossilization"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 8,
+              "matter": 12,
+              "will": 18
+            },
+            "life": 5,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": "effect_petrify",
+            "innate_effect_text": "Petrify (Vitality, Harmony): turn target to stone while in contact.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_cavern_thoctar",
+      "name": "Cavern Thoctar",
+      "tags": [
+        "brute"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_sigiled_behemoth"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 10,
+              "matter": 12,
+              "will": 12
+            },
+            "life": 5,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_etherium_abomination",
+      "name": "Etherium Abomination",
+      "tags": [
+        "caster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_infectious_horror"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 10,
+              "matter": 10,
+              "will": 20
+            },
+            "life": 6,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": "effect_fear",
+            "innate_effect_text": "Fear (Air, Harmony): target cannot deal damage until reaching their tower.",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_siegemind_ogre",
+      "name": "Siege-Mind Ogre",
+      "tags": [
+        "mental"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 18,
+              "matter": 12,
+              "will": 18
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_ember_weaver",
+      "name": "Ember Weaver",
+      "tags": [
+        "caster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_tangle_spider_2b"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 20,
+              "matter": 10,
+              "will": 20
+            },
+            "life": 6,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": "effect_creation",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_infectious_horror",
+      "name": "Infectious Horror",
+      "tags": [
+        "caster"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_etherium_abomination"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 10,
+              "matter": 10,
+              "will": 20
+            },
+            "life": 6,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": "effect_fear",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_summit_apes",
+      "name": "Summit Apes",
+      "tags": [
+        "bruiser"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_rakewalk_gargantuan"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 20,
+              "matter": 12,
+              "will": 10
+            },
+            "life": 6,
+            "actions_per_round": 3,
+            "dice_pattern": null,
+            "innate_effect": "effect_anger",
+            "on_action_rider": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_guardian_of_coverdell",
+      "name": "Guardian of Coverdell",
+      "tags": [
+        "defender"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "mon_everbark_shaman"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 20,
+              "world": 15,
+              "matter": 10,
+              "will": 7
+            },
+            "life": 5,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": null,
+            "on_action_rider": {
+              "action": "B",
+              "bonus_damage": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon_loxodon_mystic",
+      "name": "Loxodon Mystic",
+      "tags": [
+        "support"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_spirit_link"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stats": {
+              "vitality": 15,
+              "world": 15,
+              "matter": 10,
+              "will": 10
+            },
+            "life": 5,
+            "actions_per_round": 2,
+            "dice_pattern": null,
+            "innate_effect": "effect_spirit_link",
+            "on_action_rider": null
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "collection": "contradictions",
+  "notes": "Known internal inconsistencies in the paper rules. Each entry is a governance proposal: the winning resolution becomes a new version on the source entries. Resolved entries are kept (status resolved, weight 0) as history so the reasoning survives. Open entries are the FIRST votes the community should run.",
+  "entries": [
+    {
+      "id": "contra_life_vs_printed_hits",
+      "name": "Printed creature hits disagree with the Rule 14 life formula",
+      "tags": ["open", "life", "creatures"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 0.0, "status": "proposal", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_14", "mon_cloudhearth_drake_2a", "mon_tangle_spider_2b", "mon_bant_battlemage_3p", "mon_rhox_brute", "mon_ember_weaver"],
+          "vote_log": [],
+          "notes": "Detected by recomputing round_half_up(sum(stats)/10) for every card. The JSON currently stores the PRINTED value in data.life; the engine must pick one source of truth.",
+          "data": {
+            "source_entries": ["rule_14", "mon_cloudhearth_drake_2a", "mon_tangle_spider_2b", "mon_bant_battlemage_3p", "mon_rhox_brute", "mon_ember_weaver"],
+            "description": "Rule 14 Part B: life = sum(stats)/10 rounded. Five creature cards print a different hit count.",
+            "evidence": [
+              { "entry": "mon_cloudhearth_drake_2a", "stats": "13;8;18;15", "sum": 54, "formula_life": 5, "printed_hits": 6 },
+              { "entry": "mon_tangle_spider_2b",     "stats": "15;20;10;20", "sum": 65, "formula_life": 7, "printed_hits": 4 },
+              { "entry": "mon_bant_battlemage_3p",   "stats": "12;20;16;16", "sum": 64, "formula_life": 6, "printed_hits": 5 },
+              { "entry": "mon_rhox_brute",           "stats": "20;10;10;10", "sum": 50, "formula_life": 5, "printed_hits": 6 },
+              { "entry": "mon_ember_weaver",         "stats": "15;20;10;20", "sum": 65, "formula_life": 7, "printed_hits": 6 }
+            ],
+            "proposed_resolutions": [
+              { "resolution_id": "formula_wins", "text": "Engine derives life from stats at load time; data.life becomes a cached, non-authoritative field. New versions of the five creatures set life to the formula value." },
+              { "resolution_id": "card_wins",    "text": "Printed hits are deliberate design (e.g. Tangle Spider is fragile but strong). Add an optional data.life_override to creatures; Rule 14 gets a new version: 'unless the card prints otherwise'." },
+              { "resolution_id": "fix_stats",    "text": "Keep the printed hits and adjust each creature's stats so the formula matches (rebalance script proposes the minimal stat delta)." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "contra_razorfin_stat_sum",
+      "name": "Razorfin Abolisher stats sum to 30, species rule says 40",
+      "tags": ["open", "stats", "characters"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 0.0, "status": "proposal", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["char_razorfin_abolisher", "game_concept", "rule_14"],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "source_entries": ["char_razorfin_abolisher", "game_concept", "rule_14"],
+            "description": "Card prints 5; 5; 20; 0 (4 hits). The concept states every playable race has sum(stats) = 40 and Rule 14 gives 4 life only for 40. 30 would give 3 life.",
+            "evidence": [ { "entry": "char_razorfin_abolisher", "stats": "5;5;20;0", "sum": 30, "formula_life": 3, "printed_hits": 4, "expected_sum": 40 } ],
+            "proposed_resolutions": [
+              { "resolution_id": "typo_15_5_20_0", "text": "Treat it as a typo: Vitality 15 (sum 40). Matches the +Space adept flavour (high Matter) and keeps 4 life." },
+              { "resolution_id": "typo_5_15_20_0", "text": "Treat it as a typo: World 15 (sum 40)." },
+              { "resolution_id": "intentional_30", "text": "Keep 30 as a deliberate weak-but-adept character; new version with life 3 and a compensating property proposed by the rebalance script." }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "contra_rule0_duplicate_numbering",
+      "name": "Two paragraphs numbered Rule 0 and a late Rule 25 all describe setup",
+      "tags": ["resolved", "rules"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_0_setup", "rule_25_tileset_initial_deploy"],
+          "vote_log": [],
+          "notes": "Resolved by author decision on 2026-10-19.",
+          "data": {
+            "source_entries": ["rule_0_setup", "rule_25_tileset_initial_deploy"],
+            "description": "Rule 0 (tileset) and Rule 0 (character deck) share a number; Rule 25 re-states the tileset deployment with more detail (player-count sizes, entry-point order by Will).",
+            "proposed_resolutions": [ { "resolution_id": "merge_into_rule0", "text": "rule_0_setup v1.1.0 merges all three; rule_25 marked superseded (weight 0). Chosen." } ],
+            "chosen_resolution": "merge_into_rule0"
+          }
+        }
+      ]
+    },
+    {
+      "id": "contra_rule14_triple",
+      "name": "Three different rules numbered 14",
+      "tags": ["resolved", "rules"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_14"],
+          "vote_log": [],
+          "notes": "Resolved by author decision on 2026-10-19.",
+          "data": {
+            "source_entries": ["rule_14"],
+            "description": "Acquisition/trade, Life and Adjacency are all 'Rule 14'.",
+            "proposed_resolutions": [ { "resolution_id": "parts_a_b_c", "text": "Keep one entry rule_14 with Parts A/B/C so cross-references to 'Rule 14' in the paper stay valid. Chosen." } ],
+            "chosen_resolution": "parts_a_b_c"
+          }
+        }
+      ]
+    },
+    {
+      "id": "contra_rule21_rounding",
+      "name": "Rule 21 says 'rounded up at mathematical principle' but its example rounds 4 down to 0",
+      "tags": ["resolved", "math"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["rule_21_effect_damage", "rule_14", "battle_system_core"],
+          "vote_log": [],
+          "notes": "Resolved on 2026-10-19: round-half-up (0.5 -> 1, 0.4 -> 0), not ceiling. Engine formula recorded in battle_system_core.resolution_math.",
+          "data": {
+            "source_entries": ["rule_21_effect_damage"],
+            "description": "'Rounded up' would make 4 points = 1 damage, contradicting Example 2 in the same rule.",
+            "proposed_resolutions": [ { "resolution_id": "round_half_up", "text": "Interpret as standard rounding at the nearest multiple of 10. Chosen." }, { "resolution_id": "ceiling", "text": "Interpret literally as ceiling; rewrite Example 2." } ],
+            "chosen_resolution": "round_half_up"
+          }
+        }
+      ]
+    },
+    {
+      "id": "contra_golems_stat_totals",
+      "name": "Golem variants stat-buy totals",
+      "tags": ["resolved", "effects"],
+      "versions": [
+        {
+          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
+          "rebalance_links": ["effect_golems_earth", "effect_golems_water", "effect_golems_air"],
+          "vote_log": [],
+          "notes": "Checked on 2026-10-19: the three Golem variants (10;5;9;0 / 10;9;5;0 / 9;5;10;0) all total 24; the three Elementals (5;5;20;0 / 5;20;5;0 / 20;5;5;0) all total 30. No change needed; recorded so the check is not repeated.",
+          "data": {
+            "source_entries": ["effect_golems_earth", "effect_golems_water", "effect_golems_air"],
+            "description": "Suspected mismatch between Golem variant totals.",
+            "proposed_resolutions": [ { "resolution_id": "no_change", "text": "Totals already consistent at 24. Chosen." } ],
+            "chosen_resolution": "no_change"
+          }
+        }
+      ]
+    }
+  ]
+}
