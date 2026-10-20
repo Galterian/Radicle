@@ -25,9 +25,28 @@ async function git(args, cwd) {
   return stdout.trim();
 }
 
+// If a previous run was SIGKILL'd mid-push, the bare's ref files can end up
+// pointing to objects that were never fully transferred. Future clones then
+// fail with "cannot update ref 'refs/heads/main': trying to write ref … with
+// nonexistent object X". fsck catches that cheaply; on failure we rebuild the
+// bare from scratch (and clear the per-peer work trees so they re-clone).
+async function fsckBare() {
+  try {
+    await pexec('git', ['--git-dir', RADICLE_BARE, 'fsck', '--connectivity-only', '--no-dangling'], { windowsHide: true });
+    return true;
+  } catch { return false; }
+}
+
 export async function ensureBare() {
-  try { await fs.access(RADICLE_BARE); return; }
-  catch { /* fall through */ }
+  let exists = false;
+  try { await fs.access(RADICLE_BARE); exists = true; } catch {}
+  if (exists && !(await fsckBare())) {
+    console.warn(`[radicle] bare repo at ${RADICLE_BARE} failed fsck — rebuilding`);
+    await fs.rm(RADICLE_BARE, { recursive: true, force: true });
+    await fs.rm(RADICLE_WORK, { recursive: true, force: true });
+    exists = false;
+  }
+  if (exists) return;
   await fs.mkdir(RADICLE_BARE, { recursive: true });
   await git(['init', '--bare', '--initial-branch=main'], RADICLE_BARE);
   console.log(`[radicle] bare repo at ${RADICLE_BARE}`);
