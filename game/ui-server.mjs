@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { RADICLE_BARE } from './radicle-adapter.mjs';
+import { RADICLE_BARE, radicleEnv } from './radicle-adapter.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +54,23 @@ const server = http.createServer(async (req, res) => {
     try { const b = await fs.readFile(abs); res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(b); }
     catch { res.writeHead(404); res.end('not found'); }
   };
+  // Human-readable alias redirect: /r/<alias>/commits/<sha> or /r/<alias>/tree/<sha>/<path>
+  // → 302 to the real explorer URL. The alias is purely cosmetic — the destination
+  // still uses the raw RID because public seeds don't know about our local alias.
+  const rMatch = p.match(/^\/r\/([^/]+)\/(commits|tree)\/([^/]+)(\/.*)?$/);
+  if (rMatch) {
+    if (!radicleEnv.enabled) { res.writeHead(503); return res.end('radicle remote push disabled'); }
+    const [, alias, kind, sha, rest] = rMatch;
+    if (radicleEnv.alias && alias !== radicleEnv.alias) {
+      res.writeHead(404); return res.end(`unknown alias "${alias}" (configured: "${radicleEnv.alias}")`);
+    }
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) { res.writeHead(400); return res.end('bad sha'); }
+    const target = kind === 'commits'
+      ? radicleEnv.rawCommitUrl(sha)
+      : radicleEnv.rawTreeUrl(sha, rest ? rest.slice(1) : '');
+    res.writeHead(302, { Location: target, 'Cache-Control': 'no-store' });
+    return res.end();
+  }
   if (p.startsWith('/commit/')) {
     const sha = p.slice('/commit/'.length);
     if (!SHA_RE.test(sha)) { res.writeHead(400); return res.end('bad sha'); }

@@ -31,6 +31,13 @@ export const PROJECT_ROOT = path.resolve(__dirname, '..');
 const RADICLE_PUSH_REMOTE   = (process.env.RADICLE_PUSH_REMOTE ?? '1') !== '0';
 const RADICLE_SEED          = process.env.RADICLE_SEED          || 'rosa.radicle.network';
 const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://radicle.network';
+// Default: emit raw explorer URLs (shareable, work from any browser). Setting
+// RADICLE_ALIAS=chaosD6 instead routes the broadcast link through the local
+// UI server as http://127.0.0.1:<UI_PORT>/r/<alias>/commits/<sha>, which 302s
+// to the real explorer URL — pretty, but localhost-only. The /r endpoint
+// stays wired either way so manually-typed aliased URLs still redirect.
+const RADICLE_ALIAS         = process.env.RADICLE_ALIAS         ?? '';
+const UI_PORT_FOR_REDIRECT  = process.env.UI_PORT               || '7357';
 const RAD_BIN_DIR           = process.env.RAD_BIN_DIR           || path.join(os.homedir(), '.radicle', 'bin');
 const GIT_PATH_WITH_RAD     = `${RAD_BIN_DIR}${path.delimiter}${process.env.PATH || ''}`;
 
@@ -81,14 +88,25 @@ export const radicleEnv = await (async () => {
   const explorerBase = RADICLE_EXPLORER_BASE.replace(/\/+$/, '');
   // Explorer expects an URL-encoded colon between "rad" and the RID body.
   const ridInUrl = `rad%3A${rid}`;
+  const rawCommitUrl = sha => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/commits/${sha}`;
+  const rawTreeUrl   = (sha, pathIn = '') => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}`;
+  const alias = (RADICLE_ALIAS || '').trim();
+  const makePretty = (kind, sha, pathIn = '') => {
+    if (!alias) return kind === 'tree' ? rawTreeUrl(sha, pathIn) : rawCommitUrl(sha);
+    const tail = kind === 'tree' ? `tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}` : `commits/${sha}`;
+    return `http://127.0.0.1:${UI_PORT_FOR_REDIRECT}/r/${encodeURIComponent(alias)}/${tail}`;
+  };
   return {
     enabled: true,
     rid,
+    alias: alias || null,
     remoteUrl: pushUrl,
     explorerBase,
     seed: RADICLE_SEED,
-    commitUrl: sha => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/commits/${sha}`,
-    treeUrl: (sha, pathIn = '') => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}`,
+    commitUrl: sha => makePretty('commits', sha),
+    treeUrl:   (sha, pathIn = '') => makePretty('tree', sha, pathIn),
+    rawCommitUrl,
+    rawTreeUrl,
   };
 })();
 
