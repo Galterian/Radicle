@@ -657,11 +657,15 @@ function wireInput() {
       && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
     const atTile = me.tile_q === t.q && me.tile_r === t.r;
 
-    // Prefer Attack if the player holds one in hand (and hasn't marked it for
-    // discard). Otherwise fall back to staging an Empty move/posture — the
-    // gesture should always do *something* so the arrow and action card update.
+    // Pick the action for this gesture. An *explicit* Move always wins — the
+    // user already committed to Move, so right-click must stage/commit Move
+    // toward the destination, not override it with Attack. Otherwise prefer
+    // Attack when a card is in hand; else fall back to Empty.
+    const q0 = state.queued[0];
+    const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : null;
+    const moveExplicit = queuedCode === 'M' && !state.queuedIsAuto;
     const attackIdx = state.hand.findIndex(c => c && c.code === 'A' && !state.willDiscard.has(c.card_id));
-    const useAttack = attackIdx >= 0;
+    const useAttack = !moveExplicit && attackIdx >= 0;
     let label;
     if (useAttack) {
       if (state.queued[0] !== attackIdx) {
@@ -687,20 +691,20 @@ function wireInput() {
         label = `Attack-step → (${step.q},${step.r})`;
       }
     } else {
-      // No Attack available → Empty move/posture toward the right-clicked tile.
-      // Compute a full path so the destination can persist across rounds; each
-      // new planning phase recomputes from the player's then-current tile.
-      if (state.queued[0] !== 'EMPTY') {
+      // Path-based move. When Move is explicitly selected we KEEP that slot
+      // queued (just route through it); otherwise stage Empty.
+      if (!moveExplicit && state.queued[0] !== 'EMPTY') {
         state.queued = ['EMPTY'];
         state.queuedIsAuto = false;
         send({ kind: 'queue', slots: state.queued });
       }
+      const codeTag = moveExplicit ? 'Move' : 'EM';
       if (atTile) {
         state.target = { q: me.tile_q, r: me.tile_r };
         state.ui.selectedTarget = { q: me.tile_q, r: me.tile_r };
         state.ui.destinationTile = null;
         state.ui.pathPlan = null;
-        label = 'EP (stay)';
+        label = moveExplicit ? 'Move (stay)' : 'EP (stay)';
       } else {
         const blocked = blockedTilesExcluding(state.myPeerId);
         const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
@@ -711,8 +715,8 @@ function wireInput() {
           state.target = { q: step.q, r: step.r };
           state.ui.selectedTarget = step;
           label = path.length === 1
-            ? `EM → (${step.q},${step.r})`
-            : `EM → (${step.q},${step.r}) along ${path.length}-step route to (${t.q},${t.r})`;
+            ? `${codeTag} → (${step.q},${step.r})`
+            : `${codeTag} → (${step.q},${step.r}) along ${path.length}-step route to (${t.q},${t.r})`;
         } else {
           // No reachable path (blocked). Fall back to the single-step heuristic
           // so the gesture still does something useful this round.
@@ -721,7 +725,7 @@ function wireInput() {
           state.ui.selectedTarget = step;
           state.ui.destinationTile = { q: t.q, r: t.r };
           state.ui.pathPlan = null;
-          label = `EM → (${step.q},${step.r}) (no clear route)`;
+          label = `${codeTag} → (${step.q},${step.r}) (no clear route)`;
         }
       }
     }
