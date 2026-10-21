@@ -523,6 +523,7 @@ if (DISCOVERY_URL) { setInterval(pullDiscoveryState, 2500); setTimeout(pullDisco
 const PHASES = ['planning', 'reveal', 'resolution', 'cleanup'];
 let myLastSalt = null;
 let myLastReveal = null;
+let lastAttackTarget = null;  // peer_id of the enemy we last swung at — the no-target Attack fallback
 
 // Alliances in the Ashfall-Micro demo collapse into two sides: the player and
 // their npc_a ally fight together, npc_b creatures are the opposition. Treat
@@ -663,7 +664,24 @@ async function doPlanningEnd() {
   // turns the Attack into a step toward that hex at resolution time);
   // Empty Move only accepts a tile. This stops a stale selection from one
   // turn leaking into a Block commit as a bogus target.
-  const normTarget = stripTargetFor(code, target);
+  let normTarget = stripTargetFor(code, target);
+
+  // Attack with no target would resolve into nothing. Fall back to the enemy
+  // we last attacked (if still alive), else the nearest living enemy — random
+  // among ties. Resolved here, before commit, so the reveal carries a concrete
+  // target and every peer resolves the same thing.
+  if (code === 'A' && !normTarget) {
+    const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
+    let pick = enemies.find(p => p.peer_id === lastAttackTarget) || null;
+    if (!pick && enemies.length) {
+      const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+      const dmin = Math.min(...enemies.map(p => hexDistance(here, p)));
+      const nearest = enemies.filter(p => hexDistance(here, p) === dmin);
+      pick = nearest[Math.floor(Math.random() * nearest.length)];
+    }
+    if (pick) normTarget = pick.peer_id;
+  }
+  if (code === 'A' && typeof normTarget === 'string') lastAttackTarget = normTarget;
 
   myLastSalt = randomBytes(12).toString('hex');
   const commitHash = sha256Hex(`${code}::${targetTag(normTarget)}::${myLastSalt}`);
