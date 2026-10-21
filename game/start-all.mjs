@@ -60,7 +60,7 @@ const netEnv = {
   ...(WITH_DISCOVERY ? { DISCOVERY_PORT: String(DISCOVERY_PORT), DISCOVERY_URL: `http://127.0.0.1:${DISCOVERY_PORT}` } : {}),
   ...(PEER_PUBLIC_IP ? { PEER_PUBLIC_IP } : {}),
 };
-console.log(`[launcher] bus relays: ${process.env.NOSTR_RELAYS || 'wss://relay.primal.net, wss://relay.snort.social, wss://nostr.bitcoiner.social, wss://relay.nostr.net (override with NOSTR_RELAYS)'}`);
+console.log(`[launcher] bus relays: ${process.env.NOSTR_RELAYS || 'wss://relay.primal.net, wss://relay.snort.social, wss://relay.nostr.net (override with NOSTR_RELAYS)'}`);
 console.log(`[launcher] direct links: ${PEER_PUBLIC_IP ? `preset address ${PEER_PUBLIC_IP}` : 'address auto-detected when you start a dimension (override with PEER_PUBLIC_IP)'}`);
 if (UI_PORT !== 7357) console.log(`[launcher] default UI port busy — using :${UI_PORT}`);
 

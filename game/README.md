@@ -32,7 +32,7 @@ dimension: its piece of the puzzle. Two layers carry the game:
 - **A public Nostr bus carries the rounds.** Commits, reveals and heartbeats
   are ephemeral Nostr events (kind 29517, tagged with the dimension id) on a
   few public relays (`relay.primal.net`, `relay.snort.social`,
-  `nostr.bitcoiner.social`, `relay.nostr.net`; override with `NOSTR_RELAYS`).
+  `relay.nostr.net`; override with `NOSTR_RELAYS`).
   Relays speak WSS on :443, so this works from behind NAT and corporate
   proxies with nothing to forward and nobody to host. Round trip is ~100 ms.
   libp2p gossipsub still runs for peers that can reach each other directly
