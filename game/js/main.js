@@ -5,6 +5,15 @@
 import { createRenderer } from './renderer.js';
 import { pixelToHex, hexDistance, stepToward, findPath, HEX_SIZE } from './hex.js';
 
+// Direct DOM poke rather than importing from launcher.js — launcher.js is the
+// one that imports *us*, so pulling a symbol back creates a cycle that in a
+// top-level-await module graph can leave the function binding unresolved and
+// the overlay stuck up. One line of DOM manipulation is cheaper than that.
+function hideEntering() {
+  const ov = document.getElementById('entering-overlay');
+  if (ov) ov.hidden = true;
+}
+
 // Click within this many pixels of an entity's drawn centre counts as a hit on
 // that entity. The body circle is r=16; 24 gives a little slack without
 // swallowing clicks meant for the neighbouring tile (hex centres are ~80px apart).
@@ -386,6 +395,7 @@ function connect() {
         document.getElementById('dim-name').textContent = `dimension: ${state.dimension}`;
         document.getElementById('door').textContent = `${m.door ? `door: ${m.door} · ` : ''}peer: ${m.peer_id}`;
         logUI(`peer hello — alliance ${m.alliance}, hand ${state.hand.length}`, 'phase');
+        hideEntering();
         // Hello arrives after our first setPhase() has already attempted to
         // auto-select from an empty hand. Re-run now that we have cards.
         if (state.phase === 'planning' || state.phase === 'connecting…' || state.phase === 'linked to peer') {
