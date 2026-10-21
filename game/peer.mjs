@@ -140,12 +140,14 @@ for (const addr of BOOTSTRAP_MADDRS) {
 // -------- GunDB relay (per peer) --------
 const gunHttp = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('gun relay'); });
 gunHttp.listen(PEER_PORT_GUN, BIND_HOST);
-const gunDir = path.join(__dirname, 'gun-data', PEER_LABEL);
-await fs.mkdir(gunDir, { recursive: true });
+// Memory-only graph. Persisting it to disk resurrected every previous run's
+// members on restart (ghost peers in the roster, ghosts winning the lottery),
+// and a session's live state is rebuilt from the mesh in seconds anyway.
 const gun = Gun({
   web: gunHttp,
   peers: PEER_GUN_URLS,              // mesh with the other peers' relays
-  file: path.join(gunDir, 'graph'),
+  radisk: false,
+  localStorage: false,
   axe: false,
   multicast: false,
 });
@@ -384,6 +386,18 @@ function currentStateSnapshot() {
 const peersPublic = new Map();
 peersPublic.set(PEER_ID_STRING, currentStateSnapshot());
 
+// Anything we haven't heard from in PEER_STALE_MS is a leftover from a dead
+// process (other peers republish every round, ~6s). Such entries must not
+// reach the roster, the lottery or the published door doc.
+const PEER_STALE_MS = 90_000;
+const isFresh = p => p && p.peer_id === PEER_ID_STRING || (p && Date.parse(p.last_seen || 0) > Date.now() - PEER_STALE_MS);
+function livePeers() { return [...peersPublic.values()].filter(isFresh); }
+setInterval(() => {
+  let dropped = 0;
+  for (const [id, p] of peersPublic) if (!isFresh(p)) { peersPublic.delete(id); dropped++; }
+  if (dropped) broadcastUI({ kind: 'peers', peers: livePeers(), dropped: true });
+}, 10_000);
+
 async function postJson(url, body) {
   try {
     const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -397,18 +411,21 @@ async function publishPublicState() {
   myNode.put(snap);
   peersPublic.set(PEER_ID_STRING, snap);
   await postJson(`${DISCOVERY_URL}/state`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, state: snap });
-  broadcastUI({ kind: 'peers', peers: [...peersPublic.values()] });
+  broadcastUI({ kind: 'peers', peers: livePeers() });
 }
 await publishPublicState();
 
 // Also pull every other peer's public state live from Gun (slow-tier CRDT).
 dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m, k) => {
   if (!m || typeof m !== 'object' || !m.peer_id) return;
+  // Relay graphs can still carry entries from peers that died; only accept
+  // entries that look current.
+  if (!isFresh(m)) return;
   // Merge rather than replace so a partial Gun echo (which sometimes drops
   // fields) doesn't wipe tile/life.
   const prev = peersPublic.get(m.peer_id) || {};
   peersPublic.set(m.peer_id, { ...prev, ...m });
-  broadcastUI({ kind: 'peers', peers: [...peersPublic.values()] });
+  broadcastUI({ kind: 'peers', peers: livePeers() });
 });
 
 // Discovery is the reliable fallback: pull everyone's registered state and
@@ -419,7 +436,7 @@ async function pullDiscoveryState() {
     const j = await r.json();
     let changed = false;
     for (const p of j.peers || []) {
-      if (!p.state) continue;
+      if (!p.state || !isFresh(p.state)) continue;
       const prev = peersPublic.get(p.peer_id) || {};
       // Prefer any field we already have from Gun/local if the discovery copy
       // doesn't carry it, so faster sources don't get clobbered.
@@ -427,7 +444,7 @@ async function pullDiscoveryState() {
       peersPublic.set(p.peer_id, merged);
       changed = true;
     }
-    if (changed) broadcastUI({ kind: 'peers', peers: [...peersPublic.values()] });
+    if (changed) broadcastUI({ kind: 'peers', peers: livePeers() });
   } catch {}
 }
 setInterval(pullDiscoveryState, 2500);
@@ -800,7 +817,7 @@ async function endTurn() {
 }
 
 async function npcPlan() {
-  const enemies = [...peersPublic.values()].filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
+  const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
   if (!enemies.length) { queued = []; target = null; return; }
   enemies.sort((a, b) => hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, a) - hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, b));
   const nearest = enemies[0];
@@ -869,7 +886,7 @@ async function tick() {
       if (!allIn(revealsSeen) && !expired) return;
       await doResolution();
       await endRound();
-      const alive = [...peersPublic.values()].filter(p => p && p.life > 0);
+      const alive = livePeers().filter(p => p && p.life > 0);
       const sides = new Set(alive.map(a => sideOf(a.alliance)));
       if (sides.size <= 1) { currentPhase = 'game over'; broadcastUI({ kind: 'phase', name: 'game over', winner: alive[0]?.alliance || null }); return; }
       enterPhase('planning');
@@ -882,8 +899,12 @@ setInterval(() => tick().catch(e => console.error(`[${PEER_LABEL}]`, e)), 100);
 let lotteryCount = 0;
 async function radicleLottery() {
   lotteryCount++;
-  const peers = [...peersPublic.keys()].sort();
-  if (peers.length === 0) { console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: no peers in Gun yet; skip`); return; }
+  const live = livePeers();
+  const peers = live.map(p => p.peer_id).sort();
+  // A joiner that sees nobody else is cut off from its host (or the host is
+  // gone). Publishing from here would overwrite the door with our own dead-end
+  // addresses, so stay quiet; only a mesh with company gets to push.
+  if (peers.length <= 1 && BOOTSTRAP_MADDRS.length) { if (lotteryCount % 5 === 1) console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: isolated joiner, not publishing`); return; }
   const intervalIndex = Math.floor(Date.now() / (RADICLE_PUSH_SEC * 1000));
   const winner = electPusher(peers, hg.head || '', intervalIndex);
   console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: ${peers.length} peers, winner=${winner}, me=${PEER_ID_STRING}`);
@@ -891,7 +912,7 @@ async function radicleLottery() {
   try {
     const now = new Date().toISOString();
     const radRepo = radicleEnv.enabled ? `rad:${radicleEnv.rid}` : 'rad:local-bare';
-    const members = [...peersPublic.values()].filter(p => p && p.peer_id);
+    const members = live.filter(p => p && p.peer_id);
     // Mesh entry points for joiners: every live peer's libp2p multiaddr and Gun
     // relay. Discovery holds the freshest multiaddrs; Gun/peersPublic carries
     // the CSV form each peer publishes about itself. Union the two.
@@ -961,7 +982,7 @@ const uiHttp = http.createServer(async (req, res) => {
     res.end(JSON.stringify({
       peer_id: PEER_ID_STRING, dimension: DIM_NAME, phase: currentPhase, phaseEndsIn: Math.max(0, phaseEndsAt - Date.now()),
       entity, hand, queued, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
-      peers: [...peersPublic.values()],
+      peers: livePeers(),
       alliance: ALLIANCE,
     }));
     return;
@@ -971,7 +992,7 @@ const uiHttp = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: [...peersPublic.values()] }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: livePeers() }));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());

@@ -3,6 +3,8 @@
 // panel, let the user pick host-or-join via /api/launch, then reload with
 // ?peer=<peerPort>.
 
+import { fancyLabel } from './names.js';
+
 const peer = new URL(location.href).searchParams.get('peer');
 
 function revealGame() {
@@ -67,18 +69,31 @@ async function renderLauncher() {
   const doors = [];
   for (const d of items) for (const door of d.doors) {
     const min = Math.max(0, Math.round((Date.now() - Date.parse(door.last_push?.at || 0)) / 60000));
-    doors.push({ d, door, label: `${d.dimension_name} / ${door.door_id}  (push ${min} min ago)` });
+    const live = door.live;
+    const tag = live ? `LIVE · ${live.peers} peer${live.peers === 1 ? '' : 's'} · turn ${live.turn}` : `offline · last push ${min} min ago`;
+    doors.push({ d, door, live: !!live, label: `${d.dimension_name} / ${door.door_id}  — ${tag}` });
   }
+  const liveDoors = doors.filter(r => r.live);
   const status = document.getElementById('launcher-status');
   if (!dimsRes.enabled) status.textContent = `Radicle not reachable (${dimsRes.reason}). You can still create a new local Dimension.`;
   else if (!doors.length) status.textContent = 'Nothing published yet. Create a new Dimension below.';
-  else status.textContent = `Found ${doors.length} published door${doors.length === 1 ? '' : 's'} across ${items.length} dimension${items.length === 1 ? '' : 's'}.`;
+  else if (!liveDoors.length) status.textContent = `${doors.length} published door${doors.length === 1 ? '' : 's'}, none live right now — their hosts are not running. Create a new Dimension below.`;
+  else status.textContent = `${liveDoors.length} live door${liveDoors.length === 1 ? '' : 's'} (${doors.length - liveDoors.length} offline) across ${items.length} dimension${items.length === 1 ? '' : 's'}.`;
 
+  // Offline doors are listed but not selectable — joining them only yields a
+  // lonely peer spamming "fetch failed" at a host that is gone.
   const pickDoor = document.getElementById('pick-door');
-  for (const r of doors) { const o = document.createElement('option'); o.value = `${r.d.dimension_name}|${r.door.door_id}`; o.textContent = r.label; pickDoor.appendChild(o); }
+  for (const r of doors) { const o = document.createElement('option'); o.value = `${r.d.dimension_name}|${r.door.door_id}`; o.textContent = r.label; o.disabled = !r.live; pickDoor.appendChild(o); }
+  const firstLive = [...pickDoor.options].findIndex(o => !o.disabled); if (firstLive >= 0) pickDoor.selectedIndex = firstLive;
 
   const pickDim = document.getElementById('pick-dim');
-  for (const d of items) { const o = document.createElement('option'); o.value = d.dimension_name; o.textContent = `${d.dimension_name}  (${d.doors.length} door${d.doors.length === 1 ? '' : 's'})`; pickDim.appendChild(o); }
+  for (const d of items) {
+    const liveCount = d.doors.filter(x => x.live).length;
+    const o = document.createElement('option'); o.value = d.dimension_name;
+    o.textContent = `${d.dimension_name}  (${liveCount}/${d.doors.length} door${d.doors.length === 1 ? '' : 's'} live)`;
+    o.disabled = liveCount === 0; pickDim.appendChild(o);
+  }
+  const firstLiveDim = [...pickDim.options].findIndex(o => !o.disabled); if (firstLiveDim >= 0) pickDim.selectedIndex = firstLiveDim;
 
   const pickKind = document.getElementById('pick-kind');
   const pickWho  = document.getElementById('pick-who');
@@ -91,8 +106,13 @@ async function renderLauncher() {
   }
   fillWho(); pickKind.addEventListener('change', fillWho);
 
+  // Suggest a handle; the server picks its own if the field is left empty, so
+  // this is just so the user sees what "auto" will look like.
+  const takenLabels = new Set(doors.flatMap(r => (r.door.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, ''))));
+  document.getElementById('pick-label').placeholder = fancyLabel(takenLabels);
+
   const modes = document.querySelectorAll('input[name="mode"]');
-  for (const m of modes) if (m.value !== 'host' && doors.length) m.disabled = false;
+  for (const m of modes) if (m.value !== 'host' && liveDoors.length) m.disabled = false;
   function syncPanels() {
     const mode = document.querySelector('input[name="mode"]:checked').value;
     for (const el of document.querySelectorAll('.mode-panel')) el.hidden = el.dataset.for !== mode;

@@ -20,7 +20,8 @@ import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 import { ensureBare, listPublishedDimensions, radicleEnv } from './radicle-adapter.mjs';
-import { hexDistance, neighbours, inBounds } from './js/hex.js';
+import { hexDistance, inBounds } from './js/hex.js';
+import { fancyLabel } from './js/names.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -74,7 +75,8 @@ async function probeDiscovery(url, dimId) {
   try {
     const r = await fetch(`${url}/peers/${dimId}`, { signal: AbortSignal.timeout(2500) });
     const j = await r.json();
-    return j.peers || [];
+    const peers = (j.peers || []).filter(p => p.state);
+    return peers.length ? peers : null;
   } catch { return null; }
 }
 const ageMin = iso => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 60000));
@@ -106,8 +108,9 @@ if (!candidates.length) { console.error('[join] no door matches the given --dime
 const liveFirst = candidates.findIndex(x => x.live);
 const chosen = await pick('Doors', candidates, describe, { defaultIndex: liveFirst >= 0 ? liveFirst : 0 });
 const { dim, door } = chosen;
-if (!chosen.live) {
-  console.warn(`[join] warning: ${door.door_id} did not answer at ${door.network?.discovery_url}. Joining will start a fresh mesh at turn 0.`);
+if (!chosen.live && !args.force) {
+  console.error(`[join] ${dim.dimension_name} / ${door.door_id} is offline — host not answering at ${door.network?.discovery_url} (last push ${ageMin(door.last_push?.at)} min ago). Start that host, or pass --force to boot a lonely peer anyway.`);
+  process.exit(1);
 }
 if (!door.network?.bootstrap?.length) { console.error('[join] door has no bootstrap multiaddrs; the host must be running a newer peer.mjs'); process.exit(1); }
 
@@ -130,8 +133,9 @@ const sourceName = (characters.find(c => c.id === characterId) || creatures.find
 if (!sourceName) { console.error(`[join] unknown character/creature id`); process.exit(1); }
 
 const side  = args.side || await pick('Side', ['player', 'npc_a', 'npc_b'], s => ({ player: 'player  (fights with npc_a)', npc_a: 'npc_a   (allies of player)', npc_b: 'npc_b   (opposition)' }[s]));
-const label = args.as || await ask('Peer label', `${side}-${os.hostname().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)}-${Math.random().toString(36).slice(2, 5)}`);
-const entityName = args.name || `${sourceName} (${label})`;
+const taken = new Set((door.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, '')));
+const label = args.as || await ask('Peer label', fancyLabel(taken));
+const entityName = args.name || label;
 
 // -------- 4. where do I appear --------
 const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : a;

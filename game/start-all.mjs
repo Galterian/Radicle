@@ -6,6 +6,7 @@
 // Flags: --list    print published dimensions and exit (for scripts)
 
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -29,11 +30,33 @@ if (argv.includes('--list')) {
   process.exit(0);
 }
 
+// Several launchers can run on one box (to simulate different machines), so
+// the UI and discovery ports are only preferences — take the next free one.
+// UI_PORT / DISCOVERY_PORT env still pin them explicitly if you want.
+async function freePort(start) {
+  for (let p = start; p < start + 200; p++) {
+    const ok = await new Promise(res => {
+      const s = net.createServer();
+      s.once('error', () => res(false));
+      s.listen(p, '0.0.0.0', () => s.close(() => res(true)));
+    });
+    if (ok) return p;
+  }
+  throw new Error(`no free port near ${start}`);
+}
+const UI_PORT        = Number(process.env.UI_PORT)        || await freePort(7357);
+const DISCOVERY_PORT = Number(process.env.DISCOVERY_PORT) || await freePort(7350);
+
 const PEER_PUBLIC_IP = process.env.PEER_PUBLIC_IP || '';
-const netEnv = PEER_PUBLIC_IP
-  ? { PEER_PUBLIC_IP, BIND_HOST: '0.0.0.0', PUBLIC_DISCOVERY_URL: `http://${PEER_PUBLIC_IP}:7350` }
-  : {};
+const netEnv = {
+  UI_PORT: String(UI_PORT),
+  DISCOVERY_PORT: String(DISCOVERY_PORT),
+  DISCOVERY_URL: `http://127.0.0.1:${DISCOVERY_PORT}`,
+  PUBLIC_DISCOVERY_URL: `http://${PEER_PUBLIC_IP || '127.0.0.1'}:${DISCOVERY_PORT}`,
+  ...(PEER_PUBLIC_IP ? { PEER_PUBLIC_IP, BIND_HOST: '0.0.0.0' } : {}),
+};
 console.log(`[launcher] network: ${PEER_PUBLIC_IP ? `public at ${PEER_PUBLIC_IP}` : 'loopback only (set PEER_PUBLIC_IP to allow remote joiners)'}`);
+if (UI_PORT !== 7357 || DISCOVERY_PORT !== 7350) console.log(`[launcher] default ports busy — using ui :${UI_PORT}, discovery :${DISCOVERY_PORT}`);
 
 const children = [];
 function run(name, cmd, args, extraEnv = {}) {
@@ -55,5 +78,5 @@ run('discovery', 'node', [path.join(__dirname, 'discovery.mjs')], netEnv);
 // and to spawn peer processes on demand when the browser POSTs a choice.
 run('ui',        'node', [path.join(__dirname, 'ui-server.mjs')], { LAUNCHER_MODE: '1', ...netEnv });
 
-console.log('[launcher] open http://127.0.0.1:7357 to choose a dimension');
+console.log(`[launcher] open http://127.0.0.1:${UI_PORT} to choose a dimension`);
 process.on('SIGINT', () => { for (const c of children) try { c.kill('SIGINT'); } catch {}; process.exit(0); });
