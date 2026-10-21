@@ -115,33 +115,47 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
-    // Destination marker: when the player right-clicked a tile, draw an arrow
-    // from their current pixel position toward the first-step tile. Clears on
-    // new round.
+    // Destination marker: when the player right-clicked a tile we draw the
+    // full A*-computed path as a dashed polyline (me → step1 → … → destination)
+    // with an arrowhead on the final segment and a halo on the destination.
+    // Falls back to a single-step arrow when `pathPlan` isn't populated (e.g.
+    // the destination was unreachable but we still want some direction cue).
     if (state.ui.destinationTile && state.entities.length) {
       const me = state.entities.find(p => p.isSelf);
       if (me) {
         const d = state.ui.destinationTile;
         const myPos = tilePx(me.tile.q, me.tile.r);
-        const step = (me.tile.q === d.q && me.tile.r === d.r) ? d : stepToward({ q: me.tile.q, r: me.tile.r }, d);
-        const sp = tilePx(step.q, step.r);
-        // Dashed line from me → step tile, then an arrowhead at the step tile.
+        const plan = Array.isArray(state.ui.pathPlan) && state.ui.pathPlan.length
+          ? state.ui.pathPlan
+          : [(me.tile.q === d.q && me.tile.r === d.r) ? d : stepToward({ q: me.tile.q, r: me.tile.r }, d)];
         ctx.save();
         ctx.strokeStyle = '#a08eff';
         ctx.fillStyle = '#a08eff';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 4]);
-        ctx.beginPath(); ctx.moveTo(myPos.x, myPos.y); ctx.lineTo(sp.x, sp.y); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(myPos.x, myPos.y);
+        for (const hex of plan) {
+          const p = tilePx(hex.q, hex.r);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
         ctx.setLineDash([]);
-        const ang = Math.atan2(sp.y - myPos.y, sp.x - myPos.x);
+        // Arrowhead on the final segment so direction reads at a glance.
+        const last = plan[plan.length - 1];
+        const prev = plan.length > 1 ? plan[plan.length - 2] : { q: me.tile.q, r: me.tile.r };
+        const lp = tilePx(last.q, last.r);
+        const pp = tilePx(prev.q, prev.r);
+        const ang = Math.atan2(lp.y - pp.y, lp.x - pp.x);
         const ah = 10;
         ctx.beginPath();
-        ctx.moveTo(sp.x, sp.y);
-        ctx.lineTo(sp.x - ah * Math.cos(ang - Math.PI / 7), sp.y - ah * Math.sin(ang - Math.PI / 7));
-        ctx.lineTo(sp.x - ah * Math.cos(ang + Math.PI / 7), sp.y - ah * Math.sin(ang + Math.PI / 7));
+        ctx.moveTo(lp.x, lp.y);
+        ctx.lineTo(lp.x - ah * Math.cos(ang - Math.PI / 7), lp.y - ah * Math.sin(ang - Math.PI / 7));
+        ctx.lineTo(lp.x - ah * Math.cos(ang + Math.PI / 7), lp.y - ah * Math.sin(ang + Math.PI / 7));
         ctx.closePath(); ctx.fill();
-        // Faint "destination" halo on the end tile.
-        if (!(step.q === d.q && step.r === d.r)) {
+        // Faint "destination" halo when the final step isn't already the dest
+        // (happens when the path hugs around an obstacle).
+        if (!(last.q === d.q && last.r === d.r)) {
           const dp = tilePx(d.q, d.r);
           ctx.strokeStyle = '#a08eff88';
           ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
