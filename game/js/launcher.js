@@ -21,7 +21,8 @@ async function launch() {
   let body;
   if (mode === 'host') {
     const name = document.getElementById('host-name').value.trim() || 'Ashfall-Micro';
-    body = { mode: 'host', dimensionName: name };
+    const publicIp = document.getElementById('host-ip').value || null;
+    body = { mode: 'host', dimensionName: name, publicIp };
   } else {
     const side = document.getElementById('pick-side').value;
     const kind = document.getElementById('pick-kind').value;
@@ -59,11 +60,21 @@ async function launch() {
 async function renderLauncher() {
   document.getElementById('launcher').hidden = false;
 
-  const [dimsRes, charsRes, creasRes] = await Promise.all([
+  const [dimsRes, charsRes, creasRes, netRes] = await Promise.all([
     fetch('/api/dimensions').then(r => r.json()).catch(e => ({ ok: false, items: [], reason: String(e) })),
     fetch('/data/characters.json').then(r => r.json()),
     fetch('/data/creatures.json').then(r => r.json()),
+    fetch('/api/network').then(r => r.json()).catch(() => ({ candidates: [{ address: '127.0.0.1', kind: 'loopback', iface: 'lo' }], default: '127.0.0.1' })),
   ]);
+
+  const hostIp = document.getElementById('host-ip');
+  for (const c of netRes.candidates || []) {
+    const o = document.createElement('option');
+    o.value = c.address;
+    o.textContent = c.kind === 'loopback' ? '127.0.0.1 — this machine only' : `${c.address} — ${c.kind} (${c.iface})`;
+    if (c.address === netRes.default) o.selected = true;
+    hostIp.appendChild(o);
+  }
 
   const items = dimsRes.items || [];
   const doors = [];

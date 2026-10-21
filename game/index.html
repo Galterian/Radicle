@@ -15,7 +15,7 @@
         <legend>What do you want to do?</legend>
         <label><input type="radio" name="mode" value="join-door" disabled> Join an existing Dimension at a <b>specific door</b></label>
         <label><input type="radio" name="mode" value="join-random" disabled> Join an existing Dimension at a <b>random unknown place</b></label>
-        <label><input type="radio" name="mode" value="host" checked> Create a <b>NEW Dimension</b> (host locally)</label>
+        <label><input type="radio" name="mode" value="host" checked> Create a <b>NEW Dimension</b> (host it from this machine)</label>
       </fieldset>
 
       <div class="mode-panel" data-for="join-door">
@@ -28,6 +28,8 @@
 
       <div class="mode-panel" data-for="host">
         <label>Dimension name<input type="text" id="host-name" value="Ashfall-Micro" maxlength="40"></label>
+        <label>Reachable at<select id="host-ip"></select></label>
+        <div id="host-ip-hint" class="hint">Other players will dial this address. Tailscale (100.x) works across the internet; a LAN address only on the same network; loopback keeps the game on this machine.</div>
       </div>
 
       <fieldset class="join-opts" hidden>

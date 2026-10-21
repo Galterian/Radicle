@@ -12,6 +12,7 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -77,6 +78,27 @@ async function waitForPort(port, timeoutMs = 20000) {
 }
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const DISCOVERY_PORT = Number(process.env.DISCOVERY_PORT || 7350);
+
+// Addresses other machines could reach this box at. Tailscale (100.64/10)
+// first since it works across NAT, then LAN addresses, loopback last.
+const isTailscale = ip => /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(ip);
+function candidateIps() {
+  const out = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.family !== 'IPv4' || a.internal) continue;
+      out.push({ address: a.address, iface: name, kind: isTailscale(a.address) ? 'tailscale' : 'lan' });
+    }
+  }
+  out.sort((a, b) => (a.kind === 'tailscale' ? 0 : 1) - (b.kind === 'tailscale' ? 0 : 1));
+  out.push({ address: '127.0.0.1', iface: 'lo', kind: 'loopback' });
+  return out;
+}
+function defaultPublicIp() {
+  return process.env.PEER_PUBLIC_IP || candidateIps()[0].address;
+}
+const isLoopback = ip => !ip || ip === '127.0.0.1' || ip === 'localhost';
 
 // A published door is only joinable while its host's discovery answers. The
 // Radicle snapshot outlives the host process, so probe before trusting it.
@@ -112,12 +134,21 @@ async function freePortRun(start, count) {
   throw new Error(`no run of ${count} free ports near ${start}`);
 }
 
-async function hostDimension({ dimensionName }) {
+async function hostDimension({ dimensionName, publicIp }) {
   if (hostLaunched) return { peerPort: hostPlayerPort, status: 'already-running' };
   hostLaunched = true;
   const DIM_NAME = dimensionName || 'Ashfall-Micro';
   const DIM_ID   = `dim-${slug(DIM_NAME)}`;
   const DOOR_ID  = 'door-primary';
+  // Where remote players reach this host. Anything but loopback means the
+  // peers bind every interface and advertise this address + our discovery.
+  const ip = (publicIp || '').trim() || defaultPublicIp();
+  if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error(`"${ip}" is not an IPv4 address`);
+  const netEnv = {
+    PEER_PUBLIC_IP: ip,
+    BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0',
+    PUBLIC_DISCOVERY_URL: `http://${ip}:${DISCOVERY_PORT}`,
+  };
   const roster = [
     { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 } },
     { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 } },
@@ -127,8 +158,8 @@ async function hostDimension({ dimensionName }) {
   const [httpBase, libp2pBase, gunBase] = await Promise.all([freePortRun(7401, roster.length), freePortRun(7410, roster.length), freePortRun(7501, roster.length)]);
   const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
   hostPlayerPort = peers[0].http;
-  console.log(`[launcher] hosting new dimension: ${DIM_NAME}  (dim_id=${DIM_ID}, door_id=${DOOR_ID}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+)`);
-  const allGunUrls = peers.map(p => `http://127.0.0.1:${p.gun}/gun`);
+  console.log(`[launcher] hosting new dimension: ${DIM_NAME}  (dim_id=${DIM_ID}, door_id=${DOOR_ID}; reachable at ${ip}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+)`);
+  const allGunUrls = peers.map(p => `http://${ip}:${p.gun}/gun`);
   for (const p of peers) {
     const others = allGunUrls.filter(u => !u.includes(`:${p.gun}/`));
     spawnChild(`peer:${p.label}`, [path.join(__dirname, 'peer.mjs')], {
@@ -144,12 +175,13 @@ async function hostDimension({ dimensionName }) {
       DIM_NAME, DIM_ID, DOOR_ID,
       PEER_GUN_URLS:     others.join(','),
       RADICLE_PUSH_SEC:  '60',
+      ...netEnv,
     });
     await new Promise(r => setTimeout(r, 800));
   }
   const ok = await waitForPort(hostPlayerPort);
   if (!ok) throw new Error(`peer-player-1 did not come up on :${hostPlayerPort}`);
-  return { peerPort: hostPlayerPort, status: 'hosting' };
+  return { peerPort: hostPlayerPort, status: 'hosting', publicIp: ip };
 }
 
 function placeOnDoor({ door, side, placement }) {
@@ -198,7 +230,9 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   const gunRelays = door.network.gun_relays || [];
   const discoveryUrl = door.network.discovery_url;
   const hostIsLoopback = bootstrap.every(a => a.includes('/ip4/127.0.0.1/'));
-  const publicIp = process.env.PEER_PUBLIC_IP || (hostIsLoopback ? '127.0.0.1' : '127.0.0.1');
+  // Same-machine host → stay on loopback; otherwise advertise an address the
+  // host can dial back (a one-way mesh still works via discovery, but slower).
+  const publicIp = hostIsLoopback ? '127.0.0.1' : defaultPublicIp();
 
   const portLibp2p = await freePort(7420);
   const portHttp   = await freePort(7430);
@@ -241,6 +275,10 @@ async function readBody(req) {
 
 async function handleApi(req, res, p) {
   if (!LAUNCHER_MODE) { res.writeHead(404); return res.end('launcher mode disabled'); }
+  if (req.method === 'GET' && p === '/api/network') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true, candidates: candidateIps(), default: defaultPublicIp(), discoveryPort: DISCOVERY_PORT }));
+  }
   if (req.method === 'GET' && p === '/api/dimensions') {
     try {
       const items = radicleEnv.enabled ? await listPublishedDimensions() : [];

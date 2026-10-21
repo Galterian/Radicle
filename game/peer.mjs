@@ -414,6 +414,10 @@ async function publishPublicState() {
   broadcastUI({ kind: 'peers', peers: livePeers() });
 }
 await publishPublicState();
+// Liveness heartbeat independent of the round loop. Rounds republish state
+// anyway, but once a side has won the loop stops — without this the survivors
+// (and the fallen) would age out of everyone's roster as stale peers.
+setInterval(() => publishPublicState().catch(() => {}), 15_000);
 
 // Also pull every other peer's public state live from Gun (slow-tier CRDT).
 dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m, k) => {
