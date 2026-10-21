@@ -6,8 +6,10 @@ import { createRenderer } from './renderer.js';
 import { pixelToHex, hexDistance, stepToward, HEX_SIZE } from './hex.js';
 
 // Click within this many pixels of an entity's drawn centre counts as a hit on
-// that entity. A full HEX_SIZE radius keeps the "within one tile" intent.
-const HEX_SIZE_SQ_HIT = HEX_SIZE * HEX_SIZE;
+// that entity. The body circle is r=16; 24 gives a little slack without
+// swallowing clicks meant for the neighbouring tile (hex centres are ~80px apart).
+const ENTITY_HIT_PX = 24;
+const HEX_SIZE_SQ_HIT = ENTITY_HIT_PX * ENTITY_HIT_PX;
 
 const PEER_URL = `ws://127.0.0.1:${new URL(location.href).searchParams.get('peer') || '7401'}/`;
 
@@ -510,21 +512,21 @@ function wireInput() {
       if (me && Number.isInteger(me.tile_q)) {
         const atTile = me.tile_q === t.q && me.tile_r === t.r;
         const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
-        // Switch to EMPTY unless the user has deliberately queued a non-attack
-        // card (Block/Posture/Move). An auto-pick, or a stale Attack queued at
-        // open ground, both get overridden since neither resolves meaningfully.
+        // Clicking ground means "go that way". Only an explicitly chosen Move
+        // card survives (it moves too, just with the card); anything else —
+        // auto-pick, Attack, Block, Posture — is unselected in favour of Empty.
         const q0 = state.queued[0];
-        const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
-        const canSwitchToEmpty = state.queuedIsAuto || queuedCode === 'A' || q0 === 'EMPTY';
-        if (canSwitchToEmpty) {
+        const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : null;
+        const keepMove = queuedCode === 'M' && !state.queuedIsAuto;
+        if (!keepMove && q0 !== 'EMPTY') {
           state.queued = ['EMPTY'];
           state.queuedIsAuto = false;  // treat as a deliberate pick now
           send({ kind: 'queue', slots: state.queued });
         }
         state.target = { q: step.q, r: step.r };
         state.ui.selectedTarget = step;
-        const code = atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
-        logUI(`staged: ${code}`, 'phase');
+        const code = keepMove ? `Move → (${step.q},${step.r})` : atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
+        logUI(`staged: ${code} — double-click to commit`, 'phase');
       } else {
         state.target = { q: t.q, r: t.r };
         logUI(`target → tile (${t.q},${t.r})`, 'phase');
@@ -563,7 +565,10 @@ function wireInput() {
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
-    const dest = state.ui.destinationTile || t;
+    // The double-clicked tile is the direction; the right-click marker is only
+    // a preview and is replaced by the committed direction.
+    const dest = t;
+    state.ui.destinationTile = { q: t.q, r: t.r };
     // Walk one hex toward the destination. If we're already there, treat it
     // as EP (empty posture) at our own tile.
     const atDest = me.tile_q === dest.q && me.tile_r === dest.r;
