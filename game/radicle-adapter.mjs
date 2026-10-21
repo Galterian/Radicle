@@ -196,26 +196,47 @@ async function pushToRadicle(dir, branch) {
   }
 }
 
-export async function pushDimension(peerId, dimensionName, filesByRelPath) {
+// Rebuild the per-peer worktree branch on the bare repo's current tip. The
+// worktree content is regenerated from scratch on every push, so any local
+// history that diverged (another peer in this same clone pushed in between)
+// is worthless — resetting onto the remote tip is always right and is what
+// stops the "non-fast-forward" rejections two peers used to trade.
+async function resetBranchToBare(dir, branch) {
+  let tip = null;
+  try { await git(['fetch', '--quiet', 'radicle', `+refs/heads/${branch}:refs/remotes/radicle/${branch}`], dir); tip = (await git(['rev-parse', `refs/remotes/radicle/${branch}`], dir)).trim(); } catch {}
+  if (tip) {
+    try { await git(['checkout', '-q', '-B', branch, tip], dir); } catch { await git(['checkout', '-q', '-B', branch], dir); await git(['reset', '--hard', tip], dir); }
+  } else {
+    try { await git(['checkout', '-q', branch], dir); } catch { await git(['checkout', '-q', '-b', branch], dir); }
+  }
+}
+
+export async function pushDimension(peerId, dimensionName, filesByRelPath, removeRelPaths = []) {
   const dir = await ensureWorkTree(peerId);
   const branch = `ActiveDimensions/${dimensionName}`;
-  // Create / switch to the branch.
-  try { await git(['checkout', branch], dir); }
-  catch { await git(['checkout', '-b', branch], dir); }
-  try { await git(['pull', '--ff-only', 'radicle', branch], dir); } catch { /* branch may not exist upstream yet */ }
-  for (const [rel, content] of Object.entries(filesByRelPath)) {
-    const abs = path.join(dir, rel);
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+  let pushedLocal = false;
+  for (let attempt = 0; attempt < 2 && !pushedLocal; attempt++) {
+    await resetBranchToBare(dir, branch);
+    for (const [rel, content] of Object.entries(filesByRelPath)) {
+      const abs = path.join(dir, rel);
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(abs, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+    }
+    for (const rel of removeRelPaths) { try { await fs.rm(path.join(dir, rel), { force: true }); } catch {} }
+    await git(['add', '-A'], dir);
+    let changes = '';
+    try { changes = await git(['status', '--porcelain'], dir); } catch {}
+    if (!changes.trim()) return { pushed: false, reason: 'no-changes' };
+    const stamp = new Date().toISOString();
+    await git(['commit', '-q', '-m', `[${peerId}] push ${dimensionName} @ ${stamp}`], dir);
+    try { await git(['push', '--quiet', 'radicle', branch], dir); pushedLocal = true; }
+    catch (e) {
+      // Lost a race with a sibling peer in this clone — rebuild on its tip once.
+      if (attempt === 0 && /non-fast-forward|fetch first|rejected/.test(String(e.stderr || e.message))) continue;
+      throw e;
+    }
   }
-  await git(['add', '-A'], dir);
-  let changes = '';
-  try { changes = await git(['status', '--porcelain'], dir); } catch {}
-  if (!changes.trim()) return { pushed: false, reason: 'no-changes' };
-  const stamp = new Date().toISOString();
-  await git(['commit', '-m', `[${peerId}] push ${dimensionName} @ ${stamp}`], dir);
-  await git(['push', 'radicle', branch], dir);
-  const head = await git(['rev-parse', 'HEAD'], dir);
+  const head = (await git(['rev-parse', 'HEAD'], dir)).trim();
   const remote = await pushToRadicle(dir, branch);
   const published = remote.published && radicleEnv.enabled;
   const explorerUrl = published ? radicleEnv.commitUrl(head) : null;
@@ -240,49 +261,67 @@ export async function fetchDimension(peerId, dimensionName) {
   }
 }
 
-// Read every ActiveDimensions/* branch published by the repo's delegates.
-// Canonical rad://<RID> only exposes the default branch, so dimension state has
-// to be fetched per-namespace (rad://<RID>/<NID>). Returns
-//   [{ nid, dimension_name, ref, dimension, doors: [{ door_id, ...doc }] }]
-export async function listPublishedDimensions() {
-  if (!radicleEnv.enabled) throw new Error(radicleEnv.reason);
+// Where this node's Radicle storage keeps the repo: every namespace the seeds
+// replicate to us lives there as refs/namespaces/<NID>/refs/heads/...
+async function radStorageDir() {
   const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
   const radBin = path.join(RAD_BIN_DIR, 'rad');
-  let nids = [];
-  try {
-    const { stdout } = await pexec(radBin, ['inspect', '--delegates'], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv });
-    nids = [...stdout.matchAll(/did:key:(z6Mk[1-9A-HJ-NP-Za-km-z]+)/g)].map(m => m[1]);
-  } catch (e) { throw new Error(`rad inspect --delegates failed: ${e.stderr || e.message}`); }
-  if (!nids.length) throw new Error('repo has no delegates?');
+  let home = process.env.RAD_HOME || '';
+  if (!home) { try { home = (await pexec(radBin, ['path'], { windowsHide: true, env: radEnv })).stdout.trim(); } catch {} }
+  if (!home) home = path.join(process.env.HOME || '', '.radicle');
+  return path.join(home, 'storage', radicleEnv.rid);
+}
 
-  const out = [];
-  for (const nid of nids) {
-    const remoteName = `rad-ns-${nid.slice(-8)}`;
-    const refspec = `+refs/heads/ActiveDimensions/*:refs/remotes/${remoteName}/ActiveDimensions/*`;
-    try {
-      await pexec('git', ['-C', PROJECT_ROOT, 'fetch', '--quiet', `rad://${radicleEnv.rid}/${nid}`, refspec], { windowsHide: true, env: radEnv, maxBuffer: 16 * 1024 * 1024 });
-    } catch (e) {
-      console.warn(`[radicle] fetch namespace ${nid.slice(0, 12)}… failed: ${(e.stderr || e.message).toString().split('\n')[0]}`);
-      continue;
-    }
-    let refs = '';
-    try { refs = (await pexec('git', ['-C', PROJECT_ROOT, 'for-each-ref', '--format=%(refname)', `refs/remotes/${remoteName}/ActiveDimensions/`], { windowsHide: true })).stdout; } catch {}
-    for (const ref of refs.split('\n').filter(Boolean)) {
-      const dimensionName = ref.slice(`refs/remotes/${remoteName}/ActiveDimensions/`.length);
-      const base = `ActiveDimensions/${dimensionName}`;
-      const show = async (rel) => JSON.parse((await pexec('git', ['-C', PROJECT_ROOT, 'show', `${ref}:${base}/${rel}`], { windowsHide: true })).stdout);
-      let dimension;
-      try { dimension = await show('dimension.json'); } catch { continue; }
-      const doors = [];
+// Pull the latest refs for every namespace from the seeds (best effort, bounded).
+export async function syncFromSeeds(timeoutSec = 10) {
+  if (!radicleEnv.enabled) return false;
+  const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
+  const radBin = path.join(RAD_BIN_DIR, 'rad');
+  try { await pexec(radBin, ['sync', '--fetch', '--timeout', String(timeoutSec), `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: (timeoutSec + 5) * 1000 }); return true; }
+  catch (e) { console.warn(`[radicle] sync from seeds: ${(e.stderr || e.message).toString().split('\n')[0].slice(0, 160)}`); return false; }
+}
+
+// Read every ActiveDimensions/* branch in every namespace of the repo — not
+// just the delegates'. Each player publishes their own *Door* into a dimension
+// (doors/<peer>.json, door_version 2 — their piece of the puzzle) in their own
+// namespace; this unions them. Returns
+//   [{ dimension_name, dimension_id, dimension, doors: [{...door, nid, ref, commit}], namespaces: [nid], legacy_doors: [...] }]
+// grouped by dimension name. legacy_doors carries the old host-written
+// door-primary docs so old branches still show up (as history, never as live).
+export async function listPublishedDimensions({ sync = true } = {}) {
+  if (!radicleEnv.enabled) throw new Error(radicleEnv.reason);
+  if (sync) await syncFromSeeds(8);
+  const storage = await radStorageDir();
+  let refs = '';
+  try { refs = (await pexec('git', ['-C', storage, 'for-each-ref', '--format=%(refname) %(objectname)', 'refs/namespaces/*/refs/heads/ActiveDimensions/*'], { windowsHide: true })).stdout; }
+  catch (e) { throw new Error(`cannot read radicle storage at ${storage}: ${(e.stderr || e.message).toString().split('\n')[0]}`); }
+
+  const byName = new Map();
+  for (const line of refs.split('\n').filter(Boolean)) {
+    const [ref, commit] = line.split(' ');
+    const m = ref.match(/^refs\/namespaces\/([^/]+)\/refs\/heads\/ActiveDimensions\/(.+)$/);
+    if (!m) continue;
+    const [, nid, dimensionName] = m;
+    const base = `ActiveDimensions/${dimensionName}`;
+    const show = async (rel) => JSON.parse((await pexec('git', ['-C', storage, 'show', `${ref}:${base}/${rel}`], { windowsHide: true })).stdout);
+    const list = async (rel) => { try { return (await pexec('git', ['-C', storage, 'ls-tree', '--name-only', `${ref}:${base}/${rel}`], { windowsHide: true })).stdout.split('\n').filter(f => f.endsWith('.json')); } catch { return []; } };
+    let dimension;
+    try { dimension = await show('dimension.json'); } catch { continue; }
+    const entry = byName.get(dimensionName) || { dimension_name: dimensionName, dimension_id: dimension.dimension_id || null, dimension, doors: [], namespaces: [], legacy_doors: [] };
+    if (!entry.dimension_id && dimension.dimension_id) { entry.dimension_id = dimension.dimension_id; entry.dimension = dimension; }
+    entry.namespaces.push(nid);
+    for (const f of await list('doors')) {
       try {
-        const { stdout } = await pexec('git', ['-C', PROJECT_ROOT, 'ls-tree', '--name-only', `${ref}:${base}/doors`], { windowsHide: true });
-        for (const f of stdout.split('\n').filter(f => f.endsWith('.json'))) {
-          try { doors.push(await show(`doors/${f}`)); } catch {}
-        }
+        const doc = { ...(await show(`doors/${f}`)), nid, ref, commit };
+        if (doc.door_version >= 2 && doc.peer_id) entry.doors.push(doc); else entry.legacy_doors.push(doc);
       } catch {}
-      out.push({ nid, dimension_name: dimensionName, ref, dimension, doors });
     }
+    byName.set(dimensionName, entry);
   }
+  // Newest Door first within a dimension; dimensions with the freshest Door first.
+  const out = [...byName.values()];
+  for (const d of out) d.doors.sort((a, b) => Date.parse(b.pushed_at || 0) - Date.parse(a.pushed_at || 0));
+  out.sort((a, b) => Date.parse(b.doors[0]?.pushed_at || b.legacy_doors[0]?.last_push?.at || 0) - Date.parse(a.doors[0]?.pushed_at || a.legacy_doors[0]?.last_push?.at || 0));
   return out;
 }
 

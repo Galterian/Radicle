@@ -25,14 +25,17 @@ if (argv.includes('--list')) {
     const items = await listPublishedDimensions();
     if (!items.length) console.log('(no ActiveDimensions/* branches published yet)');
     const ageMin = (iso) => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 60000));
-    for (const d of items) for (const door of d.doors) console.log(`  ${d.dimension_name} / ${door.door_id}  (push ${ageMin(door.last_push?.at)} min ago)`);
+    for (const d of items) {
+      console.log(`${d.dimension_name}  (${d.doors.length} door${d.doors.length === 1 ? '' : 's'} from ${d.namespaces.length} namespace${d.namespaces.length === 1 ? '' : 's'}${d.legacy_doors.length ? `, ${d.legacy_doors.length} legacy door(s)` : ''})`);
+      for (const p of d.doors) console.log(`  ${p.peer_id.padEnd(18)} ${String(p.alliance).padEnd(6)} hp ${p.life}/${p.life_max}  tile (${p.tile?.q},${p.tile?.r})  turn ${p.clock?.turn}  pushed ${ageMin(p.pushed_at)} min ago  ns ${p.nid.slice(0, 12)}…`);
+    }
   } catch (e) { console.error(`[launcher] ${e.message}`); process.exit(1); }
   process.exit(0);
 }
 
 // Several launchers can run on one box (to simulate different machines), so
-// the UI and discovery ports are only preferences — take the next free one.
-// UI_PORT / DISCOVERY_PORT env still pin them explicitly if you want.
+// the UI port is only a preference — take the next free one. UI_PORT still
+// pins it explicitly if you want.
 async function freePort(start) {
   for (let p = start; p < start + 200; p++) {
     const ok = await new Promise(res => {
@@ -44,24 +47,22 @@ async function freePort(start) {
   }
   throw new Error(`no free port near ${start}`);
 }
-const UI_PORT        = Number(process.env.UI_PORT)        || await freePort(7357);
-const DISCOVERY_PORT = Number(process.env.DISCOVERY_PORT) || await freePort(7350);
+const UI_PORT = Number(process.env.UI_PORT) || await freePort(7357);
 
-// The address peers advertise is chosen in the browser when hosting (the
-// launcher auto-detects Tailscale/LAN addresses); PEER_PUBLIC_IP only presets
-// that choice. Discovery always listens on every interface so remote joiners
-// can register — it's a pointer directory, not game state. The browser UI
-// socket stays loopback-only.
+// No host, no directory server: peers find each other through the Doors on
+// Radicle and talk over the public Nostr bus. The old discovery.mjs mirror is
+// only started when asked (WITH_DISCOVERY=1) as a same-LAN accelerator.
+const WITH_DISCOVERY = process.env.WITH_DISCOVERY === '1';
+const DISCOVERY_PORT = WITH_DISCOVERY ? (Number(process.env.DISCOVERY_PORT) || await freePort(7350)) : null;
 const PEER_PUBLIC_IP = process.env.PEER_PUBLIC_IP || '';
 const netEnv = {
   UI_PORT: String(UI_PORT),
-  DISCOVERY_PORT: String(DISCOVERY_PORT),
-  DISCOVERY_URL: `http://127.0.0.1:${DISCOVERY_PORT}`,
-  DISCOVERY_BIND_HOST: '0.0.0.0',
+  ...(WITH_DISCOVERY ? { DISCOVERY_PORT: String(DISCOVERY_PORT), DISCOVERY_URL: `http://127.0.0.1:${DISCOVERY_PORT}` } : {}),
   ...(PEER_PUBLIC_IP ? { PEER_PUBLIC_IP } : {}),
 };
-console.log(`[launcher] network: ${PEER_PUBLIC_IP ? `preset public address ${PEER_PUBLIC_IP}` : 'public address auto-detected at host time (override with PEER_PUBLIC_IP)'}`);
-if (UI_PORT !== 7357 || DISCOVERY_PORT !== 7350) console.log(`[launcher] default ports busy — using ui :${UI_PORT}, discovery :${DISCOVERY_PORT}`);
+console.log(`[launcher] bus relays: ${process.env.NOSTR_RELAYS || 'wss://relay.primal.net, wss://relay.snort.social, wss://nostr.bitcoiner.social, wss://relay.nostr.net (override with NOSTR_RELAYS)'}`);
+console.log(`[launcher] direct links: ${PEER_PUBLIC_IP ? `preset address ${PEER_PUBLIC_IP}` : 'address auto-detected when you start a dimension (override with PEER_PUBLIC_IP)'}`);
+if (UI_PORT !== 7357) console.log(`[launcher] default UI port busy — using :${UI_PORT}`);
 
 const children = [];
 function run(name, cmd, args, extraEnv = {}) {
@@ -78,10 +79,11 @@ function run(name, cmd, args, extraEnv = {}) {
   return child;
 }
 
-run('discovery', 'node', [path.join(__dirname, 'discovery.mjs')], { ...netEnv, BIND_HOST: netEnv.DISCOVERY_BIND_HOST });
+if (WITH_DISCOVERY) run('discovery', process.execPath, [path.join(__dirname, 'discovery.mjs')], { ...netEnv, BIND_HOST: '0.0.0.0' });
 // LAUNCHER_MODE tells ui-server.mjs to enable /api/dimensions and /api/launch
 // and to spawn peer processes on demand when the browser POSTs a choice.
-run('ui',        'node', [path.join(__dirname, 'ui-server.mjs')], { LAUNCHER_MODE: '1', ...netEnv });
+// process.execPath keeps the same node binary (the system one may be too old).
+run('ui', process.execPath, [path.join(__dirname, 'ui-server.mjs')], { LAUNCHER_MODE: '1', ...netEnv });
 
 console.log(`[launcher] open http://127.0.0.1:${UI_PORT} to choose a dimension`);
 process.on('SIGINT', () => { for (const c of children) try { c.kill('SIGINT'); } catch {}; process.exit(0); });

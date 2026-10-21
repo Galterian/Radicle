@@ -13,48 +13,59 @@ Open http://127.0.0.1:7357
 
 Requires Node ≥ 18 (uses `node:fs/promises` and native `fetch` is not needed on the server side).
 
-## Multiplayer: hosting and joining over Radicle
+## Multiplayer: no host — players hold the Doors
 
-The host runs the mesh (`node start-all.mjs`). Once a minute the lottery winner
-pushes `ActiveDimensions/<Dimension>/` — `dimension.json` plus one
-`doors/<DoorId>.json` per door — to the host's Radicle namespace. Each door
-doc carries the live mesh entry points (`network.bootstrap` libp2p multiaddrs,
-`network.gun_relays`, `network.discovery_url`), the current turn/phase and the
-occupied tiles. Radicle is the directory; play happens over libp2p + Gun.
+There is no host and no server. Every peer in a dimension — your character,
+other players, the NPCs — is equal, and each one holds a **Door** into the
+dimension: its piece of the puzzle. Two layers carry the game:
 
-**Host** (needs `rad` on PATH, `rad auth` done, node running):
+- **Radicle is the public directory.** Once a minute every peer commits its
+  Door to `ActiveDimensions/<Dimension>/doors/<peer>.json` in **its own**
+  namespace (`rad://<RID>/<your NID>`), alongside a deterministic
+  `dimension.json`. A Door records what that peer knows from where it stands:
+  its entity, the live clock, the members and tiles it has seen, and how to
+  reach it. Peers that met on the hex map have seen the same things, so their
+  Doors overlap and agree. The public seeds (`rosa.radicle.network`, …)
+  replicate every namespace, so anyone who `rad clone`s the repo sees every
+  Door anyone has published, and a Door newer than ~3 minutes means its
+  player is in there right now.
+- **A public Nostr bus carries the rounds.** Commits, reveals and heartbeats
+  are ephemeral Nostr events (kind 29517, tagged with the dimension id) on a
+  few public relays (`relay.primal.net`, `relay.snort.social`,
+  `nostr.bitcoiner.social`, `relay.nostr.net`; override with `NOSTR_RELAYS`).
+  Relays speak WSS on :443, so this works from behind NAT and corporate
+  proxies with nothing to forward and nobody to host. Round trip is ~100 ms.
+  libp2p gossipsub still runs for peers that can reach each other directly
+  (same LAN); the bus is simply the path that is always there.
+
+**Anyone** (needs Node ≥ 18, `rad` on PATH, `rad auth` done, `rad node` running):
 
 ```
-# other machines must be able to reach you at this address — a Tailscale
-# 100.x address is the easy option; unset = loopback-only demo
-export PEER_PUBLIC_IP=100.64.1.5
-cd game && node start-all.mjs
-```
-
-**Player** (needs Node ≥ 18, `rad`, and a running `rad node`):
-
-```
-rad clone rad:zqZmP6itceBMqYwi1K1n8phQqCaj && cd chaosD6
+rad clone rad:zqZmP6itceBMqYwi1K1n8phQqCaj --scope all && cd chaosD6
 (cd game && npm install)
-node game/join.mjs --list          # what's published, which doors are live
-node game/join.mjs                 # interactive: door → character → side → placement
+node game/start-all.mjs            # prints http://127.0.0.1:7357 (or the next free port)
+node game/start-all.mjs --list     # every Door on Radicle, who is live, from which namespace
 ```
 
-`join.mjs` fetches `ActiveDimensions/*` from the delegates' namespaces (the
-canonical `rad://<RID>` only exposes `master`), probes each door's discovery URL
-to tell live doors from stale pushes, then spawns a regular `peer.mjs` for you
-plus the browser UI. Placement is **nearby** (a free hex adjacent to your side)
-or **random** (a free hex outside everyone's strong radius — "unrevealed").
-The new peer adopts the mesh's turn clock on boot so it lines up with the
-running game. Non-interactive example:
+In the browser pick one of:
 
-```
-node game/join.mjs --dimension Ashfall-Micro --door door-primary \
-  --as player-2 --character char_oran_rief --side player --placement random
-```
+- **Join through a player's Door** — you arrive on a free hex next to them.
+- **Join at a random unknown place** — a free hex outside everyone's strong radius.
+- **Start a NEW Dimension** — spawns your character plus the three NPCs; each
+  of the four immediately starts publishing its own Door.
 
-Your own public address is auto-detected (Tailscale range preferred); override
-with `--public-ip`. The browser UI socket always stays on loopback.
+Your new peer listens on the bus for a few seconds, adopts the live clock from
+whoever is furthest along, and from then on commits and reveals in lockstep
+with everyone. If nobody is live in a dimension you can still enter it (its
+Doors persist on Radicle); you will be alone until someone else walks in.
+
+To simulate a stranger on another machine on one box, create a second Radicle
+identity and launch from its clone — `tools/second-identity.sh setup` then
+`tools/start-b.sh`. Its Doors land in a second namespace; the first identity
+only ever sees them through the public seeds.
+
+`WITH_DISCOVERY=1 node game/start-all.mjs` additionally runs the old
+`discovery.mjs` mirror as a same-LAN accelerator; nothing depends on it.
 
 ## What it does
 
