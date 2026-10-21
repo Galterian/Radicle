@@ -7,9 +7,16 @@ const ALLIANCE_COLOR = {
   'npc_b':   '#e36666',
 };
 
-// How long an entity's position change takes to animate, in ms. Matched to the
-// ~6-second resolve window so when the round ends the piece has just arrived.
-const MOVE_DURATION_MS = 5500;
+// How long an entity's position change takes to animate, in ms. The move is
+// committed at end-of-resolution, which is ~1.5-2.3 s after the planning
+// window started on the clock belonging to the resolution we're inside; from
+// *there* to the next end-of-resolution is one full round (ROUND_SEC) plus
+// the handshake. 7500 ms gives us almost the whole round+handshake, so the
+// marker glides continuously and only arrives shortly before the next move —
+// instead of parking on its destination for 2-3 s during reveal / resolution.
+// If a new move lands before the current animation finishes, interpAt blends
+// from the current drawn position into the new target without a jump.
+const MOVE_DURATION_MS = 7500;
 // Smooth-step easing — slow in, slow out.
 const ease = t => t < 0 ? 0 : t > 1 ? 1 : (t * t * (3 - 2 * t));
 
@@ -116,58 +123,11 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
-    // Destination marker: when the player right-clicked a tile we draw the
-    // full A*-computed path as a dashed polyline (me → step1 → … → destination)
-    // with an arrowhead on the final segment and a halo on the destination.
-    // Falls back to a single-step arrow when `pathPlan` isn't populated (e.g.
-    // the destination was unreachable but we still want some direction cue).
-    if (state.ui.destinationTile && state.entities.length) {
-      const me = state.entities.find(p => p.isSelf);
-      if (me) {
-        const d = state.ui.destinationTile;
-        const myPos = tilePx(me.tile.q, me.tile.r);
-        const plan = Array.isArray(state.ui.pathPlan) && state.ui.pathPlan.length
-          ? state.ui.pathPlan
-          : [(me.tile.q === d.q && me.tile.r === d.r) ? d : stepToward({ q: me.tile.q, r: me.tile.r }, d)];
-        ctx.save();
-        ctx.strokeStyle = '#a08eff';
-        ctx.fillStyle = '#a08eff';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath();
-        ctx.moveTo(myPos.x, myPos.y);
-        for (const hex of plan) {
-          const p = tilePx(hex.q, hex.r);
-          ctx.lineTo(p.x, p.y);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-        // Arrowhead on the final segment so direction reads at a glance.
-        const last = plan[plan.length - 1];
-        const prev = plan.length > 1 ? plan[plan.length - 2] : { q: me.tile.q, r: me.tile.r };
-        const lp = tilePx(last.q, last.r);
-        const pp = tilePx(prev.q, prev.r);
-        const ang = Math.atan2(lp.y - pp.y, lp.x - pp.x);
-        const ah = 10;
-        ctx.beginPath();
-        ctx.moveTo(lp.x, lp.y);
-        ctx.lineTo(lp.x - ah * Math.cos(ang - Math.PI / 7), lp.y - ah * Math.sin(ang - Math.PI / 7));
-        ctx.lineTo(lp.x - ah * Math.cos(ang + Math.PI / 7), lp.y - ah * Math.sin(ang + Math.PI / 7));
-        ctx.closePath(); ctx.fill();
-        // Faint "destination" halo when the final step isn't already the dest
-        // (happens when the path hugs around an obstacle).
-        if (!(last.q === d.q && last.r === d.r)) {
-          const dp = tilePx(d.q, d.r);
-          ctx.strokeStyle = '#a08eff88';
-          ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.arc(dp.x, dp.y, HEX_SIZE * 0.5, 0, Math.PI * 2); ctx.stroke();
-          ctx.setLineDash([]);
-        }
-        ctx.restore();
-      }
-    }
-
     const now = performance.now();
+    // Track self's actually-drawn pixel so the destination arrow starts from
+    // the marker (not from the tile centre of a cell the marker is only
+    // halfway into). Filled in during the entity loop below.
+    let selfDrawnPx = null;
     // Entities. Dead entities render as a faded tombstone so a wiped ally still
     // leaves a marker on the map (otherwise it looks like the piece vanished).
     for (const e of state.entities) {
@@ -189,6 +149,7 @@ export function createRenderer(canvas, state) {
         const p = interpAt(live, now);
         x = p.x; y = p.y;
       }
+      if (e.isSelf) selfDrawnPx = { x, y };
       const color = ALLIANCE_COLOR[e.alliance] || '#ccc';
 
       ctx.save();
@@ -242,6 +203,59 @@ export function createRenderer(canvas, state) {
       }
 
       ctx.restore();
+    }
+
+    // Destination arrow: now that the entity loop has filled in selfDrawnPx,
+    // we can draw the dashed polyline starting from the marker's *actual*
+    // pixel (mid-slide if an animation is running) rather than the tile
+    // centre of its destination cell. Any pathPlan prefix that happens to
+    // match the marker's current tile is trimmed — otherwise, in the brief
+    // window between a move landing and the next resumeJourney, the arrow
+    // would draw a zero-length kink before continuing on.
+    if (state.ui.destinationTile && selfDrawnPx) {
+      const me = state.entities.find(p => p.isSelf);
+      if (me) {
+        const d = state.ui.destinationTile;
+        let plan = Array.isArray(state.ui.pathPlan) && state.ui.pathPlan.length
+          ? state.ui.pathPlan
+          : [(me.tile.q === d.q && me.tile.r === d.r) ? d : stepToward({ q: me.tile.q, r: me.tile.r }, d)];
+        // Drop any leading hex that is already the marker's current tile.
+        while (plan.length > 1 && plan[0].q === me.tile.q && plan[0].r === me.tile.r) {
+          plan = plan.slice(1);
+        }
+        ctx.save();
+        ctx.strokeStyle = '#a08eff';
+        ctx.fillStyle = '#a08eff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(selfDrawnPx.x, selfDrawnPx.y);
+        for (const hex of plan) {
+          const p = tilePx(hex.q, hex.r);
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const last = plan[plan.length - 1];
+        const prevHex = plan.length > 1 ? plan[plan.length - 2] : null;
+        const lp = tilePx(last.q, last.r);
+        const pp = prevHex ? tilePx(prevHex.q, prevHex.r) : selfDrawnPx;
+        const ang = Math.atan2(lp.y - pp.y, lp.x - pp.x);
+        const ah = 10;
+        ctx.beginPath();
+        ctx.moveTo(lp.x, lp.y);
+        ctx.lineTo(lp.x - ah * Math.cos(ang - Math.PI / 7), lp.y - ah * Math.sin(ang - Math.PI / 7));
+        ctx.lineTo(lp.x - ah * Math.cos(ang + Math.PI / 7), lp.y - ah * Math.sin(ang + Math.PI / 7));
+        ctx.closePath(); ctx.fill();
+        if (!(last.q === d.q && last.r === d.r)) {
+          const dp = tilePx(d.q, d.r);
+          ctx.strokeStyle = '#a08eff88';
+          ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(dp.x, dp.y, HEX_SIZE * 0.5, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
+      }
     }
 
     // Floating "-N❤" damage markers: lerp from dealer tile to victim tile
