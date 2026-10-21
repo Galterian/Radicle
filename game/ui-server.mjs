@@ -206,7 +206,15 @@ async function startDimension({ dimensionName, publicIp }) {
     { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 } },
     { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 } },
   ];
-  const [httpBase, libp2pBase, gunBase] = await Promise.all([freePortRun(7401, roster.length), freePortRun(7410, roster.length), freePortRun(7501, roster.length)]);
+  // http and gun live in different base ranges (7401, 7501) and don't collide,
+  // so probe them in parallel. libp2p (7410) sits inside http's search region,
+  // so it has to wait for httpBase and start past it — this is the fix for the
+  // old bug where both pools independently picked :7422 (EADDRINUSE).
+  const [httpBase, gunBase] = await Promise.all([
+    freePortRun(7401, roster.length),
+    freePortRun(7501, roster.length),
+  ]);
+  const libp2pBase = await freePortRun(Math.max(7410, httpBase + roster.length), roster.length);
   const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
   startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME };
   console.log(`[launcher] starting dimension ${DIM_NAME}  (dim_id=${DIM_ID}; direct links via ${ip}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+; bus relays ${DEFAULT_RELAYS.join(', ')})`);
