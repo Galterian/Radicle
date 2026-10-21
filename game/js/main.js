@@ -545,31 +545,55 @@ function wireInput() {
   //                    deck UI changes immediately so you can see your pick.
   //   • second click within 500ms — commit (lock), just like a left-double-click.
   // Browsers don't fire `dblclick` for the right button, so we time it manually.
+  // Right-click = the Attack counterpart of left-click:
+  //   • on an enemy      → Attack him, hold position
+  //   • on an empty hex  → Attack-step toward it (no damage; lets you back off
+  //                        from a neighbour while still playing Attack)
+  //   • on your own hex  → Attack with no target; the peer aims at the enemy
+  //                        you last hit, else the nearest one
+  //   • second right-click within 500ms → commit (lock)
+  // Browsers don't fire `dblclick` for the right button, so we time it manually.
   let lastRightClickAt = 0;
   canvas.addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     if (state.phase !== 'planning' || state.locked) return;
     const rect = canvas.getBoundingClientRect();
-    const t = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
+    const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    const t = pixelToHex(px, py, renderer.origin());
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
 
-    const atTile = me.tile_q === t.q && me.tile_r === t.r;
-    const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
-    state.ui.destinationTile = { q: t.q, r: t.r };
-
-    // Stage EMPTY unless the player explicitly picked a Move card.
-    const q0 = state.queued[0];
-    const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
-    const moveQueued = queuedCode === 'M' && !state.queuedIsAuto;
-    if (!moveQueued && q0 !== 'EMPTY') {
-      state.queued = ['EMPTY'];
+    const attackIdx = state.hand.findIndex(c => c && c.code === 'A' && !state.willDiscard.has(c.card_id));
+    if (attackIdx < 0) { logUI('no Attack card in hand', 'phase'); return; }
+    if (state.queued[0] !== attackIdx) {
+      state.queued = [attackIdx];
       state.queuedIsAuto = false;
       send({ kind: 'queue', slots: state.queued });
     }
-    state.target = { q: step.q, r: step.r };
-    state.ui.selectedTarget = step;
+
+    const occupant = entityAtPixel(px, py);
+    const isEnemy = occupant && occupant.peer_id !== state.myPeerId
+      && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
+    const atTile = me.tile_q === t.q && me.tile_r === t.r;
+    let label;
+    if (isEnemy) {
+      state.target = occupant.peer_id;
+      state.ui.selectedTarget = { q: occupant.tile_q, r: occupant.tile_r };
+      state.ui.destinationTile = null;
+      label = `Attack → ${occupant.name}`;
+    } else if (atTile) {
+      state.target = null;
+      state.ui.selectedTarget = t;
+      state.ui.destinationTile = null;
+      label = 'Attack → last/nearest enemy';
+    } else {
+      const step = stepToward({ q: me.tile_q, r: me.tile_r }, t);
+      state.target = { q: step.q, r: step.r };
+      state.ui.selectedTarget = step;
+      state.ui.destinationTile = { q: t.q, r: t.r };
+      label = `Attack-step → (${step.q},${step.r})`;
+    }
     send({ kind: 'target', target: state.target });
 
     const now = Date.now();
@@ -578,11 +602,9 @@ function wireInput() {
     if (isDouble) {
       state.locked = true;
       send({ kind: 'lock' });
-      const label = moveQueued ? `Move → (${step.q},${step.r})` : (atTile ? `EP (stay)` : `EM → (${step.q},${step.r})`);
-      logUI(`committed: ${label}`, 'phase');
+      logUI(`committed: ${label}`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
     } else {
-      const label = moveQueued ? `Move → (${step.q},${step.r})` : (atTile ? `EP (stay)` : `EM → (${step.q},${step.r})`);
-      logUI(`staged: ${label} — right-click again to commit`, 'phase');
+      logUI(`staged: ${label} — right-click again to commit`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
     }
     renderDeck();
   });
