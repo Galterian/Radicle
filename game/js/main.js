@@ -25,8 +25,32 @@ const state = {
   willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
   target: null,       // peer_id | {q,r} | null
   locked: false,
-  ui: { hoverTile: null, selectedTarget: null },
+  ui: { hoverTile: null, selectedTarget: null, logFilterPeerId: null },
 };
+
+// --- event-log filter: click an entity to narrow the log to its events ---
+function applyLogFilterRow(li) {
+  const f = state.ui.logFilterPeerId;
+  if (!f) { li.hidden = false; return; }
+  // Keep rows that are either scoped to the filtered peer, or truly global
+  // (phase / connection notices without a peer id).
+  li.hidden = li.dataset.peerId ? li.dataset.peerId !== f : true;
+}
+function applyLogFilter() {
+  const log = document.getElementById('log');
+  for (const li of log.children) applyLogFilterRow(li);
+  const chip = document.getElementById('log-filter-chip');
+  if (chip) {
+    if (state.ui.logFilterPeerId) {
+      chip.hidden = false;
+      chip.querySelector('.name').textContent = peerShort(state.ui.logFilterPeerId);
+    } else chip.hidden = true;
+  }
+}
+function setLogFilter(peerId) {
+  state.ui.logFilterPeerId = peerId || null;
+  applyLogFilter();
+}
 
 // Globally suppress the browser context menu — the UI uses right-click as a
 // game input (discard toggle). Without this, right-clicking the hex map pops
@@ -36,6 +60,7 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 function logUI(text, kind = 'evt', opts = null) {
   const li = document.createElement('li');
   li.className = kind;
+  if (opts?.peerId) li.dataset.peerId = opts.peerId;
   if (opts?.link) {
     // Build the row from a prefix + a clickable <a>. textContent-based
     // construction keeps the user-supplied strings out of innerHTML and avoids
@@ -53,7 +78,90 @@ function logUI(text, kind = 'evt', opts = null) {
   }
   const log = document.getElementById('log');
   log.prepend(li);
-  while (log.children.length > 80) log.lastChild.remove();
+  while (log.children.length > 120) log.lastChild.remove();
+  applyLogFilterRow(li);
+}
+
+// Fold the per-round envelopes into one row keyed by (actor, turn, round). As
+// commit → reveal → state_hash → push arrive, each badge lights up in place.
+// This keeps the log at ~1 line per actor-round instead of 4-5.
+const EVT_ROWS = new Map();  // key: "<peer>:T<turn>R<round>" → <li>
+const EVT_KEY_ORDER = [];     // insertion order; capped so the map doesn't grow
+
+function peerShort(peerId) {
+  const e = state.entities.find(p => p.peer_id === peerId);
+  return e?.name || (peerId ? peerId.slice(0, 10) : '—');
+}
+
+function evtRow(env) {
+  const key = `${env.actor_peer_id}:T${env.turn}R${env.round}`;
+  let li = EVT_ROWS.get(key);
+  if (li) return li;
+  li = document.createElement('li');
+  li.className = 'evt handshake';
+  li.dataset.peerId = env.actor_peer_id;
+  li.dataset.turn = String(env.turn);
+  li.dataset.round = String(env.round);
+  li.innerHTML = `
+    <span class="hs-prefix">T${env.turn}.${env.round + 1}</span>
+    <span class="hs-actor">${peerShort(env.actor_peer_id)}</span>
+    <span class="hs-badge commit"  title="committed (hidden)">⚑</span>
+    <span class="hs-badge reveal"  title="reveal pending">⚐<span class="hs-action"></span></span>
+    <span class="hs-badge state"   title="state hash">✓</span>
+    <span class="hs-badge push"    title="radicle push">⇡<span class="hs-push"></span></span>
+  `;
+  const log = document.getElementById('log');
+  log.prepend(li);
+  EVT_ROWS.set(key, li);
+  EVT_KEY_ORDER.push(key);
+  // Cap total handshake rows + total log rows.
+  while (EVT_KEY_ORDER.length > 60) {
+    const drop = EVT_KEY_ORDER.shift();
+    const el = EVT_ROWS.get(drop);
+    EVT_ROWS.delete(drop);
+    if (el && el.parentNode === log) el.remove();
+  }
+  while (log.children.length > 120) log.lastChild.remove();
+  applyLogFilterRow(li);
+  return li;
+}
+
+function fmtTarget(t) {
+  if (!t) return '—';
+  if (t.kind === 'tile') return `(${t.ref.q},${t.ref.r})`;
+  return peerShort(t.ref);
+}
+
+function onEnvelopeFold(env, viaMesh) {
+  const li = evtRow(env);
+  if (viaMesh) li.classList.add('from-mesh');
+  if (env.type === 'evt_action_commit') {
+    li.querySelector('.hs-badge.commit').classList.add('done');
+  }
+  if (env.type === 'evt_action_reveal') {
+    const b = li.querySelector('.hs-badge.reveal');
+    b.classList.add('done');
+    b.title = `revealed: ${env.payload.action} → ${fmtTarget(env.payload.target)}`;
+    li.querySelector('.hs-action').textContent = ` ${env.payload.action}→${fmtTarget(env.payload.target)}`;
+  }
+  if (env.type === 'evt_state_hash') {
+    li.querySelector('.hs-badge.state').classList.add('done');
+  }
+  if (env.type === 'evt_radicle_push') {
+    const b = li.querySelector('.hs-badge.push');
+    b.classList.add('done');
+    const sha = (env.payload.commit || '').slice(0, 10);
+    const url = env.payload.explorer_url || (sha ? `/commit/${sha}` : null);
+    const span = li.querySelector('.hs-push');
+    span.textContent = '';
+    if (url && sha) {
+      const a = document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = ' ' + sha;
+      span.appendChild(a);
+    }
+    b.title = sha ? `radicle push ${sha}` : 'radicle push';
+  }
 }
 
 // Translate the queued pick into the action code the server will commit as.
@@ -122,12 +230,16 @@ function renderDeck() {
 function renderRoster() {
   const el = document.getElementById('roster');
   el.innerHTML = '';
+  const activeFilter = state.ui.logFilterPeerId;
   for (const e of state.entities) {
     const row = document.createElement('div');
-    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'}`;
+    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''}`;
+    row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     row.innerHTML = `<span class="nm">${e.name}</span>
       <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})</span>`;
+    // Clicking a roster row toggles the log filter on that peer.
+    row.addEventListener('click', () => setLogFilter(activeFilter === e.peer_id ? null : e.peer_id));
     el.appendChild(row);
   }
 }
@@ -216,15 +328,16 @@ function connect() {
       }
       if (m.kind === 'evt') {
         const env = m.env;
-        logUI(`${env.type} by ${env.actor_peer_id}${m.from_peer ? ' (mesh)' : ''}`, 'evt');
-        if (env.type === 'evt_action_reveal') {
-          const t = env.payload.target;
-          const tLabel = t ? (t.kind === 'tile' ? `tile (${t.ref.q},${t.ref.r})` : t.ref) : '—';
-          logUI(`  reveal: ${env.payload.action} → ${tLabel}`, 'evt');
+        // Fold commit/reveal/state_hash/push into one row per (actor, turn, round).
+        if (env.type === 'evt_action_commit' || env.type === 'evt_action_reveal' || env.type === 'evt_state_hash' || env.type === 'evt_radicle_push') {
+          onEnvelopeFold(env, !!m.from_peer);
+        } else {
+          // Anything we don't fold still shows up as its own line (debug clarity).
+          logUI(`${env.type} by ${peerShort(env.actor_peer_id)}${m.from_peer ? ' (mesh)' : ''}`, 'evt', { peerId: env.actor_peer_id });
         }
         if (env.type === 'evt_state_hash') {
           // Every peer independently emits an evt_state_hash for the turn, so
-          // we'd log the same DMG line 4× without a dedupe. Key by (turn,
+          // we'd log the same DMG line N× without a dedupe. Key by (turn,
           // target, amount, source).
           state._loggedDmg ||= new Set();
           const dmg = env.payload.damage_applied || [];
@@ -233,9 +346,8 @@ function connect() {
             if (state._loggedDmg.has(key)) continue;
             state._loggedDmg.add(key);
             const tgt = state.entities.find(e => e.peer_id === d.target);
-            logUI(`  DMG ${d.amount} → ${tgt?.name || d.target}`, 'damage');
+            logUI(`  DMG ${d.amount} → ${tgt?.name || d.target}`, 'damage', { peerId: d.target });
           }
-          // Prune older turns periodically so the set doesn't grow forever.
           if (state._loggedDmg.size > 500) state._loggedDmg = new Set([...state._loggedDmg].slice(-100));
         }
       }
@@ -254,27 +366,18 @@ function connect() {
         logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
       }
       if (m.kind === 'radicle') {
-        const primary = m.explorerUrl || m.url || `/commit/${m.commit}`;
-        const li = document.createElement('li');
-        li.className = 'phase';
-        li.appendChild(document.createTextNode('radicle push → '));
-        const a = document.createElement('a');
-        a.href = primary; a.target = '_blank'; a.rel = 'noopener';
-        a.textContent = m.commit.slice(0,10);
-        li.appendChild(a);
-        li.appendChild(document.createTextNode(` on ${m.branch}`));
-        if (m.explorerUrl && m.localUrl) {
-          li.appendChild(document.createTextNode(' · '));
-          const b = document.createElement('a');
-          b.href = m.localUrl; b.target = '_blank'; b.rel = 'noopener';
-          b.textContent = 'local view';
-          li.appendChild(b);
-        } else if (!m.published) {
-          li.appendChild(document.createTextNode(' (local only)'));
+        // My own push. Fold into the current (turn, round) row for me so the
+        // handshake summary carries the push link too; emit a small secondary
+        // line only if we don't have an active row for this turn/round yet.
+        const url = m.explorerUrl || m.localUrl || m.url || (m.commit ? `/commit/${m.commit}` : null);
+        if (state.myPeerId && typeof state.turn === 'number' && typeof state.round === 'number') {
+          onEnvelopeFold({
+            type: 'evt_radicle_push',
+            actor_peer_id: state.myPeerId,
+            turn: state.turn, round: state.round,
+            payload: { commit: m.commit, explorer_url: url },
+          }, false);
         }
-        const log = document.getElementById('log');
-        log.prepend(li);
-        while (log.children.length > 80) log.lastChild.remove();
       }
     } catch (e) { console.error(e); }
   };
@@ -318,6 +421,8 @@ function toggleDiscard(i) {
 }
 
 function wireInput() {
+  const chipBtn = document.querySelector('#log-filter-chip button');
+  if (chipBtn) chipBtn.addEventListener('click', () => setLogFilter(null));
   document.querySelectorAll('#slots .slot').forEach(slotEl => {
     const key = slotEl.dataset.slot;
     const slotKey = key === 'EMPTY' ? 'EMPTY' : Number(key);
@@ -359,6 +464,9 @@ function wireInput() {
     if (!t) return;
     const occupant = state.entities.find(p => p.life > 0 && p.tile_q === t.q && p.tile_r === t.r);
     state.ui.selectedTarget = t;
+    // Clicking an entity narrows the event log to that peer's events;
+    // clicking an empty tile clears the filter.
+    setLogFilter(occupant ? occupant.peer_id : null);
     if (occupant && occupant.peer_id !== state.myPeerId) {
       state.target = occupant.peer_id;
       logUI(`target → ${occupant.name}`, 'phase');

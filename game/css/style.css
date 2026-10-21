@@ -12,24 +12,52 @@ html, body { height: 100%; margin: 0; background: #0b0d12; color: #e8ecf1; font-
 main { display: grid; grid-template-columns: 1fr 320px; gap: 10px; padding: 10px; height: calc(100% - 155px); }
 #stage { width: 100%; height: 100%; background: #080a10; border: 1px solid #1a1f29; border-radius: 6px; display: block; cursor: crosshair; }
 
-#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; overflow-y: auto; }
-#panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; }
+#panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
 #panel small { color: #566379; font-weight: 400; }
-#roster { display: flex; flex-direction: column; gap: 6px; }
-.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; gap: 6px; }
+#roster { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; gap: 6px; cursor: pointer; }
+.ros:hover { background: #1a2130; }
+.ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
 .ros .nm { color: #e0e6ef; }
 .ros .st { color: #8aa0bf; font-variant-numeric: tabular-nums; }
 .ros.dead { opacity: 0.4; text-decoration: line-through; }
 .ros.ally .nm::before { content: '◆ '; color: #6ad99f; }
 .ros.enemy .nm::before { content: '◆ '; color: #e36666; }
 
-#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; max-height: 50vh; overflow-y: auto; }
-#log li { padding: 2px 4px; border-left: 2px solid #333; margin: 2px 0; color: #9ab0cc; word-break: break-all; }
+#log-filter-chip { display: inline-flex; align-items: center; gap: 6px; background: #1b1a2e; border: 1px solid #a08eff44; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 10px; color: #d7cfff; margin: 0 0 6px; width: fit-content; }
+/* The #id rule above outranks the UA's [hidden] { display:none }, so re-assert. */
+#log-filter-chip[hidden] { display: none; }
+#log-filter-chip .name { font-weight: 600; color: #ffffff; }
+#log-filter-chip button { background: #a08eff22; border: 0; color: #d7cfff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; padding: 0; }
+#log-filter-chip button:hover { background: #a08eff44; }
+
+#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#log li { padding: 2px 4px; border-left: 2px solid #333; margin: 2px 0; color: #9ab0cc; word-break: break-word; }
+#log li[hidden] { display: none; }
 #log li.evt { border-color: #5e7eb5; }
 #log li.damage { border-color: #e36666; color: #ffb0b0; }
 #log li.phase { border-color: #a08eff; color: #d7cfff; }
 #log li a { color: #9ec6ff; text-decoration: underline; }
 #log li a:hover { color: #d7e9ff; }
+
+/* Folded handshake rows: one line per (actor, turn, round) with four phase
+   badges that light up as commit → reveal → state_hash → push arrive. */
+#log li.handshake { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+#log li.handshake .hs-prefix { color: #6a7a92; font-size: 10px; min-width: 44px; }
+#log li.handshake .hs-actor { color: #c8d4e3; font-weight: 600; min-width: 72px; }
+#log li.handshake .hs-badge { color: #3a4258; font-size: 11px; letter-spacing: 0.03em; transition: color .15s ease; }
+#log li.handshake .hs-badge.done { color: #e8ecf1; }
+#log li.handshake .hs-badge.commit.done { color: #8aa0bf; }
+#log li.handshake .hs-badge.reveal.done { color: #ffd27a; }
+#log li.handshake .hs-badge.state.done  { color: #6ad99f; }
+#log li.handshake .hs-badge.push.done   { color: #d08ae0; }
+#log li.handshake .hs-action { color: #ffd27a; font-weight: 600; }
+#log li.handshake .hs-push a { color: #d08ae0; text-decoration: none; }
+#log li.handshake .hs-push a:hover { text-decoration: underline; }
+#log li.handshake.from-mesh { background: #0e131e; }
+/* Hide filtered rows regardless of their display mode (flex for handshake etc.). */
+#log li[hidden] { display: none !important; }
 
 #deck-bar { position: fixed; bottom: 0; left: 0; right: 0; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; }
 #deck-row { display: flex; justify-content: center; align-items: flex-end; gap: 14px; max-width: 1020px; margin: 0 auto; }
