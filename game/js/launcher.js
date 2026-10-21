@@ -82,25 +82,38 @@ async function renderLauncher() {
   // there right now.
   const items = dimsRes.items || [];
   const ago = sec => sec == null ? '—' : sec < 90 ? `${sec}s ago` : sec < 5400 ? `${Math.round(sec / 60)} min ago` : `${Math.round(sec / 3600)} h ago`;
+  const isAlive = p => p.live && (p.life ?? 0) > 0;
+  // Only player Doors are joinable, but monster Doors are tracked separately so
+  // the status line can tell "empty dimension" from "monsters-only dimension".
   const doors = [];
+  let liveMonsterDoors = 0;
+  const monsterDims = new Set();
   for (const d of items) for (const p of d.doors) {
-    const who = `${p.name || p.peer_id.replace(/^peer:/, '')} (${p.alliance}, hp ${p.life}/${p.life_max}, tile ${p.tile?.q},${p.tile?.r})`;
+    if (p.alliance !== 'player') {
+      if (isAlive(p)) { liveMonsterDoors++; monsterDims.add(d.dimension_name); }
+      continue;
+    }
+    const who = `${p.name || p.peer_id.replace(/^peer:/, '')} (hp ${p.life}/${p.life_max}, tile ${p.tile?.q},${p.tile?.r})`;
     const tag = p.live ? `LIVE · turn ${p.clock?.turn ?? '?'} · door ${ago(p.age_sec)}` : `gone · door ${ago(p.age_sec)}`;
-    doors.push({ d, p, live: p.live, label: `${d.dimension_name} / ${who}  — ${tag}` });
+    doors.push({ d, p, live: isAlive(p), label: `${d.dimension_name} / ${who}  — ${tag}` });
   }
   const liveDoors = doors.filter(r => r.live);
-  const liveDims = items.filter(d => d.live_doors > 0);
+  const livePlayerDims = new Set(liveDoors.map(r => r.d.dimension_name));
+  const monstersPhrase = liveMonsterDoors
+    ? ` ${liveMonsterDoors} monster${liveMonsterDoors === 1 ? '' : 's'} alive in ${monsterDims.size} dimension${monsterDims.size === 1 ? '' : 's'}.`
+    : '';
   const status = document.getElementById('launcher-status');
   if (!dimsRes.enabled) status.textContent = `Radicle not reachable (${dimsRes.reason}). You can still start a new Dimension; it will be published once Radicle is back.`;
   else if (!items.length) status.textContent = 'Nothing published yet. Start a new Dimension below.';
-  else if (!liveDoors.length) status.textContent = `${items.length} dimension${items.length === 1 ? '' : 's'} on Radicle, nobody in any of them right now. Join one anyway (you will be alone until someone arrives) or start a new one.`;
-  else status.textContent = `${liveDoors.length} player${liveDoors.length === 1 ? '' : 's'} live in ${liveDims.length} dimension${liveDims.length === 1 ? '' : 's'} (${items.length} published in total, from ${new Set(items.flatMap(d => d.namespaces)).size} Radicle namespace${new Set(items.flatMap(d => d.namespaces)).size === 1 ? '' : 's'}).`;
+  else if (!liveDoors.length) status.textContent = `${items.length} dimension${items.length === 1 ? '' : 's'} on Radicle, no players in any of them right now.${monstersPhrase} Start a new Dimension to open one.`;
+  else status.textContent = `${liveDoors.length} player${liveDoors.length === 1 ? '' : 's'} live in ${livePlayerDims.size} dimension${livePlayerDims.size === 1 ? '' : 's'}.${monstersPhrase} ${items.length} dimension${items.length === 1 ? '' : 's'} published in total, from ${new Set(items.flatMap(d => d.namespaces)).size} Radicle namespace${new Set(items.flatMap(d => d.namespaces)).size === 1 ? '' : 's'}.`;
 
-  // Live Doors first; stale Doors stay selectable (a dimension persists on
-  // Radicle and can be re-entered) but are marked as such.
+  // Only alive players can be joined "next to", so stale/dead player Doors stay
+  // listed (for context) but are disabled.
   const pickDoor = document.getElementById('pick-door');
   doors.sort((a, b) => (b.live - a.live) || (a.p.age_sec - b.p.age_sec));
-  for (const r of doors) { const o = document.createElement('option'); o.value = `${r.d.dimension_name}|${r.p.peer_id}`; o.textContent = r.label; o.disabled = r.d.legacy; pickDoor.appendChild(o); }
+  for (const r of doors) { const o = document.createElement('option'); o.value = `${r.d.dimension_name}|${r.p.peer_id}`; o.textContent = r.label; o.disabled = r.d.legacy || !r.live; pickDoor.appendChild(o); }
+  const firstLive = doors.findIndex(r => r.live); if (firstLive >= 0) pickDoor.selectedIndex = firstLive;
 
   const pickDim = document.getElementById('pick-dim');
   for (const d of items) {
@@ -128,11 +141,12 @@ async function renderLauncher() {
   const takenLabels = new Set(items.flatMap(d => (d.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, ''))));
   document.getElementById('pick-label').placeholder = fancyLabel(takenLabels);
 
-  const joinable = items.some(d => !d.legacy && d.doors.length);
+  // `host` is always available; `join-door` enables only when at least one
+  // alive player Door is publishing; `join-random` stays disabled.
   const modes = document.querySelectorAll('input[name="mode"]');
-  for (const m of modes) if (m.value !== 'host' && joinable) m.disabled = false;
-  // Default to joining when someone is actually in a dimension right now.
-  if (liveDoors.length) document.querySelector('input[name="mode"][value="join-door"]').checked = true;
+  const joinDoorRadio = document.querySelector('input[name="mode"][value="join-door"]');
+  joinDoorRadio.disabled = liveDoors.length === 0;
+  if (liveDoors.length) joinDoorRadio.checked = true;
   function syncPanels() {
     const mode = document.querySelector('input[name="mode"]:checked').value;
     for (const el of document.querySelectorAll('.mode-panel')) el.hidden = el.dataset.for !== mode;

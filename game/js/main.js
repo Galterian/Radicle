@@ -534,7 +534,9 @@ function wireInput() {
     const step = atDest ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, dest);
     const q0 = state.queued[0];
     const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
-    const moveQueued = queuedCode === 'M';
+    // Only honour an explicit Move; if the UI's auto-pick happened to be Move,
+    // treat the double-click as a request to swap to EMPTY (EP/EM).
+    const moveQueued = queuedCode === 'M' && !state.queuedIsAuto;
     if (!moveQueued) {
       state.queued = ['EMPTY'];
       state.queuedIsAuto = false;
