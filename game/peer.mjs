@@ -8,8 +8,11 @@
 //     (positions, HP, hands committed, map_delta) — one Gun instance per peer, with
 //     a WebSocket relay between peers so the graph syncs across processes. Matches
 //     sync_turn_commit and the long-tail state the spec describes.
-//   • Firebase-stub discovery (:7350) advertises peer multiaddrs.
-//   • Local bare git repo plays the Radicle role for the hourly push lottery.
+//   • A public Nostr bus (nostr-bus.mjs) carries the same envelopes between
+//     machines that cannot dial each other — there is no host anywhere.
+//   • Every peer publishes its own Door (its piece of the dimension) to its
+//     own Radicle namespace once a minute; Radicle is the public directory.
+//   • discovery.mjs is an optional same-LAN mirror, off by default.
 //
 // Each peer also hosts a tiny HTTP + WebSocket server for its local browser UI so
 // the user can watch (and command) their peer. Only the "player" peer is driven
@@ -19,7 +22,10 @@ import { createLibp2p } from 'libp2p';
 import { tcp } from '@libp2p/tcp';
 import { noise } from '@chainsafe/libp2p-noise';
 import { yamux } from '@chainsafe/libp2p-yamux';
-import { gossipsub } from '@chainsafe/libp2p-gossipsub';
+// @libp2p/gossipsub (not the old @chainsafe/* package — that one targets
+// libp2p 2.x and bundles its own @libp2p/interface, so with libp2p 3 the two
+// never exchanged a single subscription).
+import { gossipsub } from '@libp2p/gossipsub';
 import { identify } from '@libp2p/identify';
 import { generateKeyPair } from '@libp2p/crypto/keys';
 import { multiaddr } from '@multiformats/multiaddr';
@@ -33,7 +39,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
 
-import { pushDimension, fetchDimension, electPusher, radicleEnv } from './radicle-adapter.mjs';
+import { pushDimension, radicleEnv } from './radicle-adapter.mjs';
+import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,15 +52,19 @@ const PEER_PORT_GUN     = Number(process.env.PEER_PORT_GUN     || 7501);        
 const DIM_NAME          = process.env.DIM_NAME         || 'Ashfall-Micro';
 const DIM_ID            = process.env.DIM_ID           || 'dim-ashfall-micro';
 const DOOR_ID           = process.env.DOOR_ID          || 'door-primary';
-const DISCOVERY_URL     = process.env.DISCOVERY_URL    || 'http://127.0.0.1:7350';
-// Networking for remote players. BIND_HOST is the interface libp2p + the Gun
-// relay listen on; PEER_PUBLIC_IP is the address other machines dial us at
-// (e.g. your Tailscale 100.x address). Leaving both unset keeps everything on
-// loopback exactly as before. The browser-UI socket always stays on loopback —
-// it can command this peer, so it must never be reachable from the network.
+// Optional LAN accelerator. There is no host in a dimension: every peer is
+// equal and the public Nostr bus (below) carries the handshake between
+// machines. If a discovery.mjs URL is given we also mirror through it, but
+// nothing depends on it any more.
+const DISCOVERY_URL     = process.env.DISCOVERY_URL    || '';
+// Networking for direct (LAN) links. BIND_HOST is the interface libp2p + the
+// Gun relay listen on; PEER_PUBLIC_IP is the address peers on the same network
+// can dial us at. Across the internet nobody dials anybody — the bus does it.
+// The browser-UI socket always stays on loopback — it can command this peer,
+// so it must never be reachable from the network.
 const BIND_HOST         = process.env.BIND_HOST        || (process.env.PEER_PUBLIC_IP ? '0.0.0.0' : '127.0.0.1');
 const PEER_PUBLIC_IP    = process.env.PEER_PUBLIC_IP   || '127.0.0.1';
-const PUBLIC_DISCOVERY_URL = process.env.PUBLIC_DISCOVERY_URL || DISCOVERY_URL.replace('127.0.0.1', PEER_PUBLIC_IP);
+const NOSTR_ENABLED     = (process.env.NOSTR_ENABLED || '1') !== '0';
 const CHARACTER_ID      = process.env.CHARACTER_ID     || '';
 const CREATURE_ID       = process.env.CREATURE_ID      || '';
 const ENTITY_NAME       = process.env.ENTITY_NAME      || PEER_LABEL;
@@ -80,6 +91,9 @@ const PEER_ID_STRING    = `peer:${PEER_LABEL}`;
 // Hoisted so publishPublicState's broadcastUI calls can safely fire before the
 // WebSocket server comes up later in the file. Client set populates lazily.
 const uiClients = new Set();
+// Public Nostr bus handle; created once the peer-state machinery below exists.
+// Declared up here so emitEnvelope/publishPublicState can reference it safely.
+let bus = null;
 function broadcastUI(msg) {
   const payload = JSON.stringify(msg);
   for (const ws of uiClients) { try { ws.send(payload); } catch {} }
@@ -156,8 +170,32 @@ console.log(`[${PEER_LABEL}] gun relay on ${myGunUrl}; peers = ${PEER_GUN_URLS.j
 const dimRoot = gun.get('chaosd6').get('dimensions').get(DIM_ID);
 const myNode  = dimRoot.get('doors').get(DOOR_ID).get('members').get(PEER_ID_STRING);
 
-// -------- Firebase-stub registration --------
+// -------- direct-link dialing --------
+// Try to open a libp2p connection to a peer we learned about (from the bus, the
+// Gun graph or the optional discovery mirror). Across the internet these
+// addresses are usually private and the dial fails — that's fine, the bus
+// carries the traffic; a successful dial just makes the exchange faster.
+const dialled = new Set();
+const dialFailed = new Map();   // peerId string -> failures, to keep the log quiet
+async function dialPeerAddrs(peerId, addrs) {
+  for (const addr of addrs) {
+    const theirPid = addr.split('/p2p/').at(-1);
+    if (!theirPid || theirPid === libp2p.peerId.toString() || dialled.has(theirPid)) continue;
+    try {
+      await libp2p.dial(multiaddr(addr));
+      dialled.add(theirPid);
+      console.log(`[${PEER_LABEL}] libp2p mesh ↔ ${peerId} (${theirPid.slice(0, 14)}…)`);
+    } catch (e) {
+      const n = (dialFailed.get(theirPid) || 0) + 1;
+      dialFailed.set(theirPid, n);
+      if (n === 1) console.log(`[${PEER_LABEL}] no direct link to ${peerId} (${e.message.split('\n')[0].slice(0, 80)}) — using the bus`);
+    }
+  }
+}
+
+// -------- optional discovery mirror (LAN accelerator) --------
 async function registerWithDiscovery() {
+  if (!DISCOVERY_URL) return;
   try {
     const r = await fetch(`${DISCOVERY_URL}/register`, {
       method: 'POST',
@@ -172,6 +210,7 @@ async function registerWithDiscovery() {
   } catch (e) { console.warn(`[${PEER_LABEL}] discovery register failed: ${e.message}`); }
 }
 async function heartbeat() {
+  if (!DISCOVERY_URL) return;
   try {
     await fetch(`${DISCOVERY_URL}/heartbeat`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -182,11 +221,9 @@ async function heartbeat() {
 await registerWithDiscovery();
 setInterval(heartbeat, 15_000);
 
-// Poll discovery for peer multiaddrs and dial any newcomers. We track dialled peer
-// ids as strings so we don't thrash the same connection every 5 seconds.
-const dialled = new Set();
 let discoveryPollCount = 0;
 async function discoveryPoll() {
+  if (!DISCOVERY_URL) return;
   discoveryPollCount++;
   try {
     const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
@@ -195,23 +232,10 @@ async function discoveryPoll() {
     if (discoveryPollCount === 1 || discoveryPollCount % 10 === 0) {
       console.log(`[${PEER_LABEL}] discovery poll #${discoveryPollCount}: ${peers.length} other peers (dialled ${dialled.size})`);
     }
-    for (const p of peers) {
-      for (const addr of p.multiaddrs || []) {
-        const theirPid = addr.split('/p2p/').at(-1);
-        if (dialled.has(theirPid)) continue;
-        try {
-          await libp2p.dial(multiaddr(addr));
-          dialled.add(theirPid);
-          console.log(`[${PEER_LABEL}] libp2p mesh ↔ ${p.peer_id} (${theirPid.slice(0, 14)}…)`);
-        } catch (e) {
-          if (discoveryPollCount <= 3) console.warn(`[${PEER_LABEL}] dial ${p.peer_id} failed: ${e.message}`);
-        }
-      }
-    }
-  } catch (e) { console.warn(`[${PEER_LABEL}] discoveryPoll error: ${e.message}`); }
+    for (const p of peers) await dialPeerAddrs(p.peer_id, p.multiaddrs || []);
+  } catch (e) { if (discoveryPollCount <= 3) console.warn(`[${PEER_LABEL}] discoveryPoll error: ${e.message}`); }
 }
-setInterval(discoveryPoll, 5_000);
-setTimeout(discoveryPoll, 1_500);
+if (DISCOVERY_URL) { setInterval(discoveryPoll, 5_000); setTimeout(discoveryPoll, 1_500); }
 
 // -------- entity shape / local state --------
 let entity;
@@ -301,15 +325,24 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
     payload,
     timestamp: new Date().toISOString(),
     signature: `sig:${PEER_ID_STRING}:stub`,
+    // Piggyback our public snapshot so receivers always resolve against fresh
+    // tile/life and the bus doesn't need a separate state event every round
+    // (public relays rate-limit chatty senders).
+    state: currentStateSnapshot(),
   };
   env._hash = digestObj(env);
   hg.selfParent = env._hash;
   hg.head = env._hash;
   hg.tape.push(env);
 
-  // 1) Broadcast via libp2p gossipsub to the strong-region mesh.
+  // 1) Broadcast via libp2p gossipsub to the strong-region mesh (direct links)
+  //    and over the public Nostr bus (peers on other machines). Receivers
+  //    dedupe by _hash, so getting the same envelope twice is harmless.
   try { await libp2p.services.pubsub.publish(TOPIC_STRONG, new TextEncoder().encode(JSON.stringify(env))); }
   catch (e) { console.warn(`[${PEER_LABEL}] pubsub publish failed: ${e.message}`); }
+  // Only the handshake needs to cross the internet; the per-round state-hash
+  // and push notes are bookkeeping and would double the relay load.
+  if (type === 'evt_action_commit' || type === 'evt_action_reveal') bus?.publish('env', env);
 
   // 2) Mirror onto the GunDB graph (CRDT; eventual-consistency across peers).
   //    Gun's nested put balks on arrays, so store the envelope as a JSON blob plus
@@ -333,22 +366,31 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
   return env;
 }
 
-// Receive envelopes from mesh peers.
+// Receive envelopes from other peers — same handling whichever transport
+// delivered them. An envelope can arrive over libp2p *and* the bus, so dedupe
+// on its hash: a duplicate reveal in the tape would resolve twice.
 let pubsubRxCount = 0;
+let busRxCount = 0;
+const envSeen = new Set();
+const envSeenOrder = [];
+function receiveEnvelope(env, via) {
+  if (!env || env.actor_peer_id === PEER_ID_STRING || env.dimension_id !== DIM_ID) return;
+  if (!env._hash || envSeen.has(env._hash)) return;
+  envSeen.add(env._hash); envSeenOrder.push(env._hash);
+  if (envSeenOrder.length > 4000) for (const h of envSeenOrder.splice(0, 2000)) envSeen.delete(h);
+  if (via === 'libp2p') pubsubRxCount++; else busRxCount++;
+  const n = via === 'libp2p' ? pubsubRxCount : busRxCount;
+  if (n <= 3 || n % 50 === 0) console.log(`[${PEER_LABEL}] ${via} rx #${n}: ${env.type} from ${env.actor_peer_id}`);
+  hg.otherParent = env._hash;
+  hg.tape.push(env);
+  if (env.state && mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: livePeers() });
+  inboxApply(env);
+  broadcastUI({ kind: 'evt', env, from_peer: true });
+}
 libp2p.services.pubsub.addEventListener('message', (ev) => {
   if (ev.detail.topic !== TOPIC_STRONG) return;
-  try {
-    const env = JSON.parse(new TextDecoder().decode(ev.detail.data));
-    if (env.actor_peer_id === PEER_ID_STRING) return;
-    pubsubRxCount++;
-    if (pubsubRxCount <= 5 || pubsubRxCount % 10 === 0) {
-      console.log(`[${PEER_LABEL}] pubsub rx #${pubsubRxCount}: ${env.type} from ${env.actor_peer_id}`);
-    }
-    hg.otherParent = env._hash;
-    hg.tape.push(env);
-    inboxApply(env);
-    broadcastUI({ kind: 'evt', env, from_peer: true });
-  } catch (e) { console.warn(`[${PEER_LABEL}] bad pubsub frame: ${e.message}`); }
+  try { receiveEnvelope(JSON.parse(new TextDecoder().decode(ev.detail.data)), 'libp2p'); }
+  catch (e) { console.warn(`[${PEER_LABEL}] bad pubsub frame: ${e.message}`); }
 });
 libp2p.services.pubsub.addEventListener('subscription-change', (ev) => {
   const subs = ev.detail.subscriptions.map(s => `${s.topic}:${s.subscribe ? '+' : '-'}`).join(',');
@@ -378,6 +420,7 @@ function currentStateSnapshot() {
     // and dial the mesh. Gun rejects arrays in nested puts, hence the CSV.
     turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt,
     gun_url: myGunUrl, multiaddrs_csv: myMaddrs.join(','),
+    nostr_pubkey: bus?.pubkey || null, nostr_relays_csv: (bus?.relays || []).join(','),
   };
 }
 
@@ -406,54 +449,74 @@ async function postJson(url, body) {
   } catch (e) { /* best-effort; log at caller */ return null; }
 }
 
-async function publishPublicState() {
+// Merge another peer's public snapshot, whichever transport brought it, and
+// opportunistically try a direct link to it.
+const knownTiles = new Map();   // "q,r" -> last time we saw someone there (part of our Door)
+function noteTile(q, r) { if (typeof q === 'number' && typeof r === 'number') knownTiles.set(`${q},${r}`, Date.now()); }
+function mergePeerState(p) {
+  if (!p || typeof p !== 'object' || !p.peer_id || p.peer_id === PEER_ID_STRING) return false;
+  if (!isFresh(p)) return false;
+  const prev = peersPublic.get(p.peer_id) || {};
+  peersPublic.set(p.peer_id, { ...prev, ...p });
+  noteTile(p.tile_q, p.tile_r);
+  if (p.multiaddrs_csv) dialPeerAddrs(p.peer_id, p.multiaddrs_csv.split(',').filter(Boolean)).catch(() => {});
+  return true;
+}
+
+// `viaBus` is for the heartbeat/startup/join paths; the per-round calls skip
+// it because every envelope already carries the snapshot.
+async function publishPublicState(viaBus = false) {
   const snap = currentStateSnapshot();
   myNode.put(snap);
   peersPublic.set(PEER_ID_STRING, snap);
-  await postJson(`${DISCOVERY_URL}/state`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, state: snap });
+  noteTile(snap.tile_q, snap.tile_r);
+  if (viaBus) bus?.publish('state', snap);
+  if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/state`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, state: snap });
   broadcastUI({ kind: 'peers', peers: livePeers() });
 }
-await publishPublicState();
+
+// -------- public Nostr bus --------
+if (NOSTR_ENABLED) {
+  bus = createNostrBus({
+    relays: DEFAULT_RELAYS, dimId: DIM_ID, label: PEER_LABEL,
+    onEvent(type, payload) {
+      if (type === 'env') receiveEnvelope(payload, 'bus');
+      else if (type === 'state') { if (mergePeerState(payload)) broadcastUI({ kind: 'peers', peers: livePeers() }); }
+    },
+  });
+  setInterval(() => {
+    const s = bus.stats();
+    console.log(`[${PEER_LABEL}] bus: ${s.open}/${bus.relays.length} relays, sent ${s.sent}, received ${s.received}${s.dropped ? `, rejected ${s.dropped}` : ''}`);
+  }, 60_000);
+} else {
+  console.log(`[${PEER_LABEL}] nostr bus disabled (NOSTR_ENABLED=0) — only direct links will carry traffic`);
+}
+await publishPublicState(true);
 // Liveness heartbeat independent of the round loop. Rounds republish state
 // anyway, but once a side has won the loop stops — without this the survivors
 // (and the fallen) would age out of everyone's roster as stale peers.
-setInterval(() => publishPublicState().catch(() => {}), 15_000);
+setInterval(() => publishPublicState(true).catch(() => {}), 15_000);
 
 // Also pull every other peer's public state live from Gun (slow-tier CRDT).
-dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m, k) => {
-  if (!m || typeof m !== 'object' || !m.peer_id) return;
-  // Relay graphs can still carry entries from peers that died; only accept
-  // entries that look current.
-  if (!isFresh(m)) return;
-  // Merge rather than replace so a partial Gun echo (which sometimes drops
-  // fields) doesn't wipe tile/life.
-  const prev = peersPublic.get(m.peer_id) || {};
-  peersPublic.set(m.peer_id, { ...prev, ...m });
-  broadcastUI({ kind: 'peers', peers: livePeers() });
+// Relay graphs can still carry entries from peers that died; mergePeerState
+// only accepts entries that look current, and merges rather than replaces so a
+// partial Gun echo (which sometimes drops fields) doesn't wipe tile/life.
+dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m) => {
+  if (mergePeerState(m)) broadcastUI({ kind: 'peers', peers: livePeers() });
 });
 
-// Discovery is the reliable fallback: pull everyone's registered state and
-// merge into peersPublic. Runs on the same cadence as peer-dial polling.
+// Optional discovery mirror: pull everyone's registered state and merge.
 async function pullDiscoveryState() {
+  if (!DISCOVERY_URL) return;
   try {
     const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
     const j = await r.json();
     let changed = false;
-    for (const p of j.peers || []) {
-      if (!p.state || !isFresh(p.state)) continue;
-      const prev = peersPublic.get(p.peer_id) || {};
-      // Prefer any field we already have from Gun/local if the discovery copy
-      // doesn't carry it, so faster sources don't get clobbered.
-      const merged = { ...prev, ...p.state };
-      peersPublic.set(p.peer_id, merged);
-      changed = true;
-    }
+    for (const p of j.peers || []) if (p.state && mergePeerState(p.state)) changed = true;
     if (changed) broadcastUI({ kind: 'peers', peers: livePeers() });
   } catch {}
 }
-setInterval(pullDiscoveryState, 2500);
-// Seed quickly after startup so the first planning phase already sees peers.
-setTimeout(pullDiscoveryState, 1200);
+if (DISCOVERY_URL) { setInterval(pullDiscoveryState, 2500); setTimeout(pullDiscoveryState, 1200); }
 
 // -------- phase FSM --------
 // planning (10s normal / 6s combat heartbeat) → reveal (5s) → resolution (5s) → cleanup
@@ -539,6 +602,7 @@ function allIn(map) {
   return expectedMembers().every(id => seen.has(id));
 }
 async function pullFromDiscovery(kind, map) {
+  if (!DISCOVERY_URL) return;
   try {
     const r = await fetch(`${DISCOVERY_URL}/${kind}/${DIM_ID}/${hg.action}`);
     const j = await r.json();
@@ -608,7 +672,7 @@ async function doPlanningEnd() {
     type: 'evt_action_commit',
     payload: { commitment: commitHash, empty_move_announced: code === 'EM' },
   });
-  await postJson(`${DISCOVERY_URL}/commit`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action, commitment: commitHash });
+  if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/commit`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action, commitment: commitHash });
 }
 
 async function doReveal() {
@@ -624,10 +688,8 @@ async function doReveal() {
       salt: myLastReveal.salt,
     },
   });
-  // Mirror to discovery so other peers' resolvers can pick it up even if
-  // gossipsub hasn't propagated the subscription yet.
-  // Discovery buckets reveals by the global action index (its `turn` field).
-  await postJson(`${DISCOVERY_URL}/reveal`, {
+  // Optional discovery mirror (buckets reveals by the global action index).
+  if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/reveal`, {
     dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action,
     action: myLastReveal.code, target: targetObj,
   });
@@ -648,10 +710,8 @@ async function doResolution() {
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
     revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target) });
   }
-  // Pull any reveals the discovery server has for this action and merge in —
-  // this is the gossipsub-didn't-propagate fallback. Peers' resolvers all
-  // converge on the same input set this way.
-  try {
+  // Optional discovery mirror: merge any reveals it has for this action.
+  if (DISCOVERY_URL) try {
     const r = await fetch(`${DISCOVERY_URL}/reveals/${DIM_ID}/${hg.action}`);
     const j = await r.json();
     for (const d of j.reveals || []) {
@@ -855,26 +915,32 @@ function inboxApply(env) {
 // Reveals are matched by turn number, so a peer that boots into a running
 // Dimension must adopt the mesh's clock or it will never see anyone's reveal
 // for "its" turn. Take the most-advanced live peer as the reference.
+// Peer snapshots arrive over the bus (every peer republishes within 15s, the
+// relay replays the last two minutes on subscribe), Gun and the optional
+// discovery mirror — all land in peersPublic. Wait briefly for the first one.
+const JOIN_SYNC_WAIT_MS = Number(process.env.JOIN_SYNC_WAIT_MS || 6000);
 async function syncClockFromMesh() {
-  try {
-    const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
-    const j = await r.json();
-    const others = (j.peers || []).filter(p => p.peer_id !== PEER_ID_STRING && p.state && typeof p.state.turn === 'number');
-    if (!others.length) { console.log(`[${PEER_LABEL}] join sync: no live peers, starting fresh at turn 0`); return; }
-    const actOf = s => typeof s.action === 'number' ? s.action : actionKey(s.turn, s.round || 0);
-    others.sort((a, b) => (actOf(b.state) - actOf(a.state)) || ((b.state.phase_ends_at || 0) - (a.state.phase_ends_at || 0)));
-    const ref = others[0].state;
-    hg.action = actOf(ref);
-    hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
-    hg.round = hg.action % ROUNDS_PER_TURN;
-    // Only planning is safe to drop into: the handshake phases assume we
-    // committed. Joining mid-handshake means we sit this action out (rule 6).
-    currentPhase = ref.phase === 'planning' ? 'planning' : 'resolution';
-    phaseEndsAt = (typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) ? ref.phase_ends_at : Date.now();
-    roundDeadline = currentPhase === 'planning' ? phaseEndsAt : Date.now();
-    console.log(`[${PEER_LABEL}] join sync: adopted turn ${hg.turn} round ${hg.round} / ${currentPhase} from ${others[0].peer_id}`);
-    await publishPublicState();
-  } catch (e) { console.warn(`[${PEER_LABEL}] join sync failed (${e.message}); starting at turn 0`); }
+  const t0 = Date.now();
+  const actOf = s => typeof s.action === 'number' ? s.action : actionKey(s.turn, s.round || 0);
+  let others = [];
+  while (Date.now() - t0 < JOIN_SYNC_WAIT_MS) {
+    others = livePeers().filter(p => p.peer_id !== PEER_ID_STRING && typeof p.turn === 'number');
+    if (others.length) break;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  if (!others.length) { console.log(`[${PEER_LABEL}] join sync: no live peers heard in ${JOIN_SYNC_WAIT_MS}ms, starting fresh at turn 0`); return; }
+  others.sort((a, b) => (actOf(b) - actOf(a)) || ((b.phase_ends_at || 0) - (a.phase_ends_at || 0)));
+  const ref = others[0];
+  hg.action = actOf(ref);
+  hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
+  hg.round = hg.action % ROUNDS_PER_TURN;
+  // Only planning is safe to drop into: the handshake phases assume we
+  // committed. Joining mid-handshake means we sit this action out (rule 6).
+  currentPhase = ref.phase === 'planning' ? 'planning' : 'resolution';
+  phaseEndsAt = (typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) ? ref.phase_ends_at : Date.now();
+  roundDeadline = currentPhase === 'planning' ? phaseEndsAt : Date.now();
+  console.log(`[${PEER_LABEL}] join sync: adopted turn ${hg.turn} round ${hg.round} / ${currentPhase} from ${ref.peer_id} (${others.length} live peers heard after ${Date.now() - t0}ms)`);
+  await publishPublicState(true);
 }
 await syncClockFromMesh();
 
@@ -944,88 +1010,87 @@ function catchUpClock() {
   console.log(`[${PEER_LABEL}] clock catch-up: +${skipped} action(s) to turn ${hg.turn} round ${hg.round} (from ${ref.peer_id})`);
 }
 
-// -------- Radicle lottery (hourly in prod; demo accelerates) --------
-let lotteryCount = 0;
-async function radicleLottery() {
-  lotteryCount++;
-  const live = livePeers();
-  const peers = live.map(p => p.peer_id).sort();
-  // A joiner that sees nobody else is cut off from its host (or the host is
-  // gone). Publishing from here would overwrite the door with our own dead-end
-  // addresses, so stay quiet; only a mesh with company gets to push.
-  if (peers.length <= 1 && BOOTSTRAP_MADDRS.length) { if (lotteryCount % 5 === 1) console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: isolated joiner, not publishing`); return; }
-  const intervalIndex = Math.floor(Date.now() / (RADICLE_PUSH_SEC * 1000));
-  // The seed must be identical on every peer or each one elects a different
-  // winner and nobody pushes (hg.head is per-peer — it broke exactly that way).
-  // DIM_ID + the minute index is shared knowledge and still rotates the duty.
-  const winner = electPusher(peers, DIM_ID, intervalIndex);
-  console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: ${peers.length} peers, winner=${winner}, me=${PEER_ID_STRING}`);
-  if (winner !== PEER_ID_STRING) return;
+// -------- Radicle: publish my Door into the dimension --------
+// There is no host and no lottery. Every peer periodically commits *its own
+// Door* — its piece of the dimension puzzle: what it knows from where it
+// stands (its entity, the live clock, the members and tiles it has seen) and
+// how to reach it — under ActiveDimensions/<dim>/doors/<peer>.json in its own
+// Radicle namespace (rad://<RID>/<my NID>). Peers that met on the hex map have
+// seen the same things, so their Doors overlap and agree; a newcomer lists
+// every namespace on the seed and unions the Doors to see the whole picture,
+// then walks in through whichever Door it picks. dimension.json is written
+// with deterministic content so every Door carries an identical copy.
+const DOOR_FILE = PEER_LABEL.replace(/[^A-Za-z0-9_.-]/g, '-');
+let doorCount = 0;
+function buildDoor(now) {
+  const radRepo = radicleEnv.enabled ? `rad:${radicleEnv.rid}` : 'rad:local-bare';
+  const members = livePeers().filter(p => p && p.peer_id);
+  const bootstrap = new Set(); const gunRelays = new Set(); const relays = new Set(DEFAULT_RELAYS);
+  for (const p of members) {
+    for (const a of (p.multiaddrs_csv || '').split(',').filter(Boolean)) bootstrap.add(a);
+    if (p.gun_url) gunRelays.add(p.gun_url);
+    for (const r of (p.nostr_relays_csv || '').split(',').filter(Boolean)) relays.add(r);
+  }
+  const tiles = [...knownTiles.entries()].map(([k, t]) => { const [q, r] = k.split(',').map(Number); return { q, r, seen_at: new Date(t).toISOString() }; });
+  const dimensionDoc = {
+    dimension_id: DIM_ID, dimension_name: DIM_NAME, radicle_repo: radRepo,
+    radicle_branch: `ActiveDimensions/${DIM_NAME}`,
+    game_mode: 'mode_mmorpg', description: 'Micro-dimension sandbox',
+    tileset: { initial_size: '5x5', bounds: { min_x: 0, min_y: 0, max_x: 4, max_y: 4 }, map_seed: '0xdeadbeef', extended_blocks: [] },
+    clock: { rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC },
+    layout: { doors: 'doors/<peer>.json — one Door per player (their piece of the puzzle), each in the player\'s own Radicle namespace; union them for the full picture' },
+    join: { command: 'node game/join.mjs', placements: ['nearby', 'random'], note: 'Reads doors/*.json across all namespaces, joins the Nostr bus for the dimension id, and dials any Door\'s libp2p address that happens to be reachable.' },
+  };
+  const door = {
+    door_version: 2, door_id: PEER_ID_STRING,
+    dimension_id: DIM_ID, dimension_name: DIM_NAME,
+    peer_id: PEER_ID_STRING, name: entity.name, alliance: ALLIANCE,
+    character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
+    tile: { q: entity.tile.q, r: entity.tile.r }, life: entity.life, life_max: entity.lifeMax,
+    hashgraph_head: hg.head || '',
+    clock: { turn: hg.turn, round: hg.round, action: hg.action, rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC, phase: currentPhase, phase_ends_at: phaseEndsAt, at: now },
+    known_members: members.map(p => ({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, life: p.life, life_max: p.life_max, last_seen: p.last_seen })),
+    known_tiles: tiles,
+    network: {
+      nostr: { relays: [...relays], pubkey: bus?.pubkey || null, kind: 29517, tag: `chaosd6:${DIM_ID}` },
+      libp2p: { multiaddrs: myMaddrs, topic: TOPIC_STRONG, bootstrap: [...bootstrap] },
+      gun: { url: myGunUrl, relays: [...gunRelays] },
+    },
+    radicle: { repo: radRepo, namespace: radicleEnv.enabled ? radicleEnv.nid : null, branch: `ActiveDimensions/${DIM_NAME}` },
+    pushed_at: now,
+  };
+  return { dimensionDoc, door };
+}
+async function publishDoor() {
+  doorCount++;
   try {
     const now = new Date().toISOString();
-    const radRepo = radicleEnv.enabled ? `rad:${radicleEnv.rid}` : 'rad:local-bare';
-    const members = live.filter(p => p && p.peer_id);
-    // Mesh entry points for joiners: every live peer's libp2p multiaddr and Gun
-    // relay. Discovery holds the freshest multiaddrs; Gun/peersPublic carries
-    // the CSV form each peer publishes about itself. Union the two.
-    const bootstrap = new Set();
-    const gunRelays = new Set();
-    for (const p of members) {
-      for (const a of (p.multiaddrs_csv || '').split(',').filter(Boolean)) bootstrap.add(a);
-      if (p.gun_url) gunRelays.add(p.gun_url);
-    }
-    try {
-      const r = await fetch(`${DISCOVERY_URL}/peers/${DIM_ID}`);
-      const j = await r.json();
-      for (const p of j.peers || []) for (const a of p.multiaddrs || []) bootstrap.add(a);
-    } catch {}
-    const occupied = members.filter(p => p.life > 0).map(p => ({ q: p.tile_q, r: p.tile_r }));
-    const dimensionDoc = {
-      dimension_id: DIM_ID, dimension_name: DIM_NAME, radicle_repo: radRepo,
-      radicle_branch: `ActiveDimensions/${DIM_NAME}`,
-      radicle_namespace: radicleEnv.enabled ? radicleEnv.nid : null,
-      game_mode: 'mode_mmorpg', created_at: now, owners: ['peer:player-1'],
-      tileset: { initial_size: '5x5', bounds: { min_x: 0, min_y: 0, max_x: 4, max_y: 4 }, map_seed: '0xdeadbeef', extended_blocks: [] },
-      turn: { max_seen: hg.turn, updated_at: now },
-      doors: [DOOR_ID], description: 'Micro-dimension sandbox',
-      join: { command: 'node game/join.mjs', placements: ['nearby', 'random'], note: 'Reads doors/*.json for bootstrap + discovery, then dials the live mesh.' },
-      last_push: { peer_id: PEER_ID_STRING, at: now, commit: 'pending' },
-    };
-    const doorDoc = {
-      door_id: DOOR_ID, magnet_id: `magnet:?xt=urn:dim:${DIM_NAME}&xs=${hg.head || ''}&tr=${radRepo}&pe=${PEER_ID_STRING}`,
-      label: 'primary strong-region', status: 'active', hashgraph_head: hg.head || '',
-      turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC, phase: currentPhase, clock_at: now,
-      members: members.map(p => ({ peer_id: p.peer_id, name: p.name, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, clan: p.alliance, life: p.life, life_max: p.life_max })),
-      region: { center: { q: 2, r: 2 }, strong_radius_tiles: 2, reach_tiles: 4, size: 5 },
-      tiles: { occupied },
-      network: {
-        discovery_url: PUBLIC_DISCOVERY_URL,
-        bootstrap: [...bootstrap],
-        gun_relays: [...gunRelays],
-        topic: TOPIC_STRONG,
-      },
-      last_push: { interval_index: intervalIndex, peer_id: PEER_ID_STRING, at: now, commit: 'pending' },
-    };
+    const { dimensionDoc, door } = buildDoor(now);
     const r = await pushDimension(PEER_ID_STRING, DIM_NAME, {
       [`ActiveDimensions/${DIM_NAME}/dimension.json`]: dimensionDoc,
-      [`ActiveDimensions/${DIM_NAME}/doors/${DOOR_ID}.json`]: doorDoc,
-      [`ActiveDimensions/${DIM_NAME}/rules_snapshot_commit`]: 'local-rules-snapshot',
-    });
+      [`ActiveDimensions/${DIM_NAME}/doors/${DOOR_FILE}.json`]: door,
+    }, [
+      // Leftovers from the host-era layout (single door written by the lottery winner).
+      `ActiveDimensions/${DIM_NAME}/doors/door-primary.json`,
+      `ActiveDimensions/${DIM_NAME}/rules_snapshot_commit`,
+    ]);
     if (r.pushed) {
       const uiPort = process.env.UI_PORT || 7357;
       const localUrl = `http://127.0.0.1:${uiPort}/commit/${r.commit}`;
       const explorerUrl = r.explorerUrl || null;
       const treeUrl = r.treeUrl || null;
       const remoteNote = r.remote?.published ? '' : ` (remote: ${r.remote?.reason || 'skipped'})`;
-      console.log(`[${PEER_LABEL}] radicle push → ${r.commit} on ${r.branch}${remoteNote}`);
+      console.log(`[${PEER_LABEL}] door #${doorCount} → ${r.commit.slice(0, 10)} on ${r.branch}${remoteNote}`);
       console.log(`[${PEER_LABEL}]   commit: ${explorerUrl || localUrl}`);
       if (treeUrl) console.log(`[${PEER_LABEL}]   tree:   ${treeUrl}`);
       broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url: explorerUrl || localUrl, localUrl, explorerUrl, treeUrl, published: !!explorerUrl });
-      await emitEnvelope({ type: 'evt_radicle_push', payload: { interval_index: intervalIndex, commit: r.commit, head_pushed: hg.head || '', explorer_url: explorerUrl, tree_url: treeUrl } });
+      await emitEnvelope({ type: 'evt_radicle_push', payload: { door: DOOR_FILE, commit: r.commit, head_pushed: hg.head || '', explorer_url: explorerUrl, tree_url: treeUrl } });
     }
-  } catch (e) { console.warn(`[${PEER_LABEL}] radicle push failed: ${e.message}`); }
+  } catch (e) { console.warn(`[${PEER_LABEL}] door push failed: ${e.message.split('\n')[0]}`); }
 }
-setInterval(() => radicleLottery().catch(() => {}), RADICLE_PUSH_SEC * 1000);
+// Stagger so several peers in one clone don't all hit the bare repo at once
+// (pushDimension retries on a lost race anyway).
+setTimeout(() => { publishDoor().catch(() => {}); setInterval(() => publishDoor().catch(() => {}), RADICLE_PUSH_SEC * 1000); }, 5_000 + Math.floor(Math.random() * 10_000));
 
 // -------- browser UI socket --------
 const uiHttp = http.createServer(async (req, res) => {
@@ -1036,6 +1101,7 @@ const uiHttp = http.createServer(async (req, res) => {
       entity, hand, queued, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
       peers: livePeers(),
       alliance: ALLIANCE,
+      multiaddrs: myMaddrs, gun_url: myGunUrl, nostr_pubkey: bus?.pubkey || null, bus: bus ? bus.stats() : null,
     }));
     return;
   }

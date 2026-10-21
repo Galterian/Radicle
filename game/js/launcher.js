@@ -76,35 +76,41 @@ async function renderLauncher() {
     hostIp.appendChild(o);
   }
 
+  // Each dimension is a set of Doors, one per player who has been in it (their
+  // piece of the puzzle), each published from that player's own Radicle
+  // namespace. A Door newer than the liveness window means its player is in
+  // there right now.
   const items = dimsRes.items || [];
+  const ago = sec => sec == null ? '—' : sec < 90 ? `${sec}s ago` : sec < 5400 ? `${Math.round(sec / 60)} min ago` : `${Math.round(sec / 3600)} h ago`;
   const doors = [];
-  for (const d of items) for (const door of d.doors) {
-    const min = Math.max(0, Math.round((Date.now() - Date.parse(door.last_push?.at || 0)) / 60000));
-    const live = door.live;
-    const tag = live ? `LIVE · ${live.peers} peer${live.peers === 1 ? '' : 's'} · turn ${live.turn}` : `offline · last push ${min} min ago`;
-    doors.push({ d, door, live: !!live, label: `${d.dimension_name} / ${door.door_id}  — ${tag}` });
+  for (const d of items) for (const p of d.doors) {
+    const who = `${p.name || p.peer_id.replace(/^peer:/, '')} (${p.alliance}, hp ${p.life}/${p.life_max}, tile ${p.tile?.q},${p.tile?.r})`;
+    const tag = p.live ? `LIVE · turn ${p.clock?.turn ?? '?'} · door ${ago(p.age_sec)}` : `gone · door ${ago(p.age_sec)}`;
+    doors.push({ d, p, live: p.live, label: `${d.dimension_name} / ${who}  — ${tag}` });
   }
   const liveDoors = doors.filter(r => r.live);
+  const liveDims = items.filter(d => d.live_doors > 0);
   const status = document.getElementById('launcher-status');
-  if (!dimsRes.enabled) status.textContent = `Radicle not reachable (${dimsRes.reason}). You can still create a new local Dimension.`;
-  else if (!doors.length) status.textContent = 'Nothing published yet. Create a new Dimension below.';
-  else if (!liveDoors.length) status.textContent = `${doors.length} published door${doors.length === 1 ? '' : 's'}, none live right now — their hosts are not running. Create a new Dimension below.`;
-  else status.textContent = `${liveDoors.length} live door${liveDoors.length === 1 ? '' : 's'} (${doors.length - liveDoors.length} offline) across ${items.length} dimension${items.length === 1 ? '' : 's'}.`;
+  if (!dimsRes.enabled) status.textContent = `Radicle not reachable (${dimsRes.reason}). You can still start a new Dimension; it will be published once Radicle is back.`;
+  else if (!items.length) status.textContent = 'Nothing published yet. Start a new Dimension below.';
+  else if (!liveDoors.length) status.textContent = `${items.length} dimension${items.length === 1 ? '' : 's'} on Radicle, nobody in any of them right now. Join one anyway (you will be alone until someone arrives) or start a new one.`;
+  else status.textContent = `${liveDoors.length} player${liveDoors.length === 1 ? '' : 's'} live in ${liveDims.length} dimension${liveDims.length === 1 ? '' : 's'} (${items.length} published in total, from ${new Set(items.flatMap(d => d.namespaces)).size} Radicle namespace${new Set(items.flatMap(d => d.namespaces)).size === 1 ? '' : 's'}).`;
 
-  // Offline doors are listed but not selectable — joining them only yields a
-  // lonely peer spamming "fetch failed" at a host that is gone.
+  // Live Doors first; stale Doors stay selectable (a dimension persists on
+  // Radicle and can be re-entered) but are marked as such.
   const pickDoor = document.getElementById('pick-door');
-  for (const r of doors) { const o = document.createElement('option'); o.value = `${r.d.dimension_name}|${r.door.door_id}`; o.textContent = r.label; o.disabled = !r.live; pickDoor.appendChild(o); }
-  const firstLive = [...pickDoor.options].findIndex(o => !o.disabled); if (firstLive >= 0) pickDoor.selectedIndex = firstLive;
+  doors.sort((a, b) => (b.live - a.live) || (a.p.age_sec - b.p.age_sec));
+  for (const r of doors) { const o = document.createElement('option'); o.value = `${r.d.dimension_name}|${r.p.peer_id}`; o.textContent = r.label; o.disabled = r.d.legacy; pickDoor.appendChild(o); }
 
   const pickDim = document.getElementById('pick-dim');
   for (const d of items) {
-    const liveCount = d.doors.filter(x => x.live).length;
     const o = document.createElement('option'); o.value = d.dimension_name;
-    o.textContent = `${d.dimension_name}  (${liveCount}/${d.doors.length} door${d.doors.length === 1 ? '' : 's'} live)`;
-    o.disabled = liveCount === 0; pickDim.appendChild(o);
+    o.textContent = d.legacy
+      ? `${d.dimension_name}  (older format — cannot join)`
+      : `${d.dimension_name}  (${d.live_doors} live / ${d.doors.length} door${d.doors.length === 1 ? '' : 's'}, newest ${ago(d.age_sec)})`;
+    o.disabled = d.legacy; pickDim.appendChild(o);
   }
-  const firstLiveDim = [...pickDim.options].findIndex(o => !o.disabled); if (firstLiveDim >= 0) pickDim.selectedIndex = firstLiveDim;
+  const firstLiveDim = items.findIndex(d => d.live_doors > 0); if (firstLiveDim >= 0) pickDim.selectedIndex = firstLiveDim;
 
   const pickKind = document.getElementById('pick-kind');
   const pickWho  = document.getElementById('pick-who');
@@ -119,11 +125,14 @@ async function renderLauncher() {
 
   // Suggest a handle; the server picks its own if the field is left empty, so
   // this is just so the user sees what "auto" will look like.
-  const takenLabels = new Set(doors.flatMap(r => (r.door.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, ''))));
+  const takenLabels = new Set(items.flatMap(d => (d.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, ''))));
   document.getElementById('pick-label').placeholder = fancyLabel(takenLabels);
 
+  const joinable = items.some(d => !d.legacy && d.doors.length);
   const modes = document.querySelectorAll('input[name="mode"]');
-  for (const m of modes) if (m.value !== 'host' && liveDoors.length) m.disabled = false;
+  for (const m of modes) if (m.value !== 'host' && joinable) m.disabled = false;
+  // Default to joining when someone is actually in a dimension right now.
+  if (liveDoors.length) document.querySelector('input[name="mode"][value="join-door"]').checked = true;
   function syncPanels() {
     const mode = document.querySelector('input[name="mode"]:checked').value;
     for (const el of document.querySelectorAll('.mode-panel')) el.hidden = el.dataset.for !== mode;

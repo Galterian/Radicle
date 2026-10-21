@@ -6,21 +6,22 @@
   "private": true,
   "scripts": {
     "discovery": "node discovery.mjs",
-    "peer":      "node peer.mjs",
-    "ui":        "node ui-server.mjs",
-    "radicle":   "node radicle-adapter.mjs init",
-    "all":       "node start-all.mjs"
+    "peer": "node peer.mjs",
+    "ui": "node ui-server.mjs",
+    "radicle": "node radicle-adapter.mjs init",
+    "all": "node start-all.mjs"
   },
   "dependencies": {
-    "libp2p": "3.5.1",
-    "@libp2p/tcp": "11.0.32",
-    "@libp2p/identify": "4.1.18",
-    "@libp2p/crypto": "5.2.0",
     "@chainsafe/libp2p-noise": "17.0.0",
     "@chainsafe/libp2p-yamux": "8.0.1",
-    "@chainsafe/libp2p-gossipsub": "14.1.2",
-    "gun": "0.2020.1240",
+    "@libp2p/crypto": "5.2.0",
+    "@libp2p/gossipsub": "^17.2.1",
+    "@libp2p/identify": "4.1.18",
+    "@libp2p/tcp": "11.0.32",
+    "@multiformats/multiaddr": "^13.0.3",
     "express": "4.21.1",
+    "gun": "0.2020.1240",
+    "libp2p": "3.5.1",
     "ws": "8.18.0"
   }
 }
