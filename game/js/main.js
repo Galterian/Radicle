@@ -3,7 +3,7 @@
 // hashgraph envelopes, resolver, radicle lottery) runs in the peer processes.
 
 import { createRenderer } from './renderer.js';
-import { pixelToHex, hexDistance, stepToward, HEX_SIZE } from './hex.js';
+import { pixelToHex, hexDistance, stepToward, findPath, HEX_SIZE } from './hex.js';
 
 // Click within this many pixels of an entity's drawn centre counts as a hit on
 // that entity. The body circle is r=16; 24 gives a little slack without
@@ -31,8 +31,74 @@ const state = {
   willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
   target: null,       // peer_id | {q,r} | null
   locked: false,
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, logFilterPeerId: null },
+  // destinationTile is the hex the player right-clicked; pathPlan is the full
+  // list of hexes (step 1 … destination) the auto-walker will follow across
+  // rounds. Both survive planning→reveal→resolution so the next round can
+  // pick up where this one left off.
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null },
 };
+
+// Build the "blocked" set the pathfinder uses: every alive entity other than
+// me stands on an impassable tile.
+function blockedTilesExcluding(myPeerId) {
+  const blocked = new Set();
+  for (const p of state.entities) {
+    if (!p || p.life <= 0 || p.peer_id === myPeerId) continue;
+    if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
+    blocked.add(`${p.tile_q},${p.tile_r}`);
+  }
+  return blocked;
+}
+
+// Cancel an in-progress multi-round journey. Called from any manual action the
+// user takes that doesn't fit the "keep walking to the destination" story
+// (slot pick, Space commit of something else, left-click a different tile).
+function cancelPathJourney(reason) {
+  if (!state.ui.destinationTile && !state.ui.pathPlan) return;
+  state.ui.destinationTile = null;
+  state.ui.pathPlan = null;
+  if (reason) logUI(`journey cancelled (${reason})`, 'phase');
+}
+
+// Called at the start of each planning phase. If a journey is in progress and
+// still reachable, (re)compute the path from the player's current tile and
+// auto-stage an Empty Move toward the next step. Returns true when a journey
+// is being resumed, false when the caller should fall back to the normal
+// first-hand-card autoselect.
+function resumeJourney() {
+  // A journey only exists when a right-click computed a full A* path and
+  // stored it in `pathPlan`. A plain destinationTile from an Attack-step or
+  // a blocked single-step fallback is just a visual cue — don't auto-walk.
+  if (!state.ui.pathPlan) return false;
+  const dest = state.ui.destinationTile;
+  if (!dest) return false;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me || !Number.isInteger(me.tile_q)) return false;
+  if (me.tile_q === dest.q && me.tile_r === dest.r) {
+    // Arrived — tear down the journey rather than looping on a zero-length
+    // path.
+    state.ui.pathPlan = null;
+    state.ui.destinationTile = null;
+    logUI(`journey complete at (${dest.q},${dest.r})`, 'phase');
+    return false;
+  }
+  const blocked = blockedTilesExcluding(state.myPeerId);
+  const path = findPath({ q: me.tile_q, r: me.tile_r }, dest, blocked);
+  if (!path.length) {
+    cancelPathJourney('blocked');
+    return false;
+  }
+  state.ui.pathPlan = path;
+  const step = path[0];
+  state.queued = ['EMPTY'];
+  state.queuedIsAuto = true;
+  send({ kind: 'queue', slots: state.queued });
+  state.target = { q: step.q, r: step.r };
+  state.ui.selectedTarget = step;
+  send({ kind: 'target', target: state.target });
+  logUI(`journey → (${step.q},${step.r}) toward (${dest.q},${dest.r}) [EM, auto]`, 'phase');
+  return true;
+}
 
 // --- event-log filter: click an entity to narrow the log to its events ---
 function applyLogFilterRow(li) {
@@ -282,8 +348,14 @@ function setPhase(name, seconds, heartbeat, m = {}) {
     state.locked = false;
     state.target = null;
     state.ui.selectedTarget = null;
-    state.ui.destinationTile = null;
-    autoselectFirstHandCard();
+    // Keep destinationTile across rounds — a right-click sets up a multi-round
+    // journey, so each new planning phase should pick up along the path rather
+    // than forget it. The auto-stage below replaces the usual first-card pick.
+    if (!resumeJourney()) {
+      state.ui.destinationTile = null;
+      state.ui.pathPlan = null;
+      autoselectFirstHandCard();
+    }
   }
 }
 
@@ -418,6 +490,9 @@ function queueSlot(key) {
     state.queued = [key];
   }
   state.queuedIsAuto = false;
+  // Picking any slot by hand means the player is taking the wheel — stop the
+  // auto-walker so a right-clicked destination doesn't fight the pick.
+  cancelPathJourney('manual pick');
   send({ kind: 'queue', slots: state.queued });
   renderDeck();
 }
@@ -507,7 +582,9 @@ function wireInput() {
 
     if (occupant && occupant.peer_id !== state.myPeerId) {
       // Clicked on an enemy — set as target, keep whatever action is queued
-      // (so an Attack queued ahead of time can land on them).
+      // (so an Attack queued ahead of time can land on them). A direct enemy
+      // pick clearly overrides any walking plan.
+      cancelPathJourney('new target');
       state.target = occupant.peer_id;
       logUI(`target → ${occupant.name}`, 'phase', { peerId: occupant.peer_id });
     } else if (state.phase === 'planning' && !state.locked) {
@@ -530,6 +607,10 @@ function wireInput() {
           state.queuedIsAuto = false;  // treat as a deliberate pick now
           send({ kind: 'queue', slots: state.queued });
         }
+        // Left-click targets a specific hex for this round only — it doesn't
+        // set up a multi-round journey (that's what right-click is for), so
+        // cancel any in-progress walker before staging the new one-off pick.
+        cancelPathJourney('new target');
         state.target = { q: step.q, r: step.r };
         state.ui.selectedTarget = step;
         const code = keepMove ? `Move → (${step.q},${step.r})` : atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
@@ -607,16 +688,42 @@ function wireInput() {
       }
     } else {
       // No Attack available → Empty move/posture toward the right-clicked tile.
+      // Compute a full path so the destination can persist across rounds; each
+      // new planning phase recomputes from the player's then-current tile.
       if (state.queued[0] !== 'EMPTY') {
         state.queued = ['EMPTY'];
         state.queuedIsAuto = false;
         send({ kind: 'queue', slots: state.queued });
       }
-      const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
-      state.target = { q: step.q, r: step.r };
-      state.ui.selectedTarget = step;
-      state.ui.destinationTile = { q: t.q, r: t.r };
-      label = atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
+      if (atTile) {
+        state.target = { q: me.tile_q, r: me.tile_r };
+        state.ui.selectedTarget = { q: me.tile_q, r: me.tile_r };
+        state.ui.destinationTile = null;
+        state.ui.pathPlan = null;
+        label = 'EP (stay)';
+      } else {
+        const blocked = blockedTilesExcluding(state.myPeerId);
+        const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
+        if (path.length) {
+          const step = path[0];
+          state.ui.destinationTile = { q: t.q, r: t.r };
+          state.ui.pathPlan = path;
+          state.target = { q: step.q, r: step.r };
+          state.ui.selectedTarget = step;
+          label = path.length === 1
+            ? `EM → (${step.q},${step.r})`
+            : `EM → (${step.q},${step.r}) along ${path.length}-step route to (${t.q},${t.r})`;
+        } else {
+          // No reachable path (blocked). Fall back to the single-step heuristic
+          // so the gesture still does something useful this round.
+          const step = stepToward({ q: me.tile_q, r: me.tile_r }, t);
+          state.target = { q: step.q, r: step.r };
+          state.ui.selectedTarget = step;
+          state.ui.destinationTile = { q: t.q, r: t.r };
+          state.ui.pathPlan = null;
+          label = `EM → (${step.q},${step.r}) (no clear route)`;
+        }
+      }
     }
     send({ kind: 'target', target: state.target });
 

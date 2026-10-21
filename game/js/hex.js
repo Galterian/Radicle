@@ -68,3 +68,54 @@ export function stepAway(from, to) {
   const best = opts[0];
   return best ? { q: best.q, r: best.r } : from;
 }
+
+// A* pathfinding over the hex grid, avoiding `blocked` tiles ("q,r" strings).
+// Returns the ordered list of hexes AFTER `from` up to and including `to`, or
+// an empty array if no path exists (or from===to). The destination itself may
+// or may not be `blocked`; we treat it the same as any other tile, so pathing
+// to an occupied hex returns [] (the UI then just stays put).
+export function findPath(from, to, blocked = new Set(), size = 5) {
+  if (from.q === to.q && from.r === to.r) return [];
+  if (!inBounds(to.q, to.r, size)) return [];
+  const key = h => `${h.q},${h.r}`;
+  const startKey = key(from);
+  const goalKey  = key(to);
+  if (blocked.has(goalKey)) return [];
+  const open = [{ q: from.q, r: from.r, g: 0, f: hexDistance(from, to) }];
+  const parents = new Map();
+  const gScore  = new Map([[startKey, 0]]);
+  const closed  = new Set();
+  while (open.length) {
+    // Linear-scan min — the grid is tiny (5x5 = 25 cells) so a heap would be
+    // overkill; keep the implementation small and allocation-free.
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+    const cur = open.splice(bi, 1)[0];
+    const ck = key(cur);
+    if (closed.has(ck)) continue;
+    closed.add(ck);
+    if (ck === goalKey) {
+      const path = [];
+      let k = ck;
+      while (parents.has(k)) {
+        const [q, r] = k.split(',').map(Number);
+        path.unshift({ q, r });
+        k = parents.get(k);
+      }
+      return path;
+    }
+    for (const n of neighbours(cur.q, cur.r)) {
+      if (!inBounds(n.q, n.r, size)) continue;
+      const nk = key(n);
+      if (closed.has(nk)) continue;
+      if (blocked.has(nk) && nk !== goalKey) continue;
+      const g = cur.g + 1;
+      if (g < (gScore.get(nk) ?? Infinity)) {
+        gScore.set(nk, g);
+        parents.set(nk, ck);
+        open.push({ q: n.q, r: n.r, g, f: g + hexDistance(n, to) });
+      }
+    }
+  }
+  return [];
+}
