@@ -47,15 +47,20 @@ async function freePort(start) {
 const UI_PORT        = Number(process.env.UI_PORT)        || await freePort(7357);
 const DISCOVERY_PORT = Number(process.env.DISCOVERY_PORT) || await freePort(7350);
 
+// The address peers advertise is chosen in the browser when hosting (the
+// launcher auto-detects Tailscale/LAN addresses); PEER_PUBLIC_IP only presets
+// that choice. Discovery always listens on every interface so remote joiners
+// can register — it's a pointer directory, not game state. The browser UI
+// socket stays loopback-only.
 const PEER_PUBLIC_IP = process.env.PEER_PUBLIC_IP || '';
 const netEnv = {
   UI_PORT: String(UI_PORT),
   DISCOVERY_PORT: String(DISCOVERY_PORT),
   DISCOVERY_URL: `http://127.0.0.1:${DISCOVERY_PORT}`,
-  PUBLIC_DISCOVERY_URL: `http://${PEER_PUBLIC_IP || '127.0.0.1'}:${DISCOVERY_PORT}`,
-  ...(PEER_PUBLIC_IP ? { PEER_PUBLIC_IP, BIND_HOST: '0.0.0.0' } : {}),
+  DISCOVERY_BIND_HOST: '0.0.0.0',
+  ...(PEER_PUBLIC_IP ? { PEER_PUBLIC_IP } : {}),
 };
-console.log(`[launcher] network: ${PEER_PUBLIC_IP ? `public at ${PEER_PUBLIC_IP}` : 'loopback only (set PEER_PUBLIC_IP to allow remote joiners)'}`);
+console.log(`[launcher] network: ${PEER_PUBLIC_IP ? `preset public address ${PEER_PUBLIC_IP}` : 'public address auto-detected at host time (override with PEER_PUBLIC_IP)'}`);
 if (UI_PORT !== 7357 || DISCOVERY_PORT !== 7350) console.log(`[launcher] default ports busy — using ui :${UI_PORT}, discovery :${DISCOVERY_PORT}`);
 
 const children = [];
@@ -73,7 +78,7 @@ function run(name, cmd, args, extraEnv = {}) {
   return child;
 }
 
-run('discovery', 'node', [path.join(__dirname, 'discovery.mjs')], netEnv);
+run('discovery', 'node', [path.join(__dirname, 'discovery.mjs')], { ...netEnv, BIND_HOST: netEnv.DISCOVERY_BIND_HOST });
 // LAUNCHER_MODE tells ui-server.mjs to enable /api/dimensions and /api/launch
 // and to spawn peer processes on demand when the browser POSTs a choice.
 run('ui',        'node', [path.join(__dirname, 'ui-server.mjs')], { LAUNCHER_MODE: '1', ...netEnv });
