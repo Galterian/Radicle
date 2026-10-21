@@ -21,7 +21,12 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
-export const DEFAULT_RELAYS = (process.env.NOSTR_RELAYS || 'wss://relay.primal.net,wss://relay.snort.social,wss://nostr.bitcoiner.social,wss://relay.nostr.net').split(',').map(s => s.trim()).filter(Boolean);
+// `nostr.bitcoiner.social` is intentionally left out: it enforces a
+// web-of-trust policy and rejects every event from our ephemeral chaosD6
+// identities. Every publish there used to spit a "Policy violated and pubkey
+// is not in our web of trust" line into the log. The remaining three relays
+// accept us without a trust graph.
+export const DEFAULT_RELAYS = (process.env.NOSTR_RELAYS || 'wss://relay.primal.net,wss://relay.snort.social,wss://relay.nostr.net').split(',').map(s => s.trim()).filter(Boolean);
 export const CHAOS_KIND = 29517;            // ephemeral range 20000–29999
 const TAG_PREFIX = 'chaosd6:';
 const LOOKBACK_SEC = 30;                    // how far back a fresh subscription asks for
