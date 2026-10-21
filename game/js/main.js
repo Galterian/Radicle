@@ -18,6 +18,8 @@ const state = {
   myPeerId: null,
   entities: [],
   hand: [],
+  deckCount: 0,       // cards still in the draw pile — rendered as the stacked pile on the right
+  discardCount: 0,    // cards in the discard pile
   queued: [],         // [] | [slotIndex] | ['EMPTY']
   queuedIsAuto: true, // false once the player has deliberately picked a slot this planning phase
   willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
@@ -67,28 +69,54 @@ function effectiveQueuedCode() {
   return null;
 }
 
+// Short, UI-only action names so narrow cards still read. Codes are canonical.
+const ACTION_SHORT = { A: 'Attack', B: 'Block', M: 'Move', P: 'Posture' };
+
 function renderDeck() {
   const slots = document.querySelectorAll('#slots .slot');
   slots.forEach(slot => {
     const key = slot.dataset.slot;
     const cardDiv = slot.querySelector('.card');
     if (key === 'EMPTY') {
-      const code = effectiveQueuedCode();
-      const liveLabel = state.queued[0] === 'EMPTY' ? ` → ${code || 'EP'}` : '';
-      cardDiv.innerHTML = `<div class="nm">[EP/EM] Empty${liveLabel}</div><div class="cd">EM if a tile is targeted · else EP</div>`;
+      const code = effectiveQueuedCode() || 'EP';   // EP/EM — reflect live target state
+      slot.dataset.code = code;
+      cardDiv.dataset.code = code;
+      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${code === 'EM' ? 'move' : 'posture'}</div>`;
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
       slot.classList.toggle('locked', state.locked && state.queued[0] === 'EMPTY');
       return;
     }
     const i = Number(key);
     const card = state.hand[i];
-    cardDiv.innerHTML = card
-      ? `<div class="nm">[${card.code}] ${card.action_name}</div><div class="cd">${card.card_id.slice(-6)}</div>`
-      : `<div class="nm" style="opacity:.5">— empty slot —</div>`;
+    if (card) {
+      const code = card.code;
+      slot.dataset.code = code;
+      cardDiv.dataset.code = code;
+      const short = ACTION_SHORT[code] || card.action_name || code;
+      cardDiv.innerHTML = `<div class="nm">${short}</div><div class="cd">${card.card_id.slice(-5)}</div>`;
+    } else {
+      delete slot.dataset.code;
+      delete cardDiv.dataset.code;
+      cardDiv.innerHTML = `<div class="nm" style="opacity:.4">—</div>`;
+    }
     slot.classList.toggle('queued', state.queued[0] === i);
     slot.classList.toggle('discard', !!card && state.willDiscard.has(card.card_id));
     slot.classList.toggle('locked', state.locked && state.queued[0] === i);
   });
+
+  // Deck + discard pile counts, straight from the peer's latest hand broadcast.
+  const dc = document.getElementById('deck-count');
+  const xc = document.getElementById('discard-count');
+  if (dc) {
+    const n = state.deckCount ?? 0;
+    dc.textContent = String(n);
+    dc.parentElement.classList.toggle('empty', n === 0);
+  }
+  if (xc) {
+    const n = state.discardCount ?? 0;
+    xc.textContent = String(n);
+    xc.parentElement.classList.toggle('empty', n === 0);
+  }
 }
 
 function renderRoster() {
@@ -148,6 +176,8 @@ function connect() {
       if (m.kind === 'hello') {
         state.myPeerId = m.peer_id;
         state.hand = m.hand || [];
+        if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
+        if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
         if (typeof m.turn === 'number') state.turn = m.turn;
         if (typeof m.round === 'number') state.round = m.round;
         if (typeof m.rounds_per_turn === 'number') state.roundsPerTurn = m.rounds_per_turn;
@@ -168,6 +198,8 @@ function connect() {
       if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat, m);
       if (m.kind === 'hand')  {
         state.hand = m.hand || state.hand;
+        if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
+        if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
         if (Array.isArray(m.queued)) state.queued = m.queued;
         if (typeof m.turn === 'number') state.turn = m.turn;
         if (typeof m.round === 'number') state.round = m.round;

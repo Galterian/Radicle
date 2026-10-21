@@ -862,7 +862,7 @@ async function endRound() {
   queued = []; target = null; locked = false; myLastReveal = null;
   hg.round += 1; hg.action += 1;
   if (hg.round >= ROUNDS_PER_TURN) await endTurn();
-  else broadcastUI({ kind: 'hand', hand, turn: hg.turn, round: hg.round });
+  else broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round });
 }
 
 // End of a turn (ROUNDS_PER_TURN actions): characters may discard the cards
@@ -888,7 +888,7 @@ async function endTurn() {
       draws: [{ peer_id: PEER_ID_STRING, cards_drawn: hand.length - before }],
     },
   });
-  broadcastUI({ kind: 'hand', hand, turn: hg.turn, round: hg.round, turn_end: true });
+  broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round, turn_end: true });
 }
 
 async function npcPlan() {
@@ -1110,7 +1110,7 @@ const uiHttp = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: livePeers() }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, deck_count: deck.length, discard_count: discard.length, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: livePeers() }));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
@@ -1126,7 +1126,7 @@ wss.on('connection', (ws) => {
           (typeof s === 'number' && s >= 0 && s < hand.length)
         );
         queued = picks;
-        broadcastUI({ kind: 'hand', hand, queued });
+        broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, queued });
       }
       if (m.kind === 'target') {
         const t = m.target;

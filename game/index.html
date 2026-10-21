@@ -80,16 +80,22 @@
   </main>
 
   <footer id="deck-bar" hidden>
-    <div id="slots">
-      <div class="slot" data-slot="0"><div class="k">1</div><div class="card"></div></div>
-      <div class="slot" data-slot="1"><div class="k">2</div><div class="card"></div></div>
-      <div class="slot" data-slot="2"><div class="k">3</div><div class="card"></div></div>
-      <div class="slot" data-slot="3"><div class="k">4</div><div class="card"></div></div>
-      <div class="slot" data-slot="4"><div class="k">5</div><div class="card"></div></div>
-      <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">[EP/EM] Empty Posture / Move</div><div class="cd">EM if you clicked a tile · else EP</div></div></div>
+    <div id="deck-row">
+      <div id="slots">
+        <div class="slot" data-slot="0"><div class="k">1</div><div class="card"></div></div>
+        <div class="slot" data-slot="1"><div class="k">2</div><div class="card"></div></div>
+        <div class="slot" data-slot="2"><div class="k">3</div><div class="card"></div></div>
+        <div class="slot" data-slot="3"><div class="k">4</div><div class="card"></div></div>
+        <div class="slot" data-slot="4"><div class="k">5</div><div class="card"></div></div>
+        <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">Empty</div><div class="cd">EP · EM if tile</div></div></div>
+      </div>
+      <aside id="deck-pile" title="deck remaining · discard pile">
+        <div class="pile deck"><span class="pile-count" id="deck-count">0</span><span class="pile-label">deck</span></div>
+        <div class="pile discard"><span class="pile-count" id="discard-count">0</span><span class="pile-label">disc</span></div>
+      </aside>
     </div>
     <div id="hint">
-      <b>1-5</b> pick one action from hand · <b>8</b> Empty Posture/Move (default) · <b>right-click</b> on a hand slot toggles discard · click a hex to target (enemy for Attack, any tile for Move/EM) · timer auto-commits whatever is queued when it hits 0
+      <b>1-5</b> pick an action · <b>8</b> Empty · <b>right-click</b> a slot to toggle discard · click a hex to target
     </div>
   </footer>
 
