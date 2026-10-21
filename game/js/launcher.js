@@ -12,9 +12,10 @@ function revealGame() {
   for (const el of document.querySelectorAll('header#hud, main, footer#deck-bar')) el.hidden = false;
 }
 
-function showEntering(sub) {
+function showEntering(sub, mainText) {
   const ov = document.getElementById('entering-overlay');
   if (!ov) return;
+  if (mainText) document.getElementById('entering-text').textContent = mainText;
   if (sub) document.getElementById('entering-sub').textContent = sub;
   ov.hidden = false;
 }
@@ -29,7 +30,7 @@ async function launch() {
   btn.disabled = true;
   msg.textContent = 'launching…';
   const mode = document.querySelector('input[name="mode"]:checked').value;
-  showEntering(mode === 'host' ? 'opening a new dimension…' : 'knocking on the door…');
+  showEntering(mode === 'host' ? 'opening a new dimension…' : 'knocking on the door…', 'entering dimension…');
   let body;
   if (mode === 'host') {
     const name = document.getElementById('host-name').value.trim() || 'Ashfall-Micro';
@@ -72,6 +73,10 @@ async function launch() {
 
 async function renderLauncher() {
   document.getElementById('launcher').hidden = false;
+  // The radios + selects are disabled until we know what dimensions exist and
+  // which doors are live, so block interaction behind the same overlay the
+  // dimension-entry flow uses — different label, same spinner.
+  showEntering('fetching dimensions, characters and relay candidates', 'ChaosD6 — getting ready to pick a dimension');
 
   const [dimsRes, charsRes, creasRes, netRes] = await Promise.all([
     fetch('/api/dimensions').then(r => r.json()).catch(e => ({ ok: false, items: [], reason: String(e) })),
@@ -169,13 +174,14 @@ async function renderLauncher() {
   document.getElementById('go').disabled = false;
 
   document.getElementById('go').addEventListener('click', launch);
+  hideEntering();
 }
 
 if (peer) {
   // We've just reloaded with ?peer=NNN. Keep the overlay up until main.js
   // hears the peer's first hello (handled over there) — otherwise the user
   // stares at an empty board while the WebSocket + hashgraph wake up.
-  showEntering('connecting to peer…');
+  showEntering('connecting to peer…', 'entering dimension…');
   revealGame();
   await import('./main.js');
 } else {
