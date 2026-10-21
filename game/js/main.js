@@ -218,6 +218,9 @@ function connect() {
           logUI(`contact d=${c.distance}: ${c.a.name}[${c.a.action}] × ${c.b.name}[${c.b.action}]${veto}`, 'phase');
         }
       }
+      if (m.kind === 'standoff') {
+        logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
+      }
       if (m.kind === 'radicle') {
         const primary = m.explorerUrl || m.url || `/commit/${m.commit}`;
         const li = document.createElement('li');

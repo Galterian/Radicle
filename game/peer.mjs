@@ -572,6 +572,11 @@ function stripTargetFor(code, target) {
 }
 
 async function doPlanningEnd() {
+  // Dead entities spectate: no commit, no reveal, nothing to resolve. The
+  // round loop keeps running so the clock stays aligned with the live mesh
+  // (joiners sync against us) and the standoff check can lift when someone new
+  // arrives — but a corpse must not keep swinging.
+  if (entity.life <= 0) { myLastReveal = null; return; }
   // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
   if (ALLIANCE !== 'player') await npcPlan();
 
@@ -654,6 +659,12 @@ async function doResolution() {
       revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null });
     }
   } catch {}
+  // Reveals from entities at 0 hp are ignored everywhere (stale discovery
+  // mirrors, late gossip, a peer that died mid-handshake) so no resolver ever
+  // lets a corpse deal damage or claim a tile. Life is public state, so every
+  // peer filters the same set.
+  const lifeOf = (id) => id === PEER_ID_STRING ? entity.life : (peersPublic.get(id)?.life ?? 0);
+  for (let i = revealsThisTurn.length - 1; i >= 0; i--) if (lifeOf(revealsThisTurn[i].actor) <= 0) revealsThisTurn.splice(i, 1);
 
   // Resolve a target object into the tile the target occupies / points at. A
   // character target reads the peer's current public tile; a tile target is
@@ -890,14 +901,48 @@ async function tick() {
       if (!allIn(revealsSeen) && !expired) return;
       await doResolution();
       await endRound();
-      const alive = livePeers().filter(p => p && p.life > 0);
-      const sides = new Set(alive.map(a => sideOf(a.alliance)));
-      if (sides.size <= 1) { currentPhase = 'game over'; broadcastUI({ kind: 'phase', name: 'game over', winner: alive[0]?.alliance || null }); return; }
+      checkStandoff();
+      catchUpClock();
       enterPhase('planning');
     }
   } finally { ticking = false; }
 }
 setInterval(() => tick().catch(e => console.error(`[${PEER_LABEL}]`, e)), 100);
+
+// "Game over" is a state of the Dimension, not the end of the process. When
+// one side is wiped out we tell the UI, but rounds keep ticking (NPCs with no
+// enemies just play Empty Posture) so that a player joining later on the
+// losing side finds the survivors on the live clock and the fight resumes.
+let standoff = null;   // winning alliance while only one side is alive, else null
+function checkStandoff() {
+  const alive = livePeers().filter(p => p && p.life > 0);
+  const sides = new Set(alive.map(a => sideOf(a.alliance)));
+  const now = sides.size <= 1 ? (alive[0]?.alliance || 'nobody') : null;
+  if (now === standoff) return;
+  standoff = now;
+  if (now) { console.log(`[${PEER_LABEL}] standoff: only ${now} remains — waiting for challengers`); broadcastUI({ kind: 'standoff', winner: now }); }
+  else      { console.log(`[${PEER_LABEL}] standoff over — a challenger has arrived, fight resumes`); broadcastUI({ kind: 'standoff', winner: null }); }
+}
+
+// Dimension-wide clock rule (sync_turn_commit.turn_counter_rule): the turn is
+// the max seen; a peer that is behind jumps forward, forfeiting the skipped
+// actions as Empty Posture. Checked at every round boundary so drift between
+// the host's and a joiner's clocks cannot accumulate.
+function catchUpClock() {
+  let ref = null;
+  for (const p of livePeers()) {
+    if (p.peer_id === PEER_ID_STRING || typeof p.action !== 'number') continue;
+    if (p.action > hg.action && (!ref || p.action > ref.action)) ref = p;
+  }
+  if (!ref) return;
+  const skipped = ref.action - hg.action;
+  hg.action = ref.action;
+  hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
+  hg.round = hg.action % ROUNDS_PER_TURN;
+  // Line the next deadline up with theirs so the handshakes overlap.
+  if (ref.phase === 'planning' && typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) roundDeadline = ref.phase_ends_at - ROUND_SEC * 1000;
+  console.log(`[${PEER_LABEL}] clock catch-up: +${skipped} action(s) to turn ${hg.turn} round ${hg.round} (from ${ref.peer_id})`);
+}
 
 // -------- Radicle lottery (hourly in prod; demo accelerates) --------
 let lotteryCount = 0;
@@ -910,7 +955,10 @@ async function radicleLottery() {
   // addresses, so stay quiet; only a mesh with company gets to push.
   if (peers.length <= 1 && BOOTSTRAP_MADDRS.length) { if (lotteryCount % 5 === 1) console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: isolated joiner, not publishing`); return; }
   const intervalIndex = Math.floor(Date.now() / (RADICLE_PUSH_SEC * 1000));
-  const winner = electPusher(peers, hg.head || '', intervalIndex);
+  // The seed must be identical on every peer or each one elects a different
+  // winner and nobody pushes (hg.head is per-peer — it broke exactly that way).
+  // DIM_ID + the minute index is shared knowledge and still rotates the duty.
+  const winner = electPusher(peers, DIM_ID, intervalIndex);
   console.log(`[${PEER_LABEL}] lottery #${lotteryCount}: ${peers.length} peers, winner=${winner}, me=${PEER_ID_STRING}`);
   if (winner !== PEER_ID_STRING) return;
   try {
