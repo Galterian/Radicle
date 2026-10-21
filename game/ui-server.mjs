@@ -18,6 +18,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { RADICLE_BARE, radicleEnv, listPublishedDimensions } from './radicle-adapter.mjs';
 import { hexDistance, inBounds } from './js/hex.js';
+import { fancyLabel } from './js/names.js';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -31,6 +32,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>
 // ---------- launch orchestration ----------
 const children = [];
 let hostLaunched = false;
+let hostPlayerPort = null;
 let launching = false;
 
 function spawnChild(name, args, env) {
@@ -76,19 +78,56 @@ async function waitForPort(port, timeoutMs = 20000) {
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 
+// A published door is only joinable while its host's discovery answers. The
+// Radicle snapshot outlives the host process, so probe before trusting it.
+async function probeDoor(door, dimId) {
+  const url = door.network?.discovery_url;
+  if (!url) return null;
+  try {
+    const r = await fetch(`${url}/peers/${dimId}`, { signal: AbortSignal.timeout(2000) });
+    const j = await r.json();
+    const peers = (j.peers || []).filter(p => p.state);
+    // A discovery on a reused port may answer for a dimension it never saw.
+    if (!peers.length) return null;
+    return { peers: peers.length, turn: Math.max(0, ...peers.map(p => p.state.turn ?? 0)) };
+  } catch { return null; }
+}
+const ageMin = iso => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 60000));
+
+// Reserve a run of consecutive free ports so one host's peers don't collide
+// with another launcher's on the same box. The probe is best-effort (another
+// process could grab a port between probe and listen); peers fail loudly if so.
+async function freePortRun(start, count) {
+  for (let base = start; base < start + 400; base++) {
+    let ok = true;
+    for (let i = 0; i < count && ok; i++) {
+      ok = await new Promise(res => {
+        const s = net.createServer();
+        s.once('error', () => res(false));
+        s.listen(base + i, '0.0.0.0', () => s.close(() => res(true)));
+      });
+    }
+    if (ok) return base;
+  }
+  throw new Error(`no run of ${count} free ports near ${start}`);
+}
+
 async function hostDimension({ dimensionName }) {
-  if (hostLaunched) return { peerPort: 7401, status: 'already-running' };
+  if (hostLaunched) return { peerPort: hostPlayerPort, status: 'already-running' };
   hostLaunched = true;
   const DIM_NAME = dimensionName || 'Ashfall-Micro';
   const DIM_ID   = `dim-${slug(DIM_NAME)}`;
   const DOOR_ID  = 'door-primary';
-  console.log(`[launcher] hosting new dimension: ${DIM_NAME}  (dim_id=${DIM_ID}, door_id=${DOOR_ID})`);
-  const peers = [
-    { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 }, libp2p: 7410, http: 7401, gun: 7501 },
-    { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 }, libp2p: 7411, http: 7402, gun: 7502 },
-    { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, libp2p: 7412, http: 7403, gun: 7503 },
-    { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, libp2p: 7413, http: 7404, gun: 7504 },
+  const roster = [
+    { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 } },
+    { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 } },
+    { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 } },
+    { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 } },
   ];
+  const [httpBase, libp2pBase, gunBase] = await Promise.all([freePortRun(7401, roster.length), freePortRun(7410, roster.length), freePortRun(7501, roster.length)]);
+  const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
+  hostPlayerPort = peers[0].http;
+  console.log(`[launcher] hosting new dimension: ${DIM_NAME}  (dim_id=${DIM_ID}, door_id=${DOOR_ID}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+)`);
   const allGunUrls = peers.map(p => `http://127.0.0.1:${p.gun}/gun`);
   for (const p of peers) {
     const others = allGunUrls.filter(u => !u.includes(`:${p.gun}/`));
@@ -108,9 +147,9 @@ async function hostDimension({ dimensionName }) {
     });
     await new Promise(r => setTimeout(r, 800));
   }
-  const ok = await waitForPort(7401);
-  if (!ok) throw new Error('peer-player-1 did not come up on :7401');
-  return { peerPort: 7401, status: 'hosting' };
+  const ok = await waitForPort(hostPlayerPort);
+  if (!ok) throw new Error(`peer-player-1 did not come up on :${hostPlayerPort}`);
+  return { peerPort: hostPlayerPort, status: 'hosting' };
 }
 
 function placeOnDoor({ door, side, placement }) {
@@ -149,6 +188,8 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   const door = doorId ? dim.doors.find(d => d.door_id === doorId) : dim.doors[0];
   if (!door) throw new Error(`door "${doorId || '(first)'}" not found on ${dimensionName}`);
   if (!door.network?.bootstrap?.length) throw new Error('door has no bootstrap multiaddrs; the host must be running a newer peer.mjs');
+  const live = await probeDoor(door, dim.dimension?.dimension_id || `dim-${slug(dim.dimension_name)}`);
+  if (!live) throw new Error(`${dimensionName} / ${door.door_id} is offline — its host isn't answering at ${door.network.discovery_url} (last push ${ageMin(door.last_push?.at)} min ago). Start that host again, or create a new Dimension.`);
 
   const startTile = placeOnDoor({ door, side, placement });
   if (!inBounds(startTile.q, startTile.r, door.region?.size || 5)) throw new Error('placement failed');
@@ -163,7 +204,8 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   const portHttp   = await freePort(7430);
   const portGun    = await freePort(7520);
 
-  const peerLabel = label || `${side}-${Math.random().toString(36).slice(2, 8)}`;
+  const taken = new Set((door.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, '')));
+  const peerLabel = (label || '').trim() || fancyLabel(taken);
   spawnChild(`peer:${peerLabel}`, [path.join(__dirname, 'peer.mjs')], {
     PEER_LABEL:        peerLabel,
     ALLIANCE:          side,
@@ -202,6 +244,11 @@ async function handleApi(req, res, p) {
   if (req.method === 'GET' && p === '/api/dimensions') {
     try {
       const items = radicleEnv.enabled ? await listPublishedDimensions() : [];
+      // Annotate every door with its live state so the launcher can grey out
+      // doors whose host has gone away.
+      await Promise.all(items.flatMap(d => d.doors.map(async door => {
+        door.live = await probeDoor(door, d.dimension?.dimension_id || `dim-${slug(d.dimension_name)}`);
+      })));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ ok: true, enabled: radicleEnv.enabled, reason: radicleEnv.enabled ? null : radicleEnv.reason, items }));
     } catch (e) {

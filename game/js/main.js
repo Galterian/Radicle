@@ -154,8 +154,10 @@ function connect() {
         // Merge rather than overwrite — the peer's initial hello may lag Gun's
         // own peer catalog.
         mergeEntities(m.peers || []);
-        document.getElementById('dim-name').textContent = `dimension: Ashfall-Micro`;
-        document.getElementById('door').textContent = `peer: ${m.peer_id}`;
+        state.dimension = m.dimension || state.dimension;
+        document.title = `ChaosD6 — ${state.dimension}`;
+        document.getElementById('dim-name').textContent = `dimension: ${state.dimension}`;
+        document.getElementById('door').textContent = `${m.door ? `door: ${m.door} · ` : ''}peer: ${m.peer_id}`;
         logUI(`peer hello — alliance ${m.alliance}, hand ${state.hand.length}`, 'phase');
         // Hello arrives after our first setPhase() has already attempted to
         // auto-select from an empty hand. Re-run now that we have cards.
@@ -174,7 +176,12 @@ function connect() {
       // Merge peer updates so a transient broadcast missing an entity doesn't
       // flicker it off the map / roster. The server never *removes* a peer
       // from its view, so we don't need an opposing delete path here.
-      if (m.kind === 'peers') mergeEntities(m.peers || []);
+      if (m.kind === 'peers') {
+        mergeEntities(m.peers || []);
+        // The peer prunes stale members and flags the broadcast; mirror the
+        // removal so ghosts from dead processes leave the roster and map.
+        if (m.dropped) { const keep = new Set((m.peers || []).map(p => p.peer_id)); state.entities = state.entities.filter(e => keep.has(e.peer_id)); }
+      }
       if (m.kind === 'evt') {
         const env = m.env;
         logUI(`${env.type} by ${env.actor_peer_id}${m.from_peer ? ' (mesh)' : ''}`, 'evt');
