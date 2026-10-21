@@ -190,7 +190,11 @@ function renderDeck() {
     const key = slot.dataset.slot;
     const cardDiv = slot.querySelector('.card');
     if (key === 'EMPTY') {
-      const code = effectiveQueuedCode() || 'EP';   // EP/EM — reflect live target state
+      // The Empty slot always labels itself EP/EM — never inherit the hand's
+      // code (that bled a `B` into the slot whenever Block was queued).
+      // EM when a tile target is set (Rule 6 declared-first), else EP.
+      const hasTileTarget = state.target && typeof state.target === 'object' && 'q' in state.target;
+      const code = hasTileTarget ? 'EM' : 'EP';
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
       cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${code === 'EM' ? 'move' : 'posture'}</div>`;
@@ -491,14 +495,46 @@ function wireInput() {
     // Clicking an entity narrows the event log to that peer's events;
     // clicking far from any entity clears the filter.
     setLogFilter(occupant ? occupant.peer_id : null);
+
     if (occupant && occupant.peer_id !== state.myPeerId) {
+      // Clicked on an enemy — set as target, keep whatever action is queued
+      // (so an Attack queued ahead of time can land on them).
       state.target = occupant.peer_id;
       logUI(`target → ${occupant.name}`, 'phase', { peerId: occupant.peer_id });
+    } else if (state.phase === 'planning' && !state.locked) {
+      // Clicked on open ground — pre-select the Empty slot and target the
+      // first step toward that tile. The Empty slot renders as EM (because a
+      // tile target is set) or EP (if you clicked your own hex). Double-click
+      // commits; a plain single-click just stages the pick.
+      const me = state.entities.find(p => p.peer_id === state.myPeerId);
+      if (me && Number.isInteger(me.tile_q)) {
+        const atTile = me.tile_q === t.q && me.tile_r === t.r;
+        const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
+        // Switch to EMPTY unless the user has deliberately queued a non-attack
+        // card (Block/Posture/Move). An auto-pick, or a stale Attack queued at
+        // open ground, both get overridden since neither resolves meaningfully.
+        const q0 = state.queued[0];
+        const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
+        const canSwitchToEmpty = state.queuedIsAuto || queuedCode === 'A' || q0 === 'EMPTY';
+        if (canSwitchToEmpty) {
+          state.queued = ['EMPTY'];
+          state.queuedIsAuto = false;  // treat as a deliberate pick now
+          send({ kind: 'queue', slots: state.queued });
+        }
+        state.target = { q: step.q, r: step.r };
+        state.ui.selectedTarget = step;
+        const code = atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
+        logUI(`staged: ${code}`, 'phase');
+      } else {
+        state.target = { q: t.q, r: t.r };
+        logUI(`target → tile (${t.q},${t.r})`, 'phase');
+      }
     } else {
       state.target = { q: t.q, r: t.r };
       logUI(`target → tile (${t.q},${t.r})`, 'phase');
     }
     send({ kind: 'target', target: state.target });
+    renderDeck();
   });
 
   // Right-click any tile = set a *destination* marker. The renderer draws an
