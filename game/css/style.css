@@ -63,8 +63,11 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 10px; padding: 10px
 /* Hide filtered rows regardless of their display mode (flex for handshake etc.). */
 #log li[hidden] { display: none !important; }
 
-/* No longer fixed — it's a flex child so main can shrink around it. */
-#deck-bar { flex: 0 0 auto; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; }
+/* No longer fixed — it's a flex child so main can shrink around it.
+   `margin-right` leaves a column aligned with the event-log panel in <main>
+   (panel is 320px wide with a 10px gap and 10px padding), so the deck bar
+   lives under the canvas only and never visually overlaps the log. */
+#deck-bar { flex: 0 0 auto; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; margin-right: calc(320px + 20px); }
 #deck-row { display: flex; justify-content: center; align-items: flex-end; gap: 14px; max-width: 1020px; margin: 0 auto; }
 #slots { display: flex; gap: 6px; align-items: flex-end; }
 /* Push the EM/EP slot apart from the dealt hand so it doesn't feel like one of
