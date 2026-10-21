@@ -3,7 +3,11 @@
 // hashgraph envelopes, resolver, radicle lottery) runs in the peer processes.
 
 import { createRenderer } from './renderer.js';
-import { pixelToHex, hexDistance } from './hex.js';
+import { pixelToHex, hexDistance, stepToward, HEX_SIZE } from './hex.js';
+
+// Click within this many pixels of an entity's drawn centre counts as a hit on
+// that entity. A full HEX_SIZE radius keeps the "within one tile" intent.
+const HEX_SIZE_SQ_HIT = HEX_SIZE * HEX_SIZE;
 
 const PEER_URL = `ws://127.0.0.1:${new URL(location.href).searchParams.get('peer') || '7401'}/`;
 
@@ -25,7 +29,7 @@ const state = {
   willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
   target: null,       // peer_id | {q,r} | null
   locked: false,
-  ui: { hoverTile: null, selectedTarget: null, logFilterPeerId: null },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, logFilterPeerId: null },
 };
 
 // --- event-log filter: click an entity to narrow the log to its events ---
@@ -272,6 +276,7 @@ function setPhase(name, seconds, heartbeat, m = {}) {
     state.locked = false;
     state.target = null;
     state.ui.selectedTarget = null;
+    state.ui.destinationTile = null;
     autoselectFirstHandCard();
   }
 }
@@ -458,18 +463,37 @@ function wireInput() {
     const rect = canvas.getBoundingClientRect();
     state.ui.hoverTile = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
   });
+  // Pick the entity closest to the click pixel if it's within one hex radius.
+  // Using pixel distance (not tile-equality) is more forgiving than requiring a
+  // bull's-eye on the tile center, and handles the case where the entity sprite
+  // overlaps the tile edge.
+  function entityAtPixel(px, py) {
+    let best = null, bestD2 = HEX_SIZE_SQ_HIT;
+    for (const p of state.entities) {
+      if (!p || p.life <= 0) continue;
+      if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
+      const pos = renderer.tilePx(p.tile_q, p.tile_r);
+      const dx = px - pos.x;
+      const dy = py - (pos.y - 6);  // renderer draws the body offset -6
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) { bestD2 = d2; best = p; }
+    }
+    return best;
+  }
+
   canvas.addEventListener('click', (ev) => {
     const rect = canvas.getBoundingClientRect();
-    const t = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
+    const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    const t = pixelToHex(px, py, renderer.origin());
     if (!t) return;
-    const occupant = state.entities.find(p => p.life > 0 && p.tile_q === t.q && p.tile_r === t.r);
+    const occupant = entityAtPixel(px, py);
     state.ui.selectedTarget = t;
     // Clicking an entity narrows the event log to that peer's events;
-    // clicking an empty tile clears the filter.
+    // clicking far from any entity clears the filter.
     setLogFilter(occupant ? occupant.peer_id : null);
     if (occupant && occupant.peer_id !== state.myPeerId) {
       state.target = occupant.peer_id;
-      logUI(`target → ${occupant.name}`, 'phase');
+      logUI(`target → ${occupant.name}`, 'phase', { peerId: occupant.peer_id });
     } else {
       state.target = { q: t.q, r: t.r };
       logUI(`target → tile (${t.q},${t.r})`, 'phase');
@@ -477,11 +501,9 @@ function wireInput() {
     send({ kind: 'target', target: state.target });
   });
 
-  // Right-click on an adjacent empty tile = "just walk there." Overrides the
-  // queued pick only when it's unsafe-to-override absent: either the player
-  // left the auto-selected default alone, or they picked Attack but the tile
-  // is empty (so Attack would resolve into empty space anyway). Non-Attack
-  // deliberate picks (Block, Posture, Move onto a peer, etc.) are preserved.
+  // Right-click any tile = set a *destination* marker. The renderer draws an
+  // arrow from the player's current tile toward that destination (showing the
+  // first-step hex). Double-click commits toward it.
   canvas.addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     if (state.phase !== 'planning' || state.locked) return;
@@ -490,20 +512,42 @@ function wireInput() {
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
-    if (hexDistance({ q: me.tile_q, r: me.tile_r }, t) !== 1) return;
-    const occupied = state.entities.some(p => p.life > 0 && p.tile_q === t.q && p.tile_r === t.r);
-    if (occupied) return;
+    state.ui.destinationTile = { q: t.q, r: t.r };
+    logUI(`destination → tile (${t.q},${t.r})`, 'phase');
+  });
+
+  // Double-click anywhere = commit toward the destination (or toward the
+  // double-clicked tile, if no destination set). Keeps Move if that's what
+  // you've chosen; otherwise swaps to the Empty slot (EM when the step tile is
+  // a different hex than you're on, EP otherwise).
+  canvas.addEventListener('dblclick', (ev) => {
+    if (state.phase !== 'planning' || state.locked) return;
+    const rect = canvas.getBoundingClientRect();
+    const t = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
+    if (!t) return;
+    const me = state.entities.find(p => p.peer_id === state.myPeerId);
+    if (!me || typeof me.tile_q !== 'number') return;
+    const dest = state.ui.destinationTile || t;
+    // Walk one hex toward the destination. If we're already there, treat it
+    // as EP (empty posture) at our own tile.
+    const atDest = me.tile_q === dest.q && me.tile_r === dest.r;
+    const step = atDest ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, dest);
     const q0 = state.queued[0];
     const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
-    const isAttackQueued = queuedCode === 'A';
-    if (!isAttackQueued && !state.queuedIsAuto) return;
-    state.queued = ['EMPTY'];
-    state.queuedIsAuto = false;
-    state.target = { q: t.q, r: t.r };
-    state.ui.selectedTarget = t;
-    send({ kind: 'queue', slots: state.queued });
+    const moveQueued = queuedCode === 'M';
+    if (!moveQueued) {
+      state.queued = ['EMPTY'];
+      state.queuedIsAuto = false;
+      send({ kind: 'queue', slots: state.queued });
+    }
+    state.target = { q: step.q, r: step.r };
+    state.ui.selectedTarget = step;
     send({ kind: 'target', target: state.target });
-    logUI(`quick-walk → tile (${t.q},${t.r}) [EM]`, 'phase');
+    // Lock in so the auto-commit at round end just goes with this.
+    state.locked = true;
+    send({ kind: 'lock' });
+    const label = moveQueued ? `Move → (${step.q},${step.r})` : (atDest ? `EP (stay)` : `EM → (${step.q},${step.r})`);
+    logUI(`committed: ${label}`, 'phase');
     renderDeck();
   });
 
