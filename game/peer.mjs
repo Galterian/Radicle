@@ -768,12 +768,25 @@ async function doResolution() {
     return null;
   };
 
-  // Movement intents. Move/Empty-Move step one tile toward the target tile.
-  // Supports both character targets (step toward the peer) and tile targets.
-  // Attack with a tile target (empty hex) also generates a step toward that
-  // tile — swinging into empty space advances you — but produces no damage
-  // (the damage pass below bails when there is no defender).
-  const movesByActor = new Map();
+  // Movement intents. Rule 8:
+  //  - EM ("Empty journey") moves halfway toward the target tile — round(d/2)
+  //    steps along the shortest hex path, min 1 step if the target isn't the
+  //    actor's own tile.
+  //  - M steps one tile toward the target.
+  //  - A with a tile target (swinging into empty space) also generates a
+  //    one-tile step — no damage (handled below), it's a movement intent.
+  //  Priority at a shared destination: A (3) > M (2) > EM (1). The strictly-
+  //  highest-priority claimant wins the tile ("journey complete"); every
+  //  lower-priority claimant AND every same-priority tied claimant is
+  //  blocked ("journey cancelled (blocked)"). EM is declared first in the
+  //  evaluation ordering only in the sense that it's the weakest tier.
+  const stepsAlong = (from, to, n) => {
+    let cur = { q: from.q, r: from.r };
+    for (let i = 0; i < n; i++) cur = stepToward(cur, { tile_q: to.q, tile_r: to.r });
+    return cur;
+  };
+  const priorityOf = (act) => act === 'A' ? 3 : act === 'M' ? 2 : act === 'EM' ? 1 : 0;
+  const moveIntents = [];
   for (const r of revealsThisTurn) {
     const isMove = r.action === 'M' || r.action === 'EM';
     const isAttackIntoEmpty = r.action === 'A' && r.target?.kind === 'tile';
@@ -782,31 +795,59 @@ async function doResolution() {
     if (!actor) continue;
     const tgtT = tileOf(r.target);
     if (!tgtT) continue;
-    const next = stepToward({ q: actor.tile_q, r: actor.tile_r }, { tile_q: tgtT.q, tile_r: tgtT.r });
-    movesByActor.set(r.actor, next);
+    const here = { q: actor.tile_q, r: actor.tile_r };
+    const d = hexDistance({ tile_q: here.q, tile_r: here.r }, { tile_q: tgtT.q, tile_r: tgtT.r });
+    const steps = r.action === 'EM' ? Math.max(1, Math.round(d / 2)) : 1;
+    const dest = stepsAlong(here, tgtT, steps);
+    moveIntents.push({ actor: r.actor, action: r.action, dest, prio: priorityOf(r.action), target: tgtT });
   }
-  // Collision veto: a Mover may not step onto a hex another living entity
-  // currently occupies — that's the "forbidden thing": Move toward an enemy
-  // engages them in opposition on your current tiles, it does not walk onto
-  // their hex. Also veto two Movers claiming the same destination (lower
-  // peer_id wins deterministically so every peer agrees).
+  // Collision veto with Rule 8 priority. A Mover may not step onto a hex
+  // another living entity currently occupies (no chaining — "Move toward an
+  // enemy engages them, it does not walk onto their hex"). At a contested
+  // tile, strictly-highest priority wins; everyone else loses with a journey-
+  // cancelled outcome.
   const occupiedNow = new Map();
   for (const p of peersPublic.values()) {
     if (!p || p.life <= 0) continue;
     occupiedNow.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
   }
-  const claimedBy = new Map();
   const nextTiles = new Map();
-  const vetoed = new Map();   // actor -> reason string
-  const sortedMovers = [...movesByActor.keys()].sort();
-  for (const actor of sortedMovers) {
-    const dest = movesByActor.get(actor);
-    const key = `${dest.q},${dest.r}`;
+  const vetoed = new Map();          // actor -> reason string
+  const journeyResults = new Map();  // actor -> { outcome: 'complete'|'blocked', q, r, action }
+  const byDest = new Map();
+  for (const it of moveIntents) {
+    const key = `${it.dest.q},${it.dest.r}`;
+    if (!byDest.has(key)) byDest.set(key, []);
+    byDest.get(key).push(it);
+  }
+  for (const [key, list] of byDest) {
     const occupant = occupiedNow.get(key);
-    if (occupant && occupant !== actor) { vetoed.set(actor, `tile occupied by ${occupant}`); continue; }
-    if (claimedBy.has(key)) { vetoed.set(actor, `tile also claimed by ${claimedBy.get(key)}`); continue; }
-    claimedBy.set(key, actor);
-    nextTiles.set(actor, dest);
+    const outsideOccupant = occupant && !list.some(x => x.actor === occupant);
+    if (outsideOccupant) {
+      for (const it of list) {
+        vetoed.set(it.actor, `tile occupied by ${occupant}`);
+        journeyResults.set(it.actor, { outcome: 'blocked', q: it.dest.q, r: it.dest.r, action: it.action });
+      }
+      continue;
+    }
+    const maxP = Math.max(...list.map(x => x.prio));
+    const top = list.filter(x => x.prio === maxP);
+    const losers = list.filter(x => x.prio !== maxP);
+    if (top.length === 1) {
+      const winner = top[0];
+      nextTiles.set(winner.actor, winner.dest);
+      journeyResults.set(winner.actor, { outcome: 'complete', q: winner.dest.q, r: winner.dest.r, action: winner.action });
+      for (const l of losers) {
+        vetoed.set(l.actor, `tile claimed by ${winner.actor}`);
+        journeyResults.set(l.actor, { outcome: 'blocked', q: l.dest.q, r: l.dest.r, action: l.action });
+      }
+    } else {
+      // Same-tier tie — Rule 8 says both (all) lose.
+      for (const it of list) {
+        vetoed.set(it.actor, `tile contested by equal-priority movers`);
+        journeyResults.set(it.actor, { outcome: 'blocked', q: it.dest.q, r: it.dest.r, action: it.action });
+      }
+    }
   }
 
   // Contact log: broadcast every pair of adjacent cross-side revealers so the
@@ -881,7 +922,12 @@ async function doResolution() {
     .map(p => ({ id: p.peer_id, tile: [p.tile_q, p.tile_r], life: (p.peer_id === PEER_ID_STRING ? entity.life : p.life) }))
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
-  await emitEnvelope({ type: 'evt_state_hash', payload: { state_hash: stateHash, damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: 'action' }))), tokens_changed: [] } });
+  await emitEnvelope({ type: 'evt_state_hash', payload: {
+    state_hash: stateHash,
+    damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: 'action' }))),
+    journey_results: [...journeyResults.entries()].map(([actor, j]) => ({ actor, ...j })),
+    tokens_changed: [],
+  } });
 }
 
 function reshuffleIfEmpty() {

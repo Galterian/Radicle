@@ -457,6 +457,22 @@ function connect() {
             }
           }
           if (state._loggedDmg.size > 500) state._loggedDmg = new Set([...state._loggedDmg].slice(-100));
+          // Rule 8 journey outcomes. One line per actor per round; de-dup by
+          // (turn, round, actor) since every peer's state_hash echoes them.
+          state._loggedJourney ||= new Set();
+          for (const j of env.payload.journey_results || []) {
+            const jk = `${env.turn}:${env.round}:${j.actor}`;
+            if (state._loggedJourney.has(jk)) continue;
+            state._loggedJourney.add(jk);
+            const who = peerShort(j.actor);
+            if (j.outcome === 'complete') logUI(`  ${who} journey complete at (${j.q},${j.r}) [${j.action}]`, 'phase', { peerId: j.actor });
+            else                           logUI(`  ${who} journey cancelled (blocked) → (${j.q},${j.r}) [${j.action}]`, 'phase', { peerId: j.actor });
+            // If MY journey was blocked, tear down the local multi-round path
+            // plan — otherwise next planning phase would auto-stage EM toward
+            // the same contested tile and lose again.
+            if (j.actor === state.myPeerId && j.outcome === 'blocked') cancelPathJourney('blocked by Rule 8');
+          }
+          if (state._loggedJourney.size > 500) state._loggedJourney = new Set([...state._loggedJourney].slice(-100));
         }
       }
       if (m.kind === 'contact') {
