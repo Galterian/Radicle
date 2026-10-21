@@ -573,6 +573,17 @@ function enterPhase(name) {
   if (name === 'planning') {
     // Keep at least a 1s declaration window if a handshake ran long.
     roundDeadline = Math.max(roundDeadline + ROUND_SEC * 1000, Date.now() + 1000);
+    // Trail the slowest live peer that's at our action and still planning:
+    // without this the faster peer tears off to the next handshake while the
+    // slower one is still planning, and the drift one-way-ratchets back on
+    // the next round. Capped at one extra ROUND_SEC so one hung peer can't
+    // freeze the dimension indefinitely.
+    const maxLag = Date.now() + ROUND_SEC * 2000;
+    for (const p of livePeers()) {
+      if (p.peer_id === PEER_ID_STRING || p.action !== hg.action) continue;
+      if (p.phase !== 'planning' || typeof p.phase_ends_at !== 'number') continue;
+      if (p.phase_ends_at > roundDeadline && p.phase_ends_at < maxLag) roundDeadline = p.phase_ends_at;
+    }
     phaseEndsAt = roundDeadline;
     ms = phaseEndsAt - Date.now();
   } else {
@@ -887,7 +898,14 @@ async function endRound() {
   queued = []; target = null; locked = false; myLastReveal = null;
   hg.round += 1; hg.action += 1;
   if (hg.round >= ROUNDS_PER_TURN) await endTurn();
-  else broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round });
+  else {
+    broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round });
+    // Push the new action to the mesh immediately — otherwise other peers
+    // only hear about our advance at turn boundaries (every 3 rounds) or on
+    // the 15s heartbeat, and the catch-up logic can't fire until it sees
+    // the leader's updated `action`.
+    publishPublicState().catch(() => {});
+  }
 }
 
 // End of a turn (ROUNDS_PER_TURN actions): characters may discard the cards
@@ -975,6 +993,20 @@ async function tick() {
   if (ticking) return;
   ticking = true;
   try {
+    // Continuous drift correction. If any peer is already past our action,
+    // forfeit this one and drop into planning for the leader's action — then
+    // let the next tick run the handshake with them in step. Without this
+    // check the lagged peer only noticed at the end of its own resolution,
+    // which meant a stable "one round behind forever" state once drift
+    // slipped past a single phase.
+    if (catchUpClock()) {
+      currentPhase = 'planning';
+      phaseEndsAt = roundDeadline;
+      broadcastUI({ kind: 'phase', name: 'planning', seconds: Math.max(0, Math.round((phaseEndsAt - Date.now()) / 100) / 10), heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
+      broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round });
+      await publishPublicState();
+      return;
+    }
     const expired = Date.now() >= phaseEndsAt;
     if (currentPhase === 'planning') {
       if (!expired) return;
@@ -1017,22 +1049,46 @@ function checkStandoff() {
 
 // Dimension-wide clock rule (sync_turn_commit.turn_counter_rule): the turn is
 // the max seen; a peer that is behind jumps forward, forfeiting the skipped
-// actions as Empty Posture. Checked at every round boundary so drift between
-// the host's and a joiner's clocks cannot accumulate.
+// actions as Empty Posture. Called from the tick loop every 100ms so drift
+// never accumulates past a single tick — a single catchUp at round end only
+// fired at the slowest point in the cycle (resolution → planning) and let
+// drift up to a full round build up between runs.
 function catchUpClock() {
   let ref = null;
   for (const p of livePeers()) {
     if (p.peer_id === PEER_ID_STRING || typeof p.action !== 'number') continue;
     if (p.action > hg.action && (!ref || p.action > ref.action)) ref = p;
   }
-  if (!ref) return;
+  if (!ref) return false;
   const skipped = ref.action - hg.action;
+  const oldTurn = hg.turn;
   hg.action = ref.action;
   hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
   hg.round = hg.action % ROUNDS_PER_TURN;
-  // Line the next deadline up with theirs so the handshakes overlap.
-  if (ref.phase === 'planning' && typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) roundDeadline = ref.phase_ends_at - ROUND_SEC * 1000;
-  console.log(`[${PEER_LABEL}] clock catch-up: +${skipped} action(s) to turn ${hg.turn} round ${hg.round} (from ${ref.peer_id})`);
+  // Forfeit any in-flight pick for the old action. The handshake buffers
+  // (commitsSeen / revealsSeen) are keyed by action so they'll just be
+  // ignored once we move past them.
+  queued = []; target = null; locked = false; myLastReveal = null;
+  // Crossed a turn boundary (ROUNDS_PER_TURN actions)? Refill the hand up to
+  // HAND_SIZE and clear the discard-flag set so the player isn't stuck with a
+  // depleted hand after a jump. Monsters never discard leftovers, so skip the
+  // willDiscard clear for them (willDiscard is only populated for characters).
+  if (hg.turn > oldTurn) {
+    willDiscard.clear();
+    while (hand.length < HAND_SIZE) { reshuffleIfEmpty(); if (!deck.length) break; hand.push(deck.shift()); }
+  }
+  // Align the new planning deadline with the reference peer's. If ref is
+  // still in planning, use their deadline so the handshakes overlap. If ref
+  // is already past planning for this action, give ourselves a short 1s
+  // declaration window so the next tick we fall into the handshake with
+  // them rather than being granted a full 6s and immediately drifting again.
+  if (ref.phase === 'planning' && typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) {
+    roundDeadline = ref.phase_ends_at;
+  } else {
+    roundDeadline = Date.now() + 1000;
+  }
+  console.log(`[${PEER_LABEL}] clock catch-up: +${skipped} action(s) to turn ${hg.turn} round ${hg.round} (from ${ref.peer_id}, ref.phase=${ref.phase})`);
+  return true;
 }
 
 // -------- Radicle: publish my Door into the dimension --------
