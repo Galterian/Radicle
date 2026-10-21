@@ -12,12 +12,24 @@ function revealGame() {
   for (const el of document.querySelectorAll('header#hud, main, footer#deck-bar')) el.hidden = false;
 }
 
+function showEntering(sub) {
+  const ov = document.getElementById('entering-overlay');
+  if (!ov) return;
+  if (sub) document.getElementById('entering-sub').textContent = sub;
+  ov.hidden = false;
+}
+export function hideEntering() {
+  const ov = document.getElementById('entering-overlay');
+  if (ov) ov.hidden = true;
+}
+
 async function launch() {
   const btn = document.getElementById('go');
   const msg = document.getElementById('launch-msg');
   btn.disabled = true;
   msg.textContent = 'launching…';
   const mode = document.querySelector('input[name="mode"]:checked').value;
+  showEntering(mode === 'host' ? 'opening a new dimension…' : 'knocking on the door…');
   let body;
   if (mode === 'host') {
     const name = document.getElementById('host-name').value.trim() || 'Ashfall-Micro';
@@ -54,6 +66,7 @@ async function launch() {
   } catch (e) {
     msg.textContent = `failed: ${e.message}`;
     btn.disabled = false;
+    hideEntering();
   }
 }
 
@@ -159,6 +172,10 @@ async function renderLauncher() {
 }
 
 if (peer) {
+  // We've just reloaded with ?peer=NNN. Keep the overlay up until main.js
+  // hears the peer's first hello (handled over there) — otherwise the user
+  // stares at an empty board while the WebSocket + hashgraph wake up.
+  showEntering('connecting to peer…');
   revealGame();
   await import('./main.js');
 } else {
