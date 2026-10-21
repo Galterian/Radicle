@@ -35,7 +35,7 @@ const state = {
   // list of hexes (step 1 … destination) the auto-walker will follow across
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [] },
 };
 
 // Build the "blocked" set the pathfinder uses: every alive entity other than
@@ -162,7 +162,9 @@ const EVT_KEY_ORDER = [];     // insertion order; capped so the map doesn't grow
 
 function peerShort(peerId) {
   const e = state.entities.find(p => p.peer_id === peerId);
-  return e?.name || (peerId ? peerId.slice(0, 10) : '—');
+  if (!e) return peerId ? peerId.slice(0, 10) : '—';
+  const hp = Number.isFinite(e.life) ? ` - ${e.life}❤️` : '';
+  return `${e.name}${hp}`;
 }
 
 function evtRow(env) {
@@ -425,11 +427,24 @@ function connect() {
           state._loggedDmg ||= new Set();
           const dmg = env.payload.damage_applied || [];
           for (const d of dmg) {
-            const key = `${env.turn}:${d.target}:${d.amount}:${d.source || ''}`;
+            const key = `${env.turn}:${d.target}:${d.amount}:${d.attacker || d.source || ''}`;
             if (state._loggedDmg.has(key)) continue;
             state._loggedDmg.add(key);
+            logUI(`  DMG ${d.amount} → ${peerShort(d.target)}`, 'damage', { peerId: d.target });
+            // Floating "-N❤️" over the map, lerping dealer→victim.
+            const atk = d.attacker ? state.entities.find(e => e.peer_id === d.attacker) : null;
             const tgt = state.entities.find(e => e.peer_id === d.target);
-            logUI(`  DMG ${d.amount} → ${tgt?.name || d.target}`, 'damage', { peerId: d.target });
+            if (tgt && Number.isInteger(tgt.tile_q) && Number.isInteger(tgt.tile_r)) {
+              state.ui.floatingDmgs.push({
+                fromQ: atk?.tile_q ?? tgt.tile_q,
+                fromR: atk?.tile_r ?? tgt.tile_r,
+                toQ: tgt.tile_q,
+                toR: tgt.tile_r,
+                amount: d.amount,
+                startAt: performance.now(),
+                duration: 2200,
+              });
+            }
           }
           if (state._loggedDmg.size > 500) state._loggedDmg = new Set([...state._loggedDmg].slice(-100));
         }

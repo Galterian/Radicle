@@ -821,8 +821,14 @@ async function doResolution() {
 
   // Damage pass. Attack still requires a character target so there's a
   // defender to score damage against; tile-target Attacks produce no damage
-  // (they're handled as a move intent above).
+  // (they're handled as a move intent above). The per-victim value is a list
+  // of {attacker, amount} so the UI can animate "-N❤" from dealer to victim.
   const damage = new Map();
+  const addDmg = (victim, attacker, amount) => {
+    const list = damage.get(victim) || [];
+    list.push({ attacker, amount });
+    damage.set(victim, list);
+  };
   for (const r of revealsThisTurn) {
     if (r.action === 'A') {
       const defId = r.target?.kind === 'character' ? r.target.ref : null;
@@ -838,21 +844,22 @@ async function doResolution() {
       if (defCode === 'EM') defCode = { A: 'EM', P: 'EM', M: 'EM', B: 'M'  }[r.action] || defCode;
       const bonus = edgeMap[r.action]?.[defCode] ?? 0;
       const dmg = Math.max(0, 1 + bonus);
-      damage.set(defId, (damage.get(defId) || 0) + dmg);
+      addDmg(defId, r.actor, dmg);
     }
     if (r.action === 'B') {
       for (const q of revealsThisTurn) {
         if (q.action === 'A' && q.target?.kind === 'character' && q.target.ref === r.actor) {
-          damage.set(q.actor, (damage.get(q.actor) || 0) + 1);
+          addDmg(q.actor, r.actor, 1);
         }
       }
     }
   }
+  const sumDmg = list => (list || []).reduce((s, d) => s + d.amount, 0);
 
   // Apply changes only to my own entity in the authoritative sense.
   const myMove = nextTiles.get(PEER_ID_STRING);
   if (myMove) entity.tile = myMove;
-  const myDmg = damage.get(PEER_ID_STRING) || 0;
+  const myDmg = sumDmg(damage.get(PEER_ID_STRING));
   if (myDmg) entity.life = Math.max(0, entity.life - myDmg);
   // Publish immediately so the browser UI sees damage / movement at reveal
   // time, not only after cleanup fires a few seconds later.
@@ -863,7 +870,7 @@ async function doResolution() {
     .map(p => ({ id: p.peer_id, tile: [p.tile_q, p.tile_r], life: (p.peer_id === PEER_ID_STRING ? entity.life : p.life) }))
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
-  await emitEnvelope({ type: 'evt_state_hash', payload: { state_hash: stateHash, damage_applied: [...damage.entries()].map(([t, a]) => ({ target: t, amount: a, source: 'action' })), tokens_changed: [] } });
+  await emitEnvelope({ type: 'evt_state_hash', payload: { state_hash: stateHash, damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: 'action' }))), tokens_changed: [] } });
 }
 
 function reshuffleIfEmpty() {

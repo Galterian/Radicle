@@ -53,7 +53,8 @@ export function createRenderer(canvas, state) {
   function scheduleIfAnimating() {
     const now = performance.now();
     const stillMoving = [...moves.values()].some(m => now - m.startAt < MOVE_DURATION_MS);
-    if (stillMoving && !rafId) {
+    const stillFloating = (state.ui.floatingDmgs || []).some(f => now - f.startAt < f.duration);
+    if ((stillMoving || stillFloating) && !rafId) {
       rafId = requestAnimationFrame(() => { rafId = 0; render(); scheduleIfAnimating(); });
     }
   }
@@ -241,6 +242,40 @@ export function createRenderer(canvas, state) {
       }
 
       ctx.restore();
+    }
+
+    // Floating "-N❤" damage markers: lerp from dealer tile to victim tile
+    // while fading out. Expired entries are swept so the array doesn't grow
+    // unbounded across a long session.
+    const floats = state.ui.floatingDmgs || [];
+    if (floats.length) {
+      let liveWriteIdx = 0;
+      for (let i = 0; i < floats.length; i++) {
+        const f = floats[i];
+        const t = (now - f.startAt) / f.duration;
+        if (t >= 1) continue;
+        if (liveWriteIdx !== i) floats[liveWriteIdx] = f;
+        liveWriteIdx++;
+        const k = ease(t);
+        const from = tilePx(f.fromQ, f.fromR);
+        const to   = tilePx(f.toQ, f.toR);
+        // Slow travel + a gentle lift so the number drifts upward as it moves.
+        const x = from.x + (to.x - from.x) * k;
+        const y = from.y + (to.y - from.y) * k - 16 * t;
+        const alpha = t < 0.75 ? 1 : (1 - (t - 0.75) / 0.25);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.font = 'bold 14px ui-sans-serif, system-ui';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillStyle = '#ff8888';
+        const text = `-${f.amount}❤`;
+        ctx.strokeText(text, x, y);
+        ctx.fillText(text, x, y);
+        ctx.restore();
+      }
+      floats.length = liveWriteIdx;
     }
   }
 
