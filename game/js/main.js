@@ -539,9 +539,13 @@ function wireInput() {
     renderDeck();
   });
 
-  // Right-click any tile = set a *destination* marker. The renderer draws an
-  // arrow from the player's current tile toward that destination (showing the
-  // first-step hex). Double-click commits toward it.
+  // Right-click any tile:
+  //   • first click  — set the destination marker, stage EMPTY (unless a Move
+  //                    was explicitly picked), target the first-step hex. The
+  //                    deck UI changes immediately so you can see your pick.
+  //   • second click within 500ms — commit (lock), just like a left-double-click.
+  // Browsers don't fire `dblclick` for the right button, so we time it manually.
+  let lastRightClickAt = 0;
   canvas.addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
     if (state.phase !== 'planning' || state.locked) return;
@@ -550,8 +554,37 @@ function wireInput() {
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
+
+    const atTile = me.tile_q === t.q && me.tile_r === t.r;
+    const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
     state.ui.destinationTile = { q: t.q, r: t.r };
-    logUI(`destination → tile (${t.q},${t.r})`, 'phase');
+
+    // Stage EMPTY unless the player explicitly picked a Move card.
+    const q0 = state.queued[0];
+    const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
+    const moveQueued = queuedCode === 'M' && !state.queuedIsAuto;
+    if (!moveQueued && q0 !== 'EMPTY') {
+      state.queued = ['EMPTY'];
+      state.queuedIsAuto = false;
+      send({ kind: 'queue', slots: state.queued });
+    }
+    state.target = { q: step.q, r: step.r };
+    state.ui.selectedTarget = step;
+    send({ kind: 'target', target: state.target });
+
+    const now = Date.now();
+    const isDouble = now - lastRightClickAt < 500;
+    lastRightClickAt = isDouble ? 0 : now;  // reset so a third click starts fresh
+    if (isDouble) {
+      state.locked = true;
+      send({ kind: 'lock' });
+      const label = moveQueued ? `Move → (${step.q},${step.r})` : (atTile ? `EP (stay)` : `EM → (${step.q},${step.r})`);
+      logUI(`committed: ${label}`, 'phase');
+    } else {
+      const label = moveQueued ? `Move → (${step.q},${step.r})` : (atTile ? `EP (stay)` : `EM → (${step.q},${step.r})`);
+      logUI(`staged: ${label} — right-click again to commit`, 'phase');
+    }
+    renderDeck();
   });
 
   // Double-click anywhere = commit toward the destination (or toward the
