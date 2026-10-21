@@ -216,12 +216,14 @@ export function createRenderer(canvas, state) {
       ctx.textAlign = 'center';
       ctx.fillText(e.name, x, y - 28);
 
-      // Queued-action chip over the player's head during planning. Locked
-      // commits show a face-down marker instead.
+      // Queued-action chip over the player's head during planning. Once
+      // committed, keep the letter as-is until the next round — only the
+      // colour shifts to orange so the user can still tell at a glance that
+      // the action is locked in.
       if (e.isSelf && e.queuedCode) {
         ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
-        ctx.fillText(`[${e.locked ? '◆' : e.queuedCode}]`, x, y - 40);
+        ctx.fillText(`[${e.queuedCode}]`, x, y - 40);
       }
 
       ctx.restore();

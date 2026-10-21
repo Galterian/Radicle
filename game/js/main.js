@@ -493,6 +493,13 @@ function wireInput() {
     const t = pixelToHex(px, py, renderer.origin());
     if (!t) return;
     const occupant = entityAtPixel(px, py);
+    // Once committed, clicks only narrow the event log — they must not drag
+    // the target/marker around (otherwise a stray click overrides the just-
+    // committed destination).
+    if (state.locked) {
+      setLogFilter(occupant ? occupant.peer_id : null);
+      return;
+    }
     state.ui.selectedTarget = t;
     // Clicking an entity narrows the event log to that peer's events;
     // clicking far from any entity clears the filter.
@@ -564,35 +571,52 @@ function wireInput() {
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
 
-    const attackIdx = state.hand.findIndex(c => c && c.code === 'A' && !state.willDiscard.has(c.card_id));
-    if (attackIdx < 0) { logUI('no Attack card in hand', 'phase'); return; }
-    if (state.queued[0] !== attackIdx) {
-      state.queued = [attackIdx];
-      state.queuedIsAuto = false;
-      send({ kind: 'queue', slots: state.queued });
-    }
-
     const occupant = entityAtPixel(px, py);
     const isEnemy = occupant && occupant.peer_id !== state.myPeerId
       && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
     const atTile = me.tile_q === t.q && me.tile_r === t.r;
+
+    // Prefer Attack if the player holds one in hand (and hasn't marked it for
+    // discard). Otherwise fall back to staging an Empty move/posture — the
+    // gesture should always do *something* so the arrow and action card update.
+    const attackIdx = state.hand.findIndex(c => c && c.code === 'A' && !state.willDiscard.has(c.card_id));
+    const useAttack = attackIdx >= 0;
     let label;
-    if (isEnemy) {
-      state.target = occupant.peer_id;
-      state.ui.selectedTarget = { q: occupant.tile_q, r: occupant.tile_r };
-      state.ui.destinationTile = null;
-      label = `Attack → ${occupant.name}`;
-    } else if (atTile) {
-      state.target = null;
-      state.ui.selectedTarget = t;
-      state.ui.destinationTile = null;
-      label = 'Attack → last/nearest enemy';
+    if (useAttack) {
+      if (state.queued[0] !== attackIdx) {
+        state.queued = [attackIdx];
+        state.queuedIsAuto = false;
+        send({ kind: 'queue', slots: state.queued });
+      }
+      if (isEnemy) {
+        state.target = occupant.peer_id;
+        state.ui.selectedTarget = { q: occupant.tile_q, r: occupant.tile_r };
+        state.ui.destinationTile = { q: occupant.tile_q, r: occupant.tile_r };
+        label = `Attack → ${occupant.name}`;
+      } else if (atTile) {
+        state.target = null;
+        state.ui.selectedTarget = t;
+        state.ui.destinationTile = null;
+        label = 'Attack → last/nearest enemy';
+      } else {
+        const step = stepToward({ q: me.tile_q, r: me.tile_r }, t);
+        state.target = { q: step.q, r: step.r };
+        state.ui.selectedTarget = step;
+        state.ui.destinationTile = { q: t.q, r: t.r };
+        label = `Attack-step → (${step.q},${step.r})`;
+      }
     } else {
-      const step = stepToward({ q: me.tile_q, r: me.tile_r }, t);
+      // No Attack available → Empty move/posture toward the right-clicked tile.
+      if (state.queued[0] !== 'EMPTY') {
+        state.queued = ['EMPTY'];
+        state.queuedIsAuto = false;
+        send({ kind: 'queue', slots: state.queued });
+      }
+      const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
       state.target = { q: step.q, r: step.r };
       state.ui.selectedTarget = step;
       state.ui.destinationTile = { q: t.q, r: t.r };
-      label = `Attack-step → (${step.q},${step.r})`;
+      label = atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
     }
     send({ kind: 'target', target: state.target });
 
