@@ -196,14 +196,40 @@ async function pushToRadicle(dir, branch) {
   }
 }
 
-// Rebuild the per-peer worktree branch on the bare repo's current tip. The
+// Rebuild the per-peer worktree branch on the latest tip we can see. The
 // worktree content is regenerated from scratch on every push, so any local
 // history that diverged (another peer in this same clone pushed in between)
-// is worthless — resetting onto the remote tip is always right and is what
-// stops the "non-fast-forward" rejections two peers used to trade.
+// is worthless — resetting onto the newest known tip is always right and is
+// what stops the "non-fast-forward" rejections sibling peers used to trade.
+//
+// Two sources are consulted: the local bare (always), and the rad remote (if
+// enabled). We pick whichever side is strictly ahead so the next commit builds
+// on it; if neither is reachable, we just stay on the current branch.
 async function resetBranchToBare(dir, branch) {
-  let tip = null;
-  try { await git(['fetch', '--quiet', 'radicle', `+refs/heads/${branch}:refs/remotes/radicle/${branch}`], dir); tip = (await git(['rev-parse', `refs/remotes/radicle/${branch}`], dir)).trim(); } catch {}
+  const tips = [];
+  try {
+    await git(['fetch', '--quiet', 'radicle', `+refs/heads/${branch}:refs/remotes/radicle/${branch}`], dir);
+    tips.push((await git(['rev-parse', `refs/remotes/radicle/${branch}`], dir)).trim());
+  } catch {}
+  if (radicleEnv.enabled && SSH_AUTH_SOCK) {
+    try {
+      await pexec('git', ['-C', dir, 'fetch', '--quiet', 'rad', `+refs/heads/${branch}:refs/remotes/rad/${branch}`], {
+        windowsHide: true,
+        env: { ...process.env, PATH: GIT_PATH_WITH_RAD, SSH_AUTH_SOCK },
+        maxBuffer: 16 * 1024 * 1024,
+        timeout: 15000,
+      });
+      tips.push((await git(['rev-parse', `refs/remotes/rad/${branch}`], dir)).trim());
+    } catch {}
+  }
+  let tip = tips[0] || null;
+  for (const t of tips.slice(1)) {
+    if (!t || t === tip) continue;
+    try {
+      const base = (await git(['merge-base', tip, t], dir)).trim();
+      if (base === tip) tip = t;
+    } catch {}
+  }
   if (tip) {
     try { await git(['checkout', '-q', '-B', branch, tip], dir); } catch { await git(['checkout', '-q', '-B', branch], dir); await git(['reset', '--hard', tip], dir); }
   } else {
@@ -214,8 +240,14 @@ async function resetBranchToBare(dir, branch) {
 export async function pushDimension(peerId, dimensionName, filesByRelPath, removeRelPaths = []) {
   const dir = await ensureWorkTree(peerId);
   const branch = `ActiveDimensions/${dimensionName}`;
-  let pushedLocal = false;
-  for (let attempt = 0; attempt < 2 && !pushedLocal; attempt++) {
+  // Races can happen on BOTH legs: the local bare (sibling peer in this clone)
+  // and the rad remote (sibling peer wrote through our shared NID namespace
+  // first). Each peer's content is independent — a door file keyed by
+  // peer_id — so losing a race means we overlay our file on top of their tip
+  // and re-push. Give it a few shots before giving up.
+  const MAX_ATTEMPTS = 3;
+  let head = null, remote = { published: false, reason: 'not attempted' };
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     await resetBranchToBare(dir, branch);
     for (const [rel, content] of Object.entries(filesByRelPath)) {
       const abs = path.join(dir, rel);
@@ -229,15 +261,20 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath, remov
     if (!changes.trim()) return { pushed: false, reason: 'no-changes' };
     const stamp = new Date().toISOString();
     await git(['commit', '-q', '-m', `[${peerId}] push ${dimensionName} @ ${stamp}`], dir);
-    try { await git(['push', '--quiet', 'radicle', branch], dir); pushedLocal = true; }
+    try { await git(['push', '--quiet', 'radicle', branch], dir); }
     catch (e) {
-      // Lost a race with a sibling peer in this clone — rebuild on its tip once.
-      if (attempt === 0 && /non-fast-forward|fetch first|rejected/.test(String(e.stderr || e.message))) continue;
+      // Lost the local-bare race — resetBranchToBare on next iteration will
+      // pull in the sibling's tip and we rebuild on top.
+      if (/non-fast-forward|fetch first|rejected/.test(String(e.stderr || e.message))) continue;
       throw e;
     }
+    remote = await pushToRadicle(dir, branch);
+    if (remote.published || !radicleEnv.enabled) { head = (await git(['rev-parse', 'HEAD'], dir)).trim(); break; }
+    // rad push failed. Only retry if the failure was a race (non-ff). Auth /
+    // network errors won't be fixed by another round-trip.
+    if (!/non-fast-forward|fetch first|rejected/.test(remote.reason || '')) { head = (await git(['rev-parse', 'HEAD'], dir)).trim(); break; }
   }
-  const head = (await git(['rev-parse', 'HEAD'], dir)).trim();
-  const remote = await pushToRadicle(dir, branch);
+  if (!head) throw new Error(`push ${dimensionName} failed after ${MAX_ATTEMPTS} attempts: ${remote.reason}`);
   const published = remote.published && radicleEnv.enabled;
   const explorerUrl = published ? radicleEnv.commitUrl(head) : null;
   // Point the tree link at the pushed branch's content root. Using the commit
@@ -277,7 +314,8 @@ export async function syncFromSeeds(timeoutSec = 10) {
   if (!radicleEnv.enabled) return false;
   const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
   const radBin = path.join(RAD_BIN_DIR, 'rad');
-  try { await pexec(radBin, ['sync', '--fetch', '--timeout', String(timeoutSec), `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: (timeoutSec + 5) * 1000 }); return true; }
+  // rad 1.x wants a unit on --timeout ("8sec"), a bare number is rejected.
+  try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: (timeoutSec + 5) * 1000 }); return true; }
   catch (e) { console.warn(`[radicle] sync from seeds: ${(e.stderr || e.message).toString().split('\n')[0].slice(0, 160)}`); return false; }
 }
 
