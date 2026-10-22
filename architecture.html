@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>chaosD6 — Decentralized Architecture</title>
+<style>
+  :root {
+    --bg: #141821; --paper: #1b2130; --raised: #232c3f; --chip: #2b3650;
+    --fg: #e6ecf5; --dim: #8da0bd; --mute: #5c6c8a; --border: #2e384f;
+    --radicle: #b084fc; --nostr: #ffb86b; --libp2p: #7fd4ff; --gun: #85e89d;
+    --peer: #ffd166; --browser: #f78bb0; --rules: #8ec5fc; --gov: #c3a6ff; --map: #f0b67f;
+    --ok: #85e89d; --part: #ffd166; --no: #f78b8b; --design: #8da0bd;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { padding: 36px 40px 20px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #1b2130 0%, #141821 100%); }
+  header h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: .3px; }
+  header h1 span { color: var(--radicle); }
+  header p { margin: 0; color: var(--dim); max-width: 980px; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  nav a { color: var(--fg); text-decoration: none; background: var(--chip); border: 1px solid var(--border);
+    padding: 4px 11px; border-radius: 999px; font-size: 13px; }
+  nav a:hover { border-color: var(--dim); }
+  main { padding: 10px 40px 60px; max-width: 1240px; margin: 0 auto; }
+  section { margin-top: 44px; }
+  h2 { font-size: 22px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px; }
+  h2 .tag { font-size: 12px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 4px; background: var(--chip); color: var(--dim); }
+  .lead { color: var(--dim); margin: 0 0 18px; max-width: 900px; }
+  .card { background: var(--paper); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+  .grid { display: grid; gap: 16px; }
+  .grid.c2 { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
+  .grid.c3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .card h3 { margin: 0 0 8px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .card ul { margin: 6px 0 0; padding-left: 18px; color: var(--dim); }
+  .card li { margin: 3px 0; }
+  .card li b, .card p b { color: var(--fg); font-weight: 600; }
+  code, pre { font-family: "Cascadia Code", Consolas, "JetBrains Mono", monospace; font-size: 13px; }
+  code { background: var(--chip); padding: 1px 5px; border-radius: 4px; color: #dbe6f7; }
+  pre { background: #0f131b; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; overflow: auto; margin: 10px 0 0; color: #cfd9e8; }
+  pre .k { color: var(--libp2p); } pre .s { color: var(--nostr); } pre .n { color: var(--gun); } pre .c { color: var(--mute); }
+  svg { display: block; max-width: 100%; height: auto; }
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; fill: var(--fg); }
+  svg .t-dim { fill: var(--dim); } svg .t-mute { fill: var(--mute); } svg .mono { font-family: Consolas, monospace; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin: 12px 0 0; color: var(--dim); font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; }
+  td.c { text-align: center; }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .ok { background: rgba(133,232,157,.15); color: var(--ok); }
+  .part { background: rgba(255,209,102,.15); color: var(--part); }
+  .no { background: rgba(247,139,139,.15); color: var(--no); }
+  .design { background: rgba(141,160,189,.15); color: var(--design); }
+  .yes { color: var(--ok); font-size: 18px; } .nope { color: var(--mute); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; }
+  .kv div:nth-child(odd) { color: var(--dim); }
+  footer { color: var(--mute); font-size: 13px; text-align: center; padding: 20px; border-top: 1px solid var(--border); }
+  .r { color: var(--radicle); } .o { color: var(--nostr); } .b { color: var(--libp2p); } .g { color: var(--gun); } .y { color: var(--peer); } .p { color: var(--browser); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>chaosD6</span> · Dimensions — decentralized architecture</h1>
+  <p>A tactical tile-and-card RPG whose rulebook is versioned and voted on in git, whose live sessions are published as
+     <b>Doors</b> on Radicle, and whose rounds are agreed on by the players themselves over libp2p, GunDB and a public Nostr bus.
+     No host. No server. No central authority. Generated from the repository state on 2026-10-22.</p>
+  <nav>
+    <a href="#overview">Overview</a><a href="#layers">Seven layers</a><a href="#routing">Event routing</a>
+    <a href="#round">Round engine</a><a href="#door">Door anatomy</a><a href="#map">Map growth</a>
+    <a href="#gov">Governance</a><a href="#status">Spec vs. code</a><a href="#proc">Processes &amp; ports</a><a href="#repo">Repository</a>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============================================================ OVERVIEW -->
+<section id="overview">
+  <h2>The whole system on one canvas <span class="tag">overview</span></h2>
+  <p class="lead">Top: the slow, durable layer (Radicle). Middle: three transports that carry the same signed envelope. Bottom: one Node peer per entity, each a full participant, and a thin browser attached to yours.</p>
+  <div class="card" style="padding:12px 14px">
+  <svg viewBox="0 0 1160 700" role="img" aria-label="chaosD6 architecture diagram">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8da0bd"/></marker>
+      <marker id="arrR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#b084fc"/></marker>
+      <marker id="arrP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#f78bb0"/></marker>
+    </defs>
+
+    <!-- RADICLE -->
+    <rect x="70" y="18" width="1020" height="150" rx="14" fill="#1f1a33" stroke="#b084fc" stroke-width="1.5"/>
+    <text x="90" y="46" font-size="17" font-weight="600" fill="#b084fc">RADICLE · rad:zqZmP6itceBMqYwi1K1n8phQqCaj</text>
+    <text x="90" y="66" font-size="12" class="t-dim">public seeds (rosa.radicle.network, iris) replicate every namespace · anyone with <tspan class="mono">rad clone --scope all</tspan> sees every Door</text>
+    <!-- governance branches -->
+    <rect x="90" y="82" width="300" height="70" rx="8" fill="#262040" stroke="#5a4a85"/>
+    <text x="104" y="102" font-size="13" font-weight="600" fill="#c3a6ff">rules governance (data/)</text>
+    <text x="104" y="121" font-size="12" class="mono t-dim">main · develop · proposals/&lt;entry&gt;-&lt;ts&gt;</text>
+    <text x="104" y="139" font-size="12" class="mono t-dim">forks/&lt;name&gt;   → weekly release tag data-vX.Y.Z</text>
+    <!-- active dimensions -->
+    <rect x="410" y="82" width="660" height="70" rx="8" fill="#262040" stroke="#5a4a85"/>
+    <text x="424" y="102" font-size="13" font-weight="600" fill="#c3a6ff">ActiveDimensions/&lt;Dimension&gt;/   — one branch, many namespaces</text>
+    <rect x="424" y="110" width="200" height="34" rx="6" fill="#2b2350" stroke="#7a62b8"/>
+    <text x="434" y="124" font-size="11" class="mono">rad://RID/NID-A</text>
+    <text x="434" y="138" font-size="10" class="mono t-dim">dimension.json · doors/P-Moth.json</text>
+    <rect x="634" y="110" width="200" height="34" rx="6" fill="#2b2350" stroke="#7a62b8"/>
+    <text x="644" y="124" font-size="11" class="mono">rad://RID/NID-B</text>
+    <text x="644" y="138" font-size="10" class="mono t-dim">dimension.json · doors/P-Pyre.json</text>
+    <rect x="844" y="110" width="212" height="34" rx="6" fill="#2b2350" stroke="#7a62b8" stroke-dasharray="4 3"/>
+    <text x="854" y="124" font-size="11" class="mono">rad://RID/NID-…</text>
+    <text x="854" y="138" font-size="10" class="mono t-dim">one Door per peer · never conflicts</text>
+
+    <!-- push / fetch arrows on margins -->
+    <path d="M40,430 L40,100 L70,100" fill="none" stroke="#b084fc" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrR)"/>
+    <text x="14" y="300" font-size="11" fill="#b084fc" transform="rotate(-90 14 300)" text-anchor="middle">push own Door every 60 s · every peer</text>
+    <path d="M1090,100 L1130,100 L1130,430 L1092,430" fill="none" stroke="#b084fc" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrR)"/>
+    <text x="1150" y="300" font-size="10.5" fill="#b084fc" transform="rotate(90 1150 300)" text-anchor="middle">rad sync --fetch · for-each-ref refs/namespaces/* · launcher &amp; join --list</text>
+
+    <!-- TRANSPORTS -->
+    <rect x="70" y="200" width="310" height="96" rx="12" fill="#152633" stroke="#7fd4ff" stroke-width="1.5"/>
+    <text x="86" y="226" font-size="15" font-weight="600" fill="#7fd4ff">libp2p gossipsub</text>
+    <text x="86" y="246" font-size="12" class="t-dim">TCP + noise + yamux · topic <tspan class="mono">/chaos/&lt;dim&gt;/strong</tspan></text>
+    <text x="86" y="264" font-size="12" class="t-dim">every envelope · needs a dialable address</text>
+    <text x="86" y="282" font-size="12" class="t-dim">no mDNS / DHT / relay → LAN or public IP only</text>
+
+    <rect x="425" y="200" width="310" height="96" rx="12" fill="#17291f" stroke="#85e89d" stroke-width="1.5"/>
+    <text x="441" y="226" font-size="15" font-weight="600" fill="#85e89d">GunDB graph (CRDT)</text>
+    <text x="441" y="246" font-size="12" class="t-dim">each peer runs its own memory-only relay</text>
+    <text x="441" y="264" font-size="12" class="t-dim mono">chaosd6/dimensions/&lt;dim&gt;/{doors,map}</text>
+    <text x="441" y="282" font-size="12" class="t-dim">presence snapshots · map blocks · envelope mirror</text>
+
+    <rect x="780" y="200" width="310" height="96" rx="12" fill="#2d2416" stroke="#ffb86b" stroke-width="1.5"/>
+    <text x="796" y="226" font-size="15" font-weight="600" fill="#ffb86b">Nostr bus · public relays</text>
+    <text x="796" y="246" font-size="12" class="t-dim">kind 29517 ephemeral · tag <tspan class="mono">d=chaosd6:&lt;dim&gt;</tspan></text>
+    <text x="796" y="264" font-size="12" class="t-dim">commit · reveal · map_extend · 15 s state heartbeat</text>
+    <text x="796" y="282" font-size="12" class="t-dim">WSS :443 crosses NAT and proxies · ~100 ms RTT</text>
+
+    <!-- RAILS -->
+    <line x1="225" y1="296" x2="225" y2="330" stroke="#7fd4ff" stroke-width="2"/>
+    <line x1="80" y1="330" x2="830" y2="330" stroke="#7fd4ff" stroke-width="2.5"/>
+    <text x="838" y="334" font-size="11" fill="#7fd4ff">LAN peers</text>
+
+    <line x1="580" y1="296" x2="580" y2="348" stroke="#85e89d" stroke-width="2"/>
+    <line x1="80" y1="348" x2="830" y2="348" stroke="#85e89d" stroke-width="2.5"/>
+    <line x1="830" y1="348" x2="1060" y2="348" stroke="#85e89d" stroke-width="2.5" stroke-dasharray="5 5"/>
+    <text x="1064" y="352" font-size="10" fill="#85e89d">if reachable</text>
+
+    <line x1="935" y1="296" x2="935" y2="366" stroke="#ffb86b" stroke-width="2"/>
+    <line x1="80" y1="366" x2="1060" y2="366" stroke="#ffb86b" stroke-width="2.5"/>
+    <text x="1064" y="370" font-size="10" fill="#ffb86b">always</text>
+
+    <!-- PEERS -->
+    <g id="peers">
+      <!-- You -->
+      <g>
+        <line x1="110" y1="330" x2="110" y2="400" stroke="#7fd4ff" stroke-width="1.5"/>
+        <line x1="140" y1="348" x2="140" y2="400" stroke="#85e89d" stroke-width="1.5"/>
+        <line x1="170" y1="366" x2="170" y2="400" stroke="#ffb86b" stroke-width="1.5"/>
+        <rect x="70" y="400" width="190" height="118" rx="12" fill="#2e2a16" stroke="#ffd166" stroke-width="2"/>
+        <text x="84" y="424" font-size="14" font-weight="700" fill="#ffd166">peer · player-1 (You)</text>
+        <text x="84" y="443" font-size="11.5" class="t-dim">alliance player · side A</text>
+        <text x="84" y="460" font-size="11.5" class="t-dim mono">char_exuberant_firestroker</text>
+        <text x="84" y="478" font-size="11.5" class="t-dim">round engine · hashgraph tape</text>
+        <text x="84" y="495" font-size="11.5" class="t-dim">deck 20–26 · hand 5 · reveals map</text>
+        <text x="84" y="511" font-size="10.5" class="mono t-mute">:7400 p2p · :7401 ws · :7501 gun</text>
+      </g>
+      <!-- Ally -->
+      <g>
+        <line x1="320" y1="330" x2="320" y2="400" stroke="#7fd4ff" stroke-width="1.5"/>
+        <line x1="350" y1="348" x2="350" y2="400" stroke="#85e89d" stroke-width="1.5"/>
+        <line x1="380" y1="366" x2="380" y2="400" stroke="#ffb86b" stroke-width="1.5"/>
+        <rect x="280" y="400" width="170" height="118" rx="12" fill="#1b2b23" stroke="#6ad99f" stroke-width="1.5"/>
+        <text x="294" y="424" font-size="14" font-weight="700" fill="#6ad99f">peer · ally-1</text>
+        <text x="294" y="443" font-size="11.5" class="t-dim">alliance npc_a · side A</text>
+        <text x="294" y="460" font-size="11.5" class="t-dim mono">char_pride_guardian</text>
+        <text x="294" y="478" font-size="11.5" class="t-dim">same engine · npcPlan()</text>
+        <text x="294" y="495" font-size="11.5" class="t-dim">publishes its own Door</text>
+      </g>
+      <!-- Foe 1 -->
+      <g>
+        <line x1="510" y1="330" x2="510" y2="400" stroke="#7fd4ff" stroke-width="1.5"/>
+        <line x1="540" y1="348" x2="540" y2="400" stroke="#85e89d" stroke-width="1.5"/>
+        <line x1="570" y1="366" x2="570" y2="400" stroke="#ffb86b" stroke-width="1.5"/>
+        <rect x="470" y="400" width="170" height="118" rx="12" fill="#2d1c1c" stroke="#e36666" stroke-width="1.5"/>
+        <text x="484" y="424" font-size="14" font-weight="700" fill="#e36666">peer · foe-1</text>
+        <text x="484" y="443" font-size="11.5" class="t-dim">alliance npc_b · side B</text>
+        <text x="484" y="460" font-size="11.5" class="t-dim mono">mon_ruinous_minotaur</text>
+        <text x="484" y="478" font-size="11.5" class="t-dim">creature · dice_pattern deck</text>
+        <text x="484" y="495" font-size="11.5" class="t-dim">never discards</text>
+      </g>
+      <!-- Foe 2 -->
+      <g>
+        <line x1="700" y1="330" x2="700" y2="400" stroke="#7fd4ff" stroke-width="1.5"/>
+        <line x1="730" y1="348" x2="730" y2="400" stroke="#85e89d" stroke-width="1.5"/>
+        <line x1="760" y1="366" x2="760" y2="400" stroke="#ffb86b" stroke-width="1.5"/>
+        <rect x="660" y="400" width="170" height="118" rx="12" fill="#2d1c1c" stroke="#e36666" stroke-width="1.5"/>
+        <text x="674" y="424" font-size="14" font-weight="700" fill="#e36666">peer · foe-2</text>
+        <text x="674" y="443" font-size="11.5" class="t-dim">alliance npc_b · side B</text>
+        <text x="674" y="460" font-size="11.5" class="t-dim mono">mon_ridge_runnet_3a</text>
+        <text x="674" y="478" font-size="11.5" class="t-dim">creature</text>
+      </g>
+      <!-- Remote -->
+      <g>
+        <line x1="950" y1="348" x2="950" y2="400" stroke="#85e89d" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <line x1="990" y1="366" x2="990" y2="400" stroke="#ffb86b" stroke-width="1.5"/>
+        <rect x="880" y="400" width="210" height="118" rx="12" fill="#2e2a16" stroke="#ffd166" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="894" y="424" font-size="14" font-weight="700" fill="#ffd166">peer · P-Pyre (stranger)</text>
+        <text x="894" y="443" font-size="11.5" class="t-dim">another machine / identity B</text>
+        <text x="894" y="460" font-size="11.5" class="t-dim">found the Dimension by listing Doors</text>
+        <text x="894" y="478" font-size="11.5" class="t-dim">joined nearby/random, adopted clock</text>
+        <text x="894" y="495" font-size="11.5" class="t-dim">reaches everyone through the bus</text>
+        <text x="894" y="511" font-size="11" class="mono t-mute">rad://RID/NID-B</text>
+      </g>
+    </g>
+
+    <!-- BROWSER + launcher -->
+    <path d="M165,518 L165,560" fill="none" stroke="#f78bb0" stroke-width="2" marker-end="url(#arrP)" marker-start="url(#arrP)"/>
+    <text x="175" y="545" font-size="11" fill="#f78bb0" class="mono">ws://127.0.0.1:7401</text>
+    <rect x="70" y="560" width="318" height="110" rx="12" fill="#2b1a26" stroke="#f78bb0" stroke-width="1.5"/>
+    <text x="84" y="584" font-size="14" font-weight="700" fill="#f78bb0">browser · thin client</text>
+    <text x="84" y="603" font-size="11.5" class="t-dim">index.html · launcher.js · main.js · renderer.js</text>
+    <text x="84" y="620" font-size="11" class="t-dim">in: hello map phase hand peers evt contact standoff radicle</text>
+    <text x="84" y="637" font-size="11.5" class="t-dim">out: queue target lock discard uilog</text>
+    <text x="84" y="655" font-size="11.5" class="t-dim">canvas hex map · 5-slot deck bar · folded log</text>
+
+    <rect x="402" y="560" width="440" height="110" rx="12" fill="#1e2433" stroke="#8da0bd" stroke-width="1.2"/>
+    <text x="414" y="584" font-size="14" font-weight="700" fill="#dbe6f7">launcher · start-all.mjs + ui-server.mjs (:7357)</text>
+    <text x="414" y="603" font-size="11.5" class="t-dim">spawns one peer process per entity · /api/dimensions lists Doors</text>
+    <text x="414" y="620" font-size="11.5" class="t-dim">/api/launch host | join (nearby / random placement from Doors)</text>
+    <text x="414" y="637" font-size="11.5" class="t-dim">/api/live/:dim probes the bus 7 s · /r/&lt;alias&gt;/… → explorer</text>
+    <text x="414" y="655" font-size="11.5" class="t-dim">join.mjs CLI drives the same API · discovery.mjs is opt-in LAN stub</text>
+
+    <rect x="860" y="560" width="230" height="110" rx="12" fill="#1a2330" stroke="#8ec5fc" stroke-width="1.2"/>
+    <text x="874" y="584" font-size="14" font-weight="700" fill="#8ec5fc">data/ rulebook</text>
+    <text x="874" y="603" font-size="11.5" class="t-dim">18 versioned collections</text>
+    <text x="874" y="620" font-size="11.5" class="t-dim">highest-weight version wins</text>
+    <text x="874" y="637" font-size="11.5" class="t-dim">frozen per Dimension session</text>
+    <text x="874" y="655" font-size="11.5" class="t-dim">served at /data/* to the UI</text>
+  </svg>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--radicle)"></i>Radicle (durable, eventual)</span>
+    <span><i class="swatch" style="background:var(--libp2p)"></i>libp2p gossipsub</span>
+    <span><i class="swatch" style="background:var(--gun)"></i>GunDB graph</span>
+    <span><i class="swatch" style="background:var(--nostr)"></i>Nostr bus</span>
+    <span><i class="swatch" style="background:var(--peer)"></i>peer process</span>
+    <span><i class="swatch" style="background:var(--browser)"></i>browser</span>
+    <span><i class="swatch" style="background:var(--rules)"></i>rulebook data</span>
+  </div>
+  </div>
+</section>
+
+<!-- ============================================================ LAYERS -->
+<section id="layers">
+  <h2>Seven layers, bottom to top <span class="tag">structure</span></h2>
+  <p class="lead">Each layer is independently replaceable. The contract between them is the versioned JSON in <code>data/</code>: the engine, the Door files and the envelopes all follow shapes declared there.</p>
+  <div class="grid c3">
+    <div class="card"><h3><i class="dot" style="background:var(--rules)"></i>A · Living rulebook</h3>
+      <p>Every rule, card, class, creature and even the P2P protocol itself is a <b>VersionedEntry</b> with weighted versions.</p>
+      <ul><li>concept · stats · elements · 26 rules · battle system · 10 actions · 66 effects · 14 skills · 33 classes · 12 characters · 29 creatures · 41 terrain items · 9 modes · 6 contradictions</li>
+          <li>Runtime contract: <code>sync_protocol</code>, <code>hashgraph_events</code>, <code>dimension_session</code>, <code>governance</code></li>
+          <li><code>bundle.py</code> packs everything into <code>dimensions-bundle.json</code>; <code>editor.html</code> is the living-rulebook browser</li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--gov)"></i>B · Governance</h3>
+      <p>The git-fork metagame. Balance is proposed as a new version object on a <code>proposals/*</code> branch and voted with <code>evt_vote</code>.</p>
+      <ul><li>Vote weight scales with proven use: <code>0.01·(1+log2(1+uses))·(1+0.1·dims)</code>, cap 0.10</li>
+          <li>Accept ≥ 0.6 weight, quorum 7, rebalance drift ≤ 15 %</li>
+          <li>Hard forks live in <code>forks/*</code> and may merge back as one proposal</li>
+          <li><span class="pill no">not automated yet</span></li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--radicle)"></i>C · Doors on Radicle</h3>
+      <p>Branch <code>ActiveDimensions/&lt;Name&gt;</code>; every peer writes <code>dimension.json</code> and its own <code>doors/&lt;peer&gt;.json</code> into <b>its own namespace</b>.</p>
+      <ul><li>Push every 60 s (paper: 1 h with lottery pusher)</li>
+          <li>Door newer than 3 min = player is live</li>
+          <li>Reader: <code>rad sync --fetch</code> + <code>git for-each-ref refs/namespaces/*</code></li>
+          <li>Logs print public explorer URLs on rosa.radicle.network</li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--nostr)"></i>D · Live mesh</h3>
+      <p>One envelope, three carriers. gossipsub where peers can dial each other, Gun for presence and map blocks, Nostr for the path that is always open.</p>
+      <ul><li>Envelope: <code>type · turn · round · action_index · self_parent · other_parent · payload · state · _hash</code></li>
+          <li>Relays that pass the burst test: primal, snort, nostr.net, bitcoiner.social</li>
+          <li>Signatures are stubs; keys ephemeral per process</li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--peer)"></i>E · Round engine</h3>
+      <p>Lives in <code>game/peer.mjs</code>, one process per entity. Fixed 6 s rounds, 3 rounds per turn, commit → reveal → deterministic resolve.</p>
+      <ul><li>Silent peer = Empty Posture; laggards jump to the max clock</li>
+          <li>Each peer applies only its own tile and life, then publishes a state hash</li>
+          <li>Standoff keeps ticking so late joiners can resume</li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--map)"></i>F · Growing map</h3>
+      <p><code>js/map.js</code>: grow-only set of hex blocks. Players reveal a disc of radius 10 near the frontier; blocks ride Gun, <code>evt_map_extend</code> and the Door.</p>
+      <ul><li>Terrain from <code>seedForDimension(dim_id)</code>, no exchange needed</li>
+          <li>Idempotent by block id, so order and transport never matter</li>
+          <li><span class="pill part">uncommitted work</span></li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--browser)"></i>G · Client &amp; launcher</h3>
+      <p>The browser is a thin view over one peer's WebSocket. The launcher spawns peers, lists Doors and places joiners.</p>
+      <ul><li>Keys 1–5 queue a slot, 8 Empty, Space lock, right-click discard / journey</li>
+          <li>A* journeys resumed every planning phase</li>
+          <li><code>join.mjs</code> gives the same powers on the CLI</li></ul></div>
+  </div>
+</section>
+
+<!-- ============================================================ ROUTING -->
+<section id="routing">
+  <h2>Which event travels where <span class="tag">routing</span></h2>
+  <p class="lead">Only the handshake and map growth cross the internet on the bus; bookkeeping events stay on gossipsub and the Gun mirror so the relays are not doubled up.</p>
+  <div class="card">
+  <table>
+    <thead><tr><th>Envelope type (from <code>data/hashgraph_events.json</code>)</th><th class="c b">gossipsub</th><th class="c o">Nostr bus</th><th class="c g">Gun graph</th><th class="c">hashgraph.jsonl</th><th class="c p">UI ws</th><th>Emitted when</th></tr></thead>
+    <tbody>
+      <tr><td><code>evt_genesis</code></td><td class="c yes">●</td><td class="c nope">–</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>peer boot (every peer, owners hard-coded)</td></tr>
+      <tr><td><code>evt_join</code></td><td class="c yes">●</td><td class="c nope">–</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>after genesis, carries deck commitment and entry tile</td></tr>
+      <tr><td><code>evt_action_commit</code></td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>planning ends · <code>sha256(code::target::salt)</code></td></tr>
+      <tr><td><code>evt_action_reveal</code></td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>reveal phase · action, target, salt</td></tr>
+      <tr><td><code>evt_state_hash</code></td><td class="c yes">●</td><td class="c nope">–</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>after resolution · damage, journeys, actions</td></tr>
+      <tr><td><code>evt_turn_commit</code></td><td class="c yes">●</td><td class="c nope">–</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>every 3 rounds · positions, draws, head</td></tr>
+      <tr><td><code>evt_map_extend</code></td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>player reveals a new disc</td></tr>
+      <tr><td><code>evt_radicle_push</code></td><td class="c yes">●</td><td class="c nope">–</td><td class="c yes">●</td><td class="c yes">●</td><td class="c yes">●</td><td>after each Door push · commit, explorer URLs</td></tr>
+      <tr><td>state snapshot (not an envelope)</td><td class="c"><span class="t-dim">inside every envelope</span></td><td class="c yes">● 15 s</td><td class="c"><code>members/&lt;peer&gt;</code></td><td class="c nope">–</td><td class="c"><code>peers</code></td><td>presence, clock, tile, life, network addresses</td></tr>
+      <tr><td><code>evt_leave · evt_instant · evt_dice · evt_merge · evt_vote</code></td><td colspan="5" class="c"><span class="pill no">declared in data/, not emitted</span></td><td>future work</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============================================================ ROUND -->
+<section id="round">
+  <h2>The round engine <span class="tag">time</span></h2>
+  <p class="lead">A fixed 6-second cadence with two short handshake windows that close early as soon as every expected member has answered. Three rounds make a turn; the turn boundary refills hands.</p>
+  <div class="card" style="padding:12px 14px">
+  <svg viewBox="0 0 1160 320" role="img" aria-label="round timeline">
+    <text x="20" y="28" font-size="14" font-weight="600">one round · ROUND_SEC = 6</text>
+    <!-- bars -->
+    <rect x="20" y="44" width="680" height="46" rx="8" fill="#2e2a16" stroke="#ffd166"/>
+    <text x="34" y="64" font-size="13" font-weight="600" fill="#ffd166">planning</text>
+    <text x="34" y="82" font-size="11.5" class="t-dim">pick card + target · NPC npcPlan() · deadline trails the slowest same-action peer (cap +12 s)</text>
+    <rect x="706" y="44" width="130" height="46" rx="8" fill="#152633" stroke="#7fd4ff"/>
+    <text x="718" y="64" font-size="13" font-weight="600" fill="#7fd4ff">reveal</text>
+    <text x="718" y="82" font-size="11" class="t-dim">≤ 0.8 s · commits in</text>
+    <rect x="842" y="44" width="170" height="46" rx="8" fill="#17291f" stroke="#85e89d"/>
+    <text x="854" y="64" font-size="13" font-weight="600" fill="#85e89d">resolution</text>
+    <text x="854" y="82" font-size="11.5" class="t-dim">≤ 1.5 s · reveals in · resolve</text>
+    <rect x="1018" y="44" width="122" height="46" rx="8" fill="#1e2433" stroke="#8da0bd"/>
+    <text x="1030" y="64" font-size="13" font-weight="600">endRound</text>
+    <text x="1030" y="82" font-size="11.5" class="t-dim">discard played card</text>
+
+    <!-- what is emitted under each -->
+    <path d="M700,90 L700,112" stroke="#7fd4ff" stroke-width="1.5"/>
+    <text x="600" y="128" font-size="11.5" fill="#7fd4ff" class="mono">evt_action_commit</text>
+    <text x="600" y="144" font-size="11" class="t-dim mono">sha256(code :: targetTag :: salt)</text>
+    <path d="M836,90 L836,112" stroke="#85e89d" stroke-width="1.5"/>
+    <text x="846" y="128" font-size="11.5" fill="#85e89d" class="mono">evt_action_reveal</text>
+    <text x="846" y="144" font-size="11" class="t-dim mono">{action, target, salt}</text>
+    <path d="M1012,90 L1012,112" stroke="#ffd166" stroke-width="1.5"/>
+    <text x="1000" y="128" font-size="11.5" fill="#ffd166" class="mono">evt_state_hash</text>
+    <text x="1000" y="144" font-size="11" class="t-dim mono">sha256([{id,tile,life}])</text>
+
+    <!-- resolution order -->
+    <text x="20" y="190" font-size="14" font-weight="600">deterministic resolver (identical on every peer)</text>
+    <rect x="20" y="202" width="250" height="40" rx="8" fill="#1e2433" stroke="#8da0bd"/>
+    <text x="32" y="219" font-size="12" font-weight="600">1 · movement</text>
+    <text x="32" y="235" font-size="10.5" class="t-dim">A &gt; M &gt; EM priority · ties block · occupied veto</text>
+    <path d="M270,222 L300,222" stroke="#8da0bd" marker-end="url(#arr)"/>
+    <rect x="302" y="202" width="300" height="40" rx="8" fill="#1e2433" stroke="#8da0bd"/>
+    <text x="314" y="219" font-size="12" font-weight="600">2 · damage from battle_system edges</text>
+    <text x="314" y="235" font-size="10.5" class="t-dim">A&gt;P&gt;M&gt;B&gt;A · Rule 6: foe reads EP/EM · Block reflects 1</text>
+    <path d="M602,222 L632,222" stroke="#8da0bd" marker-end="url(#arr)"/>
+    <rect x="634" y="202" width="230" height="40" rx="8" fill="#1e2433" stroke="#8da0bd"/>
+    <text x="646" y="219" font-size="12" font-weight="600">3 · apply own tile &amp; life</text>
+    <text x="646" y="235" font-size="11" class="t-dim">revealAround() after a move · contacts</text>
+    <path d="M864,222 L894,222" stroke="#8da0bd" marker-end="url(#arr)"/>
+    <rect x="896" y="202" width="244" height="40" rx="8" fill="#1e2433" stroke="#8da0bd"/>
+    <text x="908" y="219" font-size="12" font-weight="600">4 · publish state hash</text>
+    <text x="908" y="235" font-size="11" class="t-dim">emitted, not yet compared across peers</text>
+
+    <text x="20" y="278" font-size="12.5" class="t-dim">× 3 rounds → <tspan fill="#ffd166" font-weight="600">endTurn</tspan>: characters drop marked cards, draw to 5, reshuffle on empty · monsters never discard · emits <tspan class="mono">evt_turn_commit</tspan></text>
+    <text x="20" y="300" font-size="12.5" class="t-dim">every tick <tspan class="mono">catchUpClock()</tspan> jumps a lagging peer to the max <tspan class="mono">action = turn·3 + round</tspan> and forfeits the skipped picks as Empty Posture · a joiner adopts the clock after <tspan class="mono">JOIN_SYNC_WAIT_MS</tspan></text>
+  </svg>
+  </div>
+</section>
+
+<!-- ============================================================ DOOR -->
+<section id="door">
+  <h2>Anatomy of a Door <span class="tag">doors/&lt;peer&gt;.json · v2</span></h2>
+  <p class="lead">A Door is what one peer knows from where it stands, plus how to reach it. Doors from peers that met on the map overlap and agree. The Door is both the discovery record and the bootstrap for every transport.</p>
+  <div class="grid c2">
+    <div class="card">
+<pre>{
+  <span class="k">"door_version"</span>: 2,
+  <span class="k">"door_id"</span>: <span class="s">"peer:P-Moth"</span>,  <span class="k">"peer_id"</span>: <span class="s">"peer:P-Moth"</span>,
+  <span class="k">"dimension_id"</span>: <span class="s">"dim-ashfall-micro"</span>, <span class="k">"dimension_name"</span>: <span class="s">"Ashfall-Micro"</span>,
+  <span class="k">"alliance"</span>: <span class="s">"player"</span>, <span class="k">"character_id"</span>: <span class="s">"char_oran_rief"</span>,
+  <span class="k">"tile"</span>: { <span class="k">"q"</span>: <span class="n">4</span>, <span class="k">"r"</span>: <span class="n">1</span> }, <span class="k">"life"</span>: <span class="n">4</span>, <span class="k">"life_max"</span>: <span class="n">4</span>,
+  <span class="k">"hashgraph_head"</span>: <span class="s">"3b5d5c37…"</span>,
+  <span class="k">"clock"</span>: { <span class="k">"turn"</span>: <span class="n">42</span>, <span class="k">"round"</span>: <span class="n">1</span>, <span class="k">"action"</span>: <span class="n">127</span>,
+             <span class="k">"phase"</span>: <span class="s">"planning"</span>, <span class="k">"phase_ends_at"</span>: <span class="n">…</span>,
+             <span class="k">"rounds_per_turn"</span>: <span class="n">3</span>, <span class="k">"round_seconds"</span>: <span class="n">6</span> },
+  <span class="k">"known_members"</span>: [ { peer_id, name, alliance, tile, life, last_seen } ],
+  <span class="k">"known_tiles"</span>:   [ { q, r, seen_at } ],
+  <span class="k">"map"</span>: { <span class="k">"seed"</span>, <span class="k">"reveal_radius"</span>: <span class="n">10</span>, <span class="k">"tiles_known"</span>, <span class="k">"bounds"</span>,
+           <span class="k">"blocks"</span>: [ <span class="s">"rect:0,0,5x5"</span>, <span class="s">"disc:4,1,10"</span>, … ] },
+  <span class="k">"network"</span>: {
+    <span class="k">"nostr"</span>:  { relays[], pubkey, <span class="k">"kind"</span>: <span class="n">29517</span>, <span class="k">"tag"</span>: <span class="s">"chaosd6:dim-ashfall-micro"</span> },
+    <span class="k">"libp2p"</span>: { multiaddrs[], <span class="k">"topic"</span>: <span class="s">"/chaos/dim-ashfall-micro/strong"</span>, bootstrap[] },
+    <span class="k">"gun"</span>:    { url, relays[] }
+  },
+  <span class="k">"radicle"</span>: { repo, <span class="k">"namespace"</span>: <span class="s">"&lt;NID&gt;"</span>, <span class="k">"branch"</span>: <span class="s">"ActiveDimensions/Ashfall-Micro"</span> },
+  <span class="k">"pushed_at"</span>: <span class="s">"2026-10-22T…Z"</span>
+}</pre></div>
+    <div class="card">
+      <h3><i class="dot" style="background:var(--radicle)"></i>How a Door is used</h3>
+      <ul>
+        <li><b>Discovery.</b> The launcher lists every <code>ActiveDimensions/*</code> ref in every namespace, groups Doors by dimension, and marks a Door live if pushed within 3 minutes.</li>
+        <li><b>Placement.</b> Joiners union all Doors' map blocks, then pick a free hex next to the anchor Door (<i>nearby</i>) or more than 2 tiles from every living member (<i>random</i>).</li>
+        <li><b>Bootstrap.</b> Live Doors supply Nostr relays, libp2p multiaddrs and Gun URLs for the new peer's environment.</li>
+        <li><b>Clock.</b> The joiner listens on the bus, adopts the most advanced clock and sits out the current action.</li>
+        <li><b>Namespaces.</b> One file per peer in the peer's own namespace: pushes never conflict, so the branch merge is additive, exactly what <code>sync_radicle_push.merge_policy</code> asks for.</li>
+      </ul>
+      <h3 style="margin-top:14px"><i class="dot" style="background:var(--gov)"></i>Paper shape vs. implemented shape</h3>
+      <div class="kv">
+        <div>magnet_id</div><div>paper: <code>magnet:?xt=urn:dim:…&amp;xs=&lt;head&gt;&amp;tr=rad:…&amp;pe=…</code> · code: <code>network{}</code> block serves the same purpose</div>
+        <div>status</div><div>paper: active / stale / merged_into · code: derived from <code>pushed_at</code></div>
+        <div>region</div><div>paper: center + strong_radius 2 + reach · code: not written, one region per Dimension</div>
+        <div>pending_votes</div><div>paper only</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ MAP -->
+<section id="map">
+  <h2>Map growth without a world server <span class="tag">js/map.js · uncommitted</span></h2>
+  <p class="lead">The world is a grow-only set of hex blocks. A block is tiny and idempotent, so it can be sent on every channel at once and received in any order.</p>
+  <div class="card" style="padding:12px 14px">
+  <svg viewBox="0 0 1160 230" role="img" aria-label="map block propagation">
+    <rect x="20" y="30" width="250" height="150" rx="12" fill="#2e2a16" stroke="#ffd166" stroke-width="1.5"/>
+    <text x="34" y="54" font-size="14" font-weight="700" fill="#ffd166">player peer moves</text>
+    <text x="34" y="76" font-size="12" class="t-dim">needsReveal(q, r, 10) near frontier</text>
+    <text x="34" y="96" font-size="12" class="t-dim mono">discBlock(q, r, 10, peer)</text>
+    <text x="34" y="116" font-size="12" class="t-dim mono">id = "disc:q,r,10"</text>
+    <text x="34" y="140" font-size="12" class="t-dim">dimMap.addBlock(b) → true once</text>
+    <text x="34" y="160" font-size="12" class="t-dim">duplicates are a no-op</text>
+
+    <path d="M270,59 L400,59" stroke="#85e89d" stroke-width="2" marker-end="url(#arr)"/>
+    <path d="M270,105 L400,105" stroke="#ffb86b" stroke-width="2" marker-end="url(#arr)"/>
+    <path d="M270,151 L400,151" stroke="#b084fc" stroke-width="2" marker-end="url(#arr)"/>
+
+    <rect x="402" y="40" width="330" height="38" rx="8" fill="#17291f" stroke="#85e89d"/>
+    <text x="414" y="56" font-size="12.5" font-weight="600" fill="#85e89d">Gun · chaosd6/dimensions/&lt;dim&gt;/map/blocks/&lt;id&gt;</text>
+    <text x="414" y="71" font-size="11" class="t-dim">slow, survives reconnects · full re-put every 60 s</text>
+    <rect x="402" y="86" width="330" height="38" rx="8" fill="#2d2416" stroke="#ffb86b"/>
+    <text x="414" y="102" font-size="12.5" font-weight="600" fill="#ffb86b">evt_map_extend · gossipsub + Nostr bus</text>
+    <text x="414" y="117" font-size="11" class="t-dim">fast · payload: block, origin, seed, tiles_known, bounds</text>
+    <rect x="402" y="132" width="330" height="38" rx="8" fill="#1f1a33" stroke="#b084fc"/>
+    <text x="414" y="148" font-size="12.5" font-weight="600" fill="#b084fc">Door · map.blocks[] on Radicle</text>
+    <text x="414" y="163" font-size="11" class="t-dim">what joiners seed from before they are on the mesh</text>
+
+    <path d="M732,105 L860,105" stroke="#8da0bd" stroke-width="2" marker-end="url(#arr)"/>
+    <rect x="862" y="30" width="278" height="150" rx="12" fill="#1e2433" stroke="#8da0bd"/>
+    <text x="876" y="54" font-size="14" font-weight="700">every other peer / browser</text>
+    <text x="876" y="76" font-size="12" class="t-dim">addMapBlock(b, via) · broadcastUI map</text>
+    <text x="876" y="96" font-size="12" class="t-dim">terrain = terrainAt(seed, q, r)</text>
+    <text x="876" y="116" font-size="12" class="t-dim mono">ash · cinder · basalt · ember</text>
+    <text x="876" y="140" font-size="12" class="t-dim">hex.js known(q,r) gates picking,</text>
+    <text x="876" y="160" font-size="12" class="t-dim">stepping and A* (cap 20 000 nodes)</text>
+    <text x="20" y="212" font-size="12.5" class="t-dim">Genesis block <tspan class="mono">rect:0,0,5x5</tspan> · seed <tspan class="mono">seedForDimension(dim_id)</tspan> = FNV-1a of "chaosd6:&lt;dim&gt;" · matches the paper's <tspan class="mono">extended_blocks</tspan> idea: a stale Door grows the world from the root seed.</text>
+  </svg>
+  </div>
+</section>
+
+<!-- ============================================================ GOVERNANCE -->
+<section id="gov">
+  <h2>Rules evolve in git <span class="tag">governance.json</span></h2>
+  <p class="lead">Balance is not patched by a designer. A change is a new version object with weight 0, voted up by people who demonstrably play with the thing being changed, guarded by a rebalance script, and released weekly.</p>
+  <div class="card" style="padding:12px 14px">
+  <svg viewBox="0 0 1160 190" role="img" aria-label="governance flow">
+    <g font-size="12.5">
+      <rect x="20" y="40" width="200" height="60" rx="10" fill="#262040" stroke="#c3a6ff"/>
+      <text x="34" y="64" font-weight="600" fill="#c3a6ff">proposals/&lt;entry&gt;-&lt;ts&gt;</text>
+      <text x="34" y="84" class="t-dim">new version, weight 0.0</text>
+      <path d="M220,70 L262,70" stroke="#8da0bd" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="264" y="40" width="210" height="60" rx="10" fill="#262040" stroke="#c3a6ff"/>
+      <text x="278" y="64" font-weight="600" fill="#c3a6ff">evt_vote gossip</text>
+      <text x="278" y="84" class="t-dim">weight by usage, cap 0.10 / peer</text>
+      <path d="M474,70 L516,70" stroke="#8da0bd" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="518" y="40" width="210" height="60" rx="10" fill="#262040" stroke="#c3a6ff"/>
+      <text x="532" y="64" font-weight="600" fill="#c3a6ff">rebalance script</text>
+      <text x="532" y="84" class="t-dim">power score within 15 % or counter-nerf</text>
+      <path d="M728,70 L770,70" stroke="#8da0bd" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="772" y="40" width="160" height="60" rx="10" fill="#262040" stroke="#c3a6ff"/>
+      <text x="786" y="64" font-weight="600" fill="#c3a6ff">develop</text>
+      <text x="786" y="84" class="t-dim">hourly tally · ≥0.6 · quorum 7</text>
+      <path d="M932,70 L974,70" stroke="#8da0bd" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="976" y="40" width="164" height="60" rx="10" fill="#262040" stroke="#c3a6ff"/>
+      <text x="990" y="64" font-weight="600" fill="#c3a6ff">main · data-vX.Y.Z</text>
+      <text x="990" y="84" class="t-dim">weekly release</text>
+      <rect x="264" y="120" width="464" height="44" rx="10" fill="#1f1a33" stroke="#7a62b8" stroke-dasharray="5 4"/>
+      <text x="278" y="139" font-weight="600" fill="#b084fc">forks/&lt;name&gt;</text>
+      <text x="278" y="156" class="t-dim">a realm with its own weights · Dimensions record the fork's rules_snapshot_commit · may merge back as one proposal</text>
+      <text x="772" y="150" class="t-dim">status: <tspan class="mono">proposal → canonical | rejected</tspan>, previous canonical → <tspan class="mono">superseded</tspan></text>
+    </g>
+  </svg>
+  </div>
+</section>
+
+<!-- ============================================================ STATUS -->
+<section id="status">
+  <h2>Design brief vs. what runs today <span class="tag">honest status</span></h2>
+  <p class="lead">The brief (<code>chaosD6_request_phase1_extract_jsons_2.txt</code>) and the contract in <code>data/sync_protocol.json</code> describe more than the runtime implements. This matrix is the gap list.</p>
+  <div class="card">
+  <table>
+    <thead><tr><th>Requirement</th><th>Status</th><th>Where / why</th></tr></thead>
+    <tbody>
+      <tr><td>Dimensions registered as <code>ActiveDimensions/&lt;Name&gt;</code> with Door files on Radicle</td><td><span class="pill ok">implemented</span></td><td>per-peer Door v2 in own namespace, every 60 s</td></tr>
+      <tr><td>Commit → reveal → evaluate → state hash, chained signed envelopes</td><td><span class="pill ok">implemented</span></td><td><code>peer.mjs</code>; salt + sha256; self/other parent; signature is a stub</td></tr>
+      <tr><td>Silent member plays Empty Posture; laggards jump to max turn</td><td><span class="pill ok">implemented</span></td><td>reveal/resolution caps, <code>catchUpClock()</code></td></tr>
+      <tr><td>Join near a friend / at an unsynced frontier, adopt live clock</td><td><span class="pill ok">implemented</span></td><td><code>placeFromDoors</code>, <code>syncClockFromMesh</code></td></tr>
+      <tr><td>MapExtend from the root seed</td><td><span class="pill ok">implemented</span> <span class="pill part">uncommitted</span></td><td><code>js/map.js</code>, Gun + bus + Door</td></tr>
+      <tr><td>Serverless transport that works behind NAT</td><td><span class="pill ok">implemented</span></td><td>Nostr kind 29517 on public relays; measured 60–160 ms</td></tr>
+      <tr><td>6 s in-combat heartbeat, 10 s out-of-combat planning</td><td><span class="pill part">partial</span></td><td>fixed <code>ROUND_SEC=6</code>; heartbeat is a HUD flag at adjacency ≤ 1</td></tr>
+      <tr><td>Strong (2-tile) / reachable / far region tiers with promotion</td><td><span class="pill part">partial</span></td><td>one gossip topic for the whole Dimension; radius 2 only for random placement</td></tr>
+      <tr><td>Hourly push by lottery pusher, 5-minute git poll</td><td><span class="pill part">partial</span></td><td><code>electPusher</code> exists, unused; every peer pushes every 60 s; only the launcher polls</td></tr>
+      <tr><td>3 actions per round; 15–20 card decks</td><td><span class="pill part">partial</span></td><td>1 action per round; character decks 20–26</td></tr>
+      <tr><td>Firebase directory service</td><td><span class="pill design">dropped by design</span></td><td>Doors + bus replace it; <code>discovery.mjs</code> is an opt-in LAN stub</td></tr>
+      <tr><td>Gun persistence (Radisk)</td><td><span class="pill design">off on purpose</span></td><td>persisted graphs resurrected ghost peers</td></tr>
+      <tr><td>Verify commitment against reveal; compare state hashes; divergence merge / <code>evt_merge</code></td><td><span class="pill no">missing</span></td><td>hashes emitted, never compared; no fork detection</td></tr>
+      <tr><td>Real signatures, stable peer identity (Radicle NID as signing key)</td><td><span class="pill no">missing</span></td><td><code>sig:&lt;peer&gt;:stub</code>; libp2p/Nostr keys ephemeral per process</td></tr>
+      <tr><td><code>evt_vote</code>, <code>evt_leave</code>, <code>evt_dice</code>, <code>evt_instant</code>; effects, skills, point-buy in the resolver</td><td><span class="pill no">missing</span></td><td>loaded from <code>data/</code>, not wired</td></tr>
+      <tr><td>Governance tally and rebalance scripts</td><td><span class="pill no">missing</span></td><td>contract written in <code>governance.json</code>; editor is read-only</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ============================================================ PROCESSES -->
+<section id="proc">
+  <h2>Processes, ports, variables <span class="tag">operations</span></h2>
+  <div class="grid c2">
+    <div class="card">
+      <h3><i class="dot" style="background:var(--peer)"></i>Processes</h3>
+      <table>
+        <thead><tr><th>Process</th><th>File</th><th>Ports</th></tr></thead>
+        <tbody>
+          <tr><td>launcher</td><td><code>game/start-all.mjs</code></td><td>spawns; <code>--list</code> prints Doors</td></tr>
+          <tr><td>UI / launcher API</td><td><code>game/ui-server.mjs</code></td><td>7357 (next free if taken)</td></tr>
+          <tr><td>peer × N</td><td><code>game/peer.mjs</code></td><td>libp2p 7400+ · ws 7401+ · gun 7501+</td></tr>
+          <tr><td>joiner CLI</td><td><code>game/join.mjs</code></td><td>talks to the launcher API</td></tr>
+          <tr><td>LAN mirror (opt-in)</td><td><code>game/discovery.mjs</code></td><td>7350</td></tr>
+          <tr><td>second identity</td><td><code>game/tools/second-identity.sh</code></td><td>rad node 8777 · <code>~/.radicle-b</code></td></tr>
+        </tbody>
+      </table>
+      <pre>rad clone rad:zqZmP6itceBMqYwi1K1n8phQqCaj --scope all && cd chaosD6
+(cd game && npm --userconfig /dev/null install)
+node game/start-all.mjs            <span class="c"># http://127.0.0.1:7357</span>
+node game/start-all.mjs --list     <span class="c"># every Door on Radicle</span>
+node game/join.mjs --dimension Ashfall-Micro --placement nearby --as P-Moth</pre>
+    </div>
+    <div class="card">
+      <h3><i class="dot" style="background:var(--libp2p)"></i>Environment variables</h3>
+      <div class="kv">
+        <div><code>ROUND_SEC</code> / <code>ROUNDS_PER_TURN</code></div><div>6 / 3</div>
+        <div><code>COMMIT_WAIT_MS</code> / <code>REVEAL_WAIT_MS</code></div><div>800 / 1500</div>
+        <div><code>RADICLE_PUSH_SEC</code></div><div>60 (paper: 3600)</div>
+        <div><code>NOSTR_RELAYS</code></div><div>primal, snort, nostr.net</div>
+        <div><code>NOSTR_ENABLED</code></div><div>1</div>
+        <div><code>PEER_PUBLIC_IP</code> / <code>BIND_HOST</code></div><div>127.0.0.1 → 0.0.0.0 when public IP set</div>
+        <div><code>REVEAL_RADIUS</code> / <code>MAP_SEED</code></div><div>10 / FNV-1a of dim id</div>
+        <div><code>JOIN_SYNC_WAIT_MS</code></div><div>6000 (launcher: 500 first peer, 8000 others)</div>
+        <div><code>DOOR_LIVE_MS</code></div><div>180 000</div>
+        <div><code>RADICLE_SEED</code> / <code>RADICLE_EXPLORER_BASE</code></div><div>rosa.radicle.network / https://radicle.network</div>
+        <div><code>RADICLE_PUSH_URL</code></div><div>must be <code>rad://&lt;RID&gt;/&lt;NID&gt;</code></div>
+        <div><code>WITH_DISCOVERY</code> / <code>DISCOVERY_URL</code></div><div>off</div>
+        <div><code>ALLIANCE</code></div><div>player · npc_a · npc_b</div>
+        <div><code>CHARACTER_ID</code> / <code>CREATURE_ID</code></div><div>picks entity kind</div>
+      </div>
+      <h3 style="margin-top:14px"><i class="dot" style="background:var(--nostr)"></i>Relay findings</h3>
+      <p style="color:var(--dim);margin:0">Pass a 12-event burst: relay.primal.net, relay.snort.social, nostr.bitcoiner.social, relay.nostr.net, nostr-pub.wellorder.net. Reject or rate-limit us: damus, nos.lol, nostr.mom, oxtr.dev, offchain.pub, paid relays, purplepag.es. Re-measure with <code>game/tools/nostr-probe.mjs</code>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ REPO -->
+<section id="repo">
+  <h2>Repository map <span class="tag">files</span></h2>
+  <div class="grid c3">
+    <div class="card"><h3><i class="dot" style="background:var(--rules)"></i>Rules &amp; design</h3>
+      <ul><li><code>DimentionsEN.docx.html</code>, <code>dim_text.txt</code>, <code>dim_paras.txt</code> — the paper</li>
+          <li><code>data/*.json</code> — 18 collections + <code>index.json</code> + <code>schema.json</code></li>
+          <li><code>data/examples/ActiveDimensions/Ashfall-Reach/</code> — model Dimension</li>
+          <li><code>bundle.py</code> → <code>dimensions-bundle.json</code></li>
+          <li><code>editor.html</code> — living rulebook browser</li>
+          <li><code>chaosD6_request_phase1_extract_jsons_2.txt</code>, <code>request_*.txt</code> — the brief</li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--peer)"></i>Runtime (<code>game/</code>)</h3>
+      <ul><li><code>peer.mjs</code> — engine, mesh, Door publisher</li>
+          <li><code>radicle-adapter.mjs</code> — bare + work trees, push, namespace reader</li>
+          <li><code>nostr-bus.mjs</code> — kind 29517 bus</li>
+          <li><code>ui-server.mjs</code>, <code>start-all.mjs</code>, <code>join.mjs</code></li>
+          <li><code>js/map.js</code>, <code>js/hex.js</code>, <code>js/main.js</code>, <code>js/renderer.js</code>, <code>js/launcher.js</code>, <code>js/names.js</code></li>
+          <li>dead prototype code: <code>server.mjs</code>, <code>js/phases.js</code>, <code>combat.js</code>, <code>deck.js</code>, <code>ai.js</code>, <code>hashgraph.js</code>, <code>entities.js</code>, <code>data.js</code>, <code>radicle.js</code>, <code>sha.js</code></li></ul></div>
+    <div class="card"><h3><i class="dot" style="background:var(--gun)"></i>Tooling</h3>
+      <ul><li><code>game/tools/dev-restart.sh</code> — two launchers A :7357 / B :7358</li>
+          <li><code>game/tools/second-identity.sh</code>, <code>start-b.sh</code> — stranger simulation</li>
+          <li><code>game/tools/probe-join.mjs</code> — headless join proof</li>
+          <li><code>game/tools/nostr-probe.mjs</code>, <code>nostr-roundtrip.mjs</code></li>
+          <li>root <code>*.sh</code> — Radicle diagnostics, wait-for-push</li>
+          <li>git-ignored: <code>game/gun-data/</code>, <code>game/sessions/</code>, <code>game/radicle-work/</code>, <code>game/radicle.git/</code>, <code>game/logs/</code></li></ul></div>
+  </div>
+</section>
+
+</main>
+<footer>chaosD6 · Dimensions · architecture snapshot generated 2026-10-22 from the repository and <code>data/</code> contract · companion to README.md</footer>
+</body>
+</html>

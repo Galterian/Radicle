@@ -78,3 +78,13 @@ To completely isolate netcode latency, the real-time gameplay flow decouples inp
 2. The Active Session Action Window (6 Seconds inside combat): As soon as characters establish direct contact or share adjacent blocks, the network promotions logic locks the nodes into a tight 6-second rapid synchronization heartbeat. GunDB commits input hashes immediately across local multiplexed channels, verifying parameters instantaneously. While calculations process, a smooth 2D isometric animation loop (such as a readied guard stance or continuous spell channel) plays smoothly on screen.
 3. Instant & Resolution Phase: Instants, response skills, and point-buy attempts resolve simultaneously at the close of the 6-second heartbeat. The engine processes calculations using unified random dice variables generated safely by combining client salts, seamlessly blending the combat animations into clean 2D damage frames.
 Now that the turn timing sequences explicitly isolate the rapid 6-second in-combat session heartbeat from the lazy long-distance map puzzle graph replication, where should we head? Would you like Claude to detail the libp2p multi-stream configuration definitions for separating pubsub combat data from slower GunDB sync updates, or focus on designing the 10 common upgrade loot drops?
+
+PS: For each dimension separately!: So all my players are holding the map they have revealed so far + the intitial loaded
+  dimension hexes. Whenever a player reveal a new location he is syncing that with the other active players in that
+  dimension p2p. So the dimension got updated and the additional hexes are generated, ((if some of them are not already
+  synced from another players)) (a 10 extra hexes around the edge location that the player has reached). So this sync might
+  happen once per minute via GunDB and the player cannot reach far than 1 minute distance, since they are passing 10 hexes
+  in 10x6 seconds (6 seconds is one cound). So the additionally generated hexes are more a player can reach. generate 10
+  hexes in that direction whenever the player is closer to the edge in 10 hexes at some direction. Do the required
+  transformation so you make sure that the players are actaully holding the very diomension and via exploring the unknown
+  they are updating the dimension scope and finally sync it with the other players.

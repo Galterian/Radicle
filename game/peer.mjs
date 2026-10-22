@@ -36,12 +36,15 @@ import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
 
 import { pushDimension, radicleEnv } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
+import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE } from './js/map.js';
+import { stepToward as hexStepToward } from './js/hex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -91,6 +94,21 @@ const CREATURE_ID       = process.env.CREATURE_ID      || '';
 const ENTITY_NAME       = process.env.ENTITY_NAME      || PEER_LABEL;
 const ALLIANCE          = process.env.ALLIANCE         || 'player';              // player | npc_a | npc_b
 const START_TILE        = JSON.parse(process.env.START_TILE || '{"q":1,"r":2}');
+// The known map of this dimension: the initial block plus every disc a player
+// has revealed. MAP_SEED defaults to a value derived from DIM_ID so every peer
+// in the dimension agrees without anything being passed around; MAP_BLOCKS is
+// what the launcher read from the Doors on Radicle so a joiner starts with the
+// map everyone else already holds instead of waiting for Gun to catch up.
+const MAP_SEED          = process.env.MAP_SEED          || seedForDimension(process.env.DIM_ID || 'dim-ashfall-micro');
+const REVEAL_RADIUS     = Number(process.env.REVEAL_RADIUS || DEFAULT_REVEAL_RADIUS);
+let seedBlocks = [];
+try {
+  seedBlocks = process.env.MAP_BLOCKS_FILE
+    ? JSON.parse(fsSync.readFileSync(process.env.MAP_BLOCKS_FILE, 'utf8'))
+    : JSON.parse(process.env.MAP_BLOCKS || '[]');
+  if (process.env.MAP_BLOCKS_FILE) fsSync.rm(process.env.MAP_BLOCKS_FILE, { force: true }, () => {});
+} catch (e) { console.warn(`[${PEER_LABEL}] could not read seed map blocks: ${e.message}`); seedBlocks = []; }
+if (!Array.isArray(seedBlocks)) seedBlocks = [];
 const PEER_GUN_URLS     = (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
 const BOOTSTRAP_MADDRS  = (process.env.BOOTSTRAP || '').split(',').filter(Boolean);        // libp2p peers
 const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 60);            // demo: 60s instead of 3600s
@@ -175,17 +193,28 @@ for (const addr of BOOTSTRAP_MADDRS) {
 // -------- GunDB relay (per peer) --------
 const gunHttp = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('gun relay'); });
 gunHttp.listen(PEER_PORT_GUN, BIND_HOST);
-// Memory-only graph. Persisting it to disk resurrected every previous run's
-// members on restart (ghost peers in the roster, ghosts winning the lottery),
-// and a session's live state is rebuilt from the mesh in seconds anyway.
+// Gun needs its storage adapter to answer `get`s coming from OTHER relays —
+// with `radisk: false` a put stays readable locally but every remote read is
+// silently unanswered (tools/gun-selftest.mjs demonstrates it), which made
+// the whole Gun tier a dead channel. Persisting to a shared folder, on the
+// other hand, resurrected every previous run's members on restart (ghost
+// peers in the roster). So: radisk on, but into a throw-away directory that
+// is unique to this process, wiped at boot and again on exit.
+const GUN_LABEL = String(PEER_LABEL).replace(/[^a-z0-9._-]+/gi, '_');
+const GUN_DIR = path.join(os.tmpdir(), 'chaosd6-gun', _slug(DIM_NAME), `${GUN_LABEL}-${process.pid}`);
+// Only our own label's leftovers: sibling peers of this dimension may be live.
+try { for (const d of fsSync.readdirSync(path.dirname(GUN_DIR))) if (d.startsWith(`${GUN_LABEL}-`)) fsSync.rmSync(path.join(path.dirname(GUN_DIR), d), { recursive: true, force: true }); } catch {}
+try { fsSync.mkdirSync(GUN_DIR, { recursive: true }); } catch {}
 const gun = Gun({
   web: gunHttp,
   peers: PEER_GUN_URLS,              // mesh with the other peers' relays
-  radisk: false,
+  file: GUN_DIR,
   localStorage: false,
   axe: false,
   multicast: false,
 });
+const wipeGunDir = () => { try { fsSync.rmSync(GUN_DIR, { recursive: true, force: true }); } catch {} };
+process.on('exit', wipeGunDir);
 console.log(`[${PEER_LABEL}] gun relay on ${myGunUrl}; peers = ${PEER_GUN_URLS.join(', ') || '(none yet)'}`);
 
 const dimRoot = gun.get('chaosd6').get('dimensions').get(DIM_ID);
@@ -363,7 +392,7 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
   catch (e) { console.warn(`[${PEER_LABEL}] pubsub publish failed: ${e.message}`); }
   // Only the handshake needs to cross the internet; the per-round state-hash
   // and push notes are bookkeeping and would double the relay load.
-  if (type === 'evt_action_commit' || type === 'evt_action_reveal') bus?.publish('env', env);
+  if (type === 'evt_action_commit' || type === 'evt_action_reveal' || type === 'evt_map_extend') bus?.publish('env', env);
 
   // 2) Mirror onto the GunDB graph (CRDT; eventual-consistency across peers).
   //    Gun's nested put balks on arrays, so store the envelope as a JSON blob plus
@@ -500,6 +529,48 @@ function mergePeerState(p) {
   return true;
 }
 
+// -------- the dimension map --------
+// Grow-only set of revealed hexes (see js/map.js). Every player reveals a disc
+// of REVEAL_RADIUS around itself whenever it stands closer than that to the
+// edge of the known world — at spawn and after each move. A disc is a tiny,
+// idempotent block, so it travels on every channel we have: the Gun graph of
+// this dimension (slow, but survives everyone's reconnects), an
+// evt_map_extend envelope over gossipsub + the Nostr bus (fast), and the Door
+// on Radicle (what joiners seed from). Receiving the same block twice is a
+// no-op, so the order and the transport never matter.
+const dimMap = createKnownMap(MAP_SEED, [initialBlock(INITIAL_SIZE), ...seedBlocks]);
+const gunMap = dimRoot.get('map').get('blocks');
+const knownHex = (q, r) => dimMap.has(q, r);
+function mapSummary() { return { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, blocks: dimMap.blocks(), tiles: dimMap.size(), bounds: dimMap.bounds() }; }
+function addMapBlock(b, via) {
+  if (!isBlock(b) || !dimMap.addBlock(b)) return false;
+  console.log(`[${PEER_LABEL}] map +${b.id} via ${via} by ${b.by || '?'} → ${dimMap.size()} hexes in ${dimMap.blockCount()} blocks`);
+  broadcastUI({ kind: 'map', map: mapSummary() });
+  return true;
+}
+gunMap.map().on((b) => { if (b && typeof b === 'object') addMapBlock(b, 'gun'); });
+// Re-put everything we hold once a minute: Gun relays that came up after a
+// block was first written (or that dropped it) converge on the next pass.
+function syncMapToGun() { for (const b of dimMap.blocks()) gunMap.get(b.id).put(b); }
+syncMapToGun();
+setInterval(syncMapToGun, 60_000);
+async function revealAround(q, r) {
+  if (ALLIANCE !== 'player') return;
+  if (!dimMap.needsReveal(q, r, REVEAL_RADIUS)) return;
+  const b = discBlock(q, r, REVEAL_RADIUS, PEER_ID_STRING);
+  if (!addMapBlock(b, 'self')) return;
+  gunMap.get(b.id).put(b);
+  await emitEnvelope({
+    type: 'evt_map_extend',
+    payload: {
+      block: b,
+      block_origin: { x: q, y: r }, block_size: `disc r=${REVEAL_RADIUS}`,
+      block_seed: MAP_SEED, new_door_id: PEER_ID_STRING, rooted_at_head: hg.head || '',
+      tiles_known: dimMap.size(), bounds: dimMap.bounds(),
+    },
+  });
+}
+
 // `viaBus` is for the heartbeat/startup/join paths; the per-round calls skip
 // it because every envelope already carries the snapshot.
 async function publishPublicState(viaBus = false) {
@@ -587,16 +658,14 @@ function hexDistance(a, b) {
   const ds = Math.abs(a.tile_q + a.tile_r - b.tile_q - b.tile_r);
   return (dq + dr + ds) / 2;
 }
+// Resolver step. Deliberately NOT limited to the known map: the resolver must
+// give the same answer on every peer, and peers can hold different revealed
+// sets for a few seconds while a block propagates. A mover only ever aims at
+// hexes it knows (UI and planner both filter on the known map), and a player
+// reveals around itself after landing, so the world always exists wherever
+// someone actually stands.
 function stepToward(from, to) {
-  const DIRS = [[+1, 0], [+1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
-  let best = null, bestD = Infinity;
-  for (const [dq, dr] of DIRS) {
-    const nq = from.q + dq, nr = from.r + dr;
-    if (nq < 0 || nq > 4 || nr < 0 || nr > 4) continue;
-    const d = hexDistance({ tile_q: nq, tile_r: nr }, to);
-    if (d < bestD) { bestD = d; best = { q: nq, r: nr }; }
-  }
-  return best || from;
+  return hexStepToward({ q: from.q, r: from.r }, { q: to.tile_q, r: to.tile_r });
 }
 
 // Rounds end on a fixed ROUND_SEC cadence: each declaration deadline is the
@@ -967,7 +1036,7 @@ async function doResolution() {
 
   // Apply changes only to my own entity in the authoritative sense.
   const myMove = nextTiles.get(PEER_ID_STRING);
-  if (myMove) entity.tile = myMove;
+  if (myMove) { entity.tile = myMove; revealAround(myMove.q, myMove.r).catch(e => console.warn(`[${PEER_LABEL}] reveal failed: ${e.message}`)); }
   const myDmg = sumDmg(damage.get(PEER_ID_STRING));
   const wasAlive = entity.life > 0;
   if (myDmg) entity.life = Math.max(0, entity.life - myDmg);
@@ -1074,6 +1143,7 @@ async function npcPlan() {
 }
 
 function inboxApply(env) {
+  if (env.type === 'evt_map_extend' && env.payload?.block) addMapBlock(env.payload.block, 'envelope');
   if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
   if (env.type === 'evt_action_reveal') noteSeen(revealsSeen, env);
 }
@@ -1246,11 +1316,17 @@ function buildDoor(now) {
     for (const r of (p.nostr_relays_csv || '').split(',').filter(Boolean)) relays.add(r);
   }
   const tiles = [...knownTiles.entries()].map(([k, t]) => { const [q, r] = k.split(',').map(Number); return { q, r, seen_at: new Date(t).toISOString() }; });
+  const mapBounds = dimMap.bounds();
   const dimensionDoc = {
     dimension_id: DIM_ID, dimension_name: DIM_NAME, radicle_repo: radRepo,
     radicle_branch: `ActiveDimensions/${DIM_NAME}`,
     game_mode: 'mode_mmorpg', description: 'Micro-dimension sandbox',
-    tileset: { initial_size: '5x5', bounds: { min_x: 0, min_y: 0, max_x: 4, max_y: 4 }, map_seed: '0xdeadbeef', extended_blocks: [] },
+    tileset: {
+      initial_size: `${INITIAL_SIZE}x${INITIAL_SIZE}`, coordinates: 'axial q,r (x=q, y=r)',
+      bounds: { min_x: mapBounds.min_q, min_y: mapBounds.min_r, max_x: mapBounds.max_q, max_y: mapBounds.max_r },
+      map_seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles_known: dimMap.size(),
+      extended_blocks: dimMap.blocks().filter(b => b.kind !== 'rect').map(b => ({ door_id: b.by || null, origin: { x: b.q, y: b.r }, size: `disc r=${b.radius}`, seed: MAP_SEED, at: b.at || null })),
+    },
     clock: { rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC },
     layout: { doors: 'doors/<peer>.json — one Door per player (their piece of the puzzle), each in the player\'s own Radicle namespace; union them for the full picture' },
     join: { command: 'node game/join.mjs', placements: ['nearby', 'random'], note: 'Reads doors/*.json across all namespaces, joins the Nostr bus for the dimension id, and dials any Door\'s libp2p address that happens to be reachable.' },
@@ -1265,6 +1341,9 @@ function buildDoor(now) {
     clock: { turn: hg.turn, round: hg.round, action: hg.action, rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC, phase: currentPhase, phase_ends_at: phaseEndsAt, at: now },
     known_members: members.map(p => ({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, life: p.life, life_max: p.life_max, last_seen: p.last_seen })),
     known_tiles: tiles,
+    // The map as this peer holds it: joiners union every Door's blocks and
+    // start with the whole revealed world instead of just the initial block.
+    map: { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles_known: dimMap.size(), bounds: mapBounds, blocks: dimMap.blocks() },
     network: {
       nostr: { relays: [...relays], pubkey: bus?.pubkey || null, kind: 29517, tag: `chaosd6:${DIM_ID}` },
       libp2p: { multiaddrs: myMaddrs, topic: TOPIC_STRONG, bootstrap: [...bootstrap] },
@@ -1315,6 +1394,7 @@ const uiHttp = http.createServer(async (req, res) => {
       entity, hand, queued, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
       peers: livePeers(),
       alliance: ALLIANCE,
+      map: { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles: dimMap.size(), blocks: dimMap.blockCount(), bounds: dimMap.bounds() },
       multiaddrs: myMaddrs, gun_url: myGunUrl, nostr_pubkey: bus?.pubkey || null, bus: bus ? bus.stats() : null,
     }));
     return;
@@ -1324,7 +1404,7 @@ const uiHttp = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, deck_count: deck.length, discard_count: discard.length, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: livePeers() }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, deck_count: deck.length, discard_count: discard.length, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: livePeers(), map: mapSummary() }));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
@@ -1381,7 +1461,7 @@ uiHttp.listen(PEER_PORT_HTTP, '127.0.0.1', () => {
 // -------- fire evt_genesis & evt_join once on startup --------
 await emitEnvelope({
   type: 'evt_genesis',
-  payload: { dimension_id: DIM_ID, dimension_name: DIM_NAME, rules_snapshot_commit: 'local', tileset_size: '5x5', map_seed: '0xdeadbeef', owners: ['peer:player-1'] },
+  payload: { dimension_id: DIM_ID, dimension_name: DIM_NAME, rules_snapshot_commit: 'local', tileset_size: `${INITIAL_SIZE}x${INITIAL_SIZE}`, map_seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, owners: ['peer:player-1'] },
 });
 await emitEnvelope({
   type: 'evt_join',
@@ -1392,6 +1472,8 @@ await emitEnvelope({
     entry_tile: entity.tile, adopted_head: null,
   },
 });
+await revealAround(entity.tile.q, entity.tile.r);
+console.log(`[${PEER_LABEL}] map: seed ${MAP_SEED}, ${dimMap.size()} hexes in ${dimMap.blockCount()} blocks (reveal radius ${REVEAL_RADIUS})`);
 await enterPhase('planning');
 
 // Clean shutdown.

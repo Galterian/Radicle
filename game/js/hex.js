@@ -1,8 +1,12 @@
-// Flat-top hex grid math with axial coordinates. 5x5 means q in [0,4], r in [0,4].
+// Flat-top hex grid math with axial coordinates. The grid is unbounded; which
+// hexes exist is decided by the dimension's known map (see map.js), passed in
+// as a `known(q, r)` predicate wherever it matters.
 // Isometric look is implemented by squashing y and shifting rows.
 
 export const HEX_SIZE = 46;   // tile radius (px)
 export const H_SQUASH = 0.72; // vertical squash to get iso feel
+
+const ANY = () => true;
 
 export function hexToPixel(q, r, size = HEX_SIZE) {
   const w = Math.sqrt(3) * size;
@@ -33,46 +37,48 @@ export function hexDistance(a, b) {
   return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;
 }
 
-export function inBounds(q, r, size = 5) {
-  return q >= 0 && q < size && r >= 0 && r < size;
+// Inverse of hexToPixel: world pixel → nearest axial hex (cube rounding).
+export function pixelToHexRaw(px, py, size = HEX_SIZE) {
+  const w = Math.sqrt(3) * size;
+  const h = 1.5 * size;
+  const rf = py / (h * H_SQUASH);
+  const qf = px / w - rf / 2;
+  const sf = -qf - rf;
+  let q = Math.round(qf), r = Math.round(rf), s = Math.round(sf);
+  const dq = Math.abs(q - qf), dr = Math.abs(r - rf), ds = Math.abs(s - sf);
+  if (dq > dr && dq > ds) q = -r - s;
+  else if (dr > ds) r = -q - s;
+  return { q, r };
 }
 
-// Pick the hex nearest to (px, py) given a hex grid origin + 5x5 range.
-export function pixelToHex(px, py, origin, size = HEX_SIZE) {
-  let best = null, bestD = Infinity;
-  for (let r = 0; r < 5; r++) for (let q = 0; q < 5; q++) {
-    const p = hexToPixel(q, r, size);
-    const dx = px - (origin.x + p.x);
-    const dy = py - (origin.y + p.y);
-    const d = dx * dx + dy * dy;
-    if (d < bestD) { bestD = d; best = { q, r }; }
-  }
-  return best;
+// World pixel → hex, or null when that hex is not part of the known map.
+export function pixelToHex(px, py, origin = { x: 0, y: 0 }, known = ANY, size = HEX_SIZE) {
+  const h = pixelToHexRaw(px - origin.x, py - origin.y, size);
+  return known(h.q, h.r) ? h : null;
 }
 
 // Step one tile along the shortest line from `from` toward `to`.
-export function stepToward(from, to) {
+export function stepToward(from, to, known = ANY) {
   const opts = neighbours(from.q, from.r)
-    .filter(n => inBounds(n.q, n.r))
+    .filter(n => known(n.q, n.r))
     .map(n => ({ q: n.q, r: n.r, _d: hexDistance(n, to) }));
   opts.sort((a, b) => a._d - b._d);
   const best = opts[0];
   return best ? { q: best.q, r: best.r } : from;
 }
 
-export function stepAway(from, to) {
+export function stepAway(from, to, known = ANY) {
   const opts = neighbours(from.q, from.r)
-    .filter(n => inBounds(n.q, n.r))
+    .filter(n => known(n.q, n.r))
     .map(n => ({ q: n.q, r: n.r, _d: hexDistance(n, to) }));
   opts.sort((a, b) => b._d - a._d);
   const best = opts[0];
   return best ? { q: best.q, r: best.r } : from;
 }
 
-// A* pathfinding over the hex grid, avoiding `blocked` tiles ("q,r" strings).
+// A* pathfinding over the known hexes, avoiding `blocked` tiles ("q,r" strings).
 // Returns the ordered list of hexes AFTER `from` up to and including the
-// reached tile, or an empty array if no reachable tile exists at all. The
-// grid is tiny (5x5) so a plain linear-scan A* is fine.
+// reached tile, or an empty array if no reachable tile exists at all.
 //
 // Blocked destinations get a fallback: if `to` itself is blocked (an enemy
 // is standing on it) we path to the closest reachable hex ADJACENT to `to`
@@ -80,16 +86,14 @@ export function stepAway(from, to) {
 // this, right-clicking a tile that happens to be occupied no longer collapses
 // to the single-step heuristic; the pathfinder still routes you around the
 // obstacle and parks you one hex short.
-export function findPath(from, to, blocked = new Set(), size = 5) {
+export function findPath(from, to, blocked = new Set(), known = ANY) {
   if (from.q === to.q && from.r === to.r) return [];
-  if (!inBounds(to.q, to.r, size)) return [];
+  if (!known(to.q, to.r)) return [];
   const key = h => `${h.q},${h.r}`;
   const goalKey = key(to);
+  // Hard cap so a huge known map with an unreachable goal can't spin for long.
+  const MAX_EXPAND = 20000;
 
-  // Internal A* run. If `allowBlockedGoal` is true the goal tile may itself
-  // be in `blocked` and still counts as a valid finish — we use that for the
-  // first attempt. For the fallback runs the goals are the free neighbours
-  // of `to`, each of which must be unblocked themselves.
   const runAStar = (goalQ, goalR, allowBlockedGoal) => {
     const startKey = key(from);
     const gk = `${goalQ},${goalR}`;
@@ -97,7 +101,7 @@ export function findPath(from, to, blocked = new Set(), size = 5) {
     const parents = new Map();
     const gScore = new Map([[startKey, 0]]);
     const closed = new Set();
-    while (open.length) {
+    while (open.length && closed.size < MAX_EXPAND) {
       let bi = 0;
       for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
       const cur = open.splice(bi, 1)[0];
@@ -115,7 +119,7 @@ export function findPath(from, to, blocked = new Set(), size = 5) {
         return path;
       }
       for (const n of neighbours(cur.q, cur.r)) {
-        if (!inBounds(n.q, n.r, size)) continue;
+        if (!known(n.q, n.r)) continue;
         const nk = key(n);
         if (closed.has(nk)) continue;
         if (blocked.has(nk) && !(allowBlockedGoal && nk === gk)) continue;
@@ -140,7 +144,7 @@ export function findPath(from, to, blocked = new Set(), size = 5) {
   //    makes progress toward the clicked cell rather than giving up.
   const candidates = [];
   for (const n of neighbours(to.q, to.r)) {
-    if (!inBounds(n.q, n.r, size)) continue;
+    if (!known(n.q, n.r)) continue;
     if (blocked.has(key(n))) continue;
     const p = runAStar(n.q, n.r, false);
     if (p.length) candidates.push(p);

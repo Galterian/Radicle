@@ -1,6 +1,6 @@
 # ChaosD6 Dimensions — Ashfall Micro
 
-A simple real-time 2D isometric prototype that drops **one hero** into a **5×5 hex Dimension** alongside an **NPC ally**, facing **two creature opponents** on their own alliance. Session artefacts are written in the Radicle layout defined by `data/dimension_session.json`, and every action goes through a `commit → reveal → resolve` cycle whose envelopes match `data/sync_protocol.json` and `data/hashgraph_events.json`.
+A simple real-time 2D isometric prototype that drops **one hero** into a hex Dimension that starts **5×5 and grows as it is explored**, alongside an **NPC ally**, facing **two creature opponents** on their own alliance. Session artefacts are written in the Radicle layout defined by `data/dimension_session.json`, and every action goes through a `commit → reveal → resolve` cycle whose envelopes match `data/sync_protocol.json` and `data/hashgraph_events.json`.
 
 ## Run
 
@@ -66,6 +66,32 @@ only ever sees them through the public seeds.
 
 `WITH_DISCOVERY=1 node game/start-all.mjs` additionally runs the old
 `discovery.mjs` mirror as a same-LAN accelerator; nothing depends on it.
+
+## The map: explored, not given
+
+Each Dimension starts as a 5×5 block, but it has no edge. Every player holds
+the map it knows — the initial block plus every hex anyone has revealed — and
+reveals more by walking: whenever your hero stands closer than **10 hexes** to
+the edge of the known world (at spawn, and after every move) it generates the
+disc of radius 10 around itself. Ten hexes is one minute of travel (one hex per
+6 s round), so the world is always generated well ahead of anyone reaching it.
+
+The unit of storage and sync is the **block** (`js/map.js`): the initial
+rectangle or a disc `{q, r, radius}`. Blocks are idempotent and the set only
+grows, so merging is a plain union whichever way a block arrives — the
+`evt_map_extend` envelope (gossipsub + Nostr bus, immediate), the Gun graph of
+the dimension (`chaosd6/dimensions/<dim>/map/blocks`, re-put once a minute),
+or the Door on Radicle (`doors/<peer>.json → map.blocks`,
+`dimension.json → tileset.bounds / extended_blocks`). A joiner unions every
+Door's blocks before it even starts and is placed on a hex somebody has
+revealed. Hex terrain is derived from `(map_seed, q, r)` — the seed itself is
+derived from the dimension id — so two players who generate the same hex get
+the same hex.
+
+In the browser the camera follows your hero; the mouse wheel zooms; the dashed
+outline past the last revealed hexes is the frontier. `REVEAL_RADIUS` and
+`MAP_SEED` can be overridden per peer via env (all peers of a dimension must
+agree on the seed).
 
 ## What it does
 

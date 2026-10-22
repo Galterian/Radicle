@@ -3,7 +3,8 @@
 // hashgraph envelopes, resolver, radicle lottery) runs in the peer processes.
 
 import { createRenderer } from './renderer.js';
-import { pixelToHex, hexDistance, stepToward, findPath, HEX_SIZE } from './hex.js';
+import { hexDistance, stepToward, findPath } from './hex.js';
+import { createKnownMap, initialBlock } from './map.js';
 
 // Direct DOM poke rather than importing from launcher.js — launcher.js is the
 // one that imports *us*, so pulling a symbol back creates a cycle that in a
@@ -14,8 +15,8 @@ function hideEntering() {
   if (ov) ov.hidden = true;
 }
 
-// Click within this many pixels of an entity's drawn centre counts as a hit on
-// that entity. The body circle is r=16; 24 gives a little slack without
+// Click within this many world pixels of an entity's drawn centre counts as a
+// hit on that entity. The body circle is r=16; 24 gives a little slack without
 // swallowing clicks meant for the neighbouring tile (hex centres are ~80px apart).
 const ENTITY_HIT_PX = 24;
 const HEX_SIZE_SQ_HIT = ENTITY_HIT_PX * ENTITY_HIT_PX;
@@ -45,7 +46,26 @@ const state = {
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
   ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0 },
+  // The dimension as this peer knows it: initial block + every revealed disc.
+  // Replaced wholesale from the peer's `hello` / `map` messages; `mapVersion`
+  // bumps so the renderer can rebuild its tile/frontier caches lazily.
+  map: createKnownMap('0x0', [initialBlock()]),
+  mapVersion: 0,
 };
+
+const knownHex = (q, r) => state.map.has(q, r);
+
+function applyMap(m) {
+  if (!m || !Array.isArray(m.blocks)) return;
+  const reseeded = m.seed !== state.map.seed;
+  if (reseeded) state.map = createKnownMap(m.seed, [initialBlock()]);
+  const added = state.map.addBlocks(m.blocks);
+  if (added || reseeded) {
+    state.mapVersion++;
+    const b = state.map.bounds();
+    logUI(`map: ${state.map.size()} hexes known (q ${b.min_q}…${b.max_q}, r ${b.min_r}…${b.max_r})`, 'phase');
+  }
+}
 
 // Build the "blocked" set the pathfinder uses: every alive entity other than
 // me stands on an impassable tile.
@@ -109,7 +129,7 @@ function resumeJourney() {
     return false;
   }
   const blocked = blockedTilesExcluding(state.myPeerId);
-  const path = findPath({ q: me.tile_q, r: me.tile_r }, dest, blocked);
+  const path = findPath({ q: me.tile_q, r: me.tile_r }, dest, blocked, knownHex);
   if (!path.length) {
     cancelPathJourney('blocked');
     return false;
@@ -413,6 +433,7 @@ function connect() {
         // own peer catalog.
         mergeEntities(m.peers || []);
         state.dimension = m.dimension || state.dimension;
+        applyMap(m.map);
         document.title = `ChaosD6 — ${state.dimension}`;
         document.getElementById('dim-name').textContent = `dimension: ${state.dimension}`;
         document.getElementById('door').textContent = `${m.door ? `door: ${m.door} · ` : ''}peer: ${m.peer_id}`;
@@ -424,6 +445,7 @@ function connect() {
           autoselectFirstHandCard();
         }
       }
+      if (m.kind === 'map') applyMap(m.map);
       if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat, m);
       if (m.kind === 'hand')  {
         state.hand = m.hand || state.hand;
@@ -671,23 +693,27 @@ function wireInput() {
       });
     },
     ui: state.ui,
+    get map() { return state.map; },
+    get mapVersion() { return state.mapVersion; },
+    get myPeerId() { return state.myPeerId; },
   });
   canvas.addEventListener('mousemove', (ev) => {
     const rect = canvas.getBoundingClientRect();
-    state.ui.hoverTile = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
+    state.ui.hoverTile = renderer.pickHex(ev.clientX - rect.left, ev.clientY - rect.top, knownHex);
   });
-  // Pick the entity closest to the click pixel if it's within one hex radius.
-  // Using pixel distance (not tile-equality) is more forgiving than requiring a
-  // bull's-eye on the tile center, and handles the case where the entity sprite
-  // overlaps the tile edge.
+  // Pick the entity closest to the click if it's within one hex radius. The
+  // comparison runs in world pixels (camera-independent). Using pixel distance
+  // (not tile-equality) is more forgiving than requiring a bull's-eye on the
+  // tile center, and handles the case where the entity sprite overlaps the edge.
   function entityAtPixel(px, py) {
+    const w = renderer.toWorld(px, py);
     let best = null, bestD2 = HEX_SIZE_SQ_HIT;
     for (const p of state.entities) {
       if (!p || p.life <= 0) continue;
       if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
       const pos = renderer.tilePx(p.tile_q, p.tile_r);
-      const dx = px - pos.x;
-      const dy = py - (pos.y - 6);  // renderer draws the body offset -6
+      const dx = w.x - pos.x;
+      const dy = w.y - (pos.y - 6);  // renderer draws the body offset -6
       const d2 = dx * dx + dy * dy;
       if (d2 < bestD2) { bestD2 = d2; best = p; }
     }
@@ -697,7 +723,7 @@ function wireInput() {
   canvas.addEventListener('click', (ev) => {
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
-    const t = pixelToHex(px, py, renderer.origin());
+    const t = renderer.pickHex(px, py, knownHex);
     uilog('click', { tile: t, detail: `button=${ev.button}` });
     if (!t) return;
     const occupant = entityAtPixel(px, py);
@@ -740,7 +766,7 @@ function wireInput() {
     ev.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
-    const t = pixelToHex(px, py, renderer.origin());
+    const t = renderer.pickHex(px, py, knownHex);
     uilog('rightclick', { tile: t });
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
@@ -784,7 +810,7 @@ function wireInput() {
         logUI(`journey override — target ${occAtT.name} bound, no walk queued`, 'phase');
       } else {
         const blocked = blockedTilesExcluding(state.myPeerId);
-        const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
+        const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked, knownHex);
         state.ui.destinationTile = { q: t.q, r: t.r };
         state.ui.pathPlan = path.length ? path : null;
         state.ui.selectedTarget = path.length ? path[0] : { q: t.q, r: t.r };
@@ -858,7 +884,7 @@ function wireInput() {
         state.ui.destinationTile = null;
         label = 'Attack → last/nearest enemy';
       } else {
-        const step = stepToward({ q: me.tile_q, r: me.tile_r }, t);
+        const step = stepToward({ q: me.tile_q, r: me.tile_r }, t, knownHex);
         state.target = { q: step.q, r: step.r };
         state.ui.selectedTarget = step;
         state.ui.destinationTile = { q: t.q, r: t.r };
@@ -892,7 +918,7 @@ function wireInput() {
         label = `${codeTag} → (${t.q},${t.r}) (already in contact)`;
       } else {
         const blocked = blockedTilesExcluding(state.myPeerId);
-        const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
+        const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked, knownHex);
         if (path.length) {
           const step = path[0];
           state.ui.destinationTile = { q: t.q, r: t.r };
@@ -905,7 +931,7 @@ function wireInput() {
         } else {
           // No reachable path (blocked). Fall back to the single-step heuristic
           // so the gesture still does something useful this round.
-          const step = stepToward({ q: me.tile_q, r: me.tile_r }, t);
+          const step = stepToward({ q: me.tile_q, r: me.tile_r }, t, knownHex);
           state.target = { q: step.q, r: step.r };
           state.ui.selectedTarget = step;
           state.ui.destinationTile = { q: t.q, r: t.r };
