@@ -772,13 +772,16 @@ function wireInput() {
         state.ui.pathPlan = null;
         state.ui.selectedTarget = null;
         logUI('journey override — next round will not auto-walk', 'phase');
-      } else if (alreadyAdjacentToOccupant) {
-        // In contact with the clicked occupant — don't queue a journey that
-        // would make us pace around them next round.
+      } else if (occAtT) {
+        // Clicked tile is held by a living entity. A* can only route us to
+        // a *free neighbour* of that tile and resumeJourney would then pace
+        // the hero round after round. Just bind the target for the UI —
+        // next round's autoselect / keyboard pick decides what action to
+        // actually take against them.
         state.ui.destinationTile = { q: t.q, r: t.r };
         state.ui.pathPlan = null;
         state.ui.selectedTarget = { q: t.q, r: t.r };
-        logUI(`journey override — already adjacent to ${occAtT.name}, no walk queued`, 'phase');
+        logUI(`journey override — target ${occAtT.name} bound, no walk queued`, 'phase');
       } else {
         const blocked = blockedTilesExcluding(state.myPeerId);
         const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
@@ -796,22 +799,54 @@ function wireInput() {
       && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
     const atTile = me.tile_q === t.q && me.tile_r === t.r;
 
-    // Pick the action for this gesture. An *explicit* Move always wins — the
-    // user already committed to Move, so right-click must stage/commit Move
-    // toward the destination, not override it with Attack. Otherwise prefer
-    // Attack when a card is in hand; else fall back to Empty.
+    // Pick the action for this gesture. User rule: a right-click on an enemy
+    // only triggers an action against them when A or M is actually in the
+    // queue; otherwise the gesture is just a target binding. This stops the
+    // handler from (a) auto-swapping the queue to EM/EP every time, and (b)
+    // starting a path-based journey the pathfinder can only route *around*
+    // (the enemy's tile is blocked, so A* falls back to a free neighbour and
+    // the hero paces).
     const q0 = state.queued[0];
     const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : null;
     const moveExplicit = queuedCode === 'M' && !state.queuedIsAuto;
     const attackIdx = state.hand.findIndex(c => c && c.code === 'A' && !state.willDiscard.has(c.card_id));
-    const useAttack = !moveExplicit && attackIdx >= 0;
+    // Only auto-stage Attack when A is already queued OR the click is on an
+    // empty hex (user is gesturing somewhere to walk/attack-step). Clicking
+    // an enemy with a non-A, non-M queue respects the queued action.
+    const useAttack = !moveExplicit && attackIdx >= 0 && (queuedCode === 'A' || !isEnemy);
     let label;
+    // Enemy right-clicked AND the queue is something that isn't A or M:
+    // bind the target for the next-round attack-pick but keep the current
+    // action and don't start a journey.
+    if (isEnemy && !useAttack && !moveExplicit) {
+      state.target = occupant.peer_id;
+      state.ui.selectedTarget = { q: occupant.tile_q, r: occupant.tile_r };
+      state.ui.destinationTile = { q: occupant.tile_q, r: occupant.tile_r };
+      state.ui.pathPlan = null;
+      label = `target → ${occupant.name} (keeping ${queuedCode || 'EP'})`;
+      send({ kind: 'target', target: state.target });
+      const now = Date.now();
+      const isDouble = now - lastRightClickAt < 500;
+      lastRightClickAt = isDouble ? 0 : now;
+      if (isDouble) {
+        state.locked = true;
+        send({ kind: 'lock' });
+        logUI(`committed: ${label}`, 'phase', { peerId: occupant.peer_id });
+      } else {
+        logUI(`staged: ${label} — right-click again to commit`, 'phase', { peerId: occupant.peer_id });
+      }
+      renderDeck();
+      return;
+    }
     if (useAttack) {
       if (state.queued[0] !== attackIdx) {
         state.queued = [attackIdx];
         state.queuedIsAuto = false;
         send({ kind: 'queue', slots: state.queued });
       }
+      // Attack is single-round; any lingering pathPlan from an earlier
+      // right-click would otherwise re-trigger resumeJourney next phase.
+      state.ui.pathPlan = null;
       if (isEnemy) {
         state.target = occupant.peer_id;
         state.ui.selectedTarget = { q: occupant.tile_q, r: occupant.tile_r };
