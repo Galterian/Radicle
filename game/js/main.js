@@ -44,7 +44,7 @@ const state = {
   // list of hexes (step 1 … destination) the auto-walker will follow across
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [] },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], coldSyncUntil: 0 },
 };
 
 // Build the "blocked" set the pathfinder uses: every alive entity other than
@@ -380,6 +380,11 @@ function connect() {
     try {
       const m = JSON.parse(ev.data);
       if (m.kind === 'hello') {
+        // Tell the renderer to snap any entity updates for the next 1.5 s
+        // instead of sliding — this is a (re)connect, so initial positions
+        // should land where they are, not animate from wherever the renderer
+        // last had them.
+        state.ui.coldSyncUntil = performance.now() + 1500;
         state.myPeerId = m.peer_id;
         state.hand = m.hand || [];
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
