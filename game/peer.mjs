@@ -961,10 +961,27 @@ async function doResolution() {
     .map(p => ({ id: p.peer_id, tile: [p.tile_q, p.tile_r], life: (p.peer_id === PEER_ID_STRING ? entity.life : p.life) }))
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
+  // Per-actor action summary so the UI can float an action icon (⚔️ / 🛡 / 🤺
+  // / 👁 / ➙) for every revealer this round, mirroring the damage-float path.
+  // target_q/target_r are where the action aimed (tile target or defender's
+  // tile) so the floater can lerp from actor → aim like damage does; omitted
+  // for self-only actions (Block, Posture, Empty Posture).
+  const actionSummary = [];
+  for (const r of revealsThisTurn) {
+    const actor = peersPublic.get(r.actor);
+    if (!actor) continue;
+    const aim = (r.action === 'A' || r.action === 'M' || r.action === 'EM') ? tileOf(r.target) : null;
+    actionSummary.push({
+      actor: r.actor, action: r.action,
+      from_q: actor.tile_q, from_r: actor.tile_r,
+      target_q: aim?.q, target_r: aim?.r,
+    });
+  }
   await emitEnvelope({ type: 'evt_state_hash', payload: {
     state_hash: stateHash,
     damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: 'action' }))),
     journey_results: [...journeyResults.entries()].map(([actor, j]) => ({ actor, ...j })),
+    actions: actionSummary,
     tokens_changed: [],
   } });
 }

@@ -44,7 +44,7 @@ const state = {
   // list of hexes (step 1 … destination) the auto-walker will follow across
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], coldSyncUntil: 0 },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0 },
 };
 
 // Build the "blocked" set the pathfinder uses: every alive entity other than
@@ -478,6 +478,30 @@ function connect() {
             if (j.actor === state.myPeerId && j.outcome === 'blocked') cancelPathJourney('blocked by Rule 8');
           }
           if (state._loggedJourney.size > 500) state._loggedJourney = new Set([...state._loggedJourney].slice(-100));
+          // Per-actor action icons. Every peer echoes the same state_hash, so
+          // de-dup by (turn, round, actor); each round emits exactly one icon
+          // per revealer. A/M/EM lerp from actor tile → aim tile; B/P/EP
+          // float straight up from the actor.
+          state._loggedAction ||= new Set();
+          for (const a of env.payload.actions || []) {
+            const ak = `${env.turn}:${env.round}:${a.actor}`;
+            if (state._loggedAction.has(ak)) continue;
+            state._loggedAction.add(ak);
+            const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
+            const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
+            if (fromQ === null) continue;
+            const hasAim = Number.isInteger(a.target_q) && Number.isInteger(a.target_r);
+            state.ui.floatingIcons.push({
+              action: a.action,
+              fromQ, fromR,
+              toQ: hasAim ? a.target_q : fromQ,
+              toR: hasAim ? a.target_r : fromR,
+              upOnly: !hasAim,
+              startAt: performance.now(),
+              duration: 2200,
+            });
+          }
+          if (state._loggedAction.size > 500) state._loggedAction = new Set([...state._loggedAction].slice(-100));
         }
       }
       if (m.kind === 'contact') {
