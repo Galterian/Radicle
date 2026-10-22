@@ -450,17 +450,33 @@ function currentStateSnapshot() {
 const peersPublic = new Map();
 peersPublic.set(PEER_ID_STRING, currentStateSnapshot());
 
-// Anything we haven't heard from in PEER_STALE_MS is a leftover from a dead
-// process (other peers republish every round, ~6s). Such entries must not
-// reach the roster, the lottery or the published door doc.
+// `last_seen` is kept as a liveness hint, but we no longer drop peers from
+// `peersPublic` just because their state updates went silent. In practice
+// cross-machine Gun sync + the 15s nostr-bus heartbeat occasionally lose a
+// window of updates, and the previous 90s stale-prune was deleting live
+// monsters mid-fight — the UI then rendered no tombstone (entity gone) and
+// `checkStandoff` saw only the player side alive and fired the "only player
+// remains" banner, even though the monsters were still there on their own
+// peers. Dead peers stay in `peersPublic` with `life <= 0` so the renderer
+// can draw a persistent tombstone; truly ancient entries (process gone for
+// over an hour) get swept so the map doesn't leak forever.
 const PEER_STALE_MS = 90_000;
+const PEER_SWEEP_MS = 60 * 60_000;
 const isFresh = p => p && p.peer_id === PEER_ID_STRING || (p && Date.parse(p.last_seen || 0) > Date.now() - PEER_STALE_MS);
-function livePeers() { return [...peersPublic.values()].filter(isFresh); }
+// livePeers now returns every peer we've ever confirmed — the handshake,
+// standoff and roster logic all tolerate stale snapshots because a stale
+// snapshot is still the *last authoritative statement* about that peer.
+function livePeers() { return [...peersPublic.values()]; }
 setInterval(() => {
-  let dropped = 0;
-  for (const [id, p] of peersPublic) if (!isFresh(p)) { peersPublic.delete(id); dropped++; }
-  if (dropped) broadcastUI({ kind: 'peers', peers: livePeers(), dropped: true });
-}, 10_000);
+  let swept = 0;
+  const cutoff = Date.now() - PEER_SWEEP_MS;
+  for (const [id, p] of peersPublic) {
+    if (id === PEER_ID_STRING) continue;
+    const ls = Date.parse(p?.last_seen || 0);
+    if (!Number.isFinite(ls) || ls < cutoff) { peersPublic.delete(id); swept++; }
+  }
+  if (swept) broadcastUI({ kind: 'peers', peers: livePeers(), dropped: true });
+}, 60_000);
 
 async function postJson(url, body) {
   try {
