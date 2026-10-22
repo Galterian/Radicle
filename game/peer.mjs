@@ -600,11 +600,19 @@ function enterPhase(name) {
     // the next round. Capped at one extra ROUND_SEC so one hung peer can't
     // freeze the dimension indefinitely.
     const maxLag = Date.now() + ROUND_SEC * 2000;
+    let laggingBehind = false;
     for (const p of livePeers()) {
-      if (p.peer_id === PEER_ID_STRING || p.action !== hg.action) continue;
+      if (p.peer_id === PEER_ID_STRING || typeof p.action !== 'number') continue;
+      // Peer one action behind us is still finishing *their* previous handshake.
+      // If we tear off into a new planning window they'll never catch up through
+      // their own doResolution — they'll jump via catchUpClock and skip the
+      // local entity.tile update, which produces the "dancing hero" drift.
+      if (p.action === hg.action - 1) { laggingBehind = true; continue; }
+      if (p.action !== hg.action) continue;
       if (p.phase !== 'planning' || typeof p.phase_ends_at !== 'number') continue;
       if (p.phase_ends_at > roundDeadline && p.phase_ends_at < maxLag) roundDeadline = p.phase_ends_at;
     }
+    if (laggingBehind) roundDeadline = Math.max(roundDeadline, Math.min(maxLag, Date.now() + ROUND_SEC * 1000));
     phaseEndsAt = roundDeadline;
     ms = phaseEndsAt - Date.now();
   } else {
@@ -1138,6 +1146,15 @@ function catchUpClock() {
   }
   if (!ref) return false;
   const skipped = ref.action - hg.action;
+  // Ratchet guard: if we're only one action behind and already mid-handshake
+  // (reveal or resolution) for our current action, DON'T jump. The handshake
+  // is seconds away from completing; letting it finish runs doResolution,
+  // which is the only place `entity.tile` and `entity.life` update locally.
+  // Jumping instead forfeits the current pick and leaves our own entity state
+  // frozen, so other peers see us stuck while our browser renders mid-slide —
+  // the "hero dancing / stuck in place" symptom. endRound at the natural
+  // tail of this handshake will land us at ref.action with no drift.
+  if (skipped === 1 && (currentPhase === 'reveal' || currentPhase === 'resolution')) return false;
   const oldTurn = hg.turn;
   hg.action = ref.action;
   hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
