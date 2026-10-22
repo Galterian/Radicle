@@ -30,8 +30,11 @@ import { identify } from '@libp2p/identify';
 import { generateKeyPair } from '@libp2p/crypto/keys';
 import { multiaddr } from '@multiformats/multiaddr';
 
+// No `gun/sea.js`: nothing here uses SEA, and its message hook runs a
+// permissive JSON pre-parser over every incoming string value that crashes
+// the process on plain CSV strings (yson.js "Cannot set properties of
+// undefined") as soon as relays actually exchange data.
 import Gun from 'gun';
-import 'gun/sea.js';
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import fs from 'node:fs/promises';
@@ -205,6 +208,24 @@ const GUN_DIR = path.join(os.tmpdir(), 'chaosd6-gun', _slug(DIM_NAME), `${GUN_LA
 // Only our own label's leftovers: sibling peers of this dimension may be live.
 try { for (const d of fsSync.readdirSync(path.dirname(GUN_DIR))) if (d.startsWith(`${GUN_LABEL}-`)) fsSync.rmSync(path.join(path.dirname(GUN_DIR), d), { recursive: true, force: true }); } catch {}
 try { fsSync.mkdirSync(GUN_DIR, { recursive: true }); } catch {}
+// Gun's Node build always loads SEA, and lib/server.js defaults `opt.faith`
+// to true, which routes data coming back from the store through
+// SEA.opt.pack → a permissive JSON pre-parser that throws on some plain
+// string values ("Cannot set properties of undefined" in yson.js) and took
+// three peers down in one swarm run. `faith: false` keeps incoming data on
+// the ordinary path; the wrapper below is the belt to that brace — if pack is
+// ever reached and throws, log the value once and pass the data through.
+if (Gun.SEA?.opt?.pack) {
+  const origPack = Gun.SEA.opt.pack;
+  let packWarned = 0;
+  Gun.SEA.opt.pack = function (d, cb, ...rest) {
+    try { return origPack.call(this, d, cb, ...rest); }
+    catch (e) {
+      if (packWarned++ < 3) console.warn(`[${PEER_LABEL}] gun/SEA pack failed on ${JSON.stringify(d).slice(0, 200)}: ${e.message}`);
+      return cb(d);
+    }
+  };
+}
 const gun = Gun({
   web: gunHttp,
   peers: PEER_GUN_URLS,              // mesh with the other peers' relays
@@ -212,6 +233,7 @@ const gun = Gun({
   localStorage: false,
   axe: false,
   multicast: false,
+  faith: false,
 });
 const wipeGunDir = () => { try { fsSync.rmSync(GUN_DIR, { recursive: true, force: true }); } catch {} };
 process.on('exit', wipeGunDir);
@@ -225,21 +247,67 @@ const myNode  = dimRoot.get('doors').get(DOOR_ID).get('members').get(PEER_ID_STR
 // Gun graph or the optional discovery mirror). Across the internet these
 // addresses are usually private and the dial fails — that's fine, the bus
 // carries the traffic; a successful dial just makes the exchange faster.
-const dialled = new Set();
+// `dialled` is a cool-down, not a tombstone: a peer is skipped for DIAL_RETRY_MS
+// after an attempt (success or failure) and then eligible again, so a link
+// that dropped later is re-established by the next state message or by
+// healMesh() below. The old "dial once, never again" left the gossipsub
+// router empty (`totalPeers=0`) for the rest of the session whenever a
+// connection closed — e.g. one of two simultaneous cross-dials being pruned.
+const DIAL_RETRY_MS = 30_000;
+const dialled = new Map();      // libp2p peer id string -> last attempt (ms)
 const dialFailed = new Map();   // peerId string -> failures, to keep the log quiet
-async function dialPeerAddrs(peerId, addrs) {
+const addrsOf = new Map();      // libp2p peer id string -> { peerId (label), addr }
+async function dialPeerAddrs(peerId, addrs, force = false) {
   for (const addr of addrs) {
     const theirPid = addr.split('/p2p/').at(-1);
-    if (!theirPid || theirPid === libp2p.peerId.toString() || dialled.has(theirPid)) continue;
+    if (!theirPid || theirPid === libp2p.peerId.toString()) continue;
+    addrsOf.set(theirPid, { peerId, addr });
+    const last = dialled.get(theirPid) || 0;
+    if (!force && Date.now() - last < DIAL_RETRY_MS) continue;
+    if (!force && libp2p.getConnections().some(c => c.remotePeer.toString() === theirPid && c.status === 'open')) continue;
+    dialled.set(theirPid, Date.now());
     try {
       await libp2p.dial(multiaddr(addr));
-      dialled.add(theirPid);
       console.log(`[${PEER_LABEL}] libp2p mesh ↔ ${peerId} (${theirPid.slice(0, 14)}…)`);
     } catch (e) {
       const n = (dialFailed.get(theirPid) || 0) + 1;
       dialFailed.set(theirPid, n);
       if (n === 1) console.log(`[${PEER_LABEL}] no direct link to ${peerId} (${e.message.split('\n')[0].slice(0, 80)}) — using the bus`);
     }
+  }
+}
+libp2p.addEventListener('peer:disconnect', (ev) => {
+  const pid = ev.detail.toString();
+  dialled.delete(pid);
+  const who = addrsOf.get(pid)?.peerId || pid.slice(0, 14) + '…';
+  console.log(`[${PEER_LABEL}] libp2p link to ${who} closed — will re-dial`);
+});
+
+// Mesh self-heal. A transport connection can be up while gossipsub has
+// forgotten the peer (it removes a peer on ANY connection close, even when
+// another connection to the same peer stays open), and then nothing we
+// publish reaches them directly. Every tick: for each known member that is
+// connected but not a pubsub peer, hang up and re-dial so the fresh connection
+// runs identify → pubsub topology → subscription exchange again. Only the side
+// with the smaller libp2p id heals a given pair, so both ends don't tear the
+// link down at the same moment. Members we are not connected to at all are
+// simply re-dialled (the cool-down above governs how often).
+const healedAt = new Map();
+async function healMesh() {
+  const pubsubPeers = new Set(libp2p.services.pubsub.getPeers().map(p => p.toString()));
+  const myPid = libp2p.peerId.toString();
+  for (const [pid, { peerId, addr }] of addrsOf) {
+    if (pubsubPeers.has(pid)) continue;
+    const member = peersPublic.get(peerId);
+    if (!member || Date.parse(member.last_seen || 0) < Date.now() - 60_000) continue;  // gone, not broken
+    const conns = libp2p.getConnections().filter(c => c.remotePeer.toString() === pid && c.status === 'open');
+    if (!conns.length) { await dialPeerAddrs(peerId, [addr]); continue; }
+    if (myPid > pid) continue;
+    if (Date.now() - (healedAt.get(pid) || 0) < DIAL_RETRY_MS) continue;
+    healedAt.set(pid, Date.now());
+    console.log(`[${PEER_LABEL}] mesh heal: ${peerId} connected but not in pubsub — re-dialling`);
+    try { await libp2p.hangUp(conns[0].remotePeer); } catch {}
+    await dialPeerAddrs(peerId, [addr], true);
   }
 }
 
@@ -363,6 +431,7 @@ let phaseEndsAt = Date.now() + ROUND_SEC * 1000;
 function sha256Hex(s) { return createHash('sha256').update(s).digest('hex'); }
 function digestObj(o) { return sha256Hex(JSON.stringify(o)); }
 
+let lastEnvelopeAt = 0;
 async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
   const env = {
     type,
@@ -393,25 +462,15 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
   // Only the handshake needs to cross the internet; the per-round state-hash
   // and push notes are bookkeeping and would double the relay load.
   if (type === 'evt_action_commit' || type === 'evt_action_reveal' || type === 'evt_map_extend') bus?.publish('env', env);
+  lastEnvelopeAt = Date.now();
 
-  // 2) Mirror onto the GunDB graph (CRDT; eventual-consistency across peers).
-  //    Gun's nested put balks on arrays, so store the envelope as a JSON blob plus
-  //    flat index fields (type / actor / turn / head) for cheap lookups.
-  dimRoot.get('doors').get(DOOR_ID).get('hashgraph').get(env._hash).put({
-    hash: env._hash,
-    type: env.type,
-    actor: env.actor_peer_id,
-    turn: env.turn,
-    envelope_json: JSON.stringify(env),
-  });
-
-  // 3) Append to the on-disk tape under the Radicle work dir — pushed on the hourly lottery.
+  // 2) Append to the on-disk tape under the Radicle work dir — pushed on the hourly lottery.
   const line = JSON.stringify(env);
   const abs = path.join(__dirname, 'sessions', DIM_NAME, 'hashgraph.jsonl');
   await fs.mkdir(path.dirname(abs), { recursive: true });
   await fs.appendFile(abs, line + '\n');
 
-  // 4) Mirror to the UI.
+  // 3) Mirror to the UI.
   broadcastUI({ kind: 'evt', env });
   return env;
 }
@@ -452,8 +511,9 @@ setInterval(() => {
     const subs = libp2p.services.pubsub.getSubscribers(TOPIC_STRONG);
     const peers = libp2p.services.pubsub.getPeers();
     const topics = libp2p.services.pubsub.getTopics();
-    console.log(`[${PEER_LABEL}] gossip state: topics=${topics.length} totalPeers=${peers.length} subscribersOnStrong=${subs.length} rxCount=${pubsubRxCount}`);
+    console.log(`[${PEER_LABEL}] gossip state: topics=${topics.length} totalPeers=${peers.length} subscribersOnStrong=${subs.length} rxCount=${pubsubRxCount} links=${libp2p.getConnections().length}`);
   } catch (e) { console.warn(`[${PEER_LABEL}] gossip state err: ${e.message}`); }
+  healMesh().catch(e => console.warn(`[${PEER_LABEL}] mesh heal err: ${e.message}`));
 }, 15_000);
 
 // Shared state via Gun: positions / HP are published on each cleanup.
@@ -600,10 +660,17 @@ if (NOSTR_ENABLED) {
   console.log(`[${PEER_LABEL}] nostr bus disabled (NOSTR_ENABLED=0) — only direct links will carry traffic`);
 }
 await publishPublicState(true);
-// Liveness heartbeat independent of the round loop. Rounds republish state
-// anyway, but once a side has won the loop stops — without this the survivors
-// (and the fallen) would age out of everyone's roster as stale peers.
-setInterval(() => publishPublicState(true).catch(() => {}), 15_000);
+// Liveness heartbeat independent of the round loop. Every commit/reveal we
+// publish already carries our snapshot (and the bus relays those), so the
+// heartbeat only goes to the relays when we have been silent — once a side has
+// won and the loop stops, or while spectating dead. Otherwise it is a local
+// refresh only (Gun + UI). Keeps ~4 relay events/min/pubkey off the public
+// relays that rate-limit us.
+const HEARTBEAT_MS = 15_000;
+setInterval(() => {
+  const idle = Date.now() - lastEnvelopeAt > HEARTBEAT_MS - 1000;
+  publishPublicState(idle).catch(() => {});
+}, HEARTBEAT_MS);
 
 // Also pull every other peer's public state live from Gun (slow-tier CRDT).
 // Relay graphs can still carry entries from peers that died; mergePeerState
@@ -677,8 +744,8 @@ function enterPhase(name) {
   currentPhase = name;
   let ms;
   if (name === 'planning') {
-    // Keep at least a 1s declaration window if a handshake ran long.
-    roundDeadline = Math.max(roundDeadline + ROUND_SEC * 1000, Date.now() + 1000);
+    // Keep at least a 2s declaration window if a handshake ran long.
+    roundDeadline = Math.max(roundDeadline + ROUND_SEC * 1000, Date.now() + 2000);
     // Trail the slowest live peer that's at our action and still planning:
     // without this the faster peer tears off to the next handshake while the
     // slower one is still planning, and the drift one-way-ratchets back on
@@ -726,6 +793,28 @@ function expectedMembers() {
 function allIn(map) {
   const seen = map.get(hg.action) || new Set();
   return expectedMembers().every(id => seen.has(id));
+}
+// A member we are still waiting on is "legitimately busy" when its last
+// published state says it is at OUR action, in the phase that produces the
+// envelope we lack, with a deadline that has not passed yet. The handshake caps
+// (COMMIT_WAIT_MS / REVEAL_WAIT_MS) only ever apply to members that are silent
+// or overdue — never to one that is simply still inside its planning window.
+// Without this, the first peer to finish a round forfeits everyone whose
+// window ends a second later; they jump to catch up, finish THEIR round early
+// for the same reason, and the dimension splits into cohorts that leapfrog
+// each other at twice the designed pace (seen as 3.5 s rounds in the tape).
+const HANDSHAKE_HARD_CAP_MS = ROUND_SEC * 2000;
+function waitingOnBusyMember(map, phaseWanted) {
+  if (Date.now() > phaseEndsAt + HANDSHAKE_HARD_CAP_MS) return false;
+  const seen = map.get(hg.action) || new Set();
+  const grace = 400;
+  for (const id of expectedMembers()) {
+    if (seen.has(id)) continue;
+    const p = peersPublic.get(id);
+    if (!p || p.action !== hg.action || p.phase !== phaseWanted) continue;
+    if (typeof p.phase_ends_at === 'number' && p.phase_ends_at + grace > Date.now()) return true;
+  }
+  return false;
 }
 async function pullFromDiscovery(kind, map) {
   if (!DISCOVERY_URL) return;
@@ -844,11 +933,27 @@ async function doResolution() {
   const edgeMap = {};
   for (const e of edges) (edgeMap[e.actor] ||= {})[e.defender] = e.bonus_damage_to_actor;
 
+  // The resolver's view of the world. Every reveal envelope carries its actor's
+  // snapshot (tile, life) taken when the reveal was sent — the same bytes on
+  // every peer that received it. Resolving against THAT, rather than against
+  // our live `peersPublic` (which a late state message can mutate between two
+  // peers' resolution ticks), is what makes two peers compute the same
+  // outcome for the same reveals. Members who did not reveal this round fall
+  // back to the last snapshot we hold; they do not move, so that only matters
+  // for occupancy and targeting.
+  const view = new Map(peersPublic);
   const revealsThisTurn = [];
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
+    if (revealsThisTurn.some(r => r.actor === env.actor_peer_id)) continue;
     revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null });
+    const s = env.state;
+    if (s && s.peer_id === env.actor_peer_id && Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) {
+      view.set(env.actor_peer_id, { ...(view.get(env.actor_peer_id) || {}), ...s });
+    }
   }
+  // Our own entity is authoritative for ourselves.
+  view.set(PEER_ID_STRING, { ...(view.get(PEER_ID_STRING) || {}), ...currentStateSnapshot() });
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
     revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target) });
@@ -866,7 +971,7 @@ async function doResolution() {
   // mirrors, late gossip, a peer that died mid-handshake) so no resolver ever
   // lets a corpse deal damage or claim a tile. Life is public state, so every
   // peer filters the same set.
-  const lifeOf = (id) => id === PEER_ID_STRING ? entity.life : (peersPublic.get(id)?.life ?? 0);
+  const lifeOf = (id) => id === PEER_ID_STRING ? entity.life : (view.get(id)?.life ?? 0);
   for (let i = revealsThisTurn.length - 1; i >= 0; i--) if (lifeOf(revealsThisTurn[i].actor) <= 0) revealsThisTurn.splice(i, 1);
 
   // Resolve a target object into the tile the target occupies / points at. A
@@ -876,7 +981,7 @@ async function doResolution() {
     if (!targ) return null;
     if (targ.kind === 'tile' && targ.ref) return { q: targ.ref.q, r: targ.ref.r };
     if (targ.kind === 'character' && targ.ref) {
-      const p = peersPublic.get(targ.ref);
+      const p = view.get(targ.ref);
       return p ? { q: p.tile_q, r: p.tile_r } : null;
     }
     return null;
@@ -905,7 +1010,7 @@ async function doResolution() {
     const isMove = r.action === 'M' || r.action === 'EM';
     const isAttackIntoEmpty = r.action === 'A' && r.target?.kind === 'tile';
     if (!isMove && !isAttackIntoEmpty) continue;
-    const actor = peersPublic.get(r.actor);
+    const actor = view.get(r.actor);
     if (!actor) continue;
     const tgtT = tileOf(r.target);
     if (!tgtT) continue;
@@ -927,7 +1032,7 @@ async function doResolution() {
   // tile, strictly-highest priority wins; everyone else loses with a journey-
   // cancelled outcome.
   const occupiedNow = new Map();
-  for (const p of peersPublic.values()) {
+  for (const p of view.values()) {
     if (!p || p.life <= 0) continue;
     occupiedNow.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
   }
@@ -984,7 +1089,7 @@ async function doResolution() {
     if (r.action === 'A') {
       const defId = r.target?.kind === 'character' ? r.target.ref : null;
       if (!defId) continue;
-      const atk = peersPublic.get(r.actor), def = peersPublic.get(defId);
+      const atk = view.get(r.actor), def = view.get(defId);
       if (!atk || !def) continue;
       const atkPost = nextTiles.get(r.actor) ? { tile_q: nextTiles.get(r.actor).q, tile_r: nextTiles.get(r.actor).r } : atk;
       const defPost = nextTiles.get(defId)  ? { tile_q: nextTiles.get(defId).q,  tile_r: nextTiles.get(defId).r  } : def;
@@ -1017,8 +1122,8 @@ async function doResolution() {
   for (let i = 0; i < revealsThisTurn.length; i++) {
     for (let j = i + 1; j < revealsThisTurn.length; j++) {
       const a = revealsThisTurn[i], b = revealsThisTurn[j];
-      const pa = peersPublic.get(a.actor);
-      const pb = peersPublic.get(b.actor);
+      const pa = view.get(a.actor);
+      const pb = view.get(b.actor);
       if (!pa || !pb) continue;
       if (sideOf(pa.alliance) === sideOf(pb.alliance)) continue;
       const d = hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r });
@@ -1047,11 +1152,22 @@ async function doResolution() {
   // time, not only after cleanup fires a few seconds later.
   if (myMove || myDmg) await publishPublicState();
 
-  // Deterministic state hash over the whole region (every peer must compute the same).
-  const regionState = [...peersPublic.values()]
-    .map(p => ({ id: p.peer_id, tile: [p.tile_q, p.tile_r], life: (p.peer_id === PEER_ID_STRING ? entity.life : p.life) }))
+  // Deterministic state hash over the revealers' post-resolution state: the
+  // view's tiles with this round's moves applied and this round's damage
+  // taken off. Every peer that saw the same reveals computes the same bytes,
+  // so a mismatch between two peers' hashes for the same action means their
+  // inputs differed — and `region` lets the receiver say for which entity.
+  const regionState = revealsThisTurn
+    .map(r => view.get(r.actor))
+    .filter(Boolean)
+    .map(p => {
+      const t = nextTiles.get(p.peer_id) || { q: p.tile_q, r: p.tile_r };
+      return { id: p.peer_id, tile: [t.q, t.r], life: Math.max(0, (p.life ?? 0) - sumDmg(damage.get(p.peer_id))) };
+    })
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
+  lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });
+  if (lastStateHashes.size > 8) lastStateHashes.delete(Math.min(...lastStateHashes.keys()));
   // Per-actor action summary so the UI can float an action icon (⚔️ / 🛡 / 🤺
   // / 👁 / ➙) for every revealer this round, mirroring the damage-float path.
   // target_q/target_r are where the action aimed (tile target or defender's
@@ -1059,7 +1175,7 @@ async function doResolution() {
   // for self-only actions (Block, Posture, Empty Posture).
   const actionSummary = [];
   for (const r of revealsThisTurn) {
-    const actor = peersPublic.get(r.actor);
+    const actor = view.get(r.actor);
     if (!actor) continue;
     const aim = (r.action === 'A' || r.action === 'M' || r.action === 'EM') ? tileOf(r.target) : null;
     actionSummary.push({
@@ -1070,6 +1186,7 @@ async function doResolution() {
   }
   await emitEnvelope({ type: 'evt_state_hash', payload: {
     state_hash: stateHash,
+    region: regionState,
     damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: 'action' }))),
     journey_results: [...journeyResults.entries()].map(([actor, j]) => ({ actor, ...j })),
     actions: actionSummary,
@@ -1142,7 +1259,29 @@ async function npcPlan() {
   target = nearest.peer_id;
 }
 
+// Our own state hash per action, kept briefly so an incoming evt_state_hash
+// for the same action can be compared and a divergence named entity by entity.
+const lastStateHashes = new Map();   // action -> { hash, region }
+let divergenceCount = 0;
+function checkStateHash(env) {
+  const k = actionKey(env.turn, env.round);
+  const mine = lastStateHashes.get(k);
+  if (!mine || !env.payload?.state_hash || mine.hash === env.payload.state_hash) return;
+  divergenceCount++;
+  const theirs = new Map((env.payload.region || []).map(e => [e.id, e]));
+  const diffs = [];
+  for (const e of mine.region) {
+    const t = theirs.get(e.id);
+    if (!t) { diffs.push(`${e.id}: missing on their side`); continue; }
+    if (t.tile[0] !== e.tile[0] || t.tile[1] !== e.tile[1] || t.life !== e.life) diffs.push(`${e.id}: ours (${e.tile}) hp${e.life} vs theirs (${t.tile}) hp${t.life}`);
+    theirs.delete(e.id);
+  }
+  for (const id of theirs.keys()) diffs.push(`${id}: missing on our side`);
+  console.warn(`[${PEER_LABEL}] STATE DIVERGENCE #${divergenceCount} T${env.turn}.R${env.round + 1} vs ${env.actor_peer_id}: ${diffs.join('; ') || 'same entities, different hash'}`);
+}
+
 function inboxApply(env) {
+  if (env.type === 'evt_state_hash') checkStateHash(env);
   if (env.type === 'evt_map_extend' && env.payload?.block) addMapBlock(env.payload.block, 'envelope');
   if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
   if (env.type === 'evt_action_reveal') noteSeen(revealsSeen, env);
@@ -1210,17 +1349,21 @@ async function tick() {
       // Reveal once everyone has committed (so nobody adapts to an early
       // reveal), or when the cap expires and stragglers are treated as EP.
       if (!allIn(commitsSeen)) await pullFromDiscovery('commits', commitsSeen);
-      if (!allIn(commitsSeen) && !expired) return;
+      if (!allIn(commitsSeen) && (!expired || waitingOnBusyMember(commitsSeen, 'planning'))) return;
       await doReveal();
       enterPhase('resolution');
     } else if (currentPhase === 'resolution') {
       if (!allIn(revealsSeen)) await pullFromDiscovery('reveals', revealsSeen);
-      if (!allIn(revealsSeen) && !expired) return;
+      if (!allIn(revealsSeen) && (!expired || waitingOnBusyMember(revealsSeen, 'reveal'))) return;
       await doResolution();
       await endRound();
       checkStandoff();
       catchUpClock();
       enterPhase('planning');
+      // Publish AFTER entering planning so everyone sees our real phase and
+      // deadline for the new action (endRound's publish still says
+      // 'resolution'); waitingOnBusyMember on the other peers depends on it.
+      await publishPublicState();
     }
   } finally { ticking = false; }
 }
@@ -1285,11 +1428,15 @@ function catchUpClock() {
   // is already past planning for this action, give ourselves a short 1s
   // declaration window so the next tick we fall into the handshake with
   // them rather than being granted a full 6s and immediately drifting again.
-  if (ref.phase === 'planning' && typeof ref.phase_ends_at === 'number' && ref.phase_ends_at > Date.now()) {
-    roundDeadline = ref.phase_ends_at;
-  } else {
-    roundDeadline = Date.now() + 1000;
+  // Align with the LATEST planning deadline anyone holds for this action, so
+  // we land in the same window as the whole cohort rather than just the ref;
+  // nobody ahead of us is still planning → short window, they are waiting.
+  let latest = 0;
+  for (const p of livePeers()) {
+    if (p.peer_id === PEER_ID_STRING || p.action !== hg.action || p.phase !== 'planning') continue;
+    if (typeof p.phase_ends_at === 'number' && p.phase_ends_at > latest) latest = p.phase_ends_at;
   }
+  roundDeadline = Math.max(latest, Date.now() + 2000);
   console.log(`[${PEER_LABEL}] clock catch-up: +${skipped} action(s) to turn ${hg.turn} round ${hg.round} (from ${ref.peer_id}, ref.phase=${ref.phase})`);
   return true;
 }
