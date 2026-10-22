@@ -85,8 +85,12 @@ export function createRenderer(canvas, state) {
     B:  { glyph: '🛡',  color: '#6ad99f' },  // Block (green)
     M:  { glyph: '🤺', color: '#6ad9ff' },  // Move (blue)
     P:  { glyph: '👁',  color: '#dfe3e8' },  // Posture (dark white)
-    EP: { glyph: '➙',  color: '#ffe66e' },  // Empty Posture (yellow)
-    EM: { glyph: '➙',  color: '#c9b84c' },  // Empty Move — dim yellow
+    EP: { glyph: '🧘', color: '#ffe66e' },  // Empty Posture (yellow)
+    EM: { glyph: '🏃', color: '#ffe66e' },  // Empty Move (yellow)
+    // Standoff arrow — not an action, but used by the no-damage-in-contact
+    // path to float a ➙ between each pair of adjacent enemies who clinched
+    // without scoring.
+    STANDOFF: { glyph: '➙', color: '#ffe66e' },
   };
 
   function render() {
@@ -349,11 +353,23 @@ export function createRenderer(canvas, state) {
         ctx.globalAlpha = Math.max(0, alpha);
         ctx.font = 'bold 18px "Segoe UI Emoji", "Apple Color Emoji", ui-sans-serif, system-ui';
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.lineWidth = 4;
         ctx.strokeStyle = spec.color;
         ctx.fillStyle = spec.color;
-        ctx.strokeText(spec.glyph, x, y);
-        ctx.fillText(spec.glyph, x, y);
+        // The ➙ standoff glyph points right by default; rotate it so each
+        // arrow actually faces the enemy it's drifting toward. Other icons
+        // are drawn upright.
+        if (f.action === 'STANDOFF') {
+          const ang = Math.atan2(to.y - from.y, to.x - from.x);
+          ctx.translate(x, y);
+          ctx.rotate(ang);
+          ctx.strokeText(spec.glyph, 0, 0);
+          ctx.fillText(spec.glyph, 0, 0);
+        } else {
+          ctx.strokeText(spec.glyph, x, y);
+          ctx.fillText(spec.glyph, x, y);
+        }
         ctx.restore();
       }
       icons.length = liveWriteIdx;

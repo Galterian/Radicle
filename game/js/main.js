@@ -478,12 +478,15 @@ function connect() {
             if (j.actor === state.myPeerId && j.outcome === 'blocked') cancelPathJourney('blocked by Rule 8');
           }
           if (state._loggedJourney.size > 500) state._loggedJourney = new Set([...state._loggedJourney].slice(-100));
-          // Per-actor action icons. Every peer echoes the same state_hash, so
-          // de-dup by (turn, round, actor); each round emits exactly one icon
-          // per revealer. A/M/EM lerp from actor tile → aim tile; B/P/EP
-          // float straight up from the actor.
+          // Per-actor action icons. Only the player's own hero shows an action
+          // icon — bots stay silent so the map isn't flooded. The ➙ "nobody
+          // scored" arrow between adjacent enemies is handled below in the
+          // `contact` branch, not here. De-dup by (turn, round) since there
+          // is exactly one of my own icons per round and every peer's echoed
+          // state_hash carries the same payload.
           state._loggedAction ||= new Set();
           for (const a of env.payload.actions || []) {
+            if (a.actor !== state.myPeerId) continue;
             const ak = `${env.turn}:${env.round}:${a.actor}`;
             if (state._loggedAction.has(ak)) continue;
             state._loggedAction.add(ak);
@@ -508,12 +511,37 @@ function connect() {
         // "A×B" pairs for every adjacent cross-side revealer. Shows what
         // actually opposed what after both sides have revealed — the user
         // asked for this specifically so they can read the resolution.
+        state._loggedStandoff ||= new Set();
         for (const c of m.contacts) {
           const veto = c.a.vetoed || c.b.vetoed
             ? `  (vetoed: ${c.a.vetoed ? c.a.name + ' ' + c.a.vetoed : ''}${c.a.vetoed && c.b.vetoed ? '; ' : ''}${c.b.vetoed ? c.b.name + ' ' + c.b.vetoed : ''})`
             : '';
           logUI(`contact d=${c.distance}: ${c.a.name}[${c.a.action}] × ${c.b.name}[${c.b.action}]${veto}`, 'phase');
+          // No-damage clinch between adjacent enemies: float a ➙ from each
+          // of them toward the other so the stalemate is visible on the map.
+          // Every peer rebroadcasts the same contact set, so de-dup by
+          // (turn, round, sorted-pair).
+          if (c.damage_exchanged) continue;
+          const [p1, p2] = [c.a.peer_id, c.b.peer_id].sort();
+          const key = `${m.turn}:${m.round}:${p1}:${p2}`;
+          if (state._loggedStandoff.has(key)) continue;
+          state._loggedStandoff.add(key);
+          const aT = Number.isInteger(c.a.tile_q) && Number.isInteger(c.a.tile_r);
+          const bT = Number.isInteger(c.b.tile_q) && Number.isInteger(c.b.tile_r);
+          if (!aT || !bT) continue;
+          const now = performance.now();
+          state.ui.floatingIcons.push({
+            action: 'STANDOFF', fromQ: c.a.tile_q, fromR: c.a.tile_r,
+            toQ: c.b.tile_q, toR: c.b.tile_r, upOnly: false,
+            startAt: now, duration: 2200,
+          });
+          state.ui.floatingIcons.push({
+            action: 'STANDOFF', fromQ: c.b.tile_q, fromR: c.b.tile_r,
+            toQ: c.a.tile_q, toR: c.a.tile_r, upOnly: false,
+            startAt: now, duration: 2200,
+          });
         }
+        if (state._loggedStandoff.size > 500) state._loggedStandoff = new Set([...state._loggedStandoff].slice(-100));
       }
       if (m.kind === 'standoff') {
         logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
