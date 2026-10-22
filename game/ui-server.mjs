@@ -17,6 +17,7 @@
 
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -42,6 +43,39 @@ const children = [];
 let startedDimension = null;   // { peerPort, dimensionName } once this launcher has spawned a roster
 let launching = false;
 
+// Keep per-peer log files in game/logs/<dimension-slug>/<label>.log — one
+// subdirectory per dimension so logs are naturally partitioned by game.
+// When the user reports a bug and says "it happened in dimension <name>",
+// I only have to read the files under that one subdir instead of untangling
+// a shared log stream. Each subdir also gets an `_index.txt` with the
+// human-readable dimension name so I can confirm which slug maps to which.
+// The console still mirrors everything so a live tail is also an option.
+const LOG_DIR = path.resolve(__dirname, 'logs');
+try { fsSync.mkdirSync(LOG_DIR, { recursive: true }); } catch {}
+console.log(`[launcher] per-peer logs root: ${LOG_DIR}`);
+const _logStreams = new Map();   // key: "<dim>/<name>" -> WriteStream
+const _dimIndexWritten = new Set();
+function logStreamFor(name, env) {
+  const dimName = (env && env.DIM_NAME) || 'unknown-dimension';
+  const dimSlug = slug(dimName) || 'unknown-dimension';
+  const dimDir = path.join(LOG_DIR, dimSlug);
+  const key = `${dimSlug}/${name}`;
+  let s = _logStreams.get(key);
+  if (s) return s;
+  try { fsSync.mkdirSync(dimDir, { recursive: true }); } catch {}
+  if (!_dimIndexWritten.has(dimSlug)) {
+    try { fsSync.writeFileSync(path.join(dimDir, '_index.txt'), `dimension_name=${dimName}\ndimension_slug=${dimSlug}\n`); } catch {}
+    _dimIndexWritten.add(dimSlug);
+  }
+  const safe = String(name).replace(/[^a-z0-9._-]+/gi, '_');
+  const file = path.join(dimDir, `${safe}.log`);
+  s = fsSync.createWriteStream(file, { flags: 'a' });
+  s.on('error', (e) => console.warn(`[launcher] log stream for ${key} failed: ${e.message}`));
+  s.write(`\n===== ${new Date().toISOString()} — session start for ${name} in dimension "${dimName}" =====\n`);
+  _logStreams.set(key, s);
+  console.log(`[launcher] log → ${path.relative(__dirname, file)}`);
+  return s;
+}
 function spawnChild(name, args, env) {
   const child = spawn(process.execPath, args, {
     cwd: __dirname,
@@ -50,9 +84,14 @@ function spawnChild(name, args, env) {
     windowsHide: true,
   });
   child._name = name;
-  child.stdout.on('data', (b) => process.stdout.write(`${b}`));
-  child.stderr.on('data', (b) => process.stderr.write(`${b}`));
-  child.on('exit', (code) => console.log(`[launcher] ${name} exited (${code})`));
+  const logFile = logStreamFor(name, env);
+  child.stdout.on('data', (b) => { process.stdout.write(`${b}`); logFile.write(b); });
+  child.stderr.on('data', (b) => { process.stderr.write(`${b}`); logFile.write(b); });
+  child.on('exit', (code, signal) => {
+    const msg = `[launcher] ${name} exited (code=${code}, signal=${signal})`;
+    console.log(msg);
+    logFile.write(`\n${msg}\n`);
+  });
   children.push(child);
   return child;
 }
