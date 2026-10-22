@@ -752,6 +752,19 @@ function wireInput() {
     // toward the new destination instead of the old one. This is what kills
     // "dangling" moves: a journey retargeted mid-handshake takes effect at
     // the very next planning phase.
+    // Clicked a tile currently occupied by another living entity that we're
+    // already adjacent to? Then there is no multi-round journey to start —
+    // we're already in range. Setting pathPlan here would route the hero to
+    // some *other* free neighbour of the clicked tile, which looks exactly
+    // like "the hero circles around the target toward a tile I never
+    // clicked". Suppress pathPlan in that case so the right-click is just a
+    // target binding.
+    const occAtT = state.entities.find(p =>
+      p.peer_id !== state.myPeerId && (p.life ?? 0) > 0
+      && p.tile_q === t.q && p.tile_r === t.r);
+    const alreadyAdjacentToOccupant = !!occAtT
+      && hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, occAtT) <= 1;
+
     if (state.phase !== 'planning' || state.locked) {
       if (me.tile_q === t.q && me.tile_r === t.r) {
         // Right-click on self = cancel the pending journey outright.
@@ -759,6 +772,13 @@ function wireInput() {
         state.ui.pathPlan = null;
         state.ui.selectedTarget = null;
         logUI('journey override — next round will not auto-walk', 'phase');
+      } else if (alreadyAdjacentToOccupant) {
+        // In contact with the clicked occupant — don't queue a journey that
+        // would make us pace around them next round.
+        state.ui.destinationTile = { q: t.q, r: t.r };
+        state.ui.pathPlan = null;
+        state.ui.selectedTarget = { q: t.q, r: t.r };
+        logUI(`journey override — already adjacent to ${occAtT.name}, no walk queued`, 'phase');
       } else {
         const blocked = blockedTilesExcluding(state.myPeerId);
         const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
@@ -824,6 +844,17 @@ function wireInput() {
         state.ui.destinationTile = null;
         state.ui.pathPlan = null;
         label = moveExplicit ? 'Move (stay)' : 'EP (stay)';
+      } else if (alreadyAdjacentToOccupant) {
+        // Same guard as the locked-override branch: don't start a multi-
+        // round journey when the clicked target is a living entity we're
+        // already touching. Stage a single-step aim at the clicked tile so
+        // the committed EM/Move resolves as "step toward them" (which the
+        // resolver treats as a blocked no-op) instead of pacing around.
+        state.target = { q: t.q, r: t.r };
+        state.ui.selectedTarget = { q: t.q, r: t.r };
+        state.ui.destinationTile = { q: t.q, r: t.r };
+        state.ui.pathPlan = null;
+        label = `${codeTag} → (${t.q},${t.r}) (already in contact)`;
       } else {
         const blocked = blockedTilesExcluding(state.myPeerId);
         const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
