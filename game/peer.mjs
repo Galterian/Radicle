@@ -885,27 +885,6 @@ async function doResolution() {
     }
   }
 
-  // Contact log: broadcast every pair of adjacent cross-side revealers so the
-  // UI can show exactly what opposed what, after both commits are revealed.
-  const contacts = [];
-  for (let i = 0; i < revealsThisTurn.length; i++) {
-    for (let j = i + 1; j < revealsThisTurn.length; j++) {
-      const a = revealsThisTurn[i], b = revealsThisTurn[j];
-      const pa = peersPublic.get(a.actor);
-      const pb = peersPublic.get(b.actor);
-      if (!pa || !pb) continue;
-      if (sideOf(pa.alliance) === sideOf(pb.alliance)) continue;
-      const d = hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r });
-      if (d > 1) continue;
-      contacts.push({
-        a: { peer_id: a.actor, name: pa.name, action: a.action, vetoed: vetoed.get(a.actor) || null },
-        b: { peer_id: b.actor, name: pb.name, action: b.action, vetoed: vetoed.get(b.actor) || null },
-        distance: d,
-      });
-    }
-  }
-  if (contacts.length) broadcastUI({ kind: 'contact', contacts, turn: hg.turn });
-
   // Damage pass. Attack still requires a character target so there's a
   // defender to score damage against; tile-target Attacks produce no damage
   // (they're handled as a move intent above). The per-victim value is a list
@@ -942,6 +921,33 @@ async function doResolution() {
     }
   }
   const sumDmg = list => (list || []).reduce((s, d) => s + d.amount, 0);
+
+  // Contact log: broadcast every pair of adjacent cross-side revealers so the
+  // UI can show exactly what opposed what. Now that the damage pass has run,
+  // each pair carries `damage_exchanged` — the UI only floats the ➙ "nobody
+  // scored" arrow on pairs where it is false, and keeps the ⚔️/🛡 damage
+  // animation for the ones where it is true.
+  const dmgBetween = (x, y) => (damage.get(y) || []).some(d => d.attacker === x);
+  const contacts = [];
+  for (let i = 0; i < revealsThisTurn.length; i++) {
+    for (let j = i + 1; j < revealsThisTurn.length; j++) {
+      const a = revealsThisTurn[i], b = revealsThisTurn[j];
+      const pa = peersPublic.get(a.actor);
+      const pb = peersPublic.get(b.actor);
+      if (!pa || !pb) continue;
+      if (sideOf(pa.alliance) === sideOf(pb.alliance)) continue;
+      const d = hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r });
+      if (d > 1) continue;
+      const dmg = dmgBetween(a.actor, b.actor) || dmgBetween(b.actor, a.actor);
+      contacts.push({
+        a: { peer_id: a.actor, name: pa.name, action: a.action, tile_q: pa.tile_q, tile_r: pa.tile_r, vetoed: vetoed.get(a.actor) || null },
+        b: { peer_id: b.actor, name: pb.name, action: b.action, tile_q: pb.tile_q, tile_r: pb.tile_r, vetoed: vetoed.get(b.actor) || null },
+        distance: d,
+        damage_exchanged: dmg,
+      });
+    }
+  }
+  if (contacts.length) broadcastUI({ kind: 'contact', contacts, turn: hg.turn, round: hg.round });
 
   // Apply changes only to my own entity in the authoritative sense.
   const myMove = nextTiles.get(PEER_ID_STRING);
