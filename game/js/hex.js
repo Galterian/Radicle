@@ -70,52 +70,82 @@ export function stepAway(from, to) {
 }
 
 // A* pathfinding over the hex grid, avoiding `blocked` tiles ("q,r" strings).
-// Returns the ordered list of hexes AFTER `from` up to and including `to`, or
-// an empty array if no path exists (or from===to). The destination itself may
-// or may not be `blocked`; we treat it the same as any other tile, so pathing
-// to an occupied hex returns [] (the UI then just stays put).
+// Returns the ordered list of hexes AFTER `from` up to and including the
+// reached tile, or an empty array if no reachable tile exists at all. The
+// grid is tiny (5x5) so a plain linear-scan A* is fine.
+//
+// Blocked destinations get a fallback: if `to` itself is blocked (an enemy
+// is standing on it) we path to the closest reachable hex ADJACENT to `to`
+// instead — same spirit of "get me as near as possible to that cell". With
+// this, right-clicking a tile that happens to be occupied no longer collapses
+// to the single-step heuristic; the pathfinder still routes you around the
+// obstacle and parks you one hex short.
 export function findPath(from, to, blocked = new Set(), size = 5) {
   if (from.q === to.q && from.r === to.r) return [];
   if (!inBounds(to.q, to.r, size)) return [];
   const key = h => `${h.q},${h.r}`;
-  const startKey = key(from);
-  const goalKey  = key(to);
-  if (blocked.has(goalKey)) return [];
-  const open = [{ q: from.q, r: from.r, g: 0, f: hexDistance(from, to) }];
-  const parents = new Map();
-  const gScore  = new Map([[startKey, 0]]);
-  const closed  = new Set();
-  while (open.length) {
-    // Linear-scan min — the grid is tiny (5x5 = 25 cells) so a heap would be
-    // overkill; keep the implementation small and allocation-free.
-    let bi = 0;
-    for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
-    const cur = open.splice(bi, 1)[0];
-    const ck = key(cur);
-    if (closed.has(ck)) continue;
-    closed.add(ck);
-    if (ck === goalKey) {
-      const path = [];
-      let k = ck;
-      while (parents.has(k)) {
-        const [q, r] = k.split(',').map(Number);
-        path.unshift({ q, r });
-        k = parents.get(k);
+  const goalKey = key(to);
+
+  // Internal A* run. If `allowBlockedGoal` is true the goal tile may itself
+  // be in `blocked` and still counts as a valid finish — we use that for the
+  // first attempt. For the fallback runs the goals are the free neighbours
+  // of `to`, each of which must be unblocked themselves.
+  const runAStar = (goalQ, goalR, allowBlockedGoal) => {
+    const startKey = key(from);
+    const gk = `${goalQ},${goalR}`;
+    const open = [{ q: from.q, r: from.r, g: 0, f: hexDistance(from, { q: goalQ, r: goalR }) }];
+    const parents = new Map();
+    const gScore = new Map([[startKey, 0]]);
+    const closed = new Set();
+    while (open.length) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+      const cur = open.splice(bi, 1)[0];
+      const ck = key(cur);
+      if (closed.has(ck)) continue;
+      closed.add(ck);
+      if (ck === gk) {
+        const path = [];
+        let k = ck;
+        while (parents.has(k)) {
+          const [q, r] = k.split(',').map(Number);
+          path.unshift({ q, r });
+          k = parents.get(k);
+        }
+        return path;
       }
-      return path;
-    }
-    for (const n of neighbours(cur.q, cur.r)) {
-      if (!inBounds(n.q, n.r, size)) continue;
-      const nk = key(n);
-      if (closed.has(nk)) continue;
-      if (blocked.has(nk) && nk !== goalKey) continue;
-      const g = cur.g + 1;
-      if (g < (gScore.get(nk) ?? Infinity)) {
-        gScore.set(nk, g);
-        parents.set(nk, ck);
-        open.push({ q: n.q, r: n.r, g, f: g + hexDistance(n, to) });
+      for (const n of neighbours(cur.q, cur.r)) {
+        if (!inBounds(n.q, n.r, size)) continue;
+        const nk = key(n);
+        if (closed.has(nk)) continue;
+        if (blocked.has(nk) && !(allowBlockedGoal && nk === gk)) continue;
+        const g = cur.g + 1;
+        if (g < (gScore.get(nk) ?? Infinity)) {
+          gScore.set(nk, g);
+          parents.set(nk, ck);
+          open.push({ q: n.q, r: n.r, g, f: g + hexDistance(n, { q: goalQ, r: goalR }) });
+        }
       }
     }
+    return [];
+  };
+
+  // 1) Try the direct path to `to`, assuming `to` must itself be reachable
+  //    (unblocked). The pathfinder routes around any intermediate blockers.
+  const direct = blocked.has(goalKey) ? [] : runAStar(to.q, to.r, false);
+  if (direct.length) return direct;
+
+  // 2) Either `to` is blocked or every route to it is cut off. Fall back to
+  //    the closest reachable free neighbour of `to`, so the journey still
+  //    makes progress toward the clicked cell rather than giving up.
+  const candidates = [];
+  for (const n of neighbours(to.q, to.r)) {
+    if (!inBounds(n.q, n.r, size)) continue;
+    if (blocked.has(key(n))) continue;
+    const p = runAStar(n.q, n.r, false);
+    if (p.length) candidates.push(p);
   }
-  return [];
+  if (!candidates.length) return [];
+  candidates.sort((a, b) => a.length - b.length);
+  return candidates[0];
 }
