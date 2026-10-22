@@ -91,6 +91,23 @@ function resumeJourney() {
     logUI(`journey complete at (${dest.q},${dest.r})`, 'phase');
     return false;
   }
+  // If the clicked destination is occupied by another living entity, the
+  // pathfinder's "closest free neighbour" fallback can only ever stop us one
+  // hex short — `me.tile === dest.tile` never becomes true, so the journey
+  // loops forever. If the occupant moves, resumeJourney recomputes and the
+  // hero appears to walk *around* them, aimed at tiles the player never
+  // clicked. Treat "adjacent to the blocked destination" as arrival and
+  // hand control back to the next planning phase (Attack can engage from
+  // the step we're standing on).
+  const occupant = state.entities.find(p =>
+    p.peer_id !== state.myPeerId && (p.life ?? 0) > 0
+    && p.tile_q === dest.q && p.tile_r === dest.r);
+  if (occupant && hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, occupant) <= 1) {
+    state.ui.pathPlan = null;
+    state.ui.destinationTile = null;
+    logUI(`journey ended — adjacent to ${occupant.name} at (${dest.q},${dest.r})`, 'phase');
+    return false;
+  }
   const blocked = blockedTilesExcluding(state.myPeerId);
   const path = findPath({ q: me.tile_q, r: me.tile_r }, dest, blocked);
   if (!path.length) {
