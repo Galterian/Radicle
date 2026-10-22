@@ -69,10 +69,25 @@ export function createRenderer(canvas, state) {
     const now = performance.now();
     const stillMoving = [...moves.values()].some(m => now - m.startAt < MOVE_DURATION_MS);
     const stillFloating = (state.ui.floatingDmgs || []).some(f => now - f.startAt < f.duration);
-    if ((stillMoving || stillFloating) && !rafId) {
+    const stillIcons = (state.ui.floatingIcons || []).some(f => now - f.startAt < f.duration);
+    if ((stillMoving || stillFloating || stillIcons) && !rafId) {
       rafId = requestAnimationFrame(() => { rafId = 0; render(); scheduleIfAnimating(); });
     }
   }
+
+  // Per-action icon + color for the revealer's floating marker. The emoji
+  // characters are drawn as text; the color only affects a stroked halo
+  // behind it (emoji glyphs are rendered by the system font with their own
+  // colors, so we can't recolor the ⚔️ itself, but a tinted outline reads
+  // clearly against the dark map).
+  const ACTION_ICON = {
+    A:  { glyph: '⚔️', color: '#ff6b6b' },  // Attack (red)
+    B:  { glyph: '🛡',  color: '#6ad99f' },  // Block (green)
+    M:  { glyph: '🤺', color: '#6ad9ff' },  // Move (blue)
+    P:  { glyph: '👁',  color: '#dfe3e8' },  // Posture (dark white)
+    EP: { glyph: '➙',  color: '#ffe66e' },  // Empty Posture (yellow)
+    EM: { glyph: '➙',  color: '#c9b84c' },  // Empty Move — dim yellow
+  };
 
   function render() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -304,6 +319,44 @@ export function createRenderer(canvas, state) {
         ctx.restore();
       }
       floats.length = liveWriteIdx;
+    }
+
+    // Floating per-action icons (⚔️ / 🛡 / 🤺 / 👁 / ➙). Same lerp+fade as
+    // damage: targeted actions (A/M/EM) travel actor→aim; self-only actions
+    // (B/P/EP) rise straight up from the actor's tile. A tinted stroked halo
+    // behind the glyph gives the per-action color — the OS emoji font won't
+    // let us recolor the glyph itself.
+    const icons = state.ui.floatingIcons || [];
+    if (icons.length) {
+      let liveWriteIdx = 0;
+      for (let i = 0; i < icons.length; i++) {
+        const f = icons[i];
+        const t = (now - f.startAt) / f.duration;
+        if (t >= 1) continue;
+        if (liveWriteIdx !== i) icons[liveWriteIdx] = f;
+        liveWriteIdx++;
+        const spec = ACTION_ICON[f.action] || ACTION_ICON.EP;
+        const k = ease(t);
+        const from = tilePx(f.fromQ, f.fromR);
+        const to   = tilePx(f.toQ, f.toR);
+        const x = from.x + (to.x - from.x) * k;
+        // Self-only actions get a stronger vertical lift so they're clearly
+        // "rising" rather than drifting sideways.
+        const lift = f.upOnly ? 36 * t : 20 * t;
+        const y = from.y + (to.y - from.y) * k - lift - 24;
+        const alpha = t < 0.75 ? 1 : (1 - (t - 0.75) / 0.25);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.font = 'bold 18px "Segoe UI Emoji", "Apple Color Emoji", ui-sans-serif, system-ui';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = spec.color;
+        ctx.fillStyle = spec.color;
+        ctx.strokeText(spec.glyph, x, y);
+        ctx.fillText(spec.glyph, x, y);
+        ctx.restore();
+      }
+      icons.length = liveWriteIdx;
     }
   }
 
