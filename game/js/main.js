@@ -646,13 +646,37 @@ function wireInput() {
   let lastRightClickAt = 0;
   canvas.addEventListener('contextmenu', (ev) => {
     ev.preventDefault();
-    if (state.phase !== 'planning' || state.locked) return;
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = pixelToHex(px, py, renderer.origin());
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
+
+    // If we're past the planning window (reveal / resolution) or already
+    // committed this round, we can't change *this* round's action — but we
+    // CAN still override the pending journey so the next round picks up
+    // toward the new destination instead of the old one. This is what kills
+    // "dangling" moves: a journey retargeted mid-handshake takes effect at
+    // the very next planning phase.
+    if (state.phase !== 'planning' || state.locked) {
+      if (me.tile_q === t.q && me.tile_r === t.r) {
+        // Right-click on self = cancel the pending journey outright.
+        state.ui.destinationTile = null;
+        state.ui.pathPlan = null;
+        state.ui.selectedTarget = null;
+        logUI('journey override — next round will not auto-walk', 'phase');
+      } else {
+        const blocked = blockedTilesExcluding(state.myPeerId);
+        const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked);
+        state.ui.destinationTile = { q: t.q, r: t.r };
+        state.ui.pathPlan = path.length ? path : null;
+        state.ui.selectedTarget = path.length ? path[0] : { q: t.q, r: t.r };
+        logUI(`journey override → (${t.q},${t.r}) — takes effect next round`, 'phase');
+      }
+      renderDeck();
+      return;
+    }
 
     const occupant = entityAtPixel(px, py);
     const isEnemy = occupant && occupant.peer_id !== state.myPeerId
