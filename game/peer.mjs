@@ -46,6 +46,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // -------- config via env --------
 const PEER_LABEL        = process.env.PEER_LABEL        || 'player-1';          // human-readable
+
+// Loud crash handlers so a peer death leaves a trail in the file log rather
+// than vanishing silently from the console. Especially important for monster
+// peers — if their process dies, their marker fades from everyone's map after
+// 90s stale and the only clue was in whatever scrolled off the terminal.
+process.on('uncaughtException',  (e) => { console.error(`[${PEER_LABEL}] UNCAUGHT`, e?.stack || e); setTimeout(() => process.exit(1), 50); });
+process.on('unhandledRejection', (e) => { console.error(`[${PEER_LABEL}] UNHANDLED REJECTION`, e?.stack || e); });
 const PEER_PORT_LIBP2P  = Number(process.env.PEER_PORT_LIBP2P  || 7400);
 const PEER_PORT_HTTP    = Number(process.env.PEER_PORT_HTTP    || 7401);        // UI WebSocket + API
 const PEER_PORT_GUN     = Number(process.env.PEER_PORT_GUN     || 7501);        // GunDB relay WebSocket
@@ -801,6 +808,12 @@ async function doResolution() {
     const dest = stepsAlong(here, tgtT, steps);
     moveIntents.push({ actor: r.actor, action: r.action, dest, prio: priorityOf(r.action), target: tgtT });
   }
+  // Deterministic iteration across peers — the gossip layer delivers reveals
+  // in whatever order the mesh happened to carry them, so peer A's
+  // revealsThisTurn can be [X,Y,Z] while peer B's is [Y,X,Z]. Without an
+  // explicit sort, byDest's insertion order (and thus any ordering-dependent
+  // bookkeeping) could diverge, and so could the state_hash.
+  moveIntents.sort((a, b) => a.actor.localeCompare(b.actor));
   // Collision veto with Rule 8 priority. A Mover may not step onto a hex
   // another living entity currently occupies (no chaining — "Move toward an
   // enemy engages them, it does not walk onto their hex"). At a contested
@@ -912,7 +925,11 @@ async function doResolution() {
   const myMove = nextTiles.get(PEER_ID_STRING);
   if (myMove) entity.tile = myMove;
   const myDmg = sumDmg(damage.get(PEER_ID_STRING));
+  const wasAlive = entity.life > 0;
   if (myDmg) entity.life = Math.max(0, entity.life - myDmg);
+  if (wasAlive && entity.life <= 0) {
+    console.log(`[${PEER_LABEL}] DIED at (${entity.tile.q},${entity.tile.r}) after -${myDmg} on T${hg.turn}.R${hg.round + 1} (life_max=${entity.lifeMax})`);
+  }
   // Publish immediately so the browser UI sees damage / movement at reveal
   // time, not only after cleanup fires a few seconds later.
   if (myMove || myDmg) await publishPublicState();

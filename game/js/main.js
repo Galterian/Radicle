@@ -609,62 +609,23 @@ function wireInput() {
     const t = pixelToHex(px, py, renderer.origin());
     if (!t) return;
     const occupant = entityAtPixel(px, py);
-    // Once committed, clicks only narrow the event log — they must not drag
-    // the target/marker around (otherwise a stray click overrides the just-
-    // committed destination).
+    // Left-click never stages a movement or journey — that's exclusively a
+    // right-click gesture now. All left-click does is:
+    //   - narrow the event log to the clicked entity (or clear the filter)
+    //   - set the target to a clicked enemy so an Attack already queued (via
+    //     1-5 keys) lands on them. Enemies are a target binding, not a move.
+    // Clicks on empty ground only move the visual cursor cross-hair.
     if (state.locked) {
       setLogFilter(occupant ? occupant.peer_id : null);
       return;
     }
     state.ui.selectedTarget = t;
-    // Clicking an entity narrows the event log to that peer's events;
-    // clicking far from any entity clears the filter.
     setLogFilter(occupant ? occupant.peer_id : null);
-
     if (occupant && occupant.peer_id !== state.myPeerId) {
-      // Clicked on an enemy — set as target, keep whatever action is queued
-      // (so an Attack queued ahead of time can land on them). A direct enemy
-      // pick clearly overrides any walking plan.
-      cancelPathJourney('new target');
       state.target = occupant.peer_id;
-      logUI(`target → ${occupant.name}`, 'phase', { peerId: occupant.peer_id });
-    } else if (state.phase === 'planning' && !state.locked) {
-      // Clicked on open ground — pre-select the Empty slot and target the
-      // first step toward that tile. The Empty slot renders as EM (because a
-      // tile target is set) or EP (if you clicked your own hex). Double-click
-      // commits; a plain single-click just stages the pick.
-      const me = state.entities.find(p => p.peer_id === state.myPeerId);
-      if (me && Number.isInteger(me.tile_q)) {
-        const atTile = me.tile_q === t.q && me.tile_r === t.r;
-        const step = atTile ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, t);
-        // Clicking ground means "go that way". Only an explicitly chosen Move
-        // card survives (it moves too, just with the card); anything else —
-        // auto-pick, Attack, Block, Posture — is unselected in favour of Empty.
-        const q0 = state.queued[0];
-        const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : null;
-        const keepMove = queuedCode === 'M' && !state.queuedIsAuto;
-        if (!keepMove && q0 !== 'EMPTY') {
-          state.queued = ['EMPTY'];
-          state.queuedIsAuto = false;  // treat as a deliberate pick now
-          send({ kind: 'queue', slots: state.queued });
-        }
-        // Left-click targets a specific hex for this round only — it doesn't
-        // set up a multi-round journey (that's what right-click is for), so
-        // cancel any in-progress walker before staging the new one-off pick.
-        cancelPathJourney('new target');
-        state.target = { q: step.q, r: step.r };
-        state.ui.selectedTarget = step;
-        const code = keepMove ? `Move → (${step.q},${step.r})` : atTile ? 'EP (stay)' : `EM → (${step.q},${step.r})`;
-        logUI(`staged: ${code} — double-click to commit`, 'phase');
-      } else {
-        state.target = { q: t.q, r: t.r };
-        logUI(`target → tile (${t.q},${t.r})`, 'phase');
-      }
-    } else {
-      state.target = { q: t.q, r: t.r };
-      logUI(`target → tile (${t.q},${t.r})`, 'phase');
+      logUI(`target → ${occupant.name} (Attack binding — use right-click to move)`, 'phase', { peerId: occupant.peer_id });
+      send({ kind: 'target', target: state.target });
     }
-    send({ kind: 'target', target: state.target });
     renderDeck();
   });
 
@@ -785,43 +746,16 @@ function wireInput() {
     renderDeck();
   });
 
-  // Double-click anywhere = commit toward the destination (or toward the
-  // double-clicked tile, if no destination set). Keeps Move if that's what
-  // you've chosen; otherwise swaps to the Empty slot (EM when the step tile is
-  // a different hex than you're on, EP otherwise).
+  // Left-double-click = commit shortcut. It no longer stages a new move;
+  // that's a right-click gesture only. If something is already queued (a
+  // card, EMPTY with a right-click destination, etc.) a double-click just
+  // locks it in. On an empty queue it's a no-op.
   canvas.addEventListener('dblclick', (ev) => {
     if (state.phase !== 'planning' || state.locked) return;
-    const rect = canvas.getBoundingClientRect();
-    const t = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top, renderer.origin());
-    if (!t) return;
-    const me = state.entities.find(p => p.peer_id === state.myPeerId);
-    if (!me || typeof me.tile_q !== 'number') return;
-    // The double-clicked tile is the direction; the right-click marker is only
-    // a preview and is replaced by the committed direction.
-    const dest = t;
-    state.ui.destinationTile = { q: t.q, r: t.r };
-    // Walk one hex toward the destination. If we're already there, treat it
-    // as EP (empty posture) at our own tile.
-    const atDest = me.tile_q === dest.q && me.tile_r === dest.r;
-    const step = atDest ? { q: me.tile_q, r: me.tile_r } : stepToward({ q: me.tile_q, r: me.tile_r }, dest);
-    const q0 = state.queued[0];
-    const queuedCode = typeof q0 === 'number' ? state.hand[q0]?.code : (q0 === 'EMPTY' ? 'EM' : null);
-    // Only honour an explicit Move; if the UI's auto-pick happened to be Move,
-    // treat the double-click as a request to swap to EMPTY (EP/EM).
-    const moveQueued = queuedCode === 'M' && !state.queuedIsAuto;
-    if (!moveQueued) {
-      state.queued = ['EMPTY'];
-      state.queuedIsAuto = false;
-      send({ kind: 'queue', slots: state.queued });
-    }
-    state.target = { q: step.q, r: step.r };
-    state.ui.selectedTarget = step;
-    send({ kind: 'target', target: state.target });
-    // Lock in so the auto-commit at round end just goes with this.
+    if (!state.queued.length) return;
     state.locked = true;
     send({ kind: 'lock' });
-    const label = moveQueued ? `Move → (${step.q},${step.r})` : (atDest ? `EP (stay)` : `EM → (${step.q},${step.r})`);
-    logUI(`committed: ${label}`, 'phase');
+    logUI(`commit locked (double-click)`, 'phase');
     renderDeck();
   });
 
