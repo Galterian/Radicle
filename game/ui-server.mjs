@@ -97,14 +97,31 @@ function spawnChild(name, args, env) {
   return child;
 }
 
+// A port is free only if nothing answers on loopback AND we can bind it on the
+// wildcard. Binding alone is not enough: Node listen sockets set SO_REUSEADDR,
+// so on Linux a wildcard bind succeeds while a sibling peer already listens on
+// 127.0.0.1:<port> — that handed two joiners the same UI port.
+async function portIsFree(p) {
+  const answering = await new Promise(res => {
+    const c = net.connect({ port: p, host: '127.0.0.1' });
+    c.once('connect', () => { c.destroy(); res(true); });
+    c.once('error', () => res(false));
+    c.setTimeout(300, () => { c.destroy(); res(false); });
+  });
+  if (answering) return false;
+  return new Promise(res => {
+    const s = net.createServer();
+    s.once('error', () => res(false));
+    s.listen(p, '0.0.0.0', () => s.close(() => res(true)));
+  });
+}
+// Ports handed out by this launcher process; a probe can't see a port whose
+// peer is still booting.
+const handedOut = new Set();
 async function freePort(start) {
   for (let p = start; p < start + 200; p++) {
-    const ok = await new Promise(res => {
-      const s = net.createServer();
-      s.once('error', () => res(false));
-      s.listen(p, '0.0.0.0', () => s.close(() => res(true)));
-    });
-    if (ok) return p;
+    if (handedOut.has(p)) continue;
+    if (await portIsFree(p)) { handedOut.add(p); return p; }
   }
   throw new Error('no free port');
 }
@@ -210,14 +227,8 @@ async function probeLive(dimId, ms = 7000, relays = DEFAULT_RELAYS) {
 async function freePortRun(start, count) {
   for (let base = start; base < start + 400; base++) {
     let ok = true;
-    for (let i = 0; i < count && ok; i++) {
-      ok = await new Promise(res => {
-        const s = net.createServer();
-        s.once('error', () => res(false));
-        s.listen(base + i, '0.0.0.0', () => s.close(() => res(true)));
-      });
-    }
-    if (ok) return base;
+    for (let i = 0; i < count && ok; i++) ok = !handedOut.has(base + i) && await portIsFree(base + i);
+    if (ok) { for (let i = 0; i < count; i++) handedOut.add(base + i); return base; }
   }
   throw new Error(`no run of ${count} free ports near ${start}`);
 }
