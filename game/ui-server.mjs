@@ -26,7 +26,8 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { RADICLE_BARE, radicleEnv, listPublishedDimensions } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
-import { hexDistance, inBounds } from './js/hex.js';
+import { hexDistance } from './js/hex.js';
+import { createKnownMap, initialBlock, seedForDimension } from './js/map.js';
 import { fancyLabel } from './js/names.js';
 
 const pexec = promisify(execFile);
@@ -176,6 +177,7 @@ function describeDimension(d) {
     tile: p.tile, life: p.life, life_max: p.life_max, clock: p.clock, pushed_at: p.pushed_at, age_sec: ageSec(p.pushed_at),
     live: Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS, nid: p.nid, commit: p.commit,
     known_members: (p.known_members || []).length, known_tiles: (p.known_tiles || []).length,
+    map_tiles: p.map?.tiles_known ?? null, map_blocks: (p.map?.blocks || []).length,
   }));
   const newest = doors[0]?.pushed_at || d.legacy_doors?.[0]?.last_push?.at || null;
   return {
@@ -293,15 +295,26 @@ async function startDimension({ dimensionName, publicIp }) {
   return { peerPort: peers[0].http, status: 'started', dimension: DIM_NAME, publicIp: ip };
 }
 
+// The dimension's known map as the union of every Door's blocks. Each Door
+// carries the map as its holder saw it; blocks are idempotent so the union is
+// exactly what a peer that had heard everyone would hold.
+function mapFromDoors(dim) {
+  const seed = dim.doors.find(p => p.map?.seed)?.map.seed || seedForDimension(dimIdOf(dim));
+  const km = createKnownMap(seed, [initialBlock()]);
+  for (const p of dim.doors) km.addBlocks(p.map?.blocks || []);
+  return km;
+}
+
 // Pick a start tile from what the Doors know. 'nearby' = adjacent to a friend
-// (or to the chosen player's Door); 'random' = outside everyone's strong radius.
-function placeFromDoors({ members, anchorPeerId, side, placement, size = 5, strongRadius = 2 }) {
+// (or to the chosen player's Door); 'random' = a known hex outside everyone's
+// strong radius. Only hexes somebody has revealed are candidates.
+function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2 }) {
   const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : a;
   const alive = members
     .map(m => ({ peer_id: m.peer_id, q: m.tile?.q, r: m.tile?.r, alliance: m.alliance ?? m.clan, life: m.life ?? 1 }))
     .filter(m => Number.isInteger(m.q) && Number.isInteger(m.r) && (m.life ?? 1) > 0);
   const occupied = new Set(alive.map(m => `${m.q},${m.r}`));
-  const all = []; for (let q = 0; q < size; q++) for (let r = 0; r < size; r++) all.push({ q, r });
+  const all = [...knownMap.tiles()].map(t => ({ q: t.q, r: t.r }));
   const free = all.filter(t => !occupied.has(`${t.q},${t.r}`));
   if (!free.length) throw new Error('the grid is full');
   const minDist = (t, set) => set.length ? Math.min(...set.map(m => hexDistance(t, m))) : Infinity;
@@ -333,8 +346,15 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   const liveDoors = dim.doors.filter(p => Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS);
   if (!liveDoors.length) console.log(`[launcher] ${dimensionName}: no Door newer than ${DOOR_LIVE_MS / 60000} min — joining an empty dimension; you will be alone until someone else arrives`);
 
-  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement });
-  if (!inBounds(startTile.q, startTile.r, 5)) throw new Error('placement failed');
+  const knownMap = mapFromDoors(dim);
+  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap });
+  if (!knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
+  console.log(`[launcher] ${dimensionName}: map from ${dim.doors.length} Doors = ${knownMap.size()} hexes in ${knownMap.blockCount()} blocks (seed ${knownMap.seed})`);
+  // Hundreds of blocks don't fit comfortably in an environment variable; hand
+  // the joiner a file instead.
+  const mapBlocksFile = path.join(__dirname, 'sessions', dim.dimension_name, `map-blocks.${Date.now()}.json`);
+  await fs.mkdir(path.dirname(mapBlocksFile), { recursive: true });
+  await fs.writeFile(mapBlocksFile, JSON.stringify(knownMap.blocks()));
 
   // Network hints from every Door: bus relays (required), plus direct-link
   // addresses that may or may not be reachable from here.
@@ -370,6 +390,8 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
     DIM_NAME:          dim.dimension_name,
     DIM_ID:            dimIdOf(dim),
     DOOR_ID:           'door-primary',
+    MAP_SEED:          knownMap.seed,
+    MAP_BLOCKS_FILE:   mapBlocksFile,
     BOOTSTRAP:         [...bootstrap].join(','),
     PEER_GUN_URLS:     [...gunRelays].join(','),
     PEER_PUBLIC_IP:    publicIp,

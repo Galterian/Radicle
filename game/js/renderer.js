@@ -1,5 +1,5 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
-import { hexToPixel, hexCorners, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
+import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
 
 const ALLIANCE_COLOR = {
   'player':  '#6ad9ff',
@@ -28,32 +28,66 @@ const COLD_SYNC_MS = 1500;
 // Smooth-step easing — slow in, slow out.
 const ease = t => t < 0 ? 0 : t > 1 ? 1 : (t * t * (3 - 2 * t));
 
+// Camera easing per frame toward the player's marker. The marker itself
+// slides over MOVE_DURATION_MS, so a light follow keeps the world scrolling
+// smoothly instead of pinning the hero dead-centre with a hard lock.
+const CAM_FOLLOW = 0.12;
+const ZOOM_MIN = 0.35, ZOOM_MAX = 1.6;
+
 export function createRenderer(canvas, state) {
   const ctx = canvas.getContext('2d');
 
-  // Origin in canvas space so the 5x5 grid sits centred.
-  const origin = { x: 0, y: 0 };
+  // The map is unbounded, so everything is drawn in *world* pixels
+  // (hexToPixel) under a camera transform: `cam` is the world point at the
+  // canvas centre, `zoom` the scale. tilePx() returns world pixels; toWorld()
+  // maps a canvas pixel back. Nothing below needs to know where the camera is.
+  const cam = { x: 0, y: 0, set: false };
+  let zoom = 1;
+  let viewW = 0, viewH = 0, dpr = 1;
 
-  // Per-entity motion book-keeping: { fromQ, fromR, toQ, toR, startAt }.
+  // Per-entity motion book-keeping: { fromPx (world), toQ, toR, startAt }.
   // When we spot an entity's tile has changed since last render, we open a new
   // interpolation starting from where it was being drawn (not necessarily its
   // last whole-tile position — so interrupted moves blend smoothly).
   const moves = new Map();  // peerId -> { fromPx, toQ, toR, startAt }
 
-  function layout() {
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    const dpr = devicePixelRatio || 1;
-    canvas.width = w * dpr; canvas.height = h * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const far = hexToPixel(4, 4);
-    origin.x = (w - far.x) / 2;
-    origin.y = (h - far.y) / 2 - 20;
+  // Known tiles + fog frontier, rebuilt only when the map version changes.
+  const tileCache = { version: -1, tiles: [], frontier: [] };
+  function tilesFor(map, version) {
+    if (tileCache.version !== version) {
+      tileCache.version = version;
+      tileCache.tiles = [...map.tiles()].map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: map.terrain(t.q, t.r).fill }));
+      tileCache.frontier = map.frontier().map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r) }));
+    }
+    return tileCache;
   }
 
-  function tilePx(q, r) {
-    const p = hexToPixel(q, r);
-    return { x: origin.x + p.x, y: origin.y + p.y };
+  function layout() {
+    viewW = canvas.clientWidth; viewH = canvas.clientHeight;
+    dpr = devicePixelRatio || 1;
+    canvas.width = viewW * dpr; canvas.height = viewH * dpr;
   }
+
+  function tilePx(q, r) { return hexToPixel(q, r); }
+  function toWorld(px, py) { return { x: (px - viewW / 2) / zoom + cam.x, y: (py - viewH / 2) / zoom + cam.y }; }
+  function pickHex(px, py, known) { const w = toWorld(px, py); return pixelToHex(w.x, w.y, { x: 0, y: 0 }, known); }
+  function applyCamera() {
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * (viewW / 2 - cam.x * zoom), dpr * (viewH / 2 - cam.y * zoom));
+  }
+  function inView(x, y, margin = HEX_SIZE * 1.5) {
+    const hw = viewW / (2 * zoom) + margin, hh = viewH / (2 * zoom) + margin;
+    return x > cam.x - hw && x < cam.x + hw && y > cam.y - hh && y < cam.y + hh;
+  }
+
+  canvas.addEventListener('wheel', (ev) => {
+    ev.preventDefault();
+    const before = toWorld(ev.offsetX, ev.offsetY);
+    zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom * (ev.deltaY > 0 ? 0.9 : 1.1)));
+    // Keep the hex under the cursor where it is while zooming.
+    const after = toWorld(ev.offsetX, ev.offsetY);
+    cam.x += before.x - after.x; cam.y += before.y - after.y;
+    render();
+  }, { passive: false });
 
   function interpAt(mv, now) {
     const t = Math.min(1, (now - mv.startAt) / MOVE_DURATION_MS);
@@ -93,35 +127,98 @@ export function createRenderer(canvas, state) {
     STANDOFF: { glyph: '➙', color: '#ffe66e' },
   };
 
+  function hexPath(x, y) {
+    const corners = hexCorners(x, y);
+    ctx.beginPath();
+    for (let i = 0; i < corners.length; i++) {
+      const c = corners[i];
+      if (i === 0) ctx.moveTo(c.x, c.y);
+      else ctx.lineTo(c.x, c.y);
+    }
+    ctx.closePath();
+  }
+
+  // Work out where every entity is drawn this frame (opening a new slide when
+  // its tile changed) BEFORE anything is painted, so the camera can follow the
+  // player's marker and the tile pass can be culled against the final view.
+  function entityPositions(now) {
+    const out = new Map();
+    for (const e of state.entities) {
+      const target = tilePx(e.tile.q, e.tile.r);
+      let x = target.x, y = target.y;
+      const key = e.peerId;
+      const prev = moves.get(key);
+      if (!prev || prev.toQ !== e.tile.q || prev.toR !== e.tile.r) {
+        // Cold-sync snap: if this is the first time we've seen this entity,
+        // we've only known about it for a moment (fresh reconnect / page
+        // load), or the client just set `state.ui.coldSyncUntil` to a future
+        // time (via a hello handshake), jump the marker to the new position
+        // instead of sliding. Lets the browser render "the current state"
+        // immediately rather than animating a 7.5 s drift from the first
+        // snapshot into the mesh's actual positions.
+        const coldWindow = state.ui.coldSyncUntil && now < state.ui.coldSyncUntil;
+        const isColdSync = !prev || (now - prev.startAt < COLD_SYNC_MS) || coldWindow;
+        const fromPx = isColdSync ? target : interpAt(prev, now);
+        moves.set(key, { fromPx, toQ: e.tile.q, toR: e.tile.r, startAt: now });
+      } else {
+        const p = interpAt(moves.get(key), now);
+        x = p.x; y = p.y;
+      }
+      out.set(key, { x, y });
+    }
+    return out;
+  }
+
+  function followCamera(positions, now) {
+    const me = state.entities.find(e => e.isSelf);
+    let target = me ? positions.get(me.peerId) : null;
+    if (!target) {
+      const b = state.map.bounds();
+      target = hexToPixel((b.min_q + b.max_q) / 2, (b.min_r + b.max_r) / 2);
+    }
+    const coldWindow = state.ui.coldSyncUntil && now < state.ui.coldSyncUntil;
+    if (!cam.set || coldWindow) { cam.x = target.x; cam.y = target.y; cam.set = true; return; }
+    cam.x += (target.x - cam.x) * CAM_FOLLOW;
+    cam.y += (target.y - cam.y) * CAM_FOLLOW;
+  }
+
   function render() {
-    const w = canvas.clientWidth, h = canvas.clientHeight;
-    ctx.clearRect(0, 0, w, h);
+    const now = performance.now();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewW, viewH);
+    const positions = entityPositions(now);
+    followCamera(positions, now);
+    applyCamera();
 
-    // Draw tiles.
-    for (let r = 0; r < 5; r++) {
-      for (let q = 0; q < 5; q++) {
-        const { x, y } = tilePx(q, r);
-        const corners = hexCorners(x, y);
-        ctx.beginPath();
-        for (let i = 0; i < corners.length; i++) {
-          const c = corners[i];
-          if (i === 0) ctx.moveTo(c.x, c.y);
-          else ctx.lineTo(c.x, c.y);
-        }
-        ctx.closePath();
-        const checker = (q + r) % 2;
-        ctx.fillStyle = checker ? '#141a24' : '#101620';
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = '#232a38';
-        ctx.stroke();
-
-        // Coordinate label (debug / learning aid).
+    // Known tiles, coloured by the seed-derived terrain; then the fog line —
+    // the unknown hexes touching the known world, drawn as faint dashed
+    // outlines so the edge of the revealed dimension is visible.
+    const { tiles, frontier } = tilesFor(state.map, state.mapVersion);
+    const showLabels = zoom >= 0.75;
+    ctx.lineWidth = 1;
+    for (const t of tiles) {
+      if (!inView(t.x, t.y)) continue;
+      hexPath(t.x, t.y);
+      ctx.fillStyle = t.fill;
+      ctx.fill();
+      ctx.strokeStyle = '#232a38';
+      ctx.stroke();
+      if (showLabels) {
         ctx.fillStyle = '#2f3a4a';
         ctx.font = '9px ui-monospace, Consolas, monospace';
-        ctx.fillText(`${q},${r}`, x - 10, y - HEX_SIZE * H_SQUASH + 12);
+        ctx.textAlign = 'left';
+        ctx.fillText(`${t.q},${t.r}`, t.x - 10, t.y - HEX_SIZE * H_SQUASH + 12);
       }
     }
+    ctx.save();
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = '#1c2230';
+    for (const t of frontier) {
+      if (!inView(t.x, t.y)) continue;
+      hexPath(t.x, t.y);
+      ctx.stroke();
+    }
+    ctx.restore();
 
     // Target highlight.
     if (state.ui.hoverTile) {
@@ -150,38 +247,15 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
-    const now = performance.now();
     // Track self's actually-drawn pixel so the destination arrow starts from
     // the marker (not from the tile centre of a cell the marker is only
-    // halfway into). Filled in during the entity loop below.
+    // halfway into).
     let selfDrawnPx = null;
     // Entities. Dead entities render as a faded tombstone so a wiped ally still
     // leaves a marker on the map (otherwise it looks like the piece vanished).
     for (const e of state.entities) {
       const dead = e.life <= 0;
-      const target = tilePx(e.tile.q, e.tile.r);
-      let x = target.x, y = target.y;
-      // Smooth-slide motion between tile changes. We key on peer id and the
-      // whole-tile target so arrival-after-arrival still triggers a new tween.
-      const key = e.peerId;
-      const prev = moves.get(key);
-      if (!prev || prev.toQ !== e.tile.q || prev.toR !== e.tile.r) {
-        // Cold-sync snap: if this is the first time we've seen this entity,
-        // we've only known about it for a moment (fresh reconnect / page
-        // load), or the client just set `state.ui.coldSyncUntil` to a future
-        // time (via a hello handshake), jump the marker to the new position
-        // instead of sliding. Lets the browser render "the current state"
-        // immediately rather than animating a 7.5 s drift from the first
-        // snapshot into the mesh's actual positions.
-        const coldWindow = state.ui.coldSyncUntil && now < state.ui.coldSyncUntil;
-        const isColdSync = !prev || (now - prev.startAt < COLD_SYNC_MS) || coldWindow;
-        const fromPx = isColdSync ? target : interpAt(prev, now);
-        moves.set(key, { fromPx, toQ: e.tile.q, toR: e.tile.r, startAt: now });
-      } else {
-        const live = moves.get(key);
-        const p = interpAt(live, now);
-        x = p.x; y = p.y;
-      }
+      const { x, y } = positions.get(e.peerId);
       if (e.isSelf) selfDrawnPx = { x, y };
       const color = ALLIANCE_COLOR[e.alliance] || '#ccc';
 
@@ -376,8 +450,6 @@ export function createRenderer(canvas, state) {
     }
   }
 
-  function origin_() { return origin; }
-
   window.addEventListener('resize', () => { layout(); render(); });
   layout();
 
@@ -385,5 +457,5 @@ export function createRenderer(canvas, state) {
   // loop if any entity is mid-slide.
   const renderPublic = () => { render(); scheduleIfAnimating(); };
 
-  return { render: renderPublic, origin: origin_, tilePx };
+  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom };
 }
