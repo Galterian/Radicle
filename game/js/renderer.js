@@ -17,6 +17,14 @@ const ALLIANCE_COLOR = {
 // If a new move lands before the current animation finishes, interpAt blends
 // from the current drawn position into the new target without a jump.
 const MOVE_DURATION_MS = 7500;
+// Any tile change for an entity that we've known about for less than this
+// window counts as "cold sync" — just reconnected / just loaded — and the
+// marker snaps to the new position instead of sliding. Without this the
+// browser would stage a slow 7.5s slide from each entity's initially-reported
+// tile to whatever the mesh converges on next, so opening the app mid-game
+// looked like "everyone is drifting into position" instead of "here's the
+// current state."
+const COLD_SYNC_MS = 1500;
 // Smooth-step easing — slow in, slow out.
 const ease = t => t < 0 ? 0 : t > 1 ? 1 : (t * t * (3 - 2 * t));
 
@@ -139,10 +147,16 @@ export function createRenderer(canvas, state) {
       const key = e.peerId;
       const prev = moves.get(key);
       if (!prev || prev.toQ !== e.tile.q || prev.toR !== e.tile.r) {
-        // Start a new interpolation. From = where we're currently drawing
-        // (if we have a running one), else from the target itself (no visible
-        // slide on first appearance).
-        const fromPx = prev ? interpAt(prev, now) : target;
+        // Cold-sync snap: if this is the first time we've seen this entity,
+        // we've only known about it for a moment (fresh reconnect / page
+        // load), or the client just set `state.ui.coldSyncUntil` to a future
+        // time (via a hello handshake), jump the marker to the new position
+        // instead of sliding. Lets the browser render "the current state"
+        // immediately rather than animating a 7.5 s drift from the first
+        // snapshot into the mesh's actual positions.
+        const coldWindow = state.ui.coldSyncUntil && now < state.ui.coldSyncUntil;
+        const isColdSync = !prev || (now - prev.startAt < COLD_SYNC_MS) || coldWindow;
+        const fromPx = isColdSync ? target : interpAt(prev, now);
         moves.set(key, { fromPx, toQ: e.tile.q, toR: e.tile.r, startAt: now });
       } else {
         const live = moves.get(key);
