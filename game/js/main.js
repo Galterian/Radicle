@@ -520,7 +520,23 @@ connect();
 
 function send(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
 
+// Forward every meaningful user input to the peer process so it lands in the
+// per-dimension log file alongside the server-side envelopes. This gives us a
+// unified timeline when diagnosing "the hero moved on its own" or "my commit
+// was ignored" — we can see whether a click actually arrived, what phase the
+// client thought it was in, and whether locked/journey state matched.
+function uilog(event, extra = {}) {
+  send({
+    kind: 'uilog',
+    event,
+    phase: state.phase,
+    locked: state.locked,
+    ...extra,
+  });
+}
+
 function queueSlot(key) {
+  uilog('queueSlot', { detail: `key=${key}` });
   if (state.locked) return;
   // Single-action-per-turn (Rule 1 + Rule 7). Clicking the already-queued slot
   // unqueues it (so you can commit nothing → defaults to EP server-side);
@@ -559,6 +575,7 @@ function wireInput() {
     }
   });
   window.addEventListener('keydown', (ev) => {
+    uilog('keydown', { key: ev.key || ev.code });
     if (ev.key >= '1' && ev.key <= '5') queueSlot(Number(ev.key) - 1);
     else if (ev.key === '8') queueSlot('EMPTY');
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
@@ -607,6 +624,7 @@ function wireInput() {
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = pixelToHex(px, py, renderer.origin());
+    uilog('click', { tile: t, detail: `button=${ev.button}` });
     if (!t) return;
     const occupant = entityAtPixel(px, py);
     // Left-click never stages a movement or journey — that's exclusively a
@@ -649,6 +667,7 @@ function wireInput() {
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = pixelToHex(px, py, renderer.origin());
+    uilog('rightclick', { tile: t });
     if (!t) return;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
@@ -775,6 +794,7 @@ function wireInput() {
   // card, EMPTY with a right-click destination, etc.) a double-click just
   // locks it in. On an empty queue it's a no-op.
   canvas.addEventListener('dblclick', (ev) => {
+    uilog('dblclick');
     if (state.phase !== 'planning' || state.locked) return;
     if (!state.queued.length) return;
     state.locked = true;

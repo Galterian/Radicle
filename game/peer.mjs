@@ -35,6 +35,7 @@ import 'gun/sea.js';
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
@@ -53,6 +54,19 @@ const PEER_LABEL        = process.env.PEER_LABEL        || 'player-1';          
 // 90s stale and the only clue was in whatever scrolled off the terminal.
 process.on('uncaughtException',  (e) => { console.error(`[${PEER_LABEL}] UNCAUGHT`, e?.stack || e); setTimeout(() => process.exit(1), 50); });
 process.on('unhandledRejection', (e) => { console.error(`[${PEER_LABEL}] UNHANDLED REJECTION`, e?.stack || e); });
+
+// Dedicated UI-input log file, kept SEPARATE from the regular peer log so
+// a stream of mouse-moves/clicks can never drown out gameplay events. One
+// append-only file per (dimension, peer). Written to directly from the peer
+// so these never touch stdout, the console, or the browser's event log.
+const _slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'unknown-dimension';
+const _dirForUi = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'logs', _slug(process.env.DIM_NAME));
+try { fsSync.mkdirSync(_dirForUi, { recursive: true }); } catch {}
+const _uiLogPath = path.join(_dirForUi, `peer_${String(PEER_LABEL).replace(/[^a-z0-9._-]+/gi, '_')}.ui.log`);
+const _uiLogStream = fsSync.createWriteStream(_uiLogPath, { flags: 'a' });
+_uiLogStream.on('error', () => {});
+_uiLogStream.write(`\n===== ${new Date().toISOString()} — ui session start for ${PEER_LABEL} =====\n`);
+function writeUiLog(line) { try { _uiLogStream.write(`${line}\n`); } catch {} }
 const PEER_PORT_LIBP2P  = Number(process.env.PEER_PORT_LIBP2P  || 7400);
 const PEER_PORT_HTTP    = Number(process.env.PEER_PORT_HTTP    || 7401);        // UI WebSocket + API
 const PEER_PORT_GUN     = Number(process.env.PEER_PORT_GUN     || 7501);        // GunDB relay WebSocket
@@ -1284,6 +1298,21 @@ wss.on('connection', (ws) => {
         // cards are played during the turn. Monsters never discard leftovers.
         willDiscard.clear();
         if (entity.kind === 'character') for (const i of m.slots || []) if (hand[i]) willDiscard.add(hand[i].card_id);
+      }
+      if (m.kind === 'uilog') {
+        // Browser-side user input echo. Goes ONLY to the per-peer UI log
+        // file (never to stdout / the console / the browser's event log) so
+        // it doesn't drown out gameplay chatter. The pair lives next to the
+        // regular peer log so you can `tail` both to reconstruct a timeline.
+        const t = m.event || '?';
+        const parts = [new Date().toISOString(), t];
+        if (m.key) parts.push(`key=${m.key}`);
+        if (m.button !== undefined) parts.push(`btn=${m.button}`);
+        if (m.tile) parts.push(`tile=(${m.tile.q},${m.tile.r})`);
+        if (m.phase) parts.push(`phase=${m.phase}`);
+        if (m.locked !== undefined) parts.push(`locked=${m.locked}`);
+        if (m.detail) parts.push(m.detail);
+        writeUiLog(parts.join(' '));
       }
     } catch {}
   });
