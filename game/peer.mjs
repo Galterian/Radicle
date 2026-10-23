@@ -112,6 +112,7 @@ try {
   if (process.env.MAP_BLOCKS_FILE) fsSync.rm(process.env.MAP_BLOCKS_FILE, { force: true }, () => {});
 } catch (e) { console.warn(`[${PEER_LABEL}] could not read seed map blocks: ${e.message}`); seedBlocks = []; }
 if (!Array.isArray(seedBlocks)) seedBlocks = [];
+let dimMap = null;   // created once Gun is up (see "the dimension map" below)
 const PEER_GUN_URLS     = (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
 const BOOTSTRAP_MADDRS  = (process.env.BOOTSTRAP || '').split(',').filter(Boolean);        // libp2p peers
 const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 60);            // demo: 60s instead of 3600s
@@ -127,6 +128,16 @@ const ROUNDS_PER_TURN   = Number(process.env.ROUNDS_PER_TURN  || 3);
 const COMMIT_WAIT_MS    = Number(process.env.COMMIT_WAIT_MS   || 800);
 const REVEAL_WAIT_MS    = Number(process.env.REVEAL_WAIT_MS   || 1500);
 const HAND_SIZE         = 5;
+// Region tiers (sync_region_tiers). Movement per round is bounded so the
+// strong region can be a fixed radius: an Empty Move covers at most
+// EM_MAX_STEPS hexes, a Move one, so two entities can only contest a hex or
+// strike each other this round if they start within 2*EM_MAX_STEPS+1 of each
+// other. The handshake waits for — and the resolver/state hash cover — only the
+// members inside STRONG_RADIUS; everyone further out is "reachable"/"far": we
+// hear their state, we never wait for them.
+const EM_MAX_STEPS      = Math.max(1, Number(process.env.EM_MAX_STEPS || 3));
+const STRONG_RADIUS     = Number(process.env.STRONG_RADIUS || (2 * EM_MAX_STEPS + 2));
+const REACH_RADIUS      = STRONG_RADIUS + Number(process.env.REVEAL_RADIUS || DEFAULT_REVEAL_RADIUS);
 
 const PEER_ID_STRING    = `peer:${PEER_LABEL}`;
 
@@ -432,7 +443,7 @@ function sha256Hex(s) { return createHash('sha256').update(s).digest('hex'); }
 function digestObj(o) { return sha256Hex(JSON.stringify(o)); }
 
 let lastEnvelopeAt = 0;
-async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
+async function emitEnvelope({ type, payload, actionIndex = hg.round, viaBus = null }) {
   const env = {
     type,
     dimension_id: DIM_ID,
@@ -447,7 +458,7 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
     // Piggyback our public snapshot so receivers always resolve against fresh
     // tile/life and the bus doesn't need a separate state event every round
     // (public relays rate-limit chatty senders).
-    state: currentStateSnapshot(),
+    state: currentStateSnapshot(true),
   };
   env._hash = digestObj(env);
   hg.selfParent = env._hash;
@@ -461,7 +472,7 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round }) {
   catch (e) { console.warn(`[${PEER_LABEL}] pubsub publish failed: ${e.message}`); }
   // Only the handshake needs to cross the internet; the per-round state-hash
   // and push notes are bookkeeping and would double the relay load.
-  if (type === 'evt_action_commit' || type === 'evt_action_reveal' || type === 'evt_map_extend') bus?.publish('env', env);
+  if (viaBus ?? (type === 'evt_action_commit' || type === 'evt_action_reveal' || type === 'evt_map_extend')) bus?.publish('env', env);
   lastEnvelopeAt = Date.now();
 
   // 2) Append to the on-disk tape under the Radicle work dir — pushed on the hourly lottery.
@@ -492,7 +503,7 @@ function receiveEnvelope(env, via) {
   if (n <= 3 || n % 50 === 0) console.log(`[${PEER_LABEL}] ${via} rx #${n}: ${env.type} from ${env.actor_peer_id}`);
   hg.otherParent = env._hash;
   hg.tape.push(env);
-  if (env.state && mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: livePeers() });
+  if (env.state && mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: peersForUI() });
   inboxApply(env);
   broadcastUI({ kind: 'evt', env, from_peer: true });
 }
@@ -521,17 +532,26 @@ setInterval(() => {
 // the Gun CRDT or the gossipsub mesh hasn't converged yet (common on localhost
 // during the first few turns, which previously caused resolver no-ops and the
 // "ally marker disappears" flicker in the UI).
-function currentStateSnapshot() {
-  return {
+// `slim` is what rides on every envelope (twice a round, to everyone): the
+// game-relevant fields only. The network hints (addresses, relays) are static
+// and ~600 bytes, so they travel on the heartbeat / Gun / Door paths instead;
+// mergePeerState merges rather than replaces, so a slim update never erases
+// hints learned earlier. `map_blocks` lets a peer notice it is behind on the
+// map and lets the one ahead push its blocks (see mergePeerState).
+function currentStateSnapshot(slim = false) {
+  const s = {
     peer_id: PEER_ID_STRING, character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: ALLIANCE, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
-    // Live clock + network hints so a joining peer can align its turn counter
-    // and dial the mesh. Gun rejects arrays in nested puts, hence the CSV.
     turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt,
-    gun_url: myGunUrl, multiaddrs_csv: myMaddrs.join(','),
-    nostr_pubkey: bus?.pubkey || null, nostr_relays_csv: (bus?.relays || []).join(','),
+    map_blocks: dimMap ? dimMap.blockCount() : 0,
   };
+  if (slim) return s;
+  // Live clock + network hints so a joining peer can align its turn counter
+  // and dial the mesh. Gun rejects arrays in nested puts, hence the CSV.
+  s.gun_url = myGunUrl; s.multiaddrs_csv = myMaddrs.join(',');
+  s.nostr_pubkey = bus?.pubkey || null; s.nostr_relays_csv = (bus?.relays || []).join(',');
+  return s;
 }
 
 // Known-peers map seeded with self so the resolver always has an actor entry
@@ -556,6 +576,8 @@ const isFresh = p => p && p.peer_id === PEER_ID_STRING || (p && Date.parse(p.las
 // standoff and roster logic all tolerate stale snapshots because a stale
 // snapshot is still the *last authoritative statement* about that peer.
 function livePeers() { return [...peersPublic.values()]; }
+// What the browser gets: every snapshot plus the region tier relative to us.
+function peersForUI() { return livePeers().map(p => ({ ...p, tier: tierOf(p) })); }
 setInterval(() => {
   let swept = 0;
   const cutoff = Date.now() - PEER_SWEEP_MS;
@@ -564,7 +586,7 @@ setInterval(() => {
     const ls = Date.parse(p?.last_seen || 0);
     if (!Number.isFinite(ls) || ls < cutoff) { peersPublic.delete(id); swept++; }
   }
-  if (swept) broadcastUI({ kind: 'peers', peers: livePeers(), dropped: true });
+  if (swept) broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true });
 }, 60_000);
 
 async function postJson(url, body) {
@@ -586,6 +608,7 @@ function mergePeerState(p) {
   peersPublic.set(p.peer_id, { ...prev, ...p });
   noteTile(p.tile_q, p.tile_r);
   if (p.multiaddrs_csv) dialPeerAddrs(p.peer_id, p.multiaddrs_csv.split(',').filter(Boolean)).catch(() => {});
+  if (typeof p.map_blocks === 'number') offerMapSync(p.peer_id, p.map_blocks);
   return true;
 }
 
@@ -598,12 +621,14 @@ function mergePeerState(p) {
 // evt_map_extend envelope over gossipsub + the Nostr bus (fast), and the Door
 // on Radicle (what joiners seed from). Receiving the same block twice is a
 // no-op, so the order and the transport never matter.
-const dimMap = createKnownMap(MAP_SEED, [initialBlock(INITIAL_SIZE), ...seedBlocks]);
+dimMap = createKnownMap(MAP_SEED, [initialBlock(INITIAL_SIZE), ...seedBlocks]);
 const gunMap = dimRoot.get('map').get('blocks');
 const knownHex = (q, r) => dimMap.has(q, r);
+const blockAddedAt = [];   // when each block arrived here (ms), oldest first — see offerMapSync
 function mapSummary() { return { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, blocks: dimMap.blocks(), tiles: dimMap.size(), bounds: dimMap.bounds() }; }
 function addMapBlock(b, via) {
   if (!isBlock(b) || !dimMap.addBlock(b)) return false;
+  blockAddedAt.push(Date.now());
   console.log(`[${PEER_LABEL}] map +${b.id} via ${via} by ${b.by || '?'} → ${dimMap.size()} hexes in ${dimMap.blockCount()} blocks`);
   broadcastUI({ kind: 'map', map: mapSummary() });
   return true;
@@ -614,6 +639,47 @@ gunMap.map().on((b) => { if (b && typeof b === 'object') addMapBlock(b, 'gun'); 
 function syncMapToGun() { for (const b of dimMap.blocks()) gunMap.get(b.id).put(b); }
 syncMapToGun();
 setInterval(syncMapToGun, 60_000);
+// Positive convergence guarantee on the fast path. Every state snapshot says
+// how many blocks its sender holds; when a peer reports fewer than we hold,
+// we publish our whole block list as one evt_map_sync (gossipsub + bus),
+// rate-limited per lagging peer. Blocks are idempotent, so over-sending is
+// harmless, and a joiner that came in through stale Doors (or a clone running
+// older code's Doors) catches up within a round instead of waiting on Gun.
+// A snapshot's count is as old as the snapshot, and blocks are added every few
+// seconds while people explore, so "fewer than we hold right now" is almost
+// always just a block still in flight. We only act on a deficit against the
+// blocks we have held for MAP_SYNC_RECENT_MS, and only when it either persists
+// for MAP_SYNC_LAG_MS (the extend envelope really was missed) or is large
+// (a joiner seeded from stale Doors).
+const MAP_SYNC_MIN_MS = 30_000, MAP_SYNC_LAG_MS = 20_000, MAP_SYNC_RECENT_MS = 10_000, MAP_SYNC_BIG = 5;
+const mapSyncOfferedAt = new Map();   // peer_id -> last offer (ms)
+const mapLagSince = new Map();        // peer_id -> first time we saw it behind (ms)
+let mapSyncInFlight = false;
+function settledBlockCount() {
+  const cutoff = Date.now() - MAP_SYNC_RECENT_MS;
+  while (blockAddedAt.length && blockAddedAt[0] < cutoff) blockAddedAt.shift();
+  return dimMap.blockCount() - blockAddedAt.length;
+}
+function offerMapSync(peerId, theirBlocks) {
+  if (!dimMap) return;
+  const settled = settledBlockCount();
+  if (theirBlocks >= settled) { mapLagSince.delete(peerId); return; }
+  if (!mapLagSince.has(peerId)) mapLagSince.set(peerId, Date.now());
+  const persistent = Date.now() - mapLagSince.get(peerId) >= MAP_SYNC_LAG_MS;
+  if (!persistent && settled - theirBlocks < MAP_SYNC_BIG) return;
+  if (mapSyncInFlight) return;
+  const last = mapSyncOfferedAt.get(peerId) || 0;
+  if (Date.now() - last < MAP_SYNC_MIN_MS) return;
+  mapSyncOfferedAt.set(peerId, Date.now());
+  mapSyncInFlight = true;
+  console.log(`[${PEER_LABEL}] map sync → ${peerId} holds ${theirBlocks} blocks, we hold ${dimMap.blockCount()} (${settled} settled); publishing full block list`);
+  const blocks = dimMap.blocks();
+  // Public relays reject large events; past ~40 KB the sync rides gossipsub only.
+  const viaBus = JSON.stringify(blocks).length < 40_000;
+  emitEnvelope({ type: 'evt_map_sync', payload: { for_peer: peerId, seed: MAP_SEED, blocks }, viaBus })
+    .catch(e => console.warn(`[${PEER_LABEL}] map sync failed: ${e.message}`))
+    .finally(() => { mapSyncInFlight = false; });
+}
 async function revealAround(q, r) {
   if (ALLIANCE !== 'player') return;
   if (!dimMap.needsReveal(q, r, REVEAL_RADIUS)) return;
@@ -640,7 +706,7 @@ async function publishPublicState(viaBus = false) {
   noteTile(snap.tile_q, snap.tile_r);
   if (viaBus) bus?.publish('state', snap);
   if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/state`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, state: snap });
-  broadcastUI({ kind: 'peers', peers: livePeers() });
+  broadcastUI({ kind: 'peers', peers: peersForUI() });
 }
 
 // -------- public Nostr bus --------
@@ -649,7 +715,7 @@ if (NOSTR_ENABLED) {
     relays: DEFAULT_RELAYS, dimId: DIM_ID, label: PEER_LABEL,
     onEvent(type, payload) {
       if (type === 'env') receiveEnvelope(payload, 'bus');
-      else if (type === 'state') { if (mergePeerState(payload)) broadcastUI({ kind: 'peers', peers: livePeers() }); }
+      else if (type === 'state') { if (mergePeerState(payload)) broadcastUI({ kind: 'peers', peers: peersForUI() }); }
     },
   });
   setInterval(() => {
@@ -677,7 +743,7 @@ setInterval(() => {
 // only accepts entries that look current, and merges rather than replaces so a
 // partial Gun echo (which sometimes drops fields) doesn't wipe tile/life.
 dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m) => {
-  if (mergePeerState(m)) broadcastUI({ kind: 'peers', peers: livePeers() });
+  if (mergePeerState(m)) broadcastUI({ kind: 'peers', peers: peersForUI() });
 });
 
 // Optional discovery mirror: pull everyone's registered state and merge.
@@ -688,7 +754,7 @@ async function pullDiscoveryState() {
     const j = await r.json();
     let changed = false;
     for (const p of j.peers || []) if (p.state && mergePeerState(p.state)) changed = true;
-    if (changed) broadcastUI({ kind: 'peers', peers: livePeers() });
+    if (changed) broadcastUI({ kind: 'peers', peers: peersForUI() });
   } catch {}
 }
 if (DISCOVERY_URL) { setInterval(pullDiscoveryState, 2500); setTimeout(pullDiscoveryState, 1200); }
@@ -784,15 +850,47 @@ function noteSeen(map, env) {
   map.get(k).add(env.actor_peer_id);
   if (map.size > 16) for (const key of [...map.keys()].sort((a, b) => a - b).slice(0, map.size - 16)) map.delete(key);
 }
-function expectedMembers() {
+// Strong region: the live members within STRONG_RADIUS of us. This is who we
+// wait for in the handshake and who our resolver/state hash cover; everyone
+// else is heard (positions, map blocks, clock) but never waited on, so a slow
+// or silent peer on the far side of the map cannot stall or forfeit us. The
+// set is frozen when we commit (`roundMembers`) so a position update arriving
+// mid-handshake can't change who we are waiting for.
+function computeStrongMembers() {
   const cutoff = Date.now() - 20_000;
+  const me = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   return [...peersPublic.values()].filter(p =>
     p && p.peer_id !== PEER_ID_STRING && p.life > 0 && Date.parse(p.last_seen || 0) > cutoff
+    && Number.isInteger(p.tile_q) && Number.isInteger(p.tile_r)
+    && hexDistance(me, p) <= STRONG_RADIUS
   ).map(p => p.peer_id);
+}
+let roundMembers = { action: -1, ids: [] };
+function freezeRoundMembers() { roundMembers = { action: hg.action, ids: computeStrongMembers() }; return roundMembers.ids; }
+// Who we wait for. Commits: the strong region. Reveals: the strong region plus
+// EVERY peer whose commit for this action we have seen — a committer is alive,
+// at our action and about to reveal, and its reveal may well affect an entity
+// inside our region (an attacker 9 hexes away hitting a monster 8 hexes away
+// is exactly how Swarm-0936 diverged). Waiting those extra ~100 ms costs
+// nothing; dropping their reveal costs a divergence.
+function expectedMembers(phase = 'planning') {
+  const base = roundMembers.action === hg.action ? roundMembers.ids : computeStrongMembers();
+  if (phase !== 'reveal') return base;
+  const committed = commitsSeen.get(hg.action);
+  if (!committed || !committed.size) return base;
+  return [...new Set([...base, ...committed])].filter(id => id !== PEER_ID_STRING);
+}
+// Reachable tier: anyone who could walk into our strong region within about a
+// minute — surfaced to the UI so the roster can show who is "near".
+function tierOf(p) {
+  if (!p || p.peer_id === PEER_ID_STRING) return 'self';
+  if (!Number.isInteger(p.tile_q)) return 'far';
+  const d = hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p);
+  return d <= STRONG_RADIUS ? 'strong' : d <= REACH_RADIUS ? 'reachable' : 'far';
 }
 function allIn(map) {
   const seen = map.get(hg.action) || new Set();
-  return expectedMembers().every(id => seen.has(id));
+  return expectedMembers(map === revealsSeen ? 'reveal' : 'planning').every(id => seen.has(id));
 }
 // A member we are still waiting on is "legitimately busy" when its last
 // published state says it is at OUR action, in the phase that produces the
@@ -808,7 +906,7 @@ function waitingOnBusyMember(map, phaseWanted) {
   if (Date.now() > phaseEndsAt + HANDSHAKE_HARD_CAP_MS) return false;
   const seen = map.get(hg.action) || new Set();
   const grace = 400;
-  for (const id of expectedMembers()) {
+  for (const id of expectedMembers(phaseWanted)) {
     if (seen.has(id)) continue;
     const p = peersPublic.get(id);
     if (!p || p.action !== hg.action || p.phase !== phaseWanted) continue;
@@ -856,6 +954,7 @@ async function doPlanningEnd() {
   // (joiners sync against us) and the standoff check can lift when someone new
   // arrives — but a corpse must not keep swinging.
   if (entity.life <= 0) { myLastReveal = null; return; }
+  freezeRoundMembers();
   // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
   if (ALLIANCE !== 'player') await npcPlan();
 
@@ -941,6 +1040,11 @@ async function doResolution() {
   // outcome for the same reveals. Members who did not reveal this round fall
   // back to the last snapshot we hold; they do not move, so that only matters
   // for occupancy and targeting.
+  // Every reveal we hold is applied, whatever tier its actor is in: the
+  // resolver's effects are local (attacks are adjacent, moves are bounded and
+  // only contend for occupancy), so a far actor only ever changes far
+  // entities, and the state hash compares entities both peers resolved. The
+  // region tiers decide whom we WAIT for, never whose reveal we use.
   const view = new Map(peersPublic);
   const revealsThisTurn = [];
   for (const env of hg.tape) {
@@ -1016,7 +1120,7 @@ async function doResolution() {
     if (!tgtT) continue;
     const here = { q: actor.tile_q, r: actor.tile_r };
     const d = hexDistance({ tile_q: here.q, tile_r: here.r }, { tile_q: tgtT.q, tile_r: tgtT.r });
-    const steps = r.action === 'EM' ? Math.max(1, Math.round(d / 2)) : 1;
+    const steps = r.action === 'EM' ? Math.min(EM_MAX_STEPS, Math.max(1, Math.round(d / 2))) : 1;
     const dest = stepsAlong(here, tgtT, steps);
     moveIntents.push({ actor: r.actor, action: r.action, dest, prio: priorityOf(r.action), target: tgtT });
   }
@@ -1267,22 +1371,28 @@ function checkStateHash(env) {
   const k = actionKey(env.turn, env.round);
   const mine = lastStateHashes.get(k);
   if (!mine || !env.payload?.state_hash || mine.hash === env.payload.state_hash) return;
-  divergenceCount++;
   const theirs = new Map((env.payload.region || []).map(e => [e.id, e]));
   const diffs = [];
+  // Regions differ legitimately (their strong set is centred on them), so a
+  // different hash only counts as divergence when an entity BOTH of us
+  // resolved came out differently.
   for (const e of mine.region) {
     const t = theirs.get(e.id);
-    if (!t) { diffs.push(`${e.id}: missing on their side`); continue; }
+    if (!t) continue;
     if (t.tile[0] !== e.tile[0] || t.tile[1] !== e.tile[1] || t.life !== e.life) diffs.push(`${e.id}: ours (${e.tile}) hp${e.life} vs theirs (${t.tile}) hp${t.life}`);
-    theirs.delete(e.id);
   }
-  for (const id of theirs.keys()) diffs.push(`${id}: missing on our side`);
-  console.warn(`[${PEER_LABEL}] STATE DIVERGENCE #${divergenceCount} T${env.turn}.R${env.round + 1} vs ${env.actor_peer_id}: ${diffs.join('; ') || 'same entities, different hash'}`);
+  if (!diffs.length) return;
+  divergenceCount++;
+  console.warn(`[${PEER_LABEL}] STATE DIVERGENCE #${divergenceCount} T${env.turn}.R${env.round + 1} vs ${env.actor_peer_id}: ${diffs.join('; ')}`);
 }
 
 function inboxApply(env) {
   if (env.type === 'evt_state_hash') checkStateHash(env);
   if (env.type === 'evt_map_extend' && env.payload?.block) addMapBlock(env.payload.block, 'envelope');
+  if (env.type === 'evt_map_sync' && Array.isArray(env.payload?.blocks) && env.payload.seed === MAP_SEED) {
+    let n = 0; for (const b of env.payload.blocks) if (addMapBlock(b, `sync from ${env.actor_peer_id}`)) n++;
+    if (n) console.log(`[${PEER_LABEL}] map sync from ${env.actor_peer_id}: +${n} blocks → ${dimMap.size()} hexes`);
+  }
   if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
   if (env.type === 'evt_action_reveal') noteSeen(revealsSeen, env);
 }
@@ -1407,6 +1517,21 @@ function catchUpClock() {
   // the "hero dancing / stuck in place" symptom. endRound at the natural
   // tail of this handshake will land us at ref.action with no drift.
   if (skipped === 1 && (currentPhase === 'reveal' || currentPhase === 'resolution')) return false;
+  // One behind while planning: only a member of OUR strong region counts as
+  // evidence that we are late. Such a member waits for our commit, so if it
+  // is already planning the next action it resolved this one without us —
+  // we are a full round behind and every reveal we send lands in a round the
+  // others have closed (Swarm-0958: a joiner stayed one action behind for six
+  // rounds, forfeited every round, split the hashes, and held the others at
+  // 8.4 s rounds while their caps waited on it). A far peer one ahead is not
+  // evidence of anything — a lone explorer with an empty region closes its
+  // rounds the instant its deadline passes and must not pace the dimension.
+  if (skipped === 1) {
+    const strong = new Set(expectedMembers());
+    const ahead = livePeers().find(p => p.peer_id !== PEER_ID_STRING && p.action === hg.action + 1 && strong.has(p.peer_id));
+    if (!ahead) return false;
+    ref = ahead;
+  }
   const oldTurn = hg.turn;
   hg.action = ref.action;
   hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
@@ -1539,9 +1664,10 @@ const uiHttp = http.createServer(async (req, res) => {
     res.end(JSON.stringify({
       peer_id: PEER_ID_STRING, dimension: DIM_NAME, phase: currentPhase, phaseEndsIn: Math.max(0, phaseEndsAt - Date.now()),
       entity, hand, queued, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
-      peers: livePeers(),
+      peers: peersForUI(),
       alliance: ALLIANCE,
       map: { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles: dimMap.size(), blocks: dimMap.blockCount(), bounds: dimMap.bounds() },
+      region: { strong_radius: STRONG_RADIUS, reach_radius: REACH_RADIUS, em_max_steps: EM_MAX_STEPS, strong: expectedMembers() },
       multiaddrs: myMaddrs, gun_url: myGunUrl, nostr_pubkey: bus?.pubkey || null, bus: bus ? bus.stats() : null,
     }));
     return;
@@ -1551,7 +1677,7 @@ const uiHttp = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, deck_count: deck.length, discard_count: discard.length, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: livePeers(), map: mapSummary() }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: ALLIANCE, entity, hand, deck_count: deck.length, discard_count: discard.length, dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary() }));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
