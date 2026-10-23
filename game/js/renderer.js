@@ -41,7 +41,7 @@ export function createRenderer(canvas, state) {
   // (hexToPixel) under a camera transform: `cam` is the world point at the
   // canvas centre, `zoom` the scale. tilePx() returns world pixels; toWorld()
   // maps a canvas pixel back. Nothing below needs to know where the camera is.
-  const cam = { x: 0, y: 0, set: false };
+  const cam = { x: 0, y: 0, set: false, manual: false };
   let zoom = 1;
   let viewW = 0, viewH = 0, dpr = 1;
 
@@ -78,6 +78,36 @@ export function createRenderer(canvas, state) {
     const hw = viewW / (2 * zoom) + margin, hh = viewH / (2 * zoom) + margin;
     return x > cam.x - hw && x < cam.x + hw && y > cam.y - hh && y < cam.y + hh;
   }
+
+  // Hold the left button and drag to pan. The first few pixels are ignored so
+  // an ordinary click never nudges the camera; once a drag has started the
+  // camera stops following the hero (`cam.manual`) until recentre() — key C —
+  // so you can scout the far side of the map without being yanked back every
+  // round. The click event that follows a drag is flagged via wasDrag() so
+  // main.js can ignore it.
+  const drag = { active: false, moved: false, lastX: 0, lastY: 0 };
+  const DRAG_THRESHOLD_PX = 4;
+  canvas.addEventListener('mousedown', (ev) => {
+    if (ev.button !== 0) return;
+    drag.active = true; drag.moved = false; drag.lastX = ev.clientX; drag.lastY = ev.clientY;
+  });
+  window.addEventListener('mousemove', (ev) => {
+    if (!drag.active) return;
+    const dx = ev.clientX - drag.lastX, dy = ev.clientY - drag.lastY;
+    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+    drag.moved = true; drag.lastX = ev.clientX; drag.lastY = ev.clientY;
+    cam.x -= dx / zoom; cam.y -= dy / zoom; cam.manual = true;
+    canvas.classList.add('panning');
+    render();
+  });
+  window.addEventListener('mouseup', (ev) => {
+    if (ev.button !== 0) return;
+    drag.active = false;
+    canvas.classList.remove('panning');
+  });
+  window.addEventListener('blur', () => { drag.active = false; canvas.classList.remove('panning'); });
+  function wasDrag() { return drag.moved; }
+  function recentre() { cam.manual = false; render(); }
 
   canvas.addEventListener('wheel', (ev) => {
     ev.preventDefault();
@@ -177,7 +207,8 @@ export function createRenderer(canvas, state) {
       target = hexToPixel((b.min_q + b.max_q) / 2, (b.min_r + b.max_r) / 2);
     }
     const coldWindow = state.ui.coldSyncUntil && now < state.ui.coldSyncUntil;
-    if (!cam.set || coldWindow) { cam.x = target.x; cam.y = target.y; cam.set = true; return; }
+    if (!cam.set || coldWindow) { cam.x = target.x; cam.y = target.y; cam.set = true; cam.manual = false; return; }
+    if (cam.manual) return;   // the player dragged the map; hold still until recentre()
     cam.x += (target.x - cam.x) * CAM_FOLLOW;
     cam.y += (target.y - cam.y) * CAM_FOLLOW;
   }
@@ -457,5 +488,5 @@ export function createRenderer(canvas, state) {
   // loop if any entity is mid-slide.
   const renderPublic = () => { render(); scheduleIfAnimating(); };
 
-  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom };
+  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom, wasDrag, recentre, isPanned: () => cam.manual };
 }

@@ -19,7 +19,11 @@ html, body { height: 100%; margin: 0; background: #0b0d12; color: #e8ecf1; font-
    actual rendered height of the deck-bar — no more guessing with calc(). */
 body { display: flex; flex-direction: column; }
 
-#hud { flex: 0 0 auto; z-index: 10; padding: 8px 12px; border-bottom: 1px solid #1a1f29; background: #0f131b; }
+/* The dimension bar is pinned to the top and the deck bar to the bottom of
+   the window: both are sticky, so if the page ever grows taller than the
+   viewport (small window, long roster) they stay on screen while the middle
+   scrolls. */
+#hud { flex: 0 0 auto; position: sticky; top: 0; z-index: 10; padding: 8px 12px; border-bottom: 1px solid #1a1f29; background: #0f131b; }
 #hud[hidden], main[hidden], #deck-bar[hidden] { display: none; }
 .pill.dim { background: #1b3a2e; color: #b8f0d0; font-weight: 600; }
 #hud .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -27,10 +31,14 @@ body { display: flex; flex-direction: column; }
 .pill.phase { background: #3a2c66; color: #e0d7ff; }
 .pill.timer { background: #2a1a1a; color: #ffb0b0; min-width: 56px; text-align: center; }
 
-main { display: grid; grid-template-columns: 1fr 320px; gap: 10px; padding: 10px; flex: 1 1 auto; min-height: 0; }
+/* The single grid row may shrink below its content (minmax(0, 1fr)) so a long
+   roster or log never stretches the page: the side panel scrolls internally
+   and the canvas always fits between the two pinned bars. */
+main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minmax(0, 1fr); gap: 10px; padding: 10px; flex: 1 1 auto; min-height: 0; }
 #stage { width: 100%; height: 100%; background: #080a10; border: 1px solid #1a1f29; border-radius: 6px; display: block; cursor: crosshair; }
+#stage.panning { cursor: grabbing; }
 
-#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; }
+#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
 #panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
 #panel small { color: #566379; font-weight: 400; }
 #roster { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
@@ -81,7 +89,7 @@ main { display: grid; grid-template-columns: 1fr 320px; gap: 10px; padding: 10px
    `margin-right` leaves a column aligned with the event-log panel in <main>
    (panel is 320px wide with a 10px gap and 10px padding), so the deck bar
    lives under the canvas only and never visually overlaps the log. */
-#deck-bar { flex: 0 0 auto; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; margin-right: calc(320px + 20px); }
+#deck-bar { flex: 0 0 auto; position: sticky; bottom: 0; z-index: 10; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; margin-right: calc(320px + 20px); }
 #deck-row { display: flex; justify-content: center; align-items: flex-end; gap: 14px; max-width: 1020px; margin: 0 auto; }
 #slots { display: flex; gap: 6px; align-items: flex-end; }
 /* Push the EM/EP slot apart from the dealt hand so it doesn't feel like one of
