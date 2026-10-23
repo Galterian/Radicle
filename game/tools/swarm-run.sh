@@ -12,4 +12,11 @@ setsid nohup node start-all.mjs < /dev/null > /tmp/chaos-A.log 2>&1 &
 sleep 4
 A=$(grep -oE 'open http://127.0.0.1:[0-9]+' /tmp/chaos-A.log | grep -oE '[0-9]+$')
 echo "launcher A :$A"
-node tools/swarm-test.mjs "http://127.0.0.1:$A" "${1:-4}" 2>&1 | tee /tmp/swarm.log
+# Second identity / second clone (launcher C) if it is set up — one player joins through it.
+C=""
+if [ -d "${RAD_HOME_B:-$HOME/.radicle-b}" ] && [ "${NO_C:-0}" != 1 ]; then
+  bash tools/start-b.sh || true
+  C=$(grep -oE 'open http://127.0.0.1:[0-9]+' /tmp/chaos-C.log | grep -oE '[0-9]+$' || true)
+  echo "launcher C :${C:-none}"
+fi
+LAUNCHER_C="${C:+http://127.0.0.1:$C}" LOGS_C="${CLONE_DIR_B:-$HOME/repo_radicle_b}/game/logs"   node tools/swarm-test.mjs "http://127.0.0.1:$A" "${1:-4}" 2>&1 | tee /tmp/swarm.log

@@ -93,6 +93,29 @@ outline past the last revealed hexes is the frontier. `REVEAL_RADIUS` and
 `MAP_SEED` can be overridden per peer via env (all peers of a dimension must
 agree on the seed).
 
+Two guarantees keep every player's map the same size. Every state snapshot a
+peer sends carries how many blocks it holds; a peer that stays behind for
+20 s (or is 5+ blocks short, as a joiner seeded from stale Doors is) receives
+the sender's full block list as one `evt_map_sync`. And the launcher seeds a
+joiner from the union of all Doors, so a stranger joining from another clone
+starts with the same hexes everyone else sees.
+
+## Region tiers: who you wait for
+
+The round handshake does not wait for the whole dimension. Each peer sorts the
+others by hex distance into **strong** (within 8 hexes — the roster says
+"in contact"), **reachable** (within 18) and **far**. An Empty Move covers at
+most 3 hexes per round (`EM_MAX_STEPS`), so a strong radius of
+`2·EM_MAX_STEPS + 2` guarantees nobody outside it can touch you this round;
+the reach radius adds the reveal radius on top. The strong set is frozen when
+you commit, and only its members can hold up your commit phase; for the reveal
+phase everyone whose commit you saw is waited for too, since a committer 9
+hexes away may hit a monster 8 hexes away. Every reveal that arrives is
+resolved regardless of tier — the tiers decide whom you *wait* for, never whose
+action counts — and the per-round state hash compares only entities both peers
+resolved, so two players on opposite sides of a big map agree without ever
+hearing each other's rounds in time.
+
 ## What it does
 
 - Loads every collection listed in `data/index.json`, picks the active version per entry (highest-weight non-rejected `VersionedEntry`).
