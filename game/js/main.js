@@ -676,6 +676,7 @@ function wireInput() {
     if (ev.key >= '1' && ev.key <= '5') queueSlot(Number(ev.key) - 1);
     else if (ev.key === '8') queueSlot('EMPTY');
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
+    else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
   });
 
   const canvas = document.getElementById('stage');
@@ -722,6 +723,7 @@ function wireInput() {
   }
 
   canvas.addEventListener('click', (ev) => {
+    if (renderer.wasDrag()) return;   // the button-up that ended a map pan is not a click
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = renderer.pickHex(px, py, knownHex);

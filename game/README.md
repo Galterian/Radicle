@@ -88,8 +88,9 @@ revealed. Hex terrain is derived from `(map_seed, q, r)` — the seed itself is
 derived from the dimension id — so two players who generate the same hex get
 the same hex.
 
-In the browser the camera follows your hero; the mouse wheel zooms; the dashed
-outline past the last revealed hexes is the frontier. `REVEAL_RADIUS` and
+In the browser the camera follows your hero; hold the left button and drag to
+pan (the camera then holds still until you press **C** to recentre); the mouse
+wheel zooms; the dashed outline past the last revealed hexes is the frontier. `REVEAL_RADIUS` and
 `MAP_SEED` can be overridden per peer via env (all peers of a dimension must
 agree on the seed).
 
