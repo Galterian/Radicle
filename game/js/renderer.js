@@ -134,7 +134,8 @@ export function createRenderer(canvas, state) {
     const stillMoving = [...moves.values()].some(m => now - m.startAt < MOVE_DURATION_MS);
     const stillFloating = (state.ui.floatingDmgs || []).some(f => now - f.startAt < f.duration);
     const stillIcons = (state.ui.floatingIcons || []).some(f => now - f.startAt < f.duration);
-    if ((stillMoving || stillFloating || stillIcons) && !rafId) {
+    const stillBadges = Object.values(state.ui.revealBadges || {}).some(b => now - b.startAt < b.duration);
+    if ((stillMoving || stillFloating || stillIcons || stillBadges) && !rafId) {
       rafId = requestAnimationFrame(() => { rafId = 0; render(); scheduleIfAnimating(); });
     }
   }
@@ -335,7 +336,24 @@ export function createRenderer(canvas, state) {
       // committed, keep the letter as-is until the next round — only the
       // colour shifts to orange so the user can still tell at a glance that
       // the action is locked in.
-      if (e.isSelf && e.queuedCode) {
+      // Revealed composition over every unit — `[EM + A + ✦BT + ✦Po]` — which
+      // vanishes on the same clock and fade curve as the floating action icon.
+      // While it is live it replaces the planning chip for my own hero.
+      const badge = e.revealBadge;
+      const bt = badge ? (now - badge.startAt) / badge.duration : 1;
+      if (badge && bt < 1) {
+        const alpha = bt < 0.75 ? 1 : (1 - (bt - 0.75) / 0.25);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(11,13,18,0.9)';
+        ctx.fillStyle = e.isSelf ? '#ffe66e' : (e.alliance === 'npc_b' ? '#ff9c9c' : '#9fd8ff');
+        const text = `[${badge.text}]`;
+        ctx.strokeText(text, x, y - 40 - 6 * bt);
+        ctx.fillText(text, x, y - 40 - 6 * bt);
+        ctx.restore();
+      } else if (e.isSelf && e.queuedCode) {
         ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
         ctx.fillText(`[${e.queuedCode}]`, x, y - 40);

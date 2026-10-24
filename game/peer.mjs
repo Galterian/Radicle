@@ -1947,6 +1947,8 @@ wss.on('connection', (ws) => {
         if (tranceOn) {
           if (queuedExtra !== null) codes.add(hand[queuedExtra].code);
           if (primary === null && queuedExtra === null) codes.add(hand.find(isAct).code);
+          // No second card → the second option is EP, which carries Move / Posture skills.
+          if (queuedExtra === null) { codes.add('M'); codes.add('P'); }
         }
         queuedSkills = skillIdx.filter(i => hand[i].is_trance ? tranceOn : (codes.size > 0 && codes.has(hand[i].requires)));
         broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra }));
