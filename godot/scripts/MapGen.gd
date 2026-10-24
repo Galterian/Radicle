@@ -32,8 +32,11 @@ var _tiles: Dictionary = {}    # "q,r" -> Vector2i
 var _bounds: Dictionary = {}
 var biome: Biome                 # deterministic biome sampler for this dimension
 var features: Features           # deterministic feature placer (null if catalog missing)
+var scatter: Scatter             # deterministic scatter overlay placer (bonus WBC3 decorations)
 var _features_dirty := true
 var _features_cache: Array = []
+var _scatter_dirty := true
+var _scatter_cache: Array = []
 
 
 ## FNV-1a over the UTF-16 code units of `s` -> 32-bit unsigned (same arithmetic as JS).
@@ -78,6 +81,7 @@ func _init(dim_id: String = "Ashfall-Micro", blocks: Array = []) -> void:
 	seed_hex = seed_for_dimension(dim_id)
 	biome = Biome.new(seed_hex)
 	features = Features.new(seed_hex)
+	scatter = Scatter.new(seed_hex)
 	add_block(initial_block())
 	for b in blocks:
 		add_block(b)
@@ -96,6 +100,15 @@ func features_for_known() -> Array:
 		_features_cache = features.features_for(_tiles.values(), biome)
 		_features_dirty = false
 	return _features_cache
+
+
+## All scatter overlays inside the currently-known tiles.
+func scatter_for_known() -> Array:
+	if scatter == null or biome == null: return []
+	if _scatter_dirty:
+		_scatter_cache = scatter.scatter_for(_tiles.values(), biome)
+		_scatter_dirty = false
+	return _scatter_cache
 
 
 ## Pick the nearest walkable hex within `max_radius` of (q, r). Returns the hex itself
@@ -176,6 +189,7 @@ func add_block(b: Dictionary) -> bool:
 			_bounds.min_r = mini(_bounds.min_r, t.y)
 			_bounds.max_r = maxi(_bounds.max_r, t.y)
 	_features_dirty = true
+	_scatter_dirty = true
 	return true
 
 
