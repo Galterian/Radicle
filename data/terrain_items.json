@@ -2,49 +2,2958 @@
   "collection": "terrain_items",
   "notes": "Towers, Crystals, Mines, Buildings, Nexus, Doors, Libraries, Stashes, Trade Centers, and generic Walls/Rivers/Lava. Each entry carries requirements and yields in the data block.",
   "entries": [
-    { "id":"tower_vitality",     "name":"Tower of Vitality",     "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_vitality"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_vitality","requirement":{"stat":"stat_vitality","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_souls",        "name":"Tower of Souls",        "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_world"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_souls","requirement":{"stat":"stat_world","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_time",         "name":"Tower of Time",         "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_world"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_time","requirement":{"stat":"stat_world","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_space",        "name":"Tower of Space",        "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_world"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_space","requirement":{"stat":"stat_world","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_air",          "name":"Tower of Air",          "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_matter"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_air","requirement":{"stat":"stat_matter","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_water",        "name":"Tower of Water",        "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_matter"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_water","requirement":{"stat":"stat_matter","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_earth",        "name":"Tower of Earth",        "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_matter"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_earth","requirement":{"stat":"stat_matter","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_fire",         "name":"Tower of Fire",         "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_matter"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_fire","requirement":{"stat":"stat_matter","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_concentration","name":"Tower of Concentration","tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_will"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_concentration","requirement":{"stat":"stat_will","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-    { "id":"tower_harmony",      "name":"Tower of Harmony",      "tags":["tower"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["crystal_will"],"vote_log":[],"notes":"","data":{"kind":"tower","element":"elem_harmony","requirement":{"stat":"stat_will","min":20,"or_adept":true},"yields":{"stat_bonus":4}}}]},
-
-    { "id":"crystal_vitality",   "name":"Crystal of Vitality",   "tags":["crystal"],   "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["tower_vitality"],"vote_log":[],"notes":"","data":{"kind":"crystal","stat":"stat_vitality","requirement":{"stat":"stat_vitality","min":25}}}]},
-    { "id":"crystal_world",      "name":"Crystal of World",      "tags":["crystal"],   "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["tower_souls","tower_time","tower_space"],"vote_log":[],"notes":"","data":{"kind":"crystal","stat":"stat_world","requirement":{"stat":"stat_world","min":25}}}]},
-    { "id":"crystal_matter",     "name":"Crystal of Matter",     "tags":["crystal"],   "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["tower_air","tower_water","tower_earth","tower_fire"],"vote_log":[],"notes":"","data":{"kind":"crystal","stat":"stat_matter","requirement":{"stat":"stat_matter","min":25}}}]},
-    { "id":"crystal_will",       "name":"Crystal of Will",       "tags":["crystal"],   "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["tower_concentration","tower_harmony"],"vote_log":[],"notes":"","data":{"kind":"crystal","stat":"stat_will","requirement":{"stat":"stat_will","min":25}}}]},
-
-    { "id":"item_library",       "name":"Dimension Library",     "tags":["library","spawn"], "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"library","card_cost_coins":100,"effect_bias":{"fire_library":{"elem_fire":0.3},"world_library":{"elem_souls":0.5,"elem_time":0.5,"elem_space":0.5}},"notes":"Starting location; mind-control over guardians while standing on it"}}]},
-    { "id":"item_nexus",         "name":"Dimension Nexus",       "tags":["nexus","entry"], "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["item_dimension_door"],"vote_log":[],"notes":"","data":{"kind":"nexus","hire_or_raid_per_day":1,"notes":"Entry point for intruders; hire other players for raid; accept raid offers once per day."}}]},
-    { "id":"item_trade_center",  "name":"Dimension Trade Center","tags":["trade"],     "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["item_stash","item_library"],"vote_log":[],"notes":"","data":{"kind":"trade_center","barter_per_day":1,"requires":["item_stash"]}}]},
-    { "id":"item_stash",         "name":"Dimension Stash",       "tags":["storage"],   "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["item_trade_center"],"vote_log":[],"notes":"","data":{"kind":"stash","capacity_cards":5,"redeploy_per_day":1}}]},
-    { "id":"item_dimension_door","name":"Dimension Door",        "tags":["door","transition"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["action_travel_door"],"vote_log":[],"notes":"","data":{"kind":"door","movable":false,"open_cost":"ally agreement OR channel 'dimension_value' rounds","multi_channel_close":true}}]},
-    { "id":"item_tower_terrain", "name":"Tower (terrain)",       "tags":["terrain","defense"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"terrain","sub_kind":"tower_defense","movable":false,"behavior":"attacks only attacking creatures or gives bonus"}}]},
-    { "id":"item_force_field",   "name":"Force field / Wall",    "tags":["terrain","wall"], "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["effect_creation"],"vote_log":[],"notes":"","data":{"kind":"terrain","sub_kind":"wall","power":20,"element_required":"one","deploy_as":"trap"}}]},
-    { "id":"item_river",         "name":"River",                 "tags":["terrain","wall"], "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"terrain","sub_kind":"wall","power":20,"element_required":"elem_water","deploy_as":"trap"}}]},
-    { "id":"item_lava",          "name":"Lava",                  "tags":["terrain","wall"], "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"terrain","sub_kind":"wall","power":20,"element_required":"elem_fire","deploy_as":"trap"}}]},
-    { "id":"item_element_bonus_terrain","name":"Element bonus / penalty terrain","tags":["terrain","token"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"terrain","sub_kind":"token_source","range_tiles":1,"token_mode":"point_buy"}}]},
-    { "id":"item_artifact",      "name":"Artifact",              "tags":["artifact","permanent"], "versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"artifact","deploy_as":"not-trap","treated_like":"skill","obtained_by":"exploration"}}]},
-    { "id":"item_attraction_recruitment_center","name":"Attraction / Recruitment Center","tags":["puzzle","building"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"puzzle_building","parts_required":5,"yield_table":[{"parts":1,"creature_per_days":5},{"parts":2,"creature_per_days":3},{"parts":3,"creature_per_days":2},{"parts":4,"creature_per_days":2},{"parts":5,"creature_per_days":1}]}}]},
-
-    { "id":"mine_vit_wat_har",   "name":"Mine (Vit + Water + Harmony)",   "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_water","elem_harmony"],"gold_per_turn":15}}]},
-    { "id":"mine_soul_fir_ear",  "name":"Mine (Souls + Fire + Earth)",    "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_souls","elem_fire","elem_earth"],"gold_per_turn":15}}]},
-    { "id":"mine_vit_vit_air",   "name":"Mine (Vit + Vit + Air)",         "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_vitality","elem_air"],"gold_per_turn":15}}]},
-    { "id":"mine_vit_tim_con",   "name":"Mine (Vit + Time + Concentration)","tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_time","elem_concentration"],"gold_per_turn":15}}]},
-    { "id":"mine_spa_fir_har",   "name":"Mine (Space + Fire + Harmony)",  "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_space","elem_fire","elem_harmony"],"gold_per_turn":15}}]},
-    { "id":"mine_vit_sou_wat",   "name":"Mine (Vit + Souls + Water)",     "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_souls","elem_water"],"gold_per_turn":15}}]},
-    { "id":"mine_vit_con_har",   "name":"Mine (Vit + Concentration + Harmony)","tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_concentration","elem_harmony"],"gold_per_turn":15}}]},
-    { "id":"mine_sou_spa_ear",   "name":"Mine (Souls + Space + Earth)",   "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_souls","elem_space","elem_earth"],"gold_per_turn":15}}]},
-    { "id":"mine_air_wat_fir",   "name":"Mine (Air + Water + Fire)",      "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_air","elem_water","elem_fire"],"gold_per_turn":15}}]},
-    { "id":"mine_vit_tim_ear",   "name":"Mine (Vit + Time + Earth)",      "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_time","elem_earth"],"gold_per_turn":15}}]},
-    { "id":"mine_sou_spa_tim",   "name":"Mine (Souls + Space + Time)",    "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_souls","elem_space","elem_time"],"gold_per_turn":15}}]},
-    { "id":"mine_wat_fir_har",   "name":"Mine (Water + Fire + Harmony)",  "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_water","elem_fire","elem_harmony"],"gold_per_turn":15}}]},
-    { "id":"mine_air_ear_con",   "name":"Mine (Air + Earth + Concentration)","tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_air","elem_earth","elem_concentration"],"gold_per_turn":15}}]},
-    { "id":"mine_vit_tim_tim",   "name":"Mine (Vit + Time + Time)",       "tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_vitality","elem_time","elem_time"],"gold_per_turn":15}}]},
-    { "id":"mine_wat_har_har",   "name":"Mine (Water + Harmony + Harmony)","tags":["mine"],"versions":[{"version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{"kind":"mine","requires_permanents":["elem_water","elem_harmony","elem_harmony"],"gold_per_turn":15}}]}
+    {
+      "id": "tower_vitality",
+      "name": "Tower of Vitality",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Tree of Life",
+        "wbc3_code": "BATL",
+        "wbc3_race": "Wood Elves",
+        "match_reason": "Tree of Life = vitality",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - construction [BATLz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - info [BATLi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Grass/TGB0.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB1.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BATL.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_vitality"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_vitality",
+            "requirement": {
+              "stat": "stat_vitality",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_souls",
+      "name": "Tower of Souls",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Altar of Shadows",
+        "wbc3_code": "BPAS",
+        "wbc3_race": "Undead",
+        "match_reason": "undead altar for the Souls element",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Undead/Altar of Shadows/Altar of Shadows - base [BPAS].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Undead/Altar of Shadows/Altar of Shadows - construction [BPASz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Undead/Altar of Shadows/Altar of Shadows - info [BPASi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF0.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF1.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPAS.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_world"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_souls",
+            "requirement": {
+              "stat": "stat_world",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_time",
+      "name": "Tower of Time",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Celestial Temple",
+        "wbc3_code": "BTCE",
+        "wbc3_race": "Neutral",
+        "match_reason": "celestial (stars/time) temple",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - construction [BTCEz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - info [BTCEi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Desert/TKS0.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS1.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BTCE.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_world"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_time",
+            "requirement": {
+              "stat": "stat_world",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_space",
+      "name": "Tower of Space",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Void",
+        "wbc3_code": "BPVO",
+        "wbc3_race": "Dark Elves",
+        "match_reason": "WBC3 \"Void\" building",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Dark Elves/Void/Void - base [BPVO].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Dark Elves/Void/Void - construction [BPVOz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Dark Elves/Void/Void - info [BPVOi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF0.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF1.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPVO.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_world"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_space",
+            "requirement": {
+              "stat": "stat_world",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_air",
+      "name": "Tower of Air",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Eyrie (level 3)",
+        "wbc3_code": "BAV2",
+        "wbc3_race": "Fliers",
+        "match_reason": "eyrie on a crag for Air",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Fliers/Eyrie (level 3)/Eyrie (level 3) - base [BAV2].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Fliers/Eyrie (level 3)/Eyrie (level 3) - info [BAV2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Snow/TGI0.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI1.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BAVX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_matter"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_air",
+            "requirement": {
+              "stat": "stat_matter",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_water",
+      "name": "Tower of Water",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Sacred Pool",
+        "wbc3_code": "BPCP",
+        "wbc3_race": "Ssrathi",
+        "match_reason": "sacred pool for Water",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - base [BPCP].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - construction [BPCPz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - info [BPCPi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Water/TWX0.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX1.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPCP.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_matter"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_water",
+            "requirement": {
+              "stat": "stat_matter",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_earth",
+      "name": "Tower of Earth",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Elemental Temple",
+        "wbc3_code": "BTEL",
+        "wbc3_race": "Neutral",
+        "match_reason": "stone elemental temple for Earth",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Elemental Temple/Elemental Temple - base [BTEL].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Neutral/Elemental Temple/Elemental Temple - construction [BTELz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Elemental Temple/Elemental Temple - info [BTELi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Rock/TKF0.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF1.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BTEL.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_matter"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_earth",
+            "requirement": {
+              "stat": "stat_matter",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_fire",
+      "name": "Tower of Fire",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Infernal Temple",
+        "wbc3_code": "BTIN",
+        "wbc3_race": "Neutral",
+        "match_reason": "infernal temple for Fire",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - base [BTIN].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - construction [BTINz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - info [BTINi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Lava/TKL0.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL1.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BTIN.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_matter"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_fire",
+            "requirement": {
+              "stat": "stat_matter",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_concentration",
+      "name": "Tower of Concentration",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Tower of the Moon",
+        "wbc3_code": "BPMT",
+        "wbc3_race": "High Elves",
+        "match_reason": "Tower of the Moon = concentration/magic",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/High Elves/Tower of the Moon/Tower of the Moon - base [BPMT].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/High Elves/Tower of the Moon/Tower of the Moon - construction [BPMTz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/High Elves/Tower of the Moon/Tower of the Moon - info [BPMTi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE0.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE1.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPMT.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_will"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_concentration",
+            "requirement": {
+              "stat": "stat_will",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "tower_harmony",
+      "name": "Tower of Harmony",
+      "tags": [
+        "tower"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "White Tree",
+        "wbc3_code": "BPWT",
+        "wbc3_race": "Wood Elves",
+        "match_reason": "White Tree = harmony",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - construction [BPWTz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - info [BPWTi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ0.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ1.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPWT.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "crystal_will"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "tower",
+            "element": "elem_harmony",
+            "requirement": {
+              "stat": "stat_will",
+              "min": 20,
+              "or_adept": true
+            },
+            "yields": {
+              "stat_bonus": 4
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "crystal_vitality",
+      "name": "Crystal of Vitality",
+      "tags": [
+        "crystal"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 1)",
+        "wbc3_code": "BRC0",
+        "wbc3_race": "Neutral",
+        "match_reason": "WBC3 crystal mine = crystal deposit; tint red",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - base [BRC0].png",
+            "usage": "crystal still on the hex; tint red for this stat (team slots are red by default)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - info [BRC0i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - variant a [BRC0a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - variant d (desert) [BRC0d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - variant w (snow) [BRC0w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "tower_vitality"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "crystal",
+            "stat": "stat_vitality",
+            "requirement": {
+              "stat": "stat_vitality",
+              "min": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "crystal_world",
+      "name": "Crystal of World",
+      "tags": [
+        "crystal"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 2)",
+        "wbc3_code": "BRC1",
+        "wbc3_race": "Neutral",
+        "match_reason": "WBC3 crystal mine = crystal deposit; tint violet/indigo",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+            "usage": "crystal still on the hex; tint violet/indigo for this stat (team slots are red by default)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - info [BRC1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant a [BRC1a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant d (desert) [BRC1d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant w (snow) [BRC1w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "tower_souls",
+            "tower_time",
+            "tower_space"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "crystal",
+            "stat": "stat_world",
+            "requirement": {
+              "stat": "stat_world",
+              "min": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "crystal_matter",
+      "name": "Crystal of Matter",
+      "tags": [
+        "crystal"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 3)",
+        "wbc3_code": "BRC2",
+        "wbc3_race": "Neutral",
+        "match_reason": "WBC3 crystal mine = crystal deposit; tint brown/aqua",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
+            "usage": "crystal still on the hex; tint brown/aqua for this stat (team slots are red by default)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - info [BRC2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant a [BRC2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant d (desert) [BRC2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant w (snow) [BRC2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "tower_air",
+            "tower_water",
+            "tower_earth",
+            "tower_fire"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "crystal",
+            "stat": "stat_matter",
+            "requirement": {
+              "stat": "stat_matter",
+              "min": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "crystal_will",
+      "name": "Crystal of Will",
+      "tags": [
+        "crystal"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 3)",
+        "wbc3_code": "BRC2",
+        "wbc3_race": "Neutral",
+        "match_reason": "WBC3 crystal mine = crystal deposit; tint silver/gold",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
+            "usage": "crystal still on the hex; tint silver/gold for this stat (team slots are red by default)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - info [BRC2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant a [BRC2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant d (desert) [BRC2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant w (snow) [BRC2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "tower_concentration",
+            "tower_harmony"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "crystal",
+            "stat": "stat_will",
+            "requirement": {
+              "stat": "stat_will",
+              "min": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_library",
+      "name": "Dimension Library",
+      "tags": [
+        "library",
+        "spawn"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Library",
+        "wbc3_code": "BPLI",
+        "wbc3_race": "Empire",
+        "match_reason": "WBC3 Library (alt: Undead/Black Library)",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Empire/Library/Library - construction [BPLIz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Empire/Library/Library - info [BPLIi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "alternatives": [
+            {
+              "wbc3_name": "Black Library",
+              "wbc3_code": "BPBL",
+              "wbc3_race": "Undead",
+              "path": "assets/Sprites/Buildings/Undead/Black Library/Black Library - base [BPBL].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPLI.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "library",
+            "card_cost_coins": 100,
+            "effect_bias": {
+              "fire_library": {
+                "elem_fire": 0.3
+              },
+              "world_library": {
+                "elem_souls": 0.5,
+                "elem_time": 0.5,
+                "elem_space": 0.5
+              }
+            },
+            "notes": "Starting location; mind-control over guardians while standing on it"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_nexus",
+      "name": "Dimension Nexus",
+      "tags": [
+        "nexus",
+        "entry"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Circle of Power",
+        "wbc3_code": "BMCP",
+        "wbc3_race": "Neutral",
+        "match_reason": "ritual circle = nexus / entry point (alt: Daemons/Portal)",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Circle of Power/Circle of Power - base [BMCP].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Circle of Power/Circle of Power - info [BMCPi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "alternatives": [
+            {
+              "wbc3_name": "Portal",
+              "wbc3_code": "BPPO",
+              "wbc3_race": "Daemons",
+              "path": "assets/Sprites/Buildings/Daemons/Portal/Portal - base [BPPO].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BMCP.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "item_dimension_door"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "nexus",
+            "hire_or_raid_per_day": 1,
+            "notes": "Entry point for intruders; hire other players for raid; accept raid offers once per day."
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_trade_center",
+      "name": "Dimension Trade Center",
+      "tags": [
+        "trade"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Market",
+        "wbc3_code": "BPMA",
+        "wbc3_race": "Knights",
+        "match_reason": "market = trade center (alt: Dwarves/Trading Post)",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Knights/Market/Market - base [BPMA].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Knights/Market/Market - construction [BPMAz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Knights/Market/Market - info [BPMAi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "alternatives": [
+            {
+              "wbc3_name": "Trading Post",
+              "wbc3_code": "BPTP",
+              "wbc3_race": "Dwarves",
+              "path": "assets/Sprites/Buildings/Dwarves/Trading Post/Trading Post - base [BPTP].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPMA.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "item_stash",
+            "item_library"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "trade_center",
+            "barter_per_day": 1,
+            "requires": [
+              "item_stash"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_stash",
+      "name": "Dimension Stash",
+      "tags": [
+        "storage"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Supply Depot",
+        "wbc3_code": "BPSD",
+        "wbc3_race": "Dark Dwarves",
+        "match_reason": "supply depot = stash",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Dark Dwarves/Supply Depot/Supply Depot - base [BPSD].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Dark Dwarves/Supply Depot/Supply Depot - construction [BPSDz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Dark Dwarves/Supply Depot/Supply Depot - info [BPSDi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPSD.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "item_trade_center"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "stash",
+            "capacity_cards": 5,
+            "redeploy_per_day": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_dimension_door",
+      "name": "Dimension Door",
+      "tags": [
+        "door",
+        "transition"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Black Portal",
+        "wbc3_code": "BMBP",
+        "wbc3_race": "Neutral",
+        "match_reason": "WBC3 Black Portal",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - info [BMBPi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BMBP.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Embark.wav",
+              "usage": "play when a character travels through the door"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Disembark.wav",
+              "usage": "play when a character travels through the door"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_travel_door"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "door",
+            "movable": false,
+            "open_cost": "ally agreement OR channel 'dimension_value' rounds",
+            "multi_channel_close": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_tower_terrain",
+      "name": "Tower (terrain)",
+      "tags": [
+        "terrain",
+        "defense"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Tower (Knights)",
+        "wbc3_code": "BWTC",
+        "wbc3_race": "Shared",
+        "match_reason": "neutral defensive tower (per-race variants in Sprites/Buildings/Shared/Tower (*))",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - base [BWTC].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - construction [BWTCz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - info [BWTCi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "alternatives": [
+            {
+              "wbc3_name": "Tower (Undead)",
+              "wbc3_code": "BWTU",
+              "wbc3_race": "Shared",
+              "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - base [BWTU].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            },
+            {
+              "wbc3_name": "Tower (High Elf)",
+              "wbc3_code": "BWTM",
+              "wbc3_race": "Shared",
+              "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BWTC.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "terrain",
+            "sub_kind": "tower_defense",
+            "movable": false,
+            "behavior": "attacks only attacking creatures or gives bonus"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_force_field",
+      "name": "Force field / Wall",
+      "tags": [
+        "terrain",
+        "wall"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Walls (neutral, 2x1 horizontal)",
+        "wbc3_code": "BWN1",
+        "wbc3_race": "Shared",
+        "match_reason": "neutral wall segment (alt: Wall of Ice, Wall of Thorns; 1x2 vertical / 2x2 joint variants)",
+        "confidence": "high",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - construction [BWN1z].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - info [BWN1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "alternatives": [
+            {
+              "wbc3_name": "Wall of Ice",
+              "wbc3_code": "BWIC",
+              "wbc3_race": "Shared",
+              "path": "assets/Sprites/Buildings/Shared/Wall of Ice/Wall of Ice - base [BWIC].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            },
+            {
+              "wbc3_name": "Wall of Thorns",
+              "wbc3_code": "BWBR",
+              "wbc3_race": "Shared",
+              "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            },
+            {
+              "wbc3_name": "Walls (neutral, 1x2 vertical)",
+              "wbc3_code": "BWN2",
+              "wbc3_race": "Shared",
+              "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            },
+            {
+              "wbc3_name": "Walls (neutral, 2x2 joint)",
+              "wbc3_code": "BWN0",
+              "wbc3_race": "Shared",
+              "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Build.wav",
+              "usage": "play when the wall is deployed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_creation"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "terrain",
+            "sub_kind": "wall",
+            "power": 20,
+            "element_required": "one",
+            "deploy_as": "trap"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_river",
+      "name": "River",
+      "tags": [
+        "terrain",
+        "wall"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Water terrain",
+        "wbc3_race": "Terrain",
+        "match_reason": "shallow water tiles = river wall",
+        "confidence": "high",
+        "sprites": {},
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Water/TWX0.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX1.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX2.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX3.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWY0.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWY1.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW0.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW1.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Water",
+          "Grass Coast"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Splash.wav",
+              "usage": "play when a character enters / crosses the river hex"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/SplashMove.wav",
+              "usage": "play when a character enters / crosses the river hex"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "terrain",
+            "sub_kind": "wall",
+            "power": 20,
+            "element_required": "elem_water",
+            "deploy_as": "trap"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_lava",
+      "name": "Lava",
+      "tags": [
+        "terrain",
+        "wall"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Lava terrain",
+        "wbc3_race": "Terrain",
+        "match_reason": "lava tiles = lava wall",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+            "usage": "flame animation looping over the lava hex",
+            "blend": "additive"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Lava/TKL0.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL1.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL2.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL3.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL4.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL5.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Lava"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fire.wav",
+              "usage": "play when a character enters / is burned by the lava hex"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Boom.wav",
+              "usage": "play when a character enters / is burned by the lava hex"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "terrain",
+            "sub_kind": "wall",
+            "power": 20,
+            "element_required": "elem_fire",
+            "deploy_as": "trap"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_element_bonus_terrain",
+      "name": "Element bonus / penalty terrain",
+      "tags": [
+        "terrain",
+        "token"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Standing stone obelisk on round base",
+        "wbc3_code": "FGM0",
+        "wbc3_race": "GrassMisc",
+        "match_reason": "standing stone = element source; tint by element colour_hint",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Terrain Features/GrassMisc/Standing stone obelisk on round base/Standing stone obelisk on round base - idle [FGM0].png",
+            "usage": "single still terrain-feature image, anchor bottom-center on the hex"
+          },
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect yellow sparkle cloud (very wide sheet)/Spell effect yellow sparkle cloud (very wide sheet) - idle [EZ01].png",
+            "usage": "sparkle cloud looping over the source hex while tokens are available"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when a token is drawn from the terrain"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "terrain",
+            "sub_kind": "token_source",
+            "range_tiles": 1,
+            "token_mode": "point_buy"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_artifact",
+      "name": "Artifact",
+      "tags": [
+        "artifact",
+        "permanent"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Shrine",
+        "wbc3_code": "BMSH",
+        "wbc3_race": "Neutral",
+        "match_reason": "shrine holding an artifact",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - construction [BMSHz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - info [BMSHi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BMSH.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "artifact",
+            "deploy_as": "not-trap",
+            "treated_like": "skill",
+            "obtained_by": "exploration"
+          }
+        }
+      ]
+    },
+    {
+      "id": "item_attraction_recruitment_center",
+      "name": "Attraction / Recruitment Center",
+      "tags": [
+        "puzzle",
+        "building"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Hostel",
+        "wbc3_code": "BPHS",
+        "wbc3_race": "Wood Elves",
+        "match_reason": "hostel attracts recruits (alt: Minotaurs/Ale Store, Knights/Garrison)",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - base [BPHS].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "construction": {
+            "path": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - construction [BPHSz].png",
+            "usage": "3-frame construction/growth strip; play while the item is being deployed/channelled"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - info [BPHSi].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "alternatives": [
+            {
+              "wbc3_name": "Ale Store",
+              "wbc3_code": "BPIN",
+              "wbc3_race": "Minotaurs",
+              "path": "assets/Sprites/Buildings/Minotaurs/Ale Store/Ale Store - base [BPIN].png",
+              "usage": "alternative still (variant by owner alignment / orientation)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BPHS.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "puzzle_building",
+            "parts_required": 5,
+            "yield_table": [
+              {
+                "parts": 1,
+                "creature_per_days": 5
+              },
+              {
+                "parts": 2,
+                "creature_per_days": 3
+              },
+              {
+                "parts": 3,
+                "creature_per_days": 2
+              },
+              {
+                "parts": 4,
+                "creature_per_days": 2
+              },
+              {
+                "parts": 5,
+                "creature_per_days": 1
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_wat_har",
+      "name": "Mine (Vit + Water + Harmony)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Gold Mine (size 1)",
+        "wbc3_code": "BRG0",
+        "wbc3_race": "Neutral",
+        "match_reason": "vitality/water/air/will triple -> gold mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - info [BRG0i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - variant a [BRG0a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - variant d (desert) [BRG0d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - variant w (snow) [BRG0w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRGX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_water",
+              "elem_harmony"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_soul_fir_ear",
+      "name": "Mine (Souls + Fire + Earth)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Metal Mine (size 2)",
+        "wbc3_code": "BRM1",
+        "wbc3_race": "Neutral",
+        "match_reason": "fire (forge) in the triple -> metal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - info [BRM1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - variant a [BRM1a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - variant d (desert) [BRM1d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - variant w (snow) [BRM1w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRMX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_souls",
+              "elem_fire",
+              "elem_earth"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_vit_air",
+      "name": "Mine (Vit + Vit + Air)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Gold Mine (size 3)",
+        "wbc3_code": "BRG2",
+        "wbc3_race": "Neutral",
+        "match_reason": "vitality/water/air/will triple -> gold mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - info [BRG2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - variant a [BRG2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - variant d (desert) [BRG2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - variant w (snow) [BRG2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRGX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_vitality",
+              "elem_air"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_tim_con",
+      "name": "Mine (Vit + Time + Concentration)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 1)",
+        "wbc3_code": "BRC0",
+        "wbc3_race": "Neutral",
+        "match_reason": "world element in the triple -> crystal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - base [BRC0].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - info [BRC0i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - variant a [BRC0a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - variant d (desert) [BRC0d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - variant w (snow) [BRC0w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_time",
+              "elem_concentration"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_spa_fir_har",
+      "name": "Mine (Space + Fire + Harmony)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Metal Mine (size 2)",
+        "wbc3_code": "BRM1",
+        "wbc3_race": "Neutral",
+        "match_reason": "fire (forge) in the triple -> metal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - info [BRM1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - variant a [BRM1a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - variant d (desert) [BRM1d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - variant w (snow) [BRM1w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRMX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_space",
+              "elem_fire",
+              "elem_harmony"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_sou_wat",
+      "name": "Mine (Vit + Souls + Water)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 3)",
+        "wbc3_code": "BRC2",
+        "wbc3_race": "Neutral",
+        "match_reason": "world element in the triple -> crystal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - info [BRC2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant a [BRC2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant d (desert) [BRC2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - variant w (snow) [BRC2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_souls",
+              "elem_water"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_con_har",
+      "name": "Mine (Vit + Concentration + Harmony)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Gold Mine (size 1)",
+        "wbc3_code": "BRG0",
+        "wbc3_race": "Neutral",
+        "match_reason": "vitality/water/air/will triple -> gold mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - info [BRG0i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - variant a [BRG0a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - variant d (desert) [BRG0d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - variant w (snow) [BRG0w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRGX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_concentration",
+              "elem_harmony"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_sou_spa_ear",
+      "name": "Mine (Souls + Space + Earth)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Stone Quarry (size 2)",
+        "wbc3_code": "BRS1",
+        "wbc3_race": "Neutral",
+        "match_reason": "earth in the triple -> stone quarry",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - info [BRS1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - variant a [BRS1a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - variant d (desert) [BRS1d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - variant w (snow) [BRS1w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRSX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_souls",
+              "elem_space",
+              "elem_earth"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_air_wat_fir",
+      "name": "Mine (Air + Water + Fire)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Metal Mine (size 3)",
+        "wbc3_code": "BRM2",
+        "wbc3_race": "Neutral",
+        "match_reason": "fire (forge) in the triple -> metal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - info [BRM2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - variant a [BRM2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - variant d (desert) [BRM2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - variant w (snow) [BRM2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRMX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_air",
+              "elem_water",
+              "elem_fire"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_tim_ear",
+      "name": "Mine (Vit + Time + Earth)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Stone Quarry (size 1)",
+        "wbc3_code": "BRS0",
+        "wbc3_race": "Neutral",
+        "match_reason": "earth in the triple -> stone quarry",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - info [BRS0i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - variant a [BRS0a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - variant d (desert) [BRS0d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - variant w (snow) [BRS0w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRSX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_time",
+              "elem_earth"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_sou_spa_tim",
+      "name": "Mine (Souls + Space + Time)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 2)",
+        "wbc3_code": "BRC1",
+        "wbc3_race": "Neutral",
+        "match_reason": "world element in the triple -> crystal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - info [BRC1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant a [BRC1a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant d (desert) [BRC1d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant w (snow) [BRC1w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_souls",
+              "elem_space",
+              "elem_time"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_wat_fir_har",
+      "name": "Mine (Water + Fire + Harmony)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Metal Mine (size 3)",
+        "wbc3_code": "BRM2",
+        "wbc3_race": "Neutral",
+        "match_reason": "fire (forge) in the triple -> metal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - info [BRM2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - variant a [BRM2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - variant d (desert) [BRM2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - variant w (snow) [BRM2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRMX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_water",
+              "elem_fire",
+              "elem_harmony"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_air_ear_con",
+      "name": "Mine (Air + Earth + Concentration)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Stone Quarry (size 1)",
+        "wbc3_code": "BRS0",
+        "wbc3_race": "Neutral",
+        "match_reason": "earth in the triple -> stone quarry",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - info [BRS0i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - variant a [BRS0a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - variant d (desert) [BRS0d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - variant w (snow) [BRS0w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRSX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_air",
+              "elem_earth",
+              "elem_concentration"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_vit_tim_tim",
+      "name": "Mine (Vit + Time + Time)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Crystal Mine (size 2)",
+        "wbc3_code": "BRC1",
+        "wbc3_race": "Neutral",
+        "match_reason": "world element in the triple -> crystal mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - info [BRC1i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant a [BRC1a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant d (desert) [BRC1d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - variant w (snow) [BRC1w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRCX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_vitality",
+              "elem_time",
+              "elem_time"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "mine_wat_har_har",
+      "name": "Mine (Water + Harmony + Harmony)",
+      "tags": [
+        "mine"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Gold Mine (size 3)",
+        "wbc3_code": "BRG2",
+        "wbc3_race": "Neutral",
+        "match_reason": "vitality/water/air/will triple -> gold mine",
+        "confidence": "medium",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "info": {
+            "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - info [BRG2i].png",
+            "usage": "info panel image (140x370): portrait on top, UI icons below; use the top part as a card picture"
+          },
+          "variants": [
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - variant a [BRG2a].png",
+              "usage": "variant a - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - variant d (desert) [BRG2d].png",
+              "usage": "variant d (desert) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            },
+            {
+              "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - variant w (snow) [BRG2w].png",
+              "usage": "variant w (snow) - alternative still for matching terrain (w=snow, d=desert, a=other)"
+            }
+          ]
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/BRGX.wav",
+              "usage": "ambient/activation loop of the original building; play when a character enters or captures the item"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "kind": "mine",
+            "requires_permanents": [
+              "elem_water",
+              "elem_harmony",
+              "elem_harmony"
+            ],
+            "gold_per_turn": 15
+          }
+        }
+      ]
+    }
   ]
 }

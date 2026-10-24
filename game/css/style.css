@@ -217,3 +217,24 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 .launcher-card #go { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
 .launcher-card #go[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
 .launcher-card #launch-msg { font-size: 12px; color: #8aa0bf; }
+
+/* ---- WBC3 art: roster thumbnails, hero card, hover card ------------------ */
+.ros { justify-content: flex-start; align-items: center; }
+.ros .txt { display: flex; justify-content: space-between; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.ros .thumb { width: 28px; height: 28px; object-fit: cover; object-position: top; border-radius: 3px; border: 1px solid #262e3c; background: #0b0d12; flex: 0 0 auto; image-rendering: pixelated; }
+.ros .thumb.info { object-fit: cover; object-position: 50% 0; }
+#hero-card { display: flex; gap: 10px; align-items: center; background: #141a24; border: 1px solid #262e3c; border-radius: 6px; padding: 8px; margin-bottom: 8px; flex: 0 0 auto; }
+#hero-card[hidden] { display: none; }
+#hero-card img { width: 64px; height: 64px; object-fit: cover; object-position: top; border-radius: 4px; border: 1px solid #ffe66e55; background: #0b0d12; image-rendering: pixelated; }
+#hero-card img.info { object-position: 50% 0; }
+#hero-card .hero-name { color: #ffe66e; font-weight: 600; font-size: 13px; }
+#hero-card .hero-sub { color: #8aa0bf; font-size: 11px; margin-top: 2px; }
+#hero-card .hero-hp { color: #ffb0b0; font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+#hero-card .hero-mute { color: #566379; font-size: 10px; margin-top: 2px; cursor: pointer; }
+#hover-card { position: fixed; z-index: 30; pointer-events: none; display: flex; gap: 8px; background: #0f131bee; border: 1px solid #2a3344; border-radius: 6px; padding: 6px 8px; font-size: 11px; color: #dfe3e8; box-shadow: 0 6px 20px #0008; }
+#hover-card[hidden] { display: none; }
+#hover-card img { width: 56px; height: 90px; object-fit: cover; object-position: 50% 0; border-radius: 3px; background: #0b0d12; image-rendering: pixelated; }
+#hover-card .hc-name { font-weight: 600; color: #e8ecf1; }
+#hover-card .hc-sub { color: #8aa0bf; margin-top: 2px; }
+#hover-card .hc-hp { color: #ffb0b0; margin-top: 4px; }
+#stage.over-unit { cursor: pointer; }

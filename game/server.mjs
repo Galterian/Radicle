@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT     = __dirname;
 const DATA_DIR = path.resolve(ROOT, '..', 'data');
 const SESS_DIR = path.resolve(ROOT, 'sessions');
+const ASSETS_DIR = path.resolve(ROOT, '..', 'assets');   // curated WBC3 art/sound collection
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -20,7 +21,9 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.png':  'image/png',
   '.svg':  'image/svg+xml',
-  '.ico':  'image/x-icon'
+  '.ico':  'image/x-icon',
+  '.bmp':  'image/bmp',
+  '.wav':  'audio/wav'
 };
 
 const safeRel = (p) => p.replace(/\.\.(\/|\\|$)/g, '').replace(/^[\/\\]+/, '');
@@ -46,6 +49,10 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = decodeURIComponent(url.pathname);
 
+  if (p.startsWith('/assets/')) {
+    const rel = safeRel(p.slice('/assets/'.length));
+    return serveFile(res, path.join(ASSETS_DIR, rel), MIME[path.extname(rel).toLowerCase()] || 'application/octet-stream');
+  }
   if (p.startsWith('/data/')) {
     const rel = safeRel(p.slice('/data/'.length));
     return serveFile(res, path.join(DATA_DIR, rel), MIME[path.extname(rel).toLowerCase()] || 'application/octet-stream');
