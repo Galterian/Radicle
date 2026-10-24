@@ -73,9 +73,18 @@ func _ready() -> void:
 	map.hex_clicked.connect(_on_hex_clicked)
 	map.hex_hovered.connect(_on_hex_hovered)
 
+	# Buildings / permanents on walkable biome hexes. Lives above the terrain
+	# (HexMap) and below entities. Deterministic from (dim_seed, q, r), so every
+	# new reveal fills in with the right features automatically.
+	var features := FeatureLayer.new()
+	features.name = "Features"
+	add_child(features)
+	features.setup(gen)
+
 	ents_root = Node2D.new()
 	ents_root.name = "Entities"
 	ents_root.y_sort_enabled = true
+	ents_root.z_index = 10
 	add_child(ents_root)
 
 	fx = FxPlayer.new()
@@ -98,8 +107,11 @@ func _ready() -> void:
 	net.name = "Net"
 	add_child(net)
 
+	# Spawn: snap each default spawn to the nearest walkable hex (otherwise a
+	# player spawning on a lava or water biome can't move).
 	for s in DEFAULT_SPAWN:
-		spawn(s.id, s.kind, s.faction, s.at)
+		var at: Vector2i = gen.nearest_walkable(s.at, 5)
+		spawn(s.id, s.kind, s.faction, at)
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
