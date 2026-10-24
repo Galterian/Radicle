@@ -4,23 +4,30 @@ Isometric-hex RPG front end for chaosD6 that renders the game with the curated, 
 Warlords Battlecry III assets described in `../data/*.json` (`resources` blocks) and
 `../assets/frames.json`.
 
-## Run
+## Run (Linux / WSL2 Ubuntu)
 
-1. Install **Godot 4.3+** (standard build; the project uses the GL Compatibility renderer).
-2. Open `chaosD6/godot/project.godot` and press **F5**, or:
-   `godot --path chaosD6/godot`
-3. Assets are loaded at runtime from `chaosD6/assets/...` (no import step). If that folder
-   has not been populated yet by `tools/collect_assets.py`, the loader transparently falls
-   back to `chaos_mapper/extracted/...`.
+One-time setup from `chaosD6/`:
 
-Headless checks (verified with Godot 4.3.stable, Windows; use the main exe, the `_console`
-wrapper blocks on stdin when run from a script):
-
+```bash
+./_tools/get_godot.sh                              # downloads Godot 4.3 Linux to _tools/godot (git-ignored, ~75 MB)
+pip3 install --user -r tools/requirements.txt      # pillow + numpy for the asset tools
+sudo apt install -y libpulse0                      # optional: enable WSLg sound (otherwise silent)
 ```
-godot --headless --path chaosD6/godot --import            # once: builds the class cache
-godot --headless --path chaosD6/godot -s tools/smoke_test.gd   # data, assets, grids, A*, scene
-godot --path chaosD6/godot -s tools/screenshot.gd ++ out.png 120   # renders 120 frames, saves PNG
+
+Then, from `chaosD6/godot/`:
+
+```bash
+../_tools/godot --headless --path . --import                                 # once: builds the class cache
+../_tools/godot --path .                                                     # play
+../_tools/godot --headless --path . -s tools/smoke_test.gd                   # data/assets/grids/A*/scene (14 checks)
+../_tools/godot --path . -s tools/screenshot.gd ++ ../_tools/shot.png 120    # render 120 frames, save PNG
+python3 ../tools/check_assets.py                                             # case-sensitive asset path audit
 ```
+
+Assets load at runtime from `chaosD6/assets/...` (no Godot import step for art). If any
+sheet is not in `assets/` the loader falls back to `../extracted/...` when present.
+Run Godot from a shell (not a hook/script) so stdin is a real tty; otherwise close it
+explicitly with `< /dev/null`.
 
 ## Controls
 
