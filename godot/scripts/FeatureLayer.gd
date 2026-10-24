@@ -27,15 +27,19 @@ func _draw() -> void:
 		var tex := _tex(item.feature.path)
 		if tex == null: continue
 		var centre := Hex.hex_to_pixel(item.hex.x, item.hex.y)
+		# Tiny hash-based jitter so features in a long biome strip don't line up
+		# into visible rows at low zoom. Deterministic from (q, r).
+		var h32 := MapGen.hash32("%s:j:%d:%d" % [gen.seed_hex, item.hex.x, item.hex.y])
+		var jx := (float(h32 & 0xFFFF) / 65536.0 - 0.5) * hex_h * 0.18
+		var jy := (float((h32 >> 16) & 0xFFFF) / 65536.0 - 0.5) * hex_h * 0.12
 		# Target on-screen height ≈ 1.1 hex so buildings sit on a hex without crowding neighbours.
 		var target_h := hex_h * 1.1
 		var sx := tex.get_width()
 		var sy := tex.get_height()
-		var scale := clampf(target_h / max(1, sy), 0.25, 1.2)
+		var scale: float = clampf(target_h / max(1, sy), 0.25, 1.2)
 		var dw := sx * scale
 		var dh := sy * scale
-		# Anchor bottom-centre on the hex centre (slight offset so the "foot" lands on tile)
-		var rect := Rect2(centre.x - dw / 2.0, centre.y - dh + hex_h * 0.12, dw, dh)
+		var rect := Rect2(centre.x - dw / 2.0 + jx, centre.y - dh + hex_h * 0.12 + jy, dw, dh)
 		draw_texture_rect(tex, rect, false)
 
 

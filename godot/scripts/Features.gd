@@ -82,15 +82,20 @@ func feature_at(q: int, r: int, biome: Biome) -> Dictionary:
 	var btype := biome.biome_at(q, r)
 	var choices: Array = _catalog.get(btype, [])
 	if choices.is_empty(): return {}
-	var total := 0.0
-	for c in choices: total += float(c.get("weight", 1.0))
-	var roll := _roll01(q, r, "p") * total
-	var acc := 0.0
-	for c in choices:
-		acc += float(c.get("weight", 1.0))
-		if roll <= acc:
-			return {"path": c.path, "label": c.label, "kind": c.get("kind", "building"), "biome": btype, "id": c.get("id", c.label)}
-	return {}
+	# Pick by max-hash across choices: each entry gets its own hash of (seed, q, r, idx)
+	# then we pick the index with the largest hash * weight. This produces much better
+	# spatial variety than hash%N — adjacent features in a long biome strip reliably
+	# pick different entries, instead of all landing on the highest-weight option.
+	var best_idx := 0
+	var best_score := -1.0
+	for i in range(choices.size()):
+		var w := float(choices[i].get("weight", 1.0))
+		var s := _roll01(q, r, "p%d" % i) * w
+		if s > best_score:
+			best_score = s
+			best_idx = i
+	var c = choices[best_idx]
+	return {"path": c.path, "label": c.label, "kind": c.get("kind", "building"), "biome": btype, "id": c.get("id", c.label)}
 
 
 ## Iterate all features currently visible on the given hex set.
