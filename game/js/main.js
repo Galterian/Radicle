@@ -324,12 +324,15 @@ function extraActionCode() {
   const e = state.queuedExtra;
   return typeof e === 'number' && isAction(state.hand[e]) ? state.hand[e].code : null;
 }
+// Move and Posture skills may also ride on the Empty slot (Empty Move / Empty Posture).
+const ridesOnEmpty = (card) => card.requires === 'M' || card.requires === 'P';
 // A non-trance skill rides on the primary, or on the trance's second action.
 function skillMatchesQueue(card) {
+  if (state.queued[0] === 'EMPTY' && ridesOnEmpty(card)) return true;
   return card.requires === queuedActionCode() || (tranceActive() && card.requires === extraActionCode());
 }
 function skillUsable(card) {
-  return isSkill(card) && firstActionIdx(card.requires) >= 0;
+  return isSkill(card) && (ridesOnEmpty(card) || firstActionIdx(card.requires) >= 0);
 }
 // Drop attached skills that no longer ride on a queued action.
 function pruneQueuedSkills() {
@@ -368,7 +371,8 @@ function renderDeck() {
       const emptyIsSecond = trance && state.queuedExtra === null;
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
-      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : 'posture'}</div>`;
+      const n = state.queued[0] === 'EMPTY' ? state.queuedSkills.length : 0;
+      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
       slot.classList.toggle('queued-extra', emptyIsSecond);
       slot.classList.toggle('locked', state.locked && (state.queued[0] === 'EMPTY' || emptyIsSecond));
@@ -383,7 +387,7 @@ function renderDeck() {
       const band = isTrance(card) ? 'P' : card.requires;
       slot.dataset.code = band;
       cardDiv.dataset.code = band;
-      const needs = isTrance(card) ? 'any action' : (ACTION_SHORT[card.requires] || card.requires);
+      const needs = isTrance(card) ? 'any action' : ridesOnEmpty(card) ? `${ACTION_SHORT[card.requires]} / Empty` : (ACTION_SHORT[card.requires] || card.requires);
       cardDiv.innerHTML = `<div class="nm">✦ ${card.name}</div><div class="cd">needs ${needs}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
       slot.title = card.text || card.name;
     } else if (card) {
@@ -744,7 +748,8 @@ function queueSlot(key) {
       state.queuedSkills.push(key);
     } else {
       if (!skillMatchesQueue(card)) {
-        state.queued = [firstActionIdx(card.requires)];
+        const idx = firstActionIdx(card.requires);
+        state.queued = [idx >= 0 ? idx : 'EMPTY'];
         state.queuedSkills = [];
         state.queuedExtra = null;
       }
@@ -778,8 +783,8 @@ function queueSlot(key) {
     state.queued = [];
     state.queuedSkills = [];
   } else {
+    // Switching to Empty keeps Move/Posture skills riding along (pruneQueuedSkills drops the rest).
     state.queued = [key];
-    if (key === 'EMPTY') state.queuedSkills = [];
   }
   state.queuedIsAuto = false;
   // Picking any slot by hand means the player is taking the wheel — stop the
