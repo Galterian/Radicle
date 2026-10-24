@@ -47,7 +47,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { pushDimension, radicleEnv } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE } from './js/map.js';
-import { stepToward as hexStepToward } from './js/hex.js';
+import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1010,6 +1010,8 @@ async function doPlanningEnd() {
   }
   const optionCodes = options || [code];
   const wants = c => optionCodes.includes(c);
+  // A skill rides on its action, or — for Move / Posture skills — on an Empty option.
+  const ridesOn = req => wants(req) || ((req === 'M' || req === 'P') && (wants('EP') || wants('EM')));
 
   // Normalise target against the action's actual needs. Block / Posture / EP
   // never target; Attack keeps either an enemy peer or a tile (a tile target
@@ -1037,9 +1039,7 @@ async function doPlanningEnd() {
   }
   if (wants('A') && typeof normTarget === 'string') lastAttackTarget = normTarget;
 
-  const mySkills = (card || trance)
-    ? queuedSkills.map(i => hand[i]).filter(c => c?.kind === 'skill' && (c.is_trance ? !!trance : wants(c.requires)))
-    : [];
+  const mySkills = queuedSkills.map(i => hand[i]).filter(c => c?.kind === 'skill' && (c.is_trance ? !!trance : ridesOn(c.requires)));
   mySkills.sort((a, b) => a.skill_id.localeCompare(b.skill_id));
   const skillIds = mySkills.map(c => c.skill_id);
   const revealCode = trance ? 'BT' : code;
@@ -1178,7 +1178,9 @@ async function doResolution() {
     if (!sk.length) continue;
     const tgt = r.target?.kind === 'character' ? r.target.ref : null;
     const tgtKnown = tgt && effAction.has(tgt);
-    const rides = c => r.trance ? r.trance.includes(c) : r.action === c;
+    // Move / Posture skills also ride on Empty Move / Empty Posture.
+    const codes = r.trance || [r.action];
+    const rides = c => codes.includes(c) || ((c === 'M' || c === 'P') && (codes.includes('EP') || codes.includes('EM')));
     if (rides('M') && tgtKnown && has(r.actor, 'skill_bluff') && distBetween(r.actor, tgt) <= 1) { effAction.set(tgt, 'EP'); tranceOpts.delete(tgt); }
     if (rides('P') && has(r.actor, 'skill_intimidation')) {
       for (const o of revealsThisTurn) {
@@ -1268,9 +1270,27 @@ async function doResolution() {
   //  lower-priority claimant AND every same-priority tied claimant is
   //  blocked ("journey cancelled (blocked)"). EM is declared first in the
   //  evaluation ordering only in the sense that it's the weakest tier.
-  const stepsAlong = (from, to, n) => {
+  //  Occupied hexes are walked around, not into: a step takes the first free
+  //  neighbour that closes distance (there are up to two). When every closer
+  //  hex is held the mover aims straight anyway and is vetoed below with
+  //  "tile occupied by …" — no sidestepping at equal distance, which only
+  //  made movers ping-pong around a crowded melee. Without the detour a hero
+  //  behind a teammate was blocked round after round.
+  //  Deterministic: `view` is the same on every peer (it already drives the
+  //  occupancy veto) and the neighbour order is fixed.
+  const occupiedBefore = new Map();
+  for (const p of view.values()) if (p && p.life > 0) occupiedBefore.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
+  const stepsAlong = (actorId, from, to, n) => {
     let cur = { q: from.q, r: from.r };
-    for (let i = 0; i < n; i++) cur = stepToward(cur, { tile_q: to.q, tile_r: to.r });
+    for (let i = 0; i < n; i++) {
+      const dNow = hexDistance({ tile_q: cur.q, tile_r: cur.r }, { tile_q: to.q, tile_r: to.r });
+      if (dNow === 0) break;
+      const opts = hexNeighbours(cur.q, cur.r).map(n => ({ ...n, d: hexDistance({ tile_q: n.q, tile_r: n.r }, { tile_q: to.q, tile_r: to.r }) }));
+      const free = n => { const o = occupiedBefore.get(`${n.q},${n.r}`); return !o || o === actorId; };
+      const straight = opts.slice().sort((a, b) => a.d - b.d)[0];
+      const next = opts.find(n => n.d < dNow && free(n)) || straight;
+      cur = { q: next.q, r: next.r };
+    }
     return cur;
   };
   const priorityOf = (act) => act === 'A' ? 3 : act === 'M' ? 2 : act === 'EM' ? 1 : 0;
@@ -1292,7 +1312,7 @@ async function doResolution() {
     const here = { q: actor.tile_q, r: actor.tile_r };
     const d = hexDistance({ tile_q: here.q, tile_r: here.r }, { tile_q: tgtT.q, tile_r: tgtT.r });
     const steps = mv === 'EM' ? Math.min(EM_MAX_STEPS, Math.max(1, Math.round(d / 2))) : 1;
-    const dest = stepsAlong(here, tgtT, steps);
+    const dest = stepsAlong(r.actor, here, tgtT, steps);
     moveIntents.push({ actor: r.actor, action: mv, dest, prio: priorityOf(mv), target: tgtT });
   }
   // Deterministic iteration across peers — the gossip layer delivers reveals
@@ -1560,8 +1580,14 @@ async function npcPlan() {
   let r = Math.random() * total, pick = 'A';
   for (const [k, w] of Object.entries(WEIGHTS)) { r -= w; if (r <= 0) { pick = k; break; } }
   const slot = hand.findIndex(c => c.code === pick);
-  queued = slot >= 0 ? [slot] : [];
-  queuedSkills = slot >= 0 ? hand.map((c, i) => c.kind === 'skill' && c.requires === pick ? i : -1).filter(i => i >= 0) : [];
+  queued = slot >= 0 ? [slot] : ['EMPTY'];
+  // No card for the pick → the Empty slot, which still carries Move / Posture
+  // skills. Wanted to move but hold no M card → Empty Move toward the enemy's
+  // hex (a character target would make the Empty slot a Posture and the
+  // monster would stand still for the whole fight).
+  const emptyMove = slot < 0 && pick === 'M' && d > 1;
+  const ridesPick = c => slot >= 0 ? c.requires === pick : (c.requires === 'M' || c.requires === 'P');
+  queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && ridesPick(c) ? i : -1).filter(i => i >= 0);
   queuedExtra = null;
   const tranceIdx = hand.findIndex(c => c.is_trance);
   const others = hand.map((c, i) => c.kind !== 'skill' && i !== slot ? i : -1).filter(i => i >= 0);
@@ -1570,7 +1596,7 @@ async function npcPlan() {
     const diff = others.find(i => hand[i].code !== pick);
     queuedExtra = diff ?? null;
   }
-  target = nearest.peer_id;
+  target = emptyMove ? { q: nearest.tile_q, r: nearest.tile_r } : nearest.peer_id;
 }
 
 // Our own state hash per action, kept briefly so an incoming evt_state_hash
@@ -1615,13 +1641,19 @@ function inboxApply(env) {
 // relay replays the last two minutes on subscribe), Gun and the optional
 // discovery mirror — all land in peersPublic. Wait briefly for the first one.
 const JOIN_SYNC_WAIT_MS = Number(process.env.JOIN_SYNC_WAIT_MS || 6000);
+const JOIN_SYNC_SETTLE_MS = Number(process.env.JOIN_SYNC_SETTLE_MS || 1500);
 async function syncClockFromMesh() {
   const t0 = Date.now();
   const actOf = s => typeof s.action === 'number' ? s.action : actionKey(s.turn, s.round || 0);
-  let others = [];
+  // Keep listening until the roster stops growing (quiet for JOIN_SYNC_SETTLE_MS):
+  // resolving the first round with half the entities in view puts movers on
+  // hexes everyone else considers occupied → a one-round state divergence.
+  let others = [], lastGrowth = t0;
   while (Date.now() - t0 < JOIN_SYNC_WAIT_MS) {
-    others = livePeers().filter(p => p.peer_id !== PEER_ID_STRING && typeof p.turn === 'number');
-    if (others.length) break;
+    const now = livePeers().filter(p => p.peer_id !== PEER_ID_STRING && typeof p.turn === 'number');
+    if (now.length > others.length) lastGrowth = Date.now();
+    others = now;
+    if (others.length && Date.now() - lastGrowth >= JOIN_SYNC_SETTLE_MS) break;
     await new Promise(r => setTimeout(r, 250));
   }
   if (!others.length) { console.log(`[${PEER_LABEL}] join sync: no live peers heard in ${JOIN_SYNC_WAIT_MS}ms, starting fresh at turn 0`); return; }
@@ -1910,6 +1942,8 @@ wss.on('connection', (ws) => {
         queuedExtra = tranceOn && typeof m.extra === 'number' && m.extra !== primary && isAct(hand[m.extra]) ? m.extra : null;
         const codes = new Set();
         if (primary !== null) codes.add(hand[primary].code);
+        // Move / Posture skills may ride on the Empty slot (Empty Move / Empty Posture).
+        else if (picks.length) { codes.add('M'); codes.add('P'); }
         if (tranceOn) {
           if (queuedExtra !== null) codes.add(hand[queuedExtra].code);
           if (primary === null && queuedExtra === null) codes.add(hand.find(isAct).code);

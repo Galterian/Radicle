@@ -85,6 +85,8 @@ function spawnChild(name, args, env) {
     windowsHide: true,
   });
   child._name = name;
+  child._http = Number(env?.PEER_PORT_HTTP) || null;
+  child._dim = env?.DIM_NAME || null;
   const logFile = logStreamFor(name, env);
   child.stdout.on('data', (b) => { process.stdout.write(`${b}`); logFile.write(b); });
   child.stderr.on('data', (b) => { process.stderr.write(`${b}`); logFile.write(b); });
@@ -316,6 +318,28 @@ function mapFromDoors(dim) {
   return km;
 }
 
+// Doors lag reality by up to a Door push: a hero who joined seconds ago is not
+// in any Door yet, so two quick joiners could be placed on the same hex. Every
+// peer this launcher runs in the dimension knows the live roster — ask them and
+// merge their view (peers + self) into the Door members before placing.
+async function liveMembersFromLocalPeers(dimName) {
+  const out = [];
+  const mine = children.filter(c => c._dim === dimName && c._http && c.exitCode === null && !c.killed);
+  await Promise.all(mine.map(async c => {
+    try {
+      const st = await fetch(`http://127.0.0.1:${c._http}/status`, { signal: AbortSignal.timeout(1500) }).then(r => r.json());
+      if (st.entity?.tile) out.push({ peer_id: st.peer_id, tile: { q: st.entity.tile.q, r: st.entity.tile.r }, alliance: st.alliance, life: st.entity.life });
+      for (const p of st.peers || []) if (Number.isInteger(p.tile_q)) out.push({ peer_id: p.peer_id, tile: { q: p.tile_q, r: p.tile_r }, alliance: p.alliance, life: p.life });
+    } catch {}
+  }));
+  return out;
+}
+function mergeMembers(doorMembers, live) {
+  const byId = new Map(doorMembers.map(m => [m.peer_id, m]));
+  for (const m of live) byId.set(m.peer_id, { ...(byId.get(m.peer_id) || {}), ...m });   // live view wins
+  return [...byId.values()];
+}
+
 // Pick a start tile from what the Doors know. 'nearby' = adjacent to a friend
 // (or to the chosen player's Door); 'random' = a known hex outside everyone's
 // strong radius. Only hexes somebody has revealed are candidates.
@@ -353,7 +377,7 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   if (!dim.doors.length) throw new Error(`${dimensionName} was published by an older version (a single host door) — no player holds a Door into it`);
   const anchorDoor = doorId ? dim.doors.find(p => p.peer_id === doorId || p.door_id === doorId) : dim.doors[0];
   if (doorId && !anchorDoor) throw new Error(`no Door from ${doorId} on ${dimensionName}`);
-  const members = unionMembers(dim.doors);
+  const members = mergeMembers(unionMembers(dim.doors), await liveMembersFromLocalPeers(dim.dimension_name));
   const liveDoors = dim.doors.filter(p => Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS);
   if (!liveDoors.length) console.log(`[launcher] ${dimensionName}: no Door newer than ${DOOR_LIVE_MS / 60000} min — joining an empty dimension; you will be alone until someone else arrives`);
 

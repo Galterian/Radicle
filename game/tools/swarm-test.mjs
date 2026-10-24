@@ -60,7 +60,7 @@ function startAgent(peerId, port, attempt = 0) {
     const actionIdx = a.hand.map((c, i) => isAction(c) ? i : -1).filter(i => i >= 0);
     const tranceIdx = a.hand.findIndex(c => isSkill(c) && c.is_trance);
     // Battle Trance: two options (Attack + a different code, Block preferred).
-    if (tranceIdx >= 0 && actionIdx.length >= 2 && near && dist(near) <= 2 && Math.random() < 0.5) {
+    if (tranceIdx >= 0 && actionIdx.length >= 2 && near && dist(near) <= 3 && Math.random() < 0.6) {
       const primary = slotOf('A') >= 0 ? slotOf('A') : actionIdx[0];
       const pCode = a.hand[primary].code;
       const others = actionIdx.filter(i => i !== primary && a.hand[i].code !== pCode);
@@ -76,18 +76,26 @@ function startAgent(peerId, port, attempt = 0) {
       const s = slotOf('A') >= 0 ? slotOf('A') : slotOf('B');
       if (s >= 0) { queue(s, skillsFor(a.hand[s].code)); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.attacks++; return; }
     }
-    // Otherwise wander: keep a destination for a few rounds, pick a new known
-    // tile 3–9 hexes away when we arrive or have none (far ones force reveals).
-    if (!a.dest || (a.dest.q === me.tile_q && a.dest.r === me.tile_r) || Math.random() < 0.15) {
+    if (near && dist(near) <= 1) {
+      // Adjacent without Attack/Block: hold the Posture (an explicit P card or
+      // the Empty Posture) rather than walking into the monster's hex.
+      const p = slotOf('P');
+      if (p >= 0) queue(p, skillsFor('P')); else queue('EMPTY', skillsFor('M', 'P'));
+      send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+      return;
+    }
+    // Hunt the nearest living monster (that is what stresses the resolver);
+    // wander 3–9 hexes only when none is known.
+    if (near) a.dest = { q: near.tile_q, r: near.tile_r };
+    else if (!a.dest || (a.dest.q === me.tile_q && a.dest.r === me.tile_r) || Math.random() < 0.15) {
       const cands = [...a.map.tiles()].filter(t => { const d = hexDistance({ q: me.tile_q, r: me.tile_r }, t); return d >= 3 && d <= 9; });
       a.dest = cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;
     }
-    if (near && dist(near) <= 4 && Math.random() < 0.5) a.dest = { q: near.tile_q, r: near.tile_r };
     if (!a.dest) return;
     // 30%: an explicit Move card (with its skills) instead of the Empty Move.
     const mv = slotOf('M');
     if (mv >= 0 && Math.random() < 0.3) queue(mv, skillsFor('M'));
-    else queue('EMPTY');
+    else queue('EMPTY', skillsFor('M', 'P'));   // Move/Posture skills ride on Empty too
     send({ kind: 'target', target: { q: a.dest.q, r: a.dest.r } });
     send({ kind: 'lock' });
     a.moves++;

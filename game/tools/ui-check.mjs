@@ -82,11 +82,14 @@ for (const port of ports) {
     }
     const disabled = (await liveSkills()).find(s => s.cls.includes('disabled'));
     if (disabled) {
+      // Count "needs … card in hand" lines anywhere in the log — in a 10-peer
+      // game the handshake rows push new lines down within a second.
+      const needsCount = () => page.evaluate(() => [...document.querySelectorAll('#log li')].filter(l => /needs .* card in hand/i.test(l.innerText)).length);
+      const before = await needsCount();
       await page.click(`#slots .slot[data-slot="${disabled.slot}"]`);
       await sleep(300);
-      const after = await logTop();
-      const ok = after.some(l => /needs/i.test(l));
-      console.log(`  click disabled skill ${disabled.slot} (${disabled.text}) → log "${after[0]}" ${ok ? 'OK' : '<-- expected a "needs …" line'}`);
+      const ok = (await needsCount()) > before;
+      console.log(`  click disabled skill ${disabled.slot} (${disabled.text}) → ${ok ? 'logged "needs …" OK' : '<-- expected a "needs …" line'}`);
       if (!ok) errors.push('disabled skill click did not log a "needs" line');
     }
     await page.keyboard.press('8'); await sleep(200);

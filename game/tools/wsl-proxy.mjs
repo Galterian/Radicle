@@ -4,11 +4,11 @@
 // forwards localhost ports that no Windows process owns — so the UI must be
 // opened as http://localhost:17357 (or a UI_PORT of its own) with ?peer=174xx.
 //
-//   node tools/wsl-proxy.mjs            # 17357→7357, 17401..17414→7401..7414
+//   node tools/wsl-proxy.mjs            # 17357→7357, 17401..17440→7401..7440
 import net from 'node:net';
 
 const pairs = [[17357, 7357]];
-for (let n = 1; n <= 14; n++) pairs.push([17400 + n, 7400 + n]);
+for (let n = 1; n <= 40; n++) pairs.push([17400 + n, 7400 + n]);
 
 for (const [from, to] of pairs) {
   net.createServer(client => {
