@@ -16,3 +16,8 @@ game/logs/
 
 # Godot editor/import cache
 godot/.godot/
+
+# Local Godot binary (fetch with _tools/get_godot.sh)
+_tools/godot
+_tools/*.zip
+_test/*.log
