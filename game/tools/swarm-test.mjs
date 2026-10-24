@@ -38,9 +38,17 @@ async function status(port) {
 const agents = [];
 function startAgent(peerId, port, attempt = 0) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}/`);
-  const a = { peerId, port, ws, map: createKnownMap('0x0', [initialBlock()]), peers: new Map(), me: null, hand: [], rounds: 0, attacks: 0, moves: 0, dest: null };
+  const a = { peerId, port, ws, map: createKnownMap('0x0', [initialBlock()]), peers: new Map(), me: null, hand: [], rounds: 0, attacks: 0, moves: 0, skillsPlayed: 0, trances: 0, dest: null };
   const send = o => { try { ws.send(JSON.stringify(o)); } catch {} };
   ws.onclose = () => { if (!a.me && attempt < 10) setTimeout(() => startAgent(peerId, port, attempt + 1), 2000); };
+  const isAction = c => !!c && c.kind !== 'skill';
+  const isSkill = c => !!c && c.kind === 'skill';
+  // Skill indices riding on the given action codes (trance itself excluded).
+  const skillsFor = (...codes) => a.hand.map((c, i) => isSkill(c) && !c.is_trance && codes.includes(c.requires) ? i : -1).filter(i => i >= 0);
+  const queue = (slot, skills = [], extra = null) => {
+    send({ kind: 'queue', slots: [slot], skills, extra });
+    a.skillsPlayed += skills.filter(i => !a.hand[i]?.is_trance).length;
+  };
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
     if (!me || (me.life ?? 1) <= 0) return;
@@ -48,10 +56,25 @@ function startAgent(peerId, port, attempt = 0) {
     const dist = p => hexDistance({ q: me.tile_q, r: me.tile_r }, { q: p.tile_q, r: p.tile_r });
     enemies.sort((x, y) => dist(x) - dist(y));
     const near = enemies[0];
-    const slotOf = code => a.hand.findIndex(c => c && c.code === code);
+    const slotOf = code => a.hand.findIndex(c => isAction(c) && c.code === code);
+    const actionIdx = a.hand.map((c, i) => isAction(c) ? i : -1).filter(i => i >= 0);
+    const tranceIdx = a.hand.findIndex(c => isSkill(c) && c.is_trance);
+    // Battle Trance: two options (Attack + a different code, Block preferred).
+    if (tranceIdx >= 0 && actionIdx.length >= 2 && near && dist(near) <= 2 && Math.random() < 0.5) {
+      const primary = slotOf('A') >= 0 ? slotOf('A') : actionIdx[0];
+      const pCode = a.hand[primary].code;
+      const others = actionIdx.filter(i => i !== primary && a.hand[i].code !== pCode);
+      const extra = others.find(i => a.hand[i].code === 'B') ?? others[0] ?? null;
+      const codes = [pCode, extra !== null ? a.hand[extra].code : null].filter(Boolean);
+      queue(primary, [tranceIdx, ...skillsFor(...codes)], extra);
+      send({ kind: 'target', target: near.peer_id });
+      send({ kind: 'lock' });
+      a.trances++; a.attacks++;
+      return;
+    }
     if (near && dist(near) <= 1 && Math.random() < 0.75) {
       const s = slotOf('A') >= 0 ? slotOf('A') : slotOf('B');
-      if (s >= 0) { send({ kind: 'queue', slots: [s] }); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.attacks++; return; }
+      if (s >= 0) { queue(s, skillsFor(a.hand[s].code)); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.attacks++; return; }
     }
     // Otherwise wander: keep a destination for a few rounds, pick a new known
     // tile 3–9 hexes away when we arrive or have none (far ones force reveals).
@@ -61,7 +84,10 @@ function startAgent(peerId, port, attempt = 0) {
     }
     if (near && dist(near) <= 4 && Math.random() < 0.5) a.dest = { q: near.tile_q, r: near.tile_r };
     if (!a.dest) return;
-    send({ kind: 'queue', slots: ['EMPTY'] });
+    // 30%: an explicit Move card (with its skills) instead of the Empty Move.
+    const mv = slotOf('M');
+    if (mv >= 0 && Math.random() < 0.3) queue(mv, skillsFor('M'));
+    else queue('EMPTY');
     send({ kind: 'target', target: { q: a.dest.q, r: a.dest.r } });
     send({ kind: 'lock' });
     a.moves++;
@@ -149,7 +175,7 @@ async function audit(label) {
 const endAt = Date.now() + minutes * 60_000;
 while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 
@@ -169,5 +195,23 @@ for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir)
 }
 console.table(counts);
 const divergences = Object.values(counts).reduce((s, c) => s + c.divergence, 0);
+
+// ---- 6. tape scan: did skills / Battle Trance actually get played? ----
+// The host's hashgraph tape holds every envelope it saw (own + received). Only
+// rows after the last evt_genesis belong to this run of the dimension.
+try {
+  const tape = path.join(here, '..', 'sessions', DIM, 'hashgraph.jsonl');
+  const rows = fs.readFileSync(tape, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const gi = rows.map((r, i) => r.type === 'evt_genesis' ? i : -1).filter(i => i >= 0).at(-1) ?? 0;
+  const run = rows.slice(gi);
+  const reveals = run.filter(r => r.type === 'evt_action_reveal');
+  const withSkills = reveals.filter(r => Array.isArray(r.payload?.skills) && r.payload.skills.length);
+  const trances = reveals.filter(r => r.payload?.action === 'BT');
+  const perSkill = {};
+  for (const r of withSkills) for (const s of r.payload.skills) perSkill[s] = (perSkill[s] || 0) + 1;
+  const hashesWithDmg = run.filter(r => r.type === 'evt_state_hash' && (r.payload?.damage_applied || []).length).length;
+  log(`tape: ${reveals.length} reveals, ${withSkills.length} with skills, ${trances.length} Battle Trance (${trances.map(r => `${r.actor_peer_id.replace('peer:', '')}:${(r.payload.trance || []).join('|')}`).slice(0, 8).join(' ')}), ${hashesWithDmg} state hashes with damage`);
+  log(`tape skills: ${Object.entries(perSkill).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k.replace('skill_', '')}=${v}`).join(' ') || 'none'}`);
+} catch (e) { log(`tape scan skipped: ${e.message}`); }
 log(`RESULT: ${fin.mismatches.length} settled view mismatches, ${fin.sizes.length === 1 ? 'map consistent' : 'MAP SIZES DIFFER ' + fin.sizes.join('|')}, ${divergences} state divergences logged`);
 process.exit(0);
