@@ -81,6 +81,15 @@
   <main hidden>
     <canvas id="stage" width="920" height="620"></canvas>
     <aside id="panel">
+      <div id="hero-card" hidden>
+        <img alt="hero portrait">
+        <div class="meta">
+          <div class="hero-name">—</div>
+          <div class="hero-sub"></div>
+          <div class="hero-hp"></div>
+          <div class="hero-mute" title="press M to toggle"></div>
+        </div>
+      </div>
       <div id="roster"></div>
       <h4>event log <small>(local hashgraph)</small></h4>
       <div id="log-filter-chip" hidden>
@@ -90,6 +99,15 @@
       <ol id="log"></ol>
     </aside>
   </main>
+
+  <div id="hover-card" hidden>
+    <img alt="">
+    <div>
+      <div class="hc-name"></div>
+      <div class="hc-sub"></div>
+      <div class="hc-hp"></div>
+    </div>
+  </div>
 
   <footer id="deck-bar" hidden>
     <div id="deck-row">
@@ -107,7 +125,7 @@
       </aside>
     </div>
     <div id="hint">
-      <b>1-5</b> pick an action · <b>8</b> Empty · <b>Space</b> commit · <b>right-click a slot</b> to toggle discard · <b>left-click a hex</b> to focus / target an enemy for a queued Attack · <b>hold left &amp; drag</b> to pan the map (<b>C</b> recentres on you) · <b>wheel</b> zooms · <b>right-click a hex</b> to stage a move or journey toward it (second right-click or double-click commits)
+      <b>1-5</b> pick an action · <b>8</b> Empty · <b>Space</b> commit · <b>right-click a slot</b> to toggle discard · <b>left-click a hex</b> to focus / target an enemy for a queued Attack · <b>hold left &amp; drag</b> to pan the map (<b>C</b> recentres on you) · <b>wheel</b> zooms · <b>right-click a hex</b> to stage a move or journey toward it (second right-click or double-click commits) · <b>M</b> mute · <b>G</b> hex coords
     </div>
   </footer>
 

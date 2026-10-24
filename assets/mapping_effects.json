@@ -1,0 +1,1033 @@
+{
+  "source": "warlords3_battlecry",
+  "generated_by": "tools/enrich_effects.py",
+  "collections": {
+    "effects": {
+      "enriched": 66,
+      "total": 66
+    },
+    "skills": {
+      "enriched": 14,
+      "total": 14
+    },
+    "actions": {
+      "enriched": 10,
+      "total": 10
+    },
+    "elements": {
+      "enriched": 10,
+      "total": 10
+    },
+    "terrain_items": {
+      "enriched": 41,
+      "total": 41
+    }
+  },
+  "low_confidence": [
+    "action_empty_move",
+    "action_empty_posture",
+    "effect_aging",
+    "effect_awake",
+    "effect_confusion",
+    "effect_golems_air",
+    "effect_golems_water",
+    "effect_invisibility",
+    "effect_metaphysics",
+    "effect_sleep",
+    "effect_traps_mastery",
+    "elem_time",
+    "skill_bluff",
+    "skill_disruption_move",
+    "skill_intimidation",
+    "skill_taunt"
+  ],
+  "entries": {
+    "effect_super_sense": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Yellow light orb glow growing (sizes)/Yellow light orb glow growing (sizes) - idle [ELIT].png",
+      "wbc3_name": "Yellow light orb glow growing (sizes)",
+      "reason": "growing light orb = heightened perception revealing a tile",
+      "confidence": "medium"
+    },
+    "effect_super_force": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png",
+      "wbc3_name": "Smokedust puff animation",
+      "reason": "impact dust puff where the pushed/thrown body lands",
+      "confidence": "medium"
+    },
+    "effect_harm": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png",
+      "wbc3_name": "Particle set red sparks",
+      "reason": "red damage sparks for a direct harm channel",
+      "confidence": "medium"
+    },
+    "effect_sound_wave": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png",
+      "wbc3_name": "Spell effect white rings",
+      "reason": "expanding rings read as a sound wave",
+      "confidence": "medium"
+    },
+    "effect_summoning": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+      "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)",
+      "reason": "WBC3 summon pillar effect",
+      "confidence": "high"
+    },
+    "effect_aura": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Purple domeshield arcs/Purple domeshield arcs - idle [EZ37].png",
+      "wbc3_name": "Purple domeshield arcs",
+      "reason": "dome around the caster = aura extending effects to neighbours",
+      "confidence": "medium"
+    },
+    "effect_drain": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect red oval blobs/Spell effect red oval blobs - idle [EZ17].png",
+      "wbc3_name": "Spell effect red oval blobs",
+      "reason": "red life blobs flowing from target to caster",
+      "confidence": "medium"
+    },
+    "effect_spirit_link": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Cyan beams/Cyan beams - idle [EZ63].png",
+      "wbc3_name": "Cyan beams",
+      "reason": "beams connecting two subjects",
+      "confidence": "medium"
+    },
+    "effect_blessing_curse": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Yellow ring with + sign (buff marker)/Yellow ring with + sign (buff marker) - idle [EZ68].png",
+      "wbc3_name": "Yellow ring with + sign (buff marker)",
+      "reason": "WBC3 buff ring marker; tint red for Curse",
+      "confidence": "medium"
+    },
+    "effect_banish": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white smoke cloud ring (large)/Spell effect white smoke cloud ring (large) - idle [EZ13].png",
+      "wbc3_name": "Spell effect white smoke cloud ring (large)",
+      "reason": "large vanishing smoke ring where the subject was relocated from",
+      "confidence": "medium"
+    },
+    "effect_oblivion": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Grey smoke wisps/Grey smoke wisps - idle [EZ38].png",
+      "wbc3_name": "Grey smoke wisps",
+      "reason": "grey wisps = mind emptied, cannot act",
+      "confidence": "medium"
+    },
+    "effect_teleportation": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Bluewhite ring burst/Bluewhite ring burst - idle [EZ64].png",
+      "wbc3_name": "Bluewhite ring burst",
+      "reason": "ring burst at origin and destination hex",
+      "confidence": "medium"
+    },
+    "effect_sleep": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect faint white rings/Spell effect faint white rings - idle [EZ08].png",
+      "wbc3_name": "Spell effect faint white rings",
+      "reason": "faint rings hovering over the sleeping target",
+      "confidence": "low"
+    },
+    "effect_aging": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png",
+      "wbc3_name": "Grey arcs",
+      "reason": "grey sweeping arcs like clock hands",
+      "confidence": "low"
+    },
+    "effect_space_bending": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+      "wbc3_name": "Spell effect small purple ringspiral",
+      "reason": "purple spiral = warped space",
+      "confidence": "medium"
+    },
+    "effect_emotions_bombard": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Pinkred sparkles/Pinkred sparkles - idle [EZ50].png",
+      "wbc3_name": "Pinkred sparkles",
+      "reason": "pink sparkles for an emotional assault",
+      "confidence": "medium"
+    },
+    "effect_delay_time": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png",
+      "wbc3_name": "Spell effect faint rings",
+      "reason": "slow faint rings for slowed time",
+      "confidence": "medium"
+    },
+    "effect_potion_brew": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Green sparkle clusters/Green sparkle clusters - idle [EZ77].png",
+      "wbc3_name": "Green sparkle clusters",
+      "reason": "green alchemical sparkles; DwarvenBrew is the WBC3 brewing sound",
+      "confidence": "medium"
+    },
+    "effect_artifice": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Blue crystaldiamond icons/Blue crystaldiamond icons - idle [EZ36].png",
+      "wbc3_name": "Blue crystaldiamond icons",
+      "reason": "crystal icon = crafted permanent token",
+      "confidence": "medium"
+    },
+    "effect_invisibility": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png",
+      "wbc3_name": "Grey arc sweeps",
+      "reason": "faint grey sweeps fading the hero out",
+      "confidence": "low"
+    },
+    "effect_mutate": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Green dome arcs/Green dome arcs - idle [EZ43].png",
+      "wbc3_name": "Green dome arcs",
+      "reason": "green dome + WBC3 Morph sound",
+      "confidence": "medium"
+    },
+    "effect_lightning": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect vertical lightning boltspillars/Spell effect vertical lightning boltspillars - idle [EZ11].png",
+      "wbc3_name": "Spell effect vertical lightning boltspillars",
+      "reason": "WBC3 vertical lightning bolts",
+      "confidence": "high"
+    },
+    "effect_fireball": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Fireball explosion (growing orange blast)/Fireball explosion (growing orange blast) - idle [EX02].png",
+      "wbc3_name": "Fireball explosion (growing orange blast)",
+      "reason": "WBC3 fireball explosion",
+      "confidence": "high"
+    },
+    "effect_shield": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png",
+      "wbc3_name": "Cyan dome shield arcs",
+      "reason": "WBC3 dome shield",
+      "confidence": "high"
+    },
+    "effect_empower": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Purple ring with + sign (buff marker)/Purple ring with + sign (buff marker) - idle [EZ67].png",
+      "wbc3_name": "Purple ring with + sign (buff marker)",
+      "reason": "buff marker ring with + sign",
+      "confidence": "medium"
+    },
+    "effect_nature_embrace": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Green dotted rings/Green dotted rings - idle [EZ76].png",
+      "wbc3_name": "Green dotted rings",
+      "reason": "green nature rings wrapping the target",
+      "confidence": "medium"
+    },
+    "effect_disable": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Red X cancel marker (sizes)/Red X cancel marker (sizes) - idle [EMC0].png",
+      "wbc3_name": "Red X cancel marker (sizes)",
+      "reason": "red X over the disabled element",
+      "confidence": "medium"
+    },
+    "effect_throw": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Thrown stonerock projectile/Thrown stonerock projectile - idle [EMA3].png",
+      "wbc3_name": "Thrown stonerock projectile",
+      "reason": "thrown rock projectile strip (directions)",
+      "confidence": "high"
+    },
+    "effect_elementals_air": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png",
+      "wbc3_name": "Bluewhite arcs",
+      "reason": "air arcs on cast; summoned creature uses the WBC3 Air Elemental unit",
+      "confidence": "high"
+    },
+    "effect_elementals_water": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Particle set blue sparks + crystals/Particle set blue sparks + crystals - idle [EPA3].png",
+      "wbc3_name": "Particle set blue sparks + crystals",
+      "reason": "water sparks on cast; summoned creature uses the WBC3 Water Elemental unit",
+      "confidence": "high"
+    },
+    "effect_elementals_earth": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png",
+      "wbc3_name": "Greybrown dust puffs",
+      "reason": "dust on cast; summoned creature uses the WBC3 Earth Elemental unit",
+      "confidence": "high"
+    },
+    "effect_balefire": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Red beamline effect/Red beamline effect - idle [Emf0].png",
+      "wbc3_name": "Red beamline effect",
+      "reason": "red beam = Fiery Beam",
+      "confidence": "high"
+    },
+    "effect_golems_earth": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
+      "wbc3_name": "Small dust puffs",
+      "reason": "summoned creature uses the WBC3 Stone Golem unit",
+      "confidence": "high"
+    },
+    "effect_golems_water": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
+      "wbc3_name": "Small dust puffs",
+      "reason": "no water golem in WBC3; Bronze Golem (verdigris/sea colours) stands in",
+      "confidence": "low"
+    },
+    "effect_golems_air": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
+      "wbc3_name": "Small dust puffs",
+      "reason": "no air golem in WBC3; Iron Golem stands in",
+      "confidence": "low"
+    },
+    "effect_awake": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Yellow smileysun face icons/Yellow smileysun face icons - idle [EZ25].png",
+      "wbc3_name": "Yellow smileysun face icons",
+      "reason": "sun/face icon = awakened terrain or ally",
+      "confidence": "low"
+    },
+    "effect_resurrect_death_ward": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white glowing orb growing/Spell effect white glowing orb growing - idle [EZ07].png",
+      "wbc3_name": "Spell effect white glowing orb growing",
+      "reason": "growing white orb = returning life",
+      "confidence": "medium"
+    },
+    "effect_creation": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
+      "wbc3_name": "Small dust puffs",
+      "reason": "wall token created from earth; still image is the WBC3 neutral wall segment",
+      "confidence": "high"
+    },
+    "effect_ice_blast": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Cyan ice shards/Cyan ice shards - idle [EZ56].png",
+      "wbc3_name": "Cyan ice shards",
+      "reason": "WBC3 ice shards",
+      "confidence": "high"
+    },
+    "effect_combustion": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+      "wbc3_name": "Fire flames (torchburning)",
+      "reason": "burning flames on the target",
+      "confidence": "high"
+    },
+    "effect_fossilization": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Grey rings/Grey rings - idle [EZ60].png",
+      "wbc3_name": "Grey rings",
+      "reason": "grey rings + WBC3 Petrify sound",
+      "confidence": "medium"
+    },
+    "effect_the_void": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - black/Objectivetarget ring marker - black - idle [EOSK].png",
+      "wbc3_name": "Objectivetarget ring marker - black",
+      "reason": "black ring = void absorbing all damage",
+      "confidence": "medium"
+    },
+    "effect_metaphysics": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect pale starburst/Spell effect pale starburst - idle [EZ20].png",
+      "wbc3_name": "Spell effect pale starburst",
+      "reason": "pale starburst = mass change",
+      "confidence": "low"
+    },
+    "effect_confusion": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect yellow ring markers/Spell effect yellow ring markers - idle [EZ12].png",
+      "wbc3_name": "Spell effect yellow ring markers",
+      "reason": "yellow spinning rings over a confused target",
+      "confidence": "low"
+    },
+    "effect_inner_fire": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Orange glowing rings/Orange glowing rings - idle [EZ28].png",
+      "wbc3_name": "Orange glowing rings",
+      "reason": "orange glow around an empowered fighter",
+      "confidence": "medium"
+    },
+    "effect_blizzard": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Cyan star sparkles/Cyan star sparkles - idle [EZ53].png",
+      "wbc3_name": "Cyan star sparkles",
+      "reason": "cyan snowflake sparkles",
+      "confidence": "medium"
+    },
+    "effect_vision": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect orange glowing ring eye/Spell effect orange glowing ring eye - idle [EZ06].png",
+      "wbc3_name": "Spell effect orange glowing ring eye",
+      "reason": "WBC3 glowing eye ring = vision/scrying",
+      "confidence": "high"
+    },
+    "effect_light_darkness": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/White sparkle orbs (large)/White sparkle orbs (large) - idle [EZ32].png",
+      "wbc3_name": "White sparkle orbs (large)",
+      "reason": "large white orbs; invert/tint black for Darkness",
+      "confidence": "medium"
+    },
+    "effect_phantom": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect green hooded figure sprites (phantom)/Spell effect green hooded figure sprites (phantom) - idle [EZ22].png",
+      "wbc3_name": "Spell effect green hooded figure sprites (phantom)",
+      "reason": "WBC3 phantom hooded figure",
+      "confidence": "high"
+    },
+    "effect_meteor_shower": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Fireexplosion burst animation (large)/Fireexplosion burst animation (large) - idle [EF01].png",
+      "wbc3_name": "Fireexplosion burst animation (large)",
+      "reason": "large fire burst on every known creature",
+      "confidence": "high"
+    },
+    "effect_traps_mastery": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Particle set yellow sparks + X marks/Particle set yellow sparks + X marks - idle [EPA5].png",
+      "wbc3_name": "Particle set yellow sparks + X marks",
+      "reason": "X marks = hidden trap markers (owner-only)",
+      "confidence": "low"
+    },
+    "effect_possess_phylactery": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Purple dome arcs/Purple dome arcs - idle [EZ44].png",
+      "wbc3_name": "Purple dome arcs",
+      "reason": "purple dome swapping bodies",
+      "confidence": "medium"
+    },
+    "effect_dark_matter": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png",
+      "wbc3_name": "Spell effect purplewhite glowing orbs",
+      "reason": "purple-white orbs colliding",
+      "confidence": "medium"
+    },
+    "effect_poison": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Particle set green sparks/Particle set green sparks - idle [EPA2].png",
+      "wbc3_name": "Particle set green sparks",
+      "reason": "green sparks + WBC3 Poison sound",
+      "confidence": "medium"
+    },
+    "effect_disruption": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect cyan energy shards/Spell effect cyan energy shards - idle [EZ03].png",
+      "wbc3_name": "Spell effect cyan energy shards",
+      "reason": "shards = object split apart",
+      "confidence": "medium"
+    },
+    "effect_mind_blast": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect starburst (large)/Spell effect starburst (large) - idle [EZ19].png",
+      "wbc3_name": "Spell effect starburst (large)",
+      "reason": "large starburst over the head",
+      "confidence": "medium"
+    },
+    "effect_haste": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect tiny sparkles/Spell effect tiny sparkles - idle [EZ21].png",
+      "wbc3_name": "Spell effect tiny sparkles",
+      "reason": "tiny sparkles trailing a hasted character",
+      "confidence": "medium"
+    },
+    "effect_turn_life": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect starburst sparkles/Spell effect starburst sparkles - idle [EZ15].png",
+      "wbc3_name": "Spell effect starburst sparkles",
+      "reason": "starburst sparkles for inverted vital energy",
+      "confidence": "medium"
+    },
+    "effect_earthquake": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Large smokedust explosion animation/Large smokedust explosion animation - idle [EMX1].png",
+      "wbc3_name": "Large smokedust explosion animation",
+      "reason": "big dust explosion on all adjacent hexes",
+      "confidence": "high"
+    },
+    "effect_love": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Heart icons (healingcharm)/Heart icons (healingcharm) - idle [EZ23].png",
+      "wbc3_name": "Heart icons (healingcharm)",
+      "reason": "WBC3 heart charm icons",
+      "confidence": "high"
+    },
+    "effect_awe": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Small white starbursts/Small white starbursts - idle [EZ34].png",
+      "wbc3_name": "Small white starbursts",
+      "reason": "white starbursts of awe",
+      "confidence": "medium"
+    },
+    "effect_domination": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Red ring markers/Red ring markers - idle [EZ74].png",
+      "wbc3_name": "Red ring markers",
+      "reason": "red control ring under the dominated target",
+      "confidence": "medium"
+    },
+    "effect_anger": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Orange ember sparks/Orange ember sparks - idle [EZ27].png",
+      "wbc3_name": "Orange ember sparks",
+      "reason": "ember sparks of rage",
+      "confidence": "medium"
+    },
+    "effect_mists": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white smoke puffs/Spell effect white smoke puffs - idle [EZ18].png",
+      "wbc3_name": "Spell effect white smoke puffs",
+      "reason": "WBC3 white mist puffs",
+      "confidence": "high"
+    },
+    "effect_petrify": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png",
+      "wbc3_name": "Grey crescent arcs",
+      "reason": "grey arcs + WBC3 Petrify sound",
+      "confidence": "medium"
+    },
+    "effect_fear": {
+      "collection": "effects",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white smoke rings/Spell effect white smoke rings - idle [EZ10].png",
+      "wbc3_name": "Spell effect white smoke rings",
+      "reason": "white rings + scream",
+      "confidence": "medium"
+    },
+    "skill_powerful_attack": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Blood splatter (red) and green ichor splatter/Blood splatter (red) and green ichor splatter - idle [EDBL].png",
+      "wbc3_name": "Blood splatter (red) and green ichor splatter",
+      "reason": "heavy sword hit + crit; blood splatter on the target",
+      "confidence": "high"
+    },
+    "skill_overrun": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png",
+      "wbc3_name": "Smokedust puff animation",
+      "reason": "stomp through the enemy, dust at the swap",
+      "confidence": "medium"
+    },
+    "skill_grapple": {
+      "collection": "skills",
+      "asset": "assets/Sounds/SoundFX/Whack.wav",
+      "wbc3_name": null,
+      "reason": "body impact sounds",
+      "confidence": "medium"
+    },
+    "skill_ranged_weapon": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Arrow projectile (directions)/Arrow projectile (directions) - idle [EMA0].png",
+      "wbc3_name": "Arrow projectile (directions)",
+      "reason": "arrow projectile strip + missile sound",
+      "confidence": "high"
+    },
+    "skill_taunt": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png",
+      "wbc3_name": "Crossed burning swords icon (battle marker)",
+      "reason": "battle marker over the taunting hero",
+      "confidence": "low"
+    },
+    "skill_force_shield": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png",
+      "wbc3_name": "Cyan dome shield arcs",
+      "reason": "dome shield + metal clang",
+      "confidence": "high"
+    },
+    "skill_barricade": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+      "wbc3_name": "Ramparts",
+      "reason": "WBC3 rampart still around the hero",
+      "confidence": "medium"
+    },
+    "skill_sanctuary": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png",
+      "wbc3_name": "Spell effect white rings",
+      "reason": "white protective rings",
+      "confidence": "medium"
+    },
+    "skill_disruption_move": {
+      "collection": "skills",
+      "asset": "assets/Sounds/SoundFX/ShortWhoosh.wav",
+      "wbc3_name": null,
+      "reason": "quick dash sound",
+      "confidence": "low"
+    },
+    "skill_dodge": {
+      "collection": "skills",
+      "asset": "assets/Sounds/SoundFX/swoosh2.wav",
+      "wbc3_name": null,
+      "reason": "whoosh of a dodge",
+      "confidence": "medium"
+    },
+    "skill_bluff": {
+      "collection": "skills",
+      "asset": "assets/Sounds/SoundFX/swooshrl.wav",
+      "wbc3_name": null,
+      "reason": "feint whoosh + soft click",
+      "confidence": "low"
+    },
+    "skill_intimidation": {
+      "collection": "skills",
+      "asset": "assets/Sounds/SoundFX/drum.wav",
+      "wbc3_name": null,
+      "reason": "drum + racing heartbeat of the intimidated enemy",
+      "confidence": "low"
+    },
+    "skill_battle_trance": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Yellow ring with + sign (buff marker)/Yellow ring with + sign (buff marker) - idle [EZ68].png",
+      "wbc3_name": "Yellow ring with + sign (buff marker)",
+      "reason": "buff marker + heartbeat",
+      "confidence": "medium"
+    },
+    "skill_counter_spell": {
+      "collection": "skills",
+      "asset": "assets/Sprites/Effects/Effects1/Red X cancel marker variant/Red X cancel marker variant - idle [EMC1].png",
+      "wbc3_name": "Red X cancel marker variant",
+      "reason": "cancel X over the countered skill",
+      "confidence": "medium"
+    },
+    "action_attack": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png",
+      "wbc3_name": "Crossed burning swords icon (battle marker)",
+      "reason": "generic melee hit sounds (pick randomly) + battle marker",
+      "confidence": "high"
+    },
+    "action_block": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Shieldgem icons in 8 player colours/Shieldgem icons in 8 player colours - idle [ESHD].png",
+      "wbc3_name": "Shieldgem icons in 8 player colours",
+      "reason": "shield clang + shield gem icon",
+      "confidence": "high"
+    },
+    "action_move": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Footprints small ground marks/Footprints small ground marks - idle [EDFS].png",
+      "wbc3_name": "Footprints small ground marks",
+      "reason": "footsteps + footprints along the hex path",
+      "confidence": "high"
+    },
+    "action_posture": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png",
+      "wbc3_name": "Spell effect faint rings",
+      "reason": "faint rings while concentrating/casting",
+      "confidence": "medium"
+    },
+    "action_empty_posture": {
+      "collection": "actions",
+      "asset": "assets/Sounds/SoundFX/Pad.wav",
+      "wbc3_name": null,
+      "reason": "soft UI pad sound (no card played)",
+      "confidence": "low"
+    },
+    "action_empty_move": {
+      "collection": "actions",
+      "asset": "assets/Sounds/SoundFX/Walk.wav",
+      "wbc3_name": null,
+      "reason": "half-step footsteps",
+      "confidence": "low"
+    },
+    "action_combo": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Digit glyphs 0-9 (floating numbers)/Digit glyphs 0-9 (floating numbers) - idle [ERNX].png",
+      "wbc3_name": "Digit glyphs 0-9 (floating numbers)",
+      "reason": "floating damage digits for the +1 combo bonus",
+      "confidence": "medium"
+    },
+    "action_trade": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Dialoginventory icon sheet (many small item icons)/Dialoginventory icon sheet (many small item icons) - idle [IDLG].png",
+      "wbc3_name": "Dialoginventory icon sheet (many small item icons)",
+      "reason": "WBC3 merchant sound + item icons",
+      "confidence": "medium"
+    },
+    "action_enter_dimension": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+      "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)",
+      "reason": "arrival pillar of light on the starting tile",
+      "confidence": "medium"
+    },
+    "action_travel_door": {
+      "collection": "actions",
+      "asset": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+      "wbc3_name": "Black Portal",
+      "reason": "WBC3 Black Portal as the dimension door",
+      "confidence": "medium"
+    },
+    "elem_vitality": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png",
+      "wbc3_name": "Particle set red sparks",
+      "reason": "living grass terrain, red life sparks, heartbeat",
+      "confidence": "medium"
+    },
+    "elem_souls": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png",
+      "wbc3_name": "Spell effect purplewhite glowing orbs",
+      "reason": "dark caverns, violet soul orbs",
+      "confidence": "medium"
+    },
+    "elem_time": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png",
+      "wbc3_name": "Grey arcs",
+      "reason": "sand (hourglass) terrain, sweeping arcs",
+      "confidence": "low"
+    },
+    "elem_space": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+      "wbc3_name": "Spell effect small purple ringspiral",
+      "reason": "deep caverns, purple spiral",
+      "confidence": "medium"
+    },
+    "elem_air": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png",
+      "wbc3_name": "Bluewhite arcs",
+      "reason": "high open terrain, blue-white wind arcs",
+      "confidence": "medium"
+    },
+    "elem_water": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Particle set blue sparks + crystals/Particle set blue sparks + crystals - idle [EPA3].png",
+      "wbc3_name": "Particle set blue sparks + crystals",
+      "reason": "water tiles, blue droplets",
+      "confidence": "high"
+    },
+    "elem_earth": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png",
+      "wbc3_name": "Greybrown dust puffs",
+      "reason": "rock/mountain tiles, dust",
+      "confidence": "high"
+    },
+    "elem_fire": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+      "wbc3_name": "Fire flames (torchburning)",
+      "reason": "lava tiles, flames",
+      "confidence": "high"
+    },
+    "elem_concentration": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Small white rings/Small white rings - idle [EZ57].png",
+      "wbc3_name": "Small white rings",
+      "reason": "bare high plateau, silver rings",
+      "confidence": "medium"
+    },
+    "elem_harmony": {
+      "collection": "elements",
+      "asset": "assets/Sprites/Effects/Effects1/Yellow sparks/Yellow sparks - idle [EZ65].png",
+      "wbc3_name": "Yellow sparks",
+      "reason": "lush jungle, golden sparks",
+      "confidence": "medium"
+    },
+    "tower_vitality": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
+      "wbc3_name": "Tree of Life",
+      "reason": "Tree of Life = vitality",
+      "confidence": "medium"
+    },
+    "tower_souls": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Undead/Altar of Shadows/Altar of Shadows - base [BPAS].png",
+      "wbc3_name": "Altar of Shadows",
+      "reason": "undead altar for the Souls element",
+      "confidence": "medium"
+    },
+    "tower_time": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
+      "wbc3_name": "Celestial Temple",
+      "reason": "celestial (stars/time) temple",
+      "confidence": "medium"
+    },
+    "tower_space": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Dark Elves/Void/Void - base [BPVO].png",
+      "wbc3_name": "Void",
+      "reason": "WBC3 \"Void\" building",
+      "confidence": "high"
+    },
+    "tower_air": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Fliers/Eyrie (level 3)/Eyrie (level 3) - base [BAV2].png",
+      "wbc3_name": "Eyrie (level 3)",
+      "reason": "eyrie on a crag for Air",
+      "confidence": "medium"
+    },
+    "tower_water": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - base [BPCP].png",
+      "wbc3_name": "Sacred Pool",
+      "reason": "sacred pool for Water",
+      "confidence": "medium"
+    },
+    "tower_earth": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Elemental Temple/Elemental Temple - base [BTEL].png",
+      "wbc3_name": "Elemental Temple",
+      "reason": "stone elemental temple for Earth",
+      "confidence": "medium"
+    },
+    "tower_fire": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - base [BTIN].png",
+      "wbc3_name": "Infernal Temple",
+      "reason": "infernal temple for Fire",
+      "confidence": "high"
+    },
+    "tower_concentration": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/High Elves/Tower of the Moon/Tower of the Moon - base [BPMT].png",
+      "wbc3_name": "Tower of the Moon",
+      "reason": "Tower of the Moon = concentration/magic",
+      "confidence": "high"
+    },
+    "tower_harmony": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
+      "wbc3_name": "White Tree",
+      "reason": "White Tree = harmony",
+      "confidence": "medium"
+    },
+    "crystal_vitality": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - base [BRC0].png",
+      "wbc3_name": "Crystal Mine (size 1)",
+      "reason": "WBC3 crystal mine = crystal deposit; tint red",
+      "confidence": "medium"
+    },
+    "crystal_world": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+      "wbc3_name": "Crystal Mine (size 2)",
+      "reason": "WBC3 crystal mine = crystal deposit; tint violet/indigo",
+      "confidence": "medium"
+    },
+    "crystal_matter": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
+      "wbc3_name": "Crystal Mine (size 3)",
+      "reason": "WBC3 crystal mine = crystal deposit; tint brown/aqua",
+      "confidence": "medium"
+    },
+    "crystal_will": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
+      "wbc3_name": "Crystal Mine (size 3)",
+      "reason": "WBC3 crystal mine = crystal deposit; tint silver/gold",
+      "confidence": "medium"
+    },
+    "item_library": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
+      "wbc3_name": "Library",
+      "reason": "WBC3 Library (alt: Undead/Black Library)",
+      "confidence": "high"
+    },
+    "item_nexus": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Circle of Power/Circle of Power - base [BMCP].png",
+      "wbc3_name": "Circle of Power",
+      "reason": "ritual circle = nexus / entry point (alt: Daemons/Portal)",
+      "confidence": "high"
+    },
+    "item_trade_center": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Knights/Market/Market - base [BPMA].png",
+      "wbc3_name": "Market",
+      "reason": "market = trade center (alt: Dwarves/Trading Post)",
+      "confidence": "high"
+    },
+    "item_stash": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Dark Dwarves/Supply Depot/Supply Depot - base [BPSD].png",
+      "wbc3_name": "Supply Depot",
+      "reason": "supply depot = stash",
+      "confidence": "high"
+    },
+    "item_dimension_door": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+      "wbc3_name": "Black Portal",
+      "reason": "WBC3 Black Portal",
+      "confidence": "high"
+    },
+    "item_tower_terrain": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - base [BWTC].png",
+      "wbc3_name": "Tower (Knights)",
+      "reason": "neutral defensive tower (per-race variants in Sprites/Buildings/Shared/Tower (*))",
+      "confidence": "high"
+    },
+    "item_force_field": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+      "wbc3_name": "Walls (neutral, 2x1 horizontal)",
+      "reason": "neutral wall segment (alt: Wall of Ice, Wall of Thorns; 1x2 vertical / 2x2 joint variants)",
+      "confidence": "high"
+    },
+    "item_river": {
+      "collection": "terrain_items",
+      "asset": "assets/Images/Terrain/Water/TWX0.bmp",
+      "wbc3_name": "Water terrain",
+      "reason": "shallow water tiles = river wall",
+      "confidence": "high"
+    },
+    "item_lava": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+      "wbc3_name": "Lava terrain",
+      "reason": "lava tiles = lava wall",
+      "confidence": "high"
+    },
+    "item_element_bonus_terrain": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect yellow sparkle cloud (very wide sheet)/Spell effect yellow sparkle cloud (very wide sheet) - idle [EZ01].png",
+      "wbc3_name": "Standing stone obelisk on round base",
+      "reason": "standing stone = element source; tint by element colour_hint",
+      "confidence": "medium"
+    },
+    "item_artifact": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+      "wbc3_name": "Shrine",
+      "reason": "shrine holding an artifact",
+      "confidence": "medium"
+    },
+    "item_attraction_recruitment_center": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - base [BPHS].png",
+      "wbc3_name": "Hostel",
+      "reason": "hostel attracts recruits (alt: Minotaurs/Ale Store, Knights/Garrison)",
+      "confidence": "medium"
+    },
+    "mine_vit_wat_har": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+      "wbc3_name": "Gold Mine (size 1)",
+      "reason": "vitality/water/air/will triple -> gold mine",
+      "confidence": "medium"
+    },
+    "mine_soul_fir_ear": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+      "wbc3_name": "Metal Mine (size 2)",
+      "reason": "fire (forge) in the triple -> metal mine",
+      "confidence": "medium"
+    },
+    "mine_vit_vit_air": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
+      "wbc3_name": "Gold Mine (size 3)",
+      "reason": "vitality/water/air/will triple -> gold mine",
+      "confidence": "medium"
+    },
+    "mine_vit_tim_con": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - base [BRC0].png",
+      "wbc3_name": "Crystal Mine (size 1)",
+      "reason": "world element in the triple -> crystal mine",
+      "confidence": "medium"
+    },
+    "mine_spa_fir_har": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+      "wbc3_name": "Metal Mine (size 2)",
+      "reason": "fire (forge) in the triple -> metal mine",
+      "confidence": "medium"
+    },
+    "mine_vit_sou_wat": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
+      "wbc3_name": "Crystal Mine (size 3)",
+      "reason": "world element in the triple -> crystal mine",
+      "confidence": "medium"
+    },
+    "mine_vit_con_har": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+      "wbc3_name": "Gold Mine (size 1)",
+      "reason": "vitality/water/air/will triple -> gold mine",
+      "confidence": "medium"
+    },
+    "mine_sou_spa_ear": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+      "wbc3_name": "Stone Quarry (size 2)",
+      "reason": "earth in the triple -> stone quarry",
+      "confidence": "medium"
+    },
+    "mine_air_wat_fir": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
+      "wbc3_name": "Metal Mine (size 3)",
+      "reason": "fire (forge) in the triple -> metal mine",
+      "confidence": "medium"
+    },
+    "mine_vit_tim_ear": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
+      "wbc3_name": "Stone Quarry (size 1)",
+      "reason": "earth in the triple -> stone quarry",
+      "confidence": "medium"
+    },
+    "mine_sou_spa_tim": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+      "wbc3_name": "Crystal Mine (size 2)",
+      "reason": "world element in the triple -> crystal mine",
+      "confidence": "medium"
+    },
+    "mine_wat_fir_har": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
+      "wbc3_name": "Metal Mine (size 3)",
+      "reason": "fire (forge) in the triple -> metal mine",
+      "confidence": "medium"
+    },
+    "mine_air_ear_con": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
+      "wbc3_name": "Stone Quarry (size 1)",
+      "reason": "earth in the triple -> stone quarry",
+      "confidence": "medium"
+    },
+    "mine_vit_tim_tim": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+      "wbc3_name": "Crystal Mine (size 2)",
+      "reason": "world element in the triple -> crystal mine",
+      "confidence": "medium"
+    },
+    "mine_wat_har_har": {
+      "collection": "terrain_items",
+      "asset": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
+      "wbc3_name": "Gold Mine (size 3)",
+      "reason": "vitality/water/air/will triple -> gold mine",
+      "confidence": "medium"
+    }
+  }
+}

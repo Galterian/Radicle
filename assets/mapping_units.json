@@ -1,0 +1,1362 @@
+{
+  "char_oran_rief": {
+    "name": "Oran Rief survivalist",
+    "wbc3_name": "Gladewarden",
+    "wbc3_code": "AWMX",
+    "race": "Wood Elves",
+    "reason": "ranger survivalist (vitality adept, M/B/P combo) -> Wood Elf forest ranger archer",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 21 Hooded ranger with bow [Portrait21].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "char_pride_guardian": {
+    "name": "Pride Guardian",
+    "wbc3_name": "Knight Champion",
+    "wbc3_code": "AHFX",
+    "race": "Knights",
+    "reason": "guardian tag, world/time pillars; armoured champion of a knightly pride",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 00 Female elf knight in silver plate [Portrait00].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "char_exuberant_firestroker": {
+    "name": "Exuberant Firestroker",
+    "wbc3_name": "Red Mage",
+    "wbc3_code": "AHGR",
+    "race": "Empire",
+    "reason": "fire-adept caster -> Empire fire mage (Ring of Fire caster)",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 49 Dark-haired man in red [Portrait49].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "char_razorfin_abolisher": {
+    "name": "Razorfin Abolisher",
+    "wbc3_name": "Naga",
+    "wbc3_code": "ALGX",
+    "race": "Ssrathi",
+    "reason": "space-adept matter-20 caster with aquatic \"razorfin\" theme -> Ssrathi Naga spellcaster",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 13 Blue lizardmanssrathi [Portrait13].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 11
+  },
+  "char_manor_skeleton": {
+    "name": "Manor Skeleton",
+    "wbc3_name": "Skeleton",
+    "wbc3_code": "AUIX",
+    "race": "Undead",
+    "reason": "undead tag -> Undead Skeleton",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 52 Skeletal undead in hood [Portrait52].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "char_rhox_bodyguard": {
+    "name": "Rhox Bodyguard",
+    "wbc3_name": "Khazrimi Guard",
+    "wbc3_code": "ADLX",
+    "race": "Dwarves",
+    "reason": "balanced heavy bodyguard -> elite dwarven guard unit",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 25 Bearded dwarf in horned helm [Portrait25].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "char_sanctum_gargoyle": {
+    "name": "Sanctum Gargoyle",
+    "wbc3_name": "Imp",
+    "wbc3_code": "AAIM",
+    "race": "Daemons",
+    "reason": "astral winged stone gargoyle -> grey winged Imp",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 62 Horned brown daemon [Portrait62].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "char_moonglove_changeling": {
+    "name": "Moonglove Changeling",
+    "wbc3_name": "Ice Maiden",
+    "wbc3_code": "AEOX",
+    "race": "High Elves",
+    "reason": "mental/will-21 moon-themed changeling -> High Elf Ice Maiden (moon caster)",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 61 Blue-skinned fey with yellow hair [Portrait61].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 9
+  },
+  "char_behemoth_herald": {
+    "name": "Behemoth's Herald",
+    "wbc3_name": "Warlord",
+    "wbc3_code": "ABEX",
+    "race": "Barbarians",
+    "reason": "warrior with vitality 18 -> Barbarian Warlord",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 23 Dark-haired barbarian with tattoos [Portrait23].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "char_cynder_pyromancer": {
+    "name": "Cynder Pyromancer",
+    "wbc3_name": "Daemon Hero",
+    "wbc3_code": "AVHX",
+    "race": "Daemons",
+    "reason": "pyromancer caster -> Daemon race hero (fire-themed, has cast/spell animations and hero voice)",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 42 Gold fire daemon [Portrait42].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "char_akki_coalfinger": {
+    "name": "Akki Coalfinger",
+    "wbc3_name": "Goblin Shaman",
+    "wbc3_code": "AONX",
+    "race": "Orcs",
+    "reason": "Akki are goblins; earth-adept caster -> Goblin Shaman",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 41 Goblin with fangs [Portrait41].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 9
+  },
+  "char_godtracker_jund": {
+    "name": "GodTracker of Jund",
+    "wbc3_name": "Lizard Rider",
+    "wbc3_code": "ALCX",
+    "race": "Ssrathi",
+    "reason": "Jund = dragon/lizard jungle; air-adept tracker -> Ssrathi Lizard Rider",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 53 Ssrathi lizardman with jewels [Portrait53].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_ruinous_minotaur": {
+    "name": "Ruinous Minotaur",
+    "wbc3_name": "Minotaur",
+    "wbc3_code": "AMIX",
+    "race": "Minotaurs",
+    "reason": "minotaur bruiser -> Minotaur",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "mon_ridge_runnet_3a": {
+    "name": "Ridge Runnet 3A",
+    "wbc3_name": "Scorpionman",
+    "wbc3_code": "ARCX",
+    "race": "Swarm",
+    "reason": "ridge-dwelling brute (vit 20, +1 on Attack) -> Swarm Scorpionman",
+    "confidence": "low",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_hellkite_hatchling": {
+    "name": "Hellkite Hatchling",
+    "wbc3_name": "Wyvern",
+    "wbc3_code": "AAWY",
+    "race": "Fliers",
+    "reason": "young dragon-kin flyer -> Wyvern (smaller dragon-kin)",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "mon_cloudhearth_drake_2a": {
+    "name": "Cloudhearth Drake 2A",
+    "wbc3_name": "Storm Dragon",
+    "wbc3_code": "AADB",
+    "race": "Dragons",
+    "reason": "cloud-themed drake flyer -> Storm Dragon",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 5
+  },
+  "mon_harbor_serpent": {
+    "name": "Harbor Serpent",
+    "wbc3_name": "Hydra",
+    "wbc3_code": "AGHY",
+    "race": "Plaguelords",
+    "reason": "water serpent brute -> many-headed Hydra",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "mon_tangle_spider_2b": {
+    "name": "Tangle Spider 2B",
+    "wbc3_name": "Queen Spider",
+    "wbc3_code": "AKLX",
+    "race": "Dark Elves",
+    "reason": "web-weaving caster spider (Creation innate) -> Queen Spider",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "mon_cliffy_serpent": {
+    "name": "Cliffy Serpent",
+    "wbc3_name": "Pterodactyl",
+    "wbc3_code": "AAPT",
+    "race": "Fliers",
+    "reason": "cliff-dwelling flying serpent -> Pterodactyl",
+    "confidence": "low",
+    "portrait": null,
+    "animations": [
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "mon_bant_battlemage_3p": {
+    "name": "Bant Battlemage 3P",
+    "wbc3_name": "Inquisitor",
+    "wbc3_code": "AHGX",
+    "race": "Knights",
+    "reason": "armoured battlemage caster (Love innate) -> Knights Inquisitor caster",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_angel_of_mercy": {
+    "name": "Angel of Mercy",
+    "wbc3_name": "Archon",
+    "wbc3_code": "AAAR",
+    "race": "Temples",
+    "reason": "angel caster (Awe innate) -> celestial Archon",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_pathrazer_of_ulamog": {
+    "name": "Pathrazer of Ulamog",
+    "wbc3_name": "Daemon",
+    "wbc3_code": "AADE",
+    "race": "Daemons",
+    "reason": "eldritch winged brute -> Daemon",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 9
+  },
+  "mon_dragon": {
+    "name": "Dragon",
+    "wbc3_name": "Fire Dragon",
+    "wbc3_code": "AADR",
+    "race": "Dragons",
+    "reason": "boss dragon -> Fire Dragon",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 5
+  },
+  "mon_canyon_minotaur": {
+    "name": "Canyon Minotaur",
+    "wbc3_name": "Minotaur King",
+    "wbc3_code": "AMGX",
+    "race": "Minotaurs",
+    "reason": "minotaur bruiser variant (Earthquake) -> Minotaur King (distinct from Ruinous Minotaur)",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 11
+  },
+  "mon_selftower_sphynx": {
+    "name": "Selftower Sphynx",
+    "wbc3_name": "Griffon",
+    "wbc3_code": "AARI",
+    "race": "Fliers",
+    "reason": "sphinx (lion body, wings) control monster -> Griffon",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "mon_sigiled_behemoth": {
+    "name": "Sigiled Behemoth",
+    "wbc3_name": "Triceratops",
+    "wbc3_code": "ALDX",
+    "race": "Ssrathi",
+    "reason": "massive armoured brute -> Triceratops",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "mon_rakewalk_gargantuan": {
+    "name": "Rakewalk Gargantuan",
+    "wbc3_name": "Ironbark",
+    "wbc3_code": "ATWX",
+    "race": "Wood Elves",
+    "reason": "gargantuan bruiser (Anger) -> giant tree titan Ironbark",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_nacatl_hunt_pride": {
+    "name": "Nacatl Hunt-Pride",
+    "wbc3_name": "Wolf Rider",
+    "wbc3_code": "AOCX",
+    "race": "Orcs",
+    "reason": "pack hunters (Mists) -> Wolf Rider pack",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "mon_rhox_brute": {
+    "name": "Rhox Brute",
+    "wbc3_name": "Troll",
+    "wbc3_code": "AOMX",
+    "race": "Orcs",
+    "reason": "rhino-man brute -> Troll",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 9
+  },
+  "mon_everbark_shaman": {
+    "name": "Everbark Shaman",
+    "wbc3_name": "Treant",
+    "wbc3_code": "AWJX",
+    "race": "Wood Elves",
+    "reason": "tree-bark defender shaman -> Treant",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 12
+  },
+  "mon_bonebreaker_giant": {
+    "name": "Bonebreaker Giant",
+    "wbc3_name": "Giant",
+    "wbc3_code": "AOGX",
+    "race": "Orcs",
+    "reason": "giant bruiser -> Orc Giant",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk",
+      "z"
+    ],
+    "sound_lines": 11
+  },
+  "mon_steambeam_aquitect": {
+    "name": "Steambeam Aquitect",
+    "wbc3_name": "Engineer",
+    "wbc3_code": "AABX",
+    "race": "Dark Dwarves",
+    "reason": "steam/artifice architect -> Dark Dwarf Engineer",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_greater_basilisk": {
+    "name": "Greater Basilisk",
+    "wbc3_name": "Basilisk",
+    "wbc3_code": "AOXX",
+    "race": "Minotaurs",
+    "reason": "basilisk (Petrify) -> Basilisk",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 3
+  },
+  "mon_cavern_thoctar": {
+    "name": "Cavern Thoctar",
+    "wbc3_name": "Tyrannosaurus Rex",
+    "wbc3_code": "ALEX",
+    "race": "Ssrathi",
+    "reason": "huge cave beast brute -> T. Rex",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "mon_etherium_abomination": {
+    "name": "Etherium Abomination",
+    "wbc3_name": "Bronze Golem",
+    "wbc3_code": "AAGX",
+    "race": "Dark Dwarves",
+    "reason": "metal construct abomination caster (Fear) -> Bronze Golem",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 11
+  },
+  "mon_siegemind_ogre": {
+    "name": "Siege-Mind Ogre",
+    "wbc3_name": "Ogre",
+    "wbc3_code": "AOJX",
+    "race": "Orcs",
+    "reason": "ogre -> Ogre",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_ember_weaver": {
+    "name": "Ember Weaver",
+    "wbc3_name": "Fire Elemental",
+    "wbc3_code": "AAEF",
+    "race": "Temples",
+    "reason": "ember/fire weaving caster -> Fire Elemental",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 2
+  },
+  "mon_infectious_horror": {
+    "name": "Infectious Horror",
+    "wbc3_name": "Plague Priest",
+    "wbc3_code": "AGGX",
+    "race": "Plaguelords",
+    "reason": "infectious fear caster -> Plaguelords Plague Priest",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "mon_summit_apes": {
+    "name": "Summit Apes",
+    "wbc3_name": "Gnoll",
+    "wbc3_code": "AMJX",
+    "race": "Minotaurs",
+    "reason": "mountain ape pack bruiser -> Gnoll beastmen",
+    "confidence": "low",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "mon_guardian_of_coverdell": {
+    "name": "Guardian of Coverdell",
+    "wbc3_name": "Stone Golem",
+    "wbc3_code": "AAIX",
+    "race": "Dark Dwarves",
+    "reason": "immovable defender (+1 on Block) -> Stone Golem",
+    "confidence": "high",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "mon_loxodon_mystic": {
+    "name": "Loxodon Mystic",
+    "wbc3_name": "Elephant",
+    "wbc3_code": "APDX",
+    "race": "Empire",
+    "reason": "loxodon = elephant-folk mystic -> Elephant",
+    "confidence": "medium",
+    "portrait": null,
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_weapon_master": {
+    "name": "Weapon master",
+    "wbc3_name": "Dwarf Berserker",
+    "wbc3_code": "ADJX",
+    "race": "Dwarves",
+    "reason": "dual-axe weapon master -> Dwarf Berserker",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 10 Grey-bearded dwarf [Portrait10].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_animator": {
+    "name": "Animator",
+    "wbc3_name": "Dark Dwarf Hero",
+    "wbc3_code": "AAHX",
+    "race": "Dark Dwarves",
+    "reason": "trap-animating tinkerer -> Dark Dwarf hero (cast/special anims)",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 36 Red-hooded dwarf [Portrait36].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_druid": {
+    "name": "Druid",
+    "wbc3_name": "Druid",
+    "wbc3_code": "AWNX",
+    "race": "Wood Elves",
+    "reason": "druid -> Wood Elf Druid",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 15 Green hooded figure with staff [Portrait15].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "class_enchanter": {
+    "name": "Enchanter",
+    "wbc3_name": "High Elf Hero",
+    "wbc3_code": "AEHX",
+    "race": "High Elves",
+    "reason": "element-emitting enchanter -> High Elf hero caster",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 18 Bald elfdark elf with staff [Portrait18].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_elementalist": {
+    "name": "Elementalist",
+    "wbc3_name": "Black Mage",
+    "wbc3_code": "AHGB",
+    "race": "Empire",
+    "reason": "elemental damage caster -> Empire Black Mage",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 01 Old bearded human wizard with staff [Portrait01].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_transmuter": {
+    "name": "Transmuter",
+    "wbc3_name": "Minotaur Hero",
+    "wbc3_code": "ABHX",
+    "race": "Minotaurs",
+    "reason": "transmuter sharing effects -> Minotaur race hero caster",
+    "confidence": "low",
+    "portrait": "assets/Images/Portraits/Hero portrait 45 Minotaur in horned helm [Portrait45].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_alchemist": {
+    "name": "Alchemist",
+    "wbc3_name": "Dwarf Hero",
+    "wbc3_code": "ADHX",
+    "race": "Dwarves",
+    "reason": "alchemist/trap brewer -> Dwarf hero",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 32 Red-robed dwarfhuman with crystal [Portrait32].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_summoner": {
+    "name": "Summoner",
+    "wbc3_name": "Summoner",
+    "wbc3_code": "AVGX",
+    "race": "Daemons",
+    "reason": "summoner -> Daemon Summoner",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 08 Purple-skinned daemondark elf with horns [Portrait08].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_illusionist": {
+    "name": "Illusionist",
+    "wbc3_name": "Moonguard",
+    "wbc3_code": "AEGX",
+    "race": "High Elves",
+    "reason": "damage-ignoring illusionist -> High Elf Moonguard",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 70 Pale elf in hood [Portrait70].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_healer": {
+    "name": "Healer",
+    "wbc3_name": "White Mage",
+    "wbc3_code": "AHGW",
+    "race": "Empire",
+    "reason": "healer -> Empire White Mage",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 17 Blonde humanelf woman in white [Portrait17].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_priest": {
+    "name": "Priest",
+    "wbc3_name": "Knight Hero (variant 0)",
+    "wbc3_code": "AHH0",
+    "race": "Knights",
+    "reason": "white-robed priest sprite (sounds borrowed from Knight Hero)",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 30 Hooded dark priest [Portrait30].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_prophet": {
+    "name": "Prophet",
+    "wbc3_name": "Wood Elf Hero",
+    "wbc3_code": "AWHX",
+    "race": "Wood Elves",
+    "reason": "forest seer / prophet -> Wood Elf hero",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 73 Blonde feyelf man [Portrait73].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_seeker": {
+    "name": "Seeker",
+    "wbc3_name": "Sorceror",
+    "wbc3_code": "AKNX",
+    "race": "Dark Elves",
+    "reason": "card-seeking diviner -> Dark Elf Sorceror",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 39 Dark elfgoblin with hood [Portrait39].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "class_paladin": {
+    "name": "Paladin",
+    "wbc3_name": "Knight Lord",
+    "wbc3_code": "AHEX",
+    "race": "Knights",
+    "reason": "paladin -> Knight Lord",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 09 Gold-armoured knight (closed helm) [Portrait09].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_cleric": {
+    "name": "Cleric",
+    "wbc3_name": "Knight Hero",
+    "wbc3_code": "AHHX",
+    "race": "Knights",
+    "reason": "holy cleric -> Knight race hero (gold armour, cast anims)",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 12 White-bearded human with gold necklace [Portrait12].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_guardian": {
+    "name": "Guardian",
+    "wbc3_name": "Iceguard",
+    "wbc3_code": "AEIX",
+    "race": "High Elves",
+    "reason": "stationary regenerating guardian -> Iceguard",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 47 Blonde braided female [Portrait47].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "class_manipulator": {
+    "name": "Manipulator",
+    "wbc3_name": "Dark Elf Hero",
+    "wbc3_code": "AKHX",
+    "race": "Dark Elves",
+    "reason": "mind manipulator -> Dark Elf hero",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 24 Pale female vampiredark elf [Portrait24].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "special",
+      "walk"
+    ],
+    "sound_lines": 15
+  },
+  "class_bard": {
+    "name": "Bard",
+    "wbc3_name": "Leprechaun",
+    "wbc3_code": "AFNX",
+    "race": "Fey",
+    "reason": "bard -> Fey Leprechaun (music/luck)",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 22 Human bardrogue in red with flute [Portrait22].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "class_shaman": {
+    "name": "Shaman",
+    "wbc3_name": "Minotaur Shaman",
+    "wbc3_code": "AMMX",
+    "race": "Minotaurs",
+    "reason": "shaman -> Minotaur Shaman",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 56 Minotaur bull head [Portrait56].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 9
+  },
+  "class_necromancer": {
+    "name": "Necromancer",
+    "wbc3_name": "Liche",
+    "wbc3_code": "AUMX",
+    "race": "Undead",
+    "reason": "necromancer -> Undead Liche",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 31 Purple-skinned undeadlich [Portrait31].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "class_witch": {
+    "name": "Witch",
+    "wbc3_name": "Banshee",
+    "wbc3_code": "AFGX",
+    "race": "Fey",
+    "reason": "witch -> Fey Banshee caster",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 43 Red-hooded witch [Portrait43].bmp",
+    "animations": [
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 11
+  },
+  "class_restaurateur": {
+    "name": "Restaurateur",
+    "wbc3_name": "Peasant",
+    "wbc3_code": "AHBX",
+    "race": "Knights",
+    "reason": "utility/food provider -> Peasant",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 58 Bearded man in blue cap [Portrait58].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk",
+      "z"
+    ],
+    "sound_lines": 10
+  },
+  "class_warrior": {
+    "name": "Warrior",
+    "wbc3_name": "Swordsman",
+    "wbc3_code": "AHKX",
+    "race": "Knights",
+    "reason": "warrior -> Knights Swordsman",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 51 Hooded warrior with sword [Portrait51].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "class_ranger": {
+    "name": "Ranger",
+    "wbc3_name": "Elven Hunter",
+    "wbc3_code": "AEEX",
+    "race": "Wood Elves",
+    "reason": "trap-laying ranger -> Wood Elf Elven Hunter",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 06 Blonde elf archer, sword raised [Portrait06].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "class_kensei": {
+    "name": "Kensei",
+    "wbc3_name": "Dragon Knight",
+    "wbc3_code": "AECX",
+    "race": "High Elves",
+    "reason": "sword saint -> High Elf Dragon Knight",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 27 Female elf in silver armour [Portrait27].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "class_reaver": {
+    "name": "Reaver",
+    "wbc3_name": "Reaver",
+    "wbc3_code": "ABGX",
+    "race": "Barbarians",
+    "reason": "reaver -> Barbarian Reaver",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 68 Dark-haired barbarian [Portrait68].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 11
+  },
+  "class_barbarian": {
+    "name": "Barbarian",
+    "wbc3_name": "Barbarian",
+    "wbc3_code": "ABIX",
+    "race": "Barbarians",
+    "reason": "barbarian -> Barbarian",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 23 Dark-haired barbarian with tattoos [Portrait23].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "class_overlord": {
+    "name": "Overlord",
+    "wbc3_name": "Doom Knight",
+    "wbc3_code": "AUAX",
+    "race": "Undead",
+    "reason": "armour-granting overlord -> Undead Doom Knight",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 80 Skull-faced warlord [Portrait80].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  },
+  "class_rogue": {
+    "name": "Rogue",
+    "wbc3_name": "Dark Infantry",
+    "wbc3_code": "AKIX",
+    "race": "Dark Elves",
+    "reason": "stealthy rogue -> Dark Elf light infantry",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 29 Human rogue with dagger [Portrait29].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 6
+  },
+  "class_avenger": {
+    "name": "Avenger",
+    "wbc3_name": "Slayer Knight",
+    "wbc3_code": "AULX",
+    "race": "Undead",
+    "reason": "avenger -> Undead Slayer Knight",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 44 Zombieundead warrior [Portrait44].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 8
+  },
+  "class_monk": {
+    "name": "Monk",
+    "wbc3_name": "Mystic",
+    "wbc3_code": "AENX",
+    "race": "High Elves",
+    "reason": "mobile monk -> High Elf Mystic",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 48 Bald dark-skinned man [Portrait48].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 7
+  },
+  "class_noble": {
+    "name": "Noble",
+    "wbc3_name": "Dwarf Lord",
+    "wbc3_code": "ADGX",
+    "race": "Dwarves",
+    "reason": "noble lord -> Dwarf Lord",
+    "confidence": "medium",
+    "portrait": "assets/Images/Portraits/Hero portrait 76 White-bearded dwarf [Portrait76].bmp",
+    "animations": [
+      "attack",
+      "cast",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 11
+  },
+  "class_assassin": {
+    "name": "Assassin",
+    "wbc3_name": "Assassin",
+    "wbc3_code": "AKJX",
+    "race": "Dark Elves",
+    "reason": "assassin -> Dark Elf Assassin",
+    "confidence": "high",
+    "portrait": "assets/Images/Portraits/Hero portrait 88 Red-eyed dark assassin [Portrait88].bmp",
+    "animations": [
+      "attack",
+      "death",
+      "fidget",
+      "idle",
+      "info",
+      "walk"
+    ],
+    "sound_lines": 10
+  }
+}

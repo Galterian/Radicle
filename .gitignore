@@ -13,3 +13,6 @@ game/radicle.git/
 *Zone.Identifier
 game/host.log
 game/logs/
+
+# Godot editor/import cache
+godot/.godot/

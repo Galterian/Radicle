@@ -5,6 +5,14 @@
 import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock } from './map.js';
+import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
+
+// Unit voice lines / fx from the curated WBC3 collection. `M` toggles mute.
+const sounds = createSoundBank();
+try { sounds.set(localStorage.getItem('chaosd6.muted') === '1'); } catch { /* no storage */ }
+let rendererRef = null;   // set in wireInput(); the ws handler needs it for attack triggers
+const sourceIdOf = (p) => p?.source_id || p?.sourceId || p?.character_id || p?.creature_id || null;
+const resOf = (p) => resourcesFor(sourceIdOf(p));
 
 // Direct DOM poke rather than importing from launcher.js — launcher.js is the
 // one that imports *us*, so pulling a symbol back creates a cycle that in a
@@ -45,7 +53,7 @@ const state = {
   // list of hexes (step 1 … destination) the auto-walker will follow across
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0 },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0, showCoords: false, hoverPeerId: null },
   // The dimension as this peer knows it: initial block + every revealed disc.
   // Replaced wholesale from the peer's `hello` / `map` messages; `mapVersion`
   // bumps so the renderer can rebuild its tile/frontier caches lazily.
@@ -361,11 +369,59 @@ function renderRoster() {
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
-    row.innerHTML = `<span class="nm">${e.name}</span>
-      <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span>`;
+    const res = resOf(e);
+    const thumb = res?.portrait?.path ? `<img class="thumb" src="${assetUrl(res.portrait.path)}" alt="">`
+      : res?.sprites?.info?.path ? `<img class="thumb info" src="${assetUrl(res.sprites.info.path)}" alt="">` : '';
+    row.innerHTML = `${thumb}<span class="txt"><span class="nm">${e.name}</span>
+      <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span></span>`;
     // Clicking a roster row toggles the log filter on that peer.
     row.addEventListener('click', () => setLogFilter(activeFilter === e.peer_id ? null : e.peer_id));
     el.appendChild(row);
+  }
+}
+
+// HUD hero card (own portrait) + hover card for whichever unit the cursor is
+// over. Both read the entity's `resources` block; nothing is shown when the
+// mapping has no art for it.
+let heroCardKey = null;
+function renderHeroCard() {
+  const card = document.getElementById('hero-card');
+  if (!card) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const res = me ? resOf(me) : null;
+  const key = me ? `${me.peer_id}|${res ? 1 : 0}|${me.life}|${sounds.muted ? 1 : 0}` : null;
+  if (key === heroCardKey) return;
+  heroCardKey = key;
+  if (!me || !res) { card.hidden = true; return; }
+  card.hidden = false;
+  const img = card.querySelector('img');
+  const src = res.portrait?.path ? assetUrl(res.portrait.path) : res.sprites?.info?.path ? assetUrl(res.sprites.info.path) : '';
+  if (img.getAttribute('src') !== src) img.src = src;
+  img.classList.toggle('info', !res.portrait?.path);
+  card.querySelector('.hero-name').textContent = me.name;
+  card.querySelector('.hero-sub').textContent = `${res._entryName || ''} · as ${res.wbc3_name || '?'}${res.wbc3_race ? ` (${res.wbc3_race})` : ''}`;
+  card.querySelector('.hero-hp').textContent = `hp ${me.life}/${me.life_max}`;
+  card.querySelector('.hero-mute').textContent = sounds.muted ? '🔇 muted (M)' : '🔊 sound on (M)';
+}
+function renderHoverCard(clientX, clientY) {
+  const card = document.getElementById('hover-card');
+  if (!card) return;
+  const pid = state.ui.hoverPeerId;
+  const p = pid ? state.entities.find(e => e.peer_id === pid) : null;
+  const res = p ? resOf(p) : null;
+  if (!p) { card.hidden = true; return; }
+  card.hidden = false;
+  const img = card.querySelector('img');
+  const src = res?.sprites?.info?.path ? assetUrl(res.sprites.info.path) : res?.portrait?.path ? assetUrl(res.portrait.path) : '';
+  if (img.getAttribute('src') !== src) img.src = src;
+  img.hidden = !src;
+  card.querySelector('.hc-name').textContent = p.name;
+  card.querySelector('.hc-sub').textContent = res ? `${res._entryName || ''} · ${res.wbc3_name || ''}` : (p.source_id || '');
+  card.querySelector('.hc-hp').textContent = `hp ${p.life}/${p.life_max} · ${p.alliance}${p.life <= 0 ? ' · dead' : ''}`;
+  if (Number.isFinite(clientX)) {
+    const w = card.offsetWidth || 180, h = card.offsetHeight || 120;
+    card.style.left = `${Math.min(window.innerWidth - w - 8, clientX + 16)}px`;
+    card.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, clientY - h / 2))}px`;
   }
 }
 
@@ -489,6 +545,12 @@ function connect() {
             // Floating "-N❤️" over the map, lerping dealer→victim.
             const atk = d.attacker ? state.entities.find(e => e.peer_id === d.attacker) : null;
             const tgt = state.entities.find(e => e.peer_id === d.target);
+            // Voice: the attacker gloats when the hit is lethal. Victims'
+            // life may already be updated by the `peers` broadcast, so treat
+            // "≤0 now" or "this hit covers what was left" as a kill.
+            if (atk && tgt && ((tgt.life ?? 1) <= 0 || (d.lethal === true) || (Number.isFinite(d.life_after) && d.life_after <= 0))) {
+              sounds.play(resOf(atk), 'deathblow', { volume: 0.7 });
+            }
             if (tgt && Number.isInteger(tgt.tile_q) && Number.isInteger(tgt.tile_r)) {
               state.ui.floatingDmgs.push({
                 fromQ: atk?.tile_q ?? tgt.tile_q,
@@ -525,7 +587,17 @@ function connect() {
           // is exactly one of my own icons per round and every peer's echoed
           // state_hash carries the same payload.
           state._loggedAction ||= new Set();
+          state._animAction ||= new Set();
           for (const a of env.payload.actions || []) {
+            // Sprite swing for every revealed Attack (all peers, de-duped per
+            // turn/round/actor) — the attack sheet plays once then returns to
+            // idle.
+            const animKey = `${env.turn}:${env.round}:${a.actor}`;
+            if (!state._animAction.has(animKey)) {
+              state._animAction.add(animKey);
+              if (a.action === 'A') rendererRef?.trigger(a.actor, 'attack');
+              if (state._animAction.size > 500) state._animAction = new Set([...state._animAction].slice(-100));
+            }
             if (a.actor !== state.myPeerId) continue;
             const ak = `${env.turn}:${env.round}:${a.actor}`;
             if (state._loggedAction.has(ak)) continue;
@@ -677,6 +749,12 @@ function wireInput() {
     else if (ev.key === '8') queueSlot('EMPTY');
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
     else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
+    else if (ev.key === 'm' || ev.key === 'M') {
+      const muted = sounds.toggle();
+      try { localStorage.setItem('chaosd6.muted', muted ? '1' : '0'); } catch { /* no storage */ }
+      logUI(muted ? 'sound muted' : 'sound on', 'phase');
+    }
+    else if (ev.key === 'g' || ev.key === 'G') state.ui.showCoords = !state.ui.showCoords;
   });
 
   const canvas = document.getElementById('stage');
@@ -689,6 +767,7 @@ function wireInput() {
           peerId: p.peer_id, alliance: p.alliance, name: p.name,
           tile: { q: p.tile_q, r: p.tile_r }, life: p.life, lifeMax: p.life_max,
           isSelf: isMe,
+          sourceId: sourceIdOf(p),
           queuedCode: isMe ? effectiveQueuedCode() : null,
           locked: isMe ? state.locked : false,
         };
@@ -699,24 +778,37 @@ function wireInput() {
     get mapVersion() { return state.mapVersion; },
     get myPeerId() { return state.myPeerId; },
   });
+  rendererRef = renderer;
+  // "Ready" line once, when our own hero first shows up with art.
+  let readyPlayed = false;
+  onAssetsChanged(() => { heroCardKey = null; });
   canvas.addEventListener('mousemove', (ev) => {
     const rect = canvas.getBoundingClientRect();
-    state.ui.hoverTile = renderer.pickHex(ev.clientX - rect.left, ev.clientY - rect.top, knownHex);
+    const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    state.ui.hoverTile = renderer.pickHex(px, py, knownHex);
+    const over = entityAtPixel(px, py, true);
+    state.ui.hoverPeerId = over ? over.peer_id : null;
+    canvas.classList.toggle('over-unit', !!over);
+    renderHoverCard(ev.clientX, ev.clientY);
   });
+  canvas.addEventListener('mouseleave', () => { state.ui.hoverPeerId = null; renderHoverCard(); });
   // Pick the entity closest to the click if it's within one hex radius. The
   // comparison runs in world pixels (camera-independent). Using pixel distance
   // (not tile-equality) is more forgiving than requiring a bull's-eye on the
   // tile center, and handles the case where the entity sprite overlaps the edge.
-  function entityAtPixel(px, py) {
+  function entityAtPixel(px, py, includeDead = false) {
     const w = renderer.toWorld(px, py);
     let best = null, bestD2 = HEX_SIZE_SQ_HIT;
     for (const p of state.entities) {
-      if (!p || p.life <= 0) continue;
+      if (!p || (!includeDead && p.life <= 0)) continue;
       if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
       const pos = renderer.tilePx(p.tile_q, p.tile_r);
       const dx = w.x - pos.x;
-      const dy = w.y - (pos.y - 6);  // renderer draws the body offset -6
-      const d2 = dx * dx + dy * dy;
+      // The sprite stands ~74 px tall above the tile centre; measure the
+      // distance to the nearest point of that body column so a click on the
+      // head counts as well as one on the feet.
+      const dyBody = w.y < pos.y - 68 ? w.y - (pos.y - 68) : w.y > pos.y + 6 ? w.y - (pos.y + 6) : 0;
+      const d2 = dx * dx + dyBody * dyBody;
       if (d2 < bestD2) { bestD2 = d2; best = p; }
     }
     return best;
@@ -742,6 +834,7 @@ function wireInput() {
     }
     state.ui.selectedTarget = t;
     setLogFilter(occupant ? occupant.peer_id : null);
+    if (occupant && occupant.peer_id === state.myPeerId) sounds.play(resOf(occupant), 'select');
     if (occupant && occupant.peer_id !== state.myPeerId) {
       state.target = occupant.peer_id;
       logUI(`target → ${occupant.name} (Attack binding — use right-click to move)`, 'phase', { peerId: occupant.peer_id });
@@ -854,6 +947,7 @@ function wireInput() {
       state.ui.pathPlan = null;
       label = `target → ${occupant.name} (keeping ${queuedCode || 'EP'})`;
       send({ kind: 'target', target: state.target });
+      sounds.play(resOf(me), 'order');
       const now = Date.now();
       const isDouble = now - lastRightClickAt < 500;
       lastRightClickAt = isDouble ? 0 : now;
@@ -944,6 +1038,7 @@ function wireInput() {
       }
     }
     send({ kind: 'target', target: state.target });
+    sounds.play(resOf(me), 'order');
 
     const now = Date.now();
     const isDouble = now - lastRightClickAt < 500;
@@ -981,6 +1076,12 @@ function wireInput() {
   function raf() {
     renderRoster();
     renderDeck();
+    renderHeroCard();
+    if (!readyPlayed && state.myPeerId) {
+      const me = state.entities.find(p => p.peer_id === state.myPeerId);
+      const res = me ? resOf(me) : null;
+      if (res) { readyPlayed = true; sounds.play(res, 'ready', { volume: 0.7 }); }
+    }
     renderer.render();
     requestAnimationFrame(raf);
   }

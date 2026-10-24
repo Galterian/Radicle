@@ -13,6 +13,19 @@ Open http://127.0.0.1:7357
 
 Requires Node ≥ 18 (uses `node:fs/promises` and native `fetch` is not needed on the server side).
 
+## Art & sound (Warlords Battlecry III collection)
+
+Units, terrain hexes, portraits and voice lines come from the curated collection in
+`../assets/` (see `../assets/resources_schema.json`; every entry in `../data/*.json` carries a
+`resources` block). Both `server.mjs` and `ui-server.mjs` serve it under `/assets/`.
+
+* `js/sprites.js` — frame grids from `/assets/frames.json`, lazy sheet loading, 8-direction
+  animation (idle / walk / fidget / attack / cast / death), per-alliance team recolour of the
+  WBC3 player-colour ramp (`teamSource`), and a small voice-line sound bank (`M` mutes).
+* `sprites-preview.html` — dev gallery of every mapped character / class / creature:
+  pick state, facing and team colour, click a card for its *select* voice line.
+  `node server.mjs` then open http://127.0.0.1:7357/sprites-preview.html
+
 ## Multiplayer: no host — players hold the Doors
 
 There is no host and no server. Every peer in a dimension — your character,

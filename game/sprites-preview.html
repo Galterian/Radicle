@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>chaosD6 — sprite preview</title>
+<style>
+  body { margin: 0; background: #1b1d24; color: #ddd; font: 13px system-ui, sans-serif; }
+  header { padding: 8px 12px; background: #11131a; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  header label { display: flex; gap: 4px; align-items: center; }
+  select, input { background: #262a35; color: #eee; border: 1px solid #444; padding: 2px 4px; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; padding: 8px; }
+  .card { background: #22252f; border: 1px solid #333; border-radius: 4px; padding: 6px; }
+  .card canvas { display: block; width: 100%; height: 150px; background: radial-gradient(#3a3d4a, #22252f); cursor: pointer; image-rendering: pixelated; }
+  .card .t { font-weight: 600; margin: 4px 0 0; }
+  .card .s { color: #9aa; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+<header>
+  <b>Sprite preview</b>
+  <label>team <input id="team" type="color" value="#4a7cff"></label>
+  <label>state
+    <select id="state"><option>idle</option><option>walk</option><option>attack</option><option>cast</option><option>fidget</option><option>death</option></select>
+  </label>
+  <label>facing
+    <select id="dir"><option value="-1">rotate</option><option value="0">N</option><option value="1">NE</option><option value="2">E</option><option value="3">SE</option><option value="4" selected>S</option><option value="5">SW</option><option value="6">W</option><option value="7">NW</option></select>
+  </label>
+  <label>filter <input id="filter" placeholder="name / id"></label>
+  <span id="count"></span>
+  <span style="color:#9aa">click a card to play its select voice line</span>
+</header>
+<div id="grid"></div>
+<script type="module">
+import { loadFrames, loadResources, getSheet, drawCell, createSoundBank, DIRS } from './js/sprites.js';
+
+const grid = document.getElementById('grid');
+const teamEl = document.getElementById('team'), stateEl = document.getElementById('state'), dirEl = document.getElementById('dir'), filterEl = document.getElementById('filter');
+const bank = createSoundBank();
+let cards = [];
+
+async function build() {
+  await loadFrames();
+  const docs = await Promise.all(['characters', 'classes', 'creatures'].map(k => fetch(`/data/${k}.json`).then(r => r.ok ? r.json() : null).catch(() => null)));
+  const entries = [];
+  docs.forEach((doc, i) => {
+    const arr = Array.isArray(doc) ? doc : (doc?.entries || []);
+    for (const e of arr) if (e?.resources?.sprites) entries.push({ kind: ['characters', 'classes', 'creatures'][i], ...e });
+  });
+  grid.innerHTML = '';
+  cards = entries.map(e => {
+    const card = document.createElement('div'); card.className = 'card';
+    const cv = document.createElement('canvas'); cv.width = 230; cv.height = 150;
+    const t = document.createElement('div'); t.className = 't'; t.textContent = e.name || e.id;
+    const s = document.createElement('div'); s.className = 's';
+    s.textContent = `${e.kind}/${e.id} ← ${e.resources.wbc3_name || '?'} (${e.resources.confidence || '?'})`;
+    s.title = Object.keys(e.resources.sprites).join(', ');
+    card.append(cv, t, s); grid.append(card);
+    cv.addEventListener('click', () => bank.play(e.resources, 'select', { throttleMs: 0 }));
+    return { e, cv, ctx: cv.getContext('2d'), start: performance.now() };
+  });
+  document.getElementById('count').textContent = `${cards.length} entities`;
+}
+
+function frame(now) {
+  const team = teamEl.value, state = stateEl.value, dirSel = Number(dirEl.value), f = filterEl.value.toLowerCase();
+  for (const c of cards) {
+    const show = !f || (c.e.name + ' ' + c.e.id + ' ' + (c.e.resources.wbc3_name || '')).toLowerCase().includes(f);
+    c.cv.parentElement.style.display = show ? '' : 'none';
+    if (!show) continue;
+    const sp = c.e.resources.sprites;
+    const path = (sp[state] || sp.idle || sp.walk || Object.values(sp)[0])?.path;
+    const sheet = getSheet(path);
+    const { ctx, cv } = c;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!sheet || !sheet.ready) { ctx.fillStyle = '#777'; ctx.fillText(sheet?.failed ? 'missing sheet' : 'loading…', 8, 20); continue; }
+    const row = sheet.rows >= 8 ? (dirSel >= 0 ? dirSel : Math.floor(now / 900) % 8) : 0;
+    const fi = Math.floor((now - c.start) * (sheet.fps || 12) / 1000) % Math.max(1, sheet.cols);
+    const scale = Math.min(140 / sheet.ch, 220 / sheet.cw, 2.5);
+    drawCell(ctx, sheet, fi, row, cv.width / 2, cv.height - 6, scale, 0, team);
+    ctx.fillStyle = '#cfd'; ctx.fillText(`${sheet.cols}×${sheet.rows} ${sheet.cw}×${sheet.ch} ${sheet.rows >= 8 ? DIRS[row] : ''} ${sheet.method}`, 4, 12);
+  }
+  requestAnimationFrame(frame);
+}
+
+build().then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>

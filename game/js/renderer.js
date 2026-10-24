@@ -1,5 +1,6 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
 import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
+import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged } from './sprites.js';
 
 const ALLIANCE_COLOR = {
   'player':  '#6ad9ff',
@@ -51,12 +52,29 @@ export function createRenderer(canvas, state) {
   // last whole-tile position — so interrupted moves blend smoothly).
   const moves = new Map();  // peerId -> { fromPx, toQ, toR, startAt }
 
+  // Per-entity sprite animator (created lazily once the entity's resources
+  // are known) + last drawn position, used to derive the facing direction.
+  const anims = new Map();  // peerId -> { anim, sourceId, lastX, lastY, dir, wasDead }
+  loadFrames(); loadResources(); loadTerrain();
+  onAssetsChanged(() => render());   // repaint when a sheet / tile / json lands
+
+  // Kills the player wants to see land: main.js calls renderer.trigger(peerId,
+  // 'attack' | 'cast') when an action resolves so the sprite swings.
+  function trigger(peerId, name) { const a = anims.get(peerId); if (a?.anim) a.anim.trigger(name); }
+
   // Known tiles + fog frontier, rebuilt only when the map version changes.
   const tileCache = { version: -1, tiles: [], frontier: [] };
   function tilesFor(map, version) {
     if (tileCache.version !== version) {
       tileCache.version = version;
-      tileCache.tiles = [...map.tiles()].map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: map.terrain(t.q, t.r).fill }));
+      tileCache.tiles = [...map.tiles()].map(t => {
+        const terr = map.terrain(t.q, t.r);
+        // Deterministic variant per hex so the tiling doesn't shimmer.
+        const v = ((t.q * 92821) ^ (t.r * 68917) ^ ((t.q + t.r) * 31)) & 0x7fffffff;
+        return { q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: terr.fill, type: terr.type, variant: v % 4 };
+      });
+      // Draw order: top rows first so tile edges overlap in iso fashion.
+      tileCache.tiles.sort((a, b) => a.y - b.y || a.x - b.x);
       tileCache.frontier = map.frontier().map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r) }));
     }
     return tileCache;
@@ -225,15 +243,27 @@ export function createRenderer(canvas, state) {
     // the unknown hexes touching the known world, drawn as faint dashed
     // outlines so the edge of the revealed dimension is visible.
     const { tiles, frontier } = tilesFor(state.map, state.mapVersion);
-    const showLabels = zoom >= 0.75;
+    const showLabels = zoom >= 0.75 && state.ui.showCoords;
     ctx.lineWidth = 1;
+    // Terrain PNGs are pre-masked pointy-top hexes rendered at `scale`× the
+    // game's hex size (assets/terrain/terrain_tiles.json). Draw them centred
+    // on the hex, a hair oversize so neighbouring tiles don't show seams.
+    const tm = terrainMeta();
+    const tileScale = tm ? (HEX_SIZE / (tm.size || HEX_SIZE)) / (tm.scale || 2) : 0.5;
     for (const t of tiles) {
       if (!inView(t.x, t.y)) continue;
-      hexPath(t.x, t.y);
-      ctx.fillStyle = t.fill;
-      ctx.fill();
-      ctx.strokeStyle = '#232a38';
-      ctx.stroke();
+      const img = terrainTile(t.type, t.variant);
+      if (img) {
+        const dw = img.img.naturalWidth * tileScale * 1.02, dh = img.img.naturalHeight * tileScale * 1.02;
+        ctx.drawImage(img.img, t.x - dw / 2, t.y - dh / 2, dw, dh);
+        if (zoom >= 1.1) { hexPath(t.x, t.y); ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke(); }
+      } else {
+        hexPath(t.x, t.y);
+        ctx.fillStyle = t.fill;
+        ctx.fill();
+        ctx.strokeStyle = '#232a38';
+        ctx.stroke();
+      }
       if (showLabels) {
         ctx.fillStyle = '#2f3a4a';
         ctx.font = '9px ui-monospace, Consolas, monospace';
@@ -284,37 +314,65 @@ export function createRenderer(canvas, state) {
     let selfDrawnPx = null;
     // Entities. Dead entities render as a faded tombstone so a wiped ally still
     // leaves a marker on the map (otherwise it looks like the piece vanished).
-    for (const e of state.entities) {
+    // Y-sort so a unit lower on the screen is painted over one behind it.
+    const drawOrder = [...state.entities].sort((a, b) => positions.get(a.peerId).y - positions.get(b.peerId).y);
+    for (const e of drawOrder) {
       const dead = e.life <= 0;
       const { x, y } = positions.get(e.peerId);
       if (e.isSelf) selfDrawnPx = { x, y };
       const color = ALLIANCE_COLOR[e.alliance] || '#ccc';
 
-      ctx.save();
-      if (dead) ctx.globalAlpha = 0.35;
-
-      // Shadow + body (iso-ish lozenge).
-      ctx.beginPath();
-      ctx.ellipse(x, y + 10, 20, 6, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.lineWidth = e.isSelf ? 3 : 2;
-      ctx.strokeStyle = e.isSelf ? '#ffe66e' : '#0b0d12';
-      ctx.stroke();
-
-      if (dead) {
-        ctx.strokeStyle = '#e36666';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x - 12, y - 18); ctx.lineTo(x + 12, y + 6);
-        ctx.moveTo(x + 12, y - 18); ctx.lineTo(x - 12, y + 6);
-        ctx.stroke();
+      // Sprite book-keeping: create the animator once resources resolve,
+      // derive facing from the drawn-position delta, flag walking while the
+      // slide is still in flight.
+      let a = anims.get(e.peerId);
+      if (!a) { a = { anim: null, sourceId: null, lastX: x, lastY: y, dir: 4, wasDead: dead }; anims.set(e.peerId, a); }
+      if (!a.anim || a.sourceId !== e.sourceId || a.team !== color) {
+        const res = resourcesFor(e.sourceId);
+        if (res) { a.anim = createUnitAnim(res, { team: color }); a.sourceId = e.sourceId; a.team = color; }
       }
+      const mv = moves.get(e.peerId);
+      const moving = !!mv && (now - mv.startAt) < MOVE_DURATION_MS && (mv.fromPx.x !== tilePx(mv.toQ, mv.toR).x || mv.fromPx.y !== tilePx(mv.toQ, mv.toR).y);
+      const ddx = x - a.lastX, ddy = y - a.lastY;
+      if (moving && (Math.abs(ddx) > 0.05 || Math.abs(ddy) > 0.05)) a.dir = dirIndexFromVector(ddx, ddy);
+      a.lastX = x; a.lastY = y;
+      if (a.anim) a.anim.tick(now, { moving, dirIdx: a.dir, dead });
+
+      ctx.save();
+
+      // Ground ring: alliance colour, brighter for the player's own hero.
+      ctx.beginPath();
+      ctx.ellipse(x, y + 4, 22, 9, 0, 0, Math.PI * 2);
+      ctx.fillStyle = dead ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.35)';
+      ctx.fill();
+      ctx.lineWidth = e.isSelf ? 2.5 : 1.5;
+      ctx.strokeStyle = e.isSelf ? '#ffe66e' : color;
+      ctx.globalAlpha = dead ? 0.4 : 0.9;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, dead ? 0.75 : 1) : false;
+      if (!drewSprite) {
+        // Fallback disc marker while the sheet is loading / no resources.
+        if (dead) ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = e.isSelf ? 3 : 2;
+        ctx.strokeStyle = e.isSelf ? '#ffe66e' : '#0b0d12';
+        ctx.stroke();
+        if (dead) {
+          ctx.strokeStyle = '#e36666';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x - 12, y - 18); ctx.lineTo(x + 12, y + 6);
+          ctx.moveTo(x + 12, y - 18); ctx.lineTo(x - 12, y + 6);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+      const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
 
       // Health pips.
       const lifeMax = Math.max(1, e.lifeMax || 1);
@@ -324,20 +382,23 @@ export function createRenderer(canvas, state) {
         ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
       }
 
-      // Label.
-      ctx.fillStyle = '#e8ecf1';
+      // Label (outlined so it reads over textured tiles).
       ctx.font = '11px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText(e.name, x, y - 28);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineJoin = 'round';
+      ctx.strokeText(e.name, x, top - 6);
+      ctx.fillStyle = dead ? '#9aa0a8' : '#e8ecf1';
+      ctx.fillText(e.name, x, top - 6);
 
       // Queued-action chip over the player's head during planning. Once
       // committed, keep the letter as-is until the next round — only the
       // colour shifts to orange so the user can still tell at a glance that
       // the action is locked in.
       if (e.isSelf && e.queuedCode) {
-        ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
-        ctx.fillText(`[${e.queuedCode}]`, x, y - 40);
+        ctx.strokeText(`[${e.queuedCode}]`, x, top - 18);
+        ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
+        ctx.fillText(`[${e.queuedCode}]`, x, top - 18);
       }
 
       ctx.restore();
@@ -488,5 +549,5 @@ export function createRenderer(canvas, state) {
   // loop if any entity is mid-slide.
   const renderPublic = () => { render(); scheduleIfAnimating(); };
 
-  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom, wasDrag, recentre, isPanned: () => cam.manual };
+  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom, wasDrag, recentre, isPanned: () => cam.manual, trigger };
 }

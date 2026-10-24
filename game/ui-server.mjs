@@ -33,9 +33,13 @@ import { fancyLabel } from './js/names.js';
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
+// Curated WBC3 art/sound collection (chaosD6/assets) — sprite sheets, hex
+// terrain tiles, portraits and voice lines referenced by data/*.json `resources`.
+const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
 const LAUNCHER_MODE = process.env.LAUNCHER_MODE === '1';
 
-const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript;charset=utf-8', '.css':'text/css;charset=utf-8', '.json':'application/json;charset=utf-8' };
+const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript;charset=utf-8', '.css':'text/css;charset=utf-8', '.json':'application/json;charset=utf-8',
+               '.png':'image/png', '.bmp':'image/bmp', '.jpg':'image/jpeg', '.gif':'image/gif', '.wav':'audio/wav', '.ogg':'audio/ogg', '.mp3':'audio/mpeg' };
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
@@ -493,11 +497,17 @@ ${body.trim() ? `<pre>${esc(body)}</pre>` : ''}
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = decodeURIComponent(url.pathname);
-  const serve = async (abs) => {
-    try { const b = await fs.readFile(abs); res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(b); }
+  const serve = async (abs, cache = 'no-store') => {
+    try { const b = await fs.readFile(abs); res.writeHead(200, { 'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'Cache-Control': cache }); res.end(b); }
     catch { res.writeHead(404); res.end('not found'); }
   };
   if (p.startsWith('/api/')) return handleApi(req, res, p);
+  if (p.startsWith('/assets/')) {
+    // Static art: sheets are big and immutable, let the browser cache them.
+    const abs = path.resolve(ASSETS_DIR, '.' + p.slice('/assets'.length).replace(/\.\./g, ''));
+    if (!abs.startsWith(ASSETS_DIR)) { res.writeHead(403); return res.end('forbidden'); }
+    return serve(abs, 'public, max-age=3600');
+  }
   const rMatch = p.match(/^\/r\/([^/]+)\/(commits|tree)\/([^/]+)(\/.*)?$/);
   if (rMatch) {
     if (!radicleEnv.enabled) { res.writeHead(503); return res.end('radicle remote push disabled'); }
