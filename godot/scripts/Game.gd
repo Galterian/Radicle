@@ -36,6 +36,7 @@ const DEFAULT_SPAWN := [
 var dl := DataLoader.new()
 var gen: MapGen
 var map: HexMap
+var scatter_layer: ScatterLayer
 var features_layer: FeatureLayer
 var ents_root: Node2D
 var fx: FxPlayer
@@ -73,6 +74,15 @@ func _ready() -> void:
 	map.setup(gen)
 	map.hex_clicked.connect(_on_hex_clicked)
 	map.hex_hovered.connect(_on_hex_hovered)
+
+	# Decorative scatter (grass tufts, boulders, dead trees, flowers — "bonus"
+	# WBC3 terrain-features borrowed from the extracted archive). Lives above the
+	# terrain and below buildings. Breaks up uniform biome regions so transitions
+	# read as smooth rather than hard-edged.
+	scatter_layer = ScatterLayer.new()
+	scatter_layer.name = "Scatter"
+	add_child(scatter_layer)
+	scatter_layer.setup(gen)
 
 	# Buildings / permanents on walkable biome hexes. Lives above the terrain
 	# (HexMap) and below entities. Deterministic from (dim_seed, q, r), so every
@@ -116,7 +126,7 @@ func _ready() -> void:
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
-		map.queue_redraw(); if features_layer: features_layer.queue_redraw()
+		map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 		hud.set_entity(p)
 		cam.follow = p
 		cam.position = p.position
@@ -245,7 +255,7 @@ func _begin_reveal() -> void:
 			var t: String = (" → %s" % Hex.key_of(intents[k].target)) if intents[k].target != null else ""
 			hud.log_line("%s reveals %s%s" % [e.display_name, intents[k].code, t], Color(0.75, 0.75, 0.8) if e.faction == "npc" else Color(0.9, 0.85, 0.7))
 	map.reach = {}
-	map.queue_redraw(); if features_layer: features_layer.queue_redraw()
+	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 
 
 func _npc_plan(e: Entity) -> Dictionary:
@@ -356,7 +366,7 @@ func _resolve() -> void:
 		if not b.is_empty():
 			net.publish_block(b)
 			hud.log_line("map grows: %s (+%d hexes known)" % [b.id, gen.size()], Color(0.6, 0.8, 0.9))
-			map.queue_redraw(); if features_layer: features_layer.queue_redraw()
+			map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 
 	# ---- posture / cast visuals (P) — no damage, shows the adept element effect.
 	for id in intents.keys():
@@ -517,7 +527,7 @@ func _update_reach() -> void:
 	map.reach = {}
 	var p := player_entity()
 	if p == null or chosen < 0:
-		map.queue_redraw(); if features_layer: features_layer.queue_redraw()
+		map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 		return
 	var code := str(hand[chosen])
 	var radius := 0
@@ -529,7 +539,7 @@ func _update_reach() -> void:
 		for t in MapGen.block_tiles({"kind": "disc", "q": p.hex.x, "r": p.hex.y, "radius": radius}):
 			if gen.has(t) and t != p.hex:
 				map.reach[Hex.key_of(t)] = true
-	map.queue_redraw(); if features_layer: features_layer.queue_redraw()
+	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 
 
 func _pick_slot(i: int) -> void:
@@ -597,7 +607,7 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 	map.path_preview = []
 	for i in range(mini(budget, path.size())):
 		map.path_preview.append(path[i])
-	map.queue_redraw(); if features_layer: features_layer.queue_redraw()
+	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 	_refresh_hand()
 
 

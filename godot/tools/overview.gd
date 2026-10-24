@@ -26,6 +26,7 @@ func _init() -> void:
 	node.entities.clear()
 	node.gen = MapGen.new(dim)
 	node.map.setup(node.gen)
+	if node.scatter_layer: node.scatter_layer.setup(node.gen)
 	node.features_layer.setup(node.gen)
 	for s in node.DEFAULT_SPAWN:
 		var at: Vector2i = node.gen.nearest_walkable(s.at, 5)
@@ -55,6 +56,7 @@ func _init() -> void:
 			node.gen.reveal_around(picked, node.REVEAL_RADIUS, "bot")
 		if step % 5 == 0: await process_frame
 	node.map.queue_redraw()
+	if node.scatter_layer: node.scatter_layer.queue_redraw()
 	node.features_layer.queue_redraw()
 
 	# Fit camera to all revealed hexes.

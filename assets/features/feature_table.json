@@ -1,386 +1,498 @@
 {
- "_comment": "Feature catalog for the Godot/JS feature placer. Biome -> list of candidate buildings; the placer picks one per hex using a hash-weighted draw, with Poisson spacing (min_separation).",
- "min_separation": 3,
- "density": {
-  "grass": 0.055,
-  "high_grass": 0.05,
-  "grass_coast": 0.06,
-  "dirt": 0.05,
-  "high_dirt": 0.05,
-  "desert": 0.04,
-  "snow": 0.045,
-  "snow_coast": 0.055,
-  "rock": 0.065,
-  "rock_coast": 0.055,
-  "jungle": 0.07,
-  "marsh": 0.05,
-  "caverns": 0.08,
-  "desert_cliffs": 0,
-  "rock_cliffs": 0,
-  "mountains": 0,
-  "water": 0,
-  "lava": 0
- },
- "by_biome": {
-  "grass": [
-   {
-    "id": "Empire/Library",
-    "label": "Library",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Shrine",
-    "label": "Shrine",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Gold Mine (size 1)",
-    "label": "Gold Mine (size 1)",
-    "weight": 4,
-    "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Elemental Temple",
-    "label": "Elemental Temple",
-    "weight": 1,
-    "path": "assets/Sprites/Buildings/Neutral/Elemental Temple/Elemental Temple - base [BTEL].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Celestial Temple",
-    "label": "Celestial Temple",
-    "weight": 1,
-    "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/Tree of Life",
-    "label": "Tree of Life",
-    "weight": 1,
-    "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
-    "kind": "building"
-   }
-  ],
-  "high_grass": [
-   {
-    "id": "Neutral/Shrine",
-    "label": "Shrine",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Celestial Temple",
-    "label": "Celestial Temple",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/Tree of Life",
-    "label": "Tree of Life",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/White Tree",
-    "label": "White Tree",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/Hostel",
-    "label": "Hostel",
-    "weight": 1,
-    "path": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - base [BPHS].png",
-    "kind": "building"
-   }
-  ],
-  "grass_coast": [
-   {
-    "id": "Empire/Library",
-    "label": "Library",
-    "weight": 4,
-    "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Shrine",
-    "label": "Shrine",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/Hostel",
-    "label": "Hostel",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - base [BPHS].png",
-    "kind": "building"
-   }
-  ],
-  "dirt": [
-   {
-    "id": "Neutral/Gold Mine (size 1)",
-    "label": "Gold Mine (size 1)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Gold Mine (size 3)",
-    "label": "Gold Mine (size 3)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Metal Mine (size 2)",
-    "label": "Metal Mine (size 2)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Shrine",
-    "label": "Shrine",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
-    "kind": "building"
-   }
-  ],
-  "high_dirt": [
-   {
-    "id": "Neutral/Gold Mine (size 3)",
-    "label": "Gold Mine (size 3)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Stone Quarry (size 2)",
-    "label": "Stone Quarry (size 2)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Metal Mine (size 3)",
-    "label": "Metal Mine (size 3)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
-    "kind": "building"
-   }
-  ],
-  "desert": [
-   {
-    "id": "Neutral/Stone Quarry (size 1)",
-    "label": "Stone Quarry (size 1)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Stone Quarry (size 2)",
-    "label": "Stone Quarry (size 2)",
-    "weight": 4,
-    "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Metal Mine (size 2)",
-    "label": "Metal Mine (size 2)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
-    "kind": "building"
-   }
-  ],
-  "desert_cliffs": [],
-  "snow": [
-   {
-    "id": "Neutral/Celestial Temple",
-    "label": "Celestial Temple",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
-    "kind": "building"
-   },
-   {
-    "id": "Shared/Tower (Undead)",
-    "label": "Tower (Undead)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - base [BWTU].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Crystal Mine (size 2)",
-    "label": "Crystal Mine (size 2)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
-    "kind": "building"
-   }
-  ],
-  "snow_coast": [
-   {
-    "id": "Shared/Tower (High Elf)",
-    "label": "Tower (High Elf)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Celestial Temple",
-    "label": "Celestial Temple",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
-    "kind": "building"
-   },
-   {
-    "id": "Shared/Wall of Ice",
-    "label": "Wall of Ice",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Shared/Wall of Ice/Wall of Ice - base [BWIC].png",
-    "kind": "building"
-   }
-  ],
-  "rock": [
-   {
-    "id": "Neutral/Stone Quarry (size 1)",
-    "label": "Stone Quarry (size 1)",
-    "weight": 4,
-    "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Stone Quarry (size 2)",
-    "label": "Stone Quarry (size 2)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Metal Mine (size 3)",
-    "label": "Metal Mine (size 3)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Crystal Mine (size 1)",
-    "label": "Crystal Mine (size 1)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 1)/Crystal Mine (size 1) - base [BRC0].png",
-    "kind": "building"
-   }
-  ],
-  "rock_coast": [
-   {
-    "id": "Neutral/Stone Quarry (size 1)",
-    "label": "Stone Quarry (size 1)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
-    "kind": "building"
-   },
-   {
-    "id": "Shared/Tower (Knights)",
-    "label": "Tower (Knights)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - base [BWTC].png",
-    "kind": "building"
-   }
-  ],
-  "rock_cliffs": [],
-  "mountains": [],
-  "jungle": [
-   {
-    "id": "Wood Elves/Tree of Life",
-    "label": "Tree of Life",
-    "weight": 4,
-    "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/White Tree",
-    "label": "White Tree",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
-    "kind": "building"
-   },
-   {
-    "id": "Wood Elves/Hostel",
-    "label": "Hostel",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Wood Elves/Hostel/Hostel - base [BPHS].png",
-    "kind": "building"
-   },
-   {
-    "id": "Shared/Wall of Thorns",
-    "label": "Wall of Thorns",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
-    "kind": "building"
-   }
-  ],
-  "marsh": [
-   {
-    "id": "Shared/Wall of Thorns",
-    "label": "Wall of Thorns",
-    "weight": 4,
-    "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Shrine",
-    "label": "Shrine",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
-    "kind": "building"
-   },
-   {
-    "id": "Shared/Tower (Undead)",
-    "label": "Tower (Undead)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - base [BWTU].png",
-    "kind": "building"
-   }
-  ],
-  "water": [],
-  "lava": [],
-  "caverns": [
-   {
-    "id": "Neutral/Black Portal",
-    "label": "Black Portal",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Infernal Temple",
-    "label": "Infernal Temple",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - base [BTIN].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Crystal Mine (size 2)",
-    "label": "Crystal Mine (size 2)",
-    "weight": 3,
-    "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
-    "kind": "building"
-   },
-   {
-    "id": "Neutral/Crystal Mine (size 3)",
-    "label": "Crystal Mine (size 3)",
-    "weight": 2,
-    "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 3)/Crystal Mine (size 3) - base [BRC2].png",
-    "kind": "building"
-   }
-  ]
- }
+  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py from parallel-agent catalog.",
+  "min_separation": 3,
+  "density": {
+    "grass": 0.055,
+    "high_grass": 0.05,
+    "grass_coast": 0.06,
+    "dirt": 0.05,
+    "high_dirt": 0.05,
+    "desert": 0.04,
+    "snow": 0.045,
+    "snow_coast": 0.055,
+    "rock": 0.065,
+    "rock_coast": 0.055,
+    "jungle": 0.07,
+    "marsh": 0.05,
+    "caverns": 0.08,
+    "desert_cliffs": 0,
+    "rock_cliffs": 0,
+    "mountains": 0,
+    "water": 0,
+    "lava": 0
+  },
+  "by_biome": {
+    "grass": [
+      {
+        "id": "Empire/Library",
+        "label": "Library",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Shrine",
+        "label": "Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Gold Mine (size 1)",
+        "label": "Gold Mine (size 1)",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+        "kind": "building"
+      },
+      {
+        "id": "Knights/Cathedral",
+        "label": "Cathedral",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Knights/Cathedral/Cathedral - base [BPCA].png",
+        "kind": "building"
+      },
+      {
+        "id": "Fey/Faerie Ring",
+        "label": "Faerie Ring",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - base [BPFR].png",
+        "kind": "building"
+      }
+    ],
+    "high_grass": [
+      {
+        "id": "Neutral/Shrine",
+        "label": "Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Celestial Temple",
+        "label": "Celestial Temple",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
+        "kind": "building"
+      },
+      {
+        "id": "Wood Elves/White Tree",
+        "label": "White Tree",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
+        "kind": "building"
+      },
+      {
+        "id": "Fey/Unicorn Grove",
+        "label": "Unicorn Grove",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - base [BAUG].png",
+        "kind": "building"
+      },
+      {
+        "id": "High Elves/White Tower (level 2)",
+        "label": "White Tower (level 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 2)/White Tower (level 2) - base [BKE1].png",
+        "kind": "building"
+      }
+    ],
+    "grass_coast": [
+      {
+        "id": "Empire/Library",
+        "label": "Library",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Shrine",
+        "label": "Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+        "kind": "building"
+      },
+      {
+        "id": "Shared/Tower (High Elf)",
+        "label": "Tower (High Elf)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
+        "kind": "building"
+      },
+      {
+        "id": "Barbarians/Mill",
+        "label": "Mill",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Mill/Mill - base [BPMI].png",
+        "kind": "building"
+      }
+    ],
+    "dirt": [
+      {
+        "id": "Neutral/Gold Mine (size 1)",
+        "label": "Gold Mine (size 1)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Metal Mine (size 2)",
+        "label": "Metal Mine (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Barbarians/Scout Tower",
+        "label": "Scout Tower",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Scout Tower/Scout Tower - base [BPST].png",
+        "kind": "building"
+      },
+      {
+        "id": "Barbarians/Camp",
+        "label": "Camp",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Camp/Camp - base [BACA].png",
+        "kind": "building"
+      },
+      {
+        "id": "Barbarians/Fortress (level 2)",
+        "label": "Fortress (level 2)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 2)/Fortress (level 2) - base [BKB1].png",
+        "kind": "building"
+      }
+    ],
+    "high_dirt": [
+      {
+        "id": "Neutral/Gold Mine (size 3)",
+        "label": "Gold Mine (size 3)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Stone Quarry (size 2)",
+        "label": "Stone Quarry (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Barbarians/Scout Tower",
+        "label": "Scout Tower",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Scout Tower/Scout Tower - base [BPST].png",
+        "kind": "building"
+      },
+      {
+        "id": "Minotaurs/Lookout",
+        "label": "Lookout",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - base [BPLO].png",
+        "kind": "building"
+      },
+      {
+        "id": "Minotaurs/Henge",
+        "label": "Henge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Minotaurs/Henge/Henge - base [BPHG].png",
+        "kind": "building"
+      }
+    ],
+    "desert": [
+      {
+        "id": "Neutral/Stone Quarry (size 2)",
+        "label": "Stone Quarry (size 2)",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Metal Mine (size 2)",
+        "label": "Metal Mine (size 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Ssrathi/Sun Temple (level 2)",
+        "label": "Sun Temple (level 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 2)/Sun Temple (level 2) - base [BKL1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Minotaurs/Ziggurat (level 2)",
+        "label": "Ziggurat (level 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 2)/Ziggurat (level 2) - base [BKH1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Swarm/Dunekeep (level 2)",
+        "label": "Dunekeep (level 2)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 2)/Dunekeep (level 2) - base [BKR1].png",
+        "kind": "building"
+      }
+    ],
+    "desert_cliffs": [],
+    "snow": [
+      {
+        "id": "Neutral/Celestial Temple",
+        "label": "Celestial Temple",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Crystal Mine (size 2)",
+        "label": "Crystal Mine (size 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+        "kind": "building"
+      },
+      {
+        "id": "High Elves/White Tower (level 2)",
+        "label": "White Tower (level 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 2)/White Tower (level 2) - base [BKE1].png",
+        "kind": "building"
+      },
+      {
+        "id": "High Elves/Dragonstone",
+        "label": "Dragonstone",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/Dragonstone/Dragonstone - base [BPDI].png",
+        "kind": "building"
+      },
+      {
+        "id": "Swarm/Shrine of Melkor",
+        "label": "Shrine of Melkor",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Swarm/Shrine of Melkor/Shrine of Melkor - base [BPSK].png",
+        "kind": "building"
+      }
+    ],
+    "snow_coast": [
+      {
+        "id": "Shared/Tower (High Elf)",
+        "label": "Tower (High Elf)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
+        "kind": "building"
+      },
+      {
+        "id": "High Elves/Dragonstone",
+        "label": "Dragonstone",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/Dragonstone/Dragonstone - base [BPDI].png",
+        "kind": "building"
+      },
+      {
+        "id": "High Elves/White Tower (level 1)",
+        "label": "White Tower (level 1)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 1)/White Tower (level 1) - base [BKE0].png",
+        "kind": "building"
+      },
+      {
+        "id": "Knights/Shrine of the Sword",
+        "label": "Shrine of the Sword",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Knights/Shrine of the Sword/Shrine of the Sword - base [BPSS].png",
+        "kind": "building"
+      }
+    ],
+    "rock": [
+      {
+        "id": "Neutral/Stone Quarry (size 2)",
+        "label": "Stone Quarry (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Metal Mine (size 3)",
+        "label": "Metal Mine (size 3)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
+        "kind": "building"
+      },
+      {
+        "id": "Dark Dwarves/Furnace (level 3)",
+        "label": "Furnace (level 3)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 3)/Furnace (level 3) - base [BKA2].png",
+        "kind": "building"
+      },
+      {
+        "id": "Shared/Tower (Dwarf)",
+        "label": "Tower (Dwarf)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Dwarf)/Tower (Dwarf) - base [BWTD].png",
+        "kind": "building"
+      },
+      {
+        "id": "Dwarves/Foundry",
+        "label": "Foundry",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dwarves/Foundry/Foundry - base [BPFO].png",
+        "kind": "building"
+      }
+    ],
+    "rock_coast": [
+      {
+        "id": "Neutral/Stone Quarry (size 1)",
+        "label": "Stone Quarry (size 1)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
+        "kind": "building"
+      },
+      {
+        "id": "Shared/Tower (Knights)",
+        "label": "Tower (Knights)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - base [BWTC].png",
+        "kind": "building"
+      },
+      {
+        "id": "Minotaurs/Lookout",
+        "label": "Lookout",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - base [BPLO].png",
+        "kind": "building"
+      },
+      {
+        "id": "Knights/Keep (level 2)",
+        "label": "Keep (level 2)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Knights/Keep (level 2)/Keep (level 2) - base [BKK1].png",
+        "kind": "building"
+      }
+    ],
+    "rock_cliffs": [],
+    "mountains": [],
+    "jungle": [
+      {
+        "id": "Wood Elves/Tree of Life",
+        "label": "Tree of Life",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
+        "kind": "building"
+      },
+      {
+        "id": "Wood Elves/White Tree",
+        "label": "White Tree",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
+        "kind": "building"
+      },
+      {
+        "id": "Fey/Faerie Ring",
+        "label": "Faerie Ring",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - base [BPFR].png",
+        "kind": "building"
+      },
+      {
+        "id": "Fey/Unicorn Grove",
+        "label": "Unicorn Grove",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - base [BAUG].png",
+        "kind": "building"
+      },
+      {
+        "id": "Orcs/Totem",
+        "label": "Totem",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Orcs/Totem/Totem - base [BWTP].png",
+        "kind": "building"
+      }
+    ],
+    "marsh": [
+      {
+        "id": "Shared/Wall of Thorns",
+        "label": "Wall of Thorns",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
+        "kind": "building"
+      },
+      {
+        "id": "Plaguelords/Plague Shrine",
+        "label": "Plague Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Plaguelords/Plague Shrine/Plague Shrine - base [BPPS].png",
+        "kind": "building"
+      },
+      {
+        "id": "Plaguelords/Hall of Plague (level 2)",
+        "label": "Hall of Plague (level 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 2)/Hall of Plague (level 2) - base [BKG1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Daemons/Gallows",
+        "label": "Gallows",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Daemons/Gallows/Gallows - base [BPGA].png",
+        "kind": "building"
+      },
+      {
+        "id": "Dark Elves/Tomb",
+        "label": "Tomb",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Elves/Tomb/Tomb - base [BPTO].png",
+        "kind": "building"
+      }
+    ],
+    "water": [],
+    "lava": [],
+    "caverns": [
+      {
+        "id": "Neutral/Black Portal",
+        "label": "Black Portal",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Infernal Temple",
+        "label": "Infernal Temple",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - base [BTIN].png",
+        "kind": "building"
+      },
+      {
+        "id": "Neutral/Crystal Mine (size 2)",
+        "label": "Crystal Mine (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+        "kind": "building"
+      },
+      {
+        "id": "Dark Elves/Dark Tower (level 3)",
+        "label": "Dark Tower (level 3)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 3)/Dark Tower (level 3) - base [BKT2].png",
+        "kind": "building"
+      },
+      {
+        "id": "Daemons/Pit",
+        "label": "Pit",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Daemons/Pit/Pit - base [BAPI].png",
+        "kind": "building"
+      },
+      {
+        "id": "Plaguelords/Hydra Cave",
+        "label": "Hydra Cave",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Plaguelords/Hydra Cave/Hydra Cave - base [BPHC].png",
+        "kind": "building"
+      }
+    ]
+  }
 }
