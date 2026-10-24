@@ -1,6 +1,6 @@
 {
  "_comment": "Feature catalog for the Godot/JS feature placer. Biome -> list of candidate buildings; the placer picks one per hex using a hash-weighted draw, with Poisson spacing (min_separation).",
- "min_separation": 2,
+ "min_separation": 3,
  "density": {
   "grass": 0.055,
   "high_grass": 0.05,

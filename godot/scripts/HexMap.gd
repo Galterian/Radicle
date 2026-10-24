@@ -36,8 +36,10 @@ func _load_tiles() -> void:
 	var th := float(hexcfg.get("tile_h", 132))
 	_tile_size = Vector2(tw, th)
 	# Tiles were rendered at `scale` x HEX_SIZE; scale them back down to world size.
+	# Add a tiny overlap (3%) so adjacent tiles never leave a 1-pixel seam when the
+	# camera is zoomed out — WBC3 tiles are hard-edged, not alpha-blended.
 	var expected_w := sqrt(3.0) * Hex.HEX_SIZE
-	_tile_scale = expected_w / tw
+	_tile_scale = (expected_w / tw) * 1.03
 	var ct = cfg.get("chaos_terrain", {})
 	if typeof(ct) != TYPE_DICTIONARY:
 		return
