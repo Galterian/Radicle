@@ -329,7 +329,10 @@ const ridesOnEmpty = (card) => card.requires === 'M' || card.requires === 'P';
 // A non-trance skill rides on the primary, or on the trance's second action.
 function skillMatchesQueue(card) {
   if (state.queued[0] === 'EMPTY' && ridesOnEmpty(card)) return true;
-  return card.requires === queuedActionCode() || (tranceActive() && card.requires === extraActionCode());
+  if (card.requires === queuedActionCode()) return true;
+  if (!tranceActive()) return false;
+  // Trance's second option: the extra card, or the implicit EP (Move / Posture skills ride on it).
+  return state.queuedExtra === null ? ridesOnEmpty(card) : card.requires === extraActionCode();
 }
 function skillUsable(card) {
   return isSkill(card) && (ridesOnEmpty(card) || firstActionIdx(card.requires) >= 0);
@@ -354,6 +357,39 @@ function skillNames(payload) {
 function actionLabel(payload) {
   if (payload.action === 'BT' && Array.isArray(payload.trance)) return `BT[${payload.trance.join('|')}]`;
   return payload.action;
+}
+
+// Two-letter tags for the over-unit chip: `[EM + A + ✦BT + ✦Po]` reads as
+// "Battle Trance over Empty Move and Attack, Powerful attack on the Attack".
+// ✦ is the same mark the hand uses for skill cards. Unknown skills fall back
+// to the first two letters of their id.
+const SKILL_TAG = {
+  skill_battle_trance: 'BT', skill_powerful_attack: 'Po', skill_overrun: 'Ov', skill_bluff: 'Bl',
+  skill_intimidation: 'In', skill_grapple: 'Gr', skill_disruption_move: 'Di', skill_dodge: 'Do',
+  skill_barricade: 'Ba', skill_taunt: 'Ta', skill_sanctuary: 'Sa', skill_ranged_weapon: 'Ra',
+  skill_force_shield: 'Fs', skill_counter_spell: 'Cs',
+};
+const skillTag = id => SKILL_TAG[id] || String(id).replace(/^skill_/, '').slice(0, 2).replace(/^./, c => c.toUpperCase());
+// Compose the chip text from an action summary / queue: trance options first
+// (an option the resolver did not play is parenthesised), then ✦BT, then the
+// other skills in hand order.
+function composeLabel({ action, trance, played, skills }) {
+  const parts = [];
+  if (Array.isArray(trance) && trance.length) trance.forEach((c, i) => parts.push(!Array.isArray(played) || played.includes(i) ? c : `(${c})`));
+  else if (action) parts.push(action);
+  const ids = (skills || []).map(String);
+  const rest = ids.filter(id => id !== 'skill_battle_trance');
+  if (Array.isArray(trance) && trance.length) parts.push('✦BT');
+  for (const id of rest) parts.push(`✦${skillTag(id)}`);
+  return parts.join(' + ');
+}
+// The chip over my own head while planning: what the commit will carry.
+function queuedLabel() {
+  const code = effectiveQueuedCode();
+  if (code === null) return null;
+  const skills = state.queuedSkills.map(i => state.hand[i]).filter(isSkill).map(c => c.skill_id);
+  const trance = tranceActive() ? [queuedActionCode() || 'EP', extraActionCode() || 'EP'] : null;
+  return composeLabel({ action: code, trance, played: null, skills });
 }
 
 function renderDeck() {
@@ -621,11 +657,15 @@ function connect() {
           // is exactly one of my own icons per round and every peer's echoed
           // state_hash carries the same payload.
           state._loggedAction ||= new Set();
+          state.ui.revealBadges ||= {};
           for (const a of env.payload.actions || []) {
-            if (a.actor !== state.myPeerId) continue;
             const ak = `${env.turn}:${env.round}:${a.actor}`;
             if (state._loggedAction.has(ak)) continue;
             state._loggedAction.add(ak);
+            // Every revealer (heroes and monsters) gets the composed chip over
+            // its head — `[EM + A + ✦BT + ✦Po]` — fading on the icon's clock.
+            state.ui.revealBadges[a.actor] = { text: composeLabel(a), startAt: performance.now(), duration: 2200 };
+            if (a.actor !== state.myPeerId) continue;
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
             if (fromQ === null) continue;
@@ -823,6 +863,8 @@ function wireInput() {
   });
 
   const canvas = document.getElementById('stage');
+  // Test hook (tools/ui-check.mjs): the canvas chip text is not in the DOM.
+  window.__chaosDebug = () => ({ queuedLabel: queuedLabel(), badges: { ...(state.ui.revealBadges || {}) } });
 
   const renderer = createRenderer(canvas, {
     get entities() {
@@ -832,8 +874,9 @@ function wireInput() {
           peerId: p.peer_id, alliance: p.alliance, name: p.name,
           tile: { q: p.tile_q, r: p.tile_r }, life: p.life, lifeMax: p.life_max,
           isSelf: isMe,
-          queuedCode: isMe ? effectiveQueuedCode() : null,
+          queuedCode: isMe ? queuedLabel() : null,
           locked: isMe ? state.locked : false,
+          revealBadge: state.ui.revealBadges?.[p.peer_id] || null,
         };
       });
     },
