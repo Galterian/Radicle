@@ -13,3 +13,6 @@ game/radicle.git/
 *Zone.Identifier
 game/host.log
 game/logs/
+
+# dev UI audit output (screenshots, scratch probes)
+game/tools/out/

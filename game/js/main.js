@@ -37,6 +37,8 @@ const state = {
   deckCount: 0,       // cards still in the draw pile — rendered as the stacked pile on the right
   discardCount: 0,    // cards in the discard pile
   queued: [],         // [] | [slotIndex] | ['EMPTY']
+  queuedSkills: [],   // hand indices of skill cards riding on the queued action
+  queuedExtra: null,  // Battle Trance: hand index of the second action card (null → Empty Posture)
   queuedIsAuto: true, // false once the player has deliberately picked a slot this planning phase
   willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
   target: null,       // peer_id | {q,r} | null
@@ -138,7 +140,7 @@ function resumeJourney() {
   const step = path[0];
   state.queued = ['EMPTY'];
   state.queuedIsAuto = true;
-  send({ kind: 'queue', slots: state.queued });
+  sendQueue();
   state.target = { q: step.q, r: step.r };
   state.ui.selectedTarget = step;
   send({ kind: 'target', target: state.target });
@@ -261,8 +263,9 @@ function onEnvelopeFold(env, viaMesh) {
   if (env.type === 'evt_action_reveal') {
     const b = li.querySelector('.hs-badge.reveal');
     b.classList.add('done');
-    b.title = `revealed: ${env.payload.action} → ${fmtTarget(env.payload.target)}`;
-    li.querySelector('.hs-action').textContent = ` ${env.payload.action}→${fmtTarget(env.payload.target)}`;
+    const act = `${actionLabel(env.payload)}${skillNames(env.payload)}`;
+    b.title = `revealed: ${act} → ${fmtTarget(env.payload.target)}`;
+    li.querySelector('.hs-action').textContent = ` ${act}→${fmtTarget(env.payload.target)}`;
   }
   if (env.type === 'evt_state_hash') {
     li.querySelector('.hs-badge.state').classList.add('done');
@@ -289,6 +292,7 @@ function onEnvelopeFold(env, viaMesh) {
 // a tile target (declared-first requirement), otherwise EP.
 function effectiveQueuedCode() {
   const q = state.queued[0];
+  if (tranceActive()) return 'BT';
   if (q === 'EMPTY') {
     const hasTileTarget = state.target && typeof state.target === 'object' && 'q' in state.target;
     return hasTileTarget ? 'EM' : 'EP';
@@ -300,8 +304,58 @@ function effectiveQueuedCode() {
 // Short, UI-only action names so narrow cards still read. Codes are canonical.
 const ACTION_SHORT = { A: 'Attack', B: 'Block', M: 'Move', P: 'Posture' };
 
+const isSkill = (c) => !!c && c.kind === 'skill';
+const isAction = (c) => !!c && c.kind !== 'skill';
+
+const isTrance = (c) => isSkill(c) && (c.is_trance || c.requires === '*');
+
+// '*' (Battle Trance) matches any action card.
+function firstActionIdx(code) {
+  return state.hand.findIndex(c => isAction(c) && (code === '*' || c.code === code) && !state.willDiscard.has(c.card_id));
+}
+function tranceActive() {
+  return state.queuedSkills.some(i => isTrance(state.hand[i]));
+}
+function queuedActionCode() {
+  const q = state.queued[0];
+  return typeof q === 'number' && isAction(state.hand[q]) ? state.hand[q].code : null;
+}
+function extraActionCode() {
+  const e = state.queuedExtra;
+  return typeof e === 'number' && isAction(state.hand[e]) ? state.hand[e].code : null;
+}
+// A non-trance skill rides on the primary, or on the trance's second action.
+function skillMatchesQueue(card) {
+  return card.requires === queuedActionCode() || (tranceActive() && card.requires === extraActionCode());
+}
+function skillUsable(card) {
+  return isSkill(card) && firstActionIdx(card.requires) >= 0;
+}
+// Drop attached skills that no longer ride on a queued action.
+function pruneQueuedSkills() {
+  const trance = tranceActive();
+  if (!trance || typeof state.queued[0] !== 'number' || !isAction(state.hand[state.queued[0]])) state.queuedExtra = null;
+  if (typeof state.queuedExtra === 'number' && (!isAction(state.hand[state.queuedExtra]) || state.queuedExtra === state.queued[0])) state.queuedExtra = null;
+  state.queuedSkills = state.queuedSkills.filter(i => isSkill(state.hand[i]) && (isTrance(state.hand[i]) ? trance && queuedActionCode() : skillMatchesQueue(state.hand[i])));
+}
+function sendQueue() {
+  pruneQueuedSkills();
+  send({ kind: 'queue', slots: state.queued, skills: state.queuedSkills, extra: state.queuedExtra });
+}
+function skillNames(payload) {
+  const names = Array.isArray(payload.skill_names) && payload.skill_names.length
+    ? payload.skill_names
+    : (payload.skills || []).map(id => String(id).replace(/^skill_/, ''));
+  return names.length ? '+' + names.join('+') : '';
+}
+function actionLabel(payload) {
+  if (payload.action === 'BT' && Array.isArray(payload.trance)) return `BT[${payload.trance.join('|')}]`;
+  return payload.action;
+}
+
 function renderDeck() {
   const slots = document.querySelectorAll('#slots .slot');
+  const trance = tranceActive();
   slots.forEach(slot => {
     const key = slot.dataset.slot;
     const cardDiv = slot.querySelector('.card');
@@ -311,29 +365,48 @@ function renderDeck() {
       // EM when a tile target is set (Rule 6 declared-first), else EP.
       const hasTileTarget = state.target && typeof state.target === 'object' && 'q' in state.target;
       const code = hasTileTarget ? 'EM' : 'EP';
+      const emptyIsSecond = trance && state.queuedExtra === null;
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
-      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${code === 'EM' ? 'move' : 'posture'}</div>`;
+      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : 'posture'}</div>`;
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
-      slot.classList.toggle('locked', state.locked && state.queued[0] === 'EMPTY');
+      slot.classList.toggle('queued-extra', emptyIsSecond);
+      slot.classList.toggle('locked', state.locked && (state.queued[0] === 'EMPTY' || emptyIsSecond));
       return;
     }
     const i = Number(key);
     const card = state.hand[i];
-    if (card) {
+    const skill = isSkill(card);
+    const skillQueued = skill && state.queuedSkills.includes(i);
+    const isExtra = trance && state.queuedExtra === i;
+    if (skill) {
+      const band = isTrance(card) ? 'P' : card.requires;
+      slot.dataset.code = band;
+      cardDiv.dataset.code = band;
+      const needs = isTrance(card) ? 'any action' : (ACTION_SHORT[card.requires] || card.requires);
+      cardDiv.innerHTML = `<div class="nm">✦ ${card.name}</div><div class="cd">needs ${needs}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
+      slot.title = card.text || card.name;
+    } else if (card) {
       const code = card.code;
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
       const short = ACTION_SHORT[code] || card.action_name || code;
-      cardDiv.innerHTML = `<div class="nm">${short}</div><div class="cd">${card.card_id.slice(-5)}</div>`;
+      const n = state.queued[0] === i ? state.queuedSkills.length : 0;
+      cardDiv.innerHTML = `<div class="nm">${short}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`;
+      slot.title = '';
     } else {
       delete slot.dataset.code;
       delete cardDiv.dataset.code;
       cardDiv.innerHTML = `<div class="nm" style="opacity:.4">—</div>`;
+      slot.title = '';
     }
-    slot.classList.toggle('queued', state.queued[0] === i);
+    slot.classList.toggle('skill', skill);
+    slot.classList.toggle('disabled', skill && !skillUsable(card));
+    slot.classList.toggle('queued', !skill && state.queued[0] === i);
+    slot.classList.toggle('queued-extra', isExtra);
+    slot.classList.toggle('queued-skill', skillQueued);
     slot.classList.toggle('discard', !!card && state.willDiscard.has(card.card_id));
-    slot.classList.toggle('locked', state.locked && state.queued[0] === i);
+    slot.classList.toggle('locked', state.locked && (state.queued[0] === i || skillQueued || isExtra));
   });
 
   // Deck + discard pile counts, straight from the peer's latest hand broadcast.
@@ -361,8 +434,20 @@ function renderRoster() {
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
+    const stat = (flat, key) => {
+      const v = e[flat] ?? e.stats?.[key];
+      return Number.isFinite(v) ? v : '—';
+    };
+    const perms = (e.permanents_csv || '').split(',').filter(Boolean).map(s => s.replace(/^skill_/, '').replace(/_/g, ' '));
     row.innerHTML = `<span class="nm">${e.name}</span>
-      <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span>`;
+      <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span>
+      <span class="stats">
+        <span class="pill v" title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
+        <span class="pill w" title="World">W ${stat('stat_world', 'world')}</span>
+        <span class="pill m" title="Matter">M ${stat('stat_matter', 'matter')}</span>
+        <span class="pill wi" title="Will">Wi ${stat('stat_will', 'will')}</span>
+        ${perms.length ? `<span class="pill perm" title="permanents">✦ ${perms.join(', ')}</span>` : ''}
+      </span>`;
     // Clicking a roster row toggles the log filter on that peer.
     row.addEventListener('click', () => setLogFilter(activeFilter === e.peer_id ? null : e.peer_id));
     el.appendChild(row);
@@ -373,11 +458,13 @@ function autoselectFirstHandCard() {
   // Rule-of-thumb UX: default the queue to the first hand card so the auto-
   // commit at timer-0 picks something sensible when the player doesn't act.
   // Falls back to the EMPTY slot if the hand is empty for some reason.
-  const firstIdx = state.hand.findIndex(c => !!c);
+  const firstIdx = state.hand.findIndex(c => isAction(c));
   if (firstIdx >= 0) state.queued = [firstIdx];
   else state.queued = ['EMPTY'];
+  state.queuedSkills = [];
+  state.queuedExtra = null;
   state.queuedIsAuto = true;
-  send({ kind: 'queue', slots: state.queued });
+  sendQueue();
 }
 
 function setPhase(name, seconds, heartbeat, m = {}) {
@@ -396,6 +483,8 @@ function setPhase(name, seconds, heartbeat, m = {}) {
     // marks persist across the turn's rounds; the peer clears them at turn end.
     state.locked = false;
     state.target = null;
+    state.queuedSkills = [];
+    state.queuedExtra = null;
     state.ui.selectedTarget = null;
     // Keep destinationTile across rounds — a right-click sets up a multi-round
     // journey, so each new planning phase should pick up along the path rather
@@ -433,6 +522,7 @@ function connect() {
         // Merge rather than overwrite — the peer's initial hello may lag Gun's
         // own peer catalog.
         mergeEntities(m.peers || []);
+        if (m.entity?.stats) mergeEntities([{ peer_id: m.peer_id, stats: m.entity.stats }]);
         state.dimension = m.dimension || state.dimension;
         applyMap(m.map);
         document.title = `ChaosD6 — ${state.dimension}`;
@@ -453,6 +543,8 @@ function connect() {
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
         if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
         if (Array.isArray(m.queued)) state.queued = m.queued;
+        if (Array.isArray(m.queued_skills)) state.queuedSkills = m.queued_skills;
+        if (m.queued_extra !== undefined) state.queuedExtra = typeof m.queued_extra === 'number' ? m.queued_extra : null;
         if (typeof m.turn === 'number') state.turn = m.turn;
         if (typeof m.round === 'number') state.round = m.round;
         if (m.turn_end) { state.willDiscard.clear(); logUI(`turn end — hand refilled to ${state.hand.length}`, 'phase'); }
@@ -635,19 +727,65 @@ function uilog(event, extra = {}) {
 function queueSlot(key) {
   uilog('queueSlot', { detail: `key=${key}` });
   if (state.locked) return;
+  const card = typeof key === 'number' ? state.hand[key] : null;
+  if (typeof key === 'number' && !card) return;
+  if (isSkill(card)) {
+    // Rule 17: a skill rides on a matching action card. Toggle it on/off and
+    // pull the first matching action into the queue when needed.
+    if (!skillUsable(card)) {
+      logUI(`${card.name} needs ${isTrance(card) ? 'an action' : ACTION_SHORT[card.requires] || card.requires} card in hand`, 'phase');
+      return;
+    }
+    if (state.queuedSkills.includes(key)) {
+      state.queuedSkills = state.queuedSkills.filter(i => i !== key);
+      if (isTrance(card)) state.queuedExtra = null;
+    } else if (isTrance(card)) {
+      if (queuedActionCode() === null) { state.queued = [firstActionIdx('*')]; state.queuedSkills = []; }
+      state.queuedSkills.push(key);
+    } else {
+      if (!skillMatchesQueue(card)) {
+        state.queued = [firstActionIdx(card.requires)];
+        state.queuedSkills = [];
+        state.queuedExtra = null;
+      }
+      state.queuedSkills.push(key);
+    }
+    state.queuedIsAuto = false;
+    cancelPathJourney('manual pick');
+    sendQueue();
+    renderDeck();
+    return;
+  }
+  if (tranceActive()) {
+    // Battle Trance: the primary stays put; other action cards toggle as the
+    // second option, Empty means "second option is EP".
+    if (key === 'EMPTY') state.queuedExtra = null;
+    else if (state.queuedExtra === key) state.queuedExtra = null;
+    else if (state.queued[0] === key) {
+      if (state.queuedExtra !== null) { state.queued = [state.queuedExtra]; state.queuedExtra = null; }
+      else { state.queued = []; state.queuedSkills = []; state.queuedExtra = null; }
+    } else state.queuedExtra = key;
+    state.queuedIsAuto = false;
+    cancelPathJourney('manual pick');
+    sendQueue();
+    renderDeck();
+    return;
+  }
   // Single-action-per-turn (Rule 1 + Rule 7). Clicking the already-queued slot
   // unqueues it (so you can commit nothing → defaults to EP server-side);
   // clicking a different slot replaces the pick.
   if (state.queued[0] === key) {
     state.queued = [];
+    state.queuedSkills = [];
   } else {
     state.queued = [key];
+    if (key === 'EMPTY') state.queuedSkills = [];
   }
   state.queuedIsAuto = false;
   // Picking any slot by hand means the player is taking the wheel — stop the
   // auto-walker so a right-clicked destination doesn't fight the pick.
   cancelPathJourney('manual pick');
-  send({ kind: 'queue', slots: state.queued });
+  sendQueue();
   renderDeck();
 }
 
@@ -871,7 +1009,7 @@ function wireInput() {
       if (state.queued[0] !== attackIdx) {
         state.queued = [attackIdx];
         state.queuedIsAuto = false;
-        send({ kind: 'queue', slots: state.queued });
+        sendQueue();
       }
       // Attack is single-round; any lingering pathPlan from an earlier
       // right-click would otherwise re-trigger resumeJourney next phase.
@@ -899,7 +1037,7 @@ function wireInput() {
       if (!moveExplicit && state.queued[0] !== 'EMPTY') {
         state.queued = ['EMPTY'];
         state.queuedIsAuto = false;
-        send({ kind: 'queue', slots: state.queued });
+        sendQueue();
       }
       const codeTag = moveExplicit ? 'Move' : 'EM';
       if (atTile) {

@@ -151,6 +151,7 @@ export function createRenderer(canvas, state) {
     P:  { glyph: '👁',  color: '#dfe3e8' },  // Posture (dark white)
     EP: { glyph: '🧘', color: '#ffe66e' },  // Empty Posture (yellow)
     EM: { glyph: '🏃', color: '#ffe66e' },  // Empty Move (yellow)
+    BT: { glyph: '🌀', color: '#ffb66e' },  // Battle Trance (two actions)
     // Standoff arrow — not an action, but used by the no-damage-in-contact
     // path to float a ➙ between each pair of adjacent enemies who clinched
     // without scoring.
