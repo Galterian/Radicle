@@ -2,22 +2,732 @@
   "collection": "skills",
   "notes": "Skills are played as instants attached to a matching action card. Point-buy skills roll against the listed stat.",
   "entries": [
-    { "id": "skill_powerful_attack",   "name": "Powerful attack",       "tags": ["attack"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_overrun","skill_grapple","skill_ranged_weapon"],"vote_log":[],"notes":"","data":{ "action_type":"A", "is_permanent":false, "point_buy_stat":null, "text":"On successful attack: +1 damage; cannot perform any other action except Attack until end of round." }}] },
-    { "id": "skill_overrun",           "name": "Overrun / Push",        "tags": ["attack","move"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_powerful_attack"],"vote_log":[],"notes":"","data":{ "action_type":"A", "is_permanent":false, "point_buy_stat":null, "text":"Swap places with the enemy (walk over them and go behind). Negate enemy's Move. Alt: the enemy or ally is moved one tile away; step over them." }}] },
-    { "id": "skill_grapple",           "name": "Grapple",               "tags": ["attack","lock"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_intimidation"],"vote_log":[],"notes":"","data":{ "action_type":"A", "is_permanent":false, "point_buy_stat":null, "text":"Negate enemy's Posture or Empty Posture (enemy may replace with another action; Empty Move is still possible). While sharing a tile, neither may use Posture or Empty Posture." }}] },
-    { "id": "skill_ranged_weapon",     "name": "Ranged weapon",         "tags": ["attack","permanent","range"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_disruption_move"],"vote_log":[],"notes":"","data":{ "action_type":"A", "is_permanent":true, "point_buy_stat":"stat_matter", "element":"elem_fire", "text":"Permanent. On your Attack action, enemy's Block action does not cause you combat damage. Your Attack action does not trigger traps and the follow rule is not applied." }}] },
-
-    { "id": "skill_taunt",             "name": "Taunt",                 "tags": ["block","permanent"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_barricade"],"vote_log":[],"notes":"","data":{ "action_type":"B", "is_permanent":true, "point_buy_stat":"stat_vitality", "text":"Nearby enemies cannot Attack anything besides you. Nearby enemies cannot use Block against you." }}] },
-    { "id": "skill_force_shield",      "name": "Force Shield",          "tags": ["block","permanent"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["effect_shield"],"vote_log":[],"notes":"","data":{ "action_type":"B", "is_permanent":true, "point_buy_stat":"stat_vitality", "text":"Subtract the Shield permanent die value from effect damage before rounding. Destroy this permanent if effect damage is taken." }}] },
-    { "id": "skill_barricade",         "name": "Barricade",             "tags": ["block","permanent"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_taunt"],"vote_log":[],"notes":"","data":{ "action_type":"B", "is_permanent":true, "point_buy_stat":"stat_vitality", "text":"Nearby enemies cannot use Attack against you." }}] },
-    { "id": "skill_sanctuary",         "name": "Sanctuary",             "tags": ["block","permanent","invincible"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_force_shield","effect_the_void"],"vote_log":[],"notes":"","data":{ "action_type":"B", "is_permanent":true, "point_buy_stat":"any", "text":"Permanent until doing action. You, any permanent, and any token you control (besides Sanctuary) are invincible until you emit or perform any action." }}] },
-
-    { "id": "skill_disruption_move",   "name": "Disruption",            "tags": ["move","lock"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_ranged_weapon"],"vote_log":[],"notes":"","data":{ "action_type":"M", "is_permanent":false, "point_buy_stat":null, "text":"The enemy cannot use Posture; any Empty Posture is always played as Empty Move (enemy cannot emit non-instant effects)." }}] },
-    { "id": "skill_dodge",             "name": "Dodge / Evasion",       "tags": ["move","defense"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_bluff"],"vote_log":[],"notes":"","data":{ "action_type":"M", "is_permanent":false, "point_buy_stat":null, "text":"−1 combat damage (one less damage done to you this action)." }}] },
-    { "id": "skill_bluff",             "name": "Bluff / Feint",         "tags": ["move","counter"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_dodge","skill_intimidation"],"vote_log":[],"notes":"","data":{ "action_type":"M", "is_permanent":false, "point_buy_stat":null, "text":"Negate enemy's action and replace it with Empty Posture." }}] },
-
-    { "id": "skill_intimidation",      "name": "Intimidation",          "tags": ["posture","lock"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["skill_grapple"],"vote_log":[],"notes":"","data":{ "action_type":"P", "is_permanent":false, "point_buy_stat":null, "text":"The enemy cannot use Attack until end of round." }}] },
-    { "id": "skill_battle_trance",     "name": "Battle trance",         "tags": ["posture","economy"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["effect_haste"],"vote_log":[],"notes":"","data":{ "action_type":"P", "is_permanent":false, "point_buy_stat":null, "text":"You may use another action this turn; choose both or one for the calculations." }}] },
-    { "id": "skill_counter_spell",     "name": "Counter spell",         "tags": ["posture","counter"], "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":["effect_disable","effect_shield"],"vote_log":[],"notes":"","data":{ "action_type":"P", "is_permanent":false, "point_buy_stat":null, "text":"Counter target non-permanent skill; emit an element against the enemy, subtract the element stat from the enemy's stat." }}] }
+    {
+      "id": "skill_powerful_attack",
+      "name": "Powerful attack",
+      "tags": [
+        "attack"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "heavy sword hit + crit; blood splatter on the target",
+        "confidence": "high",
+        "wbc3_name": "Blood splatter (red) and green ichor splatter",
+        "wbc3_code": "EDBL",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Blood splatter (red) and green ichor splatter/Blood splatter (red) and green ichor splatter - idle [EDBL].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sword.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/CrushCrit.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_overrun",
+            "skill_grapple",
+            "skill_ranged_weapon"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "A",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "On successful attack: +1 damage; cannot perform any other action except Attack until end of round."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_overrun",
+      "name": "Overrun / Push",
+      "tags": [
+        "attack",
+        "move"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "stomp through the enemy, dust at the swap",
+        "confidence": "medium",
+        "wbc3_name": "Smokedust puff animation",
+        "wbc3_code": "EMX0",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Stomp.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Whack.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_powerful_attack"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "A",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "Swap places with the enemy (walk over them and go behind). Negate enemy's Move. Alt: the enemy or ally is moved one tile away; step over them."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_grapple",
+      "name": "Grapple",
+      "tags": [
+        "attack",
+        "lock"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "body impact sounds",
+        "confidence": "medium",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Whack.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Thump.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_intimidation"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "A",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "Negate enemy's Posture or Empty Posture (enemy may replace with another action; Empty Move is still possible). While sharing a tile, neither may use Posture or Empty Posture."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_ranged_weapon",
+      "name": "Ranged weapon",
+      "tags": [
+        "attack",
+        "permanent",
+        "range"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "arrow projectile strip + missile sound",
+        "confidence": "high",
+        "wbc3_name": "Arrow projectile (directions)",
+        "wbc3_code": "EMA0",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Arrow projectile (directions)/Arrow projectile (directions) - idle [EMA0].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Missile0.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/swoosh.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_disruption_move"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "A",
+            "is_permanent": true,
+            "point_buy_stat": "stat_matter",
+            "element": "elem_fire",
+            "text": "Permanent. On your Attack action, enemy's Block action does not cause you combat damage. Your Attack action does not trigger traps and the follow rule is not applied."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_taunt",
+      "name": "Taunt",
+      "tags": [
+        "block",
+        "permanent"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "battle marker over the taunting hero",
+        "confidence": "low",
+        "wbc3_name": "Crossed burning swords icon (battle marker)",
+        "wbc3_code": "EEBX",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Scream.WAV",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_barricade"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "stat_vitality",
+            "text": "Nearby enemies cannot Attack anything besides you. Nearby enemies cannot use Block against you."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_force_shield",
+      "name": "Force Shield",
+      "tags": [
+        "block",
+        "permanent"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "dome shield + metal clang",
+        "confidence": "high",
+        "wbc3_name": "Cyan dome shield arcs",
+        "wbc3_code": "EZ41",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Clank.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_shield"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "stat_vitality",
+            "text": "Subtract the Shield permanent die value from effect damage before rounding. Destroy this permanent if effect damage is taken."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_barricade",
+      "name": "Barricade",
+      "tags": [
+        "block",
+        "permanent"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "WBC3 rampart still around the hero",
+        "confidence": "medium",
+        "wbc3_name": "Ramparts",
+        "wbc3_code": "BWRA",
+        "wbc3_race": "Shared",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Build.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_taunt"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "stat_vitality",
+            "text": "Nearby enemies cannot use Attack against you."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_sanctuary",
+      "name": "Sanctuary",
+      "tags": [
+        "block",
+        "permanent",
+        "invincible"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "white protective rings",
+        "confidence": "medium",
+        "wbc3_name": "Spell effect white rings",
+        "wbc3_code": "EZ04",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_force_shield",
+            "effect_the_void"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "any",
+            "text": "Permanent until doing action. You, any permanent, and any token you control (besides Sanctuary) are invincible until you emit or perform any action."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_disruption_move",
+      "name": "Disruption",
+      "tags": [
+        "move",
+        "lock"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "quick dash sound",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/ShortWhoosh.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_ranged_weapon"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "M",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "The enemy cannot use Posture; any Empty Posture is always played as Empty Move (enemy cannot emit non-instant effects)."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_dodge",
+      "name": "Dodge / Evasion",
+      "tags": [
+        "move",
+        "defense"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "whoosh of a dodge",
+        "confidence": "medium",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/swoosh2.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/swooshlr.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_bluff"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "M",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "−1 combat damage (one less damage done to you this action)."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_bluff",
+      "name": "Bluff / Feint",
+      "tags": [
+        "move",
+        "counter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "feint whoosh + soft click",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/swooshrl.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/ClickSft.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_dodge",
+            "skill_intimidation"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "M",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "Negate enemy's action and replace it with Empty Posture."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_intimidation",
+      "name": "Intimidation",
+      "tags": [
+        "posture",
+        "lock"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "drum + racing heartbeat of the intimidated enemy",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/drum.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatFast.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "skill_grapple"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "P",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "The enemy cannot use Attack until end of round."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_battle_trance",
+      "name": "Battle trance",
+      "tags": [
+        "posture",
+        "economy"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "buff marker + heartbeat",
+        "confidence": "medium",
+        "wbc3_name": "Yellow ring with + sign (buff marker)",
+        "wbc3_code": "EZ68",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Yellow ring with + sign (buff marker)/Yellow ring with + sign (buff marker) - idle [EZ68].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatFast.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_haste"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "P",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "You may use another action this turn; choose both or one for the calculations."
+          }
+        }
+      ]
+    },
+    {
+      "id": "skill_counter_spell",
+      "name": "Counter spell",
+      "tags": [
+        "posture",
+        "counter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "cancel X over the countered skill",
+        "confidence": "medium",
+        "wbc3_name": "Red X cancel marker variant",
+        "wbc3_code": "EMC1",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Red X cancel marker variant/Red X cancel marker variant - idle [EMC1].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when the skill resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_disable",
+            "effect_shield"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "action_type": "P",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "Counter target non-permanent skill; emit an element against the enemy, subtract the element stat from the enemy's stat."
+          }
+        }
+      ]
+    }
   ]
 }
