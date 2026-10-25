@@ -666,12 +666,12 @@ function connect() {
             if (j.actor === state.myPeerId && j.outcome === 'blocked') cancelPathJourney('blocked by Rule 8');
           }
           if (state._loggedJourney.size > 500) state._loggedJourney = new Set([...state._loggedJourney].slice(-100));
-          // Per-actor action icons. Only the player's own hero shows an action
-          // icon — bots stay silent so the map isn't flooded. The ➙ "nobody
-          // scored" arrow between adjacent enemies is handled below in the
-          // `contact` branch, not here. De-dup by (turn, round) since there
-          // is exactly one of my own icons per round and every peer's echoed
-          // state_hash carries the same payload.
+          // Per-actor action icons for every revealer — heroes, allies and
+          // monsters alike (the user wants to read the monsters' plays on the
+          // map too). The ➙ "nobody scored" arrow between adjacent enemies is
+          // handled below in the `contact` branch, not here. De-dup by
+          // (turn, round, actor) since every peer's echoed state_hash carries
+          // the same payload.
           state._loggedAction ||= new Set();
           state.ui.revealBadges ||= {};
           for (const a of env.payload.actions || []) {
@@ -681,7 +681,6 @@ function connect() {
             // Every revealer (heroes and monsters) gets the composed chip over
             // its head — `[EM + A + ✦BT + ✦Po]` — fading on the icon's clock.
             state.ui.revealBadges[a.actor] = { text: composeLabel(a), startAt: performance.now(), duration: 2200 };
-            if (a.actor !== state.myPeerId) continue;
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
             if (fromQ === null) continue;
