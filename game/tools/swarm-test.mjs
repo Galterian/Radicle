@@ -41,13 +41,15 @@ function startAgent(peerId, port, attempt = 0) {
   const a = { peerId, port, ws, map: createKnownMap('0x0', [initialBlock()]), peers: new Map(), me: null, hand: [], rounds: 0, attacks: 0, moves: 0, skillsPlayed: 0, trances: 0, dest: null };
   const send = o => { try { ws.send(JSON.stringify(o)); } catch {} };
   ws.onclose = () => { if (!a.me && attempt < 10) setTimeout(() => startAgent(peerId, port, attempt + 1), 2000); };
-  const isAction = c => !!c && c.kind !== 'skill';
+  const isAction = c => !!c && c.kind === 'action';
   const isSkill = c => !!c && c.kind === 'skill';
   // Skill indices riding on the given action codes (trance itself excluded).
   const skillsFor = (...codes) => a.hand.map((c, i) => isSkill(c) && !c.is_trance && codes.includes(c.requires) ? i : -1).filter(i => i >= 0);
-  const queue = (slot, skills = [], extra = null) => {
-    send({ kind: 'queue', slots: [slot], skills, extra });
+  const isEffect = c => !!c && c.kind === 'effect';
+  const queue = (slot, skills = [], extra = null, effect = null) => {
+    send({ kind: 'queue', slots: [slot], skills, extra, effect });
     a.skillsPlayed += skills.filter(i => !a.hand[i]?.is_trance).length;
+    if (effect !== null) a.effectsCast = (a.effectsCast || 0) + 1;
   };
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
@@ -70,6 +72,16 @@ function startAgent(peerId, port, attempt = 0) {
       send({ kind: 'target', target: near.peer_id });
       send({ kind: 'lock' });
       a.trances++; a.attacks++;
+      return;
+    }
+    // Adjacent with an effect in hand: cast it on a Posture (explicit P card
+    // or the Empty Posture) half the time — this is what exercises the
+    // Rule 21 effect-damage path in the resolver.
+    const effIdx = a.hand.findIndex(isEffect);
+    if (near && dist(near) <= 1 && effIdx >= 0 && Math.random() < 0.5) {
+      const p = slotOf('P');
+      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, effIdx);
+      send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
       return;
     }
     if (near && dist(near) <= 1 && Math.random() < 0.75) {
@@ -183,7 +195,7 @@ async function audit(label) {
 const endAt = Date.now() + minutes * 60_000;
 while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 

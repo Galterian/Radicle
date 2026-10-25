@@ -482,7 +482,8 @@ export function createRenderer(canvas, state) {
         if (t >= 1) continue;
         if (liveWriteIdx !== i) icons[liveWriteIdx] = f;
         liveWriteIdx++;
-        const spec = f.skill ? (SKILL_ICON[f.skill] || SKILL_ICON.default) : (ACTION_ICON[f.action] || ACTION_ICON.EP);
+        const spec = f.effect ? { glyph: f.glyph || '✺', color: '#e6a4ff' }
+          : f.skill ? (SKILL_ICON[f.skill] || SKILL_ICON.default) : (ACTION_ICON[f.action] || ACTION_ICON.EP);
         const k = ease(t);
         const from = tilePx(f.fromQ, f.fromR);
         const to   = tilePx(f.toQ, f.toR);
