@@ -18,6 +18,14 @@ var seed_hex: String
 var _catalog: Dictionary = {}         # biome -> Array[Dictionary{id,label,weight,path,kind}]
 var _density: Dictionary = {}         # biome -> float
 var _min_sep: int = 2
+# Per-biome min_separation overrides (optional in the catalog JSON). Coast strips are
+# narrow and visually tight, so a slightly larger separation here is the cheap part
+# of the "no cluster" fix — it reduces the number of same-biome features inside a
+# single strip, which is the condition clustering requires to show up.
+var _min_sep_biome: Dictionary = {}
+# Radius within which neighbouring features' picks also contribute to the diversity
+# check in _pick_idx(). Keep this >= _min_sep so every reachable neighbour counted.
+var _diversity_radius: int = 6
 var _loaded: bool = false
 
 
@@ -28,7 +36,15 @@ func _init(seed_hex_: String, catalog_path: String = "assets/features/feature_ta
 		_catalog = cfg.get("by_biome", {})
 		_density = cfg.get("density", {})
 		_min_sep = int(cfg.get("min_separation", 2))
+		_min_sep_biome = cfg.get("min_separation_by_biome", {})
+		_diversity_radius = int(cfg.get("diversity_radius", maxi(_min_sep + 2, 6)))
 		_loaded = true
+
+
+## Separation radius for a specific biome — allows coast strips to spread features
+## farther apart than inland regions even though the global default stays modest.
+func _sep_for(biome_type: String) -> int:
+	return int(_min_sep_biome.get(biome_type, _min_sep))
 
 
 static func _h32(s: String) -> int:
@@ -51,13 +67,15 @@ func _passes_density(q: int, r: int, biome_type: String) -> bool:
 
 ## Nearest-wins Poisson spacing: the hex with the lowest "f" hash among all
 ## hexes within radius `min_sep` that also pass the density check gets the feature.
+## The separation radius comes from the local biome so coast strips can spread features
+## farther than inland regions.
 func _is_candidate(q: int, r: int, biome: Biome) -> bool:
 	if biome == null: return false
 	var btype := biome.biome_at(q, r)
 	if (_catalog.get(btype, []) as Array).is_empty(): return false
 	if not _passes_density(q, r, btype): return false
 	var my := _roll01(q, r, "f")
-	var R := _min_sep
+	var R := _sep_for(btype)
 	for dq in range(-R, R + 1):
 		var lo := maxi(-R, -dq - R)
 		var hi := mini(R, -dq + R)
@@ -73,6 +91,61 @@ func _is_candidate(q: int, r: int, biome: Biome) -> bool:
 			if nh < my or (nh == my and (nr < r or (nr == r and nq < q))):
 				return false
 	return true
+
+
+## Score each entry at (q, r) and return the sorted index list, best-first.
+## Separated out so the diversity pass below can reach into the top-2 cheaply.
+func _ranked_indices(q: int, r: int, choices: Array) -> Array:
+	var scored: Array = []
+	for i in range(choices.size()):
+		var w := float(choices[i].get("weight", 1.0))
+		var s := _roll01(q, r, "p%d" % i) * w
+		scored.append([s, i])
+	scored.sort_custom(func(a, b): return a[0] > b[0])
+	var out: Array = []
+	for s in scored:
+		out.append(int(s[1]))
+	return out
+
+
+## Diversity-aware pick: start with the max-score entry, but demote it if a nearby
+## candidate neighbour would independently pick the same index.
+##
+## "Nearby" = within _diversity_radius hexes AND itself a successful feature
+## candidate (passes density + Poisson spacing). "Independently pick the same" =
+## top-1 index matches ours. We only yield when (nr, nq) < (r, q), so the ownership
+## is deterministic — the first-ordered candidate keeps its pick, later candidates
+## shift to top-2 (and top-3, if two neighbours already own both). This breaks the
+## 6-identical-building-in-a-strip pattern without needing global state.
+func _pick_idx(q: int, r: int, choices: Array, biome: Biome) -> int:
+	var ranks := _ranked_indices(q, r, choices)
+	if ranks.is_empty(): return -1
+	# Track how many "owner" neighbours exist for each tier so we can skip past them.
+	var skip_tier := 0
+	var R := _diversity_radius
+	for dq in range(-R, R + 1):
+		var lo := maxi(-R, -dq - R)
+		var hi := mini(R, -dq + R)
+		for dr in range(lo, hi + 1):
+			if dq == 0 and dr == 0: continue
+			var nq := q + dq
+			var nr := r + dr
+			# Only neighbours with the same catalog shape matter — different biome
+			# feature pools can repeat an id without visual clustering because the
+			# surrounding tiles differ.
+			var nbt := biome.biome_at(nq, nr)
+			var npool: Array = _catalog.get(nbt, [])
+			if npool.is_empty(): continue
+			if not _passes_density(nq, nr, nbt): continue
+			# Older neighbours (lower (nr, nq)) hold onto their picks; we yield.
+			if not (nr < r or (nr == r and nq < q)): continue
+			# Compute the neighbour's top-1 if we share a catalog; otherwise ids
+			# differ and the diversity check doesn't apply.
+			if npool != choices: continue
+			var n_rank: int = _ranked_indices(nq, nr, npool)[0] if not npool.is_empty() else -1
+			if n_rank == ranks[skip_tier] and skip_tier + 1 < ranks.size():
+				skip_tier += 1
+	return ranks[skip_tier]
 
 
 ## {path, label, kind, biome, id} for a feature on (q, r), or {} if none.

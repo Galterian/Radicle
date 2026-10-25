@@ -21,6 +21,31 @@ export const BIOMES = [
   'water', 'lava', 'caverns',
 ];
 
+// Fallback flat-poly colours used when the matching terrain PNG hasn't loaded
+// yet (or at all). Mirrors the `fill` key for each biome in
+// assets/terrain/terrain_tiles.json so the raw outline doesn't flash plain
+// black during asset load.
+export const BIOME_FILL = {
+  grass:         '#2d4a26',
+  high_grass:    '#243d1f',
+  grass_coast:   '#3a4e2e',
+  dirt:          '#4a3e26',
+  high_dirt:     '#3d321f',
+  desert:        '#b89a5d',
+  desert_cliffs: '#8a6a3a',
+  snow:          '#d9e6ea',
+  snow_coast:    '#b9c9d0',
+  rock:          '#555b64',
+  rock_coast:    '#6a6e74',
+  rock_cliffs:   '#3f444a',
+  mountains:     '#4a4e55',
+  jungle:        '#1f3a1b',
+  marsh:         '#324a30',
+  water:         '#204a66',
+  lava:          '#8a2e14',
+  caverns:       '#1b1a22',
+};
+
 const UNWALKABLE = new Set(['water', 'lava', 'mountains', 'rock_cliffs', 'desert_cliffs']);
 export const isWalkable = (biome) => !UNWALKABLE.has(biome);
 
@@ -102,4 +127,16 @@ export function createBiome(seedHex) {
   }
 
   return { seedHex, heatBias, wetBias, sample, biomeAt, isWalkable: (q, r) => isWalkable(biomeAt(q, r)) };
+}
+
+// Memoised per-seed biome. Features and scatter both need to know a hex's
+// biome type dozens of times per frame; recomputing the heat/wet bias on each
+// call would waste work. One biome instance per dim seed is kept forever
+// (seeds change rarely — only when the player enters a new dimension — and
+// the memoisation is just a Map of seed→biome).
+const _biomes = new Map();
+export function biomeFor(seedHex) {
+  let b = _biomes.get(seedHex);
+  if (!b) { b = createBiome(seedHex); _biomes.set(seedHex, b); }
+  return b;
 }

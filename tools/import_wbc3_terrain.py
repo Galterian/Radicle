@@ -11,25 +11,26 @@ from PIL import Image, ImageDraw
 
 
 def _hex_mask(w, h):
-    """Flat-top hex alpha mask sized (w, h) — matches Hex.gd (HEX_SIZE=46, H_SQUASH=0.72)
-    with aspect 92:57 ≈ 1.6. Opaque inside the hex, 0 outside, 2px soft edge."""
+    """Flat-top hex alpha mask with a WIDE radial feather so adjacent-biome tiles
+    visually bleed into each other, eliminating hex-step edges where the authored
+    transition catalog has gaps (e.g., snow->jungle). Multi-ring polygon fill
+    approximates a radial gradient at import time (no runtime shader)."""
     import math
     m = Image.new("L", (w, h), 0)
     cx, cy = w / 2, h / 2
-    # Flat-top hex matching Hex.gd: width = 2*HEX_SIZE, height = 2*HEX_SIZE*H_SQUASH.
-    # Aspect ry/rx = H_SQUASH = 0.72 → for a 320-wide tile, ry ≈ 115.
     rx = w * 0.50
     ry = rx * 0.72
     pts = []
     for i in range(6):
         a = i * math.pi / 3   # flat-top: start at EAST, step 60°
         pts.append((cx + rx * math.cos(a), cy + ry * math.sin(a)))
-    # Draw a larger soft hex first, then the opaque inner hex.
-    big = [(cx + (p[0] - cx) * 1.10, cy + (p[1] - cy) * 1.10) for p in pts]
-    ImageDraw.Draw(m).polygon(big, fill=120)
-    mid = [(cx + (p[0] - cx) * 1.05, cy + (p[1] - cy) * 1.05) for p in pts]
-    ImageDraw.Draw(m).polygon(mid, fill=200)
-    ImageDraw.Draw(m).polygon(pts, fill=255)
+    # Painter's-algorithm radial feather: outer rings are light, inner is opaque.
+    # Each neighbour overlaps us by (scale-1.0) of a hex radius. Scale 1.18 → 18%
+    # bleed, so a dirt hex and a snow hex blur over a wide 36%-of-hex seam.
+    rings = [(1.18, 25), (1.14, 70), (1.10, 130), (1.06, 190), (1.03, 230), (1.00, 255)]
+    for scale, alpha in rings:
+        poly = [(cx + (p[0] - cx) * scale, cy + (p[1] - cy) * scale) for p in pts]
+        ImageDraw.Draw(m).polygon(poly, fill=alpha)
     return m
 
 CHAOS_ROOT   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

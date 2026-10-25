@@ -33,10 +33,13 @@ var _bounds: Dictionary = {}
 var biome: Biome                 # deterministic biome sampler for this dimension
 var features: Features           # deterministic feature placer (null if catalog missing)
 var scatter: Scatter             # deterministic scatter overlay placer (bonus WBC3 decorations)
+var bigfeature: BigFeature       # deterministic placer for rare 2x2-sized landmark features
 var _features_dirty := true
 var _features_cache: Array = []
 var _scatter_dirty := true
 var _scatter_cache: Array = []
+var _bigfeatures_dirty := true
+var _bigfeatures_cache: Array = []
 
 
 ## FNV-1a over the UTF-16 code units of `s` -> 32-bit unsigned (same arithmetic as JS).
@@ -82,6 +85,7 @@ func _init(dim_id: String = "Ashfall-Micro", blocks: Array = []) -> void:
 	biome = Biome.new(seed_hex)
 	features = Features.new(seed_hex)
 	scatter = Scatter.new(seed_hex)
+	bigfeature = BigFeature.new(seed_hex)
 	add_block(initial_block())
 	for b in blocks:
 		add_block(b)
@@ -109,6 +113,15 @@ func scatter_for_known() -> Array:
 		_scatter_cache = scatter.scatter_for(_tiles.values(), biome)
 		_scatter_dirty = false
 	return _scatter_cache
+
+
+## All big-feature landmarks inside the currently-known tiles.
+func bigfeatures_for_known() -> Array:
+	if bigfeature == null or biome == null: return []
+	if _bigfeatures_dirty:
+		_bigfeatures_cache = bigfeature.big_features_for(_tiles.values(), biome)
+		_bigfeatures_dirty = false
+	return _bigfeatures_cache
 
 
 ## Pick the nearest walkable hex within `max_radius` of (q, r). Returns the hex itself
@@ -190,6 +203,7 @@ func add_block(b: Dictionary) -> bool:
 			_bounds.max_r = maxi(_bounds.max_r, t.y)
 	_features_dirty = true
 	_scatter_dirty = true
+	_bigfeatures_dirty = true
 	return true
 
 
