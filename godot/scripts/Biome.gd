@@ -22,6 +22,31 @@ const PEAK := 0.90
 const BASE_SCALE := 0.07
 const DETAIL_SCALE := 0.17
 
+# Sub-biome structure (applied AFTER the Whittaker matrix picks a base biome).
+# Two extra independent noise channels break up long uniform regions the way real
+# WBC3 maps do: `ridge` grows snow-capped mountain clusters (with a rock rim)
+# inside cold/high regions, `lake` carves lakes (with a shore ring and the
+# occasional isle) into lowlands. Finer lattice than the base channels so a
+# ~700-hex reveal sees several of them. Measured percentiles of the raw channel:
+# 0.70 = top 15%, 0.77 = top 7%, 0.80 = top 5%, 0.88 = top 1%.
+# Mirror of game/js/biome.js — constants and branch order must stay identical.
+const SUB_BASE_SCALE := 0.18
+const SUB_DETAIL_SCALE := 0.42
+const SUB_CONTRAST := 1.0
+const RIDGE_MOUNTAIN := 0.80
+const RIDGE_FOOTHILL := 0.70
+const LAKE_WATER := 0.80
+const LAKE_SHORE := 0.77
+const LAKE_ISLE := 0.88
+const RIDGE_BIOMES := ["snow", "rock", "high_dirt", "high_grass", "grass"]
+const SHORE_OF := {
+	"grass": "grass_coast", "high_grass": "grass_coast", "grass_coast": "grass_coast",
+	"marsh": "grass_coast", "jungle": "grass_coast",
+	"snow": "snow_coast", "snow_coast": "snow_coast",
+	"dirt": "rock_coast", "high_dirt": "rock_coast", "desert": "rock_coast",
+	"rock": "rock_coast", "rock_coast": "rock_coast",
+}
+
 var seed_hex: String
 var heat_bias: float = 0.0
 var wet_bias: float = 0.0
@@ -72,6 +97,22 @@ static func _fbm(seed_hex: String, qf: float, rf: float, salt: String) -> float:
 	return clampf(v / 1.5, 0.0, 1.0)
 
 
+# Finer-lattice FBM for the ridge / lake sub-biome channels. Mirror of biome.js fbmSub.
+static func _fbm_sub(seed_hex: String, qf: float, rf: float, salt: String) -> float:
+	var v := _value_noise(seed_hex, qf * SUB_BASE_SCALE, rf * SUB_BASE_SCALE, salt)
+	v += 0.5 * _value_noise(seed_hex, qf * SUB_DETAIL_SCALE, rf * SUB_DETAIL_SCALE, salt + ".d")
+	return clampf((v / 1.5 - 0.5) * SUB_CONTRAST + 0.5, 0.0, 1.0)
+
+
+## Sample the two sub-biome channels for a hex: {ridge, lake} in [0, 1].
+func sample_sub(q: int, r: int) -> Dictionary:
+	var qf := float(q)
+	var rf := float(r)
+	var ridge := _fbm_sub(seed_hex, qf + 3000.0, rf + 3000.0, "r")
+	var lake := _fbm_sub(seed_hex, qf - 3000.0, rf + 3000.0, "l")
+	return {"ridge": ridge, "lake": lake}
+
+
 ## Sample all three channels for a hex. Public so the renderer can tint by elevation
 ## or do its own weighting if desired.
 func sample(q: int, r: int) -> Dictionary:
@@ -89,10 +130,30 @@ func sample(q: int, r: int) -> Dictionary:
 ## biome at a hex boundary, so neighbours overwhelmingly agree.
 func biome_at(q: int, r: int) -> String:
 	var s := sample(q, r)
-	var e: float = s.elev
-	var m: float = s.moist
-	var t: float = s.temp
+	var base := base_biome(s.elev, s.moist, s.temp)
+	var sub := sample_sub(q, r)
+	var ridge: float = sub.ridge
+	var lake: float = sub.lake
+	# --- mountains inside cold / high regions (rock rim inside snow) ---
+	if base in RIDGE_BIOMES:
+		if ridge > RIDGE_MOUNTAIN: return "mountains"
+		if base == "snow" and ridge > RIDGE_FOOTHILL: return "rock"
+	# --- lakes inside lowlands: shore ring, water, isle ---
+	if s.elev < HIGHLAND and is_walkable(base) and SHORE_OF.has(base):
+		if lake > LAKE_ISLE: return base
+		if lake > LAKE_WATER: return "water"
+		if lake > LAKE_SHORE: return SHORE_OF[base]
+	return base
 
+
+static func is_walkable(biome_type: String) -> bool:
+	match biome_type:
+		"water", "lava", "mountains", "rock_cliffs", "desert_cliffs": return false
+		_: return true
+
+
+## The Whittaker-matrix pick before the ridge / lake overlays. Mirror of biome.js baseBiome.
+func base_biome(e: float, m: float, t: float) -> String:
 	# --- water / coast ---
 	if e < WATER_LEVEL:
 		if t > 0.78 and e < WATER_LEVEL - 0.03:

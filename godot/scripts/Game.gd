@@ -120,6 +120,7 @@ func _ready() -> void:
 
 	hud = Hud.new()
 	hud.name = "Hud"
+	hud.dl = dl
 	add_child(hud)
 	hud.slot_pressed.connect(_pick_slot)
 	hud.lock_pressed.connect(_lock)
@@ -579,15 +580,49 @@ func _lock() -> void:
 	_refresh_hand()
 
 
-func _on_hex_clicked(h: Vector2i, button: int) -> void:
-	if phase != "planning" or locked:
-		return
+## Map object (building / scatter / landmark) on a hex, with its `desc` filled in, or {}.
+## Buildings win over landmarks, landmarks over small scatter — same stacking as the layers.
+func object_at(h: Vector2i) -> Dictionary:
+	if not gen.has(h):
+		return {}
+	var obj: Dictionary = gen.feature_at(h.x, h.y)
+	if obj.is_empty() and gen.bigfeature != null and gen.biome != null:
+		obj = gen.bigfeature.big_feature_at(h.x, h.y, gen.biome)
+	if obj.is_empty() and gen.scatter != null and gen.biome != null:
+		obj = gen.scatter.scatter_at(h.x, h.y, gen.biome)
+	if obj.is_empty():
+		return {}
+	obj = obj.duplicate()
+	if str(obj.get("desc", "")) == "":
+		obj["desc"] = RulesText.object_desc(obj)
+	return obj
+
+
+## Show (or hide) the HUD object card for whatever sits on `h`. Returns true if a card is shown.
+func inspect_hex(h: Vector2i) -> bool:
+	var obj := object_at(h)
+	hud.show_object_card(obj, h)
+	return not obj.is_empty()
+
+
+## True when `h` is a sensible target for the chosen card: A/M/EM aimed at another
+## known, walkable hex (far targets are fine — the path is cut to the card's budget).
+func _is_card_target(h: Vector2i) -> bool:
+	if phase != "planning" or locked or chosen < 0 or chosen >= hand.size():
+		return false
 	var p := player_entity()
-	if p == null:
-		return
+	if p == null or h == p.hex:
+		return false
+	var code := str(hand[chosen])
+	if not code in ["A", "M", "EM"]:
+		return false
+	return gen.terrain_at(h.x, h.y).walkable or entity_at(h) != null
+
+
+func _on_hex_clicked(h: Vector2i, button: int) -> void:
 	if button == MOUSE_BUTTON_RIGHT:
 		# discard the chosen card once per round -> redraw a random one
-		if chosen >= 0 and not discarded:
+		if phase == "planning" and not locked and chosen >= 0 and not discarded and player_entity() != null:
 			discarded = true
 			var pool := ["A", "B", "M", "P", "EM", "EP"]
 			hand[chosen] = pool[rng.randi_range(0, pool.size() - 1)]
@@ -598,17 +633,22 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 			_refresh_hand()
 		return
 	if not gen.has(h):
+		hud.hide_object_card()
 		return
-	if chosen < 0:
-		# clicking a friendly entity re-selects it in the HUD
+	if not _is_card_target(h):
+		# Not a targeting click: an entity re-selects it in the HUD, an object opens
+		# its info card, bare ground closes any open card.
 		var e := entity_at(h)
 		if e != null:
+			hud.hide_object_card()
 			hud.set_entity(e)
 			e.play_sound("select")
+			return
+		inspect_hex(h)
 		return
+	hud.hide_object_card()
+	var p := player_entity()
 	var code := str(hand[chosen])
-	if code in ["B", "EP"]:
-		return
 	target_hex = h
 	var blocked := blocked_map(p)
 	var path := Pathfinding.find_path(p.hex, h, blocked, func(x): return gen.has(x))
@@ -630,10 +670,17 @@ func _on_hex_hovered(h: Vector2i) -> void:
 	var s := "%s · %s" % [Hex.key_of(h), terr.type]
 	if e != null:
 		s += " · %s (%d/%d)" % [e.display_name, e.life, e.life_max]
+	var obj := object_at(h)
+	if not obj.is_empty():
+		s += " · %s" % str(obj.get("label", obj.get("id", "")))
 	hud.set_hover(s)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		if hud.object_card_visible():
+			hud.hide_object_card()
+			return
 	for i in range(5):
 		if event.is_action_pressed("hand_%d" % (i + 1)):
 			_pick_slot(i)

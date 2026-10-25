@@ -1,21 +1,32 @@
 {
   "_comment": "Big (multi-hex-looking) landmark features \u2014 forests, boulder clusters, ruins, pine stands. Scaled ~2 hex widths wide by BigFeatureLayer so each sprite visually anchors a region. Deterministic from (dim_seed, q, r); min_separation keeps them a visible landmark, not wallpaper.",
-  "min_separation": 6,
+  "min_separation": 5,
+  "min_separation_by_biome": {
+    "grass": 0,
+    "high_grass": 0,
+    "jungle": 0,
+    "snow": 0,
+    "marsh": 2,
+    "grass_coast": 2,
+    "dirt": 3,
+    "desert": 3,
+    "snow_coast": 3
+  },
   "density": {
-    "grass": 0.025,
-    "high_grass": 0.025,
-    "grass_coast": 0.015,
-    "dirt": 0.022,
-    "high_dirt": 0.02,
-    "desert": 0.02,
+    "grass": 0.16,
+    "high_grass": 0.16,
+    "grass_coast": 0.06,
+    "dirt": 0.035,
+    "high_dirt": 0.03,
+    "desert": 0.03,
     "desert_cliffs": 0.0,
-    "snow": 0.025,
-    "snow_coast": 0.018,
-    "rock": 0.022,
-    "rock_coast": 0.015,
+    "snow": 0.12,
+    "snow_coast": 0.05,
+    "rock": 0.025,
+    "rock_coast": 0.03,
     "rock_cliffs": 0.0,
-    "jungle": 0.03,
-    "marsh": 0.015,
+    "jungle": 0.18,
+    "marsh": 0.05,
     "mountains": 0.0,
     "water": 0.0,
     "lava": 0.0,
@@ -89,6 +100,48 @@
           "rock",
           "rock_coast"
         ]
+      },
+      {
+        "id": "wbc3/FPM2",
+        "label": "Deciduous tree",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm2.png",
+        "weight": 3,
+        "native_w": 240,
+        "native_h": 181,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FPM4",
+        "label": "Deciduous tree (broad)",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm4.png",
+        "weight": 3,
+        "native_w": 208,
+        "native_h": 146,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FGM9",
+        "label": "Mossy fallen log",
+        "path": "assets/terrain_bigfeatures/mossy_fallen_log_fgm9.png",
+        "weight": 1,
+        "native_w": 216,
+        "native_h": 150,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle",
+          "marsh"
+        ]
       }
     ],
     "high_grass": [
@@ -158,6 +211,48 @@
           "rock",
           "rock_coast"
         ]
+      },
+      {
+        "id": "wbc3/FPM2",
+        "label": "Deciduous tree",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm2.png",
+        "weight": 3,
+        "native_w": 240,
+        "native_h": 181,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FPM4",
+        "label": "Deciduous tree (broad)",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm4.png",
+        "weight": 3,
+        "native_w": 208,
+        "native_h": 146,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FGM9",
+        "label": "Mossy fallen log",
+        "path": "assets/terrain_bigfeatures/mossy_fallen_log_fgm9.png",
+        "weight": 1,
+        "native_w": 216,
+        "native_h": 150,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle",
+          "marsh"
+        ]
       }
     ],
     "grass_coast": [
@@ -173,6 +268,34 @@
           "high_grass",
           "grass_coast",
           "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FPM2",
+        "label": "Deciduous tree",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm2.png",
+        "weight": 3,
+        "native_w": 240,
+        "native_h": 181,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FSH0",
+        "label": "Shipwreck",
+        "path": "assets/terrain_bigfeatures/shipwreck_large_fsh0.png",
+        "weight": 1,
+        "native_w": 432,
+        "native_h": 357,
+        "biomes": [
+          "grass_coast",
+          "rock_coast",
+          "snow_coast"
         ]
       }
     ],
@@ -227,6 +350,19 @@
           "rock",
           "rock_coast",
           "desert"
+        ]
+      },
+      {
+        "id": "wbc3/FTB4",
+        "label": "Bare dead tree",
+        "path": "assets/terrain_bigfeatures/bare_dead_tree_ftb4.png",
+        "weight": 2,
+        "native_w": 256,
+        "native_h": 143,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "marsh"
         ]
       }
     ],
@@ -306,6 +442,19 @@
           "desert",
           "high_dirt"
         ]
+      },
+      {
+        "id": "wbc3/FTB4",
+        "label": "Bare dead tree",
+        "path": "assets/terrain_bigfeatures/bare_dead_tree_ftb4.png",
+        "weight": 2,
+        "native_w": 256,
+        "native_h": 143,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "marsh"
+        ]
       }
     ],
     "desert": [
@@ -359,6 +508,18 @@
           "desert",
           "high_dirt"
         ]
+      },
+      {
+        "id": "wbc3/FDP5",
+        "label": "Palm tree cluster (alt)",
+        "path": "assets/terrain_bigfeatures/palm_tree_cluster_fdp5.png",
+        "weight": 3,
+        "native_w": 352,
+        "native_h": 210,
+        "biomes": [
+          "desert",
+          "jungle"
+        ]
       }
     ],
     "desert_cliffs": [],
@@ -398,6 +559,43 @@
           "snow",
           "snow_coast"
         ]
+      },
+      {
+        "id": "wbc3/FPB2",
+        "label": "Snow pine",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_fpb2.png",
+        "weight": 3,
+        "native_w": 200,
+        "native_h": 170,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FPB3",
+        "label": "Snow pine (tall)",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_fpb3.png",
+        "weight": 3,
+        "native_w": 168,
+        "native_h": 157,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FRP0",
+        "label": "Snow-covered rock pile",
+        "path": "assets/terrain_bigfeatures/snow_covered_rock_pile_frp0.png",
+        "weight": 1,
+        "native_w": 160,
+        "native_h": 104,
+        "biomes": [
+          "snow",
+          "snow_coast",
+          "rock"
+        ]
       }
     ],
     "snow_coast": [
@@ -434,6 +632,56 @@
         "native_h": 218,
         "biomes": [
           "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FPB2",
+        "label": "Snow pine",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_fpb2.png",
+        "weight": 3,
+        "native_w": 200,
+        "native_h": 170,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FPB3",
+        "label": "Snow pine (tall)",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_fpb3.png",
+        "weight": 3,
+        "native_w": 168,
+        "native_h": 157,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FRP0",
+        "label": "Snow-covered rock pile",
+        "path": "assets/terrain_bigfeatures/snow_covered_rock_pile_frp0.png",
+        "weight": 1,
+        "native_w": 160,
+        "native_h": 104,
+        "biomes": [
+          "snow",
+          "snow_coast",
+          "rock"
+        ]
+      },
+      {
+        "id": "wbc3/FSH0",
+        "label": "Shipwreck",
+        "path": "assets/terrain_bigfeatures/shipwreck_large_fsh0.png",
+        "weight": 1,
+        "native_w": 432,
+        "native_h": 357,
+        "biomes": [
+          "grass_coast",
+          "rock_coast",
           "snow_coast"
         ]
       }
@@ -480,6 +728,19 @@
           "rock_coast",
           "desert"
         ]
+      },
+      {
+        "id": "wbc3/FRP0",
+        "label": "Snow-covered rock pile",
+        "path": "assets/terrain_bigfeatures/snow_covered_rock_pile_frp0.png",
+        "weight": 1,
+        "native_w": 160,
+        "native_h": 104,
+        "biomes": [
+          "snow",
+          "snow_coast",
+          "rock"
+        ]
       }
     ],
     "rock_coast": [
@@ -510,6 +771,19 @@
           "rock",
           "rock_coast",
           "desert"
+        ]
+      },
+      {
+        "id": "wbc3/FSH0",
+        "label": "Shipwreck",
+        "path": "assets/terrain_bigfeatures/shipwreck_large_fsh0.png",
+        "weight": 1,
+        "native_w": 432,
+        "native_h": 357,
+        "biomes": [
+          "grass_coast",
+          "rock_coast",
+          "snow_coast"
         ]
       }
     ],
@@ -553,6 +827,60 @@
           "desert",
           "jungle"
         ]
+      },
+      {
+        "id": "wbc3/FPM2",
+        "label": "Deciduous tree",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm2.png",
+        "weight": 3,
+        "native_w": 240,
+        "native_h": 181,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FPM4",
+        "label": "Deciduous tree (broad)",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm4.png",
+        "weight": 3,
+        "native_w": 208,
+        "native_h": 146,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FGM9",
+        "label": "Mossy fallen log",
+        "path": "assets/terrain_bigfeatures/mossy_fallen_log_fgm9.png",
+        "weight": 1,
+        "native_w": 216,
+        "native_h": 150,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FDP5",
+        "label": "Palm tree cluster (alt)",
+        "path": "assets/terrain_bigfeatures/palm_tree_cluster_fdp5.png",
+        "weight": 3,
+        "native_w": 352,
+        "native_h": 210,
+        "biomes": [
+          "desert",
+          "jungle"
+        ]
       }
     ],
     "marsh": [
@@ -576,6 +904,48 @@
         "weight": 2,
         "native_w": 240,
         "native_h": 189,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FPM2",
+        "label": "Deciduous tree",
+        "path": "assets/terrain_bigfeatures/deciduous_tree_fpm2.png",
+        "weight": 3,
+        "native_w": 240,
+        "native_h": 181,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FGM9",
+        "label": "Mossy fallen log",
+        "path": "assets/terrain_bigfeatures/mossy_fallen_log_fgm9.png",
+        "weight": 1,
+        "native_w": 216,
+        "native_h": 150,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FTB4",
+        "label": "Bare dead tree",
+        "path": "assets/terrain_bigfeatures/bare_dead_tree_ftb4.png",
+        "weight": 2,
+        "native_w": 256,
+        "native_h": 143,
         "biomes": [
           "dirt",
           "high_dirt",

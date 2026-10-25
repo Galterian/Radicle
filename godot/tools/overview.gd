@@ -72,7 +72,11 @@ func _init() -> void:
 	var zoom := minf(viewport.x / span_x, viewport.y / span_y)
 	zoom = clampf(zoom, 0.08, 0.9)
 	node.cam.follow = null
+	node.cam.position_smoothing_enabled = false
 	node.cam.position = centre
+	# CameraRig._process lerps zoom back toward its own _target_zoom every frame,
+	# so set that too or the overview snaps back to the default 1.0 zoom.
+	node.cam._target_zoom = zoom
 	node.cam.zoom = Vector2(zoom, zoom)
 	for i in range(30): await process_frame
 
@@ -85,8 +89,42 @@ func _init() -> void:
 	var line := ""
 	for k in biomes: line += "%s:%d  " % [k, biome_cnt[k]]
 	print("  biomes: " + line)
-	print("  features: %d" % node.gen.features_for_known().size())
-	print("  big features: %d" % node.gen.bigfeatures_for_known().size())
+	# Sub-biome structure: how much of the reveal is lake/sea vs mountain, and how
+	# many of the water hexes are *lakes* carved by the lake channel rather than the
+	# base elevation sea. Lets a threshold change be judged from the log alone.
+	var water_n := int(biome_cnt.get("water", 0))
+	var lake_n := 0
+	var mount_n := int(biome_cnt.get("mountains", 0))
+	var shore_n := int(biome_cnt.get("grass_coast", 0)) + int(biome_cnt.get("snow_coast", 0)) + int(biome_cnt.get("rock_coast", 0))
+	var bad_adj := 0
+	for h in node.gen.tiles():
+		var t: String = node.gen.biome.biome_at(h.x, h.y)
+		if t == "water":
+			var s = node.gen.biome.sample(h.x, h.y)
+			if node.gen.biome.base_biome(s.elev, s.moist, s.temp) != "water":
+				lake_n += 1
+		if t == "snow" or t == "snow_coast":
+			for n in Hex.neighbours(h):
+				var nt: String = node.gen.biome.biome_at(n.x, n.y)
+				if nt == "jungle" or nt == "marsh":
+					bad_adj += 1
+	print("  water: %d (lake-carved %d)  mountains: %d  shore: %d  snow<->jungle/marsh edges: %d" % [water_n, lake_n, mount_n, shore_n, bad_adj])
+	# Feature breakdown by kind, and big features split into forest (tree/pine/palm/log
+	# sprites) vs the rest (boulders, ruins, wrecks).
+	var kinds: Dictionary = {}
+	for f in node.gen.features_for_known():
+		var k: String = f.feature.get("kind", "building")
+		kinds[k] = int(kinds.get(k, 0)) + 1
+	var kl := ""
+	for k in kinds: kl += "%s:%d  " % [k, kinds[k]]
+	print("  features: %d  (%s)" % [node.gen.features_for_known().size(), kl.strip_edges()])
+	var forest_n := 0
+	var bigs: Array = node.gen.bigfeatures_for_known()
+	for bf in bigs:
+		var lbl: String = str(bf.big_feature.get("label", "")).to_lower()
+		if lbl.contains("tree") or lbl.contains("pine") or lbl.contains("palm") or lbl.contains("log"):
+			forest_n += 1
+	print("  big features: %d  (forest %d, other %d)" % [bigs.size(), forest_n, bigs.size() - forest_n])
 	print("  hexes: %d  heat=%+.2f  wet=%+.2f" % [node.gen.size(), node.gen.biome.heat_bias, node.gen.biome.wet_bias])
 
 	var img := get_root().get_viewport().get_texture().get_image()

@@ -109,6 +109,19 @@
     </div>
   </div>
 
+  <!-- Map-object info: left-click a hex holding a building / landmark / scatter
+       (and no unit) to open; Esc or a click elsewhere closes. -->
+  <div id="object-card" hidden>
+    <button type="button" class="oc-close" title="close (Esc)" aria-label="close">✕</button>
+    <img alt="">
+    <div class="oc-body">
+      <div class="oc-name"></div>
+      <div class="oc-kind"></div>
+      <div class="oc-desc"></div>
+      <div class="oc-coords"></div>
+    </div>
+  </div>
+
   <footer id="deck-bar" hidden>
     <div id="deck-row">
       <div id="slots">
@@ -117,7 +130,7 @@
         <div class="slot" data-slot="2"><div class="k">3</div><div class="card"></div></div>
         <div class="slot" data-slot="3"><div class="k">4</div><div class="card"></div></div>
         <div class="slot" data-slot="4"><div class="k">5</div><div class="card"></div></div>
-        <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">Empty</div><div class="cd">EP · EM if tile</div></div></div>
+        <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">Empty</div><div class="ds"></div><div class="cd">EP · EM if tile</div></div></div>
       </div>
       <aside id="deck-pile" title="deck remaining · discard pile">
         <div class="pile deck"><span class="pile-count" id="deck-count">0</span><span class="pile-label">deck</span></div>
@@ -125,7 +138,7 @@
       </aside>
     </div>
     <div id="hint">
-      <b>1-5</b> pick an action · <b>8</b> Empty · <b>Space</b> commit · <b>right-click a slot</b> to toggle discard · <b>left-click a hex</b> to focus / target an enemy for a queued Attack · <b>hold left &amp; drag</b> to pan the map (<b>C</b> recentres on you) · <b>wheel</b> zooms · <b>right-click a hex</b> to stage a move or journey toward it (second right-click or double-click commits) · <b>✦ skill</b> cards attach to the first matching action — Attack/Block skills are greyed out until you hold that card, Move/Posture skills can ride on Empty instead · <b>Battle trance</b>: pick one or two actions (Empty fills the rest) · the chip over a unit reads <code>[EM + A + ✦BT + ✦Po]</code> = its actions, then its skills (an unplayed trance option is in parentheses) · <b>M</b> mute · <b>G</b> hex coords
+      <b>1-5</b> pick an action · <b>8</b> Empty · <b>Space</b> commit · <b>right-click a slot</b> to toggle discard · <b>left-click a hex</b> to focus / target an enemy for a queued Attack (on a building or landmark it opens the object card; <b>Esc</b> closes) ·<b>hold left &amp; drag</b> to pan the map (<b>C</b> recentres on you) · <b>wheel</b> zooms · <b>right-click a hex</b> to stage a move or journey toward it (second right-click or double-click commits) · <b>✦ skill</b> cards attach to the first matching action — Attack/Block skills are greyed out until you hold that card, Move/Posture skills can ride on Empty instead · <b>Battle trance</b>: pick one or two actions (Empty fills the rest) · the chip over a unit reads <code>[EM + A + ✦BT + ✦Po]</code> = its actions, then its skills (an unplayed trance option is in parentheses) · <b>M</b> mute · <b>G</b> hex coords
     </div>
   </footer>
 

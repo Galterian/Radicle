@@ -109,10 +109,12 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 }
 
 /* Each slot is a portrait card. The top band carries the action code's color
-   and the big code glyph; the body carries the human name and card id. */
+   and the big code glyph; the body carries the human name, the always-visible
+   rule line (.ds — what the card does, ≤70 chars) and the card id. Slots are
+   wide rather than tall so the pinned deck bar grows by ~22px only. */
 .slot {
   position: relative;
-  width: 72px; height: 100px;
+  width: 118px; height: 122px;
   background: linear-gradient(180deg, #1a2230 0%, #10151e 100%);
   border: 1px solid #26303f; border-radius: 7px;
   padding: 0; cursor: pointer; user-select: none;
@@ -144,7 +146,13 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
   color: #e8ecf1; letter-spacing: 0.02em;
   text-shadow: 0 1px 2px #0008;
 }
-.slot .card .nm { font-weight: 600; color: #e8ecf1; font-size: 11px; }
+.slot .card .nm { font-weight: 600; color: #e8ecf1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Rule line: wraps to at most four lines, then clips. */
+.slot .card .ds {
+  margin-top: 3px; font-size: 9px; line-height: 1.3; color: #b6c3d6;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .slot .card .cd { color: #8aa0bf; font-size: 9px; margin-top: auto; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .02em; }
 
 /* Action-code accents — a top band plus a tinted border. */
@@ -168,6 +176,7 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 /* Skill cards: the band colour is the action they ride; the glyph gets a ✦. */
 .slot.skill .card::before { content: '✦' attr(data-code); font-size: 13px; }
 .slot.skill .card .nm { color: #d7cfff; }
+.slot.skill .card .ds { color: #c9bfff; }
 .slot.skill .card .cd { color: #a08eff; font-family: inherit; letter-spacing: 0; }
 .slot.queued-skill {
   border-color: #a08eff99;
@@ -268,4 +277,34 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #hover-card .hc-name { font-weight: 600; color: #e8ecf1; }
 #hover-card .hc-sub { color: #8aa0bf; margin-top: 2px; }
 #hover-card .hc-hp { color: #ffb0b0; margin-top: 4px; }
+/* Hovering a map object (building / landmark / scatter) reuses the card as a
+   compact one-liner: small square thumbnail, "Label · kind · biome", purpose. */
+#hover-card.object { align-items: center; max-width: 360px; }
+#hover-card.object img { width: 40px; height: 40px; object-fit: contain; object-position: 50% 50%; }
+#hover-card.object .hc-hp { color: #b6c3d6; margin-top: 2px; }
 #stage.over-unit { cursor: pointer; }
+#stage.over-object { cursor: help; }
+
+/* --- map-object info card (left-click a hex with a building and no unit) --- */
+#object-card {
+  position: fixed; z-index: 31; display: flex; gap: 10px; align-items: flex-start;
+  width: 300px; max-width: calc(100vw - 16px);
+  background: #0f131bf2; border: 1px solid #3a4a63; border-radius: 8px; padding: 10px 12px 10px 10px;
+  font-size: 11px; color: #dfe3e8; box-shadow: 0 10px 30px #000a, 0 0 0 1px #a08eff22;
+}
+#object-card[hidden] { display: none; }
+#object-card img {
+  flex: 0 0 auto; width: 96px; height: 96px; object-fit: contain; object-position: 50% 50%;
+  border-radius: 4px; background: #0b0d12; border: 1px solid #1a1f29; image-rendering: pixelated;
+}
+#object-card img[hidden] { display: none; }
+#object-card .oc-body { flex: 1 1 auto; min-width: 0; }
+#object-card .oc-name { font-weight: 600; font-size: 13px; color: #e8ecf1; padding-right: 18px; }
+#object-card .oc-kind { color: #8aa0bf; margin-top: 2px; text-transform: lowercase; }
+#object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; }
+#object-card .oc-coords { color: #6a7a92; margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
+#object-card .oc-close {
+  position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
+  border: 0; border-radius: 4px; background: transparent; color: #8aa0bf; cursor: pointer; font-size: 12px; line-height: 20px; padding: 0;
+}
+#object-card .oc-close:hover { background: #1a2230; color: #e8ecf1; }

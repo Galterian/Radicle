@@ -4,6 +4,7 @@ import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResou
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
+import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
 const ALLIANCE_COLOR = {
   'player':  '#6ad9ff',
@@ -58,7 +59,7 @@ export function createRenderer(canvas, state) {
   // Per-entity sprite animator (created lazily once the entity's resources
   // are known) + last drawn position, used to derive the facing direction.
   const anims = new Map();  // peerId -> { anim, sourceId, lastX, lastY, dir, wasDead }
-  loadFrames(); loadResources(); loadTerrain(); loadScatter(); loadFeatures();
+  loadFrames(); loadResources(); loadTerrain(); loadScatter(); loadBigFeatures(); loadFeatures();
   onAssetsChanged(() => render());    // repaint when a sheet / tile / json lands
   // Scatter and feature catalogs arrive asynchronously after the first render.
   // The tile cache keys off (mapVersion, seed) so a plain repaint wouldn't
@@ -67,6 +68,7 @@ export function createRenderer(canvas, state) {
   // because the lists already contain the item, just waiting on the image.
   let catalogEpoch = 0;
   onScatterChanged(() => { catalogEpoch++; render(); });
+  onBigFeaturesChanged(() => { catalogEpoch++; render(); });
   onFeaturesChanged(() => { catalogEpoch++; render(); });
 
   // Kills the player wants to see land: main.js calls renderer.trigger(peerId,
@@ -78,7 +80,7 @@ export function createRenderer(canvas, state) {
   // they stay in lock-step with the terrain pass; both are y-sorted (matching
   // Godot's ScatterLayer / FeatureLayer custom sort) so overlapping sprites
   // stack back-to-front correctly.
-  const tileCache = { version: -1, seed: null, epoch: -1, tiles: [], frontier: [], scatter: [], features: [] };
+  const tileCache = { version: -1, seed: null, epoch: -1, tiles: [], frontier: [], scatter: [], bigfeatures: [], features: [] };
   function tilesFor(map, version) {
     if (tileCache.version !== version || tileCache.seed !== map.seed || tileCache.epoch !== catalogEpoch) {
       tileCache.version = version;
@@ -99,10 +101,13 @@ export function createRenderer(canvas, state) {
       // functions of (seed, q, r) so the only time they can change is when
       // more hexes are revealed (which bumps mapVersion).
       tileCache.scatter = [];
+      tileCache.bigfeatures = [];
       tileCache.features = [];
       for (const t of tileCache.tiles) {
         const s = scatterAt(map.seed, t.q, t.r);
         if (s) tileCache.scatter.push({ q: t.q, r: t.r, x: t.x, y: t.y, s });
+        const b = bigFeatureAt(map.seed, t.q, t.r);
+        if (b) tileCache.bigfeatures.push({ q: t.q, r: t.r, x: t.x, y: t.y, b });
         const f = featureAt(map.seed, t.q, t.r);
         if (f) tileCache.features.push({ q: t.q, r: t.r, x: t.x, y: t.y, f });
       }
@@ -344,7 +349,8 @@ export function createRenderer(canvas, state) {
     // Match ScatterLayer.gd's sizing: target height ≈ 0.55 hex with a small
     // hash-based jitter so overlays don't align into visible rows.
     const hexH = HEX_SIZE * 2 * H_SQUASH;
-    const { scatter: scatterItems, features: featureItems } = tileCache;
+    const hexW = Math.sqrt(3) * HEX_SIZE;
+    const { scatter: scatterItems, bigfeatures: bigItems, features: featureItems } = tileCache;
     for (const it of scatterItems) {
       if (!inView(it.x, it.y)) continue;
       const tex = scatterImage(it.s.path);
@@ -359,6 +365,25 @@ export function createRenderer(canvas, state) {
       const scale = Math.min(0.9, Math.max(0.08, target / sy));
       const dw = sx * scale, dh = sy * scale;
       ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.15 + jy, dw, dh);
+    }
+
+    // Big features (forest clumps, boulder piles, ruins) — z-order 4 in Godot,
+    // between scatter and buildings so a tower never hides under a canopy.
+    // Sizing mirrors BigFeatureLayer.gd: ~2 hex widths wide, uniform scale
+    // clamped to [0.25, 1.4], base anchored just below the hex centre, with a
+    // small "bj" jitter so neighbouring trees never share a baseline exactly.
+    for (const it of bigItems) {
+      if (!inView(it.x, it.y, HEX_SIZE * 3)) continue;
+      const tex = bigFeatureImage(it.b.path);
+      if (!tex) continue;
+      const sx = tex.img.naturalWidth || 1;
+      const sy = tex.img.naturalHeight || 1;
+      const scale = Math.min(1.4, Math.max(0.25, (hexW * 2) / sx));
+      const dw = sx * scale, dh = sy * scale;
+      const h32 = hash32(`${state.map.seed}:bj:${it.q}:${it.r}`);
+      const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.22;
+      const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.15;
+      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.35 + jy, dw, dh);
     }
 
     // Features (buildings / permanents) — z-order 5 in Godot. Larger target

@@ -6,8 +6,8 @@ Terrain-Features sprite set (which already has proper alpha, unlike the TxF .bmp
 terrain tiles) and dropped into assets/terrain_bigfeatures/ alongside a catalog
 JSON consumed by godot/scripts/BigFeature.gd.
 
-We intentionally pick only ~15 (not all 60+ available) so the resulting map stays
-readable — big features should feel like landmarks, not wallpaper.
+We pick ~25 of the 60+ available: enough tree variety that a forest clump never
+repeats the same sprite twice in a row, while boulders/ruins stay rare landmarks.
 """
 import json
 import os
@@ -75,19 +75,58 @@ CURATED = [
     ("ruined_colonnade_fdm3.png",
         "DesertMisc/Ruined colonnade/Ruined colonnade - idle [FDM3].png",
         ["desert", "high_dirt"], 2, "Ruined colonnade"),
+    # --- extra forest strips so grass/jungle/snow regions can grow real woods ---
+    ("deciduous_tree_fpm2.png",
+        "GrassTrees/Deciduous tree/Deciduous tree - idle [fpm2].png",
+        ["grass", "high_grass", "grass_coast", "jungle", "marsh"], 3, "Deciduous tree"),
+    ("deciduous_tree_fpm4.png",
+        "GrassTrees/Deciduous tree/Deciduous tree - idle [FPM4].png",
+        ["grass", "high_grass", "jungle"], 3, "Deciduous tree (broad)"),
+    ("mossy_fallen_log_fgm9.png",
+        "GrassMisc/Mossy fallen log/Mossy fallen log - idle [FGM9].png",
+        ["grass", "high_grass", "jungle", "marsh"], 1, "Mossy fallen log"),
+    ("palm_tree_cluster_fdp5.png",
+        "DesertTrees/Palm tree cluster/Palm tree cluster - idle [FDP5].png",
+        ["desert", "jungle"], 3, "Palm tree cluster (alt)"),
+    ("snow_covered_pine_fpb2.png",
+        "SnowTrees/Snow-covered pine/Snow-covered pine - idle [FPB2].png",
+        ["snow", "snow_coast"], 3, "Snow pine"),
+    ("snow_covered_pine_fpb3.png",
+        "SnowTrees/Snow-covered pine/Snow-covered pine - idle [FPB3].png",
+        ["snow", "snow_coast"], 3, "Snow pine (tall)"),
+    ("snow_covered_rock_pile_frp0.png",
+        "SnowMisc/Snow-covered rock pile/Snow-covered rock pile - idle [FRP0].png",
+        ["snow", "snow_coast", "rock"], 1, "Snow-covered rock pile"),
+    ("bare_dead_tree_ftb4.png",
+        "DirtTrees/Bare dead tree/Bare dead tree - idle [FTB4].png",
+        ["dirt", "high_dirt", "marsh"], 2, "Bare dead tree"),
+    ("shipwreck_large_fsh0.png",
+        "OtherMisc/Shipwreck (large)/Shipwreck (large) - idle [FSH0].png",
+        ["grass_coast", "rock_coast", "snow_coast"], 1, "Shipwreck"),
 ]
 
 
-# Density per biome. Rare — big features should be visual landmarks, not wallpaper.
-# Numbers are matched up with min_separation=6 to average ~1 big feature per 50 hexes.
+# Density per biome. Forest biomes are dense (and pack with min_separation 1, see
+# MIN_SEP_BY_BIOME) so trees overlap into real woods; boulders/ruins stay rare
+# landmarks. BigFeature also multiplies by a grove noise field (0.15..1.8) so
+# the woods come in clumps of 3-6 trees with glades between.
 DENSITY = {
-    "grass": 0.025, "high_grass": 0.025, "grass_coast": 0.015,
-    "dirt": 0.022, "high_dirt": 0.02,
-    "desert": 0.02, "desert_cliffs": 0.0,
-    "snow": 0.025, "snow_coast": 0.018,
-    "rock": 0.022, "rock_coast": 0.015, "rock_cliffs": 0.0,
-    "jungle": 0.03, "marsh": 0.015,
+    "grass": 0.16, "high_grass": 0.16, "grass_coast": 0.06,
+    "dirt": 0.035, "high_dirt": 0.03,
+    "desert": 0.03, "desert_cliffs": 0.0,
+    "snow": 0.12, "snow_coast": 0.05,
+    "rock": 0.025, "rock_coast": 0.03, "rock_cliffs": 0.0,
+    "jungle": 0.18, "marsh": 0.05,
     "mountains": 0.0, "water": 0.0, "lava": 0.0, "caverns": 0.0,
+}
+
+# Poisson radius default is MIN_SEP; forest biomes use 0 (no spacing at all) so
+# neighbouring 2-hex-wide canopies overlap into a continuous wood inside a grove.
+MIN_SEP = 5
+MIN_SEP_BY_BIOME = {
+    "grass": 0, "high_grass": 0, "jungle": 0, "snow": 0,
+    "marsh": 2, "grass_coast": 2,
+    "dirt": 3, "desert": 3, "snow_coast": 3,
 }
 
 
@@ -140,7 +179,8 @@ def main() -> int:
             "sprite visually anchors a region. Deterministic from (dim_seed, q, r); "
             "min_separation keeps them a visible landmark, not wallpaper."
         ),
-        "min_separation": 6,
+        "min_separation": MIN_SEP,
+        "min_separation_by_biome": MIN_SEP_BY_BIOME,
         "density": DENSITY,
         "by_biome": by_biome,
     }
