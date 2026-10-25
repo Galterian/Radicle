@@ -111,6 +111,11 @@ func _draw() -> void:
 	tiles.sort_custom(func(a, b): return a.y < b.y or (a.y == b.y and a.x < b.x))
 	for t in tiles:
 		_draw_tile(t)
+	# Persistent hex grid overlay — faint so terrain still reads as continuous,
+	# but visible enough to anchor the gameplay interaction (movement, targeting).
+	for t in tiles:
+		var c := Hex.hex_to_pixel(t.x, t.y)
+		draw_polyline(_closed(Hex.corners(c, Hex.HEX_SIZE)), Color(0.0, 0.0, 0.0, 0.18), 1.0, true)
 	# Frontier (unknown neighbours of known hexes) as dashed outlines.
 	for f in gen.frontier():
 		var c := Hex.hex_to_pixel(f.x, f.y)

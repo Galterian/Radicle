@@ -99,6 +99,13 @@ export function createBiome(seedHex) {
     if (e < HIGHLAND) {
       if (t > 0.82 && m < 0.3) return 'lava';
       if (t < 0.28) return m > 0.3 ? 'snow' : 'snow_coast';
+      // Cool buffer (0.28..0.42): no jungle/marsh neighbours to snow since the
+      // archive has no snow<->jungle / snow<->marsh transition tiles.
+      if (t < 0.42) {
+        if (m < 0.3) return 'dirt';
+        if (m < 0.65) return 'grass';
+        return 'high_grass';
+      }
       if (t > 0.7) {
         if (m < 0.25) return 'desert';
         if (m < 0.55) return 'dirt';
@@ -112,6 +119,7 @@ export function createBiome(seedHex) {
     }
     if (e < ROUGH) {
       if (t < 0.3) return 'snow';
+      if (t < 0.45) return m < 0.3 ? 'high_dirt' : 'high_grass';
       if (m < 0.3) return 'high_dirt';
       if (m < 0.65) return 'high_grass';
       return t > 0.6 ? 'jungle' : 'marsh';
