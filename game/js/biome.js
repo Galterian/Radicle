@@ -11,6 +11,38 @@ export const PEAK = 0.90;
 export const BASE_SCALE = 0.07;
 export const DETAIL_SCALE = 0.17;
 
+// Sub-biome structure (applied AFTER the Whittaker matrix picks a base biome).
+// Two extra independent noise channels break up long uniform regions the way
+// real WBC3 maps do: `ridge` grows snow-capped mountain clusters (with a rock
+// rim) inside cold/high regions, `lake` carves lakes (with a shore ring and the
+// occasional isle) into lowlands. Both use a finer lattice than the base
+// channels so a ~700-hex reveal sees several of them. Measured percentiles of
+// the raw channel: 0.70 = top 15%, 0.77 = top 7%, 0.80 = top 5%, 0.88 = top 1%.
+// SUB_CONTRAST stretches the channel around 0.5 (1.0 = off) — kept as a single
+// knob so both runtimes can be retuned together.
+export const SUB_BASE_SCALE = 0.18;    // ~5.5 hexes per lattice step
+export const SUB_DETAIL_SCALE = 0.42;
+export const SUB_CONTRAST = 1.0;
+export const RIDGE_MOUNTAIN = 0.80;    // ridge above this -> mountains
+export const RIDGE_FOOTHILL = 0.70;    // ridge in [FOOTHILL, MOUNTAIN) inside snow -> rock rim
+export const LAKE_WATER = 0.80;        // lake above this -> water
+export const LAKE_SHORE = 0.77;        // lake in [SHORE, WATER) -> coast variant of the land biome
+export const LAKE_ISLE = 0.88;         // lake above this (inside a lake) -> the land biome again
+
+// Base biomes that can grow mountains. grass is deliberately included: the
+// archive's best-covered mountain transition set is grass<->mountains (18
+// tiles) and the reference screenshots show exactly that pairing.
+const RIDGE_BIOMES = new Set(['snow', 'rock', 'high_dirt', 'high_grass', 'grass']);
+// Shore ring variant per land biome. jungle/marsh shores read as grass_coast
+// (grass<->marsh 12 / grass<->jungle 14 transition tiles cover the seam).
+const SHORE_OF = {
+  grass: 'grass_coast', high_grass: 'grass_coast', grass_coast: 'grass_coast',
+  marsh: 'grass_coast', jungle: 'grass_coast',
+  snow: 'snow_coast', snow_coast: 'snow_coast',
+  dirt: 'rock_coast', high_dirt: 'rock_coast', desert: 'rock_coast',
+  rock: 'rock_coast', rock_coast: 'rock_coast',
+};
+
 export const BIOMES = [
   'grass', 'high_grass', 'grass_coast',
   'dirt', 'high_dirt',
@@ -51,7 +83,8 @@ export const isWalkable = (biome) => !UNWALKABLE.has(biome);
 
 const rand01 = (seed, ix, iy, salt) => hash32(`${seed}:${salt}:${ix}:${iy}`) / 4294967296;
 
-function valueNoise(seed, x, y, salt) {
+// Exported so bigfeature.js can share the lattice (mirrors Biome._value_noise).
+export function valueNoise(seed, x, y, salt) {
   const ix = Math.floor(x), iy = Math.floor(y);
   const fx = x - ix, fy = y - iy;
   const sx = fx * fx * (3 - 2 * fx);
@@ -71,6 +104,14 @@ function fbm(seed, qf, rf, salt) {
   return Math.min(1, Math.max(0, v / 1.5));
 }
 
+// Finer-lattice, contrast-stretched FBM for the ridge / lake sub-biome channels.
+// Mirror of Biome.gd._fbm_sub — same scales, same stretch, same clamp order.
+function fbmSub(seed, qf, rf, salt) {
+  const v = valueNoise(seed, qf * SUB_BASE_SCALE, rf * SUB_BASE_SCALE, salt)
+          + 0.5 * valueNoise(seed, qf * SUB_DETAIL_SCALE, rf * SUB_DETAIL_SCALE, salt + '.d');
+  return Math.min(1, Math.max(0, (v / 1.5 - 0.5) * SUB_CONTRAST + 0.5));
+}
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 export function createBiome(seedHex) {
@@ -85,8 +126,36 @@ export function createBiome(seedHex) {
     return { elev, moist, temp };
   }
 
+  // Sub-biome channels. Offsets decorrelate them from the base channels'
+  // lattice even though the salts already differ — mirrors Biome.gd exactly.
+  function sampleSub(q, r) {
+    const qf = q, rf = r;
+    const ridge = fbmSub(seedHex, qf + 3000, rf + 3000, 'r');
+    const lake  = fbmSub(seedHex, qf - 3000, rf + 3000, 'l');
+    return { ridge, lake };
+  }
+
+  // Final biome = base Whittaker pick, then the ridge / lake overlays. Order and
+  // thresholds must stay identical to Biome.gd.biome_at.
   function biomeAt(q, r) {
-    const { elev: e, moist: m, temp: t } = sample(q, r);
+    const s = sample(q, r);
+    const base = baseBiome(s.elev, s.moist, s.temp);
+    const { ridge, lake } = sampleSub(q, r);
+    // --- mountains inside cold / high regions (rock rim inside snow) ---
+    if (RIDGE_BIOMES.has(base)) {
+      if (ridge > RIDGE_MOUNTAIN) return 'mountains';
+      if (base === 'snow' && ridge > RIDGE_FOOTHILL) return 'rock';
+    }
+    // --- lakes inside lowlands: shore ring, water, isle ---
+    if (s.elev < HIGHLAND && isWalkable(base) && SHORE_OF[base]) {
+      if (lake > LAKE_ISLE) return base;
+      if (lake > LAKE_WATER) return 'water';
+      if (lake > LAKE_SHORE) return SHORE_OF[base];
+    }
+    return base;
+  }
+
+  function baseBiome(e, m, t) {
     if (e < WATER_LEVEL) {
       if (t > 0.78 && e < WATER_LEVEL - 0.03) return 'lava';
       return 'water';
@@ -134,7 +203,7 @@ export function createBiome(seedHex) {
     return t < 0.4 ? 'snow' : 'mountains';
   }
 
-  return { seedHex, heatBias, wetBias, sample, biomeAt, isWalkable: (q, r) => isWalkable(biomeAt(q, r)) };
+  return { seedHex, heatBias, wetBias, sample, sampleSub, baseBiome, biomeAt, isWalkable: (q, r) => isWalkable(biomeAt(q, r)) };
 }
 
 // Memoised per-seed biome. Features and scatter both need to know a hex's

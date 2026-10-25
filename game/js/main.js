@@ -6,6 +6,42 @@ import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
+import { featureAt } from './features.js';
+import { scatterAt } from './scatter.js';
+import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
+
+// Large multi-hex landmarks live in bigfeature.js, which another workstream is
+// still landing. Pull it in defensively: when the module (or its export) is
+// missing the object lookup simply skips that layer.
+let bigFeatureAt = null;
+import('./bigfeature.js').then(m => { if (typeof m?.bigFeatureAt === 'function') bigFeatureAt = m.bigFeatureAt; }).catch(() => { /* not landed yet */ });
+
+// Per-entry purpose text from the feature catalog (`desc` is being added to
+// assets/features/feature_table.json). featureAt() does not pass it through,
+// so read the table once more here and key it by entry id; until the catalog
+// carries descriptions KIND_DESC supplies a generic line per kind.
+const featureDescById = new Map();
+for (const url of ['/assets/features/feature_table.json', '/assets/terrain_bigfeatures/bigfeature_table.json', '/assets/terrain_scatter/scatter_table.json']) {
+  fetch(url).then(r => r.ok ? r.json() : null).then(j => {
+    const lists = [...Object.values(j?.by_biome || {}), j?.items].filter(Array.isArray);
+    for (const list of lists) for (const c of list) {
+      if (c && typeof c.desc === 'string' && c.desc.trim()) featureDescById.set(c.id || c.label, c.desc.trim());
+    }
+  }).catch(() => { /* table missing — generic kind text only */ });
+}
+
+// Skill rule text by skill id, straight from data/skills.json
+// (entries[].versions[0].data.text). Hand cards normally carry `text` already;
+// this is the fallback for peers that predate that field.
+const skillTextById = new Map();
+fetch('/data/skills.json').then(r => r.ok ? r.json() : null).then(j => {
+  for (const e of j?.entries || []) {
+    const t = e?.versions?.[0]?.data?.text;
+    if (e?.id && typeof t === 'string') skillTextById.set(e.id, t);
+  }
+}).catch(() => { /* no skills catalog */ });
+
+const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Unit voice lines / fx from the curated WBC3 collection. `M` toggles mute.
 const sounds = createSoundBank();
@@ -55,7 +91,7 @@ const state = {
   // list of hexes (step 1 … destination) the auto-walker will follow across
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0, showCoords: false, hoverPeerId: null },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0, showCoords: false, hoverPeerId: null, objectCard: null },
   // The dimension as this peer knows it: initial block + every revealed disc.
   // Replaced wholesale from the peer's `hello` / `map` messages; `mapVersion`
   // bumps so the renderer can rebuild its tile/frontier caches lazily.
@@ -417,8 +453,9 @@ function renderDeck() {
       cardDiv.dataset.code = code;
       const n = state.queued[0] === 'EMPTY' ? state.queuedSkills.length : 0;
       const sanct = code === 'EP' && !emptyIsSecond && inSanctuary();
-      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
-      slot.title = sanct ? 'Sanctuary: you take no damage while you rest in Empty Posture; any other action or skill ends it' : '';
+      const help = ACTION_HELP[emptyIsSecond ? 'EP' : code];
+      cardDiv.innerHTML = `<div class="nm">Empty${code === 'EM' ? ' Move' : ' Posture'}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
+      slot.title = (sanct ? 'Sanctuary: you take no damage while you rest in Empty Posture; any other action or skill ends it\n\n' : '') + (help?.full || '');
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
       slot.classList.toggle('queued-extra', emptyIsSecond);
       slot.classList.toggle('locked', state.locked && (state.queued[0] === 'EMPTY' || emptyIsSecond));
@@ -434,16 +471,20 @@ function renderDeck() {
       slot.dataset.code = band;
       cardDiv.dataset.code = band;
       const needs = isTrance(card) ? 'any action' : ridesOnEmpty(card) ? `${ACTION_SHORT[card.requires]} / Empty` : (ACTION_SHORT[card.requires] || card.requires);
-      cardDiv.innerHTML = `<div class="nm">✦ ${card.name}</div><div class="cd">needs ${needs}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
-      slot.title = card.text || card.name;
+      // Rule text on the card itself (data/skills.json text, ≤70 chars); the
+      // full sentence stays in the tooltip.
+      const text = card.text || skillTextById.get(card.skill_id) || (isTrance(card) ? ACTION_HELP.BT.full : '');
+      cardDiv.innerHTML = `<div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div><div class="ds">${escHtml(abbreviate(text, 70))}</div><div class="cd">needs ${needs}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
+      slot.title = text || card.name;
     } else if (card) {
       const code = card.code;
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
       const short = ACTION_SHORT[code] || card.action_name || code;
       const n = state.queued[0] === i ? state.queuedSkills.length : 0;
-      cardDiv.innerHTML = `<div class="nm">${short}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`;
-      slot.title = '';
+      const help = ACTION_HELP[code];
+      cardDiv.innerHTML = `<div class="nm">${escHtml(short)}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`;
+      slot.title = help?.full || '';
     } else {
       delete slot.dataset.code;
       delete cardDiv.dataset.code;
@@ -536,20 +577,83 @@ function renderHoverCard(clientX, clientY) {
   const pid = state.ui.hoverPeerId;
   const p = pid ? state.entities.find(e => e.peer_id === pid) : null;
   const res = p ? resOf(p) : null;
-  if (!p) { card.hidden = true; return; }
+  // No unit under the cursor: fall back to a one-line card for whatever map
+  // object sits on the hovered hex (building / landmark / scatter).
+  const obj = !p && state.ui.hoverTile ? objectAt(state.ui.hoverTile.q, state.ui.hoverTile.r) : null;
+  // The detail card already shows this object — no one-liner on top of it.
+  const detailOpen = obj && state.ui.objectCard && state.ui.objectCard.q === obj.q && state.ui.objectCard.r === obj.r;
+  if ((!p && !obj) || detailOpen) { card.hidden = true; return; }
   card.hidden = false;
+  card.classList.toggle('object', !!obj);
   const img = card.querySelector('img');
-  const src = res?.sprites?.info?.path ? assetUrl(res.sprites.info.path) : res?.portrait?.path ? assetUrl(res.portrait.path) : '';
+  const src = p
+    ? (res?.sprites?.info?.path ? assetUrl(res.sprites.info.path) : res?.portrait?.path ? assetUrl(res.portrait.path) : '')
+    : (assetUrl(obj.path) || '');
   if (img.getAttribute('src') !== src) img.src = src;
   img.hidden = !src;
-  card.querySelector('.hc-name').textContent = p.name;
-  card.querySelector('.hc-sub').textContent = res ? `${res._entryName || ''} · ${res.wbc3_name || ''}` : (p.source_id || '');
-  card.querySelector('.hc-hp').textContent = `hp ${p.life}/${p.life_max} · ${p.alliance}${p.life <= 0 ? ' · dead' : ''}`;
+  if (p) {
+    card.querySelector('.hc-name').textContent = p.name;
+    card.querySelector('.hc-sub').textContent = res ? `${res._entryName || ''} · ${res.wbc3_name || ''}` : (p.source_id || '');
+    card.querySelector('.hc-hp').textContent = `hp ${p.life}/${p.life_max} · ${p.alliance}${p.life <= 0 ? ' · dead' : ''}`;
+  } else {
+    card.querySelector('.hc-name').textContent = `${obj.label || obj.kind} · ${obj.kind}${obj.biome ? ` · ${obj.biome}` : ''} · (${obj.q},${obj.r})`;
+    card.querySelector('.hc-sub').textContent = abbreviate(obj.desc, 90);
+    card.querySelector('.hc-hp').textContent = 'click for details';
+  }
   if (Number.isFinite(clientX)) {
     const w = card.offsetWidth || 180, h = card.offsetHeight || 120;
     card.style.left = `${Math.min(window.innerWidth - w - 8, clientX + 16)}px`;
     card.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, clientY - h / 2))}px`;
   }
+}
+
+// --- map objects: what is on a hex and what it is for ---------------------
+// Layers in priority order: big landmark → building/permanent → scatter. Each
+// placer is a pure function of (dim seed, q, r); the catalogs load lazily, so
+// a hex can briefly report "nothing" right after connect. Returns
+// {label, kind, path, id, biome, desc, q, r} or null.
+function objectAt(q, r) {
+  if (!Number.isInteger(q) || !Number.isInteger(r) || !state.map.has(q, r)) return null;
+  const seed = state.map.seed;
+  let o = null;
+  if (bigFeatureAt) { try { o = bigFeatureAt(seed, q, r); } catch { o = null; } if (o && !o.kind) o = { ...o, kind: 'bigfeature' }; }
+  if (!o) o = featureAt(seed, q, r);
+  if (!o) o = scatterAt(seed, q, r);
+  if (!o) return null;
+  const kind = o.kind || 'building';
+  const desc = (typeof o.desc === 'string' && o.desc.trim()) || featureDescById.get(o.id) || featureDescById.get(o.label)
+    || KIND_DESC[kind] || KIND_DESC.building;
+  return { ...o, kind, desc, q, r };
+}
+
+function showObjectCard(obj, clientX, clientY) {
+  const card = document.getElementById('object-card');
+  if (!card || !obj) return;
+  const img = card.querySelector('img');
+  const src = assetUrl(obj.path) || '';
+  if (img.getAttribute('src') !== src) img.src = src;
+  img.hidden = !src;
+  img.alt = obj.label || obj.kind;
+  card.querySelector('.oc-name').textContent = obj.label || obj.kind;
+  card.querySelector('.oc-kind').textContent = `${obj.kind}${obj.family ? ` · ${obj.family}` : ''}${obj.biome ? ` · ${obj.biome}` : ''}`;
+  card.querySelector('.oc-desc').textContent = obj.desc;
+  card.querySelector('.oc-coords').textContent = `hex (${obj.q}, ${obj.r})${obj.id && obj.id !== obj.label ? ` · ${obj.id}` : ''}`;
+  card.hidden = false;
+  state.ui.objectCard = { q: obj.q, r: obj.r };
+  // Place beside the click, clamped to the viewport.
+  const w = card.offsetWidth || 300, h = card.offsetHeight || 140;
+  const x = Number.isFinite(clientX) ? clientX + 18 : window.innerWidth / 2 - w / 2;
+  const y = Number.isFinite(clientY) ? clientY - 24 : window.innerHeight / 2 - h / 2;
+  card.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, x))}px`;
+  card.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, y))}px`;
+  // The hover one-liner would sit on top of the detail card — drop it.
+  const hc = document.getElementById('hover-card');
+  if (hc) hc.hidden = true;
+}
+function hideObjectCard() {
+  const card = document.getElementById('object-card');
+  if (card && !card.hidden) card.hidden = true;
+  state.ui.objectCard = null;
 }
 
 // My permanents (Sanctuary, Barricade, …) as the peer broadcasts them.
@@ -955,8 +1059,18 @@ function wireInput() {
       slotEl.addEventListener('contextmenu', (e) => { e.preventDefault(); toggleDiscard(slotKey); });
     }
   });
+  // Object info card: ✕ button, Esc, or any click outside it (the canvas
+  // click handler below decides for itself — it re-opens on another object).
+  const objectCardEl = document.getElementById('object-card');
+  objectCardEl?.querySelector('.oc-close')?.addEventListener('click', hideObjectCard);
+  document.addEventListener('click', (ev) => {
+    if (!objectCardEl || objectCardEl.hidden) return;
+    if (objectCardEl.contains(ev.target) || ev.target === canvas) return;
+    hideObjectCard();
+  });
   window.addEventListener('keydown', (ev) => {
     uilog('keydown', { key: ev.key || ev.code });
+    if (ev.key === 'Escape') { hideObjectCard(); return; }
     if (ev.key >= '1' && ev.key <= '5') queueSlot(Number(ev.key) - 1);
     else if (ev.key === '8') queueSlot('EMPTY');
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
@@ -994,6 +1108,20 @@ function wireInput() {
     get myPeerId() { return state.myPeerId; },
   });
   rendererRef = renderer;
+  // Test hook (tools/ui-check.mjs): every known hex that carries a map object,
+  // with its current canvas-pixel position so a script can click it.
+  window.__chaosObjects = () => {
+    const o0 = renderer.toWorld(0, 0), z = renderer.zoom();
+    const out = [];
+    for (const t of state.map.tiles()) {
+      const obj = objectAt(t.q, t.r);
+      if (!obj) continue;
+      const w = renderer.tilePx(t.q, t.r);
+      const unit = state.entities.some(p => p.tile_q === t.q && p.tile_r === t.r && (p.life ?? 0) > 0);
+      out.push({ q: t.q, r: t.r, label: obj.label, kind: obj.kind, biome: obj.biome, unit, x: (w.x - o0.x) * z, y: (w.y - o0.y) * z });
+    }
+    return out;
+  };
   // "Ready" line once, when our own hero first shows up with art.
   let readyPlayed = false;
   onAssetsChanged(() => { heroCardKey = null; });
@@ -1004,9 +1132,10 @@ function wireInput() {
     const over = entityAtPixel(px, py, true);
     state.ui.hoverPeerId = over ? over.peer_id : null;
     canvas.classList.toggle('over-unit', !!over);
+    canvas.classList.toggle('over-object', !over && !!state.ui.hoverTile && !!objectAt(state.ui.hoverTile.q, state.ui.hoverTile.r));
     renderHoverCard(ev.clientX, ev.clientY);
   });
-  canvas.addEventListener('mouseleave', () => { state.ui.hoverPeerId = null; renderHoverCard(); });
+  canvas.addEventListener('mouseleave', () => { state.ui.hoverPeerId = null; state.ui.hoverTile = null; canvas.classList.remove('over-object'); renderHoverCard(); });
   // Pick the entity closest to the click if it's within one hex radius. The
   // comparison runs in world pixels (camera-independent). Using pixel distance
   // (not tile-equality) is more forgiving than requiring a bull's-eye on the
@@ -1035,8 +1164,12 @@ function wireInput() {
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = renderer.pickHex(px, py, knownHex);
     uilog('click', { tile: t, detail: `button=${ev.button}` });
-    if (!t) return;
+    if (!t) { hideObjectCard(); return; }
     const occupant = entityAtPixel(px, py);
+    // A hex holding a map object and no unit opens the object info card
+    // (units keep their hover/hero cards). Any other click closes it.
+    const obj = occupant ? null : objectAt(t.q, t.r);
+    if (obj) showObjectCard(obj, ev.clientX, ev.clientY); else hideObjectCard();
     // Left-click never stages a movement or journey — that's exclusively a
     // right-click gesture now. All left-click does is:
     //   - narrow the event log to the clicked entity (or clear the filter)

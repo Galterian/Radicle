@@ -11,10 +11,20 @@ extends RefCounted
 ## big_feature_at(q, r) is a pure function of (dim_seed, q, r, biome). Reveal grows
 ## the known map and new big features automatically appear.
 
+## Grove clumping: a coarse value-noise field (lattice ~4.5 hexes) multiplies the
+## per-biome density so trees gather into forest clumps of 3-6 with open glades
+## between, instead of an even Poisson sprinkle. Mirror of bigfeature.js.
+const GROVE_SCALE := 0.22
+const GROVE_MIN := 0.15
+const GROVE_MAX := 1.8
+const GROVE_GAIN := 3.0
+const GROVE_BIAS := 0.35
+
 var seed_hex: String
 var _catalog: Dictionary = {}         # biome -> Array[Dictionary]
 var _density: Dictionary = {}
 var _min_sep: int = 6
+var _min_sep_biome: Dictionary = {}   # optional per-biome override (forests pack tighter)
 var _loaded: bool = false
 
 
@@ -25,7 +35,18 @@ func _init(seed_hex_: String, catalog_path: String = "assets/terrain_bigfeatures
 		_catalog = cfg.get("by_biome", {})
 		_density = cfg.get("density", {})
 		_min_sep = int(cfg.get("min_separation", 6))
+		_min_sep_biome = cfg.get("min_separation_by_biome", {})
 		_loaded = true
+
+
+func _sep_for(biome_type: String) -> int:
+	return int(_min_sep_biome.get(biome_type, _min_sep))
+
+
+## Density multiplier in [GROVE_MIN, GROVE_MAX] from the grove noise field.
+func _grove_mult(q: int, r: int) -> float:
+	var g := Biome._value_noise(seed_hex, float(q) * GROVE_SCALE, float(r) * GROVE_SCALE, "g")
+	return clampf((g - GROVE_BIAS) * GROVE_GAIN, GROVE_MIN, GROVE_MAX)
 
 
 static func _h32(s: String) -> int:
@@ -43,18 +64,19 @@ func _roll01(q: int, r: int, salt: String) -> float:
 func _passes_density(q: int, r: int, biome_type: String) -> bool:
 	var d = float(_density.get(biome_type, 0.0))
 	if d <= 0: return false
-	return _roll01(q, r, "f") < d
+	return _roll01(q, r, "f") < d * _grove_mult(q, r)
 
 
 ## Nearest-wins Poisson spacing identical to Features.gd — the hex with the lowest
-## "f" hash among all candidates inside radius `min_sep` keeps the slot.
+## "f" hash among all candidates inside radius `min_sep` keeps the slot. The radius
+## comes from this hex's biome so forests (sep 1) can pack while boulders stay rare.
 func _is_candidate(q: int, r: int, biome: Biome) -> bool:
 	if biome == null: return false
 	var btype := biome.biome_at(q, r)
 	if (_catalog.get(btype, []) as Array).is_empty(): return false
 	if not _passes_density(q, r, btype): return false
 	var my := _roll01(q, r, "f")
-	var R := _min_sep
+	var R := _sep_for(btype)
 	for dq in range(-R, R + 1):
 		var lo := maxi(-R, -dq - R)
 		var hi := mini(R, -dq + R)
