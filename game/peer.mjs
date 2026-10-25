@@ -165,10 +165,14 @@ function pickActive(entry) {
 }
 
 const data = {};
-for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills']) {
+for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills', 'classes', 'effects', 'elements']) {
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
+// elem_* → character stat key the element maps to (per elements.json data.stat).
+// Used by the effect-damage math to look up the right stat for Σ(me - enemy).
+const ELEM_TO_STAT = {};
+for (const [id, e] of Object.entries(data.elements)) ELEM_TO_STAT[id] = (e.data?.stat || '').replace(/^stat_/, '');
 
 // -------- libp2p node --------
 const privateKey = await generateKeyPair('Ed25519');
@@ -391,14 +395,52 @@ if (CHARACTER_ID) {
 }
 const permanentsCsv = () => [...entity.permanents].sort().join(',');
 
+// -------- class card --------
+// Rule 9: character enters the dimension with their class as a permanent
+// (tokens of value 6 per listed color). Only a subset of class abilities
+// is wired to the resolver — the rest get the permanent and the UI label but
+// no behavior yet. The implemented set is intentionally narrow; expand as the
+// surrounding systems (traps, library, archives) land.
+const CLASSES_IMPLEMENTED = new Set([
+  'class_reaver', 'class_barbarian', 'class_monk',       // EP combat-type reassignment (static)
+  'class_guardian',                                       // regen if stationary (static)
+  'class_noble',                                          // lifesteal on combat damage (static)
+  'class_assassin',                                       // +1 damage after first hit (static)
+]);
+if (entity.kind === 'character') {
+  const forced = (process.env.FORCE_CLASS || '').trim();
+  const pool = Object.keys(data.classes);
+  let cls = forced && data.classes[forced] ? forced : null;
+  if (!cls) cls = pool[Math.floor(Math.random() * pool.length)];
+  entity.classId = cls;
+  entity.className = data.classes[cls]?.name || cls;
+  entity.permanents.add(cls);
+  // Per-round combat flags set & cleared by the resolver so static abilities
+  // can be stateful without leaking across rounds (Guardian: has moved?,
+  // Assassin: already dealt damage?). Fresh on peer start.
+  entity.classFlags = { movedThisRound: false, dealtDamageThisRound: false };
+}
+
 // Deck + hand.
 const SKILLS_IMPLEMENTED = [
   'skill_powerful_attack', 'skill_overrun', 'skill_grapple', 'skill_ranged_weapon',
   'skill_taunt', 'skill_barricade', 'skill_sanctuary',
   'skill_dodge', 'skill_bluff', 'skill_intimidation', 'skill_disruption_move',
-  'skill_battle_trance',
+  'skill_battle_trance', 'skill_force_shield', 'skill_counter_spell',
 ];
+// Point-buy stand-in until the UI has a dice dialog: the best die you could
+// keep when rolling under your stat. One D6 → never above 6.
+const pointBuyDie = (stat) => Math.max(0, Math.min(6, Math.floor((stat ?? 0) / 2)));
 const TRANCE = 'skill_battle_trance';
+// Effects dealt into character decks. Pick ones whose mechanics the resolver
+// implements this pass: completion-type damage against stat deltas, and
+// permanent effects that drop into entity.permanents (handled generically).
+// Everything else is deferred (channeling, traps, mass, relocate).
+const EFFECTS_IMPLEMENTED = [
+  'effect_fireball', 'effect_lightning', 'effect_sound_wave',   // damage
+  'effect_potion_brew', 'effect_artifice',                       // permanent buff
+  'effect_shield',                                                // instant/permanent counter
+];
 const ACTION_BY_CODE = { A: 'action_attack', B: 'action_block', M: 'action_move', P: 'action_posture' };
 // 15-card deck for everyone: 11 basics + 4 skills (Rule 0).
 const deck = [];
@@ -426,6 +468,41 @@ if (entity.kind === 'character') {
     deck.push({ card_id: `${id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: id, name: s.name, requires: trance ? '*' : s.data.action_type, is_trance: trance, text: s.data.text, tags: s.tags, is_permanent: !!s.data.is_permanent });
   }
 }
+if (entity.kind === 'character') {
+  // Deal 3 effect cards. Each carries its element_cost sequence so the client
+  // can display the required glyphs and the resolver can walk the chain as
+  // contiguous Postures emit elements (Rule 19). FORCE_EFFECTS pins them.
+  const forcedE = (process.env.FORCE_EFFECTS || '').split(',').map(s => s.trim()).filter(id => EFFECTS_IMPLEMENTED.includes(id) && data.effects[id]);
+  const poolE = EFFECTS_IMPLEMENTED.filter(id => data.effects[id] && !forcedE.includes(id));
+  for (let i = poolE.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [poolE[i], poolE[j]] = [poolE[j], poolE[i]]; }
+  for (const id of [...forcedE, ...poolE].slice(0, 3)) {
+    const e = data.effects[id];
+    const d = e.data || {};
+    const types = Array.isArray(d.effect_types) ? d.effect_types : [];
+    const tags = e.tags || [];
+    const offensive = types.includes('damage') || types.includes('point_buy');
+    // Who the effect lands on. 'target' = one enemy (autofocused to the nearest
+    // adjacent one at commit, right-click retargets); 'all_enemies' / 'all_adjacent'
+    // = every unit in contact (mass tag, or an explicit `scope` in the JSON);
+    // 'self' = buffs that only touch the caster (permanents with no damage).
+    const scope = d.scope || (tags.includes('mass') ? (offensive ? 'all_enemies' : 'all_adjacent') : offensive ? 'target' : 'self');
+    deck.push({
+      card_id: `${id}#${randomBytes(3).toString('hex')}`,
+      kind: 'effect',
+      effect_id: id,
+      name: e.name,
+      element_cost: Array.isArray(d.element_cost) ? [...d.element_cost] : [],
+      effect_types: types,
+      is_permanent: types.includes('permanent'),
+      is_damage: types.includes('damage'),
+      is_point_buy: types.includes('point_buy'),
+      is_instant: types.includes('instant'),
+      scope,
+      text: d.text,
+      tags,
+    });
+  }
+}
 // Shuffle.
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
 // FORCE_OPENING=skill_sanctuary,B,A (dev/test only): move one card per entry
@@ -434,7 +511,7 @@ for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() *
 if (process.env.FORCE_OPENING && entity.kind === 'character') {
   const top = [];
   for (const want of process.env.FORCE_OPENING.split(',').map(s => s.trim()).filter(Boolean)) {
-    const i = deck.findIndex(c => c.skill_id === want || c.code === want);
+    const i = deck.findIndex(c => c.skill_id === want || c.effect_id === want || c.code === want);
     if (i >= 0) top.push(...deck.splice(i, 1));
   }
   deck.unshift(...top);
@@ -444,6 +521,7 @@ const discard = [];
 let queued = [];           // one element: slot index (int) | 'EP' | 'EM'
 let queuedSkills = [];     // hand indices of skill cards attached to the queued action
 let queuedExtra = null;    // second option card index when Battle Trance is attached
+let queuedEffect = null;   // hand index of an effect card riding on this action (Posture / EP for most; any action for instants)
 let target = null;         // peer_id string | { q, r } tile object | null
 // `queued`/`queued_skills` ride only on the echo to a queue message — a hand
 // refresh at round/turn boundaries must not wipe the browser's fresh autoselect.
@@ -1005,11 +1083,11 @@ async function doPlanningEnd() {
     code = hasTileTarget ? 'EM' : 'EP';
   } else if (q0 === 'EP') code = 'EP';
   else if (q0 === 'EM') code = 'EM';
-  else if (typeof q0 === 'number' && hand[q0]?.kind !== 'skill' && hand[q0]) { card = hand[q0]; code = card.code; }
+  else if (typeof q0 === 'number' && hand[q0]?.kind === 'action') { card = hand[q0]; code = card.code; }
 
   // Battle Trance: two options [c1, c2]; the resolver picks per enemy which one
   // is actually played (Rule 17 instant on top of the whole action).
-  const isAction = c => c && c.kind !== 'skill';
+  const isAction = c => c && c.kind === 'action';
   const tranceCard = queuedSkills.map(i => hand[i]).find(c => c?.is_trance) || null;
   const trance = tranceCard && hand.some(isAction) ? tranceCard : null;
   let extraCard = null;
@@ -1029,37 +1107,66 @@ async function doPlanningEnd() {
   // turns the Attack into a step toward that hex at resolution time);
   // Empty Move only accepts a tile. This stops a stale selection from one
   // turn leaking into a Block commit as a bogus target.
+  // Effect ride: single-Posture cast this pass. Validated action is P / EP, or
+  // an instant on any non-trance. Multi-Posture contiguous emit (Rule 19) is
+  // not yet modeled. Decided before target normalisation because a targeted
+  // effect is the one thing that lets a Posture keep a character target.
+  let effectCard = null;
+  if (!trance && typeof queuedEffect === 'number' && hand[queuedEffect]?.kind === 'effect') {
+    const ec = hand[queuedEffect];
+    const canCast = ec.is_instant || wants('P') || wants('EP') || (!options && code === 'EP');
+    if (canCast) effectCard = ec;
+  }
+  const mySkills = queuedSkills.map(i => hand[i]).filter(c => c?.kind === 'skill' && (c.is_trance ? !!trance : ridesOn(c.requires)));
+  mySkills.sort((a, b) => a.skill_id.localeCompare(b.skill_id));
+  const skillIds = mySkills.map(c => c.skill_id);
+  // A targeted effect, or Counter Spell, is what lets a Posture keep a character target.
+  const effectNeedsTarget = (!!effectCard && effectCard.scope === 'target') || skillIds.includes('skill_counter_spell');
+
   let normTarget = options
     ? (wants('A') || wants('M') ? stripTargetFor('A', target) : wants('EM') ? stripTargetFor('EM', target) : null)
     : stripTargetFor(code, target);
+  // Posture / EP strip the target, but a targeted effect riding on them needs
+  // the enemy the player pointed at (right-click). Only a character target
+  // counts — a tile means nothing to an effect.
+  if (effectNeedsTarget && !normTarget && typeof target === 'string') normTarget = target;
 
-  // Attack with no target would resolve into nothing. Fall back to the enemy
-  // we last attacked (if still alive), else the nearest living enemy — random
-  // among ties. Resolved here, before commit, so the reveal carries a concrete
-  // target and every peer resolves the same thing.
-  if (wants('A') && !normTarget) {
-    const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
+  // Attack — or a targeted effect — with no target would resolve into nothing.
+  // Fall back to the enemy we last attacked (if still alive), else the nearest
+  // living enemy — random among ties. Resolved here, before commit, so the
+  // reveal carries a concrete target and every peer resolves the same thing.
+  // Effects only autofocus enemies in contact (Rule 14 C): far away there is
+  // nothing to hit, so the cast simply fizzles with no target.
+  if ((wants('A') || effectNeedsTarget) && !normTarget) {
+    const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+    let enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
+    if (!wants('A')) enemies = enemies.filter(p => hexDistance(here, p) <= 1);
     let pick = enemies.find(p => p.peer_id === lastAttackTarget) || null;
     if (!pick && enemies.length) {
-      const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
       const dmin = Math.min(...enemies.map(p => hexDistance(here, p)));
       const nearest = enemies.filter(p => hexDistance(here, p) === dmin);
       pick = nearest[Math.floor(Math.random() * nearest.length)];
     }
     if (pick) normTarget = pick.peer_id;
   }
-  if (wants('A') && typeof normTarget === 'string') lastAttackTarget = normTarget;
-
-  const mySkills = queuedSkills.map(i => hand[i]).filter(c => c?.kind === 'skill' && (c.is_trance ? !!trance : ridesOn(c.requires)));
-  mySkills.sort((a, b) => a.skill_id.localeCompare(b.skill_id));
-  const skillIds = mySkills.map(c => c.skill_id);
+  if ((wants('A') || effectNeedsTarget) && typeof normTarget === 'string') lastAttackTarget = normTarget;
   const revealCode = trance ? 'BT' : code;
   myLastSalt = randomBytes(12).toString('hex');
-  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${myLastSalt}`);
+  const effectTag = effectCard ? `${effectCard.effect_id}:${effectCard.element_cost.join('+')}` : '';
+  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${effectTag}::${myLastSalt}`);
   myLastReveal = {
     code: revealCode, trance: options, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null,
     optionCardIds: [card ? card.card_id : null, extraCard ? extraCard.card_id : null],
     skillIds, skillNames: mySkills.map(c => c.name), skillCardIds: mySkills.map(c => c.card_id),
+    effectId: effectCard?.effect_id || null,
+    effectCardId: effectCard?.card_id || null,
+    effectName: effectCard?.name || null,
+    effectElements: effectCard ? [...effectCard.element_cost] : null,
+    effectTypes: effectCard?.effect_types || null,
+    effectPermanent: !!effectCard?.is_permanent,
+    effectDamage: !!effectCard?.is_damage,
+    effectPointBuy: !!effectCard?.is_point_buy,
+    effectScope: effectCard?.scope || null,
   };
   await emitEnvelope({
     type: 'evt_action_commit',
@@ -1076,7 +1183,17 @@ async function doReveal() {
     payload: {
       action: myLastReveal.code,
       trance: myLastReveal.trance || null,
-      effects: [], skills: myLastReveal.skillIds, skill_names: myLastReveal.skillNames, class_ability_tapped: false,
+      effects: myLastReveal.effectId ? [{
+        effect_id: myLastReveal.effectId,
+        name: myLastReveal.effectName,
+        elements: myLastReveal.effectElements || [],
+        types: myLastReveal.effectTypes || [],
+        is_permanent: myLastReveal.effectPermanent,
+        is_damage: myLastReveal.effectDamage,
+        is_point_buy: myLastReveal.effectPointBuy,
+        scope: myLastReveal.effectScope,
+      }] : [],
+      skills: myLastReveal.skillIds, skill_names: myLastReveal.skillNames, class_ability_tapped: false,
       target: targetObj,
       combo_step: null,
       salt: myLastReveal.salt,
@@ -1113,7 +1230,9 @@ async function doResolution() {
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
     if (revealsThisTurn.some(r => r.actor === env.actor_peer_id)) continue;
-    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null });
+    const effArr = Array.isArray(env.payload.effects) ? env.payload.effects : [];
+    const eff0 = effArr[0] || null;
+    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0 });
     const s = env.state;
     if (s && s.peer_id === env.actor_peer_id && Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) {
       view.set(env.actor_peer_id, { ...(view.get(env.actor_peer_id) || {}), ...s });
@@ -1123,7 +1242,10 @@ async function doResolution() {
   view.set(PEER_ID_STRING, { ...(view.get(PEER_ID_STRING) || {}), ...currentStateSnapshot() });
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
-    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null });
+    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null, effect: myLastReveal.effectId ? {
+      effect_id: myLastReveal.effectId, name: myLastReveal.effectName, elements: myLastReveal.effectElements || [], types: myLastReveal.effectTypes || [],
+      is_permanent: myLastReveal.effectPermanent, is_damage: myLastReveal.effectDamage, is_point_buy: myLastReveal.effectPointBuy, scope: myLastReveal.effectScope,
+    } : null });
   }
   // Optional discovery mirror: merge any reveals it has for this action.
   if (DISCOVERY_URL) try {
@@ -1131,7 +1253,7 @@ async function doResolution() {
     const j = await r.json();
     for (const d of j.reveals || []) {
       if (revealsThisTurn.find(x => x.actor === d.peer_id)) continue;
-      revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null, skills: [], trance: null });
+      revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null, skills: [], trance: null, effect: null });
     }
   } catch {}
   // Reveals from entities at 0 hp are ignored everywhere (stale discovery
@@ -1158,8 +1280,10 @@ async function doResolution() {
   // Skills (Rule 17 instants, Rule 8 "prohibitions apply as a replacement").
   // `effAction` is what each actor effectively does after every skill in play
   // has had its say; everything below resolves against it, never `r.action`.
-  const skillsOf = new Map(revealsThisTurn.map(r => [r.actor, r.skills || []]));
-  const has = (id, skill) => (skillsOf.get(id) || []).includes(skill);
+  // Read live off the reveal (not a frozen copy): the Counter Spell pre-pass
+  // strips skills from a reveal and everything after must see them gone.
+  const byActorPre = new Map(revealsThisTurn.map(r => [r.actor, r]));
+  const has = (id, skill) => (byActorPre.get(id)?.skills || []).includes(skill);
   const permsOf = (id) => id === PEER_ID_STRING
     ? [...entity.permanents]
     : String(view.get(id)?.permanents_csv || '').split(',').filter(Boolean);
@@ -1184,14 +1308,47 @@ async function doResolution() {
     else if (effAction.get(id) === from) effAction.set(id, to);
   };
   const noMove = new Set();
+  const ridesFor = (r) => {
+    const codes = r.trance || [r.action];
+    return c => codes.includes(c) || ((c === 'M' || c === 'P') && (codes.includes('EP') || codes.includes('EM')));
+  };
+  // Counter Spell pre-pass (Rule 8: no stack, but a counter is a prohibition
+  // and prohibitions apply "finally as a replacement" — so it runs before any
+  // other skill resolves). The target loses every non-permanent skill it
+  // played this action; a countered Battle Trance collapses to its first
+  // card. Then the caster emits their strongest element at the target: that
+  // stat is subtracted from the target's matching stat for this round's
+  // effect math (`statPenalty`), both when the target casts and defends.
+  // Two Counter Spells aimed at each other cancel in actor order — the
+  // lexically first actor's counter lands first and strips the other's.
+  const statPenalty = new Map();   // peer → { vitality|world|matter|will: amount }
+  const STAT_KEYS = ['vitality', 'world', 'matter', 'will'];
+  for (const r of [...revealsThisTurn].sort((a, b) => a.actor.localeCompare(b.actor))) {
+    if (!(r.skills || []).includes('skill_counter_spell')) continue;
+    if (!ridesFor(r)('P')) continue;
+    const tgt = r.target?.kind === 'character' ? r.target.ref : null;
+    const o = tgt ? byActorPre.get(tgt) : null;
+    if (!o || !enemyOf(r.actor, tgt) || distBetween(r.actor, tgt) > 1) continue;
+    const kept = (o.skills || []).filter(id => !!data.skills[id]?.data?.is_permanent);
+    const stripped = (o.skills || []).filter(id => !kept.includes(id));
+    o.skills = kept;
+    if (stripped.includes(TRANCE) && o.trance) { effAction.set(tgt, o.trance[0]); tranceOpts.delete(tgt); o.trance = null; }
+    const casterV = view.get(r.actor);
+    if (casterV) {
+      const best = STAT_KEYS.map(k => [k, casterV[`stat_${k}`] ?? 0]).sort((a, b) => b[1] - a[1])[0];
+      const pen = statPenalty.get(tgt) || {};
+      pen[best[0]] = (pen[best[0]] || 0) + best[1];
+      statPenalty.set(tgt, pen);
+      if (r.actor === PEER_ID_STRING || tgt === PEER_ID_STRING) console.log(`[${PEER_LABEL}] counter spell ${r.actor.slice(0, 8)} → ${tgt.slice(0, 8)}: stripped [${stripped.join(',')}], −${best[1]} ${best[0]} this round`);
+    }
+  }
   for (const r of revealsThisTurn) {
     const sk = r.skills || [];
     if (!sk.length) continue;
     const tgt = r.target?.kind === 'character' ? r.target.ref : null;
     const tgtKnown = tgt && effAction.has(tgt);
     // Move / Posture skills also ride on Empty Move / Empty Posture.
-    const codes = r.trance || [r.action];
-    const rides = c => codes.includes(c) || ((c === 'M' || c === 'P') && (codes.includes('EP') || codes.includes('EM')));
+    const rides = ridesFor(r);
     if (rides('M') && tgtKnown && has(r.actor, 'skill_bluff') && distBetween(r.actor, tgt) <= 1) { effAction.set(tgt, 'EP'); tranceOpts.delete(tgt); }
     if (rides('P') && has(r.actor, 'skill_intimidation')) {
       for (const o of revealsThisTurn) {
@@ -1201,6 +1358,32 @@ async function doResolution() {
     if (rides('A') && tgtKnown && has(r.actor, 'skill_grapple') && codeIs(tgt, 'P')) replace(tgt, 'P', 'EP');
     if (rides('M') && tgtKnown && has(r.actor, 'skill_disruption_move') && codeIs(tgt, 'P')) replace(tgt, 'P', 'EP');
     if (rides('A') && tgtKnown && has(r.actor, 'skill_overrun') && distBetween(r.actor, tgt) <= 1) noMove.add(tgt);
+  }
+  // Rule 9 / class static abilities: EP combat-type reassignment. Applied
+  // after skills (so Intimidation first forces an attacker to EP, then the
+  // class rule may lift that EP back to A/B/M as the stance). The reassignment
+  // is combat-only — a Reaver's EP→A still has no auto-target this pass, so
+  // it never deals damage, only changes the defender's codeVs lookup. Noted
+  // for a follow-up: implicit nearest-enemy target.
+  const classOf = (id) => {
+    const perms = permsOf(id);
+    for (const p of perms) if (p.startsWith('class_') && CLASSES_IMPLEMENTED.has(p)) return p;
+    return null;
+  };
+  // `r.declared` keeps what the player actually put down (after skill
+  // prohibitions); `r.action` is the code combat is judged on. They only differ
+  // for a class stance on EP — Sanctuary, the reveal chip and the hand
+  // bookkeeping must see the EP, the damage pass the stance.
+  for (const r of revealsThisTurn) {
+    r.declared = effAction.get(r.actor);
+    if (r.declared === 'BT' && !tranceOpts.get(r.actor)) r.declared = 'EP';
+  }
+  for (const r of revealsThisTurn) {
+    if (effAction.get(r.actor) !== 'EP') continue;
+    const c = classOf(r.actor);
+    if (c === 'class_reaver') effAction.set(r.actor, 'A');
+    else if (c === 'class_barbarian') effAction.set(r.actor, 'B');
+    else if (c === 'class_monk') effAction.set(r.actor, 'M');
   }
   for (const r of revealsThisTurn) {
     r.action = effAction.get(r.actor);
@@ -1385,10 +1568,18 @@ async function doResolution() {
   // (they're handled as a move intent above). The per-victim value is a list
   // of {attacker, amount} so the UI can animate "-N❤" from dealer to victim.
   const damage = new Map();
-  const addDmg = (victim, attacker, amount) => {
+  // Noble lifesteal: amount healed per attacker this round, applied to the
+  // caster's own `entity.life` only (we are authoritative over us) after the
+  // damage pass runs. Assassin: +1 damage once the attacker has already dealt
+  // damage this round — we flip the flag on the first scoring hit.
+  const lifestealForMe = { amount: 0 };
+  const assassinScored = new Set();
+  const addDmg = (victim, attacker, amount, source = 'action') => {
     const list = damage.get(victim) || [];
-    list.push({ attacker, amount });
+    list.push({ attacker, amount, source });
     damage.set(victim, list);
+    if (amount > 0 && hasPerm(attacker, 'class_noble') && attacker === PEER_ID_STRING) lifestealForMe.amount += amount;
+    if (amount > 0) assassinScored.add(attacker);
   };
   const postTile = (id) => nextTiles.get(id) ? { tile_q: nextTiles.get(id).q, tile_r: nextTiles.get(id).r } : view.get(id);
   const attackHit = (r, defId) => {
@@ -1397,9 +1588,13 @@ async function doResolution() {
     if (hexDistance(postTile(r.actor), postTile(defId)) > 1) return;
     let dmg = hitDmg(codeVs(defId, r.actor));
     if (dmg >= 1 && has(r.actor, 'skill_powerful_attack')) dmg += 1;
+    // Assassin: +1 if the attacker has already connected this round. The flag
+    // is set when a previous addDmg(..., attacker, >0) landed — so same-round
+    // "first hit then rider" scales up for them. Resolver-local; no state leak.
+    if (dmg >= 1 && hasPerm(r.actor, 'class_assassin') && assassinScored.has(r.actor)) dmg += 1;
     if (has(defId, 'skill_dodge')) dmg = Math.max(0, dmg - 1);
     if (hasPerm(defId, 'skill_barricade')) dmg = 0;
-    if (hasPerm(defId, 'skill_sanctuary') && (effAction.get(defId) ?? 'EP') === 'EP') dmg = 0;
+    if (hasPerm(defId, 'skill_sanctuary') && (byActor.get(defId)?.declared ?? 'EP') === 'EP') dmg = 0;
     // Taunt: a nearby taunter is the only legal Attack target. Only revealers
     // count — their snapshots ride in the reveal, so every peer sees the same set.
     const taunter = revealsThisTurn.some(t => t.actor !== defId && t.actor !== r.actor
@@ -1412,7 +1607,7 @@ async function doResolution() {
     let back = 1;
     if (has(q.actor, 'skill_dodge')) back = 0;
     if (hasPerm(q.actor, 'skill_barricade')) back = 0;
-    if (hasPerm(q.actor, 'skill_sanctuary') && (effAction.get(q.actor) ?? 'EP') === 'EP') back = 0;
+    if (hasPerm(q.actor, 'skill_sanctuary') && (q.declared ?? 'EP') === 'EP') back = 0;
     addDmg(q.actor, r.actor, back);
   };
   for (const r of revealsThisTurn) {
@@ -1431,6 +1626,74 @@ async function doResolution() {
       for (const q of revealsThisTurn) if (attacksOn(q, r.actor)) blockBack(r, q);
     }
   }
+  // Effect-completion pass (Rule 21): single-Posture cast this iteration.
+  // For damage effects, Σ(my_elem_stat − target_elem_stat) across elements
+  // (Rule 18: a non-positive delta contributes nothing). Point-buy effects
+  // use floor(my_stat / 2) per element — a deterministic stand-in for the
+  // paper-rule dice roll until the UI gets a real point-buy dialog. The sum
+  // is rounded half-up / 10 (Rule 21). Adjacency per Rule 14 Part C.
+  // Permanent effects land on the actor's own entity so the next snapshot
+  // broadcasts the new permanents_csv (same path as skill permanents).
+  const roundHalfUp10 = (sum) => Math.round(sum / 10);
+  let brokenShield = false;
+  // Who an effect lands on, by its scope. Targets come from the resolver's
+  // `view` (every peer holds the same snapshots), sorted so the order of
+  // damage entries is identical everywhere. Contact = hex distance ≤ 1.
+  const effectTargets = (r, eff) => {
+    const atkV = view.get(r.actor);
+    if (!atkV) return [];
+    const here = { tile_q: atkV.tile_q, tile_r: atkV.tile_r };
+    const inContact = (id) => { const v = view.get(id); return !!v && Number.isInteger(v.tile_q) && hexDistance(here, { tile_q: v.tile_q, tile_r: v.tile_r }) <= 1; };
+    const alive = (id) => (id === PEER_ID_STRING ? entity.life : (view.get(id)?.life ?? 0)) > 0;
+    switch (eff.scope) {
+      case 'target': {
+        const id = r.target?.kind === 'character' ? r.target.ref : null;
+        return id && id !== r.actor && inContact(id) ? [id] : [];
+      }
+      case 'all_enemies':
+        return [...view.keys()].filter(id => id !== r.actor && alive(id) && enemyOf(r.actor, id) && inContact(id)).sort();
+      case 'all_adjacent':
+        return [...view.keys()].filter(id => id !== r.actor && alive(id) && inContact(id)).sort();
+      default:
+        return [];
+    }
+  };
+  for (const r of revealsThisTurn) {
+    const eff = r.effect;
+    if (!eff || !Array.isArray(eff.elements) || !eff.elements.length) continue;
+    const atkV = view.get(r.actor);
+    if (!atkV) continue;
+    if (eff.is_damage || eff.is_point_buy) {
+      const targets = effectTargets(r, eff);
+      if (!targets.length && r.actor === PEER_ID_STRING) console.log(`[${PEER_LABEL}] cast ${eff.effect_id} fizzled — no ${eff.scope === 'target' ? 'target in contact' : 'one in contact'}`);
+      // Counter Spell penalties lower a stat for this round on both sides of
+      // the comparison; never below zero.
+      const statOf = (id, v, sk) => Math.max(0, (v[`stat_${sk}`] ?? 0) - (statPenalty.get(id)?.[sk] || 0));
+      for (const defId of targets) {
+        const defV = view.get(defId);
+        let total = 0;
+        for (const el of eff.elements) {
+          const sk = ELEM_TO_STAT[el];
+          if (!sk) continue;
+          const mine = statOf(r.actor, atkV, sk);
+          const theirs = statOf(defId, defV, sk);
+          if (eff.is_point_buy) total += Math.floor(mine / 2);
+          else total += Math.max(0, mine - theirs);
+        }
+        // Force Shield: the shield die comes off Σ before rounding. Any effect
+        // damage that still lands breaks the shield (owner drops it below).
+        let shield = 0;
+        if (hasPerm(defId, 'skill_force_shield')) { shield = pointBuyDie(defV.stat_vitality); total = Math.max(0, total - shield); }
+        const dmg = roundHalfUp10(total);
+        if (dmg > 0) addDmg(defId, r.actor, dmg, 'effect');
+        if (dmg > 0 && shield && defId === PEER_ID_STRING) brokenShield = true;
+        if (r.actor === PEER_ID_STRING || defId === PEER_ID_STRING) console.log(`[${PEER_LABEL}] cast ${eff.effect_id} [${eff.elements.join('+')}] ${r.actor.slice(0, 8)} → ${defId.slice(0, 8)}: Σ${total}${shield ? ` (after shield −${shield})` : ''} → ${dmg} dmg`);
+      }
+    }
+    // Permanents land on the caster whether or not the damage leg found anyone.
+    if (eff.is_permanent && r.actor === PEER_ID_STRING) entity.permanents.add(eff.effect_id);
+  }
+
   const sumDmg = list => (list || []).reduce((s, d) => s + d.amount, 0);
 
   // Contact log: broadcast every pair of adjacent cross-side revealers so the
@@ -1464,9 +1727,16 @@ async function doResolution() {
   // Apply changes only to my own entity in the authoritative sense.
   const myMove = nextTiles.get(PEER_ID_STRING);
   if (myMove) { entity.tile = myMove; revealAround(myMove.q, myMove.r).catch(e => console.warn(`[${PEER_LABEL}] reveal failed: ${e.message}`)); }
+  if (entity.classFlags && myMove) entity.classFlags.movedThisRound = true;
   const myDmg = sumDmg(damage.get(PEER_ID_STRING));
   const wasAlive = entity.life > 0;
   if (myDmg) entity.life = Math.max(0, entity.life - myDmg);
+  // Noble lifesteal: the per-attacker amount I dealt this resolve, now applied
+  // as healing after my own damage lands (so a lethal attack that finishes an
+  // enemy also carries the heal). Cap at my life maximum.
+  if (lifestealForMe.amount > 0 && entity.life > 0 && hasPerm(PEER_ID_STRING, 'class_noble')) {
+    entity.life = Math.min(entity.lifeMax, entity.life + lifestealForMe.amount);
+  }
   if (wasAlive && entity.life <= 0) {
     console.log(`[${PEER_LABEL}] DIED at (${entity.tile.q},${entity.tile.r}) after -${myDmg} on T${hg.turn}.R${hg.round + 1} (life_max=${entity.lifeMax})`);
   }
@@ -1477,8 +1747,9 @@ async function doResolution() {
   // Sanctuary lasts while I rest: declaring anything but the plain Empty
   // Posture — another action, a trance, or a skill riding on the EP — ends it
   // from the next round (damage this round was already judged on the EP).
-  const leftSanctuary = myR && (myR.action !== 'EP' || (myR.skills || []).length > 0);
+  const leftSanctuary = myR && ((myR.declared ?? myR.action) !== 'EP' || (myR.skills || []).length > 0 || !!myR.effect);
   if (hasPerm(PEER_ID_STRING, 'skill_sanctuary') && leftSanctuary) entity.permanents.delete('skill_sanctuary');
+  if (brokenShield) { entity.permanents.delete('skill_force_shield'); console.log(`[${PEER_LABEL}] force shield broken`); }
   const playedCodes = myR?.trance ? new Set([...myR.played].map(i => myR.trance[i])) : null;
   for (const id of myLastReveal?.skillIds || []) {
     const sd = data.skills[id]?.data;
@@ -1513,10 +1784,13 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     const actor = view.get(r.actor);
     if (!actor) continue;
-    const aims = r.trance ? r.trance.some(c => c === 'A' || c === 'M' || c === 'EM') : (r.action === 'A' || r.action === 'M' || r.action === 'EM');
+    // A damaging effect aims at its target too, so the ✺ glyph flies there.
+    const effAims = !!(r.effect && (r.effect.is_damage || r.effect.is_point_buy));
+    const aims = effAims || (r.trance ? r.trance.some(c => c === 'A' || c === 'M' || c === 'EM') : (r.action === 'A' || r.action === 'M' || r.action === 'EM'));
     const aim = aims ? tileOf(r.target) : null;
     actionSummary.push({
-      actor: r.actor, action: r.action, skills: r.skills || [],
+      actor: r.actor, action: r.action, declared: r.declared ?? r.action, skills: r.skills || [],
+      effects: r.effect ? [{ effect_id: r.effect.effect_id, name: r.effect.name, elements: r.effect.elements || [] }] : [],
       trance: r.trance || null, played: r.trance ? [...r.played].sort() : null,
       from_q: actor.tile_q, from_r: actor.tile_r,
       target_q: aim?.q, target_r: aim?.r,
@@ -1525,7 +1799,7 @@ async function doResolution() {
   await emitEnvelope({ type: 'evt_state_hash', payload: {
     state_hash: stateHash,
     region: regionState,
-    damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: 'action' }))),
+    damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: d.source || 'action' }))),
     journey_results: [...journeyResults.entries()].map(([actor, j]) => ({ actor, ...j })),
     actions: actionSummary,
     tokens_changed: [],
@@ -1544,7 +1818,12 @@ async function endRound() {
   const playedIds = new Set(myLastReveal?.skillCardIds || []);
   for (const id of myPlayedCardIds || (myLastReveal?.cardId ? [myLastReveal.cardId] : [])) playedIds.add(id);
   for (let i = hand.length - 1; i >= 0; i--) if (playedIds.has(hand[i].card_id)) discard.push(...hand.splice(i, 1));
-  queued = []; queuedSkills = []; queuedExtra = null; target = null; locked = false; myLastReveal = null; myPlayedCardIds = null;
+  // Effect cards also leave hand when their action resolved (reveal.effectCardId).
+  // Permanents already took hold in the resolver via entity.permanents.add.
+  if (myLastReveal?.effectCardId) {
+    for (let i = hand.length - 1; i >= 0; i--) if (hand[i].card_id === myLastReveal.effectCardId) discard.push(...hand.splice(i, 1));
+  }
+  queued = []; queuedSkills = []; queuedExtra = null; queuedEffect = null; target = null; locked = false; myLastReveal = null; myPlayedCardIds = null;
   hg.round += 1; hg.action += 1;
   if (hg.round >= ROUNDS_PER_TURN) await endTurn();
   else {
@@ -1567,6 +1846,16 @@ async function endTurn() {
   willDiscard.clear();
   const before = hand.length;
   while (hand.length < HAND_SIZE) { reshuffleIfEmpty(); if (!deck.length) break; hand.push(deck.shift()); }
+
+  // Guardian: static ability — "when you stay on one tile for a whole round
+  // (= one turn here) restore one life token" (paper Rule 9 + class_guardian).
+  // movedThisRound is set true by the resolver whenever my own tile changed;
+  // reset after the check so the next turn's bookkeeping is clean. Dead
+  // characters do not regen.
+  if (entity.classFlags && entity.permanents.has('class_guardian') && !entity.classFlags.movedThisRound && entity.life > 0) {
+    entity.life = Math.min(entity.lifeMax, entity.life + 1);
+  }
+  if (entity.classFlags) entity.classFlags.movedThisRound = false;
 
   hg.round = 0; hg.turn += 1;
   await publishPublicState();
@@ -1604,7 +1893,7 @@ async function npcPlan() {
   queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && ridesPick(c) ? i : -1).filter(i => i >= 0);
   queuedExtra = null;
   const tranceIdx = hand.findIndex(c => c.is_trance);
-  const others = hand.map((c, i) => c.kind !== 'skill' && i !== slot ? i : -1).filter(i => i >= 0);
+  const others = hand.map((c, i) => c.kind === 'action' && i !== slot ? i : -1).filter(i => i >= 0);
   if (slot >= 0 && tranceIdx >= 0 && others.length && Math.random() < 0.35) {
     queuedSkills.push(tranceIdx);
     const diff = others.find(i => hand[i].code !== pick);
@@ -1919,7 +2208,7 @@ const uiHttp = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       peer_id: PEER_ID_STRING, dimension: DIM_NAME, phase: currentPhase, phaseEndsIn: Math.max(0, phaseEndsAt - Date.now()),
-      entity, permanents_csv: permanentsCsv(), hand, queued, queued_skills: queuedSkills, queued_extra: queuedExtra, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
+      entity, permanents_csv: permanentsCsv(), hand, queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
       peers: peersForUI(),
       alliance: ALLIANCE,
       map: { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles: dimMap.size(), blocks: dimMap.blockCount(), bounds: dimMap.bounds() },
@@ -1946,10 +2235,10 @@ wss.on('connection', (ws) => {
         // 'EM' are still accepted so older clients keep working.
         const picks = (m.slots || []).slice(0, 1).filter(s =>
           s === 'EMPTY' || s === 'EP' || s === 'EM' ||
-          (typeof s === 'number' && s >= 0 && s < hand.length && hand[s].kind !== 'skill')
+          (typeof s === 'number' && s >= 0 && s < hand.length && hand[s].kind === 'action')
         );
         queued = picks;
-        const isAct = c => c && c.kind !== 'skill';
+        const isAct = c => c && c.kind === 'action';
         const primary = typeof picks[0] === 'number' ? picks[0] : null;
         const skillIdx = [...new Set((m.skills || []).filter(i => typeof i === 'number' && hand[i]?.kind === 'skill'))];
         const tranceOn = skillIdx.some(i => hand[i].is_trance) && hand.some(isAct);
@@ -1965,7 +2254,14 @@ wss.on('connection', (ws) => {
           if (queuedExtra === null) { codes.add('M'); codes.add('P'); }
         }
         queuedSkills = skillIdx.filter(i => hand[i].is_trance ? tranceOn : (codes.size > 0 && codes.has(hand[i].requires)));
-        broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra }));
+        // Rule 19: effects ride on a Posture / Empty-Posture. Instants may ride
+        // on any action. Trance stays out of this pass — the resolver would
+        // need per-trance-option emit tracking we don't yet have.
+        const effectIdx = typeof m.effect === 'number' ? m.effect : -1;
+        const eCard = hand[effectIdx];
+        const effectAllowed = eCard && eCard.kind === 'effect' && !tranceOn && (eCard.is_instant || codes.has('P') || codes.has('EP'));
+        queuedEffect = effectAllowed ? effectIdx : null;
+        broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect }));
       }
       if (m.kind === 'target') {
         const t = m.target;
