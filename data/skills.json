@@ -124,9 +124,14 @@
       ],
       "resources": {
         "source": "warlords3_battlecry",
-        "match_reason": "body impact sounds",
+        "match_reason": "body impact sounds; grey arcs wrap the target like a grip",
         "confidence": "medium",
-        "sprites": {},
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
         "sounds": {
           "fx": [
             {
@@ -138,7 +143,10 @@
               "usage": "play when the skill resolves (pick randomly if several)"
             }
           ]
-        }
+        },
+        "wbc3_name": "Grey crescent arcs",
+        "wbc3_code": "EZ61",
+        "wbc3_race": "Effects1"
       },
       "versions": [
         {
@@ -338,15 +346,19 @@
       ],
       "resources": {
         "source": "warlords3_battlecry",
-        "match_reason": "WBC3 rampart still around the hero",
+        "match_reason": "WBC3 rampart still around the hero; stone-grey ring around the holder's tile",
         "confidence": "medium",
-        "wbc3_name": "Ramparts",
-        "wbc3_code": "BWRA",
-        "wbc3_race": "Shared",
+        "wbc3_name": "Grey ring arcs",
+        "wbc3_code": "EZ54",
+        "wbc3_race": "Effects1",
         "sprites": {
           "static": {
             "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
             "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          },
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Grey ring arcs/Grey ring arcs - idle [EZ54].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
           }
         },
         "sounds": {
@@ -444,9 +456,14 @@
       ],
       "resources": {
         "source": "warlords3_battlecry",
-        "match_reason": "quick dash sound",
+        "match_reason": "quick dash sound; sweeping arcs for the disruptive dash",
         "confidence": "low",
-        "sprites": {},
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
         "sounds": {
           "fx": [
             {
@@ -454,7 +471,10 @@
               "usage": "play when the skill resolves (pick randomly if several)"
             }
           ]
-        }
+        },
+        "wbc3_name": "Grey arc sweeps",
+        "wbc3_code": "EZ66",
+        "wbc3_race": "Effects1"
       },
       "versions": [
         {
@@ -488,9 +508,14 @@
       ],
       "resources": {
         "source": "warlords3_battlecry",
-        "match_reason": "whoosh of a dodge",
+        "match_reason": "whoosh of a dodge; faint after-image rings of the dodge",
         "confidence": "medium",
-        "sprites": {},
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect faint white rings/Spell effect faint white rings - idle [EZ08].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
         "sounds": {
           "fx": [
             {
@@ -502,7 +527,10 @@
               "usage": "play when the skill resolves (pick randomly if several)"
             }
           ]
-        }
+        },
+        "wbc3_name": "Spell effect: faint white rings",
+        "wbc3_code": "EZ08",
+        "wbc3_race": "Effects1"
       },
       "versions": [
         {
@@ -536,9 +564,14 @@
       ],
       "resources": {
         "source": "warlords3_battlecry",
-        "match_reason": "feint whoosh + soft click",
+        "match_reason": "feint whoosh + soft click; purple spiral for the feint/illusion",
         "confidence": "low",
-        "sprites": {},
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
         "sounds": {
           "fx": [
             {
@@ -550,7 +583,10 @@
               "usage": "play when the skill resolves (pick randomly if several)"
             }
           ]
-        }
+        },
+        "wbc3_name": "Spell effect: small purple ring/spiral",
+        "wbc3_code": "EZ02",
+        "wbc3_race": "Effects1"
       },
       "versions": [
         {
@@ -585,9 +621,14 @@
       ],
       "resources": {
         "source": "warlords3_battlecry",
-        "match_reason": "drum + racing heartbeat of the intimidated enemy",
+        "match_reason": "drum + racing heartbeat of the intimidated enemy; red arcs of the fear aura",
         "confidence": "low",
-        "sprites": {},
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Red crescent arcs/Red crescent arcs - idle [EZ55].png",
+            "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+          }
+        },
         "sounds": {
           "fx": [
             {
@@ -599,7 +640,10 @@
               "usage": "play when the skill resolves (pick randomly if several)"
             }
           ]
-        }
+        },
+        "wbc3_name": "Red crescent arcs",
+        "wbc3_code": "EZ55",
+        "wbc3_race": "Effects1"
       },
       "versions": [
         {

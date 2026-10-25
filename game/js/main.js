@@ -766,6 +766,9 @@ function connect() {
               icons.push({ action: 'BT' });
             } else icons.push({ action: a.action });
             for (const id of a.skills || []) if (id !== 'skill_battle_trance') icons.push({ skill: id });
+            // Each revealed skill plays its mapped WBC3 fx sound (data/skills.json
+            // resources.sounds.fx) — one shot per skill, the bank throttles repeats.
+            for (const id of a.skills || []) sounds.play(resourcesFor(id), 'fx', { volume: 0.55 });
             const startAt = performance.now();
             icons.forEach((ic, i) => state.ui.floatingIcons.push({
               ...ic,

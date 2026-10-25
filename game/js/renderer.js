@@ -1,6 +1,6 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
 import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
-import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged } from './sprites.js';
+import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame } from './sprites.js';
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
@@ -642,7 +642,17 @@ export function createRenderer(canvas, state) {
         // The ➙ standoff glyph points right by default; rotate it so each
         // arrow actually faces the enemy it's drifting toward. Other icons
         // are drawn upright.
-        if (f.action === 'STANDOFF') {
+        // Skills with a mapped WBC3 effect strip (data/skills.json
+        // resources.sprites.effect) animate that strip over the actor; the
+        // glyph is the fallback while the image loads or when none is mapped.
+        const strip = f.skill ? effectStrip(resourcesFor(f.skill)?.sprites?.effect?.path) : null;
+        if (strip) {
+          drawEffectFrame(ctx, strip, t, x, y, 44);
+          ctx.font = 'bold 11px "Segoe UI Emoji", "Apple Color Emoji", ui-sans-serif, system-ui';
+          ctx.lineWidth = 3;
+          ctx.strokeText(spec.glyph, x + 16, y + 16);
+          ctx.fillText(spec.glyph, x + 16, y + 16);
+        } else if (f.action === 'STANDOFF') {
           const ang = Math.atan2(to.y - from.y, to.x - from.x);
           ctx.translate(x, y);
           ctx.rotate(ang);
