@@ -21,3 +21,6 @@ godot/.godot/
 _tools/godot
 _tools/*.zip
 _test/*.log
+
+# dev UI audit output (screenshots, scratch probes)
+game/tools/out/

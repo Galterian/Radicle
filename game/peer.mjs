@@ -47,7 +47,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { pushDimension, radicleEnv } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE } from './js/map.js';
-import { stepToward as hexStepToward } from './js/hex.js';
+import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -161,11 +161,11 @@ function pickActive(entry) {
   const live = entry.versions.filter(v => v.status !== 'rejected' && v.status !== 'superseded');
   live.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   const v = live[0] ?? entry.versions[0];
-  return { id: entry.id, name: entry.name, data: v.data };
+  return { id: entry.id, name: entry.name, tags: entry.tags || [], data: v.data };
 }
 
 const data = {};
-for (const n of ['battle_system', 'actions', 'characters', 'creatures']) {
+for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills']) {
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
@@ -376,6 +376,7 @@ if (CHARACTER_ID) {
     tile: { ...START_TILE }, sourceId: CHARACTER_ID, sourceName: data.characters[CHARACTER_ID].name,
     stats: { ...d.stats }, lifeMax: Math.max(1, Math.round(sum / 10)), life: Math.max(1, Math.round(sum / 10)),
     actionsPerRound: d.actions_per_round, combo: d.combo || [],
+    permanents: new Set(),
   };
 } else {
   const d = data.creatures[CREATURE_ID].data;
@@ -385,37 +386,68 @@ if (CHARACTER_ID) {
     tile: { ...START_TILE }, sourceId: CREATURE_ID, sourceName: data.creatures[CREATURE_ID].name,
     stats: { ...d.stats }, lifeMax: d.life, life: d.life, actionsPerRound: d.actions_per_round,
     innateEffect: d.innate_effect, dicePattern: d.dice_pattern, onActionRider: d.on_action_rider,
+    permanents: new Set(),
   };
 }
+const permanentsCsv = () => [...entity.permanents].sort().join(',');
 
 // Deck + hand.
-const basics = ['action_attack', 'action_block', 'action_move', 'action_posture'];
+const SKILLS_IMPLEMENTED = [
+  'skill_powerful_attack', 'skill_overrun', 'skill_grapple', 'skill_ranged_weapon',
+  'skill_taunt', 'skill_barricade', 'skill_sanctuary',
+  'skill_dodge', 'skill_bluff', 'skill_intimidation', 'skill_disruption_move',
+  'skill_battle_trance',
+];
+const TRANCE = 'skill_battle_trance';
+const ACTION_BY_CODE = { A: 'action_attack', B: 'action_block', M: 'action_move', P: 'action_posture' };
+// 15-card deck for everyone: 11 basics + 4 skills (Rule 0).
 const deck = [];
+const pushAction = (code) => { const b = ACTION_BY_CODE[code]; deck.push({ card_id: `${b}#${randomBytes(3).toString('hex')}`, kind: 'action', action_id: b, code, action_name: data.actions[b].name }); };
 if (entity.kind === 'character') {
-  const combo = new Set(entity.combo || []);
-  const codes = { action_attack: 'A', action_block: 'B', action_move: 'M', action_posture: 'P' };
-  const counts = { A: 5, B: 5, M: 5, P: 5 };
-  for (const c of combo) counts[c] = Math.min(7, counts[c] + 2);
-  for (const b of basics) for (let i = 0; i < counts[codes[b]]; i++)
-    deck.push({ card_id: `${b}#${randomBytes(3).toString('hex')}`, action_id: b, code: codes[b], action_name: data.actions[b].name });
+  for (const c of 'ABMP') for (let i = 0; i < 2; i++) pushAction(c);
+  const extra = (entity.combo || []).length ? entity.combo.slice(0, 3) : ['A', 'B', 'M'];
+  for (const c of extra) pushAction(c);
+  while (deck.length < 11) pushAction('P');
+} else if (entity.dicePattern) {
+  for (let i = 0; i < 11; i++) pushAction(entity.dicePattern[i % entity.dicePattern.length]);
 } else {
-  const push = (b, k) => deck.push({ card_id: `${b}#${randomBytes(3).toString('hex')}`, action_id: b, code: k, action_name: data.actions[b].name });
-  if (entity.dicePattern) {
-    const map = { A: 'action_attack', B: 'action_block', M: 'action_move', P: 'action_posture' };
-    for (let i = 0; i < 20; i++) push(map[entity.dicePattern[i % entity.dicePattern.length]], entity.dicePattern[i % entity.dicePattern.length]);
-  } else {
-    for (let i = 0; i < 10; i++) push('action_attack', 'A');
-    for (let i = 0; i < 6; i++)  push('action_move',   'M');
-    for (let i = 0; i < 3; i++)  push('action_posture','P');
-    for (let i = 0; i < 1; i++)  push('action_block',  'B');
+  for (let i = 0; i < 6; i++) pushAction('A');
+  for (let i = 0; i < 3; i++) pushAction('M');
+  pushAction('P'); pushAction('B');
+}
+{
+  // FORCE_SKILLS=skill_a,skill_b (dev/test only) pins those skills into the 4 dealt.
+  const forced = (process.env.FORCE_SKILLS || '').split(',').filter(id => SKILLS_IMPLEMENTED.includes(id) && data.skills[id]);
+  const pool = SKILLS_IMPLEMENTED.filter(id => data.skills[id] && !forced.includes(id));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  for (const id of [...forced, ...pool].slice(0, 4)) {
+    const s = data.skills[id];
+    const trance = id === TRANCE;
+    deck.push({ card_id: `${id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: id, name: s.name, requires: trance ? '*' : s.data.action_type, is_trance: trance, text: s.data.text, tags: s.tags, is_permanent: !!s.data.is_permanent });
   }
 }
 // Shuffle.
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+// FORCE_OPENING=skill_sanctuary,B,A (dev/test only): move one card per entry
+// to the top of the deck so the opening hand is predictable. Only characters —
+// monsters keep their shuffle so a pinned hero test is not mirrored by the foe.
+if (process.env.FORCE_OPENING && entity.kind === 'character') {
+  const top = [];
+  for (const want of process.env.FORCE_OPENING.split(',').map(s => s.trim()).filter(Boolean)) {
+    const i = deck.findIndex(c => c.skill_id === want || c.code === want);
+    if (i >= 0) top.push(...deck.splice(i, 1));
+  }
+  deck.unshift(...top);
+}
 const hand = []; while (hand.length < HAND_SIZE && deck.length) hand.push(deck.shift());
 const discard = [];
 let queued = [];           // one element: slot index (int) | 'EP' | 'EM'
+let queuedSkills = [];     // hand indices of skill cards attached to the queued action
+let queuedExtra = null;    // second option card index when Battle Trance is attached
 let target = null;         // peer_id string | { q, r } tile object | null
+// `queued`/`queued_skills` ride only on the echo to a queue message — a hand
+// refresh at round/turn boundaries must not wipe the browser's fresh autoselect.
+const handMsg = (extra = {}) => ({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round, ...extra });
 let locked = false;
 const willDiscard = new Set();   // card_ids the player marked to drop at turn end (rule 7: characters MAY discard leftovers)
 
@@ -545,6 +577,8 @@ function currentStateSnapshot(slim = false) {
     alliance: ALLIANCE, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
     turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt,
     map_blocks: dimMap ? dimMap.blockCount() : 0,
+    stat_vitality: entity.stats.vitality, stat_world: entity.stats.world, stat_matter: entity.stats.matter, stat_will: entity.stats.will,
+    permanents_csv: permanentsCsv(),
   };
   if (slim) return s;
   // Live clock + network hints so a joining peer can align its turn counter
@@ -764,6 +798,7 @@ if (DISCOVERY_URL) { setInterval(pullDiscoveryState, 2500); setTimeout(pullDisco
 const PHASES = ['planning', 'reveal', 'resolution', 'cleanup'];
 let myLastSalt = null;
 let myLastReveal = null;
+let myPlayedCardIds = null;   // option cards the resolver actually played this round
 let lastAttackTarget = null;  // peer_id of the enemy we last swung at — the no-target Attack fallback
 
 // Alliances in the Ashfall-Micro demo collapse into two sides: the player and
@@ -970,20 +1005,39 @@ async function doPlanningEnd() {
     code = hasTileTarget ? 'EM' : 'EP';
   } else if (q0 === 'EP') code = 'EP';
   else if (q0 === 'EM') code = 'EM';
-  else if (typeof q0 === 'number' && hand[q0]) { card = hand[q0]; code = card.code; }
+  else if (typeof q0 === 'number' && hand[q0]?.kind !== 'skill' && hand[q0]) { card = hand[q0]; code = card.code; }
+
+  // Battle Trance: two options [c1, c2]; the resolver picks per enemy which one
+  // is actually played (Rule 17 instant on top of the whole action).
+  const isAction = c => c && c.kind !== 'skill';
+  const tranceCard = queuedSkills.map(i => hand[i]).find(c => c?.is_trance) || null;
+  const trance = tranceCard && hand.some(isAction) ? tranceCard : null;
+  let extraCard = null;
+  let options = null;
+  if (trance) {
+    if (typeof queuedExtra === 'number' && queuedExtra !== q0 && isAction(hand[queuedExtra])) extraCard = hand[queuedExtra];
+    if (code === 'EP' && !extraCard) { card = hand.find(isAction); code = card.code; }
+    options = [code, extraCard ? extraCard.code : 'EP'];
+  }
+  const optionCodes = options || [code];
+  const wants = c => optionCodes.includes(c);
+  // A skill rides on its action, or — for Move / Posture skills — on an Empty option.
+  const ridesOn = req => wants(req) || ((req === 'M' || req === 'P') && (wants('EP') || wants('EM')));
 
   // Normalise target against the action's actual needs. Block / Posture / EP
   // never target; Attack keeps either an enemy peer or a tile (a tile target
   // turns the Attack into a step toward that hex at resolution time);
   // Empty Move only accepts a tile. This stops a stale selection from one
   // turn leaking into a Block commit as a bogus target.
-  let normTarget = stripTargetFor(code, target);
+  let normTarget = options
+    ? (wants('A') || wants('M') ? stripTargetFor('A', target) : wants('EM') ? stripTargetFor('EM', target) : null)
+    : stripTargetFor(code, target);
 
   // Attack with no target would resolve into nothing. Fall back to the enemy
   // we last attacked (if still alive), else the nearest living enemy — random
   // among ties. Resolved here, before commit, so the reveal carries a concrete
   // target and every peer resolves the same thing.
-  if (code === 'A' && !normTarget) {
+  if (wants('A') && !normTarget) {
     const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
     let pick = enemies.find(p => p.peer_id === lastAttackTarget) || null;
     if (!pick && enemies.length) {
@@ -994,11 +1048,19 @@ async function doPlanningEnd() {
     }
     if (pick) normTarget = pick.peer_id;
   }
-  if (code === 'A' && typeof normTarget === 'string') lastAttackTarget = normTarget;
+  if (wants('A') && typeof normTarget === 'string') lastAttackTarget = normTarget;
 
+  const mySkills = queuedSkills.map(i => hand[i]).filter(c => c?.kind === 'skill' && (c.is_trance ? !!trance : ridesOn(c.requires)));
+  mySkills.sort((a, b) => a.skill_id.localeCompare(b.skill_id));
+  const skillIds = mySkills.map(c => c.skill_id);
+  const revealCode = trance ? 'BT' : code;
   myLastSalt = randomBytes(12).toString('hex');
-  const commitHash = sha256Hex(`${code}::${targetTag(normTarget)}::${myLastSalt}`);
-  myLastReveal = { code, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null };
+  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${myLastSalt}`);
+  myLastReveal = {
+    code: revealCode, trance: options, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null,
+    optionCardIds: [card ? card.card_id : null, extraCard ? extraCard.card_id : null],
+    skillIds, skillNames: mySkills.map(c => c.name), skillCardIds: mySkills.map(c => c.card_id),
+  };
   await emitEnvelope({
     type: 'evt_action_commit',
     payload: { commitment: commitHash, empty_move_announced: code === 'EM' },
@@ -1013,7 +1075,8 @@ async function doReveal() {
     type: 'evt_action_reveal',
     payload: {
       action: myLastReveal.code,
-      effects: [], skills: [], class_ability_tapped: false,
+      trance: myLastReveal.trance || null,
+      effects: [], skills: myLastReveal.skillIds, skill_names: myLastReveal.skillNames, class_ability_tapped: false,
       target: targetObj,
       combo_step: null,
       salt: myLastReveal.salt,
@@ -1050,7 +1113,7 @@ async function doResolution() {
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
     if (revealsThisTurn.some(r => r.actor === env.actor_peer_id)) continue;
-    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null });
+    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null });
     const s = env.state;
     if (s && s.peer_id === env.actor_peer_id && Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) {
       view.set(env.actor_peer_id, { ...(view.get(env.actor_peer_id) || {}), ...s });
@@ -1060,7 +1123,7 @@ async function doResolution() {
   view.set(PEER_ID_STRING, { ...(view.get(PEER_ID_STRING) || {}), ...currentStateSnapshot() });
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
-    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target) });
+    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null });
   }
   // Optional discovery mirror: merge any reveals it has for this action.
   if (DISCOVERY_URL) try {
@@ -1068,7 +1131,7 @@ async function doResolution() {
     const j = await r.json();
     for (const d of j.reveals || []) {
       if (revealsThisTurn.find(x => x.actor === d.peer_id)) continue;
-      revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null });
+      revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null, skills: [], trance: null });
     }
   } catch {}
   // Reveals from entities at 0 hp are ignored everywhere (stale discovery
@@ -1077,6 +1140,7 @@ async function doResolution() {
   // peer filters the same set.
   const lifeOf = (id) => id === PEER_ID_STRING ? entity.life : (view.get(id)?.life ?? 0);
   for (let i = revealsThisTurn.length - 1; i >= 0; i--) if (lifeOf(revealsThisTurn[i].actor) <= 0) revealsThisTurn.splice(i, 1);
+  revealsThisTurn.sort((a, b) => a.actor.localeCompare(b.actor));
 
   // Resolve a target object into the tile the target occupies / points at. A
   // character target reads the peer's current public tile; a tile target is
@@ -1091,6 +1155,120 @@ async function doResolution() {
     return null;
   };
 
+  // Skills (Rule 17 instants, Rule 8 "prohibitions apply as a replacement").
+  // `effAction` is what each actor effectively does after every skill in play
+  // has had its say; everything below resolves against it, never `r.action`.
+  const skillsOf = new Map(revealsThisTurn.map(r => [r.actor, r.skills || []]));
+  const has = (id, skill) => (skillsOf.get(id) || []).includes(skill);
+  const permsOf = (id) => id === PEER_ID_STRING
+    ? [...entity.permanents]
+    : String(view.get(id)?.permanents_csv || '').split(',').filter(Boolean);
+  const hasPerm = (id, skill) => permsOf(id).includes(skill);
+  const distBetween = (a, b) => {
+    const pa = view.get(a), pb = view.get(b);
+    return pa && pb ? hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r }) : Infinity;
+  };
+  const enemyOf = (a, b) => {
+    const pa = view.get(a), pb = view.get(b);
+    return !!pa && !!pb && sideOf(pa.alliance) !== sideOf(pb.alliance);
+  };
+  const effAction = new Map(revealsThisTurn.map(r => [r.actor, r.action]));
+  // Battle Trance actors carry two options; prohibitions edit the options, a
+  // Bluff negates the whole trance.
+  const tranceOpts = new Map(revealsThisTurn.filter(r => r.action === 'BT' && r.trance).map(r => [r.actor, [...r.trance]]));
+  for (const r of revealsThisTurn) if (r.action === 'BT' && !r.trance) effAction.set(r.actor, 'EP');
+  const codeIs = (id, c) => tranceOpts.has(id) ? tranceOpts.get(id).includes(c) : effAction.get(id) === c;
+  const replace = (id, from, to) => {
+    const o = tranceOpts.get(id);
+    if (o) { for (let i = 0; i < o.length; i++) if (o[i] === from) o[i] = to; }
+    else if (effAction.get(id) === from) effAction.set(id, to);
+  };
+  const noMove = new Set();
+  for (const r of revealsThisTurn) {
+    const sk = r.skills || [];
+    if (!sk.length) continue;
+    const tgt = r.target?.kind === 'character' ? r.target.ref : null;
+    const tgtKnown = tgt && effAction.has(tgt);
+    // Move / Posture skills also ride on Empty Move / Empty Posture.
+    const codes = r.trance || [r.action];
+    const rides = c => codes.includes(c) || ((c === 'M' || c === 'P') && (codes.includes('EP') || codes.includes('EM')));
+    if (rides('M') && tgtKnown && has(r.actor, 'skill_bluff') && distBetween(r.actor, tgt) <= 1) { effAction.set(tgt, 'EP'); tranceOpts.delete(tgt); }
+    if (rides('P') && has(r.actor, 'skill_intimidation')) {
+      for (const o of revealsThisTurn) {
+        if (o.actor !== r.actor && enemyOf(r.actor, o.actor) && distBetween(r.actor, o.actor) <= 1 && codeIs(o.actor, 'A')) replace(o.actor, 'A', 'EP');
+      }
+    }
+    if (rides('A') && tgtKnown && has(r.actor, 'skill_grapple') && codeIs(tgt, 'P')) replace(tgt, 'P', 'EP');
+    if (rides('M') && tgtKnown && has(r.actor, 'skill_disruption_move') && codeIs(tgt, 'P')) replace(tgt, 'P', 'EP');
+    if (rides('A') && tgtKnown && has(r.actor, 'skill_overrun') && distBetween(r.actor, tgt) <= 1) noMove.add(tgt);
+  }
+  for (const r of revealsThisTurn) {
+    r.action = effAction.get(r.actor);
+    r.trance = r.action === 'BT' ? tranceOpts.get(r.actor) || null : null;
+    if (r.action === 'BT' && !r.trance) r.action = 'EP';
+  }
+
+  // Trance assignment: for each adjacent enemy pick the option that benefits
+  // the trance actor most (dealt − taken). Each Attack option hits at most one
+  // enemy; the declared target gets first choice. With nobody adjacent both
+  // options are played.
+  const mapDef = (atk, def) => def === 'EP' ? ({ A: 'P', P: 'M', M: 'EP', B: 'EP' }[atk] || def) : def === 'EM' ? ({ A: 'EM', P: 'EM', M: 'EM', B: 'M' }[atk] || def) : def;
+  const hitDmg = (def) => Math.max(0, 1 + (edgeMap.A?.[mapDef('A', def)] ?? 0));
+  const byActor = new Map(revealsThisTurn.map(r => [r.actor, r]));
+  const codeVs = (id, other) => {
+    const r = byActor.get(id);
+    if (!r) return 'EP';
+    if (!r.trance) return r.action;
+    const idx = r.vs?.get(other) ?? (r.played ? [...r.played][0] : 0);
+    return r.trance[idx] ?? 'EP';
+  };
+  const attacksOn = (r, victim) => {
+    if (!r) return false;
+    const declared = r.target?.kind === 'character' && r.target.ref === victim;
+    if (!r.trance) return r.action === 'A' && declared;
+    const idx = r.vs?.get(victim);
+    if (idx !== undefined) return r.trance[idx] === 'A';
+    return !r.vs && declared && r.trance.includes('A');
+  };
+  for (const r of revealsThisTurn) {
+    if (!r.trance) continue;
+    const me = view.get(r.actor);
+    if (!me) { r.vs = new Map(); r.played = new Set([0, 1]); continue; }
+    const declared = r.target?.kind === 'character' ? r.target.ref : null;
+    // Revealers only — their snapshots ride in the reveal, so every peer sees the same set.
+    const adj = [...view.values()]
+      .filter(p => p && p.peer_id !== r.actor && byActor.has(p.peer_id) && p.life > 0 && enemyOf(r.actor, p.peer_id) && distBetween(r.actor, p.peer_id) <= 1)
+      .map(p => p.peer_id)
+      .sort((a, b) => (a === declared ? -1 : b === declared ? 1 : a.localeCompare(b)));
+    r.vs = new Map();
+    r.played = new Set();
+    const usedA = new Set();
+    for (const e of adj) {
+      const er = byActor.get(e);
+      const eCode = er ? codeVs(e, r.actor) : 'EP';
+      const eHits = attacksOn(er, r.actor);
+      let best = -1, bestScore = -Infinity;
+      r.trance.forEach((opt, i) => {
+        if (opt === 'A' && usedA.has(i)) return;
+        const taken = (eHits ? hitDmg(opt) : 0) + (opt === 'A' && eCode === 'B' ? 1 : 0);
+        const dealt = opt === 'A' ? hitDmg(eCode) : (opt === 'B' && eHits ? 1 : 0);
+        const score = dealt - taken;
+        if (score > bestScore) { bestScore = score; best = i; }
+      });
+      if (best < 0) continue;
+      r.vs.set(e, best);
+      r.played.add(best);
+      if (r.trance[best] === 'A') usedA.add(best);
+    }
+    if (!adj.length) r.played = new Set([0, 1]);
+  }
+  if (myLastReveal) {
+    const mine = byActor.get(PEER_ID_STRING);
+    myPlayedCardIds = mine?.trance
+      ? (myLastReveal.optionCardIds || []).filter((id, i) => id && mine.played.has(i))
+      : (myLastReveal.cardId ? [myLastReveal.cardId] : []);
+  }
+
   // Movement intents. Rule 8:
   //  - EM ("Empty journey") moves halfway toward the target tile — round(d/2)
   //    steps along the shortest hex path, min 1 step if the target isn't the
@@ -1103,26 +1281,50 @@ async function doResolution() {
   //  lower-priority claimant AND every same-priority tied claimant is
   //  blocked ("journey cancelled (blocked)"). EM is declared first in the
   //  evaluation ordering only in the sense that it's the weakest tier.
-  const stepsAlong = (from, to, n) => {
+  //  Occupied hexes are walked around, not into: a step takes the first free
+  //  neighbour that closes distance (there are up to two). When every closer
+  //  hex is held the mover aims straight anyway and is vetoed below with
+  //  "tile occupied by …" — no sidestepping at equal distance, which only
+  //  made movers ping-pong around a crowded melee. Without the detour a hero
+  //  behind a teammate was blocked round after round.
+  //  Deterministic: `view` is the same on every peer (it already drives the
+  //  occupancy veto) and the neighbour order is fixed.
+  const occupiedBefore = new Map();
+  for (const p of view.values()) if (p && p.life > 0) occupiedBefore.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
+  const stepsAlong = (actorId, from, to, n) => {
     let cur = { q: from.q, r: from.r };
-    for (let i = 0; i < n; i++) cur = stepToward(cur, { tile_q: to.q, tile_r: to.r });
+    for (let i = 0; i < n; i++) {
+      const dNow = hexDistance({ tile_q: cur.q, tile_r: cur.r }, { tile_q: to.q, tile_r: to.r });
+      if (dNow === 0) break;
+      const opts = hexNeighbours(cur.q, cur.r).map(n => ({ ...n, d: hexDistance({ tile_q: n.q, tile_r: n.r }, { tile_q: to.q, tile_r: to.r }) }));
+      const free = n => { const o = occupiedBefore.get(`${n.q},${n.r}`); return !o || o === actorId; };
+      const straight = opts.slice().sort((a, b) => a.d - b.d)[0];
+      const next = opts.find(n => n.d < dNow && free(n)) || straight;
+      cur = { q: next.q, r: next.r };
+    }
     return cur;
   };
   const priorityOf = (act) => act === 'A' ? 3 : act === 'M' ? 2 : act === 'EM' ? 1 : 0;
+  const vetoed = new Map();          // actor -> reason string
   const moveIntents = [];
+  const movesWith = (code, r) => code === 'M' || code === 'EM' || (code === 'A' && r.target?.kind === 'tile');
+  // The option a trance actor moves with: the first played M / EM / tile-Attack.
+  const moveCodeOf = (r) => r.trance
+    ? ([...r.played].sort().map(i => r.trance[i]).find(c => movesWith(c, r)) || null)
+    : (movesWith(r.action, r) ? r.action : null);
   for (const r of revealsThisTurn) {
-    const isMove = r.action === 'M' || r.action === 'EM';
-    const isAttackIntoEmpty = r.action === 'A' && r.target?.kind === 'tile';
-    if (!isMove && !isAttackIntoEmpty) continue;
+    const mv = moveCodeOf(r);
+    if (!mv) continue;
+    if (noMove.has(r.actor)) { vetoed.set(r.actor, 'move negated by Overrun'); continue; }
     const actor = view.get(r.actor);
     if (!actor) continue;
     const tgtT = tileOf(r.target);
     if (!tgtT) continue;
     const here = { q: actor.tile_q, r: actor.tile_r };
     const d = hexDistance({ tile_q: here.q, tile_r: here.r }, { tile_q: tgtT.q, tile_r: tgtT.r });
-    const steps = r.action === 'EM' ? Math.min(EM_MAX_STEPS, Math.max(1, Math.round(d / 2))) : 1;
-    const dest = stepsAlong(here, tgtT, steps);
-    moveIntents.push({ actor: r.actor, action: r.action, dest, prio: priorityOf(r.action), target: tgtT });
+    const steps = mv === 'EM' ? Math.min(EM_MAX_STEPS, Math.max(1, Math.round(d / 2))) : 1;
+    const dest = stepsAlong(r.actor, here, tgtT, steps);
+    moveIntents.push({ actor: r.actor, action: mv, dest, prio: priorityOf(mv), target: tgtT });
   }
   // Deterministic iteration across peers — the gossip layer delivers reveals
   // in whatever order the mesh happened to carry them, so peer A's
@@ -1141,7 +1343,6 @@ async function doResolution() {
     occupiedNow.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
   }
   const nextTiles = new Map();
-  const vetoed = new Map();          // actor -> reason string
   const journeyResults = new Map();  // actor -> { outcome: 'complete'|'blocked', q, r, action }
   const byDest = new Map();
   for (const it of moveIntents) {
@@ -1189,29 +1390,45 @@ async function doResolution() {
     list.push({ attacker, amount });
     damage.set(victim, list);
   };
+  const postTile = (id) => nextTiles.get(id) ? { tile_q: nextTiles.get(id).q, tile_r: nextTiles.get(id).r } : view.get(id);
+  const attackHit = (r, defId) => {
+    const atk = view.get(r.actor), def = view.get(defId);
+    if (!atk || !def) return;
+    if (hexDistance(postTile(r.actor), postTile(defId)) > 1) return;
+    let dmg = hitDmg(codeVs(defId, r.actor));
+    if (dmg >= 1 && has(r.actor, 'skill_powerful_attack')) dmg += 1;
+    if (has(defId, 'skill_dodge')) dmg = Math.max(0, dmg - 1);
+    if (hasPerm(defId, 'skill_barricade')) dmg = 0;
+    if (hasPerm(defId, 'skill_sanctuary') && (effAction.get(defId) ?? 'EP') === 'EP') dmg = 0;
+    // Taunt: a nearby taunter is the only legal Attack target. Only revealers
+    // count — their snapshots ride in the reveal, so every peer sees the same set.
+    const taunter = revealsThisTurn.some(t => t.actor !== defId && t.actor !== r.actor
+      && enemyOf(r.actor, t.actor) && hasPerm(t.actor, 'skill_taunt') && distBetween(r.actor, t.actor) <= 1);
+    if (taunter) dmg = 0;
+    addDmg(defId, r.actor, dmg);
+  };
+  const blockBack = (r, q) => {
+    if (hasPerm(q.actor, 'skill_ranged_weapon')) return;
+    let back = 1;
+    if (has(q.actor, 'skill_dodge')) back = 0;
+    if (hasPerm(q.actor, 'skill_barricade')) back = 0;
+    if (hasPerm(q.actor, 'skill_sanctuary') && (effAction.get(q.actor) ?? 'EP') === 'EP') back = 0;
+    addDmg(q.actor, r.actor, back);
+  };
   for (const r of revealsThisTurn) {
+    if (r.trance) {
+      for (const [e, idx] of [...r.vs].sort((x, y) => x[0].localeCompare(y[0]))) {
+        if (r.trance[idx] === 'A') attackHit(r, e);
+        if (r.trance[idx] === 'B' && attacksOn(byActor.get(e), r.actor)) blockBack(r, byActor.get(e));
+      }
+      continue;
+    }
     if (r.action === 'A') {
       const defId = r.target?.kind === 'character' ? r.target.ref : null;
-      if (!defId) continue;
-      const atk = view.get(r.actor), def = view.get(defId);
-      if (!atk || !def) continue;
-      const atkPost = nextTiles.get(r.actor) ? { tile_q: nextTiles.get(r.actor).q, tile_r: nextTiles.get(r.actor).r } : atk;
-      const defPost = nextTiles.get(defId)  ? { tile_q: nextTiles.get(defId).q,  tile_r: nextTiles.get(defId).r  } : def;
-      if (hexDistance(atkPost, defPost) > 1) continue;
-      const defReveal = revealsThisTurn.find(x => x.actor === defId);
-      let defCode = defReveal?.action || 'EP';
-      if (defCode === 'EP') defCode = { A: 'P',  P: 'M',  M: 'EP', B: 'EP' }[r.action] || defCode;
-      if (defCode === 'EM') defCode = { A: 'EM', P: 'EM', M: 'EM', B: 'M'  }[r.action] || defCode;
-      const bonus = edgeMap[r.action]?.[defCode] ?? 0;
-      const dmg = Math.max(0, 1 + bonus);
-      addDmg(defId, r.actor, dmg);
+      if (defId) attackHit(r, defId);
     }
     if (r.action === 'B') {
-      for (const q of revealsThisTurn) {
-        if (q.action === 'A' && q.target?.kind === 'character' && q.target.ref === r.actor) {
-          addDmg(q.actor, r.actor, 1);
-        }
-      }
+      for (const q of revealsThisTurn) if (attacksOn(q, r.actor)) blockBack(r, q);
     }
   }
   const sumDmg = list => (list || []).reduce((s, d) => s + d.amount, 0);
@@ -1233,9 +1450,10 @@ async function doResolution() {
       const d = hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r });
       if (d > 1) continue;
       const dmg = dmgBetween(a.actor, b.actor) || dmgBetween(b.actor, a.actor);
+      const label = (r, other) => r.trance ? `BT[${r.trance.join('|')}]→${codeVs(r.actor, other)}` : r.action;
       contacts.push({
-        a: { peer_id: a.actor, name: pa.name, action: a.action, tile_q: pa.tile_q, tile_r: pa.tile_r, vetoed: vetoed.get(a.actor) || null },
-        b: { peer_id: b.actor, name: pb.name, action: b.action, tile_q: pb.tile_q, tile_r: pb.tile_r, vetoed: vetoed.get(b.actor) || null },
+        a: { peer_id: a.actor, name: pa.name, action: label(a, b.actor), tile_q: pa.tile_q, tile_r: pa.tile_r, vetoed: vetoed.get(a.actor) || null },
+        b: { peer_id: b.actor, name: pb.name, action: label(b, a.actor), tile_q: pb.tile_q, tile_r: pb.tile_r, vetoed: vetoed.get(b.actor) || null },
         distance: d,
         damage_exchanged: dmg,
       });
@@ -1252,9 +1470,23 @@ async function doResolution() {
   if (wasAlive && entity.life <= 0) {
     console.log(`[${PEER_LABEL}] DIED at (${entity.tile.q},${entity.tile.r}) after -${myDmg} on T${hg.turn}.R${hg.round + 1} (life_max=${entity.lifeMax})`);
   }
+  // Permanents land in the NEXT round's snapshot, so they take effect from
+  // then on — the reveal that placed them embedded the pre-placement state.
+  const permsBefore = permanentsCsv();
+  const myR = byActor.get(PEER_ID_STRING);
+  // Sanctuary lasts while I rest: declaring anything but the plain Empty
+  // Posture — another action, a trance, or a skill riding on the EP — ends it
+  // from the next round (damage this round was already judged on the EP).
+  const leftSanctuary = myR && (myR.action !== 'EP' || (myR.skills || []).length > 0);
+  if (hasPerm(PEER_ID_STRING, 'skill_sanctuary') && leftSanctuary) entity.permanents.delete('skill_sanctuary');
+  const playedCodes = myR?.trance ? new Set([...myR.played].map(i => myR.trance[i])) : null;
+  for (const id of myLastReveal?.skillIds || []) {
+    const sd = data.skills[id]?.data;
+    if (sd?.is_permanent && (!playedCodes || playedCodes.has(sd.action_type))) entity.permanents.add(id);
+  }
   // Publish immediately so the browser UI sees damage / movement at reveal
   // time, not only after cleanup fires a few seconds later.
-  if (myMove || myDmg) await publishPublicState();
+  if (myMove || myDmg || permsBefore !== permanentsCsv()) await publishPublicState();
 
   // Deterministic state hash over the revealers' post-resolution state: the
   // view's tiles with this round's moves applied and this round's damage
@@ -1281,9 +1513,11 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     const actor = view.get(r.actor);
     if (!actor) continue;
-    const aim = (r.action === 'A' || r.action === 'M' || r.action === 'EM') ? tileOf(r.target) : null;
+    const aims = r.trance ? r.trance.some(c => c === 'A' || c === 'M' || c === 'EM') : (r.action === 'A' || r.action === 'M' || r.action === 'EM');
+    const aim = aims ? tileOf(r.target) : null;
     actionSummary.push({
-      actor: r.actor, action: r.action,
+      actor: r.actor, action: r.action, skills: r.skills || [],
+      trance: r.trance || null, played: r.trance ? [...r.played].sort() : null,
       from_q: actor.tile_q, from_r: actor.tile_r,
       target_q: aim?.q, target_r: aim?.r,
     });
@@ -1307,13 +1541,14 @@ function reshuffleIfEmpty() {
 // End of one action: the played card leaves the hand (no draw yet — rule 10
 // refills only at turn end), buffers reset, counters advance.
 async function endRound() {
-  const played = typeof queued[0] === 'number' ? hand[queued[0]] : null;
-  if (played) { discard.push(played); hand.splice(queued[0], 1); }
-  queued = []; target = null; locked = false; myLastReveal = null;
+  const playedIds = new Set(myLastReveal?.skillCardIds || []);
+  for (const id of myPlayedCardIds || (myLastReveal?.cardId ? [myLastReveal.cardId] : [])) playedIds.add(id);
+  for (let i = hand.length - 1; i >= 0; i--) if (playedIds.has(hand[i].card_id)) discard.push(...hand.splice(i, 1));
+  queued = []; queuedSkills = []; queuedExtra = null; target = null; locked = false; myLastReveal = null; myPlayedCardIds = null;
   hg.round += 1; hg.action += 1;
   if (hg.round >= ROUNDS_PER_TURN) await endTurn();
   else {
-    broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round });
+    broadcastUI(handMsg());
     // Push the new action to the mesh immediately — otherwise other peers
     // only hear about our advance at turn boundaries (every 3 rounds) or on
     // the 15s heartbeat, and the catch-up logic can't fire until it sees
@@ -1345,12 +1580,12 @@ async function endTurn() {
       draws: [{ peer_id: PEER_ID_STRING, cards_drawn: hand.length - before }],
     },
   });
-  broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round, turn_end: true });
+  broadcastUI(handMsg({ turn_end: true }));
 }
 
 async function npcPlan() {
   const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
-  if (!enemies.length) { queued = []; target = null; return; }
+  if (!enemies.length) { queued = []; queuedSkills = []; queuedExtra = null; target = null; return; }
   enemies.sort((a, b) => hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, a) - hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, b));
   const nearest = enemies[0];
   const d = hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, nearest);
@@ -1359,8 +1594,23 @@ async function npcPlan() {
   let r = Math.random() * total, pick = 'A';
   for (const [k, w] of Object.entries(WEIGHTS)) { r -= w; if (r <= 0) { pick = k; break; } }
   const slot = hand.findIndex(c => c.code === pick);
-  queued = slot >= 0 ? [slot] : [];
-  target = nearest.peer_id;
+  queued = slot >= 0 ? [slot] : ['EMPTY'];
+  // No card for the pick → the Empty slot, which still carries Move / Posture
+  // skills. Wanted to move but hold no M card → Empty Move toward the enemy's
+  // hex (a character target would make the Empty slot a Posture and the
+  // monster would stand still for the whole fight).
+  const emptyMove = slot < 0 && pick === 'M' && d > 1;
+  const ridesPick = c => slot >= 0 ? c.requires === pick : (c.requires === 'M' || c.requires === 'P');
+  queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && ridesPick(c) ? i : -1).filter(i => i >= 0);
+  queuedExtra = null;
+  const tranceIdx = hand.findIndex(c => c.is_trance);
+  const others = hand.map((c, i) => c.kind !== 'skill' && i !== slot ? i : -1).filter(i => i >= 0);
+  if (slot >= 0 && tranceIdx >= 0 && others.length && Math.random() < 0.35) {
+    queuedSkills.push(tranceIdx);
+    const diff = others.find(i => hand[i].code !== pick);
+    queuedExtra = diff ?? null;
+  }
+  target = emptyMove ? { q: nearest.tile_q, r: nearest.tile_r } : nearest.peer_id;
 }
 
 // Our own state hash per action, kept briefly so an incoming evt_state_hash
@@ -1405,13 +1655,19 @@ function inboxApply(env) {
 // relay replays the last two minutes on subscribe), Gun and the optional
 // discovery mirror — all land in peersPublic. Wait briefly for the first one.
 const JOIN_SYNC_WAIT_MS = Number(process.env.JOIN_SYNC_WAIT_MS || 6000);
+const JOIN_SYNC_SETTLE_MS = Number(process.env.JOIN_SYNC_SETTLE_MS || 1500);
 async function syncClockFromMesh() {
   const t0 = Date.now();
   const actOf = s => typeof s.action === 'number' ? s.action : actionKey(s.turn, s.round || 0);
-  let others = [];
+  // Keep listening until the roster stops growing (quiet for JOIN_SYNC_SETTLE_MS):
+  // resolving the first round with half the entities in view puts movers on
+  // hexes everyone else considers occupied → a one-round state divergence.
+  let others = [], lastGrowth = t0;
   while (Date.now() - t0 < JOIN_SYNC_WAIT_MS) {
-    others = livePeers().filter(p => p.peer_id !== PEER_ID_STRING && typeof p.turn === 'number');
-    if (others.length) break;
+    const now = livePeers().filter(p => p.peer_id !== PEER_ID_STRING && typeof p.turn === 'number');
+    if (now.length > others.length) lastGrowth = Date.now();
+    others = now;
+    if (others.length && Date.now() - lastGrowth >= JOIN_SYNC_SETTLE_MS) break;
     await new Promise(r => setTimeout(r, 250));
   }
   if (!others.length) { console.log(`[${PEER_LABEL}] join sync: no live peers heard in ${JOIN_SYNC_WAIT_MS}ms, starting fresh at turn 0`); return; }
@@ -1446,7 +1702,7 @@ async function tick() {
       currentPhase = 'planning';
       phaseEndsAt = roundDeadline;
       broadcastUI({ kind: 'phase', name: 'planning', seconds: Math.max(0, Math.round((phaseEndsAt - Date.now()) / 100) / 10), heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
-      broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, turn: hg.turn, round: hg.round });
+      broadcastUI(handMsg());
       await publishPublicState();
       return;
     }
@@ -1663,7 +1919,7 @@ const uiHttp = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       peer_id: PEER_ID_STRING, dimension: DIM_NAME, phase: currentPhase, phaseEndsIn: Math.max(0, phaseEndsAt - Date.now()),
-      entity, hand, queued, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
+      entity, permanents_csv: permanentsCsv(), hand, queued, queued_skills: queuedSkills, queued_extra: queuedExtra, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
       peers: peersForUI(),
       alliance: ALLIANCE,
       map: { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles: dimMap.size(), blocks: dimMap.blockCount(), bounds: dimMap.bounds() },
@@ -1690,10 +1946,26 @@ wss.on('connection', (ws) => {
         // 'EM' are still accepted so older clients keep working.
         const picks = (m.slots || []).slice(0, 1).filter(s =>
           s === 'EMPTY' || s === 'EP' || s === 'EM' ||
-          (typeof s === 'number' && s >= 0 && s < hand.length)
+          (typeof s === 'number' && s >= 0 && s < hand.length && hand[s].kind !== 'skill')
         );
         queued = picks;
-        broadcastUI({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, queued });
+        const isAct = c => c && c.kind !== 'skill';
+        const primary = typeof picks[0] === 'number' ? picks[0] : null;
+        const skillIdx = [...new Set((m.skills || []).filter(i => typeof i === 'number' && hand[i]?.kind === 'skill'))];
+        const tranceOn = skillIdx.some(i => hand[i].is_trance) && hand.some(isAct);
+        queuedExtra = tranceOn && typeof m.extra === 'number' && m.extra !== primary && isAct(hand[m.extra]) ? m.extra : null;
+        const codes = new Set();
+        if (primary !== null) codes.add(hand[primary].code);
+        // Move / Posture skills may ride on the Empty slot (Empty Move / Empty Posture).
+        else if (picks.length) { codes.add('M'); codes.add('P'); }
+        if (tranceOn) {
+          if (queuedExtra !== null) codes.add(hand[queuedExtra].code);
+          if (primary === null && queuedExtra === null) codes.add(hand.find(isAct).code);
+          // No second card → the second option is EP, which carries Move / Posture skills.
+          if (queuedExtra === null) { codes.add('M'); codes.add('P'); }
+        }
+        queuedSkills = skillIdx.filter(i => hand[i].is_trance ? tranceOn : (codes.size > 0 && codes.has(hand[i].requires)));
+        broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra }));
       }
       if (m.kind === 'target') {
         const t = m.target;

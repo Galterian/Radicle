@@ -42,11 +42,19 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
 #panel small { color: #566379; font-weight: 400; }
 #roster { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
-.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; gap: 6px; cursor: pointer; }
+.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; }
 .ros:hover { background: #1a2130; }
 .ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
 .ros .nm { color: #e0e6ef; }
 .ros .st { color: #8aa0bf; font-variant-numeric: tabular-nums; }
+.ros .stats { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
+.ros .stats .pill { font: 600 10px/1 ui-monospace, Menlo, Consolas, monospace; padding: 2px 5px; border-radius: 3px; background: #0f131b; color: #c8d4e3; border-left: 2px solid #4a5368; font-variant-numeric: tabular-nums; }
+.ros .stats .pill.v  { border-color: #6ad99f; }
+.ros .stats .pill.w  { border-color: #6a9ce3; }
+.ros .stats .pill.m  { border-color: #e36666; }
+.ros .stats .pill.wi { border-color: #d08ae0; }
+.ros .stats .pill.perm { border-color: #a08eff; color: #d7cfff; font-weight: 400; }
+.ros.dead .stats { opacity: 0.6; }
 .ros.dead { opacity: 0.4; text-decoration: line-through; }
 .ros.ally .nm::before { content: '◆ '; color: #6ad99f; }
 .ros.enemy .nm::before { content: '◆ '; color: #e36666; }
@@ -156,6 +164,29 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
   box-shadow: 0 0 0 1px #a08eff44 inset, 0 10px 18px -8px #000c, 0 0 20px -4px #a08eff33;
 }
 .slot.queued:hover { transform: translateY(-7px); }
+
+/* Skill cards: the band colour is the action they ride; the glyph gets a ✦. */
+.slot.skill .card::before { content: '✦' attr(data-code); font-size: 13px; }
+.slot.skill .card .nm { color: #d7cfff; }
+.slot.skill .card .cd { color: #a08eff; font-family: inherit; letter-spacing: 0; }
+.slot.queued-skill {
+  border-color: #a08eff99;
+  background: linear-gradient(180deg, #221c3a 0%, #161228 100%);
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 1px #a08eff33 inset, 0 8px 14px -8px #000c;
+}
+.slot.queued-skill:hover { transform: translateY(-4px); }
+/* Battle Trance second option (an action card, or the Empty slot when none is picked). */
+.slot.queued-extra {
+  border-color: #ffb66e;
+  background: linear-gradient(180deg, #3a2a18 0%, #221810 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 1px #ffb66e44 inset, 0 8px 14px -8px #000c, 0 0 16px -4px #ffb66e33;
+}
+.slot.queued-extra:hover { transform: translateY(-5px); }
+.slot.queued-extra .card .cd { color: #ffb66e; }
+.slot.disabled { opacity: 0.35; filter: grayscale(0.8); cursor: not-allowed; }
+.slot.disabled:hover { transform: none; border-color: #26303f; }
 .slot.discard { opacity: 0.4; filter: grayscale(0.6); }
 .slot.discard::after {
   content: ''; position: absolute; inset: 0;
