@@ -117,9 +117,25 @@ if (!radicleEnv.enabled) {
   console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad; explorer base ${radicleEnv.explorerBase}`);
 }
 
+// Every git call made for a per-peer worktree is fenced with
+// GIT_CEILING_DIRECTORIES = RADICLE_WORK. If the worktree's .git is missing or
+// hollow (a sibling launcher's fsck-rebuild rm'd it while we were live), git
+// would otherwise walk up the parents and happily operate on the *source
+// checkout* — which is how ~/repo_radicle/chaosD6 got checked out onto
+// ActiveDimensions/* branches and lost its working tree. With the ceiling set
+// discovery stops at RADICLE_WORK and the call fails loudly instead.
+const FENCED_ENV = { ...process.env, GIT_CEILING_DIRECTORIES: RADICLE_WORK };
 async function git(args, cwd) {
-  const { stdout } = await pexec('git', args, { cwd, windowsHide: true });
+  const { stdout } = await pexec('git', args, { cwd, windowsHide: true, env: FENCED_ENV });
   return stdout.trim();
+}
+
+// A worktree is only trusted when git itself says its top level IS that dir.
+async function isValidWorkTree(dir) {
+  try {
+    const top = await git(['rev-parse', '--show-toplevel'], dir);
+    return path.resolve(top) === path.resolve(dir);
+  } catch { return false; }
 }
 
 // If a previous run was SIGKILL'd mid-push, the bare's ref files can end up
@@ -154,21 +170,26 @@ function safePeerDir(peerId) { return peerId.replace(/[:/\\]/g, '-'); }
 async function ensureRadRemote(dir) {
   if (!radicleEnv.enabled) return;
   try {
-    const { stdout } = await pexec('git', ['-C', dir, 'remote', 'get-url', 'rad'], { windowsHide: true });
+    const { stdout } = await pexec('git', ['-C', dir, 'remote', 'get-url', 'rad'], { windowsHide: true, env: FENCED_ENV });
     if (stdout.trim() === radicleEnv.remoteUrl) return;
-    await pexec('git', ['-C', dir, 'remote', 'set-url', 'rad', radicleEnv.remoteUrl], { windowsHide: true });
+    await pexec('git', ['-C', dir, 'remote', 'set-url', 'rad', radicleEnv.remoteUrl], { windowsHide: true, env: FENCED_ENV });
   } catch {
-    await pexec('git', ['-C', dir, 'remote', 'add', 'rad', radicleEnv.remoteUrl], { windowsHide: true });
+    await pexec('git', ['-C', dir, 'remote', 'add', 'rad', radicleEnv.remoteUrl], { windowsHide: true, env: FENCED_ENV });
   }
 }
 
 export async function ensureWorkTree(peerId) {
   const dir = path.join(RADICLE_WORK, safePeerDir(peerId));
-  try { await fs.access(path.join(dir, '.git')); await ensureRadRemote(dir); return dir; }
-  catch { /* clone */ }
+  // fs.access(.git) is not enough: a half-deleted .git (only logs/ and refs/
+  // left behind by a concurrent rm) passes it, and git then discovers the
+  // enclosing source repo. Ask git which repo it would use and re-clone unless
+  // the answer is this very directory.
+  if (await isValidWorkTree(dir)) { await ensureRadRemote(dir); return dir; }
+  await fs.rm(dir, { recursive: true, force: true });
   await fs.mkdir(RADICLE_WORK, { recursive: true });
   // --initial-branch so an empty bare repo clones cleanly.
-  await pexec('git', ['clone', '--origin', 'radicle', RADICLE_BARE, dir], { windowsHide: true });
+  await pexec('git', ['clone', '--origin', 'radicle', RADICLE_BARE, dir], { windowsHide: true, env: FENCED_ENV });
+  if (!(await isValidWorkTree(dir))) throw new Error(`[radicle] ${dir} is not a standalone worktree after clone — refusing to run git here`);
   await git(['config', 'user.email', `${peerId}@chaosd6.local`], dir);
   await git(['config', 'user.name', peerId], dir);
   // Seed main so later checkouts have something to switch away from.
@@ -187,7 +208,7 @@ async function pushToRadicle(dir, branch) {
     const refspec = `refs/heads/${branch}:refs/heads/${branch}`;
     const { stdout, stderr } = await pexec('git', ['-C', dir, 'push', 'rad', refspec], {
       windowsHide: true,
-      env: { ...process.env, PATH: GIT_PATH_WITH_RAD, SSH_AUTH_SOCK },
+      env: { ...FENCED_ENV, PATH: GIT_PATH_WITH_RAD, SSH_AUTH_SOCK },
       maxBuffer: 16 * 1024 * 1024,
     });
     return { published: true, info: (stdout + stderr).trim() };
@@ -215,7 +236,7 @@ async function resetBranchToBare(dir, branch) {
     try {
       await pexec('git', ['-C', dir, 'fetch', '--quiet', 'rad', `+refs/heads/${branch}:refs/remotes/rad/${branch}`], {
         windowsHide: true,
-        env: { ...process.env, PATH: GIT_PATH_WITH_RAD, SSH_AUTH_SOCK },
+        env: { ...FENCED_ENV, PATH: GIT_PATH_WITH_RAD, SSH_AUTH_SOCK },
         maxBuffer: 16 * 1024 * 1024,
         timeout: 15000,
       });
