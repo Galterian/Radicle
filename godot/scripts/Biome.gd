@@ -111,6 +111,13 @@ func biome_at(q: int, r: int) -> String:
 			return "lava"
 		if t < 0.28:
 			return "snow" if m > 0.3 else "snow_coast"
+		# Cool buffer (0.28..0.42): no jungle/marsh. Keeps snow neighbours safe —
+		# the archive has no snow↔jungle / snow↔marsh transition tiles, so we
+		# never let those biomes be adjacent at the sampler level.
+		if t < 0.42:
+			if m < 0.3: return "dirt"
+			if m < 0.65: return "grass"
+			return "high_grass"
 		if t > 0.7:
 			if m < 0.25: return "desert"
 			if m < 0.55: return "dirt"
@@ -124,6 +131,10 @@ func biome_at(q: int, r: int) -> String:
 	# --- highlands ---
 	if e < ROUGH:
 		if t < 0.3: return "snow"
+		# Cool buffer in highlands too — no high-moisture biome touches snow.
+		if t < 0.45:
+			if m < 0.3: return "high_dirt"
+			return "high_grass"
 		if m < 0.3: return "high_dirt"
 		if m < 0.65: return "high_grass"
 		if t > 0.6: return "jungle"

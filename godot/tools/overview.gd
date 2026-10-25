@@ -27,6 +27,7 @@ func _init() -> void:
 	node.gen = MapGen.new(dim)
 	node.map.setup(node.gen)
 	if node.scatter_layer: node.scatter_layer.setup(node.gen)
+	if node.bigfeatures_layer: node.bigfeatures_layer.setup(node.gen)
 	node.features_layer.setup(node.gen)
 	for s in node.DEFAULT_SPAWN:
 		var at: Vector2i = node.gen.nearest_walkable(s.at, 5)
@@ -57,6 +58,7 @@ func _init() -> void:
 		if step % 5 == 0: await process_frame
 	node.map.queue_redraw()
 	if node.scatter_layer: node.scatter_layer.queue_redraw()
+	if node.bigfeatures_layer: node.bigfeatures_layer.queue_redraw()
 	node.features_layer.queue_redraw()
 
 	# Fit camera to all revealed hexes.
@@ -84,6 +86,7 @@ func _init() -> void:
 	for k in biomes: line += "%s:%d  " % [k, biome_cnt[k]]
 	print("  biomes: " + line)
 	print("  features: %d" % node.gen.features_for_known().size())
+	print("  big features: %d" % node.gen.bigfeatures_for_known().size())
 	print("  hexes: %d  heat=%+.2f  wet=%+.2f" % [node.gen.size(), node.gen.biome.heat_bias, node.gen.biome.wet_bias])
 
 	var img := get_root().get_viewport().get_texture().get_image()

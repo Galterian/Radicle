@@ -1,6 +1,9 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
 import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
 import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged } from './sprites.js';
+import { hash32 } from './map.js';
+import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
+import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
 
 const ALLIANCE_COLOR = {
   'player':  '#6ad9ff',
@@ -55,27 +58,55 @@ export function createRenderer(canvas, state) {
   // Per-entity sprite animator (created lazily once the entity's resources
   // are known) + last drawn position, used to derive the facing direction.
   const anims = new Map();  // peerId -> { anim, sourceId, lastX, lastY, dir, wasDead }
-  loadFrames(); loadResources(); loadTerrain();
-  onAssetsChanged(() => render());   // repaint when a sheet / tile / json lands
+  loadFrames(); loadResources(); loadTerrain(); loadScatter(); loadFeatures();
+  onAssetsChanged(() => render());    // repaint when a sheet / tile / json lands
+  // Scatter and feature catalogs arrive asynchronously after the first render.
+  // The tile cache keys off (mapVersion, seed) so a plain repaint wouldn't
+  // rebuild the scatter/feature draw lists — bump catalogEpoch so the cache
+  // notices and rebuilds. PNG loads (not catalog loads) only need a repaint
+  // because the lists already contain the item, just waiting on the image.
+  let catalogEpoch = 0;
+  onScatterChanged(() => { catalogEpoch++; render(); });
+  onFeaturesChanged(() => { catalogEpoch++; render(); });
 
   // Kills the player wants to see land: main.js calls renderer.trigger(peerId,
   // 'attack' | 'cast') when an action resolves so the sprite swings.
   function trigger(peerId, name) { const a = anims.get(peerId); if (a?.anim) a.anim.trigger(name); }
 
   // Known tiles + fog frontier, rebuilt only when the map version changes.
-  const tileCache = { version: -1, tiles: [], frontier: [] };
+  // Scatter and feature lists are derived from the same set of known tiles so
+  // they stay in lock-step with the terrain pass; both are y-sorted (matching
+  // Godot's ScatterLayer / FeatureLayer custom sort) so overlapping sprites
+  // stack back-to-front correctly.
+  const tileCache = { version: -1, seed: null, epoch: -1, tiles: [], frontier: [], scatter: [], features: [] };
   function tilesFor(map, version) {
-    if (tileCache.version !== version) {
+    if (tileCache.version !== version || tileCache.seed !== map.seed || tileCache.epoch !== catalogEpoch) {
       tileCache.version = version;
+      tileCache.seed = map.seed;
+      tileCache.epoch = catalogEpoch;
       tileCache.tiles = [...map.tiles()].map(t => {
         const terr = map.terrain(t.q, t.r);
-        // Deterministic variant per hex so the tiling doesn't shimmer.
-        const v = ((t.q * 92821) ^ (t.r * 68917) ^ ((t.q + t.r) * 31)) & 0x7fffffff;
-        return { q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: terr.fill, type: terr.type, variant: v % 4 };
+        // Deterministic variant per hex so the tiling doesn't shimmer. Not
+        // modded here — sprites.terrainTile wraps against the per-biome list
+        // length (20 variants per biome today, previously 4).
+        const variant = hash32(`${map.seed}:v:${t.q}:${t.r}`) & 0x7fffffff;
+        return { q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: terr.fill, type: terr.type, variant };
       });
       // Draw order: top rows first so tile edges overlap in iso fashion.
       tileCache.tiles.sort((a, b) => a.y - b.y || a.x - b.x);
       tileCache.frontier = map.frontier().map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r) }));
+      // Build scatter/feature draw lists once per map version. Both are pure
+      // functions of (seed, q, r) so the only time they can change is when
+      // more hexes are revealed (which bumps mapVersion).
+      tileCache.scatter = [];
+      tileCache.features = [];
+      for (const t of tileCache.tiles) {
+        const s = scatterAt(map.seed, t.q, t.r);
+        if (s) tileCache.scatter.push({ q: t.q, r: t.r, x: t.x, y: t.y, s });
+        const f = featureAt(map.seed, t.q, t.r);
+        if (f) tileCache.features.push({ q: t.q, r: t.r, x: t.x, y: t.y, f });
+      }
+      // Already y-sorted courtesy of iterating `tileCache.tiles` in draw order.
     }
     return tileCache;
   }
@@ -245,16 +276,21 @@ export function createRenderer(canvas, state) {
     const { tiles, frontier } = tilesFor(state.map, state.mapVersion);
     const showLabels = zoom >= 0.75 && state.ui.showCoords;
     ctx.lineWidth = 1;
-    // Terrain PNGs are pre-masked pointy-top hexes rendered at `scale`× the
-    // game's hex size (assets/terrain/terrain_tiles.json). Draw them centred
-    // on the hex, a hair oversize so neighbouring tiles don't show seams.
+    // Terrain PNGs are flat-top WBC3 hexes authored at `tile_w × tile_h`
+    // (assets/terrain/terrain_tiles.json → "hex"). Our game hex is 2*HEX_SIZE
+    // wide, so the scale that maps the PNG's long axis onto our hex is
+    // (2*HEX_SIZE / tile_w); then the Godot client bumps that by 1.10 so
+    // alpha-masked edges overlap neighbours instead of showing seams. Match
+    // that exactly so both runtimes land the same pixel size.
     const tm = terrainMeta();
-    const tileScale = tm ? (HEX_SIZE / (tm.size || HEX_SIZE)) / (tm.scale || 2) : 0.5;
+    const tileScale = tm && tm.tile_w
+      ? ((2 * HEX_SIZE) / tm.tile_w) * 1.10
+      : ((2 * HEX_SIZE) / (tm?.size || 320)) * 1.10;
     for (const t of tiles) {
       if (!inView(t.x, t.y)) continue;
       const img = terrainTile(t.type, t.variant);
       if (img) {
-        const dw = img.img.naturalWidth * tileScale * 1.02, dh = img.img.naturalHeight * tileScale * 1.02;
+        const dw = img.img.naturalWidth * tileScale, dh = img.img.naturalHeight * tileScale;
         ctx.drawImage(img.img, t.x - dw / 2, t.y - dh / 2, dw, dh);
         if (zoom >= 1.1) { hexPath(t.x, t.y); ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke(); }
       } else {
@@ -280,6 +316,47 @@ export function createRenderer(canvas, state) {
       ctx.stroke();
     }
     ctx.restore();
+
+    // Scatter overlays (z-order 3 in Godot — above terrain, below features).
+    // 2D canvas has no z buffer, so order == paint order: terrain painted
+    // above (z=0), scatter now, features below (z=5), entities last (z=10).
+    // Match ScatterLayer.gd's sizing: target height ≈ 0.55 hex with a small
+    // hash-based jitter so overlays don't align into visible rows.
+    const hexH = HEX_SIZE * 2 * H_SQUASH;
+    const { scatter: scatterItems, features: featureItems } = tileCache;
+    for (const it of scatterItems) {
+      if (!inView(it.x, it.y)) continue;
+      const tex = scatterImage(it.s.path);
+      if (!tex) continue;
+      const h32 = hash32(`${state.map.seed}:sj:${it.q}:${it.r}`);
+      const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.55;
+      const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.42;
+      const sizeJit = 0.85 + (((h32 >> 8) & 0xFF) / 255) * 0.35;
+      const sy = tex.img.naturalHeight || 1;
+      const sx = tex.img.naturalWidth || 1;
+      const target = hexH * 0.55 * sizeJit;
+      const scale = Math.min(0.9, Math.max(0.08, target / sy));
+      const dw = sx * scale, dh = sy * scale;
+      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.15 + jy, dw, dh);
+    }
+
+    // Features (buildings / permanents) — z-order 5 in Godot. Larger target
+    // size (≈1.1 hex) with a tiny jitter so adjacent features in a long biome
+    // strip don't line up into visible rows.
+    for (const it of featureItems) {
+      if (!inView(it.x, it.y)) continue;
+      const tex = featureImage(it.f.path);
+      if (!tex) continue;
+      const h32 = hash32(`${state.map.seed}:j:${it.q}:${it.r}`);
+      const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.18;
+      const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.12;
+      const sy = tex.img.naturalHeight || 1;
+      const sx = tex.img.naturalWidth || 1;
+      const target = hexH * 1.1;
+      const scale = Math.min(1.2, Math.max(0.25, target / sy));
+      const dw = sx * scale, dh = sy * scale;
+      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
+    }
 
     // Target highlight.
     if (state.ui.hoverTile) {

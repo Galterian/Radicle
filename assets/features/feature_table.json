@@ -1,6 +1,6 @@
 {
   "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py from parallel-agent catalog.",
-  "min_separation": 3,
+  "min_separation": 5,
   "density": {
     "grass": 0.055,
     "high_grass": 0.05,

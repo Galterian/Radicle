@@ -37,6 +37,7 @@ var dl := DataLoader.new()
 var gen: MapGen
 var map: HexMap
 var scatter_layer: ScatterLayer
+var bigfeatures_layer: BigFeatureLayer
 var features_layer: FeatureLayer
 var ents_root: Node2D
 var fx: FxPlayer
@@ -84,6 +85,15 @@ func _ready() -> void:
 	add_child(scatter_layer)
 	scatter_layer.setup(gen)
 
+	# Rare "big feature" landmarks (large forest clusters, pine stands, cactus
+	# clumps, boulder piles, ruins) spanning ~2 hex widths visually. These are the
+	# WBC3-style anchors that keep a biome strip from feeling repetitive. Lives
+	# between the small scatter (z=3) and the buildings (z=5).
+	bigfeatures_layer = BigFeatureLayer.new()
+	bigfeatures_layer.name = "BigFeatures"
+	add_child(bigfeatures_layer)
+	bigfeatures_layer.setup(gen)
+
 	# Buildings / permanents on walkable biome hexes. Lives above the terrain
 	# (HexMap) and below entities. Deterministic from (dim_seed, q, r), so every
 	# new reveal fills in with the right features automatically.
@@ -126,7 +136,7 @@ func _ready() -> void:
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
-		map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+		map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 		hud.set_entity(p)
 		cam.follow = p
 		cam.position = p.position
@@ -255,7 +265,7 @@ func _begin_reveal() -> void:
 			var t: String = (" → %s" % Hex.key_of(intents[k].target)) if intents[k].target != null else ""
 			hud.log_line("%s reveals %s%s" % [e.display_name, intents[k].code, t], Color(0.75, 0.75, 0.8) if e.faction == "npc" else Color(0.9, 0.85, 0.7))
 	map.reach = {}
-	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 
 
 func _npc_plan(e: Entity) -> Dictionary:
@@ -366,7 +376,7 @@ func _resolve() -> void:
 		if not b.is_empty():
 			net.publish_block(b)
 			hud.log_line("map grows: %s (+%d hexes known)" % [b.id, gen.size()], Color(0.6, 0.8, 0.9))
-			map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+			map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 
 	# ---- posture / cast visuals (P) — no damage, shows the adept element effect.
 	for id in intents.keys():
@@ -527,7 +537,7 @@ func _update_reach() -> void:
 	map.reach = {}
 	var p := player_entity()
 	if p == null or chosen < 0:
-		map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+		map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 		return
 	var code := str(hand[chosen])
 	var radius := 0
@@ -539,7 +549,7 @@ func _update_reach() -> void:
 		for t in MapGen.block_tiles({"kind": "disc", "q": p.hex.x, "r": p.hex.y, "radius": radius}):
 			if gen.has(t) and t != p.hex:
 				map.reach[Hex.key_of(t)] = true
-	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 
 
 func _pick_slot(i: int) -> void:
@@ -607,7 +617,7 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 	map.path_preview = []
 	for i in range(mini(budget, path.size())):
 		map.path_preview.append(path[i])
-	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+	map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
 	_refresh_hand()
 
 

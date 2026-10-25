@@ -1,0 +1,591 @@
+{
+  "_comment": "Big (multi-hex-looking) landmark features \u2014 forests, boulder clusters, ruins, pine stands. Scaled ~2 hex widths wide by BigFeatureLayer so each sprite visually anchors a region. Deterministic from (dim_seed, q, r); min_separation keeps them a visible landmark, not wallpaper.",
+  "min_separation": 6,
+  "density": {
+    "grass": 0.025,
+    "high_grass": 0.025,
+    "grass_coast": 0.015,
+    "dirt": 0.022,
+    "high_dirt": 0.02,
+    "desert": 0.02,
+    "desert_cliffs": 0.0,
+    "snow": 0.025,
+    "snow_coast": 0.018,
+    "rock": 0.022,
+    "rock_coast": 0.015,
+    "rock_cliffs": 0.0,
+    "jungle": 0.03,
+    "marsh": 0.015,
+    "mountains": 0.0,
+    "water": 0.0,
+    "lava": 0.0,
+    "caverns": 0.0
+  },
+  "by_biome": {
+    "grass": [
+      {
+        "id": "wbc3/FPM7",
+        "label": "Large tree cluster",
+        "path": "assets/terrain_bigfeatures/large_tree_cluster_fpm7.png",
+        "weight": 4,
+        "native_w": 512,
+        "native_h": 246,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FPM8",
+        "label": "Large leafy tree",
+        "path": "assets/terrain_bigfeatures/large_leafy_tree_fpm8.png",
+        "weight": 3,
+        "native_w": 472,
+        "native_h": 279,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FGMB",
+        "label": "Fallen log",
+        "path": "assets/terrain_bigfeatures/fallen_log_fgmb.png",
+        "weight": 2,
+        "native_w": 304,
+        "native_h": 220,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FGM1",
+        "label": "Mossy mine entrance",
+        "path": "assets/terrain_bigfeatures/cave_mine_entrance_fgm1.png",
+        "weight": 1,
+        "native_w": 240,
+        "native_h": 166,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock"
+        ]
+      },
+      {
+        "id": "wbc3/FGM6",
+        "label": "Grey boulder cluster",
+        "path": "assets/terrain_bigfeatures/grey_boulder_cluster_fgm6.png",
+        "weight": 2,
+        "native_w": 152,
+        "native_h": 101,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock",
+          "rock_coast"
+        ]
+      }
+    ],
+    "high_grass": [
+      {
+        "id": "wbc3/FPM7",
+        "label": "Large tree cluster",
+        "path": "assets/terrain_bigfeatures/large_tree_cluster_fpm7.png",
+        "weight": 4,
+        "native_w": 512,
+        "native_h": 246,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FPM8",
+        "label": "Large leafy tree",
+        "path": "assets/terrain_bigfeatures/large_leafy_tree_fpm8.png",
+        "weight": 3,
+        "native_w": 472,
+        "native_h": 279,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FGMB",
+        "label": "Fallen log",
+        "path": "assets/terrain_bigfeatures/fallen_log_fgmb.png",
+        "weight": 2,
+        "native_w": 304,
+        "native_h": 220,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FGM1",
+        "label": "Mossy mine entrance",
+        "path": "assets/terrain_bigfeatures/cave_mine_entrance_fgm1.png",
+        "weight": 1,
+        "native_w": 240,
+        "native_h": 166,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock"
+        ]
+      },
+      {
+        "id": "wbc3/FGM6",
+        "label": "Grey boulder cluster",
+        "path": "assets/terrain_bigfeatures/grey_boulder_cluster_fgm6.png",
+        "weight": 2,
+        "native_w": 152,
+        "native_h": 101,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock",
+          "rock_coast"
+        ]
+      }
+    ],
+    "grass_coast": [
+      {
+        "id": "wbc3/FPM7",
+        "label": "Large tree cluster",
+        "path": "assets/terrain_bigfeatures/large_tree_cluster_fpm7.png",
+        "weight": 4,
+        "native_w": 512,
+        "native_h": 246,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle"
+        ]
+      }
+    ],
+    "dirt": [
+      {
+        "id": "wbc3/FTF0",
+        "label": "Large dead tree",
+        "path": "assets/terrain_bigfeatures/large_dead_tree_ftf0.png",
+        "weight": 3,
+        "native_w": 376,
+        "native_h": 228,
+        "biomes": [
+          "dirt",
+          "high_dirt"
+        ]
+      },
+      {
+        "id": "wbc3/FTF1",
+        "label": "Large dead tree (alt)",
+        "path": "assets/terrain_bigfeatures/large_dead_tree_ftf1.png",
+        "weight": 3,
+        "native_w": 376,
+        "native_h": 240,
+        "biomes": [
+          "dirt",
+          "high_dirt"
+        ]
+      },
+      {
+        "id": "wbc3/FTB2",
+        "label": "Bare dead tree (large)",
+        "path": "assets/terrain_bigfeatures/bare_dead_tree_large_ftb2.png",
+        "weight": 2,
+        "native_w": 240,
+        "native_h": 189,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FRD5",
+        "label": "Boulder cluster",
+        "path": "assets/terrain_bigfeatures/boulder_cluster_large_frd5.png",
+        "weight": 2,
+        "native_w": 112,
+        "native_h": 101,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "rock",
+          "rock_coast",
+          "desert"
+        ]
+      }
+    ],
+    "high_dirt": [
+      {
+        "id": "wbc3/FTF0",
+        "label": "Large dead tree",
+        "path": "assets/terrain_bigfeatures/large_dead_tree_ftf0.png",
+        "weight": 3,
+        "native_w": 376,
+        "native_h": 228,
+        "biomes": [
+          "dirt",
+          "high_dirt"
+        ]
+      },
+      {
+        "id": "wbc3/FTF1",
+        "label": "Large dead tree (alt)",
+        "path": "assets/terrain_bigfeatures/large_dead_tree_ftf1.png",
+        "weight": 3,
+        "native_w": 376,
+        "native_h": 240,
+        "biomes": [
+          "dirt",
+          "high_dirt"
+        ]
+      },
+      {
+        "id": "wbc3/FTB2",
+        "label": "Bare dead tree (large)",
+        "path": "assets/terrain_bigfeatures/bare_dead_tree_large_ftb2.png",
+        "weight": 2,
+        "native_w": 240,
+        "native_h": 189,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FRD5",
+        "label": "Boulder cluster",
+        "path": "assets/terrain_bigfeatures/boulder_cluster_large_frd5.png",
+        "weight": 2,
+        "native_w": 112,
+        "native_h": 101,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "rock",
+          "rock_coast",
+          "desert"
+        ]
+      },
+      {
+        "id": "wbc3/FDM0",
+        "label": "Large ruined temple",
+        "path": "assets/terrain_bigfeatures/large_ruined_temple_fdm0.png",
+        "weight": 2,
+        "native_w": 248,
+        "native_h": 210,
+        "biomes": [
+          "desert",
+          "high_dirt"
+        ]
+      },
+      {
+        "id": "wbc3/FDM3",
+        "label": "Ruined colonnade",
+        "path": "assets/terrain_bigfeatures/ruined_colonnade_fdm3.png",
+        "weight": 2,
+        "native_w": 256,
+        "native_h": 162,
+        "biomes": [
+          "desert",
+          "high_dirt"
+        ]
+      }
+    ],
+    "desert": [
+      {
+        "id": "wbc3/FRD5",
+        "label": "Boulder cluster",
+        "path": "assets/terrain_bigfeatures/boulder_cluster_large_frd5.png",
+        "weight": 2,
+        "native_w": 112,
+        "native_h": 101,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "rock",
+          "rock_coast",
+          "desert"
+        ]
+      },
+      {
+        "id": "wbc3/FDP4",
+        "label": "Palm tree cluster",
+        "path": "assets/terrain_bigfeatures/palm_tree_cluster_fdp4.png",
+        "weight": 3,
+        "native_w": 360,
+        "native_h": 200,
+        "biomes": [
+          "desert",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FDM0",
+        "label": "Large ruined temple",
+        "path": "assets/terrain_bigfeatures/large_ruined_temple_fdm0.png",
+        "weight": 2,
+        "native_w": 248,
+        "native_h": 210,
+        "biomes": [
+          "desert",
+          "high_dirt"
+        ]
+      },
+      {
+        "id": "wbc3/FDM3",
+        "label": "Ruined colonnade",
+        "path": "assets/terrain_bigfeatures/ruined_colonnade_fdm3.png",
+        "weight": 2,
+        "native_w": 256,
+        "native_h": 162,
+        "biomes": [
+          "desert",
+          "high_dirt"
+        ]
+      }
+    ],
+    "desert_cliffs": [],
+    "snow": [
+      {
+        "id": "wbc3/FPB7",
+        "label": "Snow pine cluster",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_cluster_fpb7.png",
+        "weight": 4,
+        "native_w": 424,
+        "native_h": 246,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FPB8",
+        "label": "Snow pine (large)",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_large_fpb8.png",
+        "weight": 3,
+        "native_w": 304,
+        "native_h": 240,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FSF3",
+        "label": "Snowy fallen log (large)",
+        "path": "assets/terrain_bigfeatures/snowy_fallen_log_large_fsf3.png",
+        "weight": 2,
+        "native_w": 312,
+        "native_h": 218,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      }
+    ],
+    "snow_coast": [
+      {
+        "id": "wbc3/FPB7",
+        "label": "Snow pine cluster",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_cluster_fpb7.png",
+        "weight": 4,
+        "native_w": 424,
+        "native_h": 246,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FPB8",
+        "label": "Snow pine (large)",
+        "path": "assets/terrain_bigfeatures/snow_covered_pine_large_fpb8.png",
+        "weight": 3,
+        "native_w": 304,
+        "native_h": 240,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FSF3",
+        "label": "Snowy fallen log (large)",
+        "path": "assets/terrain_bigfeatures/snowy_fallen_log_large_fsf3.png",
+        "weight": 2,
+        "native_w": 312,
+        "native_h": 218,
+        "biomes": [
+          "snow",
+          "snow_coast"
+        ]
+      }
+    ],
+    "rock": [
+      {
+        "id": "wbc3/FGM1",
+        "label": "Mossy mine entrance",
+        "path": "assets/terrain_bigfeatures/cave_mine_entrance_fgm1.png",
+        "weight": 1,
+        "native_w": 240,
+        "native_h": 166,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock"
+        ]
+      },
+      {
+        "id": "wbc3/FGM6",
+        "label": "Grey boulder cluster",
+        "path": "assets/terrain_bigfeatures/grey_boulder_cluster_fgm6.png",
+        "weight": 2,
+        "native_w": 152,
+        "native_h": 101,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock",
+          "rock_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FRD5",
+        "label": "Boulder cluster",
+        "path": "assets/terrain_bigfeatures/boulder_cluster_large_frd5.png",
+        "weight": 2,
+        "native_w": 112,
+        "native_h": 101,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "rock",
+          "rock_coast",
+          "desert"
+        ]
+      }
+    ],
+    "rock_coast": [
+      {
+        "id": "wbc3/FGM6",
+        "label": "Grey boulder cluster",
+        "path": "assets/terrain_bigfeatures/grey_boulder_cluster_fgm6.png",
+        "weight": 2,
+        "native_w": 152,
+        "native_h": 101,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "rock",
+          "rock_coast"
+        ]
+      },
+      {
+        "id": "wbc3/FRD5",
+        "label": "Boulder cluster",
+        "path": "assets/terrain_bigfeatures/boulder_cluster_large_frd5.png",
+        "weight": 2,
+        "native_w": 112,
+        "native_h": 101,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "rock",
+          "rock_coast",
+          "desert"
+        ]
+      }
+    ],
+    "rock_cliffs": [],
+    "jungle": [
+      {
+        "id": "wbc3/FPM7",
+        "label": "Large tree cluster",
+        "path": "assets/terrain_bigfeatures/large_tree_cluster_fpm7.png",
+        "weight": 4,
+        "native_w": 512,
+        "native_h": 246,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "grass_coast",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FPM8",
+        "label": "Large leafy tree",
+        "path": "assets/terrain_bigfeatures/large_leafy_tree_fpm8.png",
+        "weight": 3,
+        "native_w": 472,
+        "native_h": 279,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "jungle"
+        ]
+      },
+      {
+        "id": "wbc3/FDP4",
+        "label": "Palm tree cluster",
+        "path": "assets/terrain_bigfeatures/palm_tree_cluster_fdp4.png",
+        "weight": 3,
+        "native_w": 360,
+        "native_h": 200,
+        "biomes": [
+          "desert",
+          "jungle"
+        ]
+      }
+    ],
+    "marsh": [
+      {
+        "id": "wbc3/FGMB",
+        "label": "Fallen log",
+        "path": "assets/terrain_bigfeatures/fallen_log_fgmb.png",
+        "weight": 2,
+        "native_w": 304,
+        "native_h": 220,
+        "biomes": [
+          "grass",
+          "high_grass",
+          "marsh"
+        ]
+      },
+      {
+        "id": "wbc3/FTB2",
+        "label": "Bare dead tree (large)",
+        "path": "assets/terrain_bigfeatures/bare_dead_tree_large_ftb2.png",
+        "weight": 2,
+        "native_w": 240,
+        "native_h": 189,
+        "biomes": [
+          "dirt",
+          "high_dirt",
+          "marsh"
+        ]
+      }
+    ],
+    "mountains": [],
+    "water": [],
+    "lava": [],
+    "caverns": []
+  }
+}
