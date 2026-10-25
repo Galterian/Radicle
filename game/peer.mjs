@@ -428,6 +428,17 @@ if (entity.kind === 'character') {
 }
 // Shuffle.
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+// FORCE_OPENING=skill_sanctuary,B,A (dev/test only): move one card per entry
+// to the top of the deck so the opening hand is predictable. Only characters —
+// monsters keep their shuffle so a pinned hero test is not mirrored by the foe.
+if (process.env.FORCE_OPENING && entity.kind === 'character') {
+  const top = [];
+  for (const want of process.env.FORCE_OPENING.split(',').map(s => s.trim()).filter(Boolean)) {
+    const i = deck.findIndex(c => c.skill_id === want || c.code === want);
+    if (i >= 0) top.push(...deck.splice(i, 1));
+  }
+  deck.unshift(...top);
+}
 const hand = []; while (hand.length < HAND_SIZE && deck.length) hand.push(deck.shift());
 const discard = [];
 let queued = [];           // one element: slot index (int) | 'EP' | 'EM'
@@ -1462,9 +1473,12 @@ async function doResolution() {
   // Permanents land in the NEXT round's snapshot, so they take effect from
   // then on — the reveal that placed them embedded the pre-placement state.
   const permsBefore = permanentsCsv();
-  const myEff = effAction.get(PEER_ID_STRING) ?? 'EP';
-  if (hasPerm(PEER_ID_STRING, 'skill_sanctuary') && myEff !== 'EP') entity.permanents.delete('skill_sanctuary');
   const myR = byActor.get(PEER_ID_STRING);
+  // Sanctuary lasts while I rest: declaring anything but the plain Empty
+  // Posture — another action, a trance, or a skill riding on the EP — ends it
+  // from the next round (damage this round was already judged on the EP).
+  const leftSanctuary = myR && (myR.action !== 'EP' || (myR.skills || []).length > 0);
+  if (hasPerm(PEER_ID_STRING, 'skill_sanctuary') && leftSanctuary) entity.permanents.delete('skill_sanctuary');
   const playedCodes = myR?.trance ? new Set([...myR.played].map(i => myR.trance[i])) : null;
   for (const id of myLastReveal?.skillIds || []) {
     const sd = data.skills[id]?.data;

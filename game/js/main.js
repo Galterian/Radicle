@@ -408,7 +408,9 @@ function renderDeck() {
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
       const n = state.queued[0] === 'EMPTY' ? state.queuedSkills.length : 0;
-      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
+      const sanct = code === 'EP' && !emptyIsSecond && inSanctuary();
+      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
+      slot.title = sanct ? 'Sanctuary: you take no damage while you rest in Empty Posture; any other action or skill ends it' : '';
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
       slot.classList.toggle('queued-extra', emptyIsSecond);
       slot.classList.toggle('locked', state.locked && (state.queued[0] === 'EMPTY' || emptyIsSecond));
@@ -494,12 +496,26 @@ function renderRoster() {
   }
 }
 
+// My permanents (Sanctuary, Barricade, …) as the peer broadcasts them.
+function myPermanents() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  return String(me?.permanents_csv || '').split(',').filter(Boolean);
+}
+const inSanctuary = () => myPermanents().includes('skill_sanctuary');
+
 function autoselectFirstHandCard() {
   // Rule-of-thumb UX: default the queue to the first hand card so the auto-
   // commit at timer-0 picks something sensible when the player doesn't act.
   // Falls back to the EMPTY slot if the hand is empty for some reason.
+  // In Sanctuary the default is the Empty Posture instead: the hero cannot be
+  // hurt while resting there, and any other action or skill ends the refuge —
+  // so leaving it has to be the player's deliberate pick.
   const firstIdx = state.hand.findIndex(c => isAction(c));
-  if (firstIdx >= 0) state.queued = [firstIdx];
+  if (inSanctuary()) {
+    state.queued = ['EMPTY']; state.target = null;
+    logUI('Sanctuary: resting in Empty Posture — nothing can hurt you; picking any action or skill leaves it', 'phase');
+  }
+  else if (firstIdx >= 0) state.queued = [firstIdx];
   else state.queued = ['EMPTY'];
   state.queuedSkills = [];
   state.queuedExtra = null;
@@ -670,15 +686,26 @@ function connect() {
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
             if (fromQ === null) continue;
             const hasAim = Number.isInteger(a.target_q) && Number.isInteger(a.target_r);
-            state.ui.floatingIcons.push({
-              action: a.action,
+            // One row of icons: the action (for a trance: each played option,
+            // then 🌀), followed by a glyph per skill that rode on it. They
+            // travel and fade together — the skill vanishes with its action.
+            const icons = [];
+            if (Array.isArray(a.trance) && a.trance.length) {
+              a.trance.forEach((c, i) => { if (!Array.isArray(a.played) || a.played.includes(i)) icons.push({ action: c }); });
+              icons.push({ action: 'BT' });
+            } else icons.push({ action: a.action });
+            for (const id of a.skills || []) if (id !== 'skill_battle_trance') icons.push({ skill: id });
+            const startAt = performance.now();
+            icons.forEach((ic, i) => state.ui.floatingIcons.push({
+              ...ic,
+              dx: (i - (icons.length - 1) / 2) * 22,
               fromQ, fromR,
               toQ: hasAim ? a.target_q : fromQ,
               toR: hasAim ? a.target_r : fromR,
               upOnly: !hasAim,
-              startAt: performance.now(),
+              startAt,
               duration: 2200,
-            });
+            }));
           }
           if (state._loggedAction.size > 500) state._loggedAction = new Set([...state._loggedAction].slice(-100));
         }
@@ -864,7 +891,7 @@ function wireInput() {
 
   const canvas = document.getElementById('stage');
   // Test hook (tools/ui-check.mjs): the canvas chip text is not in the DOM.
-  window.__chaosDebug = () => ({ queuedLabel: queuedLabel(), badges: { ...(state.ui.revealBadges || {}) } });
+  window.__chaosDebug = () => ({ queuedLabel: queuedLabel(), badges: { ...(state.ui.revealBadges || {}) }, icons: state.ui.floatingIcons.map(f => f.skill || f.action) });
 
   const renderer = createRenderer(canvas, {
     get entities() {

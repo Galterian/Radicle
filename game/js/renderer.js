@@ -158,6 +158,25 @@ export function createRenderer(canvas, state) {
     // without scoring.
     STANDOFF: { glyph: '➙', color: '#ffe66e' },
   };
+  // Skill glyphs float in a row next to the action icon they rode on and
+  // vanish with it. One picture per skill, closest Unicode match to its text.
+  const SKILL_ICON = {
+    skill_battle_trance:   { glyph: '🌀', color: '#ffb66e' },  // two actions, one trance
+    skill_powerful_attack: { glyph: '💥', color: '#ff6b6b' },  // +1 damage
+    skill_overrun:         { glyph: '🐂', color: '#ff6b6b' },  // charge, negates the target's move
+    skill_grapple:         { glyph: '✊', color: '#ff6b6b' },  // hold → target plays EP
+    skill_ranged_weapon:   { glyph: '🏹', color: '#ff6b6b' },  // Block does not strike back
+    skill_barricade:       { glyph: '🧱', color: '#6ad99f' },  // permanent wall
+    skill_taunt:           { glyph: '📣', color: '#6ad99f' },  // only legal target
+    skill_sanctuary:       { glyph: '⛩', color: '#6ad99f' },  // untouchable while resting
+    skill_force_shield:    { glyph: '🔰', color: '#6ad99f' },
+    skill_dodge:           { glyph: '💨', color: '#6ad9ff' },  // −1 damage taken
+    skill_bluff:           { glyph: '🎭', color: '#6ad9ff' },  // target plays EP
+    skill_disruption_move: { glyph: '🌪', color: '#6ad9ff' },  // target plays EP
+    skill_intimidation:    { glyph: '😠', color: '#dfe3e8' },  // target plays EP
+    skill_counter_spell:   { glyph: '✨', color: '#dfe3e8' },
+    default:               { glyph: '✦',  color: '#c9b8ff' },
+  };
 
   function hexPath(x, y) {
     const corners = hexCorners(x, y);
@@ -463,11 +482,12 @@ export function createRenderer(canvas, state) {
         if (t >= 1) continue;
         if (liveWriteIdx !== i) icons[liveWriteIdx] = f;
         liveWriteIdx++;
-        const spec = ACTION_ICON[f.action] || ACTION_ICON.EP;
+        const spec = f.skill ? (SKILL_ICON[f.skill] || SKILL_ICON.default) : (ACTION_ICON[f.action] || ACTION_ICON.EP);
         const k = ease(t);
         const from = tilePx(f.fromQ, f.fromR);
         const to   = tilePx(f.toQ, f.toR);
-        const x = from.x + (to.x - from.x) * k;
+        // `dx` spreads an action's icons (its options + its skills) into a row.
+        const x = from.x + (to.x - from.x) * k + (f.dx || 0);
         // Self-only actions get a stronger vertical lift so they're clearly
         // "rising" rather than drifting sideways.
         const lift = f.upOnly ? 36 * t : 20 * t;
