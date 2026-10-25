@@ -57,7 +57,9 @@ function activeVersion(entry) {
 export function loadResources() {
   if (!resourcesLoading) {
     const one = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
-    resourcesLoading = Promise.all([one('/data/characters.json'), one('/data/creatures.json')]).then(docs => {
+    // Skills and effects carry `resources` too (effect strip + fx sounds), so a
+    // revealed skill id resolves through the same resourcesFor() lookup.
+    resourcesLoading = Promise.all([one('/data/characters.json'), one('/data/creatures.json'), one('/data/skills.json'), one('/data/effects.json')]).then(docs => {
       for (const doc of docs) {
         const entries = Array.isArray(doc) ? doc : (doc?.entries || []);
         for (const e of entries) {
@@ -83,6 +85,39 @@ export function resourcesFor(sourceId) {
 export function assetUrl(path) {
   if (!path) return null;
   return '/' + String(path).replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
+}
+
+// ---------------------------------------------------------------------------
+// Effect strips (skills / effects `resources.sprites.effect`): one row of
+// frames, cols from frames.json or inferred from the aspect ratio.
+
+const effectStrips = new Map();   // path -> {img, ready, cols, fps}
+
+export function effectStrip(path) {
+  if (!path) return null;
+  let s = effectStrips.get(path);
+  if (!s) {
+    s = { img: new Image(), ready: false, cols: 1, fps: 10 };
+    s.img.onload = () => {
+      const g = frames ? frames[path] : null;
+      s.cols = g?.cols || Math.max(1, Math.round(s.img.width / s.img.height));
+      s.fps = g?.fps || 10;
+      s.ready = true;
+      notify();
+    };
+    s.img.src = assetUrl(path);
+    effectStrips.set(path, s);
+  }
+  return s.ready ? s : null;
+}
+
+// Draw frame `t` (0..1 through the strip) centred on (x, y) at height `h`.
+export function drawEffectFrame(ctx, strip, t, x, y, h) {
+  const cw = strip.img.width / strip.cols;
+  const ch = strip.img.height;
+  const i = Math.min(strip.cols - 1, Math.floor(Math.max(0, t) * strip.cols));
+  const w = h * (cw / ch);
+  ctx.drawImage(strip.img, i * cw, 0, cw, ch, x - w / 2, y - h / 2, w, h);
 }
 
 // ---------------------------------------------------------------------------
