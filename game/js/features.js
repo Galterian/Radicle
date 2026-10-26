@@ -114,10 +114,15 @@ export function featureImage(path) {
   let t = _imgs.get(path);
   if (!t) {
     t = { img: new Image(), ready: false, failed: false };
-    t.img.onload = () => { t.ready = true; notify(); };
-    t.img.onerror = () => { t.failed = true; };
-    t.img.src = '/' + String(path).replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
+    // Store in the cache BEFORE assigning src: if the browser serves the PNG
+    // from disk cache the onload handler can fire before this call returns,
+    // and notify() → listener → featureImage(path) would otherwise re-enter
+    // and build a second Image, orphaning the one that actually loaded.
     _imgs.set(path, t);
+    const url = '/' + String(path).replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
+    t.img.onload = () => { t.ready = true; notify(); };
+    t.img.onerror = () => { t.failed = true; console.warn('[features] image failed to load:', url); };
+    t.img.src = url;
   }
   return t.ready ? t : null;
 }
