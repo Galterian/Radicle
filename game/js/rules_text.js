@@ -85,6 +85,7 @@ export const KIND_DESC = {
   temple:     'A temple or shrine. Sacred ground — a place to rest, bless permanents and recover between fights.',
   tower:      'A watchtower. Extends the reach of whoever holds it (chess-like 2-3 hex range per building).',
   wall:       'A wall segment. Blocks movement and line of attack; fights happen around it, not through it.',
+  bridge:     'A span over water or ravine. The only legal crossing on this stretch of shore — chokepoint for both sides.',
   scatter:    'Terrain decoration (grass, rock, trees). No effect on play — the hex is walkable as its biome says.',
   bigfeature: 'A large landmark spanning several hexes. Orientation point for the whole region.',
 };

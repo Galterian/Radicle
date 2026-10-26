@@ -93,10 +93,11 @@ export function scatterImage(path) {
   let t = _imgs.get(path);
   if (!t) {
     t = { img: new Image(), ready: false, failed: false };
-    t.img.onload = () => { t.ready = true; notify(); };
-    t.img.onerror = () => { t.failed = true; };
-    t.img.src = '/' + String(path).replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
     _imgs.set(path, t);
+    const url = '/' + String(path).replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
+    t.img.onload = () => { t.ready = true; notify(); };
+    t.img.onerror = () => { t.failed = true; console.warn('[scatter] image failed to load:', url); };
+    t.img.src = url;
   }
   return t.ready ? t : null;
 }

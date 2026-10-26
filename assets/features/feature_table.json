@@ -388,9 +388,8 @@
         "label": "Archway",
         "weight": 2,
         "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
-        "kind": "building",
-        "desc": "Imperial archway. Waypoint: moving through it costs no movement.",
-        "desc_status": "placeholder"
+        "kind": "bridge",
+        "desc": "Stone span. On grass coast: the only legal crossing — hold it to pin the other side."
       },
       {
         "id": "High Elves/Healer",
@@ -418,6 +417,14 @@
         "kind": "building",
         "desc": "Alchemist. Trading post: buy a potion card for gold.",
         "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Stone Bridge (Archway)",
+        "label": "Stone Bridge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "Stone bridge over the shallows. The only legal crossing — hold it to block the other side."
       }
     ],
     "dirt": [
@@ -1121,6 +1128,14 @@
         "kind": "building",
         "desc": "Alchemist. Trading post: buy a potion card for gold.",
         "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ice Bridge (Archway)",
+        "label": "Ice Bridge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "A span of iced-over stone. Narrow footing — one unit at a time; falling off ends your turn."
       }
     ],
     "rock": [
@@ -1329,9 +1344,8 @@
         "label": "Kargothian Gate",
         "weight": 1,
         "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
-        "kind": "wall",
-        "desc": "Dark Elf gatehouse. Chokepoint: only one unit may pass per round.",
-        "desc_status": "placeholder"
+        "kind": "bridge",
+        "desc": "Stone span. On rock coast: the only legal crossing — hold it to pin the other side."
       },
       {
         "id": "Shared/Tower (Dwarf)",
@@ -1368,6 +1382,14 @@
         "kind": "building",
         "desc": "Blacksmith. Trading post: upgrade one weapon card for gold.",
         "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Toll Bridge (Gate)",
+        "label": "Toll Bridge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
+        "kind": "bridge",
+        "desc": "Toll bridge over a sea-rift. Whoever holds it collects 1 gold from each unit that crosses."
       }
     ],
     "rock_cliffs": [],
@@ -1599,6 +1621,14 @@
         "kind": "building",
         "desc": "Burial mound. Opening it (rest here) draws a relic card or wakes a wight.",
         "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Causeway (Archway)",
+        "label": "Causeway",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "Raised causeway over bog. Non-cavalry crossing elsewhere lose 1 move — this hex is the dry road."
       }
     ],
     "water": [],
