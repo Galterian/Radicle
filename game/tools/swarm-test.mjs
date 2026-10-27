@@ -60,6 +60,20 @@ function startAgent(peerId, port, attempt = 0) {
     const near = enemies[0];
     const slotOf = code => a.hand.findIndex(c => isAction(c) && c.code === code);
     const actionIdx = a.hand.map((c, i) => isAction(c) ? i : -1).filter(i => i >= 0);
+    // Haste holder: commit a bonus round first (Attack on the nearest enemy in
+    // contact, else an Empty Move toward it) — the peer keeps those cards out of
+    // the normal pick that follows.
+    const allowance = a.bonusMax || 0;   // live allowance from the hand message (Haste 1, Balefire +3)
+    if (allowance > 0 && near) {
+      const ai = slotOf('A');
+      const plans = [];
+      for (let k = 0; k < allowance; k++) {
+        if (k === 0 && dist(near) <= 1 && ai >= 0) plans.push({ slots: [ai], skills: skillsFor('A'), effect: null, target: near.peer_id });
+        else plans.push({ slots: ['EMPTY'], skills: [], effect: null, target: { q: near.tile_q, r: near.tile_r } });
+      }
+      send({ kind: 'bonus', plans });
+      a.hastes = (a.hastes || 0) + plans.length;
+    }
     const tranceIdx = a.hand.findIndex(c => isSkill(c) && c.is_trance);
     // Battle Trance: two options (Attack + a different code, Block preferred).
     if (tranceIdx >= 0 && actionIdx.length >= 2 && near && dist(near) <= 3 && Math.random() < 0.6) {
@@ -116,7 +130,7 @@ function startAgent(peerId, port, attempt = 0) {
     const m = JSON.parse(e.data);
     if (m.kind === 'hello') { a.me = m.peer_id; a.hand = m.hand || []; if (m.map) { a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); } for (const p of m.peers || []) a.peers.set(p.peer_id, p); log(`  ${peerId} hello: map ${a.map.size()} hexes / ${a.map.blockCount()} blocks`); }
     if (m.kind === 'map') { if (m.map.seed !== a.map.seed) a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); }
-    if (m.kind === 'hand') a.hand = m.hand || a.hand;
+    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; }
     if (m.kind === 'peers') for (const p of m.peers || []) a.peers.set(p.peer_id, { ...(a.peers.get(p.peer_id) || {}), ...p });
     if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
   };
@@ -195,7 +209,7 @@ async function audit(label) {
 const endAt = Date.now() + minutes * 60_000;
 while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 

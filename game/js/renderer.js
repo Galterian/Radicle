@@ -6,6 +6,13 @@ const ALLIANCE_COLOR = {
   'npc_a':   '#6ad99f',
   'npc_b':   '#e36666',
 };
+// Rule 12 tile tokens: a small die in the element's colour on the hex. Shield
+// tokens are drawn hollow (they absorb an effect hit), bonus tokens filled.
+const ELEM_COLOR = {
+  elem_vitality: '#ff6b6b', elem_souls: '#b48cff', elem_time: '#d9c36a', elem_space: '#8fa3ff',
+  elem_air: '#dfe3e8', elem_water: '#6ad9ff', elem_earth: '#c49a6c', elem_fire: '#ff9a3c',
+  elem_concentration: '#6ad99f', elem_harmony: '#ffb6e6',
+};
 
 // How long an entity's position change takes to animate, in ms. The move is
 // committed at end-of-resolution, which is ~1.5-2.3 s after the planning
@@ -299,6 +306,25 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
+    // Tile tokens (dice left on hexes by effects), bottom-right of the hex.
+    for (const t of (state.tileTokens || [])) {
+      const { x, y } = tilePx(t.q, t.r);
+      const i = (state.tileTokens || []).filter(o => o.q === t.q && o.r === t.r).indexOf(t);
+      const tx = x + HEX_SIZE * 0.45 - i * 11, ty = y + HEX_SIZE * H_SQUASH * 0.55;
+      if (!inView(tx, ty)) continue;
+      ctx.beginPath();
+      ctx.rect(tx - 5, ty - 5, 10, 10);
+      ctx.fillStyle = t.kind === 'shield' ? '#0b0d12' : (ELEM_COLOR[t.elem] || '#ccc');
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = ELEM_COLOR[t.elem] || '#ccc';
+      ctx.stroke();
+      ctx.fillStyle = t.kind === 'shield' ? (ELEM_COLOR[t.elem] || '#ccc') : '#0b0d12';
+      ctx.font = 'bold 8px ui-monospace, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(t.value), tx, ty + 3);
+    }
+
     // Track self's actually-drawn pixel so the destination arrow starts from
     // the marker (not from the tile centre of a cell the marker is only
     // halfway into).
@@ -358,6 +384,13 @@ export function createRenderer(canvas, state) {
       // Revealed composition over every unit — `[EM + A + ✦BT + ✦Po]` — which
       // vanishes on the same clock and fade curve as the floating action icon.
       // While it is live it replaces the planning chip for my own hero.
+      // Locked out of acting (lost actions): an hourglass over the marker.
+      if (e.lostActions > 0 && !dead) {
+        ctx.font = '12px ui-monospace, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffe66e';
+        ctx.fillText(`⏳${e.lostActions > 1 ? e.lostActions : ''}`, x + 18, y - 16);
+      }
       const badge = e.revealBadge;
       const bt = badge ? (now - badge.startAt) / badge.duration : 1;
       if (badge && bt < 1) {
@@ -446,6 +479,7 @@ export function createRenderer(canvas, state) {
         if (t >= 1) continue;
         if (liveWriteIdx !== i) floats[liveWriteIdx] = f;
         liveWriteIdx++;
+        if (t < 0) continue;   // scheduled for later (normal action after a Haste bonus round)
         const k = ease(t);
         const from = tilePx(f.fromQ, f.fromR);
         const to   = tilePx(f.toQ, f.toR);
@@ -482,6 +516,7 @@ export function createRenderer(canvas, state) {
         if (t >= 1) continue;
         if (liveWriteIdx !== i) icons[liveWriteIdx] = f;
         liveWriteIdx++;
+        if (t < 0) continue;   // scheduled for later (normal action after a Haste bonus round)
         const spec = f.effect ? { glyph: f.glyph || '✺', color: '#e6a4ff' }
           : f.skill ? (SKILL_ICON[f.skill] || SKILL_ICON.default) : (ACTION_ICON[f.action] || ACTION_ICON.EP);
         const k = ease(t);
