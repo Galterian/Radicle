@@ -36,6 +36,11 @@ const state = {
   hand: [],
   deckCount: 0,       // cards still in the draw pile — rendered as the stacked pile on the right
   discardCount: 0,    // cards in the discard pile
+  archive: [],        // my archive (side deck) as the peer reports it
+  willArchive: new Set(),  // card_ids marked to go to the archive at this resolution
+  archiveMode: false, // the archive pile was clicked: the next hand card picked is marked for it
+  deckMin: 15,        // the circulating deck never drops below this
+  circulating: 0,     // draw pile + discard + hand
   queued: [],         // [] | [slotIndex] | ['EMPTY']
   queuedSkills: [],   // hand indices of skill cards riding on the queued action
   queuedExtra: null,  // Battle Trance: hand index of the second action card (null → Empty Posture)
@@ -322,7 +327,9 @@ const isAction = (c) => !!c && c.kind !== 'skill' && c.kind !== 'effect';
 // the Attack (and on an Empty Move, which fights as an Attack for them).
 const EVERY_INSTANT = new Set(['effect_the_void', 'effect_light_darkness', 'effect_teleportation', 'effect_emotions_bombard']);
 const castInstant = (card, every) => every ? EVERY_INSTANT.has(card.effect_id) : !!card.is_instant;
-const castLength = (card, every) => castInstant(card, every) ? 1 : Math.max(1, card.element_cost.length) + (every ? 1 : 0);
+const myWorldStat = () => { const me = state.entities.find(p => p.peer_id === state.myPeerId); return Math.max(1, Number(me?.stat_world ?? me?.stats?.world) || 10); };
+const summonLength = (card) => Math.max(1, Math.ceil((card.summon?.need || 30) / myWorldStat()));
+const castLength = (card, every) => castInstant(card, every) ? 1 : (card.summon ? summonLength(card) : Math.max(1, card.element_cost.length)) + (every ? 1 : 0);
 const effectDoubled = () => state.queuedEffect !== null && state.queuedEffect2 !== null;
 // Rule 22: effect B chains onto A when B's first element is A's last one.
 const chainsOnto = (prev, next) => !!prev && !!next && prev.effect_id !== next.effect_id && next.element_cost[0] === prev.element_cost[prev.element_cost.length - 1];
@@ -473,6 +480,7 @@ function queuedLabel() {
 
 function renderDeck() {
   document.getElementById('slots')?.classList.toggle('haste-mode', state.bonusMode);
+  document.getElementById('slots')?.classList.toggle('archive-mode', state.archiveMode);
   const slots = document.querySelectorAll('#slots .slot');
   const trance = tranceActive();
   slots.forEach(slot => {
@@ -517,7 +525,8 @@ function renderDeck() {
       const twin = !effectQueued && state.hand.some((c, j) => j !== i && isEffect(c) && c.effect_id === card.effect_id);
       const canChain = !effectQueued && chainable(card);
       const tag = link >= 0 ? `⛓ ${link + 2}nd` : dbl ? 'double' : kindTag;
-      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}✺ ${card.name}</div><div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}</div>`;
+      const sm = card.summon ? ` · 🐾 ${card.summon.bind ? 'bind ' : ''}${card.summon.name} Σ${card.summon.need}` : '';
+      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}✺ ${card.name}</div><div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}</div>`;
       if (twin) slot.title = `${card.text || card.name}\n\nYou hold two: pick both to cast them together (Rule 23 ∀)`;
       else if (canChain) slot.title = `${card.text || card.name}\n\nChains onto ${chainTail().name}: its ${elemGlyphs(card.element_cost.slice(0, 1))} is emitted once for both (Rule 22)`;
       else slot.title = card.text || card.name;
@@ -550,6 +559,7 @@ function renderDeck() {
     slot.classList.toggle('queued-extra', isExtra);
     slot.classList.toggle('queued-skill', skillQueued || effectQueued);
     slot.classList.toggle('discard', !!card && state.willDiscard.has(card.card_id));
+    slot.classList.toggle('archive', !!card && state.willArchive.has(card.card_id));
     slot.classList.toggle('locked', state.locked && (state.queued[0] === i || skillQueued || effectQueued || isExtra));
   });
 
@@ -566,6 +576,58 @@ function renderDeck() {
     xc.textContent = String(n);
     xc.parentElement.classList.toggle('empty', n === 0);
   }
+  const ac = document.getElementById('archive-count');
+  if (ac) {
+    const n = state.archive.length;
+    ac.textContent = String(n);
+    ac.parentElement.classList.toggle('empty', n === 0);
+    ac.parentElement.classList.toggle('armed', state.archiveMode);
+    ac.parentElement.title = `Archive: ${n} card${n === 1 ? '' : 's'} · deck ${state.circulating}/${state.deckMin} min — click, then a hand card: it is archived at this resolution instead of discarded · double-click opens the archive`;
+  }
+  if (!document.getElementById('archive-popup')?.hidden) renderArchivePopup();
+}
+
+// The archive popup: every archived card; a click puts it back onto the discard pile.
+function renderArchivePopup() {
+  const list = document.getElementById('ap-list');
+  const sub = document.getElementById('ap-sub');
+  if (!list) return;
+  if (sub) sub.textContent = `${state.archive.length} archived · ${state.circulating} circulating (min ${state.deckMin})`;
+  if (!state.archive.length) { list.innerHTML = '<div class="empty">nothing archived yet — click the pile, then a hand card</div>'; return; }
+  list.innerHTML = state.archive.map(c => {
+    const creature = c.kind === 'creature';
+    const nm = creature ? `🐾 ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
+    const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
+    return `<div class="ac${creature ? ' creature' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div><div class="cd">${cd}</div></div>`;
+  }).join('');
+  list.querySelectorAll('.ac:not(.creature)').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
+}
+function openArchive(open) {
+  const el = document.getElementById('archive-popup');
+  if (!el) return;
+  el.hidden = !open;
+  if (open) { state.archiveMode = false; renderArchivePopup(); }
+  renderDeck();
+}
+let archiveClickTimer = null;
+function wireArchive() {
+  const pile = document.querySelector('#archive-pile .pile');
+  if (!pile) return;
+  // A double-click also fires two clicks: hold the single-click for a beat.
+  pile.addEventListener('click', () => {
+    if (archiveClickTimer) { clearTimeout(archiveClickTimer); archiveClickTimer = null; return; }
+    archiveClickTimer = setTimeout(() => {
+      archiveClickTimer = null;
+      if (state.locked) return;
+      state.archiveMode = !state.archiveMode;
+      uilog('archive', { detail: state.archiveMode ? 'arm' : 'disarm' });
+      logUI(state.archiveMode ? 'archive: pick a hand card — it goes to the archive at this resolution (click a marked card to unmark it)' : 'archive pick cancelled', 'phase');
+      renderDeck();
+    }, 230);
+  });
+  pile.addEventListener('dblclick', () => { if (archiveClickTimer) { clearTimeout(archiveClickTimer); archiveClickTimer = null; } openArchive(true); });
+  document.getElementById('ap-close')?.addEventListener('click', () => openArchive(false));
+  document.getElementById('archive-popup')?.addEventListener('click', (e) => { if (e.target.id === 'archive-popup') openArchive(false); });
 }
 
 function renderRoster() {
@@ -655,20 +717,34 @@ function renderPerms() {
   if (!el) return;
   const perms = myPermCards();
   const KEYS = ['9', '0', '-', '='];
+  let ki = 0;   // keys go to permanents with an ability only (a Summoning has none)
   const html = perms.map((p, k) => {
     const plans = state.bonus?.plans || [];
+    const key = p.action ? KEYS[ki++] : null;
     const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && (state.bonusMode || plans.length > 0));
-    const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${KEYS[k] || '·'})`
-      : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${KEYS[k] || '·'})`
+    const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
+      : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${key || '·'})`
+      : p.id === 'effect_summoning' ? `Summoning (6) — holds ${mySummoned()?.name || 'your creature'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
       : p.name;
     const cd = p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}` : p.die ? `⚄${p.die}` : 'perm';
-    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${KEYS[k] ? `<div class="k">${KEYS[k]}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${p.id === 'effect_summoning' ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
   el.innerHTML = html;
   el.hidden = perms.length === 0;
   el.querySelectorAll('.perm.clickable').forEach(d => d.addEventListener('click', () => clickPermanent(Number(d.dataset.k))));
+}
+// The creature my Summoning holds, as the roster knows it.
+function mySummoned() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  return me?.summoned_peer_id ? state.entities.find(p => p.peer_id === me.summoned_peer_id) || { name: me.summoned_peer_id } : null;
+}
+// Keys 9 0 - = address the n-th permanent WITH an ability.
+function clickPermanentKey(n) {
+  const all = myPermCards();
+  const k = all.findIndex((p, i) => p.action && all.slice(0, i).filter(x => x.action).length === n);
+  if (k >= 0) clickPermanent(k);
 }
 function clickPermanent(k) {
   const p = myPermCards()[k];
@@ -696,7 +772,7 @@ function clearQueuePick() {
 // allowance is used up) the queue goes back to the normal action.
 function commitBonus() {
   if (!state.queued.length) { logUI('bonus round: pick an action first', 'phase'); return; }
-  const plan = { slots: state.queued, skills: state.queuedSkills, effect: state.queuedEffect, target: state.target && typeof state.target === 'object' ? { q: state.target.q, r: state.target.r } : state.target };
+  const plan = { slots: state.queued, skills: state.queuedSkills, extra: state.queuedExtra, effect: state.queuedEffect, destroy: state.destroy?.stat || null, target: state.target && typeof state.target === 'object' ? { q: state.target.q, r: state.target.r } : state.target };
   state.bonusPlans = [...state.bonusPlans, plan];
   send({ kind: 'bonus', plans: state.bonusPlans });
   const max = state.bonus?.max || 1;
@@ -807,6 +883,10 @@ function connect() {
         state.hand = m.hand || [];
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
         if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
+        if (Array.isArray(m.archive)) state.archive = m.archive;
+        if (Array.isArray(m.will_archive)) state.willArchive = new Set(m.will_archive);
+        if (typeof m.deck_min === 'number') state.deckMin = m.deck_min;
+        if (typeof m.circulating === 'number') state.circulating = m.circulating;
         if (typeof m.turn === 'number') state.turn = m.turn;
         if (typeof m.round === 'number') state.round = m.round;
         if (typeof m.rounds_per_turn === 'number') state.roundsPerTurn = m.rounds_per_turn;
@@ -833,6 +913,11 @@ function connect() {
         state.hand = m.hand || state.hand;
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
         if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
+        if (Array.isArray(m.archive)) state.archive = m.archive;
+        if (Array.isArray(m.will_archive)) state.willArchive = new Set(m.will_archive);
+        if (typeof m.deck_min === 'number') state.deckMin = m.deck_min;
+        if (typeof m.circulating === 'number') state.circulating = m.circulating;
+        if (m.notice) logUI(m.notice, 'phase');
         if (Array.isArray(m.queued)) state.queued = m.queued;
         if (Array.isArray(m.queued_skills)) state.queuedSkills = m.queued_skills;
         if (m.queued_extra !== undefined) state.queuedExtra = typeof m.queued_extra === 'number' ? m.queued_extra : null;
@@ -895,6 +980,16 @@ function connect() {
             }
           }
           if (state._loggedDmg.size > 500) state._loggedDmg = new Set([...state._loggedDmg].slice(-100));
+          // A Summoning fell: its creature vanishes (💨 where it stood).
+          state._loggedVanish ||= new Set();
+          for (const v of env.payload.vanished || []) {
+            const vk = `${env.turn}:${env.round}:${v.peer_id}`;
+            if (state._loggedVanish.has(vk)) continue;
+            state._loggedVanish.add(vk);
+            logUI(`  💨 ${v.name || peerShort(v.peer_id)} ${v.bound ? 'is released from' : 'vanishes with'} ${peerShort(env.actor_peer_id)}'s Summoning`, 'damage', { peerId: v.peer_id });
+            const at = Number.isInteger(v.q) ? v : state.entities.find(e => e.peer_id === v.peer_id);
+            if (at && Number.isInteger(at.q ?? at.tile_q)) state.ui.floatingIcons.push({ effect: 'vanish', glyph: '💨', fromQ: at.q ?? at.tile_q, fromR: at.r ?? at.tile_r, toQ: at.q ?? at.tile_q, toR: at.r ?? at.tile_r, upOnly: true, startAt: performance.now() + seqDelay, duration: 2600 });
+          }
           // Rule 8 journey outcomes. One line per actor per round; de-dup by
           // (turn, round, actor) since every peer's state_hash echoes them.
           state._loggedJourney ||= new Set();
@@ -1051,6 +1146,13 @@ function queueSlot(key) {
   if (state.locked) return;
   const card = typeof key === 'number' ? state.hand[key] : null;
   if (typeof key === 'number' && !card) return;
+  // Archive pick: the card is marked (or unmarked) for the archive, nothing is queued.
+  if (state.archiveMode) {
+    state.archiveMode = false;
+    if (card) { send({ kind: 'archive', slot: key }); uilog('archive-mark', { detail: card.card_id }); }
+    renderDeck();
+    return;
+  }
   if (inBonusPlan(card)) { logUI('that card is already committed to a bonus round', 'phase'); return; }
   if (isEffect(card)) {
     // Rule 19: an effect is cast on a Posture. Toggle it; when it does not fit
@@ -1168,13 +1270,15 @@ function wireInput() {
       slotEl.addEventListener('contextmenu', (e) => { e.preventDefault(); toggleDiscard(slotKey); });
     }
   });
+  wireArchive();
   window.addEventListener('keydown', (ev) => {
     uilog('keydown', { key: ev.key || ev.code });
+    if (ev.key === 'Escape') { if (!document.getElementById('archive-popup')?.hidden) openArchive(false); else if (state.archiveMode) { state.archiveMode = false; renderDeck(); } return; }
     if (ev.key >= '1' && ev.key <= '7') queueSlot(Number(ev.key) - 1);
     else if (ev.key === '8') queueSlot('EMPTY');
-    else if (ev.key === '9' || ev.key === '0') clickPermanent(ev.key === '9' ? 0 : 1);
+    else if (ev.key === '9' || ev.key === '0') clickPermanentKey(ev.key === '9' ? 0 : 1);
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
-    else if (ev.key === '-' || ev.key === '=') clickPermanent(ev.key === '-' ? 2 : 3);
+    else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
     else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
   });
 

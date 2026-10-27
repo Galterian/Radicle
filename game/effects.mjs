@@ -86,6 +86,7 @@ export const EFFECT_RULES = {
   effect_oblivion:      { scope: 'target', lockRestOfTurn: true, lockNextTurn: true, permanent: true },  // the lock holds while the caster's permanent stands
   // permanents read as flags elsewhere
   effect_inner_fire:       { permanent: true },
+  effect_summoning:        { permanent: true, statBuy: true, fixedPower: 6 },   // stat buy of Souls → a creature of mine (peer.mjs spawns it)
   effect_invisibility:     { permanent: true },
   effect_emotions_bombard: { permanent: true },
   effect_aura:             { permanent: true },
@@ -113,7 +114,7 @@ export function playableEffects(dataEffects) {
 //         stay banked in `kept`; a cast still emitting returns status 'casting' with the updated bank.
 export function resolveEffect(ctx, cast) {
   const rule = EFFECT_RULES[cast.effect_id];
-  const out = { status: 'done', hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0, every: false, kept: null, notes: [] };
+  const out = { status: 'done', hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0, every: false, kept: null, summon: null, notes: [] };
   if (!rule) { out.status = 'fizzled'; out.notes.push('no rules for this effect'); return out; }
   const me = cast.actor;
   const myTile = ctx.tileOf(me);
@@ -144,7 +145,7 @@ export function resolveEffect(ctx, cast) {
     if (rule.lockRestOfTurn) out.locks.push({ on: defId, restOfTurn: true, nextTurn: !!rule.lockNextTurn, by: me, effect_id: cast.effect_id });
   };
   const myStat = (el) => ctx.statFor(me, el);
-  const emptied = (status) => ({ ...out, status, hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0 });
+  const emptied = (status) => ({ ...out, status, hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0, summon: null });
 
   // Point-buy damage: buy the element being emitted right now, bank the die.
   const of = cast.of ?? elems.length;
@@ -202,6 +203,23 @@ export function resolveEffect(ctx, cast) {
   if (cast.aura) {
     if (['target', 'all_enemies', 'all_adjacent', 'all_seen', 'self_or_enemy'].includes(rule.scope)) recipients = enemiesWithin(10);
     else if (rule.scope === 'self' || rule.scope === 'self_or_ally') recipients = ctx.peers().filter(id => alive(id) && (id === me || visible(id)) && ctx.dist(me, id) <= 10).sort();
+  }
+
+  // Stat buy (Summoning): every emission banks my stat for the element (Souls →
+  // World); the cast is paid once the bank covers the creature's stat sum
+  // (cast.summon.need). No dice, so nothing fails — it only takes longer.
+  if (rule.statBuy) {
+    const need = Math.max(1, Number(cast.summon?.need) || 0);
+    const kept = Array.isArray(cast.kept) ? [...cast.kept] : [];
+    while (kept.length < step) kept.push(myStat(elems[0]));
+    out.kept = kept;
+    const bank = kept.reduce((a, v) => a + (v || 0), 0);
+    out.notes.push(`stat buy ${bank}/${need}`);
+    if (bank < need) return emptied('casting');
+    const sm = cast.summon || {};
+    // ∀: the creature in view becomes mine — it has to still be there.
+    if (sm.bind && !(alive(sm.bind) && visible(sm.bind) && ctx.dist(me, sm.bind) <= 10)) { out.status = 'fizzled'; out.notes.push('the creature is gone'); return out; }
+    out.summon = { owner: me, creature_id: sm.creature_id || null, name: sm.name || null, need, bind: sm.bind || null, archive_card_id: sm.archive_card_id || null };
   }
 
   // Damage legs (raw sums; the resolver applies Force Shield / tokens / rounding).

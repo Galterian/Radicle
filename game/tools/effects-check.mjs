@@ -128,5 +128,26 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   const far = { C: { q: 0, r: 0 }, E: { q: 5, r: 0 }, F: { q: 0, r: 5 }, A: { q: -1, r: 0 } };
   eq('turn life heals when alone', resolveEffect(world(stats, far, sides), { actor: 'C', effect_id: 'effect_turn_life', elements: ['elem_vitality', 'elem_harmony'], salt: 'x', target: null, is_instant: true }).heals, [{ on: 'C', amount: 2 }]);
 }
+// Summoning (user spec): stat buy — each Souls emission banks my World stat (12); a creature of Σ30
+// needs 3 emissions: casting, casting, done with the permanent (power fixed at 6 on the peer side).
+{
+  const stats = { C: M(10, 12, 10, 10), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  const cast = { actor: 'C', effect_id: 'effect_summoning', elements: ['elem_souls'], salt: 's', target: null, is_instant: false, of: 3, summon: { creature_id: 'mon_x', name: 'X', need: 30 } };
+  const s1 = resolveEffect(world(stats, tiles, sides), { ...cast, step: 1, kept: null });
+  eq('summoning step 1: casting, bank 12', [s1.status, s1.kept], ['casting', [12]]);
+  const s2 = resolveEffect(world(stats, tiles, sides), { ...cast, step: 2, kept: s1.kept });
+  eq('summoning step 2: casting, bank 24', [s2.status, s2.kept], ['casting', [12, 12]]);
+  const s3 = resolveEffect(world(stats, tiles, sides), { ...cast, step: 3, kept: s2.kept });
+  eq('summoning step 3: paid → permanent + summon', [s3.status, s3.permanents, s3.summon.creature_id, s3.summon.need], ['done', [{ on: 'C', id: 'effect_summoning' }], 'mon_x', 30]);
+  // Still short at the estimated last emission → keeps casting (the peer grows the cast by one).
+  const short = resolveEffect(world(stats, tiles, sides), { ...cast, step: 3, kept: [8, 8] });
+  eq('summoning short at the last emission keeps casting', [short.status, short.kept], ['casting', [8, 8, 12]]);
+  // ∀: binds the creature in view; gone → fizzles.
+  const bind = resolveEffect(world(stats, tiles, sides), { ...cast, step: 3, kept: [12, 12], every: true, summon: { ...cast.summon, bind: 'E' } });
+  eq('summoning ∀ binds the creature in view', [bind.status, bind.summon.bind], ['done', 'E']);
+  const gone = resolveEffect(world(stats, tiles, sides, { life: { E: 0 } }), { ...cast, step: 3, kept: [12, 12], every: true, summon: { ...cast.summon, bind: 'E' } });
+  eq('summoning ∀ with the creature dead fizzles', gone.status, 'fizzled');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall checks passed');
 process.exit(fails ? 1 : 0);
