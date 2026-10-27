@@ -248,3 +248,27 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 .launcher-card #go { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
 .launcher-card #go[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
 .launcher-card #launch-msg { font-size: 12px; color: #8aa0bf; }
+
+/* Rule 24: my stat pills are buttons — emit that stat against an enemy token. */
+.ros .pill.clickable { cursor: pointer; }
+.ros .pill.clickable:hover { outline: 1px solid #ffe66e; }
+.ros .pill.active { background: #ffe66e; color: #0b0d12; font-weight: 600; }
+
+/* Permanents strip right of the deck (Rule 12/23/24): small cards with their die. */
+#perms { display: flex; gap: 6px; margin-left: 14px; margin-bottom: 2px; align-items: flex-end; }
+#perms .perm {
+  position: relative; width: 62px; min-height: 60px; padding: 14px 5px 5px; border-radius: 6px;
+  background: linear-gradient(180deg, #1d2a22 0%, #121a16 100%); border: 1px solid #2d4a3a; color: #cfe3d6;
+  font-size: 10px; line-height: 1.2; text-align: center;
+}
+#perms .perm .k { position: absolute; top: 2px; left: 4px; font: 600 9px/1 ui-monospace, Menlo, Consolas, monospace; color: #8aa0bf; }
+#perms .perm .nm { text-transform: capitalize; }
+#perms .perm .cd { margin-top: 3px; color: #8aa0bf; font-size: 9px; }
+#perms .perm.clickable { cursor: pointer; border-color: #6a8f3a; }
+#perms .perm.clickable:hover { outline: 1px solid #ffe66e; }
+#perms .perm.active { background: #ffe66e; color: #0b0d12; }
+#perms .perm.active .cd, #perms .perm.active .k { color: #3a3a1a; }
+
+/* Haste: picking the bonus round tints the hand; cards already committed to it are held. */
+#slots.haste-mode .slot:not(.disabled) .card { box-shadow: 0 0 0 1px #ffe66e inset; }
+#slots .slot.haste-held .card { opacity: .45; outline: 1px dashed #ffe66e; }
