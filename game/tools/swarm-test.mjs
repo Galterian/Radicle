@@ -67,9 +67,13 @@ function startAgent(peerId, port, attempt = 0) {
     if (allowance > 0 && near) {
       const ai = slotOf('A');
       const plans = [];
+      // Plans carry instants (skills riding the code, an instant effect on the
+      // Empty Posture) so the Rule 8 bonus-round judgment gets exercised.
+      const instIdx = a.hand.findIndex(c => isEffect(c) && c.is_instant);
       for (let k = 0; k < allowance; k++) {
         if (k === 0 && dist(near) <= 1 && ai >= 0) plans.push({ slots: [ai], skills: skillsFor('A'), effect: null, target: near.peer_id });
-        else plans.push({ slots: ['EMPTY'], skills: [], effect: null, target: { q: near.tile_q, r: near.tile_r } });
+        else if (dist(near) <= 1 && instIdx >= 0 && k <= 1) plans.push({ slots: ['EMPTY'], skills: skillsFor('P'), effect: instIdx, target: near.peer_id });
+        else plans.push({ slots: ['EMPTY'], skills: skillsFor('M'), effect: null, target: { q: near.tile_q, r: near.tile_r } });
       }
       send({ kind: 'bonus', plans });
       a.hastes = (a.hastes || 0) + plans.length;
@@ -88,10 +92,32 @@ function startAgent(peerId, port, attempt = 0) {
       a.trances++; a.attacks++;
       return;
     }
+    // A cast in progress (multi-Posture effect, Summoning's stat buy): keep
+    // emitting on a Posture until it lands instead of interrupting it (Rule 19).
+    if (a.casting?.card_ids?.length) {
+      const ci = a.hand.findIndex(c => c.card_id === a.casting.card_ids[0]);
+      if (ci >= 0) {
+        const p = slotOf('P');
+        queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, ci);
+        if (near) send({ kind: 'target', target: near.peer_id });
+        send({ kind: 'lock' });
+        a.continued = (a.continued || 0) + 1;
+        return;
+      }
+    }
     // Adjacent with an effect in hand: cast it on a Posture (explicit P card
     // or the Empty Posture) half the time — this is what exercises the
-    // Rule 21 effect-damage path in the resolver.
+    // Rule 21 effect-damage path in the resolver. A Summoning needs no enemy
+    // in reach — start it whenever one is in sight.
     const effIdx = a.hand.findIndex(isEffect);
+    const sumIdx = a.hand.findIndex(c => isEffect(c) && c.effect_id === 'effect_summoning');
+    if (sumIdx >= 0 && near && Math.random() < 0.5) {
+      const p = slotOf('P');
+      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, sumIdx);
+      send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+      a.summons = (a.summons || 0) + 1;
+      return;
+    }
     if (near && dist(near) <= 1 && effIdx >= 0 && Math.random() < 0.5) {
       const p = slotOf('P');
       queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, effIdx);
@@ -130,7 +156,7 @@ function startAgent(peerId, port, attempt = 0) {
     const m = JSON.parse(e.data);
     if (m.kind === 'hello') { a.me = m.peer_id; a.hand = m.hand || []; if (m.map) { a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); } for (const p of m.peers || []) a.peers.set(p.peer_id, p); log(`  ${peerId} hello: map ${a.map.size()} hexes / ${a.map.blockCount()} blocks`); }
     if (m.kind === 'map') { if (m.map.seed !== a.map.seed) a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); }
-    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; }
+    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; }
     if (m.kind === 'peers') for (const p of m.peers || []) a.peers.set(p.peer_id, { ...(a.peers.get(p.peer_id) || {}), ...p });
     if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
   };
@@ -209,7 +235,7 @@ async function audit(label) {
 const endAt = Date.now() + minutes * 60_000;
 while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 
