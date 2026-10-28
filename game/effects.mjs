@@ -87,6 +87,13 @@ export const EFFECT_RULES = {
   // permanents read as flags elsewhere
   effect_inner_fire:       { permanent: true },
   effect_summoning:        { permanent: true, statBuy: true, fixedPower: 6 },   // stat buy of Souls → a creature of mine (peer.mjs spawns it)
+  effect_golems_earth:     { permanent: true, statBuy: true, fixedPower: 6 },   // Souls, Harmony in turn → a golem (need 24)
+  effect_golems_water:     { permanent: true, statBuy: true, fixedPower: 6 },
+  effect_golems_air:       { permanent: true, statBuy: true, fixedPower: 6 },
+  effect_elementals_air:   { permanent: true, statBuy: true, fixedPower: 6 },   // Harmony, Concentration in turn → an elemental (need 30)
+  effect_elementals_water: { permanent: true, statBuy: true, fixedPower: 6 },
+  effect_elementals_earth: { permanent: true, statBuy: true, fixedPower: 6 },
+  effect_resurrect_death_ward: { permanent: true, statBuy: true, fixedPower: 6, resurrect: true },   // Vitality → raise the dead unit next to me / spawn an archived creature / Death Ward an ally
   effect_invisibility:     { permanent: true },
   effect_emotions_bombard: { permanent: true },
   effect_aura:             { permanent: true },
@@ -209,17 +216,27 @@ export function resolveEffect(ctx, cast) {
   // World); the cast is paid once the bank covers the creature's stat sum
   // (cast.summon.need). No dice, so nothing fails — it only takes longer.
   if (rule.statBuy) {
-    const need = Math.max(1, Number(cast.summon?.need) || 0);
+    const sm = cast.summon || {};
+    // Resurrect with nothing to aim at (no dead unit, no archived creature, no ally) does nothing.
+    if (rule.resurrect && !sm.revive && !sm.creature_id && !sm.ward) { out.status = 'fizzled'; out.notes.push('nothing to raise or ward'); return out; }
+    const need = Math.max(sm.ward ? 0 : 1, Number(sm.need) || 0);
     const kept = Array.isArray(cast.kept) ? [...cast.kept] : [];
-    while (kept.length < step) kept.push(myStat(elems[0]));
+    // Emission k banks my stat for the card's k-th element (round-robin: Souls, Harmony, Souls, …).
+    while (kept.length < step) kept.push(myStat(elems[kept.length % Math.max(1, elems.length)]));
     out.kept = kept;
     const bank = kept.reduce((a, v) => a + (v || 0), 0);
     out.notes.push(`stat buy ${bank}/${need}`);
     if (bank < need) return emptied('casting');
-    const sm = cast.summon || {};
     // ∀: the creature in view becomes mine — it has to still be there.
     if (sm.bind && !(alive(sm.bind) && visible(sm.bind) && ctx.dist(me, sm.bind) <= 10)) { out.status = 'fizzled'; out.notes.push('the creature is gone'); return out; }
-    out.summon = { owner: me, creature_id: sm.creature_id || null, name: sm.name || null, need, bind: sm.bind || null, archive_card_id: sm.archive_card_id || null };
+    // Resurrect: the dead unit must still lie next to me; a Death Ward needs its ally alive next to me.
+    if (sm.revive) {
+      const life = ctx.lifeOf(sm.revive), d = ctx.dist(me, sm.revive);
+      if (!(life <= 0 && d <= 1)) { out.status = 'fizzled'; out.notes.push(`nothing to raise here (${sm.revive} life ${life}, ${d} away)`); return out; }
+      out.notes.push(`raise ${sm.revive} (life ${life}, ${d} away)`);
+    }
+    if (sm.ward && !(alive(sm.ward) && !ctx.enemyOf(me, sm.ward) && ctx.dist(me, sm.ward) <= 1)) { out.status = 'fizzled'; out.notes.push('no ally to ward'); return out; }
+    out.summon = { owner: me, creature_id: sm.creature_id || null, name: sm.name || null, need, bind: sm.bind || null, archive_card_id: sm.archive_card_id || null, revive: sm.revive || null, is_player: !!sm.is_player, ward: sm.ward || null };
   }
 
   // Damage legs (raw sums; the resolver applies Force Shield / tokens / rounding).
