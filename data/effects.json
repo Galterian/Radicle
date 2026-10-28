@@ -292,9 +292,20 @@
               "path": "assets/Sounds/SoundFX/STEZ09.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fire.wav",
+              "usage": "play when the effect triggers"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Boom.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "fire pillar whoosh + conjuration boom for the summon-pillar visual",
       "versions": [
         {
           "author_peer_id": "",
@@ -353,9 +364,16 @@
               "path": "assets/Sounds/SoundFX/STEZ37.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "continuous arcane hum matches purple dome-shield passive aura",
       "versions": [
         {
           "author_peer_id": "",
@@ -582,9 +600,16 @@
               "path": "assets/Sounds/SoundFX/STEZ13.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fade.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "fade-out sound mirrors the white smoke ring that relocates the subject",
       "versions": [
         {
           "author_peer_id": "",
@@ -762,9 +787,16 @@
               "path": "assets/Sounds/SoundFX/STEZ08.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatSlow.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "slow heartbeat conveys the sleep/trap-dormancy state",
       "versions": [
         {
           "author_peer_id": "",
@@ -878,9 +910,16 @@
               "path": "assets/Sounds/SoundFX/STEZ02.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Morph.WAV",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "morph warps space; purple ring-spiral is a localised reality bend",
       "versions": [
         {
           "author_peer_id": "",
@@ -934,9 +973,16 @@
               "path": "assets/Sounds/SoundFX/STEZ23.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatFast.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "racing heartbeat suits the pink-red sparkle emotional bombard",
       "versions": [
         {
           "author_peer_id": "",
@@ -989,9 +1035,16 @@
               "path": "assets/Sounds/SoundFX/STEZ14.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/PageTurn.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "turning page = time stretching/pausing, pairs with faint rings",
       "versions": [
         {
           "author_peer_id": "",
@@ -1424,9 +1477,20 @@
               "path": "assets/Sounds/SoundFX/STEZ41.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Clank.wav",
+              "usage": "play when the effect triggers"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "metal impact + ring: canonical shield-up sound pair",
       "versions": [
         {
           "author_peer_id": "",
@@ -2358,9 +2422,16 @@
               "path": "assets/Sounds/SoundFX/STEZ25.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "bright sparkle on the yellow smiley/sun-face awakening visual",
       "versions": [
         {
           "author_peer_id": "",
@@ -2783,9 +2854,16 @@
               "path": "assets/Sounds/SoundFX/STEZ20.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "arcane hum fits the pale-starburst mass/body manipulation",
       "versions": [
         {
           "author_peer_id": "",
@@ -2840,9 +2918,16 @@
               "path": "assets/Sounds/SoundFX/STEZ12.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Error.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "error chime reads as mental mis-step for a confusion trap",
       "versions": [
         {
           "author_peer_id": "",
@@ -2899,9 +2984,16 @@
               "path": "assets/Sounds/SoundFX/STEZ28.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fire.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "orange glowing-ring effect = flame kindling inside the caster",
       "versions": [
         {
           "author_peer_id": "",
@@ -3014,9 +3106,16 @@
               "path": "assets/Sounds/SoundFX/STEZ06.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "twinkle on reveal matches the orange eye-ring vision cue",
       "versions": [
         {
           "author_peer_id": "",
@@ -3071,9 +3170,16 @@
               "path": "assets/Sounds/SoundFX/STEZ32.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "light-orb sparkle for the white sparkle-orb no-damage dome",
       "versions": [
         {
           "author_peer_id": "",
@@ -3129,9 +3235,16 @@
               "path": "assets/Sounds/SoundFX/STEZ22.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fade.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "fade-in matches the green hooded figure mirror-of-self",
       "versions": [
         {
           "author_peer_id": "",
@@ -3369,9 +3482,16 @@
               "path": "assets/Sounds/SoundFX/STEZ05.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Boom.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "collision boom for inverted-target damage via purple-white orbs",
       "versions": [
         {
           "author_peer_id": "",
@@ -3483,9 +3603,16 @@
               "path": "assets/Sounds/SoundFX/STEZ03.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/ElectricCrit.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "crackle for the cyan energy shards splitting an object",
       "versions": [
         {
           "author_peer_id": "",
@@ -3541,9 +3668,16 @@
               "path": "assets/Sounds/SoundFX/STEZ19.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Boom.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "starburst explosion sound for the mind-blast large starburst",
       "versions": [
         {
           "author_peer_id": "",
@@ -3666,9 +3800,16 @@
               "path": "assets/Sounds/SoundFX/STEZ15.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "life-energy sparkle for the starburst-sparkles vital transfer",
       "versions": [
         {
           "author_peer_id": "",
@@ -3786,9 +3927,16 @@
               "path": "assets/Sounds/SoundFX/STEZ23.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatSlow.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "calm heartbeat under the heart-icon charm visual",
       "versions": [
         {
           "author_peer_id": "",
@@ -3846,9 +3994,16 @@
               "path": "assets/Sounds/SoundFX/STEZ34.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "small-starburst awe shimmer; sparkle matches the pale rays",
       "versions": [
         {
           "author_peer_id": "",
@@ -3968,9 +4123,16 @@
               "path": "assets/Sounds/SoundFX/STEZ27.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Scream.WAV",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "scream for the orange ember-sparks rage visual",
       "versions": [
         {
           "author_peer_id": "",
@@ -4028,9 +4190,16 @@
               "path": "assets/Sounds/SoundFX/STEZ18.wav",
               "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
             }
+          ],
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/LongWhoosh.wav",
+              "usage": "play when the effect triggers"
+            }
           ]
         }
       },
+      "_mapping_notes": "drawn whoosh matches the swirling white smoke-puff mists",
       "versions": [
         {
           "author_peer_id": "",
