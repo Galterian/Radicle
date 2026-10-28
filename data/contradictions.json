@@ -14,7 +14,7 @@
         {
           "version": "1.0.0",
           "weight": 0.0,
-          "status": "proposal",
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -90,6 +90,300 @@
                 "text": "Keep the printed hits and adjust each creature's stats so the formula matches (rebalance script proposes the minimal stat delta)."
               }
             ]
+          },
+          "logic": {
+            "description": "Open. Rule 14 Part B derives life as round_half_up(sum(stats) / 10) (life_from_stats) but five creature cards print a different hit count: Cloudhearth Drake 54 -> 5 vs 6, Tangle Spider 65 -> 7 vs 4, Bant Battlemage 64 -> 6 vs 5, Rhox Brute 50 -> 5 vs 6, Ember Weaver 65 -> 7 vs 6. The collection rule unit_life_matches_stats flags exactly these five as WARN until a resolution wins: formula_wins (engine derives life, data.life is a cache), card_wins (optional life_override + Rule 14 'unless the card prints otherwise') or fix_stats (rebalance the stats to match the printed hits).",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "Every source entry (rule_14 and the five creatures) exists in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id, null while the vote is open.",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "printed-minus-formula",
+                "description": "Per evidence row: printed hits minus the Rule 14 formula life (non-zero = the clash).",
+                "target": "proposal",
+                "unit": "life",
+                "value": {
+                  "map": [
+                    {
+                      "var": "entry.data.evidence"
+                    },
+                    {
+                      "-": [
+                        {
+                          "var": "printed_hits"
+                        },
+                        {
+                          "var": "formula_life"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "formula-life-from-catalog",
+                "description": "The formula life recomputed from the canonical stats of the first flagged creature (Cloudhearth Drake).",
+                "target": "proposal",
+                "unit": "life",
+                "value": {
+                  "rule": [
+                    "life_from_stats",
+                    {
+                      "stats": {
+                        "entry": [
+                          "mon_cloudhearth_drake_2a",
+                          "stats"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "still-open",
+                "description": "True while no resolution has been chosen.",
+                "target": "proposal",
+                "value": {
+                  "!": {
+                    "var": "entry.data.chosen_resolution"
+                  }
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "evidence-kept",
+                "description": "The evidence rows stay (at least as many as the canonical version).",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.evidence"
+                        }
+                      ]
+                    },
+                    {
+                      "count": [
+                        {
+                          "var": "entry.data.evidence"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "life_from_stats"
+            ]
+          }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "resolved",
+          "origin": "playtest_patch",
+          "author_peer_id": "",
+          "created_at": "2026-10-28",
+          "parent_version": "1.0.0",
+          "rebalance_links": [
+            "rule_14",
+            "mon_cloudhearth_drake_2a",
+            "mon_tangle_spider_2b",
+            "mon_bant_battlemage_3p",
+            "mon_rhox_brute",
+            "mon_ember_weaver"
+          ],
+          "vote_log": [],
+          "notes": "User ruling 2026-10-28: every creature's life is round_half_up(Σstats/10). New canonical versions 1.1.0 on mon_cloudhearth_drake_2a, mon_tangle_spider_2b, mon_bant_battlemage_3p, mon_rhox_brute, mon_ember_weaver.",
+          "data": {
+            "source_entries": [
+              "rule_14",
+              "mon_cloudhearth_drake_2a",
+              "mon_tangle_spider_2b",
+              "mon_bant_battlemage_3p",
+              "mon_rhox_brute",
+              "mon_ember_weaver"
+            ],
+            "description": "Rule 14 Part B: life = sum(stats)/10 rounded. Five creature cards print a different hit count.",
+            "evidence": [
+              {
+                "entry": "mon_cloudhearth_drake_2a",
+                "stats": "13;8;18;15",
+                "sum": 54,
+                "formula_life": 5,
+                "printed_hits": 6
+              },
+              {
+                "entry": "mon_tangle_spider_2b",
+                "stats": "15;20;10;20",
+                "sum": 65,
+                "formula_life": 7,
+                "printed_hits": 4
+              },
+              {
+                "entry": "mon_bant_battlemage_3p",
+                "stats": "12;20;16;16",
+                "sum": 64,
+                "formula_life": 6,
+                "printed_hits": 5
+              },
+              {
+                "entry": "mon_rhox_brute",
+                "stats": "20;10;10;10",
+                "sum": 50,
+                "formula_life": 5,
+                "printed_hits": 6
+              },
+              {
+                "entry": "mon_ember_weaver",
+                "stats": "15;20;10;20",
+                "sum": 65,
+                "formula_life": 7,
+                "printed_hits": 6
+              }
+            ],
+            "proposed_resolutions": [
+              {
+                "resolution_id": "formula_wins",
+                "text": "Engine derives life from stats at load time; data.life becomes a cached, non-authoritative field. New versions of the five creatures set life to the formula value."
+              },
+              {
+                "resolution_id": "card_wins",
+                "text": "Printed hits are deliberate design (e.g. Tangle Spider is fragile but strong). Add an optional data.life_override to creatures; Rule 14 gets a new version: 'unless the card prints otherwise'."
+              },
+              {
+                "resolution_id": "fix_stats",
+                "text": "Keep the printed hits and adjust each creature's stats so the formula matches (rebalance script proposes the minimal stat delta)."
+              }
+            ],
+            "chosen_resolution": "formula_wins"
           },
           "logic": {
             "description": "Open. Rule 14 Part B derives life as round_half_up(sum(stats) / 10) (life_from_stats) but five creature cards print a different hit count: Cloudhearth Drake 54 -> 5 vs 6, Tangle Spider 65 -> 7 vs 4, Bant Battlemage 64 -> 6 vs 5, Rhox Brute 50 -> 5 vs 6, Ember Weaver 65 -> 7 vs 6. The collection rule unit_life_matches_stats flags exactly these five as WARN until a resolution wins: formula_wins (engine derives life, data.life is a cache), card_wins (optional life_override + Rule 14 'unless the card prints otherwise') or fix_stats (rebalance the stats to match the printed hits).",
