@@ -271,17 +271,156 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #hero-card .hero-sub { color: #8aa0bf; font-size: 11px; margin-top: 2px; }
 #hero-card .hero-hp { color: #ffb0b0; font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
 #hero-card .hero-mute { color: #566379; font-size: 10px; margin-top: 2px; cursor: pointer; }
-#hover-card { position: fixed; z-index: 30; pointer-events: none; display: flex; gap: 8px; background: #0f131bee; border: 1px solid #2a3344; border-radius: 6px; padding: 6px 8px; font-size: 11px; color: #dfe3e8; box-shadow: 0 6px 20px #0008; }
+/* --- Rich hover card -------------------------------------------------------
+   Unit variant: head (thumb + name/sub/hp/coords) · stat pills · permanents
+   stack · (self only) hand skills stack. The card is rebuilt on every move
+   so the body width adapts; max-width keeps it from eating the viewport. */
+#hover-card {
+  position: fixed; z-index: 30; pointer-events: none;
+  display: flex; flex-direction: column; gap: 6px;
+  background: #0f131bee; border: 1px solid #2a3344; border-radius: 7px;
+  padding: 8px 10px; font-size: 11px; color: #dfe3e8;
+  box-shadow: 0 10px 28px #000a, 0 0 0 1px #a08eff22;
+  width: 300px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px); overflow: hidden;
+}
 #hover-card[hidden] { display: none; }
-#hover-card img { width: 56px; height: 90px; object-fit: cover; object-position: 50% 0; border-radius: 3px; background: #0b0d12; image-rendering: pixelated; }
-#hover-card .hc-name { font-weight: 600; color: #e8ecf1; }
-#hover-card .hc-sub { color: #8aa0bf; margin-top: 2px; }
-#hover-card .hc-hp { color: #ffb0b0; margin-top: 4px; }
-/* Hovering a map object (building / landmark / scatter) reuses the card as a
-   compact one-liner: small square thumbnail, "Label · kind · biome", purpose. */
-#hover-card.object { align-items: center; max-width: 360px; }
-#hover-card.object img { width: 40px; height: 40px; object-fit: contain; object-position: 50% 50%; }
-#hover-card.object .hc-hp { color: #b6c3d6; margin-top: 2px; }
+#hover-card .hc-head { display: flex; gap: 8px; align-items: flex-start; }
+#hover-card .hc-thumb { width: 56px; height: 90px; object-fit: cover; object-position: 50% 0; border-radius: 3px; background: #0b0d12; image-rendering: pixelated; flex: 0 0 auto; }
+#hover-card .hc-thumb-obj { width: 56px; height: 56px; object-fit: contain; }
+#hover-card .hc-meta { flex: 1 1 auto; min-width: 0; }
+#hover-card .hc-name { font-weight: 600; color: #e8ecf1; font-size: 12px; }
+#hover-card .hc-sub { color: #8aa0bf; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
+#hover-card .hc-hp { color: #ffb0b0; margin-top: 4px; line-height: 1.4; }
+#hover-card .hc-coords { color: #6a7a92; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 10px; }
+#hover-card .hc-stats { display: flex; flex-wrap: wrap; gap: 3px; }
+#hover-card .hc-stats .pill {
+  font: 600 10px/1 ui-monospace, Menlo, Consolas, monospace;
+  padding: 2px 5px; border-radius: 3px; background: #0f131b;
+  color: #c8d4e3; border-left: 2px solid #4a5368;
+}
+#hover-card .hc-stats .pill.v  { border-color: #6ad99f; }
+#hover-card .hc-stats .pill.w  { border-color: #6a9ce3; }
+#hover-card .hc-stats .pill.m  { border-color: #e36666; }
+#hover-card .hc-stats .pill.wi { border-color: #d08ae0; }
+#hover-card .hc-section-head {
+  font: 600 9px/1 ui-sans-serif, system-ui, sans-serif; color: #8aa0bf;
+  letter-spacing: .1em; text-transform: uppercase; margin-top: 2px;
+}
+#hover-card .hc-perms, #hover-card .hc-skills {
+  display: flex; flex-direction: column; gap: 4px;
+}
+/* Object variant: compact one-liner */
+#hover-card.object { width: auto; max-width: 360px; flex-direction: row; align-items: center; }
+#hover-card.object .hc-head { align-items: center; }
+
+#stage.over-unit { cursor: pointer; }
+#stage.over-object { cursor: help; }
+
+/* --- SkillCard (shared by roster permanents, hover card, reveal overlay,
+       and the deck slots). The icon is a <canvas> with a glyph fallback
+       behind it so the card paints BEFORE the sprite loads. ------------- */
+.skill-card {
+  display: flex; gap: 6px; align-items: flex-start;
+  background: #141926; border: 1px solid #262e3c; border-radius: 5px;
+  padding: 5px 6px; color: #c8d4e3; font-size: 10.5px; line-height: 1.3;
+  min-height: 36px;
+}
+.skill-card-strip   { background: linear-gradient(180deg, #171d2b 0%, #10151e 100%); }
+.skill-card-tooltip { background: #141a24; border-color: #2a3344; }
+.skill-card-reveal {
+  background: linear-gradient(180deg, #1b2238 0%, #0e1322 100%);
+  border-color: #a08eff55;
+  box-shadow: 0 6px 18px #000a, 0 0 0 1px #a08eff33 inset;
+  min-width: 220px;
+}
+.skill-card .skill-card-body { flex: 1 1 auto; min-width: 0; }
+.skill-card .skill-card-name {
+  font-weight: 600; color: #e8ecf1; font-size: 11px;
+  text-transform: capitalize;
+  overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 6px;
+}
+.skill-card .skill-card-badge {
+  background: #a08eff22; color: #d7cfff; border: 1px solid #a08eff44;
+  padding: 0 4px; border-radius: 3px;
+  font: 500 8px/1.5 ui-monospace, Consolas, monospace;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.skill-card .skill-card-text {
+  color: #b6c3d6; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.skill-card-reveal .skill-card-text { -webkit-line-clamp: 4; }
+
+.skill-icon {
+  position: relative; flex: 0 0 auto; display: inline-block;
+  background: #0b0d12; border: 1px solid #262e3c; border-radius: 3px;
+  overflow: hidden; image-rendering: pixelated;
+  box-shadow: 0 0 0 1px var(--sk-color, #a08eff55) inset;
+}
+.skill-icon-glyph {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  color: var(--sk-color, #c9b8ff); font-family: "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;
+  line-height: 1; pointer-events: none;
+}
+.skill-icon-canvas { position: relative; display: block; width: 100%; height: 100%; }
+/* The canvas sits ABOVE the glyph in DOM paint order; without a sprite the
+   canvas is transparent, so the glyph behind it reads through. Once the
+   sprite paints we add .sprite-loaded on the wrap and hide the glyph. */
+.skill-icon.sprite-loaded .skill-icon-glyph { display: none; }
+
+/* --- Roster permanents stack ------------------------------------------- */
+.ros .perm-cards {
+  flex-basis: 100%;
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: 4px;
+}
+.ros .perm-cards.collapsed .skill-card:nth-child(n+3) { display: none; }
+.ros .perm-cards.collapsed.open .skill-card:nth-child(n+3) { display: flex; }
+.ros .perm-toggle {
+  background: #1a2130; border: 1px solid #262e3c; color: #8aa0bf;
+  border-radius: 3px; padding: 2px 6px; font: 500 10px/1.2 ui-sans-serif, sans-serif;
+  cursor: pointer; align-self: flex-start;
+}
+.ros .perm-toggle:hover { background: #26303f; color: #d7cfff; }
+
+/* --- Reveal overlay (DOM floating over canvas) ------------------------- */
+#skill-reveal-layer {
+  position: fixed; inset: 0; z-index: 29; pointer-events: none;
+}
+.reveal-overlay {
+  position: fixed;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: opacity .12s ease;
+  will-change: transform, opacity;
+}
+.reveal-overlay .reveal-chip {
+  font: 600 11px/1.2 ui-monospace, Consolas, monospace;
+  color: #a08eff; background: #0b0d12cc;
+  border: 1px solid #a08eff55; border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: 0 1px 2px #000;
+}
+.reveal-overlay .reveal-chip.self  { color: #ffe66e; border-color: #ffe66e55; }
+.reveal-overlay .reveal-chip.enemy { color: #ff9c9c; border-color: #e3666655; }
+.reveal-overlay .reveal-skill-stack {
+  display: flex; flex-direction: column; gap: 4px; max-width: 260px;
+}
+
+/* --- Deck slot: skill icon alongside the always-visible rule line ------ */
+.slot .card .skill-slot-icon {
+  position: absolute; right: 4px; top: 20px;
+  width: 28px; height: 28px;
+  pointer-events: none;
+}
+.slot .card .skill-slot-icon .skill-icon {
+  width: 28px; height: 28px;
+}
+.slot .card .skill-slot-icon .skill-icon-glyph { font-size: 20px; }
+.slot.skill .card { padding-right: 36px; }
 #stage.over-unit { cursor: pointer; }
 #stage.over-object { cursor: help; }
 
