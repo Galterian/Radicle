@@ -143,6 +143,7 @@ func _ready() -> void:
 		cam.position = p.position
 	hud.log_line("chaosD6 · dimension Ashfall-Micro · seed %s · %d hexes known" % [gen.seed_hex, gen.size()], Color(0.9, 0.75, 0.5))
 	hud.log_line("Data: %d characters, %d creatures, %d effects loaded from data/*.json" % [dl.ids("characters").size(), dl.ids("creatures").size(), dl.ids("effects").size()])
+	hud.set_roster(entities)
 	_begin_planning()
 
 
@@ -240,6 +241,8 @@ func _begin_planning() -> void:
 	var p := player_entity()
 	if p != null:
 		hud.update_life(p)
+	# Life totals change between rounds (damage pass); keep roster in sync.
+	hud.set_roster(entities)
 
 
 func _begin_reveal() -> void:
@@ -507,6 +510,8 @@ func _state() -> Dictionary:
 func _on_died(e: Entity) -> void:
 	if e.faction == "player":
 		hud.update_life(e)
+	# Roster reflects alive/dead state and life totals, so refresh on every death.
+	hud.set_roster(entities)
 
 
 # ------------------------------------------------------------------ player input
@@ -664,6 +669,7 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 func _on_hex_hovered(h: Vector2i) -> void:
 	if not gen.has(h):
 		hud.set_hover("")
+		hud.hide_unit_hover()
 		return
 	var terr := gen.terrain_at(h.x, h.y)
 	var e := entity_at(h)
@@ -674,6 +680,13 @@ func _on_hex_hovered(h: Vector2i) -> void:
 	if not obj.is_empty():
 		s += " · %s" % str(obj.get("label", obj.get("id", "")))
 	hud.set_hover(s)
+	# Rich hover card for units — mirror of game/js/main.js renderHoverCard.
+	# Only fires on a unit; empty / object hexes close any open card so the
+	# right column reverts to log + roster.
+	if e != null:
+		hud.show_unit_hover(e)
+	else:
+		hud.hide_unit_hover()
 
 
 func _unhandled_input(event: InputEvent) -> void:
