@@ -677,7 +677,10 @@ func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool) -> void
 		box.add_child(_make_perm_card(s, full_desc))
 
 
-func _make_perm_card(skill_id: String, full_desc: bool) -> PanelContainer:
+func _make_perm_card(card_id: String, full_desc: bool) -> PanelContainer:
+	# card_id may be either `skill_*` or `effect_*`; the browser's skill_card.js
+	# ingests both pools identically, so we route through RulesText's prefix-aware
+	# helpers to pull icon / name / text regardless of which catalog owns the id.
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", _box(Color(0.1, 0.1, 0.14, 0.75)))
 	var hb := HBoxContainer.new()
@@ -687,16 +690,16 @@ func _make_perm_card(skill_id: String, full_desc: bool) -> PanelContainer:
 	icon.custom_minimum_size = Vector2(28, 28)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.texture = RulesText.skill_icon_texture(dl, skill_id)
+	icon.texture = RulesText.card_icon_texture(dl, card_id)
 	icon.visible = icon.texture != null
 	hb.add_child(icon)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
 	hb.add_child(col)
-	var nm := _label(RulesText.skill_name(dl, skill_id), 11, Color(0.95, 0.85, 0.75))
+	var nm := _label(RulesText.card_entry_name(dl, card_id), 11, Color(0.95, 0.85, 0.75))
 	col.add_child(nm)
-	var text := RulesText.skill_text(dl, skill_id)
+	var text := RulesText.card_entry_text(dl, card_id)
 	var desc := text if full_desc else RulesText.abbreviate(text, 80)
 	var ds := _label(desc, 10, Color(0.82, 0.82, 0.9))
 	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -705,10 +708,11 @@ func _make_perm_card(skill_id: String, full_desc: bool) -> PanelContainer:
 	return card
 
 
-## True when every skill id in `entities[].data.permanents` resolves to a real
-## sprite icon (not the words-form fallback). hud_check.gd uses this to assert
-## sibling #1's `resources.sprites.icon` schema is wired. Permanents that have
-## no icon field yet still return a texture via the effect-strip fallback.
+## True when every skill_* / effect_* id in `entities[].data.permanents`
+## resolves to a real sprite icon (not the words-form fallback). hud_check.gd
+## uses this to assert sibling #1's `resources.sprites.icon` schema is wired.
+## Permanents that have no icon field yet still return a texture via the
+## effect-strip fallback.
 func every_permanent_has_texture(entities: Array) -> bool:
 	for e in entities:
 		if e == null:
@@ -717,6 +721,6 @@ func every_permanent_has_texture(entities: Array) -> bool:
 		if typeof(perms) != TYPE_ARRAY:
 			continue
 		for sid in perms:
-			if RulesText.skill_icon_texture(dl, str(sid)) == null:
+			if RulesText.card_icon_texture(dl, str(sid)) == null:
 				return false
 	return true

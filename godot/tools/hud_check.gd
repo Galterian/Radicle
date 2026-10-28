@@ -187,6 +187,66 @@ func _init() -> void:
 	if rows == want_rows: ok += 1
 	else: fail += 1
 
+	# ---- 7) effect icon resolution: data/effects.json browser parity (sibling #2
+	# wired skill_card.js to ingest effects the same way as skills). Godot's
+	# RulesText.effect_icon_texture mirrors skill_icon_texture — slices frame 0
+	# off resources.sprites.icon with an effect-strip fallback. We assert both
+	# the live-catalog path on a real id AND the fallback path on a synthetic
+	# entry that only carries `resources.sprites.effect`.
+	var eff_id := "effect_summoning"
+	var eff_tex: Texture2D = RulesText.effect_icon_texture(node.dl, eff_id)
+	var dedicated_eff: bool = RulesText.has_dedicated_effect_icon(node.dl, eff_id)
+	print("  %s: tex=%s dedicated=%s" % [eff_id, "yes" if eff_tex != null else "no", "yes" if dedicated_eff else "no"])
+	print(("  ok   " if eff_tex != null else "  FAIL ") + "effect_icon_texture resolves a texture for %s" % eff_id)
+	if eff_tex != null: ok += 1
+	else: fail += 1
+	# Non-dedicated path should still produce an AtlasTexture via the effect-strip
+	# fallback. (A dedicated icon field would be a direct sheet; both are valid
+	# Texture2D — the AtlasTexture assertion only applies when the fallback or a
+	# multi-frame icon sheet was sliced.)
+	if not dedicated_eff:
+		var is_atlas: bool = eff_tex is AtlasTexture
+		print(("  ok   " if is_atlas else "  FAIL ") + "fallback path produces an AtlasTexture for %s" % eff_id)
+		if is_atlas: ok += 1
+		else: fail += 1
+
+	# Synthetic entry: force the fallback branch regardless of whether sibling #1
+	# has populated the real catalog yet. The entry carries only
+	# `resources.sprites.effect`, so icon_texture_from_entry MUST slice frame 0
+	# off the strip. We re-use effect_summoning's known effect-strip path.
+	var real_entry: Dictionary = node.dl.get_entry("effects", eff_id)
+	var real_eff_path := ""
+	var _res = real_entry.get("resources", {})
+	if typeof(_res) == TYPE_DICTIONARY:
+		var _sp = _res.get("sprites", {})
+		if typeof(_sp) == TYPE_DICTIONARY:
+			var _ef = _sp.get("effect", null)
+			if typeof(_ef) == TYPE_DICTIONARY:
+				real_eff_path = str(_ef.get("path", ""))
+	var mock_entry := {
+		"id": "effect_mock",
+		"resources": {
+			"sprites": {
+				# No `icon` key — the slicer must take the fallback branch.
+				"effect": {"path": real_eff_path},
+			},
+		},
+	}
+	var mock_tex: Texture2D = RulesText.icon_texture_from_entry(mock_entry)
+	print("  mock-entry fallback: path='%s' tex=%s" % [real_eff_path, "yes" if mock_tex != null else "no"])
+	print(("  ok   " if mock_tex != null else "  FAIL ") + "icon_texture_from_entry resolves a Texture2D from a synthetic entry (fallback path)")
+	if mock_tex != null: ok += 1
+	else: fail += 1
+	var mock_is_atlas: bool = mock_tex is AtlasTexture
+	print(("  ok   " if mock_is_atlas else "  FAIL ") + "synthetic-entry fallback returns an AtlasTexture (sliced from the effect strip)")
+	if mock_is_atlas: ok += 1
+	else: fail += 1
+	# Negative control: an entry with no sprites at all must return null.
+	var empty_tex: Texture2D = RulesText.icon_texture_from_entry({"id": "effect_void"})
+	print(("  ok   " if empty_tex == null else "  FAIL ") + "icon_texture_from_entry returns null when neither icon nor effect sprite exists")
+	if empty_tex == null: ok += 1
+	else: fail += 1
+
 	for i in range(6):
 		await process_frame
 	img = get_root().get_viewport().get_texture().get_image()
