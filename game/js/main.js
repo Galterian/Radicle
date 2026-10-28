@@ -42,6 +42,55 @@ fetch('/data/skills.json').then(r => r.ok ? r.json() : null).then(j => {
   }
 }).catch(() => { /* no skills catalog */ });
 
+// Extra per-entry fields the hover card surfaces beyond the stat/portrait data
+// that sprites.js tracks: combo (action letters), adept_element, actions_per_round,
+// innate_effect (+text), tags, logic.description. Pulled from the merged
+// characters.json / creatures.json schemas — code defensively, any field may
+// be missing on an older entry. Keyed by source_id (char_* / mon_*).
+const entityExtraById = new Map();
+let _entityExtraReady = false;
+const _entityListeners = new Set();
+function _notifyEntityExtra() { for (const fn of _entityListeners) { try { fn(); } catch { /* ignore */ } } }
+function onEntityExtraReady(fn) { _entityListeners.add(fn); if (_entityExtraReady) fn(); return () => _entityListeners.delete(fn); }
+function activeVersionLocal(entry) {
+  const vs = Array.isArray(entry?.versions) ? entry.versions : [];
+  let best = null;
+  for (const v of vs) {
+    if (v && v.status === 'rejected') continue;
+    if (!best || (v.weight ?? 0) > (best.weight ?? 0)) best = v;
+  }
+  return best;
+}
+Promise.all([
+  fetch('/data/characters.json').then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch('/data/creatures.json').then(r => r.ok ? r.json() : null).catch(() => null),
+]).then(([chars, mons]) => {
+  for (const doc of [chars, mons]) {
+    for (const e of doc?.entries || []) {
+      if (!e || !e.id) continue;
+      const ver = activeVersionLocal(e) || {};
+      const data = ver.data || {};
+      const logic = ver.logic || {};
+      // Just the first sentence of logic.description to keep the hover card tight.
+      const desc = typeof logic.description === 'string' ? logic.description : '';
+      const firstSentence = desc ? desc.split(/\.(?=\s|$)/)[0].trim() : '';
+      entityExtraById.set(e.id, {
+        tags: Array.isArray(e.tags) ? e.tags.slice() : [],
+        combo: Array.isArray(data.combo) ? data.combo.slice() : null,
+        adept_element: data.adept_element || null,
+        actions_per_round: Number.isFinite(data.actions_per_round) ? data.actions_per_round : null,
+        innate_effect: data.innate_effect || null,
+        innate_effect_text: typeof data.innate_effect_text === 'string' ? data.innate_effect_text : '',
+        dice_pattern: data.dice_pattern || null,
+        on_action_rider: data.on_action_rider || null,
+        logicDesc: firstSentence,
+      });
+    }
+  }
+  _entityExtraReady = true;
+  _notifyEntityExtra();
+}).catch(() => { /* best-effort */ });
+
 const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Unit voice lines / fx from the curated WBC3 collection. `M` toggles mute.
@@ -902,6 +951,10 @@ function renderRevealOverlay() {
 // instead, re-render on identity + state changes only, and let the mouse move
 // just reposition. The key is `pid|objKey|life|perms|hand`.
 let _hoverCardKey = null;
+// First-paint: when the entity-extras catalog lands after the user has already
+// hovered a unit, the card is still rendered without the extra chips/info.
+// Invalidate the cached key so the next mousemove rebuilds with the new data.
+onEntityExtraReady(() => { _hoverCardKey = null; });
 function renderHoverCard(clientX, clientY) {
   const card = document.getElementById('hover-card');
   if (!card) return;
@@ -935,6 +988,20 @@ function renderHoverCard(clientX, clientY) {
     // Only our own hand is public; show held skills for the self card only.
     const isSelf = p.peer_id === state.myPeerId;
     const heldSkillIds = isSelf ? state.hand.filter(c => isSkill(c)).map(c => c.skill_id) : [];
+    // Richer post-merge detail: tags, combo, adept element, actions/round,
+    // innate effect (creatures), one-sentence logic summary. Each piece is
+    // optional so an older entry still produces a sensible card.
+    const extra = entityExtraById.get(sourceIdOf(p)) || null;
+    const chips = [];
+    const classId = (p.permanents_csv || '').split(',').find(s => s.startsWith('class_'));
+    if (classId) chips.push({ cls: 'cls', text: '⚜ ' + classId.replace(/^class_/, '').replace(/_/g, ' ') });
+    for (const t of extra?.tags || []) chips.push({ cls: 'tag', text: t });
+    const info = [];
+    if (extra?.combo) info.push('combo ' + extra.combo.join(' · '));
+    if (extra?.adept_element) info.push(extra.adept_element.replace(/^elem_/, '') + ' adept');
+    if (Number.isFinite(extra?.actions_per_round)) info.push(extra.actions_per_round + '/round');
+    if (extra?.innate_effect_text) info.push(extra.innate_effect_text);
+    const logic = extra?.logicDesc || '';
     card.innerHTML = `
       <div class="hc-head">
         ${src ? `<img class="hc-thumb" src="${escHtml(src)}" alt="">` : ''}
@@ -946,6 +1013,9 @@ function renderHoverCard(clientX, clientY) {
         </div>
       </div>
       <div class="hc-stats">${statPillsHtml(p)}</div>
+      ${chips.length ? `<div class="hc-chips">${chips.map(c => `<span class="hc-chip ${c.cls}">${escHtml(c.text)}</span>`).join('')}</div>` : ''}
+      ${info.length ? `<div class="hc-info">${info.map(escHtml).join(' · ')}</div>` : ''}
+      ${logic ? `<div class="hc-logic">${escHtml(abbreviate(logic, 200))}</div>` : ''}
       ${permIds.length ? `<div class="hc-section-head">permanents</div><div class="hc-perms"></div>` : ''}
       ${heldSkillIds.length ? `<div class="hc-section-head">skills in hand</div><div class="hc-skills"></div>` : ''}
     `;

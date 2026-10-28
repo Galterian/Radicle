@@ -355,6 +355,43 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #hover-card .hc-perms, #hover-card .hc-skills {
   display: flex; flex-direction: column; gap: 4px;
 }
+/* Richer post-merge flavor rows — tag chips, combo/adept/innate info,
+   and the one-sentence logic summary. All optional; each disappears when
+   the merged entry doesn't carry that field. */
+#hover-card .hc-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+#hover-card .hc-chip {
+  font: 500 9px/1.4 ui-sans-serif, system-ui, sans-serif;
+  padding: 1px 6px; border-radius: 3px;
+  background: #141a24; color: #c8d4e3;
+  border: 1px solid #26303f;
+  text-transform: capitalize;
+}
+#hover-card .hc-chip.cls { color: #ffe66e; border-color: #ffe66e55; background: #2a2210; }
+#hover-card .hc-chip.tag { color: #a8b4c8; }
+#hover-card .hc-info {
+  color: #cfe3d6; font-size: 10.5px; line-height: 1.4;
+  padding: 3px 6px; background: #141a24; border-left: 2px solid #6ad99f;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+#hover-card .hc-logic {
+  color: #b6c3d6; font-size: 10px; line-height: 1.4;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+/* Inline effect-reference icon beside a mentioned effect name inside a
+   .skill-card-text. The icon is a tiny .skill-icon with its own glyph
+   fallback — matches the main card's resolution chain. */
+.inline-fx {
+  display: inline-flex; align-items: center; gap: 2px;
+  vertical-align: baseline; white-space: nowrap;
+}
+.inline-fx .skill-icon {
+  width: 14px; height: 14px; vertical-align: -3px;
+  border-radius: 2px;
+}
+.inline-fx .skill-icon-glyph { font-size: 10px; }
 /* Object variant: compact one-liner */
 #hover-card.object { width: auto; max-width: 360px; flex-direction: row; align-items: center; }
 #hover-card.object .hc-head { align-items: center; }

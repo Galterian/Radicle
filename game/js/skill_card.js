@@ -51,6 +51,9 @@ export const SKILL_GLYPHS = {
 };
 
 const _entries = new Map();   // id -> parsed info
+// name index for inline-icon decoration: `lowercased name` -> id. Longer names
+// come first so "Super sense" wins over "Sense".
+const _nameIndex = [];        // [{ nameLower, id, pattern }]
 let _frames = null;           // frames.json cache (path -> {cols, rows, cell_w, cell_h})
 let _loading = null;
 const _listeners = new Set();
@@ -100,12 +103,43 @@ export function loadCatalog() {
     one('/assets/frames.json'),
   ]).then(([skills, effects, frames]) => {
     for (const e of skills?.entries || []) _ingest(e, false);
-    // Effects may ride the same card component (future: elemental castings).
+    // Effects now ride the same card component — same shape as skills, just a
+    // different source. Resolution is symmetric: resources.sprites.icon →
+    // effect strip frame 0 → unicode glyph.
     for (const e of effects?.entries || []) _ingest(e, (e.tags || []).includes('permanent'));
     _frames = frames || {};
+    _rebuildNameIndex();
     _notify();
   }).catch(() => { _frames = {}; });
   return _loading;
+}
+
+// Build the "effect name" → id index used by decorateEffectRefs(). Only
+// effect_* ids (so a description "the Fear aura" picks up Fear + Aura, not
+// another skill with the same filler word). Skip names shorter than four
+// characters to avoid false-positives on common words ("Awe" was dropped).
+function _rebuildNameIndex() {
+  _nameIndex.length = 0;
+  for (const info of _entries.values()) {
+    if (!String(info.id).startsWith('effect_')) continue;
+    const nm = String(info.name || '').trim();
+    if (nm.length < 4) continue;
+    // Strip anything in parens: "Elementals — Water" and "Fiery Beam / Balefire"
+    // keep their primary; sub-tokens are added as separate aliases.
+    const aliases = new Set();
+    aliases.add(nm);
+    for (const part of nm.split(/\s*[\/——]\s*/)) {
+      const p = part.trim();
+      if (p.length >= 4) aliases.add(p);
+    }
+    for (const a of aliases) {
+      // Escape regex specials, enforce word boundary.
+      const esc = a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      _nameIndex.push({ nameLower: a.toLowerCase(), id: info.id, pattern: new RegExp(`\\b${esc}\\b`, 'gi') });
+    }
+  }
+  // Longer first so "Super sense" wins over "Sense".
+  _nameIndex.sort((a, b) => b.nameLower.length - a.nameLower.length);
 }
 
 // Fire-and-forget — any caller that imports this module gets the fetch started.
@@ -293,6 +327,14 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
     ds.className = 'skill-card-text';
     ds.textContent = text;
     body.appendChild(ds);
+    // Inline mini-icon next to every effect-name mention. Runs after mount
+    // so the text node already carries the string. Re-runs on catalog arrival
+    // because the name index is empty before that lands.
+    const _decorate = () => decorateEffectRefs(ds, { selfId: id, iconSize: 14 });
+    _decorate();
+    if (!_nameIndex.length) {
+      const off = onCatalogChanged(() => { _decorate(); off(); });
+    }
   }
 
   el.appendChild(body);
@@ -306,6 +348,9 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
         let ds = body.querySelector('.skill-card-text');
         if (!ds) { ds = document.createElement('div'); ds.className = 'skill-card-text'; body.appendChild(ds); }
         ds.textContent = i2.text;
+        // Fresh text node → re-run decoration from scratch.
+        delete ds.dataset.fxDecorated;
+        decorateEffectRefs(ds, { selfId: id, iconSize: 14 });
       }
       off();
     });
@@ -323,4 +368,44 @@ export function fillSkillCardStack(container, ids, opts = {}) {
     if (!id) continue;
     container.appendChild(makeSkillCard(id, opts));
   }
+}
+
+// Walk the text node inside a `.skill-card-text` (or any element) and insert
+// a small effect icon next to every mention of a known effect's name. Called
+// once by makeSkillCard after setting text; also re-callable from outside
+// when a caller wants to decorate custom text (e.g. a tooltip body).
+// Only decorates once per element: a marker on the host guards re-entry.
+export function decorateEffectRefs(host, { selfId = null, iconSize = 14 } = {}) {
+  if (!host || host.dataset?.fxDecorated) return;
+  if (host.dataset) host.dataset.fxDecorated = '1';
+  if (!_nameIndex.length) return;   // catalog not here yet; subscriber below retries
+  // Walk only direct text nodes — don't descend into previously-wrapped spans.
+  const text = host.textContent || '';
+  if (!text) return;
+  const matches = [];
+  for (const row of _nameIndex) {
+    if (selfId && row.id === selfId) continue;   // don't annotate a card with its own name
+    row.pattern.lastIndex = 0;
+    let m;
+    while ((m = row.pattern.exec(text)) !== null) {
+      // Skip overlaps already consumed by a longer earlier match.
+      const start = m.index, end = m.index + m[0].length;
+      if (matches.some(x => start < x.end && end > x.start)) continue;
+      matches.push({ start, end, id: row.id, label: m[0] });
+    }
+  }
+  if (!matches.length) return;
+  matches.sort((a, b) => a.start - b.start);
+  host.textContent = '';
+  let cur = 0;
+  for (const m of matches) {
+    if (m.start > cur) host.appendChild(document.createTextNode(text.slice(cur, m.start)));
+    const span = document.createElement('span');
+    span.className = 'inline-fx';
+    span.appendChild(makeSkillIcon(m.id, { size: iconSize, title: skillInfo(m.id)?.name || m.label }));
+    span.appendChild(document.createTextNode(m.label));
+    host.appendChild(span);
+    cur = m.end;
+  }
+  if (cur < text.length) host.appendChild(document.createTextNode(text.slice(cur)));
 }

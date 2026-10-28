@@ -88,6 +88,7 @@ const SHORT_MAX := 70
 static var _feature_desc_cache: Dictionary = {}
 static var _feature_desc_loaded := false
 static var _skill_icon_cache: Dictionary = {}      # skill_id -> Texture2D (may be null)
+static var _effect_icon_cache: Dictionary = {}     # effect_id -> Texture2D (may be null)
 
 
 ## Full rule text (tooltip form) for a basic action code, or "" when unknown.
@@ -251,45 +252,75 @@ static func skill_icon_texture(dl: DataLoader, skill_id: String) -> Texture2D:
 		return null
 	if _skill_icon_cache.has(skill_id):
 		return _skill_icon_cache[skill_id]
-	var entry := dl.get_entry("skills", skill_id)
-	var res = entry.get("resources", {})
-	var tex: Texture2D = null
-	if typeof(res) == TYPE_DICTIONARY:
-		var sprites = res.get("sprites", {})
-		if typeof(sprites) == TYPE_DICTIONARY:
-			var icon = sprites.get("icon", null)
-			var path := ""
-			var cols := 1
-			var frame := 0
-			if typeof(icon) == TYPE_DICTIONARY and str(icon.get("path", "")) != "":
-				path = str(icon.get("path", ""))
-				cols = maxi(1, int(icon.get("cols", 1)))
-				frame = int(icon.get("frame", 0))
-			else:
-				# No dedicated icon sheet yet — slice frame 0 off the effect strip.
-				var eff = sprites.get("effect", null)
-				if typeof(eff) == TYPE_DICTIONARY:
-					path = str(eff.get("path", ""))
-					cols = maxi(0, int(eff.get("cols", 0)))
-					frame = int(eff.get("frame", 0))
-			if path != "":
-				var sheet := Assets.load_texture(path)
-				if sheet != null:
-					if cols <= 1:
-						var w := sheet.get_width()
-						var h := sheet.get_height()
-						if h > 0 and w > h:
-							cols = maxi(1, roundi(float(w) / float(h)))
-					if cols <= 1:
-						tex = sheet
-					else:
-						var cell_w := int(sheet.get_width() / cols)
-						var at := AtlasTexture.new()
-						at.atlas = sheet
-						at.region = Rect2(frame * cell_w, 0, cell_w, sheet.get_height())
-						tex = at
+	var tex := icon_texture_from_entry(dl.get_entry("skills", skill_id))
 	_skill_icon_cache[skill_id] = tex
 	return tex
+
+
+## Effect-card icon: identical slicing contract to skill_icon_texture but reads
+## from data/effects.json. Browser parity: skill_card.js `_ingest` treats effects
+## and skills the same way (resources.sprites.icon → effect strip fallback).
+## Returns null when neither sheet exists; callers can show a text badge in that
+## case. hud_check.gd exercises both the normal path and the fallback via a
+## synthetic entry (see icon_texture_from_entry).
+static func effect_icon_texture(dl: DataLoader, effect_id: String) -> Texture2D:
+	if dl == null or not effect_id.begins_with("effect_"):
+		return null
+	if _effect_icon_cache.has(effect_id):
+		return _effect_icon_cache[effect_id]
+	var tex := icon_texture_from_entry(dl.get_entry("effects", effect_id))
+	_effect_icon_cache[effect_id] = tex
+	return tex
+
+
+## Non-caching worker shared by skill_icon_texture / effect_icon_texture. Given
+## a catalog entry dictionary (skills.json or effects.json shape), returns an
+## AtlasTexture clipped to frame 0 of resources.sprites.icon, falls back to the
+## first frame of resources.sprites.effect (inferring cols ≈ round(w/h) when
+## the entry doesn't record cols), returns null when neither sheet is wired.
+## Exposed publicly so hud_check.gd can hand it synthetic entries to assert the
+## fallback path.
+static func icon_texture_from_entry(entry: Dictionary) -> Texture2D:
+	if typeof(entry) != TYPE_DICTIONARY or entry.is_empty():
+		return null
+	var res = entry.get("resources", {})
+	if typeof(res) != TYPE_DICTIONARY:
+		return null
+	var sprites = res.get("sprites", {})
+	if typeof(sprites) != TYPE_DICTIONARY:
+		return null
+	var icon = sprites.get("icon", null)
+	var path := ""
+	var cols := 1
+	var frame := 0
+	if typeof(icon) == TYPE_DICTIONARY and str(icon.get("path", "")) != "":
+		path = str(icon.get("path", ""))
+		cols = maxi(1, int(icon.get("cols", 1)))
+		frame = int(icon.get("frame", 0))
+	else:
+		# No dedicated icon sheet yet — slice frame 0 off the effect strip.
+		var eff = sprites.get("effect", null)
+		if typeof(eff) == TYPE_DICTIONARY:
+			path = str(eff.get("path", ""))
+			cols = maxi(0, int(eff.get("cols", 0)))
+			frame = int(eff.get("frame", 0))
+	if path == "":
+		return null
+	var sheet := Assets.load_texture(path)
+	if sheet == null:
+		return null
+	if cols <= 1:
+		var w := sheet.get_width()
+		var h := sheet.get_height()
+		if h > 0 and w > h:
+			cols = maxi(1, roundi(float(w) / float(h)))
+	if cols <= 1:
+		return sheet
+	var cell_w := int(sheet.get_width() / cols)
+	var at := AtlasTexture.new()
+	at.atlas = sheet
+	at.region = Rect2(frame * cell_w, 0, cell_w, sheet.get_height())
+	return at
 
 
 ## True when the icon came from the authoritative `resources.sprites.icon`
@@ -298,7 +329,18 @@ static func skill_icon_texture(dl: DataLoader, skill_id: String) -> Texture2D:
 static func has_dedicated_icon(dl: DataLoader, skill_id: String) -> bool:
 	if dl == null or not skill_id.begins_with("skill_"):
 		return false
-	var entry := dl.get_entry("skills", skill_id)
+	return _entry_has_dedicated_icon(dl.get_entry("skills", skill_id))
+
+
+## True when an effects.json entry has a dedicated `resources.sprites.icon`
+## (sibling #1's schema). Mirror of has_dedicated_icon for effect ids.
+static func has_dedicated_effect_icon(dl: DataLoader, effect_id: String) -> bool:
+	if dl == null or not effect_id.begins_with("effect_"):
+		return false
+	return _entry_has_dedicated_icon(dl.get_entry("effects", effect_id))
+
+
+static func _entry_has_dedicated_icon(entry: Dictionary) -> bool:
 	var res = entry.get("resources", {})
 	if typeof(res) != TYPE_DICTIONARY:
 		return false
@@ -307,3 +349,52 @@ static func has_dedicated_icon(dl: DataLoader, skill_id: String) -> bool:
 		return false
 	var icon = sprites.get("icon", null)
 	return typeof(icon) == TYPE_DICTIONARY and str(icon.get("path", "")) != ""
+
+
+## Catalog kind for a hand-card / permanent id. "skill_*" → "skills", "effect_*"
+## → "effects", else "". Lets Hud.gd pull name/text/icon for either prefix
+## without hard-coding the mapping in every call site (parity with the browser
+## skill_card.js, which ingests both pools through the same _ingest()).
+static func card_entry_kind(id: String) -> String:
+	if id.begins_with("skill_"):
+		return "skills"
+	if id.begins_with("effect_"):
+		return "effects"
+	return ""
+
+
+## Icon texture for either a skill_* or effect_* id (dispatch by prefix).
+## Returns null when the id doesn't look like a card we know about or the
+## catalog has no sheet to slice.
+static func card_icon_texture(dl: DataLoader, id: String) -> Texture2D:
+	if id.begins_with("skill_"):
+		return skill_icon_texture(dl, id)
+	if id.begins_with("effect_"):
+		return effect_icon_texture(dl, id)
+	return null
+
+
+## Display name for either a skill_* or effect_* id.
+static func card_entry_name(dl: DataLoader, id: String) -> String:
+	var kind := card_entry_kind(id)
+	if kind == "" or dl == null:
+		return id
+	return dl.name_of(kind, id)
+
+
+## Full rule text for either a skill_* or effect_* id (same resolution rule as
+## skill_text — pick_active then fall back to versions[0]).
+static func card_entry_text(dl: DataLoader, id: String) -> String:
+	var kind := card_entry_kind(id)
+	if kind == "" or dl == null:
+		return ""
+	var entry := dl.get_entry(kind, id)
+	if entry.is_empty():
+		return ""
+	var data := DataLoader.pick_active(entry)
+	var d = data.get("data", {})
+	if typeof(d) != TYPE_DICTIONARY or not d.has("text"):
+		var versions = entry.get("versions", [])
+		if typeof(versions) == TYPE_ARRAY and not versions.is_empty() and typeof(versions[0]) == TYPE_DICTIONARY:
+			d = versions[0].get("data", {})
+	return str(d.get("text", "")) if typeof(d) == TYPE_DICTIONARY else ""
