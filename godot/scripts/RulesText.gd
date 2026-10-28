@@ -87,6 +87,7 @@ const SHORT_MAX := 70
 
 static var _feature_desc_cache: Dictionary = {}
 static var _feature_desc_loaded := false
+static var _skill_icon_cache: Dictionary = {}      # skill_id -> Texture2D (may be null)
 
 
 ## Full rule text (tooltip form) for a basic action code, or "" when unknown.
@@ -236,3 +237,73 @@ static func _load_feature_descs() -> void:
 		for it in sc.items:
 			if typeof(it) == TYPE_DICTIONARY and it.has("desc") and str(it.desc) != "":
 				_feature_desc_cache[str(it.get("id", it.get("label", "")))] = str(it.desc)
+
+
+## Skill-card icon: an AtlasTexture pointing at frame 0 of the icon sheet from
+## data/skills.json `resources.sprites.icon` (sibling #1 adds this field). When
+## the entry has no `icon` yet we fall back to the first frame of
+## `resources.sprites.effect` and guess `cols` from the sheet aspect ratio
+## (cols ≈ round(w/h)). Returns null when neither sheet exists or the texture
+## fails to load; callers must swap in the words-form string from
+## icons_to_words() in that case.
+static func skill_icon_texture(dl: DataLoader, skill_id: String) -> Texture2D:
+	if dl == null or not skill_id.begins_with("skill_"):
+		return null
+	if _skill_icon_cache.has(skill_id):
+		return _skill_icon_cache[skill_id]
+	var entry := dl.get_entry("skills", skill_id)
+	var res = entry.get("resources", {})
+	var tex: Texture2D = null
+	if typeof(res) == TYPE_DICTIONARY:
+		var sprites = res.get("sprites", {})
+		if typeof(sprites) == TYPE_DICTIONARY:
+			var icon = sprites.get("icon", null)
+			var path := ""
+			var cols := 1
+			var frame := 0
+			if typeof(icon) == TYPE_DICTIONARY and str(icon.get("path", "")) != "":
+				path = str(icon.get("path", ""))
+				cols = maxi(1, int(icon.get("cols", 1)))
+				frame = int(icon.get("frame", 0))
+			else:
+				# No dedicated icon sheet yet — slice frame 0 off the effect strip.
+				var eff = sprites.get("effect", null)
+				if typeof(eff) == TYPE_DICTIONARY:
+					path = str(eff.get("path", ""))
+					cols = maxi(0, int(eff.get("cols", 0)))
+					frame = int(eff.get("frame", 0))
+			if path != "":
+				var sheet := Assets.load_texture(path)
+				if sheet != null:
+					if cols <= 1:
+						var w := sheet.get_width()
+						var h := sheet.get_height()
+						if h > 0 and w > h:
+							cols = maxi(1, roundi(float(w) / float(h)))
+					if cols <= 1:
+						tex = sheet
+					else:
+						var cell_w := int(sheet.get_width() / cols)
+						var at := AtlasTexture.new()
+						at.atlas = sheet
+						at.region = Rect2(frame * cell_w, 0, cell_w, sheet.get_height())
+						tex = at
+	_skill_icon_cache[skill_id] = tex
+	return tex
+
+
+## True when the icon came from the authoritative `resources.sprites.icon`
+## field (not the effect-strip fallback). hud_check.gd uses this to assert
+## sibling #1's schema contract is wired through when icons are populated.
+static func has_dedicated_icon(dl: DataLoader, skill_id: String) -> bool:
+	if dl == null or not skill_id.begins_with("skill_"):
+		return false
+	var entry := dl.get_entry("skills", skill_id)
+	var res = entry.get("resources", {})
+	if typeof(res) != TYPE_DICTIONARY:
+		return false
+	var sprites = res.get("sprites", {})
+	if typeof(sprites) != TYPE_DICTIONARY:
+		return false
+	var icon = sprites.get("icon", null)
+	return typeof(icon) == TYPE_DICTIONARY and str(icon.get("path", "")) != ""
