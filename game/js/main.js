@@ -9,6 +9,7 @@ import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged
 import { featureAt } from './features.js';
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
+import { makeSkillIcon, fillSkillCardStack } from './skill_card.js';
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
 // still landing. Pull it in defensively: when the module (or its export) is
@@ -474,7 +475,17 @@ function renderDeck() {
       // Rule text on the card itself (data/skills.json text, ≤70 chars); the
       // full sentence stays in the tooltip.
       const text = card.text || skillTextById.get(card.skill_id) || (isTrance(card) ? ACTION_HELP.BT.full : '');
-      cardDiv.innerHTML = `<div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div><div class="ds">${escHtml(abbreviate(text, 70))}</div><div class="cd">needs ${needs}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
+      // Build the card as DOM so the icon canvas can live inside it — the
+      // skill-card icon shows the real effect sprite (frame 0) when a skill's
+      // resources.sprites.icon or .effect is mapped, otherwise the unicode
+      // glyph. slot .ds carries the short rule; the full line stays in title.
+      cardDiv.innerHTML = `
+        <div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div>
+        <div class="skill-slot-icon"></div>
+        <div class="ds">${escHtml(abbreviate(text, 70))}</div>
+        <div class="cd">needs ${escHtml(needs)}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
+      const iconMount = cardDiv.querySelector('.skill-slot-icon');
+      if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name }));
       slot.title = text || card.name;
     } else if (card) {
       const code = card.code;
@@ -532,18 +543,48 @@ function renderRoster() {
       const v = e[flat] ?? e.stats?.[key];
       return Number.isFinite(v) ? v : '—';
     };
-    const perms = (e.permanents_csv || '').split(',').filter(Boolean).map(s => s.replace(/^skill_/, '').replace(/_/g, ' '));
-    row.innerHTML = `${thumb}<span class="txt"><span class="nm">${e.name}</span>
-      <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span>
+    const permIds = (e.permanents_csv || '').split(',').filter(Boolean);
+    const headQR = `(${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})`;
+    row.innerHTML = `${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}</span>
+      <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         <span class="pill v" title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
         <span class="pill w" title="World">W ${stat('stat_world', 'world')}</span>
         <span class="pill m" title="Matter">M ${stat('stat_matter', 'matter')}</span>
         <span class="pill wi" title="Will">Wi ${stat('stat_will', 'will')}</span>
-        ${perms.length ? `<span class="pill perm" title="permanents">✦ ${perms.join(', ')}</span>` : ''}
-      </span></span>`;
+      </span>
+      ${permIds.length ? '<div class="perm-cards" data-count="' + permIds.length + '"></div>' : ''}
+      </span>`;
+    // Build the permanents stack as real SkillCard DOM, not innerHTML strings
+    // — the icon canvas has to be a live node so the sprite paints into it.
+    if (permIds.length) {
+      const stack = row.querySelector('.perm-cards');
+      // Over three permanents: default-collapse into a chevron that expands
+      // in place. Keeps the roster scannable while still a click away from
+      // the full stack.
+      const collapsed = permIds.length > 3;
+      if (collapsed) stack.classList.add('collapsed');
+      fillSkillCardStack(stack, permIds, { variant: 'strip', badge: 'perm' });
+      if (collapsed) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'perm-toggle';
+        toggle.textContent = `+${permIds.length - 2} more…`;
+        toggle.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const isOpen = stack.classList.toggle('open');
+          toggle.textContent = isOpen ? 'collapse' : `+${permIds.length - 2} more…`;
+        });
+        stack.appendChild(toggle);
+      }
+    }
     // Clicking a roster row toggles the log filter on that peer.
-    row.addEventListener('click', () => setLogFilter(activeFilter === e.peer_id ? null : e.peer_id));
+    row.addEventListener('click', (ev) => {
+      // Skill cards inside this row shouldn't toggle the log filter when the
+      // user is reading one — only the empty region / name counts.
+      if (ev.target.closest('.skill-card') || ev.target.closest('.perm-toggle')) return;
+      setLogFilter(activeFilter === e.peer_id ? null : e.peer_id);
+    });
     el.appendChild(row);
   }
 }
@@ -571,6 +612,91 @@ function renderHeroCard() {
   card.querySelector('.hero-hp').textContent = `hp ${me.life}/${me.life_max}`;
   card.querySelector('.hero-mute').textContent = sounds.muted ? '🔇 muted (M)' : '🔊 sound on (M)';
 }
+// Shared stat line builder — same shape as the roster row so the two surfaces
+// render identical pills.
+function statPillsHtml(e) {
+  const stat = (flat, key) => {
+    const v = e[flat] ?? e.stats?.[key];
+    return Number.isFinite(v) ? v : '—';
+  };
+  return `
+    <span class="pill v"  title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
+    <span class="pill w"  title="World">W ${stat('stat_world', 'world')}</span>
+    <span class="pill m"  title="Matter">M ${stat('stat_matter', 'matter')}</span>
+    <span class="pill wi" title="Will">Wi ${stat('stat_will', 'will')}</span>`;
+}
+
+// Floating skill-card overlay above revealing units. Mirrors the canvas-side
+// floating-icon strip but as full DOM cards — same clock, same actors. Pure
+// view: it reads state.ui.revealBadges / state.entities and renders into a
+// fixed overlay layer; it never mutates game state.
+let _revealEls = new Map();   // peerId -> HTMLElement
+function renderRevealOverlay() {
+  const layer = document.getElementById('skill-reveal-layer');
+  const canvas = document.getElementById('stage');
+  if (!layer || !canvas || !rendererRef) return;
+  const now = performance.now();
+  const badges = state.ui.revealBadges || {};
+  const rect = canvas.getBoundingClientRect();
+  const z = rendererRef.zoom();
+  const origin = rendererRef.toWorld(0, 0);
+
+  const liveIds = new Set();
+  for (const [pid, badge] of Object.entries(badges)) {
+    if (!badge) continue;
+    const t = (now - badge.startAt) / badge.duration;
+    if (t >= 1) continue;
+    const e = state.entities.find(x => x.peer_id === pid);
+    if (!e || !Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    liveIds.add(pid);
+
+    // Build only once per reveal; animate opacity + rise via CSS variable.
+    let el = _revealEls.get(pid);
+    if (!el || el.dataset.startAt !== String(badge.startAt)) {
+      if (el) el.remove();
+      el = document.createElement('div');
+      el.className = 'reveal-overlay';
+      el.dataset.peerId = pid;
+      el.dataset.startAt = String(badge.startAt);
+      // Chip row at the top: "[EM + A + ✦BT + ✦Po]" — matches the canvas text.
+      const chip = document.createElement('div');
+      chip.className = 'reveal-chip';
+      chip.classList.toggle('self', pid === state.myPeerId);
+      chip.classList.toggle('enemy', e.alliance === 'npc_b');
+      chip.textContent = `[${badge.text}]`;
+      el.appendChild(chip);
+      if (Array.isArray(badge.skills) && badge.skills.length) {
+        const stack = document.createElement('div');
+        stack.className = 'reveal-skill-stack';
+        fillSkillCardStack(stack, badge.skills, { variant: 'reveal' });
+        el.appendChild(stack);
+      }
+      layer.appendChild(el);
+      _revealEls.set(pid, el);
+    }
+
+    // Fade + rise on the badge's own clock. Only drive opacity + translate —
+    // the DOM contents don't change frame to frame.
+    const alpha = t < 0.75 ? 1 : Math.max(0, 1 - (t - 0.75) / 0.25);
+    const rise = 10 * t;
+    const w = rendererRef.tilePx(e.tile_q, e.tile_r);
+    const cx = (w.x - origin.x) * z + rect.left;
+    const cy = (w.y - origin.y) * z + rect.top;
+    el.style.opacity = String(alpha);
+    el.style.transform = `translate(-50%, calc(-100% - ${rise}px))`;
+    el.style.left = `${cx}px`;
+    el.style.top = `${cy - 72}px`;
+  }
+  // Drop overlays whose badge has expired or whose entity vanished.
+  for (const [pid, el] of _revealEls) {
+    if (!liveIds.has(pid)) { el.remove(); _revealEls.delete(pid); }
+  }
+}
+
+// Rebuilding the hover card innerHTML every mousemove would thrash the DOM;
+// instead, re-render on identity + state changes only, and let the mouse move
+// just reposition. The key is `pid|objKey|life|perms|hand`.
+let _hoverCardKey = null;
 function renderHoverCard(clientX, clientY) {
   const card = document.getElementById('hover-card');
   if (!card) return;
@@ -582,28 +708,68 @@ function renderHoverCard(clientX, clientY) {
   const obj = !p && state.ui.hoverTile ? objectAt(state.ui.hoverTile.q, state.ui.hoverTile.r) : null;
   // The detail card already shows this object — no one-liner on top of it.
   const detailOpen = obj && state.ui.objectCard && state.ui.objectCard.q === obj.q && state.ui.objectCard.r === obj.r;
-  if ((!p && !obj) || detailOpen) { card.hidden = true; return; }
+  if ((!p && !obj) || detailOpen) { card.hidden = true; _hoverCardKey = null; return; }
   card.hidden = false;
   card.classList.toggle('object', !!obj);
-  const img = card.querySelector('img');
-  const src = p
-    ? (res?.sprites?.info?.path ? assetUrl(res.sprites.info.path) : res?.portrait?.path ? assetUrl(res.portrait.path) : '')
-    : (assetUrl(obj.path) || '');
-  if (img.getAttribute('src') !== src) img.src = src;
-  img.hidden = !src;
-  if (p) {
-    card.querySelector('.hc-name').textContent = p.name;
-    card.querySelector('.hc-sub').textContent = res ? `${res._entryName || ''} · ${res.wbc3_name || ''}` : (p.source_id || '');
-    card.querySelector('.hc-hp').textContent = `hp ${p.life}/${p.life_max} · ${p.alliance}${p.life <= 0 ? ' · dead' : ''}`;
-  } else {
-    card.querySelector('.hc-name').textContent = `${obj.label || obj.kind} · ${obj.kind}${obj.biome ? ` · ${obj.biome}` : ''} · (${obj.q},${obj.r})`;
-    card.querySelector('.hc-sub').textContent = abbreviate(obj.desc, 90);
-    card.querySelector('.hc-hp').textContent = 'click for details';
+  card.classList.toggle('unit', !!p);
+  // Rebuild innerHTML on identity change so the detail section fits whatever
+  // caller is active (unit vs. object). The hover card re-mounts on every
+  // mousemove; keeping it DOM-light avoids layout churn — plus the key below
+  // skips the rebuild when nothing material has changed.
+  const key = p
+    ? `U:${p.peer_id}|${p.life}/${p.life_max}|${p.permanents_csv || ''}|${p.peer_id === state.myPeerId ? state.hand.filter(c=>isSkill(c)).map(c=>c.card_id).join(',') : ''}`
+    : `O:${obj.q},${obj.r}|${obj.id || obj.label || obj.kind}`;
+  const dirty = key !== _hoverCardKey;
+  _hoverCardKey = key;
+  if (dirty && p) {
+    const sub = res ? `${res._entryName || ''}${res.wbc3_name ? ' · ' + res.wbc3_name : ''}${res.wbc3_race ? ' (' + res.wbc3_race + ')' : ''}` : (p.source_id || '');
+    const srcPath = res?.sprites?.info?.path || res?.portrait?.path || '';
+    const src = srcPath ? assetUrl(srcPath) : '';
+    const tier = p.tier && p.tier !== 'self' ? (p.tier === 'strong' ? 'in contact' : p.tier) : '';
+    const permIds = String(p.permanents_csv || '').split(',').filter(Boolean);
+    // Only our own hand is public; show held skills for the self card only.
+    const isSelf = p.peer_id === state.myPeerId;
+    const heldSkillIds = isSelf ? state.hand.filter(c => isSkill(c)).map(c => c.skill_id) : [];
+    card.innerHTML = `
+      <div class="hc-head">
+        ${src ? `<img class="hc-thumb" src="${escHtml(src)}" alt="">` : ''}
+        <div class="hc-meta">
+          <div class="hc-name">${escHtml(p.name)}</div>
+          <div class="hc-sub">${escHtml(sub)}</div>
+          <div class="hc-hp">hp ${p.life}/${p.life_max} · ${escHtml(p.alliance || '')}${p.life <= 0 ? ' · dead' : ''}${tier ? ' · ' + escHtml(tier) : ''}</div>
+          <div class="hc-coords">(${p.tile_q ?? '—'}, ${p.tile_r ?? '—'})</div>
+        </div>
+      </div>
+      <div class="hc-stats">${statPillsHtml(p)}</div>
+      ${permIds.length ? `<div class="hc-section-head">permanents</div><div class="hc-perms"></div>` : ''}
+      ${heldSkillIds.length ? `<div class="hc-section-head">skills in hand</div><div class="hc-skills"></div>` : ''}
+    `;
+    const permWrap = card.querySelector('.hc-perms');
+    if (permWrap) fillSkillCardStack(permWrap, permIds, { variant: 'tooltip', badge: 'perm' });
+    const skillWrap = card.querySelector('.hc-skills');
+    if (skillWrap) fillSkillCardStack(skillWrap, heldSkillIds, { variant: 'tooltip' });
+  } else if (dirty && obj) {
+    const src = obj ? assetUrl(obj.path) : '';
+    card.innerHTML = `
+      <div class="hc-head">
+        ${src ? `<img class="hc-thumb hc-thumb-obj" src="${escHtml(src)}" alt="">` : ''}
+        <div class="hc-meta">
+          <div class="hc-name">${escHtml(obj.label || obj.kind)}</div>
+          <div class="hc-sub">${escHtml(obj.kind)}${obj.biome ? ' · ' + escHtml(obj.biome) : ''} · (${obj.q},${obj.r})</div>
+          <div class="hc-hp">${escHtml(abbreviate(obj.desc, 160))}</div>
+          <div class="hc-coords">click for details</div>
+        </div>
+      </div>`;
   }
   if (Number.isFinite(clientX)) {
-    const w = card.offsetWidth || 180, h = card.offsetHeight || 120;
-    card.style.left = `${Math.min(window.innerWidth - w - 8, clientX + 16)}px`;
-    card.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, clientY - h / 2))}px`;
+    // Fit the card alongside the cursor, flipping to the other side if the
+    // natural placement would clip the viewport.
+    const w = card.offsetWidth || 240, h = card.offsetHeight || 140;
+    const preferRight = clientX + 24 + w <= window.innerWidth - 8;
+    const left = preferRight ? clientX + 16 : clientX - 16 - w;
+    const top = Math.max(8, Math.min(window.innerHeight - h - 8, clientY - h / 2));
+    card.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, left))}px`;
+    card.style.top = `${top}px`;
   }
 }
 
@@ -856,7 +1022,16 @@ function connect() {
             state._loggedAction.add(ak);
             // Every revealer (heroes and monsters) gets the composed chip over
             // its head — `[EM + A + ✦BT + ✦Po]` — fading on the icon's clock.
-            state.ui.revealBadges[a.actor] = { text: composeLabel(a), startAt: performance.now(), duration: 2200 };
+            // The payload also carries the raw skill ids so the DOM reveal
+            // overlay can pop a SkillCard per skill (icon + full description).
+            state.ui.revealBadges[a.actor] = {
+              text: composeLabel(a),
+              skills: (a.skills || []).filter(id => id && id !== 'skill_battle_trance'),
+              trance: Array.isArray(a.trance) ? a.trance.slice() : null,
+              action: a.action,
+              startAt: performance.now(),
+              duration: 2200,
+            };
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
             if (fromQ === null) continue;
@@ -1431,6 +1606,10 @@ function wireInput() {
       if (res) { readyPlayed = true; sounds.play(res, 'ready', { volume: 0.7 }); }
     }
     renderer.render();
+    // Floating SkillCard DOM over revealing units — pinned to the canvas each
+    // frame so it tracks the camera / zoom (positions read renderer.toWorld
+    // and renderer.tilePx, same bridge used by __chaosObjects).
+    renderRevealOverlay();
     requestAnimationFrame(raf);
   }
   raf();
