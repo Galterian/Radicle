@@ -1,6 +1,6 @@
 {
-  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall; desc_status=placeholder marks purposes not yet backed by rules.",
-  "min_separation": 4,
+  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall | bridge; desc_status=placeholder marks purposes not yet backed by rules. min_separation = 2: forbidden zone around each winner is 1+3R(R+1)=19 hexes, so effective coverage caps near 1/19 ≈ 5 buildings per 100 hexes on fully-walkable biomes (target: ≥3 per 10×10).",
+  "min_separation": 2,
   "density": {
     "grass": 0.088,
     "high_grass": 0.08,
