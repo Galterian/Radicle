@@ -1,20 +1,20 @@
 {
-  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall | bridge; desc_status=placeholder marks purposes not yet backed by rules. min_separation = 2: forbidden zone around each winner is 1+3R(R+1)=19 hexes, so effective coverage caps near 1/19 ≈ 5 buildings per 100 hexes on fully-walkable biomes (target: ≥3 per 10×10).",
-  "min_separation": 2,
+  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall | bridge; desc_status=placeholder marks purposes not yet backed by rules. min_separation = 1 (winners cannot be direct neighbours â€” distance â‰¥ 2); densities below are 2Ã— the previous pass (3.2Ã— the pre-scaled baseline). Simulated avg â‰ˆ 3.4â€“5.0 buildings per 10Ã—10 patch across biomes.",
+  "min_separation": 1,
   "density": {
-    "grass": 0.088,
-    "high_grass": 0.08,
-    "grass_coast": 0.096,
-    "dirt": 0.08,
-    "high_dirt": 0.08,
-    "desert": 0.064,
-    "snow": 0.072,
-    "snow_coast": 0.088,
-    "rock": 0.104,
-    "rock_coast": 0.088,
-    "jungle": 0.112,
-    "marsh": 0.08,
-    "caverns": 0.128,
+    "grass": 0.176,
+    "high_grass": 0.16,
+    "grass_coast": 0.192,
+    "dirt": 0.16,
+    "high_dirt": 0.16,
+    "desert": 0.128,
+    "snow": 0.144,
+    "snow_coast": 0.176,
+    "rock": 0.208,
+    "rock_coast": 0.176,
+    "jungle": 0.224,
+    "marsh": 0.16,
+    "caverns": 0.256,
     "desert_cliffs": 0,
     "rock_cliffs": 0,
     "mountains": 0,
@@ -389,7 +389,7 @@
         "weight": 2,
         "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
         "kind": "bridge",
-        "desc": "Stone span. On grass coast: the only legal crossing — hold it to pin the other side."
+        "desc": "Stone span. On grass coast: the only legal crossing â€” hold it to pin the other side."
       },
       {
         "id": "High Elves/Healer",
@@ -424,7 +424,7 @@
         "weight": 2,
         "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
         "kind": "bridge",
-        "desc": "Stone bridge over the shallows. The only legal crossing — hold it to block the other side."
+        "desc": "Stone bridge over the shallows. The only legal crossing â€” hold it to block the other side."
       }
     ],
     "dirt": [
@@ -1135,7 +1135,7 @@
         "weight": 2,
         "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
         "kind": "bridge",
-        "desc": "A span of iced-over stone. Narrow footing — one unit at a time; falling off ends your turn."
+        "desc": "A span of iced-over stone. Narrow footing â€” one unit at a time; falling off ends your turn."
       }
     ],
     "rock": [
@@ -1345,7 +1345,7 @@
         "weight": 1,
         "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
         "kind": "bridge",
-        "desc": "Stone span. On rock coast: the only legal crossing — hold it to pin the other side."
+        "desc": "Stone span. On rock coast: the only legal crossing â€” hold it to pin the other side."
       },
       {
         "id": "Shared/Tower (Dwarf)",
@@ -1628,7 +1628,7 @@
         "weight": 2,
         "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
         "kind": "bridge",
-        "desc": "Raised causeway over bog. Non-cavalry crossing elsewhere lose 1 move — this hex is the dry road."
+        "desc": "Raised causeway over bog. Non-cavalry crossing elsewhere lose 1 move â€” this hex is the dry road."
       }
     ],
     "water": [],
@@ -1753,5 +1753,10 @@
       }
     ]
   },
-  "_density_scaled": true
+  "_density_scaled": 3.2,
+  "_min_separation_history": [
+    4,
+    2,
+    1
+  ]
 }
