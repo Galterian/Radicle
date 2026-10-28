@@ -1,0 +1,174 @@
+{
+  "collection": "effects",
+  "description": "Shared-rule candidates found while authoring effects.logic.json: logic repeated verbatim across many effect blocks (inlined there for now). Same shape as a data/logic_rules.json entry; the integrator merges them and the mapping can then reference them with {\"rule\": [id, params]}.",
+  "entries": [
+    {
+      "id": "cast_target_in_reach",
+      "name": "Cast — declared target within reach (Aura ∀ reaches the view)",
+      "description": "Standard targeting gate of every target-scope effect (used by ~25 blocks as prerequisite `target_in_reach`): either no target was declared (the engine picks the enemy the cast hurts most within range, Rule 15 pc override) or the right-clicked target is within `range` hexes; a cast flagged `aura` (through an Aura ∀) reaches everything within 10.",
+      "tags": ["cast", "range", "aura", "rule_15"],
+      "params": {
+        "target": { "type": "unit|tile|null" },
+        "dist": { "type": "number" },
+        "aura": { "type": "boolean", "default": false },
+        "range": { "type": "number", "default": 1 }
+      },
+      "logic": {
+        "or": [
+          { "==": [{ "param": "target" }, null] },
+          { "if": [{ "param": "aura" }, { "rule": ["in_view", { "dist": { "param": "dist" }, "radius": 10 }] }, { "rule": ["in_view", { "dist": { "param": "dist" }, "radius": { "param": "range" } }] }] }
+        ]
+      },
+      "examples": [
+        { "args": { "target": null, "dist": 7 }, "expect": true },
+        { "args": { "target": { "id": "x" }, "dist": 1 }, "expect": true },
+        { "args": { "target": { "id": "x" }, "dist": 3 }, "expect": false },
+        { "args": { "target": { "id": "x" }, "dist": 3, "aura": true }, "expect": true },
+        { "args": { "target": { "id": "x" }, "dist": 2, "range": 2 }, "expect": true }
+      ]
+    },
+    {
+      "id": "cast_target_is_enemy_or_auto",
+      "name": "Cast — declared target is an enemy, or none declared",
+      "description": "Second half of the standard target gate (prerequisite `target_is_enemy` in every damaging / locking block): a right-clicked target must be an enemy (is_enemy); without a declared target the engine aims at an enemy itself.",
+      "tags": ["cast", "alliance"],
+      "params": {
+        "target": { "type": "unit|null" },
+        "caster_alliance": { "type": "string" },
+        "target_alliance": { "type": "string" }
+      },
+      "logic": {
+        "or": [
+          { "==": [{ "param": "target" }, null] },
+          { "rule": ["is_enemy", { "a_alliance": { "param": "caster_alliance" }, "b_alliance": { "param": "target_alliance" } }] }
+        ]
+      },
+      "examples": [
+        { "args": { "target": null, "caster_alliance": "player", "target_alliance": null }, "expect": true },
+        { "args": { "target": { "id": "x" }, "caster_alliance": "player", "target_alliance": "npc_b" }, "expect": true },
+        { "args": { "target": { "id": "x" }, "caster_alliance": "player", "target_alliance": "npc_a" }, "expect": false }
+      ]
+    },
+    {
+      "id": "point_buy_dice_for_cast",
+      "name": "Rule 20 — total dice a point-buy cast rolls",
+      "description": "Σ over the cast elements of point_buy_dice_count(caster stat behind the element). Used as effect `point_buy_dice` by every point-buy damage block (Harm, Mind Blast, Drain, Meteor Shower, Blizzard, Ice Blast, Dark Matter) and by the stat-penalty blocks. Iterates: pass caster / elements as {\"root\": ...}.",
+      "tags": ["point_buy", "rule_20"],
+      "params": {
+        "caster": { "type": "unit" },
+        "elements": { "type": "[element_id]" }
+      },
+      "logic": {
+        "sum": [{ "map": [{ "param": "elements" }, { "rule": ["point_buy_dice_count", { "stat": { "stat_of": [{ "param": "caster" }, { "var": "" }] } }] }] }]
+      },
+      "examples": [
+        { "args": { "caster": { "stats": { "vitality": 16, "world": 12, "matter": 15, "will": 9 } }, "elements": ["elem_earth", "elem_concentration", "elem_space"] }, "expect": 7 }
+      ]
+    },
+    {
+      "id": "point_buy_damage",
+      "name": "Rule 20 (pc) — damage of a point-buy cast",
+      "description": "Σ of the kept dice (one per element, highest die of each successful roll, nulls count 0) ÷10 rounded half up. Used as effect `point_buy_damage` by the seven point-buy damage blocks; the peer subtracts a Force Shield from the Σ before rounding.",
+      "tags": ["point_buy", "damage", "rule_20"],
+      "params": { "kept": { "type": "[number|null]" } },
+      "logic": { "round_div10": [{ "sum": [{ "param": "kept" }] }] },
+      "examples": [
+        { "args": { "kept": [6, 2, 4] }, "expect": 1 },
+        { "args": { "kept": [3, null] }, "expect": 0 },
+        { "args": { "kept": [5, 5] }, "expect": 1 }
+      ]
+    },
+    {
+      "id": "lock_actions",
+      "name": "Rule 23 — actions lost by a lock (doubled on ∀)",
+      "description": "n actions lost by the hit target, doubled when the cast is a ∀ double cast (Lightning, Space-bending). Effect `actions_lost`.",
+      "tags": ["lock", "rule_23"],
+      "params": { "n": { "type": "number", "default": 1 }, "every": { "type": "boolean", "default": false } },
+      "logic": { "*": [{ "param": "n" }, { "if": [{ "param": "every" }, 2, 1] }] },
+      "examples": [
+        { "args": { "n": 1 }, "expect": 1 },
+        { "args": { "n": 1, "every": true }, "expect": 2 }
+      ]
+    },
+    {
+      "id": "lock_rest_of_turn",
+      "name": "Lock — remaining actions of this turn (+ next turn)",
+      "description": "Actions a target loses from a rest-of-turn lock: its actions_per_round minus the actions already played (action_index + 1), floored at 0; with next_turn (Oblivion) the whole next turn is added. Used by Fossilization and Oblivion.",
+      "tags": ["lock"],
+      "params": { "actions_per_round": { "type": "number" }, "action_index": { "type": "number" }, "next_turn": { "type": "boolean", "default": false } },
+      "logic": {
+        "+": [
+          { "max0": [{ "-": [{ "param": "actions_per_round" }, { "+": [{ "param": "action_index" }, 1] }] }] },
+          { "if": [{ "param": "next_turn" }, { "param": "actions_per_round" }, 0] }
+        ]
+      },
+      "examples": [
+        { "args": { "actions_per_round": 3, "action_index": 1 }, "expect": 1 },
+        { "args": { "actions_per_round": 3, "action_index": 1, "next_turn": true }, "expect": 4 }
+      ]
+    },
+    {
+      "id": "token_power_of",
+      "name": "Rule 24 — power of a unit's token behind an element",
+      "description": "The highest value among a unit's tokens whose elem matches (null when none). Used as the `power` argument of using_rule_24 in the `destroyed_by_rule_24` effect of every point-buy permanent (Oblivion, Inner Fire, Invisibility, Haste, Aura, Disable, Potion brew, Artifice, …). Iterates: pass the element as {\"root\": ...}.",
+      "tags": ["rule_24", "tokens", "permanent"],
+      "params": { "unit": { "type": "unit" }, "elem": { "type": "element_id" } },
+      "logic": { "max_of": [{ "map": [{ "filter": [{ "param": "unit" }, { "==": [{ "var": "elem" }, { "param": "elem" }] }] }, { "var": "value" }] }] },
+      "examples": [
+        { "args": { "unit": [{ "kind": "bonus", "elem": "elem_fire", "value": 4 }, { "kind": "shield", "elem": "elem_fire", "value": 6 }], "elem": "elem_fire" }, "expect": 6 }
+      ],
+      "notes": "`unit` here is the unit's tokens array (unit.tokens); the integrator may prefer the whole unit and {\"var\": \"tokens\"} inside."
+    },
+    {
+      "id": "stat_buy_bank_step",
+      "name": "Stat buy — stat banked at emission k",
+      "description": "The caster stat behind the card element going out at emission `step` (1-based), card elements round-robin: element index = (step − 1) mod |elements|. Used as effect `stat_buy_bank_this_emission` by the eight stat-buy blocks (Summoning, 3 Golems, 3 Elementals, Resurrect).",
+      "tags": ["stat_buy", "channeling", "summon"],
+      "params": { "caster": { "type": "unit" }, "elements": { "type": "[element_id]" }, "step": { "type": "number" } },
+      "logic": {
+        "stat_of": [
+          { "param": "caster" },
+          { "var": { "cat": ["elements.", { "%": [{ "max0": [{ "-": [{ "param": "step" }, 1] }] }, { "max": [1, { "count": [{ "param": "elements" }] }] }] }] } }
+        ]
+      },
+      "examples": [],
+      "notes": "The inlined form reads the element list from the battle context ({\"var\": \"elements\"}) via a computed var path; as a named rule the element pick should take the list through the param instead (json-logic has no index-by-expression op, so the integrator may want a small `nth(array, i)` custom op)."
+    },
+    {
+      "id": "every_double",
+      "name": "Rule 23 — ×2 on a ∀ double cast",
+      "description": "2 when `every` (two copies chained), else 1. Multiplies locks and the paper's 'power 20 × number of casts' of traps / Creation / Traps mastery.",
+      "tags": ["rule_23"],
+      "params": { "every": { "type": "boolean", "default": false } },
+      "logic": { "if": [{ "param": "every" }, 2, 1] },
+      "examples": [ { "args": { "every": true }, "expect": 2 }, { "args": {}, "expect": 1 } ]
+    },
+    {
+      "id": "effect_cost_keeps_element",
+      "name": "Effect validation — cost keeps its key element",
+      "description": "element_cost stays non-empty and still carries the given element (the element family that defines the effect). Used as validation `cost_keeps_key_element` in all 66 blocks.",
+      "tags": ["validation", "effects"],
+      "params": { "elem": { "type": "element_id" } },
+      "logic": { "and": [{ ">=": [{ "count": [{ "var": "proposal.data.element_cost" }] }, 1] }, { "includes": [{ "var": "proposal.data.element_cost" }, { "param": "elem" }] }] },
+      "examples": [ { "args": { "elem": "elem_fire" }, "data": { "proposal": { "data": { "element_cost": ["elem_fire", "elem_fire"] } } }, "expect": true } ]
+    },
+    {
+      "id": "effect_cost_count_within_one",
+      "name": "Effect validation — element count within ±1 of canonical",
+      "description": "|proposal cost| differs from |canonical cost| by at most one. Used as validation `cost_count_within_one` in 59 blocks (the summon families assert the fixed stat_buy_total instead).",
+      "tags": ["validation", "effects"],
+      "params": {},
+      "logic": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.element_cost" }] }, { "count": [{ "var": "entry.data.element_cost" }] }] }] }, 1] },
+      "examples": [ { "data": { "entry": { "data": { "element_cost": ["elem_fire", "elem_fire"] } }, "proposal": { "data": { "element_cost": ["elem_fire"] } } }, "expect": true } ]
+    },
+    {
+      "id": "effect_keeps_type",
+      "name": "Effect validation — effect_types keeps a tag",
+      "description": "The proposal's effect_types still includes the given tag (damage / instant / permanent / stat_buy / channeling / trap / relocate / scout). Used as validation `keeps_type_<tag>` in all 66 blocks.",
+      "tags": ["validation", "effects"],
+      "params": { "tag": { "type": "string" } },
+      "logic": { "includes": [{ "var": "proposal.data.effect_types" }, { "param": "tag" }] },
+      "examples": [ { "args": { "tag": "damage" }, "data": { "proposal": { "data": { "effect_types": ["damage", "instant"] } } }, "expect": true } ]
+    }
+  ]
+}

@@ -5,11 +5,25 @@
     {
       "id": "session_dimension_descriptor",
       "name": "dimension.json (ActiveDimensions/<DimensionName>/dimension.json)",
-      "tags": ["radicle", "session", "shape"],
+      "tags": [
+        "radicle",
+        "session",
+        "shape"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["sync_radicle_push", "sync_join_flow", "mode_mmorpg"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_radicle_push",
+            "sync_join_flow",
+            "mode_mmorpg"
+          ],
           "vote_log": [],
           "notes": "One per Dimension. Written at open_dimension, updated by any pusher; conflicts resolve to the higher turn.",
           "data": {
@@ -20,18 +34,449 @@
               "rules_snapshot_commit": "git commit hash of data/ frozen for this session (index.json notes)",
               "game_mode": "mode_* id from game_modes.json (mode_mmorpg by default)",
               "created_at": "ISO-8601",
-              "owners": ["peer_id of the opening players"],
+              "owners": [
+                "peer_id of the opening players"
+              ],
               "tileset": {
                 "initial_size": "WxH per rule_0_setup",
-                "bounds": { "min_x": "int", "min_y": "int", "max_x": "int", "max_y": "int" },
+                "bounds": {
+                  "min_x": "int",
+                  "min_y": "int",
+                  "max_x": "int",
+                  "max_y": "int"
+                },
                 "map_seed": "hex; all hidden placement derives from it",
-                "extended_blocks": [ { "door_id": "string", "origin": {"x":"int","y":"int"}, "size": "WxH", "seed": "hex" } ]
+                "extended_blocks": [
+                  {
+                    "door_id": "string",
+                    "origin": {
+                      "x": "int",
+                      "y": "int"
+                    },
+                    "size": "WxH",
+                    "seed": "hex"
+                  }
+                ]
               },
-              "turn": { "max_seen": "int", "updated_at": "ISO-8601" },
-              "doors": ["DoorId strings; one file each under doors/"],
+              "turn": {
+                "max_seen": "int",
+                "updated_at": "ISO-8601"
+              },
+              "doors": [
+                "DoorId strings; one file each under doors/"
+              ],
               "description": "free text that pushers may change (in-game changeable descriptions)",
-              "last_push": { "peer_id": "string", "at": "ISO-8601", "commit": "git hash" }
+              "last_push": {
+                "peer_id": "string",
+                "at": "ISO-8601",
+                "commit": "git hash"
+              }
             }
+          },
+          "logic": {
+            "description": "Governs the shape of ActiveDimensions/<DimensionName>/dimension.json, the one-per-Dimension descriptor written at open_dimension and updated by any pusher; conflicts resolve to the higher turn.max_seen. Required identity: dimension_id, dimension_name, radicle_repo, rules_snapshot_commit, game_mode (mode_mmorpg default), owners, tileset {initial_size, bounds, map_seed, extended_blocks}, turn, doors, last_push. The runtime deviates: peer.mjs buildDoor writes a deterministic dimension.json with radicle_branch, clock {rounds_per_turn, round_seconds}, layout, join hints and tileset.coordinates / reveal_radius / tiles_known, but WITHOUT created_at, owners, turn, doors, last_push or rules_snapshot_commit; bounds are axial q,r exposed as x,y and extended_blocks are discs ('disc r=10') keyed by the revealing peer. Context assumed: doc = the document under test, me.id, interval_index, ours / theirs documents for a merge.",
+            "prerequisites": [
+              {
+                "id": "identity_fields_present",
+                "description": "dimension_id, dimension_name and radicle_repo are non-empty strings; radicle_repo is a rad: id.",
+                "when": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.dimension_id"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "doc.dimension_name"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "doc.radicle_repo"
+                        },
+                        "^rad:"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "rules_snapshot_present",
+                "description": "rules_snapshot_commit pins the data/ commit the session plays with (peer.mjs omits it).",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "doc.rules_snapshot_commit"
+                        }
+                      ]
+                    },
+                    "string"
+                  ]
+                }
+              },
+              {
+                "id": "game_mode_is_mode_id",
+                "description": "game_mode is a mode_* id from game_modes.json.",
+                "when": {
+                  "matches": [
+                    {
+                      "var": "doc.game_mode"
+                    },
+                    "^mode_[a-z0-9_]+$"
+                  ]
+                }
+              },
+              {
+                "id": "owners_non_empty",
+                "description": "At least one opening player owns the Dimension.",
+                "when": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "doc.owners"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "tileset_well_formed",
+                "description": "tileset has a map_seed string and bounds with min <= max on both axes.",
+                "when": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.tileset.map_seed"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "doc.tileset.bounds.min_x"
+                        },
+                        {
+                          "var": "doc.tileset.bounds.max_x"
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "doc.tileset.bounds.min_y"
+                        },
+                        {
+                          "var": "doc.tileset.bounds.max_y"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "turn_and_doors_present",
+                "description": "turn.max_seen is a non-negative number and doors is an array.",
+                "when": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "doc.turn.max_seen"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.doors"
+                            }
+                          ]
+                        },
+                        "array"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "descriptor_path",
+                "description": "Where the document lives: ActiveDimensions/<DimensionName>/dimension.json.",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    "ActiveDimensions/",
+                    {
+                      "var": "doc.dimension_name"
+                    },
+                    "/dimension.json"
+                  ]
+                }
+              },
+              {
+                "id": "merged_turn",
+                "description": "Conflict rule: the higher turn.max_seen wins.",
+                "target": "everyone",
+                "value": {
+                  "max": [
+                    {
+                      "var": "ours.turn.max_seen"
+                    },
+                    {
+                      "var": "theirs.turn.max_seen"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "is_owner",
+                "description": "Whether I am one of the opening players (may vote to migrate the snapshot).",
+                "target": "caster",
+                "value": {
+                  "includes": [
+                    {
+                      "var": "doc.owners"
+                    },
+                    {
+                      "var": "me.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "effective_game_mode",
+                "description": "game_mode or the default mode_mmorpg.",
+                "target": "everyone",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "doc.game_mode"
+                      }
+                    },
+                    {
+                      "var": "doc.game_mode"
+                    },
+                    "mode_mmorpg"
+                  ]
+                }
+              },
+              {
+                "id": "map_width_tiles",
+                "description": "Bounds width (max_x - min_x + 1).",
+                "target": "tile",
+                "unit": "hexes",
+                "value": {
+                  "+": [
+                    {
+                      "-": [
+                        {
+                          "var": "doc.tileset.bounds.max_x"
+                        },
+                        {
+                          "var": "doc.tileset.bounds.min_x"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "extended_blocks_count",
+                "description": "Blocks added by join_new_location (peer.mjs: reveal discs).",
+                "target": "tile",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.tileset.extended_blocks"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "door_count",
+                "description": "Doors listed in the descriptor (one file each under doors/).",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.doors"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "shape_keys_unchanged",
+                "description": "The descriptor shape keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.shape"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.shape"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.shape"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "identity_keys_present",
+                "description": "dimension_id, dimension_name, radicle_repo, rules_snapshot_commit, tileset, turn and doors are the fields every reader depends on.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "dimension_id",
+                      "dimension_name",
+                      "radicle_repo",
+                      "rules_snapshot_commit",
+                      "tileset",
+                      "turn",
+                      "doors"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.shape"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "tileset_keys_kept",
+                "description": "tileset keeps map_seed, bounds and extended_blocks; bounds keeps the four edges.",
+                "assert": {
+                  "and": [
+                    {
+                      "subset_of": [
+                        [
+                          "initial_size",
+                          "bounds",
+                          "map_seed",
+                          "extended_blocks"
+                        ],
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape.tileset"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        [
+                          "min_x",
+                          "min_y",
+                          "max_x",
+                          "max_y"
+                        ],
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape.tileset.bounds"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "turn_keeps_max_seen",
+                "description": "turn.max_seen stays (the merge rule depends on it).",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "max_seen"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.shape.turn"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -39,11 +484,26 @@
     {
       "id": "session_door",
       "name": "doors/<DoorId>.json (one per connected hashgraph part / clan entry point)",
-      "tags": ["radicle", "session", "shape", "magnet"],
+      "tags": [
+        "radicle",
+        "session",
+        "shape",
+        "magnet"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["sync_radicle_push", "sync_join_flow", "sync_divergence_merge"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_radicle_push",
+            "sync_join_flow",
+            "sync_divergence_merge"
+          ],
           "vote_log": [],
           "notes": "A DoorId is a magnet-style identifier for a hashgraph head plus the peers holding it. Joiners read this file, connect to the peers, and adopt the part. Many DoorIds per Dimension are expected until clans meet and merge.",
           "data": {
@@ -55,16 +515,472 @@
               "hashgraph_head": "sha256 of the latest finalized event in this part",
               "genesis_or_root": "sha256 of evt_genesis or the evt_map_extend this part is rooted at",
               "turn": "int (this part's turn at last push)",
-              "members": [ { "peer_id": "string", "character_id": "char_* id", "class_id": "class_* id", "tile": {"x":"int","y":"int"}, "clan": "string | null", "last_seen": "ISO-8601" } ],
-              "region": { "center": {"x":"int","y":"int"}, "strong_radius_tiles": "int", "reach_tiles": "int" },
+              "members": [
+                {
+                  "peer_id": "string",
+                  "character_id": "char_* id",
+                  "class_id": "class_* id",
+                  "tile": {
+                    "x": "int",
+                    "y": "int"
+                  },
+                  "clan": "string | null",
+                  "last_seen": "ISO-8601"
+                }
+              ],
+              "region": {
+                "center": {
+                  "x": "int",
+                  "y": "int"
+                },
+                "strong_radius_tiles": "int",
+                "reach_tiles": "int"
+              },
               "map_summary": {
                 "tiles_revealed": "int",
-                "owned_items": [ { "item_id": "tower_* | crystal_* | mine_* | item_*", "tile": {"x":"int","y":"int"}, "owner_peer_id": "string" } ],
-                "awake_creatures": [ { "creature_id": "mon_*", "tile": {"x":"int","y":"int"}, "life_left": "int" } ]
+                "owned_items": [
+                  {
+                    "item_id": "tower_* | crystal_* | mine_* | item_*",
+                    "tile": {
+                      "x": "int",
+                      "y": "int"
+                    },
+                    "owner_peer_id": "string"
+                  }
+                ],
+                "awake_creatures": [
+                  {
+                    "creature_id": "mon_*",
+                    "tile": {
+                      "x": "int",
+                      "y": "int"
+                    },
+                    "life_left": "int"
+                  }
+                ]
               },
-              "last_push": { "interval_index": "int", "peer_id": "string", "at": "ISO-8601", "commit": "git hash" },
+              "last_push": {
+                "interval_index": "int",
+                "peer_id": "string",
+                "at": "ISO-8601",
+                "commit": "git hash"
+              },
               "pending_votes": "int (governance votes gossiped but not yet batched to proposals/*)"
             }
+          },
+          "logic": {
+            "description": "Governs the shape of doors/<DoorId>.json, one per connected hashgraph part: door_id, magnet_id, label, status (active | stale | merged_into:<DoorId> | closed), hashgraph_head, genesis_or_root, turn, members [{peer_id, character_id, class_id, tile, clan, last_seen}], region {center, strong_radius_tiles, reach_tiles}, map_summary, last_push {interval_index, peer_id, at, commit}, pending_votes. The runtime deviates: peer.mjs writes door_version 2 with door_id = peer_id (one Door per PEER in its own Radicle namespace) carrying peer_id, name, alliance, character_id / creature_id, tile {q,r}, life, life_max, hashgraph_head, clock {turn, round, action, phase, phase_ends_at}, known_members, known_tiles, map {seed, reveal_radius, blocks}, network {nostr, libp2p, gun}, radicle {repo, namespace, branch} and pushed_at; there is no magnet_id, label, status, genesis_or_root, region, map_summary, last_push or pending_votes. Context assumed: doc, me.id, interval_index, member tiles as {q,r} (hex_distance reads q/r; the paper shape says x,y).",
+            "prerequisites": [
+              {
+                "id": "door_identity_present",
+                "description": "door_id and hashgraph_head are strings; magnet_id is a magnet URI.",
+                "when": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.door_id"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.hashgraph_head"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "doc.magnet_id"
+                        },
+                        "^magnet:\\?xt=urn:dim:"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "status_in_vocabulary",
+                "description": "status is active, stale, merged_into:<DoorId> or closed.",
+                "when": {
+                  "matches": [
+                    {
+                      "var": "doc.status"
+                    },
+                    "^(active|stale|merged_into:.+|closed)$"
+                  ]
+                }
+              },
+              {
+                "id": "turn_and_members",
+                "description": "turn is a non-negative number and members is an array.",
+                "when": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "doc.turn"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.members"
+                            }
+                          ]
+                        },
+                        "array"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "region_radii_ordered",
+                "description": "region.strong_radius_tiles is at least 1 and no larger than reach_tiles.",
+                "when": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "doc.region.strong_radius_tiles"
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "doc.region.strong_radius_tiles"
+                        },
+                        {
+                          "var": "doc.region.reach_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "last_push_indexed",
+                "description": "last_push.interval_index is a number (needed to tell a stale Door).",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "doc.last_push.interval_index"
+                        }
+                      ]
+                    },
+                    "number"
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "door_path",
+                "description": "doors/<DoorId>.json under the Dimension branch.",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    "ActiveDimensions/",
+                    {
+                      "var": "dimension.name"
+                    },
+                    "/doors/",
+                    {
+                      "var": "doc.door_id"
+                    },
+                    ".json"
+                  ]
+                }
+              },
+              {
+                "id": "is_stale",
+                "description": "sync_join_flow.join_new_location: the Door is stale when its last push predates the current interval.",
+                "target": "everyone",
+                "value": {
+                  "<": [
+                    {
+                      "var": "doc.last_push.interval_index"
+                    },
+                    {
+                      "var": "interval_index"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "member_count",
+                "description": "Peers holding this part.",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.members"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "members_in_strong_region",
+                "description": "Members within region.strong_radius_tiles of region.center (tiles read as q,r).",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "filter": [
+                        {
+                          "var": "doc.members"
+                        },
+                        {
+                          "<=": [
+                            {
+                              "hex_distance": [
+                                {
+                                  "root": "doc.region.center"
+                                },
+                                {
+                                  "var": "tile"
+                                }
+                              ]
+                            },
+                            {
+                              "root": "doc.region.strong_radius_tiles"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "i_am_holder",
+                "description": "Whether I hold this DoorId (and may be elected its pusher).",
+                "target": "caster",
+                "value": {
+                  "includes": [
+                    {
+                      "map": [
+                        {
+                          "var": "doc.members"
+                        },
+                        {
+                          "var": "peer_id"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "me.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "tiles_revealed",
+                "description": "map_summary.tiles_revealed (peer.mjs: map.tiles_known).",
+                "target": "tile",
+                "unit": "hexes",
+                "value": {
+                  "var": "doc.map_summary.tiles_revealed"
+                }
+              },
+              {
+                "id": "awake_creature_life",
+                "description": "Total life left on awake creatures in the summary.",
+                "target": "all_enemies",
+                "unit": "life",
+                "value": {
+                  "sum": [
+                    {
+                      "map": [
+                        {
+                          "var": "doc.map_summary.awake_creatures"
+                        },
+                        {
+                          "var": "life_left"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "shape_keys_unchanged",
+                "description": "The Door shape keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.shape"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.shape"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.shape"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "head_and_members_present",
+                "description": "door_id, hashgraph_head, turn, members and last_push are what a joiner needs.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "door_id",
+                      "hashgraph_head",
+                      "turn",
+                      "members",
+                      "last_push",
+                      "status"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.shape"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "status_vocabulary_kept",
+                "description": "status still names active, stale, merged_into and closed.",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.shape.status"
+                        },
+                        "active"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.shape.status"
+                        },
+                        "stale"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.shape.status"
+                        },
+                        "merged_into"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.shape.status"
+                        },
+                        "closed"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "member_item_keys_kept",
+                "description": "A member entry keeps peer_id and tile; region keeps strong_radius_tiles and reach_tiles.",
+                "assert": {
+                  "and": [
+                    {
+                      "subset_of": [
+                        [
+                          "peer_id",
+                          "tile"
+                        ],
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape.members.0"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        [
+                          "strong_radius_tiles",
+                          "reach_tiles"
+                        ],
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape.region"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -72,37 +988,540 @@
     {
       "id": "session_local_state",
       "name": "Local client state (never pushed as-is)",
-      "tags": ["client", "shape"],
+      "tags": [
+        "client",
+        "shape"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_10_draw", "rule_11_archive", "rule_12_permanent_types", "rule_14"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_10_draw",
+            "rule_11_archive",
+            "rule_12_permanent_types",
+            "rule_14"
+          ],
           "vote_log": [],
           "notes": "What the Godot client holds in memory/on disk for the part of the hashgraph it owns. The hand is private; only its commitment is ever gossiped.",
           "data": {
             "shape": {
               "peer_id": "string (Radicle node id / signing key)",
               "dimension_id": "string",
-              "door_ids_held": ["string"],
-              "hashgraph": { "events": "append-only store of signed envelopes", "head": "sha256", "finalized_turn": "int" },
+              "door_ids_held": [
+                "string"
+              ],
+              "hashgraph": {
+                "events": "append-only store of signed envelopes",
+                "head": "sha256",
+                "finalized_turn": "int"
+              },
               "character": {
-                "character_id": "char_* id", "class_id": "class_* id", "tile": {"x":"int","y":"int"},
-                "stats": { "vitality": "int", "world": "int", "matter": "int", "will": "int" },
+                "character_id": "char_* id",
+                "class_id": "class_* id",
+                "tile": {
+                  "x": "int",
+                  "y": "int"
+                },
+                "stats": {
+                  "vitality": "int",
+                  "world": "int",
+                  "matter": "int",
+                  "will": "int"
+                },
                 "life_tokens": "int (rule_14 Part B: sum(stats)/10)",
-                "element_tokens": [ { "element": "elem_*", "value": "int 1..6", "source": "point_buy | tower | effect_*", "penalty": "bool" } ],
-                "combo": ["A|B|M|P x3 (rule_16)"], "combo_progress": "int"
+                "element_tokens": [
+                  {
+                    "element": "elem_*",
+                    "value": "int 1..6",
+                    "source": "point_buy | tower | effect_*",
+                    "penalty": "bool"
+                  }
+                ],
+                "combo": [
+                  "A|B|M|P x3 (rule_16)"
+                ],
+                "combo_progress": "int"
               },
               "cards": {
-                "hand": ["card ids, max 5 (rule_10)"],
+                "hand": [
+                  "card ids, max 5 (rule_10)"
+                ],
                 "deck_order_commitment": "hash gossiped at join",
-                "discard": ["card ids"],
-                "archive": ["card ids (rule_11; face-up column)"],
-                "permanents_in_play": [ { "card_id": "string", "tapped": "bool", "tokens": ["..."] } ]
+                "discard": [
+                  "card ids"
+                ],
+                "archive": [
+                  "card ids (rule_11; face-up column)"
+                ],
+                "permanents_in_play": [
+                  {
+                    "card_id": "string",
+                    "tapped": "bool",
+                    "tokens": [
+                      "..."
+                    ]
+                  }
+                ]
               },
-              "known_map": { "tiles": { "x,y": { "revealed": "bool", "traps": ["effect_* | hidden"], "creature": "mon_* | null", "items": ["..."], "owner": "peer_id | null", "occupants": ["peer_id | mon_*"] } } },
-              "region_peers": { "strong": ["peer_id"], "reachable": ["peer_id"], "far_known_doors": ["DoorId"] },
-              "pending_disturbances": [ { "from_door_id": "string", "summary": "string", "received_at": "ISO-8601" } ]
+              "known_map": {
+                "tiles": {
+                  "x,y": {
+                    "revealed": "bool",
+                    "traps": [
+                      "effect_* | hidden"
+                    ],
+                    "creature": "mon_* | null",
+                    "items": [
+                      "..."
+                    ],
+                    "owner": "peer_id | null",
+                    "occupants": [
+                      "peer_id | mon_*"
+                    ]
+                  }
+                }
+              },
+              "region_peers": {
+                "strong": [
+                  "peer_id"
+                ],
+                "reachable": [
+                  "peer_id"
+                ],
+                "far_known_doors": [
+                  "DoorId"
+                ]
+              },
+              "pending_disturbances": [
+                {
+                  "from_door_id": "string",
+                  "summary": "string",
+                  "received_at": "ISO-8601"
+                }
+              ]
             }
+          },
+          "logic": {
+            "description": "Governs what a client keeps locally and never pushes as-is: peer_id, dimension_id, door_ids_held, hashgraph {events, head, finalized_turn}, character {ids, tile, stats, life_tokens = round(sum(stats)/10), element_tokens, combo}, cards {hand (max 5), deck_order_commitment, discard, archive, permanents_in_play}, known_map, region_peers {strong, reachable, far_known_doors}, pending_disturbances. The hand is private; only its commitment is gossiped. The runtime deviates: peer.mjs keeps entity {tile q/r, life, lifeMax, stats, permanents, tokens, elemPen, shieldElems, disables}, hand / deck / discard arrays, hg {tape, head, selfParent, otherParent, action, turn, round}, knownTiles + dimMap and peersPublic; it holds a single DOOR_ID (no door_ids_held), stores no deck_order_commitment (the digest is emitted in evt_join only), has no pending_disturbances, and persists the tape to game/sessions/<dim>/hashgraph.jsonl; its public snapshot (published every envelope) carries tile, life, permanents and tokens but never the hand. Context assumed: doc, outgoing (the snapshot about to be published), doc.cards.deck_size (runtime-supplied deck length).",
+            "prerequisites": [
+              {
+                "id": "identity_present",
+                "description": "peer_id and dimension_id are strings; hashgraph.head is a string.",
+                "when": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.peer_id"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.dimension_id"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.hashgraph.head"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "character_stats_numeric",
+                "description": "The four stats are numbers (rule_14 Part B).",
+                "when": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.character.stats.vitality"
+                            }
+                          ]
+                        },
+                        "number"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.character.stats.world"
+                            }
+                          ]
+                        },
+                        "number"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.character.stats.matter"
+                            }
+                          ]
+                        },
+                        "number"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "doc.character.stats.will"
+                            }
+                          ]
+                        },
+                        "number"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "hand_within_limit",
+                "description": "rule_10: the hand holds at most 5 cards.",
+                "when": {
+                  "<=": [
+                    {
+                      "count": [
+                        {
+                          "var": "doc.cards.hand"
+                        }
+                      ]
+                    },
+                    5
+                  ]
+                }
+              },
+              {
+                "id": "hand_never_published",
+                "description": "The outgoing public snapshot carries no hand, deck or discard — only their commitment.",
+                "when": {
+                  "and": [
+                    {
+                      "!": {
+                        "var": "outgoing.hand"
+                      }
+                    },
+                    {
+                      "!": {
+                        "var": "outgoing.deck"
+                      }
+                    },
+                    {
+                      "!": {
+                        "var": "outgoing.discard"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "element_tokens_in_range",
+                "description": "Every element token value is 1..6.",
+                "when": {
+                  "none": [
+                    {
+                      "var": "doc.character.element_tokens"
+                    },
+                    {
+                      "or": [
+                        {
+                          "<": [
+                            {
+                              "var": "value"
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          ">": [
+                            {
+                              "var": "value"
+                            },
+                            6
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "life_tokens",
+                "description": "rule_14 Part B: life = round_half_up(sum(stats) / 10).",
+                "target": "caster",
+                "unit": "life",
+                "value": {
+                  "rule": [
+                    "life_from_stats",
+                    {
+                      "stats": {
+                        "var": "doc.character.stats"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "cards_to_draw",
+                "description": "rule_10: cards needed to refill the hand to 5 at turn end.",
+                "target": "caster",
+                "unit": "cards",
+                "value": {
+                  "rule": [
+                    "hand_refill",
+                    {
+                      "hand_size": {
+                        "count": [
+                          {
+                            "var": "doc.cards.hand"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "archive_allowed",
+                "description": "rule_11: archiving is allowed while deck + discard + hand stays at least 15 afterwards (deck_size supplied by the runtime).",
+                "target": "caster",
+                "value": {
+                  "rule": [
+                    "deck_floor",
+                    {
+                      "circulating": {
+                        "+": [
+                          {
+                            "var": "doc.cards.deck_size"
+                          },
+                          {
+                            "count": [
+                              {
+                                "var": "doc.cards.hand"
+                              }
+                            ]
+                          },
+                          {
+                            "count": [
+                              {
+                                "var": "doc.cards.discard"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "strong_peer_count",
+                "description": "Members of my strong region as held locally (peer.mjs expectedMembers).",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.region_peers.strong"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "doors_held",
+                "description": "DoorIds I hold (always 1 in peer.mjs).",
+                "target": "caster",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.door_ids_held"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "permanents_in_play",
+                "description": "Permanent cards on the table for me.",
+                "target": "caster",
+                "unit": "cards",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.cards.permanents_in_play"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "pending_disturbances",
+                "description": "disturbance_in_the_force notices not yet shown.",
+                "target": "caster",
+                "value": {
+                  "count": [
+                    {
+                      "var": "doc.pending_disturbances"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "shape_keys_unchanged",
+                "description": "The local-state shape keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.shape"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.shape"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.shape"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.shape"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "character_has_four_stats",
+                "description": "character.stats keeps vitality, world, matter, will.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "vitality",
+                      "world",
+                      "matter",
+                      "will"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.shape.character.stats"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "cards_keep_hand_and_commitment",
+                "description": "cards keeps hand, deck_order_commitment, discard, archive and permanents_in_play.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "hand",
+                      "deck_order_commitment",
+                      "discard",
+                      "archive",
+                      "permanents_in_play"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.shape.cards"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "region_peers_tiers_kept",
+                "description": "region_peers keeps the strong / reachable tiers of sync_region_tiers.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "strong",
+                      "reachable"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.shape.region_peers"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "deck_floor",
+              "hand_refill",
+              "life_from_stats"
+            ]
           }
         }
       ]

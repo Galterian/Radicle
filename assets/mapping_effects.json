@@ -26,14 +26,6 @@
   "low_confidence": [
     "action_empty_move",
     "action_empty_posture",
-    "effect_aging",
-    "effect_awake",
-    "effect_confusion",
-    "effect_golems_air",
-    "effect_golems_water",
-    "effect_invisibility",
-    "effect_metaphysics",
-    "effect_sleep",
     "effect_traps_mastery",
     "elem_time",
     "skill_bluff",
@@ -128,17 +120,17 @@
     },
     "effect_sleep": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Spell effect faint white rings/Spell effect faint white rings - idle [EZ08].png",
-      "wbc3_name": "Spell effect faint white rings",
-      "reason": "faint rings hovering over the sleeping target",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png",
+      "wbc3_name": "Spell effect purplewhite glowing orbs",
+      "reason": "dreamy floating purple-white orbs hover over the sleeping target",
+      "confidence": "medium"
     },
     "effect_aging": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png",
-      "wbc3_name": "Grey arcs",
-      "reason": "grey sweeping arcs like clock hands",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Grey smoke wisps/Grey smoke wisps - idle [EZ38].png",
+      "wbc3_name": "Grey smoke wisps",
+      "reason": "grey wisps = withering, time-stripping aura",
+      "confidence": "medium"
     },
     "effect_space_bending": {
       "collection": "effects",
@@ -177,10 +169,10 @@
     },
     "effect_invisibility": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png",
-      "wbc3_name": "Grey arc sweeps",
-      "reason": "faint grey sweeps fading the hero out",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white smoke rings/Spell effect white smoke rings - idle [EZ10].png",
+      "wbc3_name": "Spell effect white smoke rings",
+      "reason": "target fades into expanding smoke rings",
+      "confidence": "medium"
     },
     "effect_mutate": {
       "collection": "effects",
@@ -275,24 +267,24 @@
     },
     "effect_golems_water": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
-      "wbc3_name": "Small dust puffs",
-      "reason": "no water golem in WBC3; Bronze Golem (verdigris/sea colours) stands in",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Cyan ice shards/Cyan ice shards - idle [EZ56].png",
+      "wbc3_name": "Cyan ice shards",
+      "reason": "no water golem in WBC3; cyan shards stand in for a water elemental summoning marker",
+      "confidence": "medium"
     },
     "effect_golems_air": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
-      "wbc3_name": "Small dust puffs",
-      "reason": "no air golem in WBC3; Iron Golem stands in",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect white smoke cloud ring (large)/Spell effect white smoke cloud ring (large) - idle [EZ13].png",
+      "wbc3_name": "Spell effect white smoke cloud ring (large)",
+      "reason": "no air golem in WBC3; large white cloud ring stands in for the air elemental summoning marker",
+      "confidence": "medium"
     },
     "effect_awake": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Yellow smileysun face icons/Yellow smileysun face icons - idle [EZ25].png",
-      "wbc3_name": "Yellow smileysun face icons",
-      "reason": "sun/face icon = awakened terrain or ally",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect orange glowing ring eye/Spell effect orange glowing ring eye - idle [EZ06].png",
+      "wbc3_name": "Spell effect orange glowing ring eye",
+      "reason": "glowing-eye marker = perception / awakened terrain",
+      "confidence": "medium"
     },
     "effect_resurrect_death_ward": {
       "collection": "effects",
@@ -338,17 +330,17 @@
     },
     "effect_metaphysics": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Spell effect pale starburst/Spell effect pale starburst - idle [EZ20].png",
-      "wbc3_name": "Spell effect pale starburst",
-      "reason": "pale starburst = mass change",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect starburst (large)/Spell effect starburst (large) - idle [EZ19].png",
+      "wbc3_name": "Spell effect starburst (large)",
+      "reason": "large starburst = dramatic mass-change event",
+      "confidence": "medium"
     },
     "effect_confusion": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Spell effect yellow ring markers/Spell effect yellow ring markers - idle [EZ12].png",
-      "wbc3_name": "Spell effect yellow ring markers",
-      "reason": "yellow spinning rings over a confused target",
-      "confidence": "low"
+      "asset": "assets/Sprites/Effects/Effects1/Spell effect yellow sparkle cloud (very wide sheet)/Spell effect yellow sparkle cloud (very wide sheet) - idle [EZ01].png",
+      "wbc3_name": "Spell effect yellow sparkle cloud (very wide sheet)",
+      "reason": "wide swirling spark cloud = scrambled perception",
+      "confidence": "medium"
     },
     "effect_inner_fire": {
       "collection": "effects",

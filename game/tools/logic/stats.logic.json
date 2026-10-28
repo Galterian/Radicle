@@ -1,0 +1,83 @@
+{
+  "collection": "stats",
+  "notes": "One block per pillar. effects: the elements the stat powers (from data), the caster's emission power for any of them, the point-buy dice that stat rolls. validation: code / pillar_role / zero_in unchanged, elements a non-empty subset of valid_element_ids, and every listed element's own `stat` column points back at this entry.",
+  "entries": {
+    "stat_vitality": {
+      "description": "Vitality (code V) is the physical pillar. It powers one element, elem_vitality: a caster emits Vitality with power stats.vitality and resists it with the same stat (Rule 18); its point-buy rolls point_buy_dice_count(vitality) dice (Rule 20); Force Shield's Vitality die is the shield value (pc). zero_in: undead and astral beings have Vitality 0 (species rule). Vitality counts fully in the stat sum that gives life (Rule 14).",
+      "prerequisites": [
+        { "id": "unit-has-vitality", "description": "The caster's stats carry a numeric vitality.", "when": { "==": [{ "typeof": [{ "var": "caster.stats.vitality" }] }, "number"] } }
+      ],
+      "effects": [
+        { "id": "elements", "description": "Elements this stat powers.", "target": "caster", "value": { "var": "entry.data.elements" } },
+        { "id": "emit-power", "description": "Emission power for any Vitality element.", "target": "caster", "unit": "stat", "value": { "var": "caster.stats.vitality" } },
+        { "id": "point-buy-dice", "description": "Dice a Vitality point-buy rolls.", "target": "caster", "unit": "die", "value": { "rule": ["point_buy_dice_count", { "stat": { "var": "caster.stats.vitality" } }] } },
+        { "id": "zero-in", "description": "Kinds of being with this stat at 0.", "target": "caster", "value": { "var": "entry.data.zero_in" } }
+      ],
+      "validation": [
+        { "id": "code-unchanged", "description": "The stat code never changes.", "assert": { "==": [{ "var": "proposal.data.code" }, { "var": "entry.data.code" }] } },
+        { "id": "pillar-role-unchanged", "description": "The pillar role never changes.", "assert": { "==": [{ "var": "proposal.data.pillar_role" }, { "var": "entry.data.pillar_role" }] } },
+        { "id": "elements-valid", "description": "elements is a non-empty subset of the ten element ids.", "assert": { "and": [{ ">=": [{ "count": [{ "var": "proposal.data.elements" }] }, 1] }, { "subset_of": [{ "var": "proposal.data.elements" }, { "rule": ["valid_element_ids", {}] }] }, { "distinct": [{ "var": "proposal.data.elements" }] }] } },
+        { "id": "elements-map-back", "description": "Every listed element's own stat column names this stat.", "assert": { "all": [{ "var": "proposal.data.elements" }, { "==": [{ "entry": [{ "var": "" }, "stat"] }, { "root": "entry.id" }] }] } },
+        { "id": "zero-in-unchanged", "description": "zero_in keeps the same set of kinds.", "assert": { "and": [{ "subset_of": [{ "var": "proposal.data.zero_in" }, { "var": "entry.data.zero_in" }] }, { "subset_of": [{ "var": "entry.data.zero_in" }, { "var": "proposal.data.zero_in" }] }] } }
+      ]
+    },
+    "stat_world": {
+      "description": "World (code W, Souls / Spiritual) is the spiritual pillar, the manipulation of the time-space continuum. It powers three elements: elem_souls, elem_time and elem_space; a caster emits any of them with power stats.world and resists with the same stat (Rule 18); its point-buy rolls point_buy_dice_count(world) dice (Rule 20). zero_in: ordinary objects and plants have World 0; magical / ethereal beings have non-zero World (species rule).",
+      "prerequisites": [
+        { "id": "unit-has-world", "description": "The caster's stats carry a numeric world.", "when": { "==": [{ "typeof": [{ "var": "caster.stats.world" }] }, "number"] } }
+      ],
+      "effects": [
+        { "id": "elements", "description": "Elements this stat powers.", "target": "caster", "value": { "var": "entry.data.elements" } },
+        { "id": "emit-power", "description": "Emission power for any World element.", "target": "caster", "unit": "stat", "value": { "var": "caster.stats.world" } },
+        { "id": "point-buy-dice", "description": "Dice a World point-buy rolls.", "target": "caster", "unit": "die", "value": { "rule": ["point_buy_dice_count", { "stat": { "var": "caster.stats.world" } }] } },
+        { "id": "zero-in", "description": "Kinds of being with this stat at 0.", "target": "caster", "value": { "var": "entry.data.zero_in" } }
+      ],
+      "validation": [
+        { "id": "code-unchanged", "description": "The stat code never changes.", "assert": { "==": [{ "var": "proposal.data.code" }, { "var": "entry.data.code" }] } },
+        { "id": "pillar-role-unchanged", "description": "The pillar role never changes.", "assert": { "==": [{ "var": "proposal.data.pillar_role" }, { "var": "entry.data.pillar_role" }] } },
+        { "id": "elements-valid", "description": "elements is a non-empty subset of the ten element ids.", "assert": { "and": [{ ">=": [{ "count": [{ "var": "proposal.data.elements" }] }, 1] }, { "subset_of": [{ "var": "proposal.data.elements" }, { "rule": ["valid_element_ids", {}] }] }, { "distinct": [{ "var": "proposal.data.elements" }] }] } },
+        { "id": "elements-map-back", "description": "Every listed element's own stat column names this stat.", "assert": { "all": [{ "var": "proposal.data.elements" }, { "==": [{ "entry": [{ "var": "" }, "stat"] }, { "root": "entry.id" }] }] } },
+        { "id": "zero-in-unchanged", "description": "zero_in keeps the same set of kinds.", "assert": { "and": [{ "subset_of": [{ "var": "proposal.data.zero_in" }, { "var": "entry.data.zero_in" }] }, { "subset_of": [{ "var": "entry.data.zero_in" }, { "var": "proposal.data.zero_in" }] }] } }
+      ]
+    },
+    "stat_matter": {
+      "description": "Matter (code M, Ethereality) is the emotional pillar, the manipulation of matter and energy through the elements. It powers four elements: elem_air, elem_water, elem_earth and elem_fire; a caster emits any of them with power stats.matter and resists with the same stat (Rule 18), so Fireball (fire, fire) deals round_div10(2 x max(matter delta, 0)); its point-buy rolls point_buy_dice_count(matter) dice (15 -> 3, 8 -> 1, 9 -> 2). zero_in: non-magical objects have Matter 0.",
+      "prerequisites": [
+        { "id": "unit-has-matter", "description": "The caster's stats carry a numeric matter.", "when": { "==": [{ "typeof": [{ "var": "caster.stats.matter" }] }, "number"] } }
+      ],
+      "effects": [
+        { "id": "elements", "description": "Elements this stat powers.", "target": "caster", "value": { "var": "entry.data.elements" } },
+        { "id": "emit-power", "description": "Emission power for any Matter element.", "target": "caster", "unit": "stat", "value": { "var": "caster.stats.matter" } },
+        { "id": "point-buy-dice", "description": "Dice a Matter point-buy rolls.", "target": "caster", "unit": "die", "value": { "rule": ["point_buy_dice_count", { "stat": { "var": "caster.stats.matter" } }] } },
+        { "id": "zero-in", "description": "Kinds of being with this stat at 0.", "target": "caster", "value": { "var": "entry.data.zero_in" } }
+      ],
+      "validation": [
+        { "id": "code-unchanged", "description": "The stat code never changes.", "assert": { "==": [{ "var": "proposal.data.code" }, { "var": "entry.data.code" }] } },
+        { "id": "pillar-role-unchanged", "description": "The pillar role never changes.", "assert": { "==": [{ "var": "proposal.data.pillar_role" }, { "var": "entry.data.pillar_role" }] } },
+        { "id": "elements-valid", "description": "elements is a non-empty subset of the ten element ids.", "assert": { "and": [{ ">=": [{ "count": [{ "var": "proposal.data.elements" }] }, 1] }, { "subset_of": [{ "var": "proposal.data.elements" }, { "rule": ["valid_element_ids", {}] }] }, { "distinct": [{ "var": "proposal.data.elements" }] }] } },
+        { "id": "elements-map-back", "description": "Every listed element's own stat column names this stat.", "assert": { "all": [{ "var": "proposal.data.elements" }, { "==": [{ "entry": [{ "var": "" }, "stat"] }, { "root": "entry.id" }] }] } },
+        { "id": "zero-in-unchanged", "description": "zero_in keeps the same set of kinds.", "assert": { "and": [{ "subset_of": [{ "var": "proposal.data.zero_in" }, { "var": "entry.data.zero_in" }] }, { "subset_of": [{ "var": "entry.data.zero_in" }, { "var": "proposal.data.zero_in" }] }] } }
+      ]
+    },
+    "stat_will": {
+      "description": "Will (code Wi) is the mental pillar: self-control and mental states. It powers two elements, elem_concentration and elem_harmony; a caster emits either with power stats.will and resists with the same stat (Rule 18); its point-buy rolls point_buy_dice_count(will) dice (Rule 20). Will also orders the choice of entry points at setup (Rule 0, highest first). zero_in: plants and most non-sentient beings have Will 0 (golems have Will 0).",
+      "prerequisites": [
+        { "id": "unit-has-will", "description": "The caster's stats carry a numeric will.", "when": { "==": [{ "typeof": [{ "var": "caster.stats.will" }] }, "number"] } }
+      ],
+      "effects": [
+        { "id": "elements", "description": "Elements this stat powers.", "target": "caster", "value": { "var": "entry.data.elements" } },
+        { "id": "emit-power", "description": "Emission power for any Will element.", "target": "caster", "unit": "stat", "value": { "var": "caster.stats.will" } },
+        { "id": "point-buy-dice", "description": "Dice a Will point-buy rolls.", "target": "caster", "unit": "die", "value": { "rule": ["point_buy_dice_count", { "stat": { "var": "caster.stats.will" } }] } },
+        { "id": "zero-in", "description": "Kinds of being with this stat at 0.", "target": "caster", "value": { "var": "entry.data.zero_in" } },
+        { "id": "entry-order-key", "description": "Setup: entry points are chosen in descending order of this value.", "target": "caster", "unit": "stat", "value": { "var": "caster.stats.will" } }
+      ],
+      "validation": [
+        { "id": "code-unchanged", "description": "The stat code never changes.", "assert": { "==": [{ "var": "proposal.data.code" }, { "var": "entry.data.code" }] } },
+        { "id": "pillar-role-unchanged", "description": "The pillar role never changes.", "assert": { "==": [{ "var": "proposal.data.pillar_role" }, { "var": "entry.data.pillar_role" }] } },
+        { "id": "elements-valid", "description": "elements is a non-empty subset of the ten element ids.", "assert": { "and": [{ ">=": [{ "count": [{ "var": "proposal.data.elements" }] }, 1] }, { "subset_of": [{ "var": "proposal.data.elements" }, { "rule": ["valid_element_ids", {}] }] }, { "distinct": [{ "var": "proposal.data.elements" }] }] } },
+        { "id": "elements-map-back", "description": "Every listed element's own stat column names this stat.", "assert": { "all": [{ "var": "proposal.data.elements" }, { "==": [{ "entry": [{ "var": "" }, "stat"] }, { "root": "entry.id" }] }] } },
+        { "id": "zero-in-unchanged", "description": "zero_in keeps the same set of kinds.", "assert": { "and": [{ "subset_of": [{ "var": "proposal.data.zero_in" }, { "var": "entry.data.zero_in" }] }, { "subset_of": [{ "var": "entry.data.zero_in" }, { "var": "proposal.data.zero_in" }] }] } }
+      ]
+    }
+  }
+}

@@ -67,9 +67,28 @@ Every entry in every collection is a `VersionedEntry`:
 
 The game model itself: four pillars (vitality, world, matter, will; playable races sum to 40), ten elements, actions `A B M P` plus `EP EM` (Empty Posture / Empty Move), a rock-paper-scissors resolution cycle `attack > posture > move > block > attack` with Rule 6 adversarial reading of empty cards, 3 actions per round, hand of 5, decks of 15 to 20 cards in `mode_mmorpg`, lateral progression (no levels).
 
+### 3.1 The logic layer (JsonLogic)
+
+Every active version also carries a `logic` block next to `data`, written in [JsonLogic](https://jsonlogic.com) (`json-logic-js`):
+
+```
+logic: { description,                                   // machine-oriented prose: what it checks / changes, pc overrides
+         prerequisites: [ { id, description, when } ],  // all must hold before the entry may be used / cast / triggered
+         effects:       [ { id, description, target, unit, value } ],   // the outcome maths
+         validation:    [ { id, description, assert } ],// invariants every NEW version must keep
+         references:    [ named rule ids ] }
+```
+
+Anything shared between entries lives once in `data/logic_rules.json` as a **named rule** (`using_rule_24`, `rule_21_delta_damage`, `point_buy_dice_count`, `stat_buy_paid`, `life_from_stats`, `in_contact`, `rps_edge`, the governance `power_score_*` formulas, …) and is referenced with `{"rule": ["<id>", {params}]}`; the same file documents the custom operations, the evaluation context and the per-collection validation rules.
+
+* `game/logic-engine.mjs` — loads the data layer, expands rule references, evaluates against a context, validates proposals (`validateProposal`), scores entries (`powerScore`).
+* `node tools/logic-check.mjs` — regression: rule examples, every block expands, coverage, every active version re-validated (a WARN is a data contradiction, e.g. a creature whose printed life is not round(Σstats/10)).
+* `node tools/logic-apply.mjs tools/logic/<collection>.logic.json` — blocks are authored in mapping files under `game/tools/logic/` and applied, never hand-edited into `data/`. Guide: `game/tools/logic/README.md`.
+* `node tools/rebalance.mjs report | check <proposal.json> [--apply]` — the rebalance script from `governance_rebalance_script`: validate → power scores → ±15 % tolerance → counter-proposals over `rebalance_links` → verdict. Example proposals in `game/tools/proposals/`.
+
 ## 4. Layer B — governance, the git-fork metagame
 
-Defined in `data/governance.json`, not yet automated in code:
+Defined in `data/governance.json`; the rebalance step runs as `game/tools/rebalance.mjs` (see 3.1), the tally / release / branch flow is not automated yet:
 
 | Branch | Content | Who writes |
 |---|---|---|

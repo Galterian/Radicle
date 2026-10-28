@@ -1,0 +1,72 @@
+{
+  "collection": "actions",
+  "description": "Shared-rule candidates found while authoring actions.logic.json — inlined there for now (same shape as a logic_rules entry). class_ep_stance (see classes.shared.json) is also used by action_empty_posture / action_empty_move.",
+  "candidates": [
+    {
+      "id": "action_card_in_hand",
+      "name": "The action card is in hand",
+      "description": "A, B, M, P need their card in the hand; EP and EM never do. The logic blocks read {\"var\": \"caster.hand_has.<code>\"}; as a named rule the hand is passed as a code list so the code can be a parameter.",
+      "tags": ["actions", "cards", "rule_10"],
+      "params": { "hand_codes": { "type": "[action_code]" }, "code": { "type": "string" } },
+      "logic": { "or": [{ "in": [{ "param": "code" }, ["EP", "EM"]] }, { "includes": [{ "param": "hand_codes" }, { "param": "code" }] }] },
+      "examples": [
+        { "args": { "hand_codes": ["A", "P"], "code": "A" }, "expect": true },
+        { "args": { "hand_codes": ["A", "P"], "code": "B" }, "expect": false },
+        { "args": { "hand_codes": [], "code": "EP" }, "expect": true }
+      ]
+    },
+    {
+      "id": "empty_move_hexes",
+      "name": "Empty Move — halfway toward the target",
+      "description": "EM walks ceil(dist / 2) hexes along the shortest path (= round(d/2) for integer d), at least 1 when the target is not the actor's own tile. Used by action_empty_move, class_rogue and battle_system_core.",
+      "tags": ["movement", "rule_8", "actions"],
+      "params": { "dist": { "type": "number" } },
+      "logic": { "if": [{ "<=": [{ "param": "dist" }, 0] }, 0, { "max": [1, { "ceil": [{ "/": [{ "param": "dist" }, 2] }] }] }] },
+      "examples": [
+        { "args": { "dist": 5 }, "expect": 3 },
+        { "args": { "dist": 1 }, "expect": 1 },
+        { "args": { "dist": 0 }, "expect": 0 }
+      ]
+    },
+    {
+      "id": "rps_lists_match_cycle",
+      "name": "Validation — rps lists name exactly the cycle neighbours",
+      "description": "A battle action's rps_wins_against is exactly [win_code] and rps_loses_against exactly [lose_code] (A>P, P>M, M>B, B>A). Repeated in the four A/B/M/P validations.",
+      "tags": ["validation", "actions", "battle_system"],
+      "params": { "wins": { "type": "[action_code]" }, "loses": { "type": "[action_code]" }, "win_code": { "type": "string" }, "lose_code": { "type": "string" } },
+      "logic": { "and": [
+        { "includes": [{ "param": "wins" }, { "param": "win_code" }] }, { "==": [{ "count": [{ "param": "wins" }] }, 1] },
+        { "includes": [{ "param": "loses" }, { "param": "lose_code" }] }, { "==": [{ "count": [{ "param": "loses" }] }, 1] }
+      ] },
+      "examples": [
+        { "args": { "wins": ["P"], "loses": ["B"], "win_code": "P", "lose_code": "B" }, "expect": true },
+        { "args": { "wins": ["P", "M"], "loses": ["B"], "win_code": "P", "lose_code": "B" }, "expect": false }
+      ]
+    },
+    {
+      "id": "outside_the_cycle",
+      "name": "Validation — no rps edges",
+      "description": "Empty and meta actions (EP, EM, COMBO, TRADE, ENTER, DOOR) keep both rps lists empty. Repeated in six validations.",
+      "tags": ["validation", "actions"],
+      "params": { "wins": { "type": "[action_code]" }, "loses": { "type": "[action_code]" } },
+      "logic": { "and": [{ "==": [{ "count": [{ "param": "wins" }] }, 0] }, { "==": [{ "count": [{ "param": "loses" }] }, 0] }] },
+      "examples": [
+        { "args": { "wins": [], "loses": [] }, "expect": true },
+        { "args": { "wins": ["A"], "loses": [] }, "expect": false }
+      ]
+    },
+    {
+      "id": "block_return_damage",
+      "name": "Damage an attacker takes from a Block",
+      "description": "B>A scores 1 on an attacker in contact unless the attacker holds Ranged Weapon (then 0). Used from both sides: action_attack.damage_taken_from_block and action_block.combat_damage_per_attacker.",
+      "tags": ["damage", "rule_7", "skills"],
+      "params": { "attacker_action": { "type": "string" }, "attacker_permanents": { "type": "[entry_id]" } },
+      "logic": { "if": [{ "and": [{ "==": [{ "param": "attacker_action" }, "A"] }, { "!": { "includes": [{ "param": "attacker_permanents" }, "skill_ranged_weapon"] } }] }, { "rule": ["rps_edge", { "actor": "B", "defender": "A" }] }, 0] },
+      "examples": [
+        { "args": { "attacker_action": "A", "attacker_permanents": [] }, "expect": 1 },
+        { "args": { "attacker_action": "A", "attacker_permanents": ["skill_ranged_weapon"] }, "expect": 0 },
+        { "args": { "attacker_action": "M", "attacker_permanents": [] }, "expect": 0 }
+      ]
+    }
+  ]
+}

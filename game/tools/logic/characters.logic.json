@@ -1,0 +1,4506 @@
+{
+  "collection": "characters",
+  "entries": {
+    "char_oran_rief": {
+      "description": "Oran Rief survivalist (ranger) — playable character. Combo M → B → P (Move, Block, Posture): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_vitality (stat Vitality, own value 16): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V16/W10/M3/Wi11, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Vitality (elem_vitality) dominates (16), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_vitality may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_vitality"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_pride_guardian": {
+      "description": "Pride Guardian (guardian) — playable character. Combo A → P → M (Attack, Posture, Move): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_time (stat World, own value 16): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V11/W16/M10/Wi3, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); World (Souls, Time, Space) dominates (16), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_time may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_time"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_exuberant_firestroker": {
+      "description": "Exuberant Firestroker (caster) — playable character. Combo M → B → A (Move, Block, Attack): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_fire (stat Matter, own value 16): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V6/W16/M16/Wi2, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); World (Souls, Time, Space) dominates (16), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_fire may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_fire"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_razorfin_abolisher": {
+      "description": "Razorfin Abolisher (caster) — playable character. Combo B → M → P (Block, Move, Posture): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_space (stat World, own value 5): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V5/W5/M20/Wi0, Σ 30 — violates the species_sum_rule Σ = 40 (data contradiction); life 4 although round(Σ/10) = 3 (data contradiction); Matter (Air, Water, Earth, Fire) dominates (20), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_space may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_space"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_manor_skeleton": {
+      "description": "Manor Skeleton (undead) — playable character. Combo A → B → P (Attack, Block, Posture): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_harmony (stat Will, own value 15): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V15/W5/M5/Wi15, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Vitality (elem_vitality) dominates (15), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_harmony may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_harmony"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_rhox_bodyguard": {
+      "description": "Rhox Bodyguard (balanced) — playable character. No a-priori combo (Rule 16 bonus unavailable until a combo card is found); card bonus instead: draw one extra card per round (hand refill limit 6 instead of 5). No adept element: every element emits at the plain stat value. Stats V10/W10/M10/Wi10, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Vitality (elem_vitality) dominates (10), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10 refill, card bonus: draw up to 6 instead of 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                },
+                "limit": 6
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_sanctum_gargoyle": {
+      "description": "Sanctum Gargoyle (astral) — playable character. Combo P → M → B (Posture, Move, Block): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_souls (stat World, own value 17): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V9/W17/M7/Wi7, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); World (Souls, Time, Space) dominates (17), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_souls may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_souls"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_moonglove_changeling": {
+      "description": "Moonglove Changeling (mental) — playable character. Combo P → A → B (Posture, Attack, Block): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_concentration (stat Will, own value 21): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V7/W2/M10/Wi21, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Will (Concentration, Harmony) dominates (21), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_concentration may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_concentration"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_behemoth_herald": {
+      "description": "Behemoth's Herald (warrior) — playable character. Combo A → B → M (Attack, Block, Move): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Alternative combo on the card: A → B → P. No adept element: every element emits at the plain stat value. Stats V18/W7/M8/Wi7, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Vitality (elem_vitality) dominates (18), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_cynder_pyromancer": {
+      "description": "Cynder Pyromancer (caster) — playable character. Combo M → P → A (Move, Posture, Attack): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_water (stat Matter, own value 15): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V13/W7/M15/Wi5, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Matter (Air, Water, Earth, Fire) dominates (15), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_water may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_water"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_akki_coalfinger": {
+      "description": "Akki Coalfinger (caster) — playable character. Combo B → M → A (Block, Move, Attack): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_earth (stat Matter, own value 20): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V5/W10/M20/Wi5, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Matter (Air, Water, Earth, Fire) dominates (20), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_earth may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_earth"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "char_godtracker_jund": {
+      "description": "GodTracker of Jund (mental) — playable character. Combo B → A → P (Block, Attack, Posture): Rule 16 — play exactly that action sequence in order and, while in contact with an enemy, deal +1 bonus damage; the engine seeds the three combo cards into the 11-card action deck. Adept in elem_air (stat Matter, own value 16): Rule 16 'Adept' emits that element with power 20 regardless of the underlying stat, and the tower of that element admits the character without the 20-stat requirement. Stats V6/W2/M16/Wi16, Σ 40 (species_sum_rule: playable races have Σ = 40); life 4 = round(Σ/10); Matter (Air, Water, Earth, Fire) dominates (16), so its Rule 21 casts of those elements carry the biggest delta and it shrugs the same elements off. 3 actions per round (Rule 1); after the last turn of a round it discards and draws up to five (Rule 10).",
+      "prerequisites": [
+        {
+          "id": "alive",
+          "description": "A character with life 0 is down and plays nothing.",
+          "when": {
+            ">": [
+              {
+                "var": "caster.life"
+              },
+              0
+            ]
+          }
+        },
+        {
+          "id": "adept_element_not_disabled",
+          "description": "The adept element elem_air may be emitted only while no Disable bars it for this character.",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": [
+                  "elem_air"
+                ],
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_needs_contact",
+          "description": "Rule 16: the +1 combo damage applies only while in contact with an enemy.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "life_from_stats",
+          "description": "Life = round_half_up(Σstats / 10).",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "rule": [
+              "life_from_stats",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_sum",
+          "description": "Σ stats (species_sum_rule: 40 for playable races).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "entry.data.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_stat_value",
+          "description": "The raw stat behind the adept element (stat_of); 0 when there is no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "entry.data"
+              },
+              {
+                "var": "entry.data.adept_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "adept_emit_power",
+          "description": "Rule 16: an adept emits its element with power 20 regardless of the stat; 0 when no adept element.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              0,
+              20
+            ]
+          }
+        },
+        {
+          "id": "combo_length",
+          "description": "Number of actions in the trained combo.",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.combo"
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_bonus_damage",
+          "description": "Rule 16: +1 damage when the combo was just completed (combo_complete in context) and an enemy is in contact.",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "!!": {
+                      "var": "combo_complete"
+                    }
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.combo"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round",
+          "description": "Actions per round (Rule 1).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.actions_per_round"
+          }
+        },
+        {
+          "id": "hand_refill",
+          "description": "Rule 10: cards drawn at the end of a round to get back to 5.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "hand_refill",
+              {
+                "hand_size": {
+                  "var": "caster.hand_size"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "stat_sum_within_5_or_species_40",
+          "description": "Σ proposal stats stays within ±5 of the canonical Σ, or lands exactly on the species sum 40 (concept species_sum_rule) — so a typo fix toward 40 is allowed.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "stat_sum": [
+                      {
+                        "var": "proposal.data.stats"
+                      }
+                    ]
+                  },
+                  40
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "abs": [
+                      {
+                        "-": [
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "proposal.data.stats"
+                              }
+                            ]
+                          },
+                          {
+                            "stat_sum": [
+                              {
+                                "var": "entry.data.stats"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  5
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "species_sum_40",
+          "description": "species_sum_rule (concept.json): a playable race has Σstats = 40.",
+          "assert": {
+            "==": [
+              {
+                "stat_sum": [
+                  {
+                    "var": "proposal.data.stats"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "adept_element_valid",
+          "description": "adept_element is null or one of the ten element ids.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.adept_element"
+                  },
+                  {
+                    "rule": [
+                      "valid_element_ids",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "combo_codes_and_length",
+          "description": "combo holds only action codes and keeps its length.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "var": "proposal.data.combo"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.combo"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.combo"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "life_matches_proposal_stats",
+          "description": "life equals round_half_up(Σ proposal stats / 10).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.life"
+              },
+              {
+                "rule": [
+                  "life_from_stats",
+                  {
+                    "stats": {
+                      "var": "proposal.data.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_per_round_3",
+          "description": "Rule 1: characters have three actions per round; unchanged.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  3
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.actions_per_round"
+                  },
+                  {
+                    "var": "entry.data.actions_per_round"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

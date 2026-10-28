@@ -1,0 +1,56 @@
+{
+  "collection": "stats",
+  "description": "Shared-rule candidates found while authoring stats.logic.json (all 4 pillars repeat the same validation; same_set is also inlined in concept.logic.json pillars-kept). Shape of data/logic_rules.json entries.",
+  "entries": [
+    {
+      "id": "same_set",
+      "name": "Two lists hold the same values",
+      "description": "True when `a` and `b` are subsets of each other (order and duplicates ignored). json-logic's `==` compares arrays by reference, so list equality needs this. Inlined for zero_in (4 stats) and for the concept's pillars.",
+      "tags": ["validation", "lists"],
+      "params": { "a": { "type": "array" }, "b": { "type": "array" } },
+      "logic": { "and": [{ "subset_of": [{ "param": "a" }, { "param": "b" }] }, { "subset_of": [{ "param": "b" }, { "param": "a" }] }] },
+      "examples": [
+        { "args": { "a": ["plants", "undead"], "b": ["undead", "plants"] }, "expect": true },
+        { "args": { "a": ["plants"], "b": ["undead", "plants"] }, "expect": false }
+      ]
+    },
+    {
+      "id": "stat_elements_valid",
+      "name": "Stat — elements are real, distinct and map back",
+      "description": "proposal.data.elements is a non-empty, duplicate-free subset of valid_element_ids and every listed element's own `stat` column names this stat entry (entry.id). Inlined as elements-valid + elements-map-back in all 4 stats. Context {entry, proposal}; uses root inside `all`.",
+      "tags": ["validation", "stats", "elements"],
+      "params": {},
+      "logic": {
+        "and": [
+          { ">=": [{ "count": [{ "var": "proposal.data.elements" }] }, 1] },
+          { "distinct": [{ "var": "proposal.data.elements" }] },
+          { "subset_of": [{ "var": "proposal.data.elements" }, { "rule": ["valid_element_ids", {}] }] },
+          { "all": [{ "var": "proposal.data.elements" }, { "==": [{ "entry": [{ "var": "" }, "stat"] }, { "root": "entry.id" }] }] }
+        ]
+      },
+      "examples": [
+        { "data": { "entry": { "id": "stat_will" }, "proposal": { "data": { "elements": ["elem_concentration", "elem_harmony"] } } }, "expect": true },
+        { "data": { "entry": { "id": "stat_will" }, "proposal": { "data": { "elements": ["elem_fire"] } } }, "expect": false }
+      ]
+    },
+    {
+      "id": "stat_identity_kept",
+      "name": "Stat — code, pillar role and zero_in unchanged",
+      "description": "A new version of a pillar keeps its code, pillar_role and the zero_in set. Inlined as code-unchanged / pillar-role-unchanged / zero-in-unchanged in all 4 stats. Context {entry, proposal}.",
+      "tags": ["validation", "stats"],
+      "params": {},
+      "logic": {
+        "and": [
+          { "==": [{ "var": "proposal.data.code" }, { "var": "entry.data.code" }] },
+          { "==": [{ "var": "proposal.data.pillar_role" }, { "var": "entry.data.pillar_role" }] },
+          { "subset_of": [{ "var": "proposal.data.zero_in" }, { "var": "entry.data.zero_in" }] },
+          { "subset_of": [{ "var": "entry.data.zero_in" }, { "var": "proposal.data.zero_in" }] }
+        ]
+      },
+      "examples": [
+        { "data": { "entry": { "data": { "code": "V", "pillar_role": "physical", "zero_in": ["undead", "astral"] } }, "proposal": { "data": { "code": "V", "pillar_role": "physical", "zero_in": ["astral", "undead"] } } }, "expect": true },
+        { "data": { "entry": { "data": { "code": "V", "pillar_role": "physical", "zero_in": ["undead"] } }, "proposal": { "data": { "code": "V", "pillar_role": "mental", "zero_in": ["undead"] } } }, "expect": false }
+      ]
+    }
+  ]
+}
