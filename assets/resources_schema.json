@@ -1,0 +1,46 @@
+{
+  "$sprite_notes": "Unit sheets: rows = 8 facings N,NE,E,SE,S,SW,W,NW (row 0 faces away from the camera), cols = frames, grid in assets/frames.json. Team colour: palette ramp 224..238 is normalised to pure (0,g,0) by the extractor; recolour at runtime (godot/shaders/team_recolor.gdshader, game/js/sprites.js teamSource). Translucency: RS sheets encode shadow as FA runs (alpha 112) and FB-FE edge levels; RL sheets use the magenta ramp 250..254 -> translucent black (ghosts, mage cloaks). Effects: alpha = brightness (additive emulation).",
+  "$comment": "Contract for the entry-level `resources` key added to every entry of data/*.json (characters, classes, creatures, effects, skills, actions, terrain_items, elements). It sits NEXT to `versions`, is not versioned/voted, and only points at curated free assets under chaosD6/assets/. All paths are relative to the chaosD6 repo root and mirror the layout of chaos_mapper/extracted (extracted/Sprites/Units/... -> assets/Sprites/Units/...). Frame grids for every sheet live in assets/frames.json keyed by the same relative path.",
+  "resources": {
+    "source": "warlords3_battlecry",
+    "wbc3_name": "Minotaur",
+    "wbc3_code": "AMIX",
+    "wbc3_race": "Minotaurs",
+    "match_reason": "why this asset was chosen (meaning / name / stats / tags)",
+    "confidence": "high | medium | low",
+    "sprites": {
+      "idle":   {"path": "assets/Sprites/Units/Minotaurs/Minotaur/Minotaur - idle [AMIX].png",   "usage": "8-direction idle loop (rows = directions N,NE,E,SE,S,SW,W,NW (row 0 faces away from camera); cols = frames), grid in assets/frames.json"},
+      "walk":   {"path": "...", "usage": "8-direction walk cycle, play while moving along the hex path"},
+      "attack": {"path": "...", "usage": "8-direction attack, play on action A / skill"},
+      "death":  {"path": "...", "usage": "death strip, play once when life reaches 0"},
+      "fidget": {"path": "...", "usage": "8-direction idle variation, play randomly while idle"},
+      "cast":   {"path": "...", "usage": "8-direction spell cast, play on effect/skill use"},
+      "special":{"path": "...", "usage": "special ability animation"},
+      "info":   {"path": "...", "usage": "info panel image: portrait on top, team-coloured UI icons below"},
+      "static": {"path": "...", "usage": "single still image (buildings, terrain items, misc)"},
+      "construction": {"path": "...", "usage": "3-frame construction/growth strip (buildings)"},
+      "effect": {"path": "...", "usage": "effect animation strip (cols = frames), play at target hex; blend: additive for fire/light effects"}
+    },
+    "portrait": {"path": "assets/Images/Portraits/Portrait12.bmp", "usage": "hero/character portrait for HUD and roster"},
+    "icon": {"path": "assets/Images/UI/Graphics/...bmp", "usage": "card / HUD icon"},
+    "tiles": [{"path": "assets/Images/Terrain/Lava/....bmp", "usage": "terrain tile block (8-bit 320x240 tile sheet) for hexes of this terrain"}],
+    "sounds": {
+      "ready":      [{"path": "assets/Sounds/Units/Minotaurs/Minotaur/Minotaur - Ready - ....wav", "quote": "text if known", "usage": "play when the entity spawns / is recruited"}],
+      "select":     [{"path": "...", "quote": "...", "usage": "play on click-select, pick randomly"}],
+      "order":      [{"path": "...", "quote": "...", "usage": "play when an action is queued / a target is set"}],
+      "deathblow":  [{"path": "...", "quote": "...", "usage": "play when the entity kills a target"}],
+      "conversion": [{"path": "...", "usage": "play when capturing a terrain item"}],
+      "spell":      [{"path": "...", "usage": "play when casting an effect"}],
+      "fx":         [{"path": "assets/Sounds/SoundFX/Boom.wav", "usage": "sound effect for this effect/skill/action"}]
+    }
+  },
+  "frames_json_entry": {
+    "$comment": "assets/frames.json: one entry per sheet, keyed by the relative asset path",
+    "assets/Sprites/Units/Daemons/Daemon/Daemon - idle [AADE].png": {
+      "width": 3008, "height": 1352, "cols": 16, "rows": 8, "cell_w": 188, "cell_h": 169,
+      "kind": "unit-8dir | strip | single | construction | info",
+      "directions": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+      "fps": 12, "loop": true, "anchor": "bottom-center", "method": "boundary | correlation | assumed", "confidence": "high"
+    }
+  }
+}

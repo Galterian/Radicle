@@ -1,15 +1,774 @@
 {
   "collection": "elements",
   "entries": [
-    { "id": "elem_vitality",      "name": "Vitality",      "tags": ["physical"],  "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_vitality", "color_hint": "red-flesh" } }] },
-    { "id": "elem_souls",         "name": "Souls",         "tags": ["world"],     "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_world",    "color_hint": "violet" } }] },
-    { "id": "elem_time",          "name": "Time",          "tags": ["world"],     "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_world",    "color_hint": "indigo" } }] },
-    { "id": "elem_space",         "name": "Space",         "tags": ["world"],     "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_world",    "color_hint": "deep-blue" } }] },
-    { "id": "elem_air",           "name": "Air",           "tags": ["matter"],    "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_matter",   "color_hint": "sky-blue" } }] },
-    { "id": "elem_water",         "name": "Water",         "tags": ["matter"],    "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_matter",   "color_hint": "aqua" } }] },
-    { "id": "elem_earth",         "name": "Earth",         "tags": ["matter"],    "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_matter",   "color_hint": "brown" } }] },
-    { "id": "elem_fire",          "name": "Fire",          "tags": ["matter"],    "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_matter",   "color_hint": "orange-red" } }] },
-    { "id": "elem_concentration", "name": "Concentration", "tags": ["will"],      "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_will",     "color_hint": "silver" } }] },
-    { "id": "elem_harmony",       "name": "Harmony",       "tags": ["will"],      "versions": [{ "version":"1.0.0","weight":1.0,"status":"canonical","origin":"paper_rules","author_peer_id":"","created_at":"2026-10-19","parent_version":null,"rebalance_links":[],"vote_log":[],"notes":"","data":{ "stat": "stat_will",     "color_hint": "gold" } }] }
+    {
+      "id": "elem_vitality",
+      "name": "Vitality",
+      "tags": [
+        "physical"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Particle set red sparks",
+        "wbc3_code": "EPA1",
+        "wbc3_race": "Effects1",
+        "match_reason": "living grass terrain, red life sparks, heartbeat",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Grass/TGB0.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB1.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB2.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB3.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Grass"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatSlow.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_vitality",
+            "color_hint": "red-flesh"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_souls",
+      "name": "Souls",
+      "tags": [
+        "world"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Spell effect purplewhite glowing orbs",
+        "wbc3_code": "EZ05",
+        "wbc3_race": "Effects1",
+        "match_reason": "dark caverns, violet soul orbs",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF0.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF1.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF2.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF3.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Caverns"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/STEZ05.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Skeleton.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_world",
+            "color_hint": "violet"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_time",
+      "name": "Time",
+      "tags": [
+        "world"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Grey arcs",
+        "wbc3_code": "EZ70",
+        "wbc3_race": "Effects1",
+        "match_reason": "sand (hourglass) terrain, sweeping arcs",
+        "confidence": "low",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Desert/TKS0.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS1.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS2.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS3.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Desert"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/PageTurn.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_world",
+            "color_hint": "indigo"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_space",
+      "name": "Space",
+      "tags": [
+        "world"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Spell effect small purple ringspiral",
+        "wbc3_code": "EZ02",
+        "wbc3_race": "Effects1",
+        "match_reason": "deep caverns, purple spiral",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF0.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF1.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF2.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF3.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD0.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD1.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD2.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD3.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Caverns",
+          "Rock Cliffs"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/STEZ02.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_world",
+            "color_hint": "deep-blue"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_air",
+      "name": "Air",
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Bluewhite arcs",
+        "wbc3_code": "EZ75",
+        "wbc3_race": "Effects1",
+        "match_reason": "high open terrain, blue-white wind arcs",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Snow/TGI0.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI1.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI2.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI3.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH0.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH1.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH2.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH3.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Snow",
+          "High Grass"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/LongWhoosh.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_matter",
+            "color_hint": "sky-blue"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_water",
+      "name": "Water",
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Particle set blue sparks + crystals",
+        "wbc3_code": "EPA3",
+        "wbc3_race": "Effects1",
+        "match_reason": "water tiles, blue droplets",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Particle set blue sparks + crystals/Particle set blue sparks + crystals - idle [EPA3].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Water/TWX0.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX1.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX2.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX3.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW0.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW1.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW2.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW3.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Water",
+          "Grass Coast"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Splash.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_matter",
+            "color_hint": "aqua"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_earth",
+      "name": "Earth",
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Greybrown dust puffs",
+        "wbc3_code": "EZ39",
+        "wbc3_race": "Effects1",
+        "match_reason": "rock/mountain tiles, dust",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Rock/TKF0.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF1.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF2.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF3.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA0.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA1.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA2.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA3.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Rock",
+          "Mountains"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Stomp.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_matter",
+            "color_hint": "brown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_fire",
+      "name": "Fire",
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Fire flames (torchburning)",
+        "wbc3_code": "EZ42",
+        "wbc3_race": "Effects1",
+        "match_reason": "lava tiles, flames",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Lava/TKL0.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL1.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL2.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL3.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Lava"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fire.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_matter",
+            "color_hint": "orange-red"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_concentration",
+      "name": "Concentration",
+      "tags": [
+        "will"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Small white rings",
+        "wbc3_code": "EZ57",
+        "wbc3_race": "Effects1",
+        "match_reason": "bare high plateau, silver rings",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Small white rings/Small white rings - idle [EZ57].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE0.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE1.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE2.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE3.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "High Dirt"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_will",
+            "color_hint": "silver"
+          }
+        }
+      ]
+    },
+    {
+      "id": "elem_harmony",
+      "name": "Harmony",
+      "tags": [
+        "will"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Yellow sparks",
+        "wbc3_code": "EZ65",
+        "wbc3_race": "Effects1",
+        "match_reason": "lush jungle, golden sparks",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Yellow sparks/Yellow sparks - idle [EZ65].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ0.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ1.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ2.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ3.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM0.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM1.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM2.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM3.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Jungle",
+          "Marsh"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "stat": "stat_will",
+            "color_hint": "gold"
+          }
+        }
+      ]
+    }
   ]
 }
