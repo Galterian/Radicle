@@ -4,90 +4,745 @@
     {
       "id": "battle_system_core",
       "name": "Core battle system",
-      "tags": ["combat"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["rule_7_turn_round_sequence", "rule_8_card_declare_sequence", "rule_13_evaluation", "rule_21_effect_damage"],
-        "vote_log": [], "notes": "",
-        "data": {
-          "turn_structure": {
-            "actions_per_round_pc": 3,
-            "actions_per_round_monster_range": [1, 4],
-            "simultaneous": true,
-            "declaration_sequence": [
-              "empty_move_announce",
-              "flip_action_card",
-              "effects",
-              "skills_and_instants_and_class_abilities_or_point_buy"
-            ],
-            "end_of_round": "discard remaining, draw up to 5; monsters do not discard",
-            "handshake_scope": "players sharing adjacent tiles sync face-down cards each turn; same-dimension players sync once per turn end"
+      "tags": [
+        "combat"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_7_turn_round_sequence",
+            "rule_8_card_declare_sequence",
+            "rule_13_evaluation",
+            "rule_21_effect_damage"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "turn_structure": {
+              "actions_per_round_pc": 3,
+              "actions_per_round_monster_range": [
+                1,
+                4
+              ],
+              "simultaneous": true,
+              "declaration_sequence": [
+                "empty_move_announce",
+                "flip_action_card",
+                "effects",
+                "skills_and_instants_and_class_abilities_or_point_buy"
+              ],
+              "end_of_round": "discard remaining, draw up to 5; monsters do not discard",
+              "handshake_scope": "players sharing adjacent tiles sync face-down cards each turn; same-dimension players sync once per turn end"
+            },
+            "initiative": {
+              "mode": "simultaneous",
+              "narrative_order_rules": [
+                "first player in contact = 'youngest' player label",
+                "later arrivals slot in by proximity / contact order",
+                "a monster slots immediately after the character that discovered it"
+              ]
+            },
+            "resolution_matrix": {
+              "cycle": "attack > posture > move > block > attack",
+              "empty_resolution_rule": "Empty Posture carries no bonus and no damage of its own. For resolution, the enemy chooses which empty-type to treat it as (rule 6): an enemy with Attack treats EP as Posture (Attack beats Posture → EP takes 1); an enemy with Posture treats EP as Empty Move (Posture beats Move → EP takes 1). Enemies playing Move or Block pick the empty-type that neutralises the match, so Move-vs-EP and Block-vs-EP resolve as neutral. Empty Move resolves symmetrically: Block treats it as Move (Move loses to Block → EM takes 1).",
+              "edges": [
+                {
+                  "actor": "A",
+                  "defender": "P",
+                  "bonus_damage_to_actor": 1
+                },
+                {
+                  "actor": "P",
+                  "defender": "M",
+                  "bonus_damage_to_actor": 1
+                },
+                {
+                  "actor": "M",
+                  "defender": "B",
+                  "bonus_damage_to_actor": 1
+                },
+                {
+                  "actor": "B",
+                  "defender": "A",
+                  "bonus_damage_to_actor": 1,
+                  "note": "defender A also takes -1 damage dealt"
+                },
+                {
+                  "actor": "A",
+                  "defender": "B",
+                  "bonus_damage_to_actor": -1,
+                  "note": "attacker takes 1 damage"
+                },
+                {
+                  "actor": "M",
+                  "defender": "P",
+                  "bonus_damage_to_actor": -1,
+                  "note": "mover takes 1 damage"
+                },
+                {
+                  "actor": "P",
+                  "defender": "A",
+                  "bonus_damage_to_actor": -1,
+                  "note": "poser takes 1 damage"
+                },
+                {
+                  "actor": "B",
+                  "defender": "M",
+                  "bonus_damage_to_actor": -1,
+                  "note": "blocker takes 1 damage"
+                },
+                {
+                  "actor": "A",
+                  "defender": "EP",
+                  "bonus_damage_to_actor": 1,
+                  "note": "enemy with Attack treats EP as Posture → attack still hits, EP takes 1"
+                },
+                {
+                  "actor": "P",
+                  "defender": "EP",
+                  "bonus_damage_to_actor": 1,
+                  "note": "enemy with Posture treats EP as Empty Move → posture beats move, EP takes 1"
+                },
+                {
+                  "actor": "EP",
+                  "defender": "A",
+                  "bonus_damage_to_actor": -1,
+                  "note": "mirror of A-vs-EP: EP actor takes 1 damage"
+                },
+                {
+                  "actor": "EP",
+                  "defender": "P",
+                  "bonus_damage_to_actor": -1,
+                  "note": "mirror of P-vs-EP: EP actor takes 1 damage"
+                },
+                {
+                  "actor": "B",
+                  "defender": "EM",
+                  "bonus_damage_to_actor": 1,
+                  "note": "enemy with Block treats EM as Move → block beats move, EM takes 1"
+                },
+                {
+                  "actor": "EM",
+                  "defender": "B",
+                  "bonus_damage_to_actor": -1,
+                  "note": "mirror of B-vs-EM: EM actor takes 1 damage"
+                }
+              ],
+              "empty_posture_vs_attack": "ep takes -1 damage; attack still hits (now encoded as edge A→EP)",
+              "empty_move_vs_block": "em takes -1 damage; block still hits (now encoded as edge B→EM)"
+            },
+            "resolution_math": {
+              "effect_damage_formula": "round_half_up( Σ max(stat_caster - stat_defender, 0) / 10 )   // 0.5→1, 0.4→0 — see rule_21",
+              "life": "round_half_up( Σstats / 10 )   // 40 → 4; 80 → 8; both exact so rounding is moot",
+              "point_buy": "roll N d6 whose sum ≤ stat; keep highest die as token value",
+              "stat_buy": "accumulate caster stat per emission across turns until target total; used by Summoning/Elementals/Golems/Resurrect"
+            },
+            "movement_and_range": {
+              "adjacency": "8-neighbor (horizontal, vertical, diagonal)",
+              "move_action_distance_tiles": 1,
+              "empty_move_distance_tiles": 0.5,
+              "attack_follow": "optional free-chase that mirrors enemy's Move toward their next tile (Rule 15)",
+              "range_extensions_from_terrain": "towers / outposts grant chess-like 2-3 tile reach per building"
+            },
+            "status_handling": {
+              "token_types": [
+                "shield_token: colorless die on tile; extra life; cumulative",
+                "stat_penalty_token: wooden die under stat number; subtracts",
+                "permanent_token: colored die over a stat; adds",
+                "tile_token: large colored die right of tile; bonuses all creatures on tile"
+              ],
+              "lock_condition": "a trap or monster can lock your character; counts as 1 re-entry attempt lost"
+            },
+            "mmorpg_realtime_overrides": {
+              "action_slots": 4,
+              "skill_slots_bound_to_actions": 4,
+              "effect_slots": 4,
+              "stack_cooldown_schedule_seconds": [
+                360,
+                180,
+                90,
+                45,
+                23,
+                12
+              ],
+              "move_run_duration_seconds": 15,
+              "attack_mode_default": "charge-run"
+            }
           },
-          "initiative": {
-            "mode": "simultaneous",
-            "narrative_order_rules": [
-              "first player in contact = 'youngest' player label",
-              "later arrivals slot in by proximity / contact order",
-              "a monster slots immediately after the character that discovered it"
+          "logic": {
+            "description": "The core combat contract. A pc character plays 3 actions per round (monsters 1..4), all declared face down and flipped simultaneously; declaration order is Empty Move announce, action flip, effects, then skills / instants / class abilities / point-buys. Combat damage comes off the 4-cycle resolution matrix (Attack > Posture > Move > Block > Attack, 1 per edge, Attack base 1; empty actions are read as the action they lose to). Effect damage is Rule 21: sum over the cast's elements of max0(caster stat - defender stat), / 10, rounded half up (0.5 -> 1). Life is the stat sum / 10 rounded half up. Move walks 1 hex, Empty Move half the distance rounded up. End of round: discard, refill to 5 (monsters do not discard).",
+            "prerequisites": [
+              {
+                "id": "has_actions_left",
+                "description": "The unit still has an action this round (action_index below its actions per round).",
+                "when": {
+                  "<": [
+                    {
+                      "var": "action_index"
+                    },
+                    {
+                      "max": [
+                        1,
+                        {
+                          "var": "caster.actions_per_round"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "round_in_range",
+                "description": "The round counter runs 0..2 within a turn.",
+                "when": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "round"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<": [
+                        {
+                          "var": "round"
+                        },
+                        {
+                          "entry": [
+                            "battle_system_core",
+                            "turn_structure.actions_per_round_pc"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "actions_per_round_pc",
+                "description": "A pc character declares 3 actions per round.",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "entry": [
+                    "battle_system_core",
+                    "turn_structure.actions_per_round_pc"
+                  ]
+                }
+              },
+              {
+                "id": "monster_actions_in_range",
+                "description": "A monster's actions per round lie within the configured 1..4 range.",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "caster.actions_per_round"
+                        },
+                        {
+                          "entry": [
+                            "battle_system_core",
+                            "turn_structure.actions_per_round_monster_range.0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "caster.actions_per_round"
+                        },
+                        {
+                          "entry": [
+                            "battle_system_core",
+                            "turn_structure.actions_per_round_monster_range.1"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "combat_damage",
+                "description": "Resolution-matrix damage of the caster's action against the defender's (Attack base 1 + one edge).",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": {
+                        "var": "caster.action"
+                      },
+                      "defender": {
+                        "var": "defender.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "edge_list",
+                "description": "The configured matrix edges (actor, defender, bonus_damage_to_actor).",
+                "target": "everyone",
+                "unit": "damage",
+                "value": {
+                  "entry": [
+                    "battle_system_core",
+                    "resolution_matrix.edges"
+                  ]
+                }
+              },
+              {
+                "id": "effect_damage",
+                "description": "Rule 21 delta damage of the cast's elements, caster vs defender.",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rule_21_delta_damage",
+                    {
+                      "caster": {
+                        "root": "caster"
+                      },
+                      "defender": {
+                        "root": "defender"
+                      },
+                      "elements": {
+                        "root": "elements"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "life_from_stats",
+                "description": "A unit's life is round_half_up(stat sum / 10).",
+                "target": "caster",
+                "unit": "life",
+                "value": {
+                  "rule": [
+                    "life_from_stats",
+                    {
+                      "stats": {
+                        "var": "caster.stats"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "rounding_half_up_check",
+                "description": "Rounding contract: 5/10 rounds to 1 and 4/10 to 0.",
+                "target": "everyone",
+                "unit": "damage",
+                "value": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "round_div10": [
+                            5
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "round_div10": [
+                            4
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "round_half_up": [
+                            0.5
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point_buy_dice",
+                "description": "Point-buy dice for the caster's stat behind the first cast element.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          {
+                            "var": "elements.0"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "move_hexes",
+                "description": "Move walks move_action_distance_tiles (1); Empty Move ceil(dist * empty_move_distance_tiles).",
+                "target": "caster",
+                "unit": "hexes",
+                "value": {
+                  "if": [
+                    {
+                      "==": [
+                        {
+                          "var": "caster.action"
+                        },
+                        "EM"
+                      ]
+                    },
+                    {
+                      "max": [
+                        1,
+                        {
+                          "ceil": [
+                            {
+                              "*": [
+                                {
+                                  "var": "dist"
+                                },
+                                {
+                                  "entry": [
+                                    "battle_system_core",
+                                    "movement_and_range.empty_move_distance_tiles"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "caster.action"
+                        },
+                        "M"
+                      ]
+                    },
+                    {
+                      "entry": [
+                        "battle_system_core",
+                        "movement_and_range.move_action_distance_tiles"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "end_of_round_draw",
+                "description": "Cards drawn at end of round to refill the hand to 5.",
+                "target": "caster",
+                "unit": "cards",
+                "value": {
+                  "rule": [
+                    "hand_refill",
+                    {
+                      "hand_size": {
+                        "var": "caster.hand_size"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "actions_per_round_pc_is_3",
+                "description": "actions_per_round_pc stays 3.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.turn_structure.actions_per_round_pc"
+                    },
+                    3
+                  ]
+                }
+              },
+              {
+                "id": "monster_range_1_to_4",
+                "description": "Monster actions per round stay in the 1..4 range.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.turn_structure.actions_per_round_monster_range.0"
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.turn_structure.actions_per_round_monster_range.1"
+                        },
+                        4
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "edges_keep_the_4_cycle",
+                "description": "The edge list contains A>P, P>M, M>B and B>A, each with bonus 1 to the actor.",
+                "assert": {
+                  "and": [
+                    {
+                      "some": [
+                        {
+                          "var": "proposal.data.resolution_matrix.edges"
+                        },
+                        {
+                          "and": [
+                            {
+                              "==": [
+                                {
+                                  "var": "actor"
+                                },
+                                "A"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "defender"
+                                },
+                                "P"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "bonus_damage_to_actor"
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "some": [
+                        {
+                          "var": "proposal.data.resolution_matrix.edges"
+                        },
+                        {
+                          "and": [
+                            {
+                              "==": [
+                                {
+                                  "var": "actor"
+                                },
+                                "P"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "defender"
+                                },
+                                "M"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "bonus_damage_to_actor"
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "some": [
+                        {
+                          "var": "proposal.data.resolution_matrix.edges"
+                        },
+                        {
+                          "and": [
+                            {
+                              "==": [
+                                {
+                                  "var": "actor"
+                                },
+                                "M"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "defender"
+                                },
+                                "B"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "bonus_damage_to_actor"
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "some": [
+                        {
+                          "var": "proposal.data.resolution_matrix.edges"
+                        },
+                        {
+                          "and": [
+                            {
+                              "==": [
+                                {
+                                  "var": "actor"
+                                },
+                                "B"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "defender"
+                                },
+                                "A"
+                              ]
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "bonus_damage_to_actor"
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "edges_use_battle_codes",
+                "description": "Every edge names battle action codes only.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.resolution_matrix.edges"
+                    },
+                    {
+                      "and": [
+                        {
+                          "in": [
+                            {
+                              "var": "actor"
+                            },
+                            {
+                              "rule": [
+                                "valid_action_codes",
+                                {}
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "in": [
+                            {
+                              "var": "defender"
+                            },
+                            {
+                              "rule": [
+                                "valid_action_codes",
+                                {}
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "movement_distances",
+                "description": "Move stays 1 tile and Empty Move half a tile.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.movement_and_range.move_action_distance_tiles"
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.movement_and_range.empty_move_distance_tiles"
+                        },
+                        0.5
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "hand_refill",
+              "life_from_stats",
+              "point_buy_dice_count",
+              "rps_edge",
+              "rule_21_delta_damage",
+              "valid_action_codes"
             ]
-          },
-          "resolution_matrix": {
-            "cycle": "attack > posture > move > block > attack",
-            "empty_resolution_rule": "Empty Posture carries no bonus and no damage of its own. For resolution, the enemy chooses which empty-type to treat it as (rule 6): an enemy with Attack treats EP as Posture (Attack beats Posture → EP takes 1); an enemy with Posture treats EP as Empty Move (Posture beats Move → EP takes 1). Enemies playing Move or Block pick the empty-type that neutralises the match, so Move-vs-EP and Block-vs-EP resolve as neutral. Empty Move resolves symmetrically: Block treats it as Move (Move loses to Block → EM takes 1).",
-            "edges": [
-              { "actor": "A", "defender": "P", "bonus_damage_to_actor": 1 },
-              { "actor": "P", "defender": "M", "bonus_damage_to_actor": 1 },
-              { "actor": "M", "defender": "B", "bonus_damage_to_actor": 1 },
-              { "actor": "B", "defender": "A", "bonus_damage_to_actor": 1, "note": "defender A also takes -1 damage dealt" },
-              { "actor": "A", "defender": "B", "bonus_damage_to_actor": -1, "note": "attacker takes 1 damage" },
-              { "actor": "M", "defender": "P", "bonus_damage_to_actor": -1, "note": "mover takes 1 damage" },
-              { "actor": "P", "defender": "A", "bonus_damage_to_actor": -1, "note": "poser takes 1 damage" },
-              { "actor": "B", "defender": "M", "bonus_damage_to_actor": -1, "note": "blocker takes 1 damage" },
-
-              { "actor": "A", "defender": "EP", "bonus_damage_to_actor": 1, "note": "enemy with Attack treats EP as Posture → attack still hits, EP takes 1" },
-              { "actor": "P", "defender": "EP", "bonus_damage_to_actor": 1, "note": "enemy with Posture treats EP as Empty Move → posture beats move, EP takes 1" },
-              { "actor": "EP", "defender": "A", "bonus_damage_to_actor": -1, "note": "mirror of A-vs-EP: EP actor takes 1 damage" },
-              { "actor": "EP", "defender": "P", "bonus_damage_to_actor": -1, "note": "mirror of P-vs-EP: EP actor takes 1 damage" },
-
-              { "actor": "B", "defender": "EM", "bonus_damage_to_actor": 1, "note": "enemy with Block treats EM as Move → block beats move, EM takes 1" },
-              { "actor": "EM", "defender": "B", "bonus_damage_to_actor": -1, "note": "mirror of B-vs-EM: EM actor takes 1 damage" }
-            ],
-            "empty_posture_vs_attack": "ep takes -1 damage; attack still hits (now encoded as edge A→EP)",
-            "empty_move_vs_block": "em takes -1 damage; block still hits (now encoded as edge B→EM)"
-          },
-          "resolution_math": {
-            "effect_damage_formula": "round_half_up( Σ max(stat_caster - stat_defender, 0) / 10 )   // 0.5→1, 0.4→0 — see rule_21",
-            "life": "round_half_up( Σstats / 10 )   // 40 → 4; 80 → 8; both exact so rounding is moot",
-            "point_buy": "roll N d6 whose sum ≤ stat; keep highest die as token value",
-            "stat_buy": "accumulate caster stat per emission across turns until target total; used by Summoning/Elementals/Golems/Resurrect"
-          },
-          "movement_and_range": {
-            "adjacency": "8-neighbor (horizontal, vertical, diagonal)",
-            "move_action_distance_tiles": 1,
-            "empty_move_distance_tiles": 0.5,
-            "attack_follow": "optional free-chase that mirrors enemy's Move toward their next tile (Rule 15)",
-            "range_extensions_from_terrain": "towers / outposts grant chess-like 2-3 tile reach per building"
-          },
-          "status_handling": {
-            "token_types": [
-              "shield_token: colorless die on tile; extra life; cumulative",
-              "stat_penalty_token: wooden die under stat number; subtracts",
-              "permanent_token: colored die over a stat; adds",
-              "tile_token: large colored die right of tile; bonuses all creatures on tile"
-            ],
-            "lock_condition": "a trap or monster can lock your character; counts as 1 re-entry attempt lost"
-          },
-          "mmorpg_realtime_overrides": {
-            "action_slots": 4,
-            "skill_slots_bound_to_actions": 4,
-            "effect_slots": 4,
-            "stack_cooldown_schedule_seconds": [360, 180, 90, 45, 23, 12],
-            "move_run_duration_seconds": 15,
-            "attack_mode_default": "charge-run"
           }
         }
-      }]
+      ]
     }
   ]
 }

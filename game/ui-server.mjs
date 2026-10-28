@@ -559,6 +559,10 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (p.startsWith('/data/')) return serve(path.join(DATA_DIR, p.slice('/data/'.length).replace(/\.\./g, '')));
+  // Resources quoted in data/*.json (sprites + sounds, mapping files, schema).
+  // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
+  // readFile follows them, and the path-traversal check happens before.
+  if (p.startsWith('/assets/')) return serve(path.join(ASSETS_DIR, p.slice('/assets/'.length).replace(/\.\./g, '')));
   const rel = p === '/' ? '/index.html' : p;
   const abs = path.join(__dirname, rel.replace(/\.\./g, ''));
   if (!abs.startsWith(__dirname)) { res.writeHead(403); return res.end('forbidden'); }

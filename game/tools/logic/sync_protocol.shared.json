@@ -1,0 +1,111 @@
+{
+  "collection": "sync_protocol",
+  "note": "Shared-rule candidates found while authoring sync_protocol.logic.json (and reused by hashgraph_events). Same shape as data/logic_rules.json entries; inlined in the mapping files until the integrator merges them.",
+  "entries": [
+    {
+      "id": "in_strong_region",
+      "name": "Sync — two units share a strong region",
+      "description": "hex_distance(a.tile, b.tile) <= sync_region_tiers.tiers[0].strong_radius_tiles. Used by sync_region_tiers (membership, promotion, strong_region_members), sync_handshake_per_action (actor_in_strong_region), evt_action_commit (action_in_strong_region). Pass tiles as {q,r}.",
+      "tags": [ "sync", "regions", "strong_region" ],
+      "params": {
+        "a_tile": { "type": "tile" },
+        "b_tile": { "type": "tile" },
+        "radius": { "type": "number", "default": { "entry": [ "sync_region_tiers", "tiers.0.strong_radius_tiles" ] } }
+      },
+      "logic": { "<=": [ { "hex_distance": [ { "param": "a_tile" }, { "param": "b_tile" } ] }, { "param": "radius" } ] },
+      "examples": [
+        { "args": { "a_tile": { "q": 0, "r": 0 }, "b_tile": { "q": 2, "r": 0 }, "radius": 2 }, "expect": true },
+        { "args": { "a_tile": { "q": 0, "r": 0 }, "b_tile": { "q": 3, "r": 0 }, "radius": 2 }, "expect": false }
+      ]
+    },
+    {
+      "id": "tier_of_distance",
+      "name": "Sync — tier name for a hex distance",
+      "description": "strong when dist <= strong radius, reachable when dist <= reach, far otherwise (peer.mjs tierOf). Used by sync_region_tiers.tier_of_peer and the UI roster.",
+      "tags": [ "sync", "regions" ],
+      "params": {
+        "dist": { "type": "number" },
+        "strong": { "type": "number" },
+        "reach": { "type": "number" }
+      },
+      "logic": { "if": [ { "<=": [ { "param": "dist" }, { "param": "strong" } ] }, "strong", { "<=": [ { "param": "dist" }, { "param": "reach" } ] }, "reachable", "far" ] },
+      "examples": [
+        { "args": { "dist": 2, "strong": 2, "reach": 18 }, "expect": "strong" },
+        { "args": { "dist": 9, "strong": 8, "reach": 18 }, "expect": "reachable" },
+        { "args": { "dist": 30, "strong": 8, "reach": 18 }, "expect": "far" }
+      ]
+    },
+    {
+      "id": "all_members_answered",
+      "name": "Handshake — every expected member sent its envelope",
+      "description": "subset_of(expected, seen). Used by sync_handshake_per_action.phase_may_advance, evt_action_commit.all_committed, evt_instant.window_closed, evt_state_hash.all_reveals_in_or_expired, evt_genesis / evt_merge finality (signers), evt_join.accepted.",
+      "tags": [ "sync", "handshake" ],
+      "params": {
+        "expected": { "type": "[peer_id]" },
+        "seen": { "type": "[peer_id]" }
+      },
+      "logic": { "subset_of": [ { "param": "expected" }, { "param": "seen" } ] },
+      "examples": [
+        { "args": { "expected": [ "a", "b" ], "seen": [ "b", "a", "c" ] }, "expect": true },
+        { "args": { "expected": [ "a", "b" ], "seen": [ "a" ] }, "expect": false }
+      ]
+    },
+    {
+      "id": "straggler_action",
+      "name": "Handshake — silent member is resolved as Empty Posture",
+      "description": "'EP' once elapsed_s >= handshake_timeout_s (sync_region_tiers.failure_mode / rule_6), null while the window is open. Used by sync_handshake_per_action and evt_action_commit.",
+      "tags": [ "sync", "handshake", "rule_6" ],
+      "params": {
+        "elapsed_s": { "type": "number" },
+        "timeout_s": { "type": "number", "default": { "entry": [ "sync_handshake_per_action", "handshake_timeout_s" ] } }
+      },
+      "logic": { "if": [ { ">=": [ { "param": "elapsed_s" }, { "param": "timeout_s" } ] }, "EP", null ] },
+      "examples": [
+        { "args": { "elapsed_s": 31, "timeout_s": 30 }, "expect": "EP" },
+        { "args": { "elapsed_s": 5, "timeout_s": 30 }, "expect": null }
+      ]
+    },
+    {
+      "id": "interval_index",
+      "name": "Radicle — push interval index",
+      "description": "floor(unix_time / radicle_push_interval_s). Used by sync_radicle_push (interval_index, next_push_at_s, fallback_deadline_s, is_elected_pusher_or_fallback) and evt_radicle_push.",
+      "tags": [ "radicle", "interval" ],
+      "params": {
+        "now_s": { "type": "number" },
+        "interval_s": { "type": "number", "default": { "entry": [ "sync_radicle_push", "radicle_push_interval_s" ] } }
+      },
+      "logic": { "floor": [ { "/": [ { "param": "now_s" }, { "param": "interval_s" } ] } ] },
+      "examples": [
+        { "args": { "now_s": 7300, "interval_s": 3600 }, "expect": 2 }
+      ]
+    },
+    {
+      "id": "active_dimension_path",
+      "name": "Radicle — artefact path under ActiveDimensions/<DimensionName>/",
+      "description": "cat('ActiveDimensions/', dimension_name, '/', rest). Used by sync_radicle_push (door_path, dimension_descriptor_path, runtime_door_path), evt_radicle_push.commit_path, session_dimension_descriptor.descriptor_path, session_door.door_path, governance_branch_layout.dimension_branch_name.",
+      "tags": [ "radicle", "paths" ],
+      "params": {
+        "dimension_name": { "type": "string" },
+        "rest": { "type": "string", "default": "" }
+      },
+      "logic": { "cat": [ "ActiveDimensions/", { "param": "dimension_name" }, "/", { "param": "rest" } ] },
+      "examples": [
+        { "args": { "dimension_name": "Ashfall", "rest": "doors/door-1.json" }, "expect": "ActiveDimensions/Ashfall/doors/door-1.json" }
+      ]
+    },
+    {
+      "id": "max_turn_rule",
+      "name": "Sync — the Dimension turn is the max seen",
+      "description": "max(mine, max_of(peers' turns)). Used by sync_turn_commit.dimension_turn, evt_turn_commit.dimension_turn, sync_divergence_merge.merged_turn, evt_merge.turn_adopted, sync_radicle_push.merged_dimension_turn, session_dimension_descriptor.merged_turn.",
+      "tags": [ "sync", "turn" ],
+      "params": {
+        "mine": { "type": "number" },
+        "others": { "type": "[number]" }
+      },
+      "logic": { "max": [ { "param": "mine" }, { "max_of": [ { "param": "others" } ] } ] },
+      "examples": [
+        { "args": { "mine": 3, "others": [ 4, 2 ] }, "expect": 4 }
+      ]
+    }
+  ]
+}

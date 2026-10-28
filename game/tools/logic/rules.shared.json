@@ -1,0 +1,110 @@
+{
+  "collection": "rules",
+  "description": "Shared-rule candidates found while authoring rules.logic.json. Each entry has the shape of a data/logic_rules.json entry; the integrator merges them. Where a candidate is referenced below the mapping file currently inlines the logic.",
+  "entries": [
+    {
+      "id": "rule_keeps_identity",
+      "name": "Rule — proposal keeps number and scope",
+      "description": "Every new version of a paper rule keeps the rule number and the scope of the canonical version. Inlined as validation items keeps-number / keeps-scope in all 26 rule entries. Context {entry, proposal}.",
+      "tags": ["validation", "rules"],
+      "params": {},
+      "logic": {
+        "and": [
+          { "==": [{ "var": "proposal.data.number" }, { "var": "entry.data.number" }] },
+          { "==": [{ "var": "proposal.data.scope" }, { "var": "entry.data.scope" }] }
+        ]
+      },
+      "examples": [
+        { "data": { "entry": { "data": { "number": "1", "scope": "turn-economy" } }, "proposal": { "data": { "number": "1", "scope": "turn-economy" } } }, "expect": true },
+        { "data": { "entry": { "data": { "number": "1", "scope": "turn-economy" } }, "proposal": { "data": { "number": "2", "scope": "turn-economy" } } }, "expect": false }
+      ]
+    },
+    {
+      "id": "rule_text_min_length",
+      "name": "Rule — text longer than a minimum",
+      "description": "The rule text of a proposal is longer than `min` characters (default 40; the collection rule rule_has_text only asks for 20). Inlined as text-long-enough in all 26 rule entries.",
+      "tags": ["validation", "rules"],
+      "params": { "min": { "type": "number", "default": 40 } },
+      "logic": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, { "param": "min" }] },
+      "examples": [
+        { "args": {}, "data": { "proposal": { "data": { "text": "A rule text that is comfortably longer than forty characters." } } }, "expect": true },
+        { "args": { "min": 100 }, "data": { "proposal": { "data": { "text": "short" } } }, "expect": false }
+      ]
+    },
+    {
+      "id": "cross_refs_resolve",
+      "name": "Rule — cross_refs name existing entries",
+      "description": "proposal.data.cross_refs holds at most `max` ids and every id resolves to a catalog entry (rules, actions, effects ...). json-logic's `all` is false on an empty list, hence the explicit empty guard. Inlined as cross-refs-resolve in all 26 rule entries; the same shape serves contradictions' source_entries (see contradictions.shared.json entries_exist).",
+      "tags": ["validation", "rules", "catalog"],
+      "params": { "max": { "type": "number", "default": 8 } },
+      "logic": {
+        "and": [
+          { "<=": [{ "count": [{ "var": "proposal.data.cross_refs" }] }, { "param": "max" }] },
+          { "or": [
+            { "==": [{ "count": [{ "var": "proposal.data.cross_refs" }] }, 0] },
+            { "all": [{ "var": "proposal.data.cross_refs" }, { "!=": [{ "entry": [{ "var": "" }] }, null] }] }
+          ] }
+        ]
+      },
+      "examples": [
+        { "args": {}, "data": { "proposal": { "data": { "cross_refs": ["rule_14", "action_attack"] } } }, "expect": true },
+        { "args": {}, "data": { "proposal": { "data": { "cross_refs": [] } } }, "expect": true },
+        { "args": {}, "data": { "proposal": { "data": { "cross_refs": ["rule_14", "no_such_entry"] } } }, "expect": false }
+      ]
+    },
+    {
+      "id": "forced_empty_postures",
+      "name": "Rule 1 / 7 — forced Empty Postures",
+      "description": "Actions a unit must fill with Empty Posture because its opponent has more actions per round: max(opponent − own, 0). A forced EP cannot be converted to Empty Move. Inlined in rule_1_actions_per_round and rule_7_turn_round_sequence.",
+      "tags": ["rule_1", "rule_7", "actions"],
+      "params": { "own": { "type": "number" }, "opponent": { "type": "number" } },
+      "logic": { "max0": [{ "-": [{ "param": "opponent" }, { "param": "own" }]}] },
+      "examples": [
+        { "args": { "own": 3, "opponent": 4 }, "expect": 1 },
+        { "args": { "own": 3, "opponent": 2 }, "expect": 0 }
+      ]
+    },
+    {
+      "id": "tileset_tiles_for_players",
+      "name": "Rule 0 — tileset size by player count",
+      "description": "Tiles in the Dimension tileset: 12 (3x4) for up to 2 players, 16 (4x4) for 3, 25 (5x5) for 4 or more. Inlined in rule_0_setup and its superseded mirror rule_25_tileset_initial_deploy.",
+      "tags": ["rule_0", "setup", "tileset"],
+      "params": { "player_count": { "type": "number" } },
+      "logic": { "if": [{ "<=": [{ "param": "player_count" }, 2] }, 12, { "==": [{ "param": "player_count" }, 3] }, 16, 25] },
+      "examples": [
+        { "args": { "player_count": 2 }, "expect": 12 },
+        { "args": { "player_count": 3 }, "expect": 16 },
+        { "args": { "player_count": 5 }, "expect": 25 }
+      ]
+    },
+    {
+      "id": "element_at_step",
+      "name": "Cast — the element being emitted now",
+      "description": "elements[cast.step] read from the root context: the element the current Posture emits. json-logic evaluates the `var` path argument, so a dynamic path is built with `cat`. Inlined four times in rule_18_element_emit and rule_20_effect_types.",
+      "tags": ["cast", "rule_18", "rule_19"],
+      "params": { "step": { "type": "number" } },
+      "logic": { "var": { "cat": ["elements.", { "param": "step" }] } },
+      "examples": [
+        { "args": { "step": 1 }, "data": { "elements": ["elem_fire", "elem_air"] }, "expect": "elem_air" }
+      ]
+    },
+    {
+      "id": "rps_edge_with_empty",
+      "name": "Resolution matrix edge incl. Block vs Empty Move",
+      "description": "AMENDMENT CANDIDATE for rps_edge: battle_system_core.resolution_matrix lists the edge B → EM (Block treats Empty Move as Move, EM takes 1) which rps_edge does not return (it yields 0). This wrapper adds that edge; rule_6_empty_posture_move inlines the same +1 today. Preferably fold the edge into rps_edge itself.",
+      "tags": ["resolution", "rule_6", "battle_system"],
+      "params": { "actor": { "type": "string" }, "defender": { "type": "string" } },
+      "logic": {
+        "+": [
+          { "rule": ["rps_edge", { "actor": { "param": "actor" }, "defender": { "param": "defender" } }] },
+          { "if": [{ "and": [{ "==": [{ "param": "actor" }, "B"] }, { "==": [{ "param": "defender" }, "EM"] }] }, 1, 0] }
+        ]
+      },
+      "examples": [
+        { "args": { "actor": "B", "defender": "EM" }, "expect": 1 },
+        { "args": { "actor": "A", "defender": "EP" }, "expect": 2 },
+        { "args": { "actor": "M", "defender": "EP" }, "expect": 0 }
+      ]
+    }
+  ]
+}

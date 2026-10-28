@@ -1,0 +1,261 @@
+{
+  "collection": "characters",
+  "description": "Shared-rule candidates repeated across the 12 character blocks.",
+  "entries": [
+    {
+      "id": "species_sum_40",
+      "name": "species_sum_rule — playable race Σstats = 40",
+      "description": "concept.json species_sum_rule: playable races have Σ(stats) = 40.",
+      "tags": [
+        "validation",
+        "characters",
+        "concept"
+      ],
+      "params": {
+        "stats": {
+          "type": "stats"
+        }
+      },
+      "logic": {
+        "==": [
+          {
+            "stat_sum": [
+              {
+                "param": "stats"
+              }
+            ]
+          },
+          40
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "stats": {
+              "vitality": 10,
+              "world": 10,
+              "matter": 10,
+              "will": 10
+            }
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "stats": {
+              "vitality": 5,
+              "world": 5,
+              "matter": 20,
+              "will": 0
+            }
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "adept_emit_power",
+      "name": "Rule 16 — adept emits with power 20",
+      "description": "20 when an adept element is set, else 0 (the plain stat applies).",
+      "tags": [
+        "rule_16",
+        "characters"
+      ],
+      "params": {
+        "adept_element": {
+          "type": "element_id|null"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "==": [
+              {
+                "param": "adept_element"
+              },
+              null
+            ]
+          },
+          0,
+          20
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "adept_element": "elem_fire"
+          },
+          "expect": 20
+        },
+        {
+          "args": {
+            "adept_element": null
+          },
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "combo_bonus_damage",
+      "name": "Rule 16 — combo bonus",
+      "description": "+1 damage when the combo was just completed and an enemy is in contact.",
+      "tags": [
+        "rule_16",
+        "damage",
+        "characters"
+      ],
+      "params": {
+        "combo_complete": {
+          "type": "boolean"
+        },
+        "dist": {
+          "type": "number"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "and": [
+              {
+                "param": "combo_complete"
+              },
+              {
+                "<=": [
+                  {
+                    "param": "dist"
+                  },
+                  1
+                ]
+              }
+            ]
+          },
+          1,
+          0
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "combo_complete": true,
+            "dist": 1
+          },
+          "expect": 1
+        },
+        {
+          "args": {
+            "combo_complete": true,
+            "dist": 2
+          },
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "list_same_length",
+      "name": "Two lists have the same length",
+      "description": "count(a) == count(b) — combo length unchanged, schedule length unchanged, …",
+      "tags": [
+        "validation"
+      ],
+      "params": {
+        "a": {
+          "type": "array"
+        },
+        "b": {
+          "type": "array"
+        }
+      },
+      "logic": {
+        "==": [
+          {
+            "count": [
+              {
+                "param": "a"
+              }
+            ]
+          },
+          {
+            "count": [
+              {
+                "param": "b"
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "a": [
+              "A",
+              "B"
+            ],
+            "b": [
+              "M",
+              "P"
+            ]
+          },
+          "expect": true
+        }
+      ]
+    },
+    {
+      "id": "optional_in",
+      "name": "Value is null or in the allowed list",
+      "description": "Used for adept_element / terrain element / innate ids.",
+      "tags": [
+        "validation"
+      ],
+      "params": {
+        "value": {
+          "type": "any"
+        },
+        "allowed": {
+          "type": "array"
+        }
+      },
+      "logic": {
+        "or": [
+          {
+            "==": [
+              {
+                "param": "value"
+              },
+              null
+            ]
+          },
+          {
+            "in": [
+              {
+                "param": "value"
+              },
+              {
+                "param": "allowed"
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "value": null,
+            "allowed": [
+              "a"
+            ]
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "value": "b",
+            "allowed": [
+              "a"
+            ]
+          },
+          "expect": false
+        }
+      ]
+    }
+  ]
+}

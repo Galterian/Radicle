@@ -1,0 +1,19 @@
+{
+  "collection": "effects",
+  "entry_id": "effect_fireball",
+  "version": {
+    "version": "1.1.0",
+    "origin": "player_vote",
+    "parent_version": "1.0.0",
+    "notes": "EXAMPLE invalid proposal: unknown element and bad type",
+    "data": {
+      "effect_types": [
+        "boom"
+      ],
+      "element_cost": [
+        "elem_plasma"
+      ],
+      "text": "Put a permanent fire token for each cast Fireball over a tile. The token vanishes when a character passes over it, dealing the point-buy damage."
+    }
+  }
+}

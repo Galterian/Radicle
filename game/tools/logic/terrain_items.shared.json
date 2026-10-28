@@ -1,0 +1,477 @@
+{
+  "collection": "terrain_items",
+  "description": "Shared-rule candidates repeated across the 41 terrain item blocks (towers ×10, crystals ×4, mines ×15, …).",
+  "entries": [
+    {
+      "id": "keys_unchanged",
+      "name": "Two objects have the same key set",
+      "description": "subset_of(keys(a), keys(b)) and subset_of(keys(b), keys(a)) — payload / requirement / yields key sets unchanged.",
+      "tags": [
+        "validation"
+      ],
+      "params": {
+        "a": {
+          "type": "object"
+        },
+        "b": {
+          "type": "object"
+        }
+      },
+      "logic": {
+        "and": [
+          {
+            "subset_of": [
+              {
+                "keys": [
+                  {
+                    "param": "a"
+                  }
+                ]
+              },
+              {
+                "keys": [
+                  {
+                    "param": "b"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "subset_of": [
+              {
+                "keys": [
+                  {
+                    "param": "b"
+                  }
+                ]
+              },
+              {
+                "keys": [
+                  {
+                    "param": "a"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "a": {
+              "x": 1,
+              "y": 2
+            },
+            "b": {
+              "y": 3,
+              "x": 4
+            }
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "a": {
+              "x": 1
+            },
+            "b": {
+              "x": 1,
+              "y": 2
+            }
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "positive_half_tolerance",
+      "name": "Number > 0 within ±50 % of canonical (null-tolerant)",
+      "description": "If the canonical is null the proposal may be null or any positive number; otherwise it must be > 0 and within ±50 % (within_tolerance relative 0.5). Used for every numeric tunable (requirement.min, stat_bonus, gold_per_turn, per_action_s, deck_size …).",
+      "tags": [
+        "validation",
+        "rebalance"
+      ],
+      "params": {
+        "current": {
+          "type": "number|null"
+        },
+        "proposal": {
+          "type": "number|null"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "==": [
+              {
+                "param": "current"
+              },
+              null
+            ]
+          },
+          {
+            "or": [
+              {
+                "==": [
+                  {
+                    "param": "proposal"
+                  },
+                  null
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "param": "proposal"
+                  },
+                  0
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                ">": [
+                  {
+                    "param": "proposal"
+                  },
+                  0
+                ]
+              },
+              {
+                "rule": [
+                  "within_tolerance",
+                  {
+                    "current": {
+                      "param": "current"
+                    },
+                    "proposal": {
+                      "param": "proposal"
+                    },
+                    "relative": 0.5
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "current": 20,
+            "proposal": 25
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "current": 20,
+            "proposal": 31
+          },
+          "expect": false
+        },
+        {
+          "args": {
+            "current": null,
+            "proposal": null
+          },
+          "expect": true
+        }
+      ]
+    },
+    {
+      "id": "on_tile",
+      "name": "Unit stands on the tile",
+      "description": "dist ≤ 0 — using a tower / crystal / mine / library / stash requires standing on it.",
+      "tags": [
+        "range",
+        "terrain"
+      ],
+      "params": {
+        "dist": {
+          "type": "number"
+        }
+      },
+      "logic": {
+        "<=": [
+          {
+            "param": "dist"
+          },
+          0
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "dist": 0
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "dist": 1
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "tower_requirement_met",
+      "name": "Tower — stat behind the element ≥ min, or adept",
+      "description": "stat_of(caster, element) ≥ min, or or_adept and the caster's adept element is the tower element.",
+      "tags": [
+        "terrain",
+        "tower"
+      ],
+      "params": {
+        "caster": {
+          "type": "unit"
+        },
+        "element": {
+          "type": "element_id"
+        },
+        "min": {
+          "type": "number"
+        },
+        "or_adept": {
+          "type": "boolean",
+          "default": true
+        },
+        "adept_element": {
+          "type": "element_id|null",
+          "default": null
+        }
+      },
+      "logic": {
+        "or": [
+          {
+            ">=": [
+              {
+                "stat_of": [
+                  {
+                    "param": "caster"
+                  },
+                  {
+                    "param": "element"
+                  }
+                ]
+              },
+              {
+                "param": "min"
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "param": "or_adept"
+              },
+              {
+                "==": [
+                  {
+                    "param": "adept_element"
+                  },
+                  {
+                    "param": "element"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "caster": {
+              "stats": {
+                "vitality": 20,
+                "world": 5,
+                "matter": 5,
+                "will": 10
+              }
+            },
+            "element": "elem_vitality",
+            "min": 20
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "caster": {
+              "stats": {
+                "vitality": 10,
+                "world": 5,
+                "matter": 5,
+                "will": 10
+              }
+            },
+            "element": "elem_vitality",
+            "min": 20,
+            "adept_element": "elem_vitality"
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "caster": {
+              "stats": {
+                "vitality": 10,
+                "world": 5,
+                "matter": 5,
+                "will": 10
+              }
+            },
+            "element": "elem_vitality",
+            "min": 20
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "daily_use_available",
+      "name": "Per-day use left",
+      "description": "uses_today < per_day (nexus hire/raid, trade center barter, stash redeploy).",
+      "tags": [
+        "terrain",
+        "pacing"
+      ],
+      "params": {
+        "uses_today": {
+          "type": "number"
+        },
+        "per_day": {
+          "type": "number"
+        }
+      },
+      "logic": {
+        "<": [
+          {
+            "param": "uses_today"
+          },
+          {
+            "param": "per_day"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "uses_today": 0,
+            "per_day": 1
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "uses_today": 1,
+            "per_day": 1
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "token_elems_cover",
+      "name": "Caster tokens cover the required elements",
+      "description": "subset_of(required, map(tokens, elem)) — a mine's requires_permanents are all present among the caster's tokens (presence, not multiplicity).",
+      "tags": [
+        "terrain",
+        "mine"
+      ],
+      "params": {
+        "required": {
+          "type": "[element_id]"
+        },
+        "tokens": {
+          "type": "[token]"
+        }
+      },
+      "logic": {
+        "subset_of": [
+          {
+            "param": "required"
+          },
+          {
+            "map": [
+              {
+                "param": "tokens"
+              },
+              {
+                "var": "elem"
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "required": [
+              "elem_fire"
+            ],
+            "tokens": [
+              {
+                "kind": "perm",
+                "elem": "elem_fire",
+                "value": 6
+              }
+            ]
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "required": [
+              "elem_fire"
+            ],
+            "tokens": []
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "rule_2_trap_power",
+      "name": "Rule 2 — trap power of an effect-only tile",
+      "description": "20 per element used in the effects lying on the tile.",
+      "tags": [
+        "rule_2",
+        "trap"
+      ],
+      "params": {
+        "elements": {
+          "type": "[element_id]"
+        }
+      },
+      "logic": {
+        "*": [
+          20,
+          {
+            "count": [
+              {
+                "param": "elements"
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "elements": [
+              "elem_fire",
+              "elem_fire"
+            ]
+          },
+          "expect": 40
+        }
+      ]
+    }
+  ]
+}

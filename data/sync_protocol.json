@@ -5,11 +5,25 @@
     {
       "id": "sync_region_tiers",
       "name": "Region reference tiers (strong / reachable / far)",
-      "tags": ["p2p", "regions", "hashgraph"],
+      "tags": [
+        "p2p",
+        "regions",
+        "hashgraph"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["sync_handshake_per_action", "sync_turn_commit", "rule_14"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_handshake_per_action",
+            "sync_turn_commit",
+            "rule_14"
+          ],
           "vote_log": [],
           "notes": "Derived from Rule 14 Part C (8-neighbour adjacency) and the author's region concept: players in strongly referenced regions share the same turn state and handshake every action; players that can reach each other within one real-time sync interval share the same map hashgraph to avoid collisions on first contact; far players sync once per turn or only at the Radicle push.",
           "data": {
@@ -20,7 +34,13 @@
                 "label": "Contact region",
                 "membership": "players/creatures whose tiles are adjacent or within strong_radius_tiles of each other, or that currently target each other (attack/move/follow)",
                 "strong_radius_tiles": 2,
-                "shared_state": ["turn_state", "face_down_declarations", "effect_tokens_on_tiles", "life_tokens", "traps_on_tiles"],
+                "shared_state": [
+                  "turn_state",
+                  "face_down_declarations",
+                  "effect_tokens_on_tiles",
+                  "life_tokens",
+                  "traps_on_tiles"
+                ],
                 "sync_mode": "handshake_per_action",
                 "consensus": "every action is a signed hashgraph event; the action resolves only when all strong-region members have gossiped it (virtual voting, no leader)",
                 "failure_mode": "a member that does not answer the handshake within handshake_timeout_s is treated as playing Empty Posture for that action (rule_6) and marked lagging"
@@ -30,7 +50,12 @@
                 "label": "One-interval reach region",
                 "membership": "players that could enter each other's strong region before the next Radicle push (max move distance x actions x rounds per radicle_push_interval_s)",
                 "reach_formula": "reach_tiles = move_tiles_per_action(1) * actions_per_round(3) * rounds_per_interval",
-                "shared_state": ["map_tiles_revealed", "tile_owners", "permanents_on_tiles", "player_positions"],
+                "shared_state": [
+                  "map_tiles_revealed",
+                  "tile_owners",
+                  "permanents_on_tiles",
+                  "player_positions"
+                ],
                 "sync_mode": "turn_commit",
                 "consensus": "members exchange a signed TurnCommit at the end of each turn so that the shared map hashgraph is identical before any first contact",
                 "failure_mode": "missing commits are filled on first contact via hashgraph merge (see sync_divergence_merge)"
@@ -39,13 +64,544 @@
                 "tier": "far",
                 "label": "Unmet / distant region",
                 "membership": "everyone else inside the Dimension, including clans and new players that have never met",
-                "shared_state": ["dimension_descriptor", "turn_counter", "door_ids"],
+                "shared_state": [
+                  "dimension_descriptor",
+                  "turn_counter",
+                  "door_ids"
+                ],
                 "sync_mode": "radicle_push",
                 "consensus": "none in real time; the Radicle branch ActiveDimensions/<DimensionName>/ is the eventual rendezvous point",
                 "failure_mode": "state is allowed to diverge; divergence is reconciled on first contact or at the next push"
               }
             ],
             "tier_promotion": "a far/reachable peer is promoted to strong as soon as a position event places it inside strong_radius_tiles; promotion triggers a full state handshake (sync_join_flow step adopt_hashgraph_part)"
+          },
+          "logic": {
+            "description": "Governs which peers of a Dimension share live turn state (strong), which only share the map hashgraph (reachable) and which merely share the descriptor (far). Tunables: tiers[0].strong_radius_tiles (2) is the hex distance at or under which two live units are strong-region members; the reachable tier has no number of its own, its reach_tiles is derived as move_tiles_per_action(1) x actions_per_round(3) x turns per radicle_push_interval_s. The runtime (peer.mjs) deviates: STRONG_RADIUS defaults to 2*EM_MAX_STEPS+2 = 8 axial hexes (not 2 tiles on an 8-neighbour grid), REACH_RADIUS is STRONG_RADIUS + reveal radius (10) = 18, a member must also be alive and heard from within the last 20 s, the strong set is recomputed every action and frozen at commit (no full-state handshake on promotion), and every reveal the peer holds is resolved whatever tier its actor is in; members that did not reveal are resolved from their last published snapshot. Battle context assumed: a / b = units with tile {q,r}, life, target, tier, last_seen_age_s; me, peers = my unit and the live roster; region.reach_tiles = the derived reach; runtime.em_max_steps.",
+            "prerequisites": [
+              {
+                "id": "strong_tier_membership",
+                "description": "Two units are strong-region members when their hex distance is at or under tiers[0].strong_radius_tiles, or when either currently targets the other.",
+                "when": {
+                  "or": [
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "entry.data.tiers.0.strong_radius_tiles"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "a.target"
+                        },
+                        {
+                          "var": "b.id"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "b.target"
+                        },
+                        {
+                          "var": "a.id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "member_is_live",
+                "description": "Only living units count as region members; the runtime additionally drops a peer whose last snapshot is older than 20 s (contract is silent on liveness).",
+                "when": {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "var": "b.life"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "b.last_seen_age_s"
+                        },
+                        20
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "reach_tiles",
+                "description": "reach_formula: 1 tile per action x 3 actions per turn x turns per Radicle push interval (radicle_push_interval_s / clock.turn_seconds, floored).",
+                "target": "everyone",
+                "unit": "hexes",
+                "value": {
+                  "*": [
+                    1,
+                    3,
+                    {
+                      "floor": [
+                        {
+                          "/": [
+                            {
+                              "entry": [
+                                "sync_radicle_push",
+                                "radicle_push_interval_s"
+                              ]
+                            },
+                            {
+                              "var": "clock.turn_seconds"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "tier_of_peer",
+                "description": "The tier name of unit b relative to unit a: strong when within the strong radius, reachable when within region.reach_tiles, far otherwise (peer.mjs tierOf).",
+                "target": "target",
+                "value": {
+                  "if": [
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "entry.data.tiers.0.strong_radius_tiles"
+                        }
+                      ]
+                    },
+                    "strong",
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "region.reach_tiles"
+                        }
+                      ]
+                    },
+                    "reachable",
+                    "far"
+                  ]
+                }
+              },
+              {
+                "id": "is_reachable",
+                "description": "Unit b is in a's reachable tier: outside the strong radius but within region.reach_tiles.",
+                "target": "target",
+                "value": {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "entry.data.tiers.0.strong_radius_tiles"
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "region.reach_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "strong_region_members",
+                "description": "Ids of the live peers within the strong radius of me — the set the handshake waits for and the state hash covers (peer.mjs computeStrongMembers).",
+                "target": "everyone",
+                "value": {
+                  "map": [
+                    {
+                      "filter": [
+                        {
+                          "var": "peers"
+                        },
+                        {
+                          "and": [
+                            {
+                              "!=": [
+                                {
+                                  "var": "id"
+                                },
+                                {
+                                  "root": "me.id"
+                                }
+                              ]
+                            },
+                            {
+                              ">": [
+                                {
+                                  "var": "life"
+                                },
+                                0
+                              ]
+                            },
+                            {
+                              "<=": [
+                                {
+                                  "hex_distance": [
+                                    {
+                                      "root": "me.tile"
+                                    },
+                                    {
+                                      "var": "tile"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "root": "entry.data.tiers.0.strong_radius_tiles"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "var": "id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "promotion_to_strong",
+                "description": "tier_promotion: a peer not yet strong is promoted the moment a position event places it inside the strong radius.",
+                "target": "target",
+                "value": {
+                  "and": [
+                    {
+                      "!=": [
+                        {
+                          "var": "b.tier"
+                        },
+                        "strong"
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "entry.data.tiers.0.strong_radius_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "runtime_strong_radius",
+                "description": "Deviation: peer.mjs derives its strong radius from movement, 2*EM_MAX_STEPS+2 (8 with the default 3 Empty-Move steps), instead of the contract's 2 tiles.",
+                "target": "everyone",
+                "unit": "hexes",
+                "value": {
+                  "+": [
+                    {
+                      "*": [
+                        2,
+                        {
+                          "var": "runtime.em_max_steps"
+                        }
+                      ]
+                    },
+                    2
+                  ]
+                }
+              },
+              {
+                "id": "runtime_reach_radius",
+                "description": "Deviation: peer.mjs reach radius = strong radius + reveal radius (default 10), not the move x actions x turns formula.",
+                "target": "everyone",
+                "unit": "hexes",
+                "value": {
+                  "+": [
+                    {
+                      "*": [
+                        2,
+                        {
+                          "var": "runtime.em_max_steps"
+                        }
+                      ]
+                    },
+                    2,
+                    {
+                      "var": "runtime.reveal_radius"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "tier_names_unchanged",
+                "description": "Exactly the three tiers strong / reachable / far, each once.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.tiers"
+                            }
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.tiers"
+                            },
+                            {
+                              "var": "tier"
+                            }
+                          ]
+                        },
+                        [
+                          "strong",
+                          "reachable",
+                          "far"
+                        ]
+                      ]
+                    },
+                    {
+                      "distinct": [
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.tiers"
+                            },
+                            {
+                              "var": "tier"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "strong_tier_first_with_radius",
+                "description": "tiers[0] is the strong tier, synced per action, with an integer strong_radius_tiles between 1 and 9 (it must stay under the 10-hex view radius so the reachable ring is wider than the strong disc).",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.tiers.0.tier"
+                        },
+                        "strong"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.tiers.0.sync_mode"
+                        },
+                        "handshake_per_action"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.tiers.0.strong_radius_tiles"
+                            }
+                          ]
+                        },
+                        "number"
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "proposal.data.tiers.0.strong_radius_tiles"
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "<": [
+                        {
+                          "var": "proposal.data.tiers.0.strong_radius_tiles"
+                        },
+                        10
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "floor": [
+                            {
+                              "var": "proposal.data.tiers.0.strong_radius_tiles"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "proposal.data.tiers.0.strong_radius_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "sync_modes_in_vocabulary",
+                "description": "Every tier syncs by handshake_per_action, turn_commit or radicle_push and names at least one shared_state item.",
+                "assert": {
+                  "and": [
+                    {
+                      "subset_of": [
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.tiers"
+                            },
+                            {
+                              "var": "sync_mode"
+                            }
+                          ]
+                        },
+                        [
+                          "handshake_per_action",
+                          "turn_commit",
+                          "radicle_push"
+                        ]
+                      ]
+                    },
+                    {
+                      "none": [
+                        {
+                          "var": "proposal.data.tiers"
+                        },
+                        {
+                          "<": [
+                            {
+                              "count": [
+                                {
+                                  "var": "shared_state"
+                                }
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "tier_promotion_text_kept",
+                "description": "tier_adjacency and tier_promotion stay documented strings.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.tile_adjacency"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.tier_promotion"
+                            }
+                          ]
+                        },
+                        20
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -53,20 +609,65 @@
     {
       "id": "sync_handshake_per_action",
       "name": "Per-action handshake (strong regions)",
-      "tags": ["p2p", "handshake", "turn-state"],
+      "tags": [
+        "p2p",
+        "handshake",
+        "turn-state"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_7_turn_round_sequence", "rule_8_card_declare_sequence", "rule_13_evaluation", "battle_system_core"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_7_turn_round_sequence",
+            "rule_8_card_declare_sequence",
+            "rule_13_evaluation",
+            "battle_system_core"
+          ],
           "vote_log": [],
           "notes": "Mirrors the paper's simultaneous action rule (Rule 7) and the declaration sequence (Rule 8). Commit/reveal keeps face-down cards secret until everyone in the strong region has committed.",
           "data": {
             "phases": [
-              { "phase": 1, "name": "commit",   "payload": "hash(action_card + effects + skills + salt) per actor", "rule_ref": "rule_8_card_declare_sequence", "all_members_required": true },
-              { "phase": 2, "name": "reveal",   "payload": "the plaintext declaration + salt; peers verify the hash", "rule_ref": "rule_8_card_declare_sequence", "all_members_required": true },
-              { "phase": 3, "name": "instants", "payload": "optional Skills/instants/class abilities/point-buy responses, same commit-reveal in a mini-round", "rule_ref": "rule_17_skills", "all_members_required": false },
-              { "phase": 4, "name": "evaluate", "payload": "each peer runs the deterministic resolver (battle_system_core) locally and signs the resulting state hash", "rule_ref": "rule_13_evaluation", "all_members_required": true },
-              { "phase": 5, "name": "finalize", "payload": "action event is final when the state hashes of all members match; mismatch -> dispute (see sync_divergence_merge)", "rule_ref": null, "all_members_required": true }
+              {
+                "phase": 1,
+                "name": "commit",
+                "payload": "hash(action_card + effects + skills + salt) per actor",
+                "rule_ref": "rule_8_card_declare_sequence",
+                "all_members_required": true
+              },
+              {
+                "phase": 2,
+                "name": "reveal",
+                "payload": "the plaintext declaration + salt; peers verify the hash",
+                "rule_ref": "rule_8_card_declare_sequence",
+                "all_members_required": true
+              },
+              {
+                "phase": 3,
+                "name": "instants",
+                "payload": "optional Skills/instants/class abilities/point-buy responses, same commit-reveal in a mini-round",
+                "rule_ref": "rule_17_skills",
+                "all_members_required": false
+              },
+              {
+                "phase": 4,
+                "name": "evaluate",
+                "payload": "each peer runs the deterministic resolver (battle_system_core) locally and signs the resulting state hash",
+                "rule_ref": "rule_13_evaluation",
+                "all_members_required": true
+              },
+              {
+                "phase": 5,
+                "name": "finalize",
+                "payload": "action event is final when the state hashes of all members match; mismatch -> dispute (see sync_divergence_merge)",
+                "rule_ref": null,
+                "all_members_required": true
+              }
             ],
             "handshake_timeout_s": 30,
             "max_retries": 2,
@@ -77,7 +678,9 @@
               "type": "string (one of the ids in hashgraph_events.json)",
               "dimension_id": "string",
               "door_id": "string",
-              "turn": "int", "round": "int", "action_index": "int (0..actions_per_round-1)",
+              "turn": "int",
+              "round": "int",
+              "action_index": "int (0..actions_per_round-1)",
               "actor_peer_id": "string",
               "self_parent": "hash of the actor's previous event",
               "other_parent": "hash of the most recent event received from another peer",
@@ -85,6 +688,431 @@
               "timestamp": "ISO-8601",
               "signature": "detached signature over the whole envelope minus signature"
             }
+          },
+          "logic": {
+            "description": "Governs the five-phase commit / reveal / instants / evaluate / finalize handshake every strong-region action goes through. Tunables: handshake_timeout_s (30) is how long a member may stay silent before it is deemed to play Empty Posture and marked lagging; max_retries (2) bounds dispute replays; phases[].all_members_required says which phases block on the whole strong set. Dice are specified as 1 + (sha256(concat(all members' salts) + roll_index) mod 6). The runtime deviates: peer.mjs runs three phases (planning -> reveal -> resolution); instants, point-buy destroys and class abilities ride inside evt_action_reveal, and finalize is just an evt_state_hash whose mismatch is logged, never disputed. The caps are COMMIT_WAIT_MS 800 / REVEAL_WAIT_MS 1500 with a hard cap of 2 x ROUND_SEC (12 s), not 30 s; a member still inside its own planning window is never timed out. Dice are derived from the ACTING peer's own salt only (effects.mjs rollDice over sha256(salt:purpose:action)), the signature is a stub string, the envelope carries extra state and _hash fields, and a reveal is never checked against its commitment. Context assumed: phase, elapsed_s, attempt, region.strong (ids), seen (ids), commits_seen, reveal.recomputed_commitment, commit.commitment, salt_digest_int, clock.round_seconds.",
+            "prerequisites": [
+              {
+                "id": "phase_may_advance",
+                "description": "A blocking phase advances when every strong-region member has sent its envelope, or the handshake timeout has elapsed (stragglers become Empty Posture).",
+                "when": {
+                  "or": [
+                    {
+                      "subset_of": [
+                        {
+                          "var": "region.strong"
+                        },
+                        {
+                          "var": "seen"
+                        }
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "elapsed_s"
+                        },
+                        {
+                          "var": "entry.data.handshake_timeout_s"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "actor_in_strong_region",
+                "description": "Only envelopes from members within the strong radius of sync_region_tiers are waited for.",
+                "when": {
+                  "<=": [
+                    {
+                      "hex_distance": [
+                        {
+                          "var": "me.tile"
+                        },
+                        {
+                          "var": "actor.tile"
+                        }
+                      ]
+                    },
+                    {
+                      "entry": [
+                        "sync_region_tiers",
+                        "tiers.0.strong_radius_tiles"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "commit_precedes_reveal",
+                "description": "A reveal is only accepted from an actor whose commit for the same action was seen (phase 1 before phase 2).",
+                "when": {
+                  "includes": [
+                    {
+                      "var": "commits_seen"
+                    },
+                    {
+                      "var": "actor.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "reveal_matches_commitment",
+                "description": "The sha256 recomputed over the revealed plaintext + salt must equal the committed hash (json-logic cannot hash; the runtime supplies reveal.recomputed_commitment). peer.mjs does not perform this check.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "reveal.recomputed_commitment"
+                    },
+                    {
+                      "var": "commit.commitment"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "retries_left",
+                "description": "A dispute replay may run while the attempt counter is at or under max_retries.",
+                "when": {
+                  "<=": [
+                    {
+                      "var": "attempt"
+                    },
+                    {
+                      "var": "entry.data.max_retries"
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "phase_count",
+                "description": "Number of handshake phases per action (5 in the contract, 3 in peer.mjs).",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "var": "entry.data.phases"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "blocking_phase_names",
+                "description": "Names of the phases that require every strong-region member.",
+                "target": "everyone",
+                "value": {
+                  "map": [
+                    {
+                      "filter": [
+                        {
+                          "var": "entry.data.phases"
+                        },
+                        {
+                          "var": "all_members_required"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "name"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "straggler_action",
+                "description": "failure_mode: a member silent past handshake_timeout_s is resolved as Empty Posture (EP); null while the window is still open.",
+                "target": "target",
+                "value": {
+                  "if": [
+                    {
+                      ">=": [
+                        {
+                          "var": "elapsed_s"
+                        },
+                        {
+                          "var": "entry.data.handshake_timeout_s"
+                        }
+                      ]
+                    },
+                    "EP",
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "retries_remaining",
+                "description": "max_retries minus the attempts already made, floored at 0.",
+                "target": "everyone",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "var": "entry.data.max_retries"
+                        },
+                        {
+                          "var": "attempt"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "die_from_salts",
+                "description": "Shared-salt D6: 1 + (digest mod 6), where salt_digest_int is sha256(concat(salts) + roll_index) read as an integer (supplied by the runtime). peer.mjs seeds from the actor's salt alone.",
+                "target": "everyone",
+                "unit": "die",
+                "value": {
+                  "+": [
+                    1,
+                    {
+                      "%": [
+                        {
+                          "var": "salt_digest_int"
+                        },
+                        6
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "runtime_handshake_hard_cap_s",
+                "description": "Deviation: peer.mjs never waits longer than 2 x ROUND_SEC (12 s by default) for a silent member, instead of handshake_timeout_s.",
+                "target": "everyone",
+                "value": {
+                  "*": [
+                    2,
+                    {
+                      "var": "clock.round_seconds"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "timeout_in_range",
+                "description": "handshake_timeout_s is a positive number of at most 300 s.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.handshake_timeout_s"
+                            }
+                          ]
+                        },
+                        "number"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "var": "proposal.data.handshake_timeout_s"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "proposal.data.handshake_timeout_s"
+                        },
+                        300
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "max_retries_non_negative_integer",
+                "description": "max_retries is an integer from 0 to 10.",
+                "assert": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "proposal.data.max_retries"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "proposal.data.max_retries"
+                        },
+                        10
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "floor": [
+                            {
+                              "var": "proposal.data.max_retries"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "proposal.data.max_retries"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "phases_commit_then_reveal",
+                "description": "The phase list keeps its length, starts with commit then reveal (secrecy of face-down cards), and every phase flags all_members_required as a boolean.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.phases"
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "var": "entry.data.phases"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.phases.0.name"
+                        },
+                        "commit"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.phases.1.name"
+                        },
+                        "reveal"
+                      ]
+                    },
+                    {
+                      "none": [
+                        {
+                          "var": "proposal.data.phases"
+                        },
+                        {
+                          "!=": [
+                            {
+                              "typeof": [
+                                {
+                                  "var": "all_members_required"
+                                }
+                              ]
+                            },
+                            "boolean"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "envelope_keys_unchanged",
+                "description": "message_envelope keeps exactly the canonical field set (hashgraph_events are wrapped in it).",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.message_envelope"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.message_envelope"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.message_envelope"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.message_envelope"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "envelope_core_fields_present",
+                "description": "The envelope always carries type, ids, clock, parents, payload, timestamp and signature.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "type",
+                      "dimension_id",
+                      "turn",
+                      "round",
+                      "action_index",
+                      "actor_peer_id",
+                      "self_parent",
+                      "other_parent",
+                      "payload",
+                      "timestamp",
+                      "signature"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.message_envelope"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -92,11 +1120,24 @@
     {
       "id": "sync_turn_commit",
       "name": "Once-per-turn sync (reachable regions / whole Dimension)",
-      "tags": ["p2p", "turn", "gossip"],
+      "tags": [
+        "p2p",
+        "turn",
+        "gossip"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["sync_region_tiers", "rule_10_draw"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_region_tiers",
+            "rule_10_draw"
+          ],
           "vote_log": [],
           "notes": "Players who do not share a strong region do not need every action; they need the turn boundary so turn counters stay aligned and the map hashgraph stays mergeable.",
           "data": {
@@ -112,6 +1153,394 @@
             "gossip_ttl_hops": 6,
             "turn_counter_rule": "a Dimension-wide turn is the max turn seen; peers that are behind receive the missing TurnCommits before acting (they cannot skip turns, see rule_6 for Empty Posture catch-up)",
             "far_region_notification": "when a TurnCommit or Radicle poll reveals previously unknown map items (new clans, new DoorIds, long-distance permanents) the client raises the disturbance_in_the_force UI event and applies the delta to unrevealed tiles only"
+          },
+          "logic": {
+            "description": "Governs the once-per-turn TurnCommit that keeps reachable / far peers' turn counters and map hashgraph mergeable. Tunables: gossip_fanout (3) peers per hop and gossip_ttl_hops (6) hops bound the gossip; turn_counter_rule makes the Dimension turn the maximum seen, and a lagging peer forfeits the skipped actions as Empty Posture. The runtime deviates: every peer emits its own evt_turn_commit at the turn boundary (endRound) over libp2p gossipsub only (fanout / ttl are gossipsub's, not these numbers), the payload has no map_delta (map blocks travel in evt_map_sync / evt_map_extend) and positions are axial q,r; catchUpClock applies the max-turn rule every 100 ms with two guards: one action behind while mid-handshake never jumps, and one action behind while planning jumps only if a STRONG-region member is already ahead (a far explorer must not pace the dimension). Context assumed: turn, round, action, action_finalized, phase, peers[] with action/turn/id/tier, region.strong, dimension.max_turn_seen / max_action_seen, clock.rounds_per_turn, hops.",
+            "prerequisites": [
+              {
+                "id": "turn_boundary_reached",
+                "description": "A TurnCommit is emitted after the last action of the turn is finalized in the strong region.",
+                "when": {
+                  "and": [
+                    {
+                      "!!": {
+                        "var": "action_finalized"
+                      }
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "round"
+                        },
+                        {
+                          "-": [
+                            {
+                              "var": "clock.rounds_per_turn"
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "recipient_outside_strong_region",
+                "description": "TurnCommits are for members that do not share our strong region (reachable or far); strong members already hold every action.",
+                "when": {
+                  "in": [
+                    {
+                      "var": "b.tier"
+                    },
+                    [
+                      "reachable",
+                      "far"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "peer_not_behind_before_acting",
+                "description": "turn_counter_rule: a peer may act only when its turn equals the Dimension-wide maximum; behind peers first receive the missing TurnCommits.",
+                "when": {
+                  ">=": [
+                    {
+                      "var": "turn"
+                    },
+                    {
+                      "var": "dimension.max_turn_seen"
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "dimension_turn",
+                "description": "The Dimension-wide turn: the maximum of my turn and every peer's turn.",
+                "target": "everyone",
+                "value": {
+                  "max": [
+                    {
+                      "var": "turn"
+                    },
+                    {
+                      "max_of": [
+                        {
+                          "map": [
+                            {
+                              "var": "peers"
+                            },
+                            {
+                              "var": "turn"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "skipped_actions_forfeit",
+                "description": "Actions a lagging peer forfeits as Empty Posture when it catches up to the highest action seen.",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "var": "dimension.max_action_seen"
+                        },
+                        {
+                          "var": "action"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "gossip_targets",
+                "description": "How many peers one gossip hop forwards to: gossip_fanout, or fewer when fewer peers exist.",
+                "target": "everyone",
+                "value": {
+                  "min": [
+                    {
+                      "var": "entry.data.gossip_fanout"
+                    },
+                    {
+                      "count": [
+                        {
+                          "var": "peers"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "gossip_ttl_remaining",
+                "description": "Hops a TurnCommit may still travel: gossip_ttl_hops minus hops taken.",
+                "target": "everyone",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "var": "entry.data.gossip_ttl_hops"
+                        },
+                        {
+                          "var": "hops"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "runtime_catch_up_allowed",
+                "description": "Deviation (peer.mjs catchUpClock): jump when 2+ actions behind; when exactly 1 behind, only while planning and only if a strong-region member is already at action+1.",
+                "target": "caster",
+                "value": {
+                  "if": [
+                    {
+                      ">": [
+                        {
+                          "-": [
+                            {
+                              "var": "dimension.max_action_seen"
+                            },
+                            {
+                              "var": "action"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    true,
+                    {
+                      "==": [
+                        {
+                          "-": [
+                            {
+                              "var": "dimension.max_action_seen"
+                            },
+                            {
+                              "var": "action"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "and": [
+                        {
+                          "==": [
+                            {
+                              "var": "phase"
+                            },
+                            "planning"
+                          ]
+                        },
+                        {
+                          "some": [
+                            {
+                              "var": "peers"
+                            },
+                            {
+                              "and": [
+                                {
+                                  "==": [
+                                    {
+                                      "var": "action"
+                                    },
+                                    {
+                                      "+": [
+                                        {
+                                          "root": "action"
+                                        },
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "includes": [
+                                    {
+                                      "root": "region.strong"
+                                    },
+                                    {
+                                      "var": "id"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    false
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "gossip_fanout_in_range",
+                "description": "gossip_fanout is an integer from 1 to 16.",
+                "assert": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "proposal.data.gossip_fanout"
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "proposal.data.gossip_fanout"
+                        },
+                        16
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "floor": [
+                            {
+                              "var": "proposal.data.gossip_fanout"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "proposal.data.gossip_fanout"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "gossip_ttl_in_range",
+                "description": "gossip_ttl_hops is an integer from 1 to 32.",
+                "assert": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "proposal.data.gossip_ttl_hops"
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "proposal.data.gossip_ttl_hops"
+                        },
+                        32
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "floor": [
+                            {
+                              "var": "proposal.data.gossip_ttl_hops"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "proposal.data.gossip_ttl_hops"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The TurnCommit payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_carries_turn_and_head",
+                "description": "turn, region_state_hash and hashgraph_head are what makes the commit mergeable; they must stay.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "turn",
+                      "region_state_hash",
+                      "hashgraph_head"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -119,11 +1548,24 @@
     {
       "id": "sync_radicle_push",
       "name": "Interval Radicle push (the single decentralized rendezvous)",
-      "tags": ["radicle", "git", "interval"],
+      "tags": [
+        "radicle",
+        "git",
+        "interval"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["sync_join_flow", "governance_branch_layout"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_join_flow",
+            "governance_branch_layout"
+          ],
           "vote_log": [],
           "notes": "The author's design: one random active player holding a DoorId pushes the merged DoorId.json every interval. Everyone else polls git. This is the only centralization point and it is itself a decentralized Radicle repo.",
           "data": {
@@ -143,6 +1585,434 @@
             "commit_content": "doors/<DoorId>.json = { magnet_id, turn, hashgraph_head, members, map_summary (revealed tiles count, owned towers/crystals/mines), last_push_at } - see dimension_session.json for the exact shape",
             "merge_policy": "git merge on the branch is additive: doors/ files from different clans never conflict (one file per DoorId); dimension.json conflicts resolve to the higher turn counter",
             "git_poll_effect": "on poll, if a new/changed doors/<DoorId>.json is seen that is not in the local hashgraph, the client schedules a background reconciliation and raises disturbance_in_the_force"
+          },
+          "logic": {
+            "description": "Governs the interval Radicle push, the only rendezvous point. Tunables: radicle_push_interval_s (3600) between pushes, poll_interval_s (300) between git polls, pusher_election.pusher_grace_s (300) before the runner-up of the sha256 lottery pushes instead; paths name the files under branch ActiveDimensions/<DimensionName>. The runtime deviates substantially: RADICLE_PUSH_SEC defaults to 60 s (demo), there is NO lottery — every peer pushes its own doors/<peer_label>.json (door_version 2) plus a deterministic dimension.json into its own Radicle namespace (rad://<RID>/<NID>), so doors never conflict and the merge policy is a union by the reader (join.mjs); nobody polls git on a timer (doors are read at join time), rules_snapshot_commit is deleted as a leftover, and the explorer URL is broadcast to the UI. Context assumed: now_s, last_push_s, me.id, me.door_ids_held, door_id, lottery.winner / lottery.runner_up (argmin sha256, supplied by runtime), dimension.name, ours.turn.max_seen / theirs.turn.max_seen.",
+            "prerequisites": [
+              {
+                "id": "interval_elapsed",
+                "description": "A push is due once radicle_push_interval_s have passed since the last push.",
+                "when": {
+                  ">=": [
+                    {
+                      "-": [
+                        {
+                          "var": "now_s"
+                        },
+                        {
+                          "var": "last_push_s"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "entry.data.radicle_push_interval_s"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "is_elected_pusher_or_fallback",
+                "description": "pusher_election: the lottery winner pushes; the runner-up pushes once pusher_grace_s have passed in this interval without a push.",
+                "when": {
+                  "or": [
+                    {
+                      "==": [
+                        {
+                          "var": "me.id"
+                        },
+                        {
+                          "var": "lottery.winner"
+                        }
+                      ]
+                    },
+                    {
+                      "and": [
+                        {
+                          "==": [
+                            {
+                              "var": "me.id"
+                            },
+                            {
+                              "var": "lottery.runner_up"
+                            }
+                          ]
+                        },
+                        {
+                          ">=": [
+                            {
+                              "-": [
+                                {
+                                  "var": "now_s"
+                                },
+                                {
+                                  "*": [
+                                    {
+                                      "floor": [
+                                        {
+                                          "/": [
+                                            {
+                                              "var": "now_s"
+                                            },
+                                            {
+                                              "var": "entry.data.radicle_push_interval_s"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "var": "entry.data.radicle_push_interval_s"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "var": "entry.data.pusher_election.pusher_grace_s"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "holds_door",
+                "description": "Only a holder of the DoorId's hashgraph may be its pusher.",
+                "when": {
+                  "includes": [
+                    {
+                      "var": "me.door_ids_held"
+                    },
+                    {
+                      "var": "door_id"
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "interval_index",
+                "description": "floor(unix_time / radicle_push_interval_s) — the lottery and evt_radicle_push interval number.",
+                "target": "everyone",
+                "value": {
+                  "floor": [
+                    {
+                      "/": [
+                        {
+                          "var": "now_s"
+                        },
+                        {
+                          "var": "entry.data.radicle_push_interval_s"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "next_push_at_s",
+                "description": "Start of the next interval: (interval_index + 1) x radicle_push_interval_s.",
+                "target": "everyone",
+                "value": {
+                  "*": [
+                    {
+                      "+": [
+                        {
+                          "floor": [
+                            {
+                              "/": [
+                                {
+                                  "var": "now_s"
+                                },
+                                {
+                                  "var": "entry.data.radicle_push_interval_s"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "var": "entry.data.radicle_push_interval_s"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "polls_per_interval",
+                "description": "How many git polls fit in one push interval (12 with the canonical numbers).",
+                "target": "everyone",
+                "value": {
+                  "floor": [
+                    {
+                      "/": [
+                        {
+                          "var": "entry.data.radicle_push_interval_s"
+                        },
+                        {
+                          "var": "entry.data.poll_interval_s"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "fallback_deadline_s",
+                "description": "Unix time at which the runner-up may push: interval start + pusher_grace_s.",
+                "target": "everyone",
+                "value": {
+                  "+": [
+                    {
+                      "*": [
+                        {
+                          "floor": [
+                            {
+                              "/": [
+                                {
+                                  "var": "now_s"
+                                },
+                                {
+                                  "var": "entry.data.radicle_push_interval_s"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "var": "entry.data.radicle_push_interval_s"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "entry.data.pusher_election.pusher_grace_s"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "door_path",
+                "description": "paths.door with the placeholders filled: ActiveDimensions/<DimensionName>/doors/<DoorId>.json.",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    "ActiveDimensions/",
+                    {
+                      "var": "dimension.name"
+                    },
+                    "/doors/",
+                    {
+                      "var": "door_id"
+                    },
+                    ".json"
+                  ]
+                }
+              },
+              {
+                "id": "dimension_descriptor_path",
+                "description": "paths.dimension_descriptor with the placeholder filled.",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    "ActiveDimensions/",
+                    {
+                      "var": "dimension.name"
+                    },
+                    "/dimension.json"
+                  ]
+                }
+              },
+              {
+                "id": "runtime_door_path",
+                "description": "Deviation: peer.mjs writes one door per PEER, doors/<peer_label>.json, in the peer's own namespace.",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    "ActiveDimensions/",
+                    {
+                      "var": "dimension.name"
+                    },
+                    "/doors/",
+                    {
+                      "var": "me.label"
+                    },
+                    ".json"
+                  ]
+                }
+              },
+              {
+                "id": "merged_dimension_turn",
+                "description": "merge_policy: a dimension.json conflict resolves to the higher turn counter.",
+                "target": "everyone",
+                "value": {
+                  "max": [
+                    {
+                      "var": "ours.turn.max_seen"
+                    },
+                    {
+                      "var": "theirs.turn.max_seen"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "intervals_positive_and_ordered",
+                "description": "poll_interval_s and radicle_push_interval_s are positive and a poll is never longer than a push interval.",
+                "assert": {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "var": "proposal.data.poll_interval_s"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "var": "proposal.data.radicle_push_interval_s"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "var": "proposal.data.poll_interval_s"
+                        },
+                        {
+                          "var": "proposal.data.radicle_push_interval_s"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "grace_within_interval",
+                "description": "pusher_grace_s is positive and shorter than the push interval so the fallback can still fire inside it.",
+                "assert": {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "var": "proposal.data.pusher_election.pusher_grace_s"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<": [
+                        {
+                          "var": "proposal.data.pusher_election.pusher_grace_s"
+                        },
+                        {
+                          "var": "proposal.data.radicle_push_interval_s"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "branch_under_active_dimensions",
+                "description": "The branch and every path stay under ActiveDimensions/ (governance_branch_layout).",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.branch"
+                        },
+                        "^ActiveDimensions/"
+                      ]
+                    },
+                    {
+                      "none": [
+                        {
+                          "values": [
+                            {
+                              "var": "proposal.data.paths"
+                            }
+                          ]
+                        },
+                        {
+                          "!": {
+                            "matches": [
+                              {
+                                "var": ""
+                              },
+                              "^ActiveDimensions/"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "paths_keys_unchanged",
+                "description": "paths keeps the canonical artefact names (dimension_descriptor, door, rules_snapshot).",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.paths"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.paths"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.paths"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.paths"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -150,11 +2020,26 @@
     {
       "id": "sync_join_flow",
       "name": "Joining a Dimension (open / follow a friend / new location)",
-      "tags": ["join", "door", "magnet"],
+      "tags": [
+        "join",
+        "door",
+        "magnet"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_0_setup", "rule_1_actions_per_round", "item_nexus", "item_dimension_door"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_0_setup",
+            "rule_1_actions_per_round",
+            "item_nexus",
+            "item_dimension_door"
+          ],
           "vote_log": [],
           "notes": "The DoorId behaves like a magnet URI: it names a hashgraph head and the peers that hold it, not a server. Three ways in: open a new Dimension, join a friend/clan (adopt their hashgraph part), or appear at a brand-new location from an old push.",
           "data": {
@@ -192,6 +2077,433 @@
             ],
             "leave_dimension": "a LeaveEvent is gossiped; the character card stays on its tile as a map item until the next Radicle push records the departure",
             "firebase_role": "discovery/coordination only: list of DimensionNames with their Radicle repo ids and last push time. Never game state."
+          },
+          "logic": {
+            "description": "Governs how a peer enters a Dimension: open_dimension, join_near_friend (adopt a DoorId's hashgraph part, enter inside the friend's reachable region, not adjacent to a non-ally) or join_new_location (a stale DoorId, a fresh map block the size of the initial tileset, a new DoorId). door_id_format is a magnet URI naming hashgraph head, repo and peers. The runtime deviates: peer.mjs picks the flow by alliance (player -> open_dimension, anything else -> join_near_friend) and never runs join_new_location; DOOR_ID is the env string 'door-primary' and doors are keyed by peer, not magnet URIs; join.mjs unions doors/*.json across namespaces and places 'nearby' or 'random'; join sync adopts the clock of the most-advanced live peer and a peer that lands mid-handshake sits that action out (rule 6); adopted_head is always null, class_id null, and no signature chain is verified. There is no Firebase directory. Context assumed: join.flow / join.entry_tile / join.door_id, me.alliance, peers[] with tile/alliance/life/action, friend.tile, region.reach_tiles, door.last_push.interval_index, interval_index, ref.phase, dimension.tileset.initial_size.",
+            "prerequisites": [
+              {
+                "id": "flow_known",
+                "description": "The requested flow is one of the entry's flows.",
+                "when": {
+                  "in": [
+                    {
+                      "var": "join.flow"
+                    },
+                    {
+                      "map": [
+                        {
+                          "var": "entry.data.flows"
+                        },
+                        {
+                          "var": "flow"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "entry_tile_free",
+                "description": "No living unit stands on the entry tile.",
+                "when": {
+                  "none": [
+                    {
+                      "var": "peers"
+                    },
+                    {
+                      "and": [
+                        {
+                          ">": [
+                            {
+                              "var": "life"
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "==": [
+                            {
+                              "hex_distance": [
+                                {
+                                  "root": "join.entry_tile"
+                                },
+                                {
+                                  "var": "tile"
+                                }
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "entry_not_adjacent_to_non_ally",
+                "description": "rule_0_setup entry-point constraint: the entry tile is not in contact with a living unit of another alliance.",
+                "when": {
+                  "none": [
+                    {
+                      "var": "peers"
+                    },
+                    {
+                      "and": [
+                        {
+                          ">": [
+                            {
+                              "var": "life"
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "!=": [
+                            {
+                              "var": "alliance"
+                            },
+                            {
+                              "root": "me.alliance"
+                            }
+                          ]
+                        },
+                        {
+                          "<=": [
+                            {
+                              "hex_distance": [
+                                {
+                                  "root": "join.entry_tile"
+                                },
+                                {
+                                  "var": "tile"
+                                }
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "near_friend_within_reach",
+                "description": "join_near_friend: the entry tile lies inside the friend's reachable region.",
+                "when": {
+                  "or": [
+                    {
+                      "!=": [
+                        {
+                          "var": "join.flow"
+                        },
+                        "join_near_friend"
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "join.entry_tile"
+                            },
+                            {
+                              "var": "friend.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "region.reach_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "new_location_needs_stale_door",
+                "description": "join_new_location: the chosen DoorId's last push is older than the current interval.",
+                "when": {
+                  "or": [
+                    {
+                      "!=": [
+                        {
+                          "var": "join.flow"
+                        },
+                        "join_new_location"
+                      ]
+                    },
+                    {
+                      "<": [
+                        {
+                          "var": "door.last_push.interval_index"
+                        },
+                        {
+                          "var": "interval_index"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "door_id_is_magnet",
+                "description": "door_id_format: the DoorId is a magnet URI with the urn:dim exact topic.",
+                "when": {
+                  "matches": [
+                    {
+                      "var": "join.door_id"
+                    },
+                    "^magnet:\\?xt=urn:dim:"
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "steps_in_flow",
+                "description": "Number of steps the chosen flow prescribes.",
+                "target": "caster",
+                "value": {
+                  "sum": [
+                    {
+                      "map": [
+                        {
+                          "filter": [
+                            {
+                              "var": "entry.data.flows"
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "flow"
+                                },
+                                {
+                                  "root": "join.flow"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "var": "steps"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "adopted_action",
+                "description": "Join sync: the joiner adopts the clock of the most-advanced live peer (peer.mjs syncClockFromMesh).",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "max_of": [
+                    {
+                      "map": [
+                        {
+                          "var": "peers"
+                        },
+                        {
+                          "var": "action"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "joins_into_phase",
+                "description": "Only planning is safe to join; landing mid-handshake means sitting the action out (rule 6 Empty Posture).",
+                "target": "caster",
+                "value": {
+                  "if": [
+                    {
+                      "==": [
+                        {
+                          "var": "ref.phase"
+                        },
+                        "planning"
+                      ]
+                    },
+                    "planning",
+                    "resolution"
+                  ]
+                }
+              },
+              {
+                "id": "new_block_size",
+                "description": "join_new_location extends the tileset by one block the size of the initial tileset.",
+                "target": "tile",
+                "value": {
+                  "var": "dimension.tileset.initial_size"
+                }
+              },
+              {
+                "id": "runtime_flow_choice",
+                "description": "Deviation: peer.mjs chooses the flow by alliance — player opens, everyone else joins near a friend.",
+                "target": "caster",
+                "value": {
+                  "if": [
+                    {
+                      "==": [
+                        {
+                          "var": "me.alliance"
+                        },
+                        "player"
+                      ]
+                    },
+                    "open_dimension",
+                    "join_near_friend"
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "flow_names_unchanged",
+                "description": "Exactly the three flows open_dimension / join_near_friend / join_new_location, each once.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.flows"
+                            }
+                          ]
+                        },
+                        3
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.flows"
+                            },
+                            {
+                              "var": "flow"
+                            }
+                          ]
+                        },
+                        [
+                          "open_dimension",
+                          "join_near_friend",
+                          "join_new_location"
+                        ]
+                      ]
+                    },
+                    {
+                      "distinct": [
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.flows"
+                            },
+                            {
+                              "var": "flow"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "every_flow_has_steps",
+                "description": "Each flow lists at least one step.",
+                "assert": {
+                  "none": [
+                    {
+                      "var": "proposal.data.flows"
+                    },
+                    {
+                      "<": [
+                        {
+                          "count": [
+                            {
+                              "var": "steps"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "door_id_format_is_magnet",
+                "description": "door_id_format stays a magnet URI template naming the hashgraph head (xs=) and peers (pe=).",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.door_id_format"
+                        },
+                        "^magnet:"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.door_id_format"
+                        },
+                        "xs="
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.door_id_format"
+                        },
+                        "pe="
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "leave_and_firebase_documented",
+                "description": "leave_dimension and firebase_role remain documented strings (Firebase is discovery only, never game state).",
+                "assert": {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.leave_dimension"
+                            }
+                          ]
+                        },
+                        10
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.firebase_role"
+                        },
+                        "[Nn]ever game state"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -199,11 +2511,25 @@
     {
       "id": "sync_divergence_merge",
       "name": "Reconciling divergent map parts on first contact",
-      "tags": ["hashgraph", "merge", "conflict"],
+      "tags": [
+        "hashgraph",
+        "merge",
+        "conflict"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["sync_region_tiers", "rule_2_discover_tile", "rule_24_destroy_permanent_token"],
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_region_tiers",
+            "rule_2_discover_tile",
+            "rule_24_destroy_permanent_token"
+          ],
           "vote_log": [],
           "notes": "Two clans that never met hold two hashgraph parts that may disagree about tiles neither has actually touched. Merge rules keep the game fair without a server.",
           "data": {
@@ -219,6 +2545,341 @@
             ],
             "dispute": "if the resolver hashes differ at any step, the minority peers replay with the majority's events; a peer that still differs after max_retries is marked desynced and must rejoin via join_near_friend",
             "cheat_resistance": "only signed events in a validated chain are replayed; a peer cannot introduce cards it never drew because draws (rule_10) are events with shared-salt randomness"
+          },
+          "logic": {
+            "description": "Governs reconciliation when two hashgraph parts that never met come into reach: find the common ancestor, replay both event sets in consensus order, take single-touched tiles as-is, resolve double-touched tiles by the deterministic resolver with the earlier consensus timestamp winning conflicting ownership, keep seed-derived hidden tiles, adopt max(turn), emit a MergeEvent; a peer still differing after sync_handshake_per_action.max_retries is desynced. The runtime deviates: peer.mjs performs no merge or replay — checkStateHash compares incoming evt_state_hash payloads entity by entity (tile and life) with its own and only logs 'STATE DIVERGENCE #n', never disputes or marks a peer desynced; evt_merge is never emitted; the only merge that exists is the grow-only union of map blocks (addMapBlock via evt_map_sync / evt_map_extend); hidden placement does derive from MAP_SEED as specified. Context assumed: a / b with hashgraph_head and tile, region.reach_tiles, merge.common_ancestor, mine.state_hash / theirs.state_hash, parts (a, b with action), tile.touched_by_a / touched_by_b, claim_a / claim_b {ts, owner}, attempt, compared[] of {mine, theirs} entity pairs.",
+            "prerequisites": [
+              {
+                "id": "different_parts_in_reach",
+                "description": "trigger: two peers hold different hashgraph heads and are inside each other's reachable region.",
+                "when": {
+                  "and": [
+                    {
+                      "!=": [
+                        {
+                          "var": "a.hashgraph_head"
+                        },
+                        {
+                          "var": "b.hashgraph_head"
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "hex_distance": [
+                            {
+                              "var": "a.tile"
+                            },
+                            {
+                              "var": "b.tile"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "region.reach_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "common_ancestor_known",
+                "description": "Both parts descend from a known Radicle push (the common ancestor hash is a string).",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "merge.common_ancestor"
+                        }
+                      ]
+                    },
+                    "string"
+                  ]
+                }
+              },
+              {
+                "id": "dispute_only_on_hash_mismatch",
+                "description": "The dispute branch applies only when the resolver hashes differ.",
+                "when": {
+                  "!=": [
+                    {
+                      "var": "mine.state_hash"
+                    },
+                    {
+                      "var": "theirs.state_hash"
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "merged_turn",
+                "description": "The merged region adopts max(turn) of the two parts.",
+                "target": "everyone",
+                "value": {
+                  "max": [
+                    {
+                      "var": "parts.a.turn"
+                    },
+                    {
+                      "var": "parts.b.turn"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "lagging_part_skipped_actions",
+                "description": "Actions the lagging part plays as Empty Posture to reach the merged clock.",
+                "target": "everyone",
+                "unit": "actions",
+                "value": {
+                  "abs": [
+                    {
+                      "-": [
+                        {
+                          "var": "parts.a.action"
+                        },
+                        {
+                          "var": "parts.b.action"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "tile_state_source",
+                "description": "Tiles touched by one part only keep that part's state; tiles touched by both go through the resolver.",
+                "target": "tile",
+                "value": {
+                  "if": [
+                    {
+                      "and": [
+                        {
+                          "!!": {
+                            "var": "tile.touched_by_a"
+                          }
+                        },
+                        {
+                          "!": {
+                            "var": "tile.touched_by_b"
+                          }
+                        }
+                      ]
+                    },
+                    "a",
+                    {
+                      "and": [
+                        {
+                          "!!": {
+                            "var": "tile.touched_by_b"
+                          }
+                        },
+                        {
+                          "!": {
+                            "var": "tile.touched_by_a"
+                          }
+                        }
+                      ]
+                    },
+                    "b",
+                    "resolver"
+                  ]
+                }
+              },
+              {
+                "id": "conflicting_owner_winner",
+                "description": "Two owners of one tower: the earlier consensus timestamp wins; the loser's cards return to its discard pile.",
+                "target": "tile",
+                "value": {
+                  "if": [
+                    {
+                      "<=": [
+                        {
+                          "var": "claim_a.ts"
+                        },
+                        {
+                          "var": "claim_b.ts"
+                        }
+                      ]
+                    },
+                    {
+                      "var": "claim_a.owner"
+                    },
+                    {
+                      "var": "claim_b.owner"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "peer_desynced",
+                "description": "dispute: a peer that still differs after max_retries replays is marked desynced and must rejoin via join_near_friend.",
+                "target": "target",
+                "value": {
+                  ">": [
+                    {
+                      "var": "attempt"
+                    },
+                    {
+                      "entry": [
+                        "sync_handshake_per_action",
+                        "max_retries"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "runtime_divergent_entities",
+                "description": "Deviation (peer.mjs checkStateHash): the number of entities both peers resolved whose tile or life differ — only these count as divergence, and they are logged, not disputed.",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "filter": [
+                        {
+                          "var": "compared"
+                        },
+                        {
+                          "or": [
+                            {
+                              "!=": [
+                                {
+                                  "var": "mine.life"
+                                },
+                                {
+                                  "var": "theirs.life"
+                                }
+                              ]
+                            },
+                            {
+                              "!=": [
+                                {
+                                  "var": "mine.tile_key"
+                                },
+                                {
+                                  "var": "theirs.tile_key"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "algorithm_has_steps",
+                "description": "The merge algorithm keeps at least five string steps (ancestor, replay, single-touched, double-touched, turn).",
+                "assert": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.algorithm"
+                            }
+                          ]
+                        },
+                        5
+                      ]
+                    },
+                    {
+                      "none": [
+                        {
+                          "var": "proposal.data.algorithm"
+                        },
+                        {
+                          "!=": [
+                            {
+                              "typeof": [
+                                {
+                                  "var": ""
+                                }
+                              ]
+                            },
+                            "string"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "turn_rule_is_max",
+                "description": "Some algorithm step adopts max(turn) — turn counters never go backwards on merge.",
+                "assert": {
+                  "some": [
+                    {
+                      "var": "proposal.data.algorithm"
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": ""
+                        },
+                        "max\\(turn\\)"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "dispute_and_cheat_resistance_present",
+                "description": "trigger, dispute and cheat_resistance stay documented strings.",
+                "assert": {
+                  "and": [
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.trigger"
+                            }
+                          ]
+                        },
+                        20
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.dispute"
+                            }
+                          ]
+                        },
+                        20
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.cheat_resistance"
+                            }
+                          ]
+                        },
+                        20
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]

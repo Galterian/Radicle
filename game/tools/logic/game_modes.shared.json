@@ -1,0 +1,254 @@
+{
+  "collection": "game_modes",
+  "description": "Shared-rule candidates repeated across the 9 game mode blocks.",
+  "entries": [
+    {
+      "id": "non_empty_string",
+      "name": "Non-empty string",
+      "description": "typeof x == string and len > 0 — win_condition, matchmaking, theme, notes …",
+      "tags": [
+        "validation"
+      ],
+      "params": {
+        "x": {
+          "type": "any"
+        }
+      },
+      "logic": {
+        "and": [
+          {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "param": "x"
+                  }
+                ]
+              },
+              "string"
+            ]
+          },
+          {
+            ">": [
+              {
+                "len": [
+                  {
+                    "param": "x"
+                  }
+                ]
+              },
+              0
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "x": "defeat opponent"
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "x": ""
+          },
+          "expect": false
+        },
+        {
+          "args": {
+            "x": null
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "same_type",
+      "name": "Two values have the same typeof",
+      "description": "typeof(a) == typeof(b) — player_count type unchanged.",
+      "tags": [
+        "validation"
+      ],
+      "params": {
+        "a": {
+          "type": "any"
+        },
+        "b": {
+          "type": "any"
+        }
+      },
+      "logic": {
+        "==": [
+          {
+            "typeof": [
+              {
+                "param": "a"
+              }
+            ]
+          },
+          {
+            "typeof": [
+              {
+                "param": "b"
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "a": "2",
+            "b": "n"
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "a": 2,
+            "b": "2"
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "ordered_pair",
+      "name": "Two-number range with 0 < min < max",
+      "description": "round_total_s, building_size_tiles_range — checks count 2, both positive, not equal (order-insensitive via min_of/max_of).",
+      "tags": [
+        "validation"
+      ],
+      "params": {
+        "range": {
+          "type": "[number]"
+        }
+      },
+      "logic": {
+        "and": [
+          {
+            "==": [
+              {
+                "count": [
+                  {
+                    "param": "range"
+                  }
+                ]
+              },
+              2
+            ]
+          },
+          {
+            ">": [
+              {
+                "min_of": [
+                  {
+                    "param": "range"
+                  }
+                ]
+              },
+              0
+            ]
+          },
+          {
+            "<": [
+              {
+                "min_of": [
+                  {
+                    "param": "range"
+                  }
+                ]
+              },
+              {
+                "max_of": [
+                  {
+                    "param": "range"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "range": [
+              15,
+              50
+            ]
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "range": [
+              50,
+              15
+            ]
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "range": [
+              0,
+              5
+            ]
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "default_time_per_turn_s",
+      "name": "Mode time per turn with the Time-management fallback",
+      "description": "The mode's own time_per_turn_s, or mode_time_management.per_action_s when null.",
+      "tags": [
+        "pacing",
+        "game_modes"
+      ],
+      "params": {
+        "own": {
+          "type": "number|null"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "==": [
+              {
+                "param": "own"
+              },
+              null
+            ]
+          },
+          {
+            "entry": [
+              "mode_time_management",
+              "per_action_s"
+            ]
+          },
+          {
+            "param": "own"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "own": null
+          },
+          "expect": 10
+        },
+        {
+          "args": {
+            "own": 30
+          },
+          "expect": 30
+        }
+      ]
+    }
+  ]
+}

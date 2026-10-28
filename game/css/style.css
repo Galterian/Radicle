@@ -45,7 +45,13 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 .ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; }
 .ros:hover { background: #1a2130; }
 .ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
-.ros .nm { color: #e0e6ef; }
+.ros .nm { color: #e0e6ef; display: flex; align-items: center; gap: 6px; }
+/* "Ally" column (user spec): whose team a unit fights for. */
+.ros-head { display: flex; justify-content: space-between; padding: 0 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #6a7a92; }
+.ros .team { font: 600 9px/1 ui-monospace, Menlo, Consolas, monospace; padding: 2px 5px; border-radius: 3px; background: #0f131b; color: #c8d4e3; border: 1px solid #26303f; text-transform: none; letter-spacing: 0; }
+.ros .team.team-own { border-color: #6ad99f; color: #a8f0c6; }
+.ros .team.team-ally { border-color: #6a9ce3; color: #b8d0f5; }
+.ros .team.team-foe { border-color: #e36666; color: #f0b0b0; }
 .ros .st { color: #8aa0bf; font-variant-numeric: tabular-nums; }
 .ros .stats { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
 .ros .stats .pill { font: 600 10px/1 ui-monospace, Menlo, Consolas, monospace; padding: 2px 5px; border-radius: 3px; background: #0f131b; color: #c8d4e3; border-left: 2px solid #4a5368; font-variant-numeric: tabular-nums; }

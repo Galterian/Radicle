@@ -1,0 +1,3262 @@
+{
+  "collection": "game_modes",
+  "entries": {
+    "mode_arena": {
+      "description": "Arena (8.1): a 4x4 tileset for exactly 2 players starting at the diagonal centre tiles; win by defeating the opponent; matchmaking is nexus-based; time_per_turn_s is null on the card — the pacing comes from Time management (8.8: 10 s per action, 5 s per effect / discard-draw, 15–50 s per round).",
+      "prerequisites": [
+        {
+          "id": "player_count_matches",
+          "description": "Exactly player_count (\"2\") players (players assumed in context; loose == against the string).",
+          "when": {
+            "==": [
+              {
+                "var": "players"
+              },
+              {
+                "var": "entry.data.player_count"
+              }
+            ]
+          }
+        },
+        {
+          "id": "opponent_alive",
+          "description": "The arena ends when the opponent is defeated (defender.life > 0 keeps it running).",
+          "when": {
+            ">": [
+              {
+                "var": "defender.life"
+              },
+              0
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "tileset_side",
+          "description": "Side length of the 4x4 tileset (literal — the string \"4x4\" is not numeric).",
+          "target": "tile",
+          "unit": "hexes",
+          "value": 4
+        },
+        {
+          "id": "tiles_total",
+          "description": "4 × 4 tiles.",
+          "target": "tile",
+          "unit": "hexes",
+          "value": 16
+        },
+        {
+          "id": "players",
+          "description": "player_count as given.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.player_count"
+          }
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "time_per_turn_s of the card, or Time management per_action_s when null.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "entry": [
+                  "mode_time_management",
+                  "per_action_s"
+                ]
+              },
+              {
+                "var": "entry.data.time_per_turn_s"
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.win_condition"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.win_condition"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "two_players",
+          "description": "Arena stays a duel (player_count \"2\").",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.player_count"
+              },
+              "2"
+            ]
+          }
+        },
+        {
+          "id": "matchmaking_text",
+          "description": "matchmaking is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.matchmaking"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.matchmaking"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_invasion": {
+      "description": "Dimension Invasion / Protection (8.2): a labyrinth tower-defence on roughly an 8x8 tileset for n players; intruders enter at the nexus and must reach the library. The dimension creator may not place two neighbouring monsters and has limited walls; difficulty scales with the card count used. No explicit time per turn (Time management 8.8 applies).",
+      "prerequisites": [
+        {
+          "id": "at_least_one_player",
+          "description": "player_count is \"n\" — any number ≥ 1 (players assumed in context).",
+          "when": {
+            ">=": [
+              {
+                "var": "players"
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "no_adjacent_monsters",
+          "description": "constraint: no two neighbouring monsters placed by the creator (placement.no_adjacent_monsters assumed in context).",
+          "when": {
+            "!!": {
+              "var": "placement.no_adjacent_monsters"
+            }
+          }
+        },
+        {
+          "id": "entry_is_nexus",
+          "description": "Intruders enter on the nexus (entry field).",
+          "when": {
+            "==": [
+              {
+                "var": "entry.data.entry"
+              },
+              "nexus"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "tileset_side",
+          "description": "Approximate side length (~8x8) as a literal.",
+          "target": "tile",
+          "unit": "hexes",
+          "value": 8
+        },
+        {
+          "id": "tiles_total",
+          "description": "≈ 8 × 8 tiles.",
+          "target": "tile",
+          "unit": "hexes",
+          "value": 64
+        },
+        {
+          "id": "players",
+          "description": "player_count (\"n\").",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.player_count"
+          }
+        },
+        {
+          "id": "constraint_count",
+          "description": "Number of placement constraints on the creator.",
+          "target": "everyone",
+          "unit": "tokens",
+          "value": {
+            "count": [
+              {
+                "var": "entry.data.constraints"
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "Time management per_action_s (no own value).",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "entry": [
+              "mode_time_management",
+              "per_action_s"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "entry_exit_text",
+          "description": "entry and exit stay non-empty strings.",
+          "assert": {
+            "and": [
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.entry"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.entry"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.exit"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.exit"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "constraints_kept",
+          "description": "constraints keeps at least the canonical number of rules.",
+          "assert": {
+            ">=": [
+              {
+                "count": [
+                  {
+                    "var": "proposal.data.constraints"
+                  }
+                ]
+              },
+              {
+                "count": [
+                  {
+                    "var": "entry.data.constraints"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_raid": {
+      "description": "Raid (8.3): co-op against a final boss (the Dragon over its library) or against another player's dimension; the raid is accepted through the target's nexus (item_nexus: one hire/raid per day) and its difficulty is the card count of the nexus owner. No fixed tileset or player count on the card.",
+      "prerequisites": [
+        {
+          "id": "at_least_one_raider",
+          "description": "players ≥ 1 (assumed in context).",
+          "when": {
+            ">=": [
+              {
+                "var": "players"
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "nexus_offer_available",
+          "description": "The nexus owner has a hire/raid use left today (uses_today < item_nexus.hire_or_raid_per_day).",
+          "when": {
+            "<": [
+              {
+                "var": "uses_today"
+              },
+              {
+                "entry": [
+                  "item_nexus",
+                  "hire_or_raid_per_day"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "boss_life",
+          "description": "Life of the final boss (catalog lookup mon_dragon.life).",
+          "target": "all_enemies",
+          "unit": "life",
+          "value": {
+            "entry": [
+              "mon_dragon",
+              "life"
+            ]
+          }
+        },
+        {
+          "id": "boss_actions_per_round",
+          "description": "The Dragon's actions per round.",
+          "target": "all_enemies",
+          "unit": "actions",
+          "value": {
+            "entry": [
+              "mon_dragon",
+              "actions_per_round"
+            ]
+          }
+        },
+        {
+          "id": "difficulty_card_count",
+          "description": "Difficulty = card count of the nexus owner (nexus_owner.card_count assumed in context).",
+          "target": "everyone",
+          "unit": "cards",
+          "value": {
+            "var": "nexus_owner.card_count"
+          }
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "Time management per_action_s.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "entry": [
+              "mode_time_management",
+              "per_action_s"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_text",
+          "description": "target is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.target"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.target"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "difficulty_text",
+          "description": "difficulty is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.difficulty"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.difficulty"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_world": {
+      "description": "World (8.4): Carcassonne-style — 48 whole, 24 two-terrain, 24 three-terrain and 6 four-terrain tiles (102 tiles), 8 monsters per player, win by holding 12 monsters. No fixed player count; Time management (8.8) pacing.",
+      "prerequisites": [
+        {
+          "id": "at_least_two_players",
+          "description": "A tile-laying world needs at least two players (players assumed in context).",
+          "when": {
+            ">=": [
+              {
+                "var": "players"
+              },
+              2
+            ]
+          }
+        },
+        {
+          "id": "tiles_remain",
+          "description": "Tiles left to place (tiles_placed assumed in context) below the total.",
+          "when": {
+            "<": [
+              {
+                "var": "tiles_placed"
+              },
+              {
+                "sum": [
+                  {
+                    "values": [
+                      {
+                        "var": "entry.data.terrain_tiles"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "tiles_total",
+          "description": "Σ terrain_tiles = 102.",
+          "target": "tile",
+          "unit": "hexes",
+          "value": {
+            "sum": [
+              {
+                "values": [
+                  {
+                    "var": "entry.data.terrain_tiles"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "monsters_total",
+          "description": "monsters_per_player × players.",
+          "target": "all_enemies",
+          "unit": "tokens",
+          "value": {
+            "*": [
+              {
+                "var": "entry.data.monsters_per_player"
+              },
+              {
+                "var": "players"
+              }
+            ]
+          }
+        },
+        {
+          "id": "monsters_to_win",
+          "description": "Monsters a player must hold to win (literal from win_condition \"hold 12 monsters\").",
+          "target": "caster",
+          "unit": "tokens",
+          "value": 12
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "Time management per_action_s.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "entry": [
+              "mode_time_management",
+              "per_action_s"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.win_condition"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.win_condition"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "terrain_tiles_keys_unchanged",
+          "description": "terrain_tiles keeps whole/two/three/four.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "keys": [
+                      {
+                        "var": "proposal.data.terrain_tiles"
+                      }
+                    ]
+                  },
+                  {
+                    "keys": [
+                      {
+                        "var": "entry.data.terrain_tiles"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "subset_of": [
+                  {
+                    "keys": [
+                      {
+                        "var": "entry.data.terrain_tiles"
+                      }
+                    ]
+                  },
+                  {
+                    "keys": [
+                      {
+                        "var": "proposal.data.terrain_tiles"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "tiles_total_half_tolerance",
+          "description": "Σ tiles within ±50 % of canonical.",
+          "assert": {
+            "rule": [
+              "within_tolerance",
+              {
+                "current": {
+                  "sum": [
+                    {
+                      "values": [
+                        {
+                          "var": "entry.data.terrain_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "proposal": {
+                  "sum": [
+                    {
+                      "values": [
+                        {
+                          "var": "proposal.data.terrain_tiles"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "relative": 0.5
+              }
+            ]
+          }
+        },
+        {
+          "id": "monsters_per_player_positive",
+          "description": "monsters_per_player ≥ 1 within ±50 %.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.monsters_per_player"
+                  },
+                  1
+                ]
+              },
+              {
+                "if": [
+                  {
+                    "==": [
+                      {
+                        "var": "entry.data.monsters_per_player"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    "or": [
+                      {
+                        "==": [
+                          {
+                            "var": "proposal.data.monsters_per_player"
+                          },
+                          null
+                        ]
+                      },
+                      {
+                        ">": [
+                          {
+                            "var": "proposal.data.monsters_per_player"
+                          },
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        ">": [
+                          {
+                            "var": "proposal.data.monsters_per_player"
+                          },
+                          0
+                        ]
+                      },
+                      {
+                        "rule": [
+                          "within_tolerance",
+                          {
+                            "current": {
+                              "var": "entry.data.monsters_per_player"
+                            },
+                            "proposal": {
+                              "var": "proposal.data.monsters_per_player"
+                            },
+                            "relative": 0.5
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_mmorpg": {
+      "description": "MMORPG (8.5): persistent play; start over your home library and enter other dimensions through dimension doors. Starting deck 20 cards (8 actions, 2 skills, 2 mines, 4 effects, 1 nexus, 1 trade center, 1 tower, 1 attraction/recruitment); deck stays between 15 and 20 (Rule 11 floor 15 = deck_floor). No fixed player count; Time management pacing.",
+      "prerequisites": [
+        {
+          "id": "deck_in_range",
+          "description": "caster.deck_size (assumed in context) between min_deck and max_deck.",
+          "when": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "caster.deck_size"
+                  },
+                  {
+                    "var": "entry.data.min_deck"
+                  }
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "caster.deck_size"
+                  },
+                  {
+                    "var": "entry.data.max_deck"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "starts_on_library",
+          "description": "start_location is the home library (string check).",
+          "when": {
+            "==": [
+              {
+                "var": "entry.data.start_location"
+              },
+              "over your home library"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "starting_deck_cards",
+          "description": "Starting deck size.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "var": "entry.data.starting_deck_cards"
+          }
+        },
+        {
+          "id": "composition_total",
+          "description": "Σ starting_composition (must equal starting_deck_cards).",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "sum": [
+              {
+                "values": [
+                  {
+                    "var": "entry.data.starting_composition"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "archive_allowed",
+          "description": "Rule 11: 1 if a card may still be archived at the current deck size (deck_floor with min_deck), else 0.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "if": [
+              {
+                "rule": [
+                  "deck_floor",
+                  {
+                    "circulating": {
+                      "var": "caster.deck_size"
+                    },
+                    "min": {
+                      "var": "entry.data.min_deck"
+                    }
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "Time management per_action_s.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "entry": [
+              "mode_time_management",
+              "per_action_s"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "composition_sums_to_deck",
+          "description": "Σ starting_composition == starting_deck_cards.",
+          "assert": {
+            "==": [
+              {
+                "sum": [
+                  {
+                    "values": [
+                      {
+                        "var": "proposal.data.starting_composition"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "var": "proposal.data.starting_deck_cards"
+              }
+            ]
+          }
+        },
+        {
+          "id": "deck_bounds",
+          "description": "1 ≤ min_deck ≤ starting_deck_cards ≤ max_deck.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.min_deck"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.min_deck"
+                  },
+                  {
+                    "var": "proposal.data.starting_deck_cards"
+                  }
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.starting_deck_cards"
+                  },
+                  {
+                    "var": "proposal.data.max_deck"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "min_deck_is_rule_11_floor",
+          "description": "min_deck equals the Rule 11 deck floor (15).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.min_deck"
+              },
+              15
+            ]
+          }
+        },
+        {
+          "id": "composition_keys_unchanged",
+          "description": "starting_composition keeps its card categories.",
+          "assert": {
+            "and": [
+              {
+                "subset_of": [
+                  {
+                    "keys": [
+                      {
+                        "var": "proposal.data.starting_composition"
+                      }
+                    ]
+                  },
+                  {
+                    "keys": [
+                      {
+                        "var": "entry.data.starting_composition"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "subset_of": [
+                  {
+                    "keys": [
+                      {
+                        "var": "entry.data.starting_composition"
+                      }
+                    ]
+                  },
+                  {
+                    "keys": [
+                      {
+                        "var": "proposal.data.starting_composition"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_puzzle": {
+      "description": "MMORPG Puzzle (8.6): long-term building puzzles of 4 to 1024 tiles where each tile is a word of a wise sentence / poem, themed per language; smaller nationalities get more puzzle parts; servers merge by coupling continents / planets. No player count, tileset or turn timer on the card.",
+      "prerequisites": [
+        {
+          "id": "building_size_in_range",
+          "description": "building.size_tiles (assumed in context) within building_size_tiles_range.",
+          "when": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "building.size_tiles"
+                  },
+                  {
+                    "var": "entry.data.building_size_tiles_range.0"
+                  }
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "building.size_tiles"
+                  },
+                  {
+                    "var": "entry.data.building_size_tiles_range.1"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "min_building_tiles",
+          "description": "Smallest puzzle building.",
+          "target": "tile",
+          "unit": "hexes",
+          "value": {
+            "var": "entry.data.building_size_tiles_range.0"
+          }
+        },
+        {
+          "id": "max_building_tiles",
+          "description": "Largest puzzle building.",
+          "target": "tile",
+          "unit": "hexes",
+          "value": {
+            "var": "entry.data.building_size_tiles_range.1"
+          }
+        },
+        {
+          "id": "parts_building_yields",
+          "description": "Parts needed by the Attraction / Recruitment Center that the puzzle feeds (catalog lookup).",
+          "target": "tile",
+          "unit": "tokens",
+          "value": {
+            "entry": [
+              "item_attraction_recruitment_center",
+              "parts_required"
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "Time management per_action_s.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "entry": [
+              "mode_time_management",
+              "per_action_s"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "range_ordered_positive",
+          "description": "range is [min, max] with 1 ≤ min < max.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.building_size_tiles_range.0"
+                  },
+                  1
+                ]
+              },
+              {
+                "<": [
+                  {
+                    "var": "proposal.data.building_size_tiles_range.0"
+                  },
+                  {
+                    "var": "proposal.data.building_size_tiles_range.1"
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.building_size_tiles_range"
+                      }
+                    ]
+                  },
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "theme_text",
+          "description": "theme is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.theme"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.theme"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_cards_list": {
+      "description": "MMORPG Cards (8.7): a catalog cross-reference, not a playable mode — it points at item_stash, item_nexus, item_trade_center and the 15 mine_* variants in terrain_items.json. No player count, tileset or timer.",
+      "prerequisites": [
+        {
+          "id": "referenced_items_exist",
+          "description": "The referenced terrain items are in the catalog (kind readable).",
+          "when": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "entry": [
+                      "item_stash",
+                      "kind"
+                    ]
+                  },
+                  "stash"
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "entry": [
+                      "item_nexus",
+                      "kind"
+                    ]
+                  },
+                  "nexus"
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "entry": [
+                      "item_trade_center",
+                      "kind"
+                    ]
+                  },
+                  "trade_center"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "mine_variants",
+          "description": "Number of mine_* cards (literal 15 — JsonLogic cannot enumerate a collection).",
+          "target": "everyone",
+          "unit": "cards",
+          "value": 15
+        },
+        {
+          "id": "mine_gold_per_turn",
+          "description": "Gold per turn of a mine (catalog lookup of the first variant).",
+          "target": "caster",
+          "unit": "tokens",
+          "value": {
+            "entry": [
+              "mine_vit_wat_har",
+              "gold_per_turn"
+            ]
+          }
+        },
+        {
+          "id": "stash_capacity",
+          "description": "item_stash.capacity_cards.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "entry": [
+              "item_stash",
+              "capacity_cards"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "notes_text",
+          "description": "notes is a non-empty string.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.notes"
+                      }
+                    ]
+                  },
+                  "string"
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "len": [
+                      {
+                        "var": "proposal.data.notes"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "references_resolve",
+          "description": "item_stash, item_nexus, item_trade_center exist in the catalog.",
+          "assert": {
+            "and": [
+              {
+                "!=": [
+                  {
+                    "entry": [
+                      "item_stash",
+                      "kind"
+                    ]
+                  },
+                  null
+                ]
+              },
+              {
+                "!=": [
+                  {
+                    "entry": [
+                      "item_nexus",
+                      "kind"
+                    ]
+                  },
+                  null
+                ]
+              },
+              {
+                "!=": [
+                  {
+                    "entry": [
+                      "item_trade_center",
+                      "kind"
+                    ]
+                  },
+                  null
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mode_time_management": {
+      "description": "Time management (8.8): 10 s per action, 5 s per effect and per discard/draw, a round lasts 15–50 s; fog of war on. On first contact turn numbers equalise to the player with the lowest turn number and remaining time to the one with more time left; a team shares vision and inherits the earliest player's time state. Applies to every mode without its own timer.",
+      "prerequisites": [
+        {
+          "id": "action_within_time",
+          "description": "The action was committed within per_action_s (elapsed_s assumed in context).",
+          "when": {
+            "<=": [
+              {
+                "var": "elapsed_s"
+              },
+              {
+                "var": "entry.data.per_action_s"
+              }
+            ]
+          }
+        },
+        {
+          "id": "contact_sync_applies",
+          "description": "Rule applies on first contact of two units (in_contact).",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "time_per_turn_s",
+          "description": "Seconds per action (one turn).",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.per_action_s"
+          }
+        },
+        {
+          "id": "time_per_effect_s",
+          "description": "Extra seconds per effect played.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.per_effect_s"
+          }
+        },
+        {
+          "id": "round_three_actions_s",
+          "description": "Three actions × per_action_s (the minimum a 3-action round takes before effects).",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "*": [
+              3,
+              {
+                "var": "entry.data.per_action_s"
+              }
+            ]
+          }
+        },
+        {
+          "id": "round_total_max_s",
+          "description": "Upper bound of a round.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.round_total_s.1"
+          }
+        },
+        {
+          "id": "synced_turn",
+          "description": "Contact sync: turn numbers equalise to the lower of the two (turn vs defender.turn assumed).",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "min": [
+              {
+                "var": "turn"
+              },
+              {
+                "var": "defender.turn"
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "per_action_positive_half_tolerance",
+          "description": "per_action_s > 0 and within ±50 % of canonical.",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.per_action_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.per_action_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.per_action_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.per_action_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.per_action_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.per_action_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "per_effect_positive_half_tolerance",
+          "description": "per_effect_s > 0 and within ±50 % of canonical.",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.per_effect_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.per_effect_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.per_effect_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.per_effect_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.per_effect_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.per_effect_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "per_discard_draw_positive_half_tolerance",
+          "description": "per_discard_draw_s > 0 and within ±50 % of canonical.",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.per_discard_draw_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.per_discard_draw_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.per_discard_draw_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.per_discard_draw_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.per_discard_draw_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.per_discard_draw_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "round_total_range",
+          "description": "round_total_s is [min, max] with 0 < min < max.",
+          "assert": {
+            "and": [
+              {
+                ">": [
+                  {
+                    "var": "proposal.data.round_total_s.0"
+                  },
+                  0
+                ]
+              },
+              {
+                "<": [
+                  {
+                    "var": "proposal.data.round_total_s.0"
+                  },
+                  {
+                    "var": "proposal.data.round_total_s.1"
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.round_total_s"
+                      }
+                    ]
+                  },
+                  2
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "fog_of_war_boolean",
+          "description": "fog_of_war stays a boolean.",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.fog_of_war"
+                  }
+                ]
+              },
+              "boolean"
+            ]
+          }
+        }
+      ]
+    },
+    "mode_mmorpg_realtime": {
+      "description": "Real-time MMORPG (8.9): deck of 30, 4 action slots with 4 skill slots bound to them and 4 effect slots; stacking the same card follows the cooldown schedule 360/180/90/45/23/12 s; a Move runs for 15 s; attacks default to charge-run; progression is lateral (no levels, no pay-to-win). No player count or tileset on the card.",
+      "prerequisites": [
+        {
+          "id": "deck_is_30",
+          "description": "caster.deck_size (assumed) equals deck_size.",
+          "when": {
+            "==": [
+              {
+                "var": "caster.deck_size"
+              },
+              {
+                "var": "entry.data.deck_size"
+              }
+            ]
+          }
+        },
+        {
+          "id": "slot_free",
+          "description": "An action is queued only into a free action slot (caster.actions_queued assumed < action_slots).",
+          "when": {
+            "<": [
+              {
+                "var": "caster.actions_queued"
+              },
+              {
+                "var": "entry.data.action_slots"
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "deck_size",
+          "description": "Real-time deck size.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "var": "entry.data.deck_size"
+          }
+        },
+        {
+          "id": "action_slots",
+          "description": "Action slots (actions per round analogue).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.action_slots"
+          }
+        },
+        {
+          "id": "first_stack_cooldown_s",
+          "description": "Cooldown of the first stack (longest).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "max_of": [
+              {
+                "var": "entry.data.stack_cooldown_schedule_seconds"
+              }
+            ]
+          }
+        },
+        {
+          "id": "last_stack_cooldown_s",
+          "description": "Cooldown of the deepest stack (shortest).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "min_of": [
+              {
+                "var": "entry.data.stack_cooldown_schedule_seconds"
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_s",
+          "description": "A Move runs move_run_duration_s — the real-time turn length.",
+          "target": "everyone",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.move_run_duration_s"
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "tileset_size_unchanged",
+          "description": "tileset_size (a string in the data) is unchanged or absent.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.tileset_size"
+                  },
+                  {
+                    "var": "entry.data.tileset_size"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "player_count_type_unchanged",
+          "description": "player_count keeps its type (typeof equal).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.player_count"
+                  }
+                ]
+              },
+              {
+                "typeof": [
+                  {
+                    "var": "entry.data.player_count"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "time_per_turn_positive_half_tolerance",
+          "description": "time_per_turn_s is null or > 0 and within ±50 % of canonical (any positive value when canonical is null).",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.time_per_turn_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.time_per_turn_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.time_per_turn_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.time_per_turn_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "win_condition_text",
+          "description": "win_condition, when present, is a non-empty string.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.win_condition"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "typeof": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      "string"
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "len": [
+                          {
+                            "var": "proposal.data.win_condition"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "deck_size_half_tolerance",
+          "description": "deck_size > 0 and within ±50 % of canonical.",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.deck_size"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.deck_size"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.deck_size"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.deck_size"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.deck_size"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.deck_size"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "slots_1_to_4",
+          "description": "action_slots, skill_slots_bound_to_actions and effect_slots are 1..4 and the skill slots match the action slots.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.action_slots"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.action_slots"
+                  },
+                  4
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.skill_slots_bound_to_actions"
+                  },
+                  {
+                    "var": "proposal.data.action_slots"
+                  }
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.effect_slots"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.effect_slots"
+                  },
+                  4
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cooldown_schedule_shape",
+          "description": "Schedule keeps its length, every step positive, first is the maximum and last the minimum (decreasing).",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.stack_cooldown_schedule_seconds"
+                      }
+                    ]
+                  },
+                  {
+                    "count": [
+                      {
+                        "var": "entry.data.stack_cooldown_schedule_seconds"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "var": "proposal.data.stack_cooldown_schedule_seconds"
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": ""
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "max_of": [
+                      {
+                        "var": "proposal.data.stack_cooldown_schedule_seconds"
+                      }
+                    ]
+                  },
+                  {
+                    "var": "proposal.data.stack_cooldown_schedule_seconds.0"
+                  }
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "min_of": [
+                      {
+                        "var": "proposal.data.stack_cooldown_schedule_seconds"
+                      }
+                    ]
+                  },
+                  {
+                    "var": "proposal.data.stack_cooldown_schedule_seconds.5"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "move_run_half_tolerance",
+          "description": "move_run_duration_s > 0 and within ±50 % of canonical.",
+          "assert": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "entry.data.move_run_duration_s"
+                  },
+                  null
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "proposal.data.move_run_duration_s"
+                      },
+                      null
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.move_run_duration_s"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "proposal.data.move_run_duration_s"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "within_tolerance",
+                      {
+                        "current": {
+                          "var": "entry.data.move_run_duration_s"
+                        },
+                        "proposal": {
+                          "var": "proposal.data.move_run_duration_s"
+                        },
+                        "relative": 0.5
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
