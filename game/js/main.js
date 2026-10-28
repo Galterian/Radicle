@@ -81,10 +81,25 @@ const state = {
   hand: [],
   deckCount: 0,       // cards still in the draw pile — rendered as the stacked pile on the right
   discardCount: 0,    // cards in the discard pile
+  archive: [],        // my archive (side deck) as the peer reports it
+  willArchive: new Set(),  // card_ids marked to go to the archive at this resolution
+  archiveMode: false, // the archive pile was clicked: the next hand card picked is marked for it
+  deckMin: 15,        // the circulating deck never drops below this
+  circulating: 0,     // draw pile + discard + hand
   queued: [],         // [] | [slotIndex] | ['EMPTY']
   queuedSkills: [],   // hand indices of skill cards riding on the queued action
   queuedExtra: null,  // Battle Trance: hand index of the second action card (null → Empty Posture)
+  queuedEffect: null, // hand index of the effect card cast on this action (Posture / Empty; instants on any action)
+  queuedEffect2: null, // a second copy of that effect, cast together with it (Rule 23 ∀ double cast)
+  queuedChain: [],    // further effects chained onto it (Rule 22: first element = previous last; shared one emitted once)
+  withAura: false,    // cast the plan through my Aura ∀ — everyone within 10 hexes, Aura consumed
+  bonusMode: false,   // picking bonus rounds (Haste: one; Balefire: three) before the normal action
+  bonusPlans: [],     // plans committed so far this action, as sent: { slots, skills, effect, target }
+  bonus: { max: 0, balefire: 0, plans: [] },   // the peer's echo: allowance and plans with card_ids
   queuedIsAuto: true, // false once the player has deliberately picked a slot this planning phase
+  casting: null,      // { effect_id, name, step, of } — a multi-Posture cast in progress (Rule 19)
+  destroy: null,      // { stat } — Rule 24: emitting that stat against an enemy token this action
+  lostActions: 0,     // actions I must sit out (Lightning, Oblivion, …)
   willDiscard: new Set(),  // card_ids flagged to drop at turn end — survives the hand shrinking within a turn
   target: null,       // peer_id | {q,r} | null
   locked: false,
@@ -350,7 +365,69 @@ function effectiveQueuedCode() {
 const ACTION_SHORT = { A: 'Attack', B: 'Block', M: 'Move', P: 'Posture' };
 
 const isSkill = (c) => !!c && c.kind === 'skill';
-const isAction = (c) => !!c && c.kind !== 'skill';
+const isEffect = (c) => !!c && c.kind === 'effect';
+const isAction = (c) => !!c && c.kind !== 'skill' && c.kind !== 'effect';
+// Rule 19: an effect is cast on a Posture (or Empty Posture); instants ride on
+// any action. Never on a Battle Trance in this pass. A Reaver also emits on
+// the Attack (and on an Empty Move, which fights as an Attack for them).
+const EVERY_INSTANT = new Set(['effect_the_void', 'effect_light_darkness', 'effect_teleportation', 'effect_emotions_bombard']);
+const castInstant = (card, every) => every ? EVERY_INSTANT.has(card.effect_id) : !!card.is_instant;
+const myWorldStat = () => { const me = state.entities.find(p => p.peer_id === state.myPeerId); return Math.max(1, Number(me?.stat_world ?? me?.stats?.world) || 10); };
+const summonLength = (card) => Math.max(1, Math.ceil((card.summon?.need || 30) / myWorldStat()));
+const castLength = (card, every) => castInstant(card, every) ? 1 : (card.summon ? summonLength(card) : Math.max(1, card.element_cost.length)) + (every ? 1 : 0);
+const effectDoubled = () => state.queuedEffect !== null && state.queuedEffect2 !== null;
+// Rule 22: effect B chains onto A when B's first element is A's last one.
+const chainsOnto = (prev, next) => !!prev && !!next && prev.effect_id !== next.effect_id && next.element_cost[0] === prev.element_cost[prev.element_cost.length - 1];
+const chainTail = () => { const i = state.queuedChain.length ? state.queuedChain[state.queuedChain.length - 1] : state.queuedEffect; return i === null ? null : state.hand[i]; };
+// A card chains when its first element is the one going out at the tail's last emission —
+// of the queued plan, or of the cast in progress (join_elem from the peer).
+const chainable = (card) => {
+  if (!isEffect(card)) return false;
+  if (state.casting?.card_ids && !state.queuedChain.length) {
+    if (state.casting.card_ids.includes(card.card_id)) return false;
+    return !!state.casting.join_elem && card.element_cost[0] === state.casting.join_elem;
+  }
+  return state.queuedEffect !== null && chainsOnto(chainTail(), card);
+};
+// The whole plan is one long cast unless it is a single, un-doubled instant.
+const planIsLong = () => effectDoubled() || state.queuedChain.length > 0;
+function effectMatchesQueue(card, every = false, long = false) {
+  if (!isEffect(card) || tranceActive()) return false;
+  if (!long && castInstant(card, every)) return state.queued.length > 0;
+  const code = effectiveQueuedCode();
+  return code === 'P' || code === 'EP' || (isReaver() && code === 'A') || (isMonk() && (code === 'M' || code === 'EM'));
+}
+const isReaver = () => myPermanents().includes('class_reaver');
+const isMonk = () => myPermanents().includes('class_monk');
+// Rule 20 pc override: once a non-instant effect is picked, only the actions
+// that can carry it (Posture, Empty; Attack for a Reaver) stay selectable.
+function castLocksOut(card) {
+  if (!isAction(card)) return false;
+  if (state.lostActions > 0) return true;
+  const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+  if (!(eff && (planIsLong() || !castInstant(eff, false))) && !state.casting) return false;
+  return !(card.code === 'P' || (isReaver() && card.code === 'A') || (isMonk() && card.code === 'M'));
+}
+// Always castable: the Empty slot is a Posture, and instants ride on anything.
+const effectUsable = (card) => isEffect(card);
+// Rule 20/22: once an effect is picked (or a cast is running) the other effect
+// cards stay live only if they can join it — a twin (∀) or a chain link.
+function effectLockedOut(card, i) {
+  if (state.queuedChain.includes(i)) return false;
+  if (state.casting?.card_ids) return !state.casting.card_ids.includes(card.card_id) && !chainable(card);
+  if (state.queuedEffect === null) return false;
+  if (state.queuedEffect === i || state.queuedEffect2 === i) return false;
+  const first = state.hand[state.queuedEffect];
+  const twinOK = first && card.effect_id === first.effect_id && state.queuedEffect2 === null && state.queuedChain.length === 0;
+  // One element per emission: an instant rides a Posture that is already casting only by joining it.
+  return !twinOK && !chainable(card);
+}
+const ELEM_GLYPH = {
+  elem_vitality: '♥', elem_souls: '☽', elem_time: '⌛', elem_space: '✧',
+  elem_air: '≋', elem_water: '~', elem_earth: '▲', elem_fire: '🔥',
+  elem_concentration: '◎', elem_harmony: '♪',
+};
+const elemGlyphs = (els) => (els || []).map(e => ELEM_GLYPH[e] || '?').join('');
 
 const isTrance = (c) => isSkill(c) && (c.is_trance || c.requires === '*');
 
@@ -388,10 +465,14 @@ function pruneQueuedSkills() {
   if (!trance || typeof state.queued[0] !== 'number' || !isAction(state.hand[state.queued[0]])) state.queuedExtra = null;
   if (typeof state.queuedExtra === 'number' && (!isAction(state.hand[state.queuedExtra]) || state.queuedExtra === state.queued[0])) state.queuedExtra = null;
   state.queuedSkills = state.queuedSkills.filter(i => isSkill(state.hand[i]) && (isTrance(state.hand[i]) ? trance && queuedActionCode() : skillMatchesQueue(state.hand[i])));
+  if (state.queuedEffect2 !== null && (state.queuedEffect === null || !effectMatchesQueue(state.hand[state.queuedEffect], true))) state.queuedEffect2 = null;
+  if (state.queuedChain.length && (state.queuedEffect === null || !effectMatchesQueue(state.hand[state.queuedEffect], false, true))) state.queuedChain = [];
+  if (state.queuedEffect !== null && !effectMatchesQueue(state.hand[state.queuedEffect])) { state.queuedEffect = null; state.queuedEffect2 = null; state.queuedChain = []; }
+  if (state.queuedEffect === null) state.withAura = false;
 }
 function sendQueue() {
   pruneQueuedSkills();
-  send({ kind: 'queue', slots: state.queued, skills: state.queuedSkills, extra: state.queuedExtra });
+  send({ kind: 'queue', slots: state.queued, skills: state.queuedSkills, extra: state.queuedExtra, effect: state.queuedEffect, effect2: state.queuedEffect2, chain: state.queuedChain, aura: state.withAura });
 }
 function skillNames(payload) {
   const names = Array.isArray(payload.skill_names) && payload.skill_names.length
@@ -418,14 +499,18 @@ const skillTag = id => SKILL_TAG[id] || String(id).replace(/^skill_/, '').slice(
 // Compose the chip text from an action summary / queue: trance options first
 // (an option the resolver did not play is parenthesised), then ✦BT, then the
 // other skills in hand order.
-function composeLabel({ action, trance, played, skills }) {
+function composeLabel({ action, declared, trance, played, skills, effects }) {
   const parts = [];
   if (Array.isArray(trance) && trance.length) trance.forEach((c, i) => parts.push(!Array.isArray(played) || played.includes(i) ? c : `(${c})`));
+  // A class stance (Reaver / Barbarian / Monk) judges an Empty Posture as
+  // A / B / M — show both so the reader knows the EP was the play.
+  else if (action && declared && declared !== action) parts.push(`${declared}⚜${action}`);
   else if (action) parts.push(action);
   const ids = (skills || []).map(String);
   const rest = ids.filter(id => id !== 'skill_battle_trance');
   if (Array.isArray(trance) && trance.length) parts.push('✦BT');
   for (const id of rest) parts.push(`✦${skillTag(id)}`);
+  for (const e of effects || []) parts.push(`✺${elemGlyphs(e.elements || e.element_cost)}`);
   return parts.join(' + ');
 }
 // The chip over my own head while planning: what the commit will carry.
@@ -434,10 +519,13 @@ function queuedLabel() {
   if (code === null) return null;
   const skills = state.queuedSkills.map(i => state.hand[i]).filter(isSkill).map(c => c.skill_id);
   const trance = tranceActive() ? [queuedActionCode() || 'EP', extraActionCode() || 'EP'] : null;
-  return composeLabel({ action: code, trance, played: null, skills });
+  const effects = state.queuedEffect !== null && isEffect(state.hand[state.queuedEffect]) ? [state.hand[state.queuedEffect]] : [];
+  return composeLabel({ action: code, trance, played: null, skills, effects });
 }
 
 function renderDeck() {
+  document.getElementById('slots')?.classList.toggle('haste-mode', state.bonusMode);
+  document.getElementById('slots')?.classList.toggle('archive-mode', state.archiveMode);
   const slots = document.querySelectorAll('#slots .slot');
   const trance = tranceActive();
   slots.forEach(slot => {
@@ -465,9 +553,30 @@ function renderDeck() {
     const i = Number(key);
     const card = state.hand[i];
     const skill = isSkill(card);
+    const effect = isEffect(card);
     const skillQueued = skill && state.queuedSkills.includes(i);
+    const effectQueued = effect && (state.queuedEffect === i || state.queuedEffect2 === i || state.queuedChain.includes(i));
+    // Hand slots beyond the dealt five only show up when a card sits there (Haste ∀, Balefire's five).
+    if (i >= 5) slot.hidden = !card;
     const isExtra = trance && state.queuedExtra === i;
-    if (skill) {
+    if (effect) {
+      slot.dataset.code = 'P';
+      cardDiv.dataset.code = 'P';
+      const kindTag = card.is_permanent ? 'perm' : card.is_damage ? 'dmg' : card.is_point_buy ? 'buy' : 'effect';
+      const inCast = !!state.casting?.card_ids?.includes(card.card_id);
+      const prog = inCast ? ` · ${state.casting.step}/${state.casting.of} cast` : '';
+      const dbl = effectQueued && effectDoubled() && (state.queuedEffect === i || state.queuedEffect2 === i);
+      const link = state.queuedChain.indexOf(i);
+      const len = castLength(card, dbl);
+      const twin = !effectQueued && state.hand.some((c, j) => j !== i && isEffect(c) && c.effect_id === card.effect_id);
+      const canChain = !effectQueued && chainable(card);
+      const tag = link >= 0 ? `⛓ ${link + 2}nd` : dbl ? 'double' : kindTag;
+      const sm = card.summon ? ` · 🐾 ${card.summon.bind ? 'bind ' : ''}${card.summon.name} Σ${card.summon.need}` : '';
+      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}✺ ${card.name}</div><div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}</div>`;
+      if (twin) slot.title = `${card.text || card.name}\n\nYou hold two: pick both to cast them together (Rule 23 ∀)`;
+      else if (canChain) slot.title = `${card.text || card.name}\n\nChains onto ${chainTail().name}: its ${elemGlyphs(card.element_cost.slice(0, 1))} is emitted once for both (Rule 22)`;
+      else slot.title = card.text || card.name;
+    } else if (skill) {
       const band = isTrance(card) ? 'P' : card.requires;
       slot.dataset.code = band;
       cardDiv.dataset.code = band;
@@ -503,12 +612,15 @@ function renderDeck() {
       slot.title = '';
     }
     slot.classList.toggle('skill', skill);
-    slot.classList.toggle('disabled', skill && !skillUsable(card));
-    slot.classList.toggle('queued', !skill && state.queued[0] === i);
+    slot.classList.toggle('effect', effect);
+    slot.classList.toggle('disabled', (skill && !skillUsable(card)) || castLocksOut(card) || (effect && effectLockedOut(card, i)) || inBonusPlan(card));
+    slot.classList.toggle('haste-held', inBonusPlan(card));
+    slot.classList.toggle('queued', !skill && !effect && state.queued[0] === i);
     slot.classList.toggle('queued-extra', isExtra);
-    slot.classList.toggle('queued-skill', skillQueued);
+    slot.classList.toggle('queued-skill', skillQueued || effectQueued);
     slot.classList.toggle('discard', !!card && state.willDiscard.has(card.card_id));
-    slot.classList.toggle('locked', state.locked && (state.queued[0] === i || skillQueued || isExtra));
+    slot.classList.toggle('archive', !!card && state.willArchive.has(card.card_id));
+    slot.classList.toggle('locked', state.locked && (state.queued[0] === i || skillQueued || effectQueued || isExtra));
   });
 
   // Deck + discard pile counts, straight from the peer's latest hand broadcast.
@@ -524,6 +636,58 @@ function renderDeck() {
     xc.textContent = String(n);
     xc.parentElement.classList.toggle('empty', n === 0);
   }
+  const ac = document.getElementById('archive-count');
+  if (ac) {
+    const n = state.archive.length;
+    ac.textContent = String(n);
+    ac.parentElement.classList.toggle('empty', n === 0);
+    ac.parentElement.classList.toggle('armed', state.archiveMode);
+    ac.parentElement.title = `Archive: ${n} card${n === 1 ? '' : 's'} · deck ${state.circulating}/${state.deckMin} min — click, then a hand card: it is archived at this resolution instead of discarded · double-click opens the archive`;
+  }
+  if (!document.getElementById('archive-popup')?.hidden) renderArchivePopup();
+}
+
+// The archive popup: every archived card; a click puts it back onto the discard pile.
+function renderArchivePopup() {
+  const list = document.getElementById('ap-list');
+  const sub = document.getElementById('ap-sub');
+  if (!list) return;
+  if (sub) sub.textContent = `${state.archive.length} archived · ${state.circulating} circulating (min ${state.deckMin})`;
+  if (!state.archive.length) { list.innerHTML = '<div class="empty">nothing archived yet — click the pile, then a hand card</div>'; return; }
+  list.innerHTML = state.archive.map(c => {
+    const creature = c.kind === 'creature';
+    const nm = creature ? `🐾 ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
+    const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
+    return `<div class="ac${creature ? ' creature' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div><div class="cd">${cd}</div></div>`;
+  }).join('');
+  list.querySelectorAll('.ac:not(.creature)').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
+}
+function openArchive(open) {
+  const el = document.getElementById('archive-popup');
+  if (!el) return;
+  el.hidden = !open;
+  if (open) { state.archiveMode = false; renderArchivePopup(); }
+  renderDeck();
+}
+let archiveClickTimer = null;
+function wireArchive() {
+  const pile = document.querySelector('#archive-pile .pile');
+  if (!pile) return;
+  // A double-click also fires two clicks: hold the single-click for a beat.
+  pile.addEventListener('click', () => {
+    if (archiveClickTimer) { clearTimeout(archiveClickTimer); archiveClickTimer = null; return; }
+    archiveClickTimer = setTimeout(() => {
+      archiveClickTimer = null;
+      if (state.locked) return;
+      state.archiveMode = !state.archiveMode;
+      uilog('archive', { detail: state.archiveMode ? 'arm' : 'disarm' });
+      logUI(state.archiveMode ? 'archive: pick a hand card — it goes to the archive at this resolution (click a marked card to unmark it)' : 'archive pick cancelled', 'phase');
+      renderDeck();
+    }, 230);
+  });
+  pile.addEventListener('dblclick', () => { if (archiveClickTimer) { clearTimeout(archiveClickTimer); archiveClickTimer = null; } openArchive(true); });
+  document.getElementById('ap-close')?.addEventListener('click', () => openArchive(false));
+  document.getElementById('archive-popup')?.addEventListener('click', (e) => { if (e.target.id === 'archive-popup') openArchive(false); });
 }
 
 function renderRoster() {
@@ -539,19 +703,42 @@ function renderRoster() {
     const res = resOf(e);
     const thumb = res?.portrait?.path ? `<img class="thumb" src="${assetUrl(res.portrait.path)}" alt="">`
       : res?.sprites?.info?.path ? `<img class="thumb info" src="${assetUrl(res.sprites.info.path)}" alt="">` : '';
+    let statTokens = [];
+    try { statTokens = JSON.parse(e.stat_tokens_json || '[]'); } catch {}
+    // Rule 12 dice over / under a stat show as the modifier next to the base value.
     const stat = (flat, key) => {
       const v = e[flat] ?? e.stats?.[key];
-      return Number.isFinite(v) ? v : '—';
+      if (!Number.isFinite(v)) return '—';
+      const mod = statTokens.filter(t => t.stat === key).reduce((a, t) => a + t.value, 0);
+      return mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v;
+    };
+    const lost = e.lost_actions > 0 ? `<span class="pill perm" title="lost actions">⏳ ${e.lost_actions}</span>` : '';
+    let pens = [];
+    try { pens = JSON.parse(e.elem_pen_json || '[]'); } catch {}
+    const countered = pens.map(t => `${t.elem.replace(/^elem_/, '')} −${t.amount}`);
+    const allPerms = (e.permanents_csv || '').split(',').filter(Boolean);
+    const cls = allPerms.find(s => s.startsWith('class_'));
+    let permPower = {};
+    try { permPower = JSON.parse(e.perm_power_json || '{}') || {}; } catch {}
+    // Every permanent shows the die it was placed with — what an enemy's emission has to beat (Rule 24).
+    const perms = allPerms.filter(s => !s.startsWith('class_')).map(s => `${s.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}${permPower[s] ? ` ⚄${permPower[s]}` : ''}`);
+    const mine = e.peer_id === state.myPeerId;
+    const pill = (cls, key, label, flat) => {
+      const on = mine && state.destroy?.stat === key;
+      const title = mine ? `${label} — click to emit ${label} against the closest enemy's ${label} tokens (Rule 24)` : label;
+      return `<span class="pill ${cls}${mine ? ' clickable' : ''}${on ? ' active' : ''}" data-stat="${key}" title="${title}">${on ? '⚒ ' : ''}${label[0] === 'W' && label.length > 5 ? 'Wi' : label[0]} ${stat(flat, key)}</span>`;
     };
     const permIds = (e.permanents_csv || '').split(',').filter(Boolean);
     const headQR = `(${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})`;
     row.innerHTML = `${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}</span>
       <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
-        <span class="pill v" title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
-        <span class="pill w" title="World">W ${stat('stat_world', 'world')}</span>
-        <span class="pill m" title="Matter">M ${stat('stat_matter', 'matter')}</span>
-        <span class="pill wi" title="Will">Wi ${stat('stat_will', 'will')}</span>
+        ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
+        ${pill('w', 'world', 'World', 'stat_world')}
+        ${pill('m', 'matter', 'Matter', 'stat_matter')}
+        ${pill('wi', 'will', 'Will', 'stat_will')}
+        ${cls ? `<span class="pill cls" title="class">⚜ ${cls.replace(/^class_/, '').replace(/_/g, ' ')}</span>` : ''}
+        ${lost}${countered.length ? `<span class="pill perm" title="countered this turn">✨ ${countered.join(', ')}</span>` : ''}
       </span>
       ${permIds.length ? '<div class="perm-cards" data-count="' + permIds.length + '"></div>' : ''}
       </span>`;
@@ -578,11 +765,21 @@ function renderRoster() {
         stack.appendChild(toggle);
       }
     }
-    // Clicking a roster row toggles the log filter on that peer.
+    // Clicking a roster row toggles the log filter on that peer; clicking one
+    // of MY stat pills queues a Rule 24 emission with that stat instead.
     row.addEventListener('click', (ev) => {
       // Skill cards inside this row shouldn't toggle the log filter when the
       // user is reading one — only the empty region / name counts.
       if (ev.target.closest('.skill-card') || ev.target.closest('.perm-toggle')) return;
+      const pillEl = ev.target.closest('.pill.clickable');
+      if (pillEl && mine) {
+        ev.stopPropagation();
+        if (state.locked) return;
+        uilog('destroy', { detail: pillEl.dataset.stat });
+        send({ kind: 'destroy', stat: pillEl.dataset.stat });
+        cancelPathJourney('manual pick');
+        return;
+      }
       setLogFilter(activeFilter === e.peer_id ? null : e.peer_id);
     });
     el.appendChild(row);
@@ -827,6 +1024,109 @@ function myPermanents() {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   return String(me?.permanents_csv || '').split(',').filter(Boolean);
 }
+// The permanents strip right of the deck: every non-class permanent as a small
+// card with its die; the first two answer to keys 9 and 0. An Aura ∀ is a
+// button — it routes the queued cast to everyone within 10 hexes and is spent.
+function myPermCards() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  let power = {}; try { power = JSON.parse(me?.perm_power_json || '{}') || {}; } catch {}
+  const every = new Set(String(me?.every_csv || '').split(',').filter(Boolean));
+  return myPermanents().filter(id => !id.startsWith('class_')).map(id => ({
+    id, name: id.replace(/^(skill|effect)_/, '').replace(/_/g, ' '), die: power[id] || 0, every: every.has(id),
+    action: id === 'effect_aura' && every.has(id) ? 'aura' : id === 'effect_haste' ? 'bonus' : null,
+  })).concat(state.bonus?.balefire ? [{ id: 'balefire_charge', name: 'balefire ×3', die: 0, every: false, action: 'bonus', virtual: true }] : []);
+}
+let lastPermsHtml = '';
+function renderPerms() {
+  const el = document.getElementById('perms');
+  if (!el) return;
+  const perms = myPermCards();
+  const KEYS = ['9', '0', '-', '='];
+  let ki = 0;   // keys go to permanents with an ability only (a Summoning has none)
+  const html = perms.map((p, k) => {
+    const plans = state.bonus?.plans || [];
+    const key = p.action ? KEYS[ki++] : null;
+    const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && (state.bonusMode || plans.length > 0));
+    const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
+      : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${key || '·'})`
+      : p.id === 'effect_summoning' ? `Summoning (6) — holds ${mySummoned()?.name || 'your creature'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
+      : p.name;
+    const cd = p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}` : p.die ? `⚄${p.die}` : 'perm';
+    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${p.id === 'effect_summoning' ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
+  }).join('');
+  if (html === lastPermsHtml) return;
+  lastPermsHtml = html;
+  el.innerHTML = html;
+  el.hidden = perms.length === 0;
+  el.querySelectorAll('.perm.clickable').forEach(d => d.addEventListener('click', () => clickPermanent(Number(d.dataset.k))));
+}
+// The creature my Summoning holds, as the roster knows it.
+function mySummoned() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  return me?.summoned_peer_id ? state.entities.find(p => p.peer_id === me.summoned_peer_id) || { name: me.summoned_peer_id } : null;
+}
+// Keys 9 0 - = address the n-th permanent WITH an ability.
+function clickPermanentKey(n) {
+  const all = myPermCards();
+  const k = all.findIndex((p, i) => p.action && all.slice(0, i).filter(x => x.action).length === n);
+  if (k >= 0) clickPermanent(k);
+}
+function clickPermanent(k) {
+  const p = myPermCards()[k];
+  if (!p || state.locked) return;
+  uilog('permanent', { detail: p.id });
+  if (p.action === 'aura') {
+    if (state.queuedEffect === null) { logUI('pick an effect first — the Aura ∀ carries it to everyone within 10 hexes', 'phase'); return; }
+    state.withAura = !state.withAura;
+    sendQueue(); renderDeck();
+  }
+  if (p.action === 'bonus') {
+    if (state.bonus?.plans?.length) { state.bonusPlans = []; send({ kind: 'bonus', plans: [] }); logUI('bonus rounds cleared', 'phase'); clearQueuePick(); return; }
+    state.bonusMode = !state.bonusMode;
+    // Entering the pick starts from a clean queue; leaving it without committing drops the pick.
+    clearQueuePick();
+    logUI(state.bonusMode ? `⚡ bonus round 1/${state.bonus?.max || 1}: pick action, skills, effect — Space commits it` : 'bonus pick cancelled', 'phase');
+    renderDeck();
+  }
+}
+function clearQueuePick() {
+  state.queued = []; state.queuedSkills = []; state.queuedExtra = null; state.queuedEffect = null; state.queuedEffect2 = null; state.queuedChain = []; state.withAura = false; state.queuedIsAuto = false;
+  sendQueue();
+}
+// Space in bonus mode commits one bonus plan; after the last one (or when the
+// allowance is used up) the queue goes back to the normal action.
+function commitBonus() {
+  if (!state.queued.length) { logUI('bonus round: pick an action first', 'phase'); return; }
+  const plan = { slots: state.queued, skills: state.queuedSkills, extra: state.queuedExtra, effect: state.queuedEffect, destroy: state.destroy?.stat || null, target: state.target && typeof state.target === 'object' ? { q: state.target.q, r: state.target.r } : state.target };
+  state.bonusPlans = [...state.bonusPlans, plan];
+  send({ kind: 'bonus', plans: state.bonusPlans });
+  const max = state.bonus?.max || 1;
+  // A cast still emitting elements rides on into the next bonus plan.
+  const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+  const carried = eff && !eff.is_instant ? state.queuedEffect : null;
+  const stepsSoFar = carried !== null ? state.bonusPlans.filter(b => b.effect === carried).length : 0;
+  const carryOn = carried !== null && stepsSoFar < castLength(eff, false) && state.bonusPlans.length < max;
+  clearQueuePick();
+  if (state.bonusPlans.length >= max) {
+    state.bonusMode = false;
+    logUI(`⚡ ${state.bonusPlans.length} bonus round(s) committed — now pick your normal action`, 'phase');
+  } else {
+    if (carryOn) { const pi = firstActionIdx('P'); state.queued = [pi >= 0 ? pi : 'EMPTY']; state.queuedEffect = carried; sendQueue(); }
+    logUI(`⚡ bonus round ${state.bonusPlans.length + 1}/${max}: pick the next (Space commits; click the ⚡ card to stop)`, 'phase');
+  }
+  renderDeck();
+}
+// Cards already committed to a bonus plan are spent — except an effect still being cast there.
+const inBonusPlan = (card) => {
+  if (!card) return false;
+  const plans = state.bonus?.plans || [];
+  if (!plans.some(b => b.card_ids?.includes(card.card_id))) return false;
+  if (isEffect(card) && !card.is_instant) {
+    const steps = plans.filter(b => b.card_ids?.includes(card.card_id)).length;
+    if (steps < castLength(card, false) && state.bonusMode) return false;
+  }
+  return true;
+};
 const inSanctuary = () => myPermanents().includes('skill_sanctuary');
 
 function autoselectFirstHandCard() {
@@ -845,6 +1145,10 @@ function autoselectFirstHandCard() {
   else state.queued = ['EMPTY'];
   state.queuedSkills = [];
   state.queuedExtra = null;
+  state.queuedEffect = null;
+  state.queuedEffect2 = null;
+  state.queuedChain = [];
+  state.withAura = false;
   state.queuedIsAuto = true;
   sendQueue();
 }
@@ -867,6 +1171,12 @@ function setPhase(name, seconds, heartbeat, m = {}) {
     state.target = null;
     state.queuedSkills = [];
     state.queuedExtra = null;
+    state.queuedEffect = null;
+    state.queuedEffect2 = null;
+    state.queuedChain = [];
+    state.withAura = false;
+    state.bonusMode = false;
+    state.bonusPlans = [];
     state.ui.selectedTarget = null;
     // Keep destinationTile across rounds — a right-click sets up a multi-round
     // journey, so each new planning phase should pick up along the path rather
@@ -898,6 +1208,10 @@ function connect() {
         state.hand = m.hand || [];
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
         if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
+        if (Array.isArray(m.archive)) state.archive = m.archive;
+        if (Array.isArray(m.will_archive)) state.willArchive = new Set(m.will_archive);
+        if (typeof m.deck_min === 'number') state.deckMin = m.deck_min;
+        if (typeof m.circulating === 'number') state.circulating = m.circulating;
         if (typeof m.turn === 'number') state.turn = m.turn;
         if (typeof m.round === 'number') state.round = m.round;
         if (typeof m.rounds_per_turn === 'number') state.roundsPerTurn = m.rounds_per_turn;
@@ -924,11 +1238,24 @@ function connect() {
         state.hand = m.hand || state.hand;
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
         if (typeof m.discard_count === 'number') state.discardCount = m.discard_count;
+        if (Array.isArray(m.archive)) state.archive = m.archive;
+        if (Array.isArray(m.will_archive)) state.willArchive = new Set(m.will_archive);
+        if (typeof m.deck_min === 'number') state.deckMin = m.deck_min;
+        if (typeof m.circulating === 'number') state.circulating = m.circulating;
+        if (m.notice) logUI(m.notice, 'phase');
         if (Array.isArray(m.queued)) state.queued = m.queued;
         if (Array.isArray(m.queued_skills)) state.queuedSkills = m.queued_skills;
         if (m.queued_extra !== undefined) state.queuedExtra = typeof m.queued_extra === 'number' ? m.queued_extra : null;
+        if (m.queued_effect !== undefined) state.queuedEffect = typeof m.queued_effect === 'number' ? m.queued_effect : null;
+        if (m.queued_effect2 !== undefined) state.queuedEffect2 = typeof m.queued_effect2 === 'number' ? m.queued_effect2 : null;
+        if (Array.isArray(m.queued_chain)) state.queuedChain = m.queued_chain.filter(i => typeof i === 'number');
+        if (m.aura !== undefined) state.withAura = !!m.aura;
+        if (m.bonus !== undefined) state.bonus = m.bonus || { max: 0, balefire: 0, plans: [] };
         if (typeof m.turn === 'number') state.turn = m.turn;
         if (typeof m.round === 'number') state.round = m.round;
+        if (m.casting !== undefined) state.casting = m.casting || null;
+        if (m.destroy !== undefined) state.destroy = m.destroy || null;
+        if (typeof m.lost_actions === 'number') { if (m.lost_actions > state.lostActions) logUI(`you lose ${m.lost_actions} action${m.lost_actions > 1 ? 's' : ''} — Empty Posture until it passes`, 'phase'); state.lostActions = m.lost_actions; }
         if (m.turn_end) { state.willDiscard.clear(); logUI(`turn end — hand refilled to ${state.hand.length}`, 'phase'); }
       }
       // Merge peer updates so a transient broadcast missing an entity doesn't
@@ -955,8 +1282,10 @@ function connect() {
           // target, amount, source).
           state._loggedDmg ||= new Set();
           const dmg = env.payload.damage_applied || [];
+          const seqDelay = (env.payload.bonus_rounds || 0) * 1400;   // bonus rounds play first, in order; the normal action after
           for (const d of dmg) {
-            const key = `${env.turn}:${d.target}:${d.amount}:${d.attacker || d.source || ''}`;
+            const key = `${env.turn}:${env.round}:${d.target}:${d.amount}:${d.attacker || d.source || ''}:${d.bonus ? 'h' : ''}`;
+            const dmgDelay = d.bonus ? 0 : seqDelay;
             if (state._loggedDmg.has(key)) continue;
             state._loggedDmg.add(key);
             logUI(`  DMG ${d.amount} → ${peerShort(d.target)}`, 'damage', { peerId: d.target });
@@ -976,12 +1305,22 @@ function connect() {
                 toQ: tgt.tile_q,
                 toR: tgt.tile_r,
                 amount: d.amount,
-                startAt: performance.now(),
+                startAt: performance.now() + dmgDelay,
                 duration: 2200,
               });
             }
           }
           if (state._loggedDmg.size > 500) state._loggedDmg = new Set([...state._loggedDmg].slice(-100));
+          // A Summoning fell: its creature vanishes (💨 where it stood).
+          state._loggedVanish ||= new Set();
+          for (const v of env.payload.vanished || []) {
+            const vk = `${env.turn}:${env.round}:${v.peer_id}`;
+            if (state._loggedVanish.has(vk)) continue;
+            state._loggedVanish.add(vk);
+            logUI(`  💨 ${v.name || peerShort(v.peer_id)} ${v.bound ? 'is released from' : 'vanishes with'} ${peerShort(env.actor_peer_id)}'s Summoning`, 'damage', { peerId: v.peer_id });
+            const at = Number.isInteger(v.q) ? v : state.entities.find(e => e.peer_id === v.peer_id);
+            if (at && Number.isInteger(at.q ?? at.tile_q)) state.ui.floatingIcons.push({ effect: 'vanish', glyph: '💨', fromQ: at.q ?? at.tile_q, fromR: at.r ?? at.tile_r, toQ: at.q ?? at.tile_q, toR: at.r ?? at.tile_r, upOnly: true, startAt: performance.now() + seqDelay, duration: 2600 });
+          }
           // Rule 8 journey outcomes. One line per actor per round; de-dup by
           // (turn, round, actor) since every peer's state_hash echoes them.
           state._loggedJourney ||= new Set();
@@ -1017,21 +1356,28 @@ function connect() {
               if (a.action === 'A') rendererRef?.trigger(a.actor, 'attack');
               if (state._animAction.size > 500) state._animAction = new Set([...state._animAction].slice(-100));
             }
-            const ak = `${env.turn}:${env.round}:${a.actor}`;
+            const ak = `${env.turn}:${env.round}:${a.actor}${a.bonus ? `:bonus${a.bonus_k || 0}` : ''}`;
             if (state._loggedAction.has(ak)) continue;
             state._loggedAction.add(ak);
+            const at0 = performance.now() + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay);
             // Every revealer (heroes and monsters) gets the composed chip over
             // its head — `[EM + A + ✦BT + ✦Po]` — fading on the icon's clock.
+            // A bonus round shows as `⚡ A ▸ P` once the normal action follows it.
             // The payload also carries the raw skill ids so the DOM reveal
             // overlay can pop a SkillCard per skill (icon + full description).
+            const prevBadge = state.ui.revealBadges[a.actor];
+            const chained = !a.bonus && prevBadge?.bonusKey === `${env.turn}:${env.round}`;
+            const chainedBonus = a.bonus && prevBadge?.bonusKey === `${env.turn}:${env.round}`;
             state.ui.revealBadges[a.actor] = {
-              text: composeLabel(a),
+              text: chained || chainedBonus ? `${prevBadge.text} ▸ ${composeLabel(a)}` : `${a.bonus ? '⚡ ' : ''}${composeLabel(a)}`,
               skills: (a.skills || []).filter(id => id && id !== 'skill_battle_trance'),
               trance: Array.isArray(a.trance) ? a.trance.slice() : null,
               action: a.action,
               startAt: performance.now(),
-              duration: 2200,
+              duration: 2200 + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay),
+              bonusKey: a.bonus ? `${env.turn}:${env.round}` : null,
             };
+            if (a.bonus) logUI(`  ⚡ ${peerShort(a.actor)} ${a.pre ? 'balefire first' : `bonus round ${(a.bonus_k || 0) + 1}`}: ${composeLabel(a)}`, 'phase', { peerId: a.actor });
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
             if (fromQ === null) continue;
@@ -1048,7 +1394,8 @@ function connect() {
             // Each revealed skill plays its mapped WBC3 fx sound (data/skills.json
             // resources.sounds.fx) — one shot per skill, the bank throttles repeats.
             for (const id of a.skills || []) sounds.play(resourcesFor(id), 'fx', { volume: 0.55 });
-            const startAt = performance.now();
+            for (const e of a.effects || []) icons.push({ effect: e.effect_id, glyph: `✺${elemGlyphs(e.elements)}` });
+            const startAt = at0;
             icons.forEach((ic, i) => state.ui.floatingIcons.push({
               ...ic,
               dx: (i - (icons.length - 1) / 2) * 22,
@@ -1153,6 +1500,44 @@ function queueSlot(key) {
   if (state.locked) return;
   const card = typeof key === 'number' ? state.hand[key] : null;
   if (typeof key === 'number' && !card) return;
+  // Archive pick: the card is marked (or unmarked) for the archive, nothing is queued.
+  if (state.archiveMode) {
+    state.archiveMode = false;
+    if (card) { send({ kind: 'archive', slot: key }); uilog('archive-mark', { detail: card.card_id }); }
+    renderDeck();
+    return;
+  }
+  if (inBonusPlan(card)) { logUI('that card is already committed to a bonus round', 'phase'); return; }
+  if (isEffect(card)) {
+    // Rule 19: an effect is cast on a Posture. Toggle it; when it does not fit
+    // the current pick, pull a Posture card (or the Empty slot) into the queue.
+    const first = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+    if (state.casting?.card_ids && !state.casting.card_ids.includes(card.card_id) && !chainable(card) && !state.queuedChain.includes(key)) { logUI('finish the cast first — only an effect sharing the element going out can join it', 'phase'); return; }
+    if (state.queuedEffect === key) { state.queuedEffect = state.queuedEffect2; state.queuedEffect2 = null; state.queuedChain = []; }
+    else if (state.queuedEffect2 === key) state.queuedEffect2 = null;
+    else if (state.queuedChain.includes(key)) state.queuedChain = state.queuedChain.slice(0, state.queuedChain.indexOf(key));   // drop this link and what follows
+    else {
+      // Rule 23 ∀: a second copy of the queued effect joins it as a double cast.
+      // Rule 22: an effect whose first element is the tail's last one chains on.
+      const doubling = !!first && first.effect_id === card.effect_id && state.queuedChain.length === 0 && !state.casting;
+      const linking = !doubling && chainable(card);
+      if (tranceActive()) { state.queuedSkills = state.queuedSkills.filter(i => !isTrance(state.hand[i])); state.queuedExtra = null; }
+      if (!effectMatchesQueue(card, doubling, linking)) {
+        const idx = firstActionIdx('P');
+        state.queued = [idx >= 0 ? idx : 'EMPTY'];
+        state.queuedSkills = [];
+        state.queuedExtra = null;
+      }
+      if (doubling) state.queuedEffect2 = key;
+      else if (linking) state.queuedChain.push(key);
+      else { state.queuedEffect = key; state.queuedEffect2 = null; state.queuedChain = []; }
+    }
+    state.queuedIsAuto = false;
+    cancelPathJourney('manual pick');
+    sendQueue();
+    renderDeck();
+    return;
+  }
   if (isSkill(card)) {
     // Rule 17: a skill rides on a matching action card. Toggle it on/off and
     // pull the first matching action into the queue when needed.
@@ -1194,6 +1579,11 @@ function queueSlot(key) {
     cancelPathJourney('manual pick');
     sendQueue();
     renderDeck();
+    return;
+  }
+  if (castLocksOut(card)) {
+    const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+    logUI(state.lostActions > 0 ? `you sit this action out (${state.lostActions} left)` : `${(eff || state.casting)?.name || 'the effect'} is being cast — only Posture${isReaver() ? ', Attack' : ''}${isMonk() ? ', Move' : ''} or Empty Posture until it lands (moving interrupts it)`, 'phase');
     return;
   }
   // Single-action-per-turn (Rule 1 + Rule 7). Clicking the already-queued slot
@@ -1243,12 +1633,20 @@ function wireInput() {
     if (objectCardEl.contains(ev.target) || ev.target === canvas) return;
     hideObjectCard();
   });
+  wireArchive();
   window.addEventListener('keydown', (ev) => {
     uilog('keydown', { key: ev.key || ev.code });
-    if (ev.key === 'Escape') { hideObjectCard(); return; }
-    if (ev.key >= '1' && ev.key <= '5') queueSlot(Number(ev.key) - 1);
+    if (ev.key === 'Escape') {
+      hideObjectCard();
+      if (!document.getElementById('archive-popup')?.hidden) openArchive(false);
+      else if (state.archiveMode) { state.archiveMode = false; renderDeck(); }
+      return;
+    }
+    if (ev.key >= '1' && ev.key <= '7') queueSlot(Number(ev.key) - 1);
     else if (ev.key === '8') queueSlot('EMPTY');
-    else if (ev.code === 'Space') { ev.preventDefault(); if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
+    else if (ev.key === '9' || ev.key === '0') clickPermanentKey(ev.key === '9' ? 0 : 1);
+    else if (ev.code === 'Space') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
+    else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
     else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
     else if (ev.key === 'm' || ev.key === 'M') {
       const muted = sounds.toggle();
@@ -1274,10 +1672,16 @@ function wireInput() {
           queuedCode: isMe ? queuedLabel() : null,
           locked: isMe ? state.locked : false,
           revealBadge: state.ui.revealBadges?.[p.peer_id] || null,
+          lostActions: p.lost_actions || 0,
         };
       });
     },
     ui: state.ui,
+    get tileTokens() {
+      const out = [];
+      for (const p of state.entities) { try { for (const t of JSON.parse(p.tile_tokens_json || '[]')) out.push({ ...t, owner: p.peer_id, alliance: p.alliance }); } catch {} }
+      return out;
+    },
     get map() { return state.map; },
     get mapVersion() { return state.mapVersion; },
     get myPeerId() { return state.myPeerId; },
@@ -1468,7 +1872,11 @@ function wireInput() {
       state.ui.selectedTarget = { q: occupant.tile_q, r: occupant.tile_r };
       state.ui.destinationTile = { q: occupant.tile_q, r: occupant.tile_r };
       state.ui.pathPlan = null;
-      label = `target → ${occupant.name} (keeping ${queuedCode || 'EP'})`;
+      const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+      const counter = state.queuedSkills.some(i => state.hand[i]?.skill_id === 'skill_counter_spell');
+      label = eff || counter
+        ? `${eff ? eff.name : 'Counter spell'} → ${occupant.name} (on ${queuedCode || 'EP'})`
+        : `target → ${occupant.name} (keeping ${queuedCode || 'EP'})`;
       send({ kind: 'target', target: state.target });
       sounds.play(resOf(me), 'order');
       const now = Date.now();
@@ -1598,6 +2006,7 @@ function wireInput() {
   }, 250);
   function raf() {
     renderRoster();
+    renderPerms();
     renderDeck();
     renderHeroCard();
     if (!readyPlayed && state.myPeerId) {
