@@ -1,0 +1,94 @@
+{
+  "collection": "hashgraph_events",
+  "note": "Shared-rule candidates repeated verbatim in all 13 hashgraph_events blocks (and the key-set rule in sync_protocol / dimension_session / governance too). Same shape as data/logic_rules.json entries.",
+  "entries": [
+    {
+      "id": "object_keys_unchanged",
+      "name": "Validation — an object keeps exactly the canonical key set",
+      "description": "count(keys(proposal_obj)) == count(keys(current_obj)) and every proposal key is a canonical key. Used 13x as payload_keys_unchanged (hashgraph_events), 3x as shape_keys_unchanged (dimension_session), plus sync_handshake_per_action.envelope_keys_unchanged, sync_turn_commit.payload_keys_unchanged, sync_radicle_push.paths_keys_unchanged, governance_branch_layout.branch_names_unchanged, governance_rebalance_script.power_score_collections_unchanged. Pass the objects as {\"var\": ...} references.",
+      "tags": [ "validation", "shape" ],
+      "params": {
+        "current": { "type": "object" },
+        "proposal": { "type": "object" }
+      },
+      "logic": {
+        "and": [
+          { "==": [ { "count": [ { "keys": [ { "param": "proposal" } ] } ] }, { "count": [ { "keys": [ { "param": "current" } ] } ] } ] },
+          { "subset_of": [ { "keys": [ { "param": "proposal" } ] }, { "keys": [ { "param": "current" } ] } ] }
+        ]
+      },
+      "examples": [
+        { "args": { "current": { "a": 1, "b": 2 }, "proposal": { "b": 5, "a": 0 } }, "expect": true },
+        { "args": { "current": { "a": 1, "b": 2 }, "proposal": { "a": 1, "c": 2 } }, "expect": false }
+      ]
+    },
+    {
+      "id": "valid_event_scopes",
+      "name": "Hashgraph event scopes",
+      "description": "The scope vocabulary of hashgraph_events: dimension | door | strong_region. Used by every event's scope_in_vocabulary validation; a collection_validation candidate for hashgraph_events.",
+      "tags": [ "validation", "hashgraph_events" ],
+      "params": {},
+      "logic": [ "dimension", "door", "strong_region" ],
+      "examples": []
+    },
+    {
+      "id": "event_scope_valid",
+      "name": "Hashgraph event — scope from the vocabulary and unchanged",
+      "description": "proposal.data.scope is in valid_event_scopes and equals entry.data.scope; finality text unchanged. Candidate for collection_validation.hashgraph_events.",
+      "tags": [ "validation", "hashgraph_events" ],
+      "params": {},
+      "logic": {
+        "and": [
+          { "in": [ { "var": "proposal.data.scope" }, { "rule": [ "valid_event_scopes", {} ] } ] },
+          { "==": [ { "var": "proposal.data.scope" }, { "var": "entry.data.scope" } ] },
+          { "==": [ { "var": "proposal.data.finality" }, { "var": "entry.data.finality" } ] }
+        ]
+      },
+      "examples": []
+    },
+    {
+      "id": "envelope_matches_event",
+      "name": "Hashgraph event — envelope type / scope / emitter / payload keys match the entry",
+      "description": "The four prerequisites every event block repeats: envelope.type == entry.id, scope == entry.data.scope, emitter.role == entry.data.emitted_by, and every contract payload key is present in envelope.payload. Context: {envelope, scope, emitter, entry}.",
+      "tags": [ "hashgraph_events", "prerequisite" ],
+      "params": {},
+      "logic": {
+        "and": [
+          { "==": [ { "var": "envelope.type" }, { "var": "entry.id" } ] },
+          { "==": [ { "var": "scope" }, { "var": "entry.data.scope" } ] },
+          { "==": [ { "var": "emitter.role" }, { "var": "entry.data.emitted_by" } ] },
+          { "subset_of": [ { "keys": [ { "var": "entry.data.payload" } ] }, { "keys": [ { "var": "envelope.payload" } ] } ] }
+        ]
+      },
+      "examples": []
+    },
+    {
+      "id": "members_outstanding",
+      "name": "Handshake — expected members whose envelope is still missing",
+      "description": "count(filter(expected, not in seen)). Used by evt_action_commit.members_outstanding; the complement of all_members_answered (sync_protocol.shared.json). Pass `seen` as {\"root\": ...} because the body iterates.",
+      "tags": [ "sync", "handshake" ],
+      "params": {
+        "expected": { "type": "[peer_id]" },
+        "seen": { "type": "[peer_id]" }
+      },
+      "logic": { "count": [ { "filter": [ { "param": "expected" }, { "!": { "includes": [ { "param": "seen" }, { "var": "" } ] } } ] } ] },
+      "examples": [
+        { "args": { "expected": [ "a", "b", "c" ], "seen": [ "a" ] }, "expect": 2 }
+      ]
+    },
+    {
+      "id": "die_from_digest",
+      "name": "Shared-salt D6",
+      "description": "1 + (digest mod 6) where digest is sha256(concat(salts) + roll_index) read as an integer by the runtime (json-logic cannot hash). Used by sync_handshake_per_action.die_from_salts and evt_dice.die_from_digest.",
+      "tags": [ "dice", "random" ],
+      "params": {
+        "digest_int": { "type": "number" }
+      },
+      "logic": { "+": [ 1, { "%": [ { "param": "digest_int" }, 6 ] } ] },
+      "examples": [
+        { "args": { "digest_int": 12345 }, "expect": 4 },
+        { "args": { "digest_int": 17 }, "expect": 6 }
+      ]
+    }
+  ]
+}

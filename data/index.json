@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "name": "Dimensions (chaosD6) — Data Layer",
   "paper_source": "DimentionsEN.docx.html",
   "generated_at": "2026-10-19",
@@ -129,6 +129,13 @@
       "entries": 5,
       "writes": "vote-driven",
       "purpose": "runtime / P2P contract (point 2 of the game idea)"
+    },
+    {
+      "id": "logic_rules",
+      "file": "logic_rules.json",
+      "entries": 144,
+      "writes": "vote-driven",
+      "purpose": "shared JsonLogic vocabulary (named rules, custom ops, collection validation, power-score formulas) — not a VersionedEntry collection"
     }
   ],
   "load_order_for_engine": [
@@ -156,7 +163,8 @@
     "Changes mid-session do not retroactively apply; a Dimension inherits the rules snapshot of the session it was opened under (recorded in ActiveDimensions/<id>/rules_snapshot_commit).",
     "contradictions.json holds the FIRST governance proposals (status proposal) plus resolved history (status resolved, weight 0).",
     "governance.json, sync_protocol.json, hashgraph_events.json and dimension_session.json are the machine-readable form of the P2P / Radicle / hashgraph game idea; concept.json keeps only the narrative summary.",
-    "Entry counts in `collections` are informational; the editor and engine must trust the files, not these numbers."
+    "Entry counts in `collections` are informational; the editor and engine must trust the files, not these numbers.",
+    "Every active version carries a  block (JsonLogic). Named rules live once in logic_rules.json; game/logic-engine.mjs evaluates them; tools/logic-check.mjs and tools/rebalance.mjs validate data and proposals. Authoring guide: game/tools/logic/README.md."
   ],
   "examples": {
     "ActiveDimensions": "examples/ActiveDimensions/<DimensionName>/ - a filled-in dimension.json + doors/<DoorId>.json pair following dimension_session.json shapes"

@@ -1,0 +1,71 @@
+{
+  "collection": "contradictions",
+  "description": "Shared-rule candidates found while authoring contradictions.logic.json (the same four validation items and the sources-exist prerequisite repeat in all 6 entries). Shape of data/logic_rules.json entries.",
+  "entries": [
+    {
+      "id": "entries_exist",
+      "name": "Catalog — every id in a list resolves",
+      "description": "True when every id in `ids` names an existing catalog entry (its active data is not null). json-logic's `all` is false for an empty list, so the empty case is allowed explicitly. Used as the sources-exist prerequisite and sources-resolve validation in all contradiction entries; the same shape is inlined for rules' cross_refs (rules.shared.json cross_refs_resolve).",
+      "tags": ["validation", "catalog"],
+      "params": { "ids": { "type": "[entry_id]" } },
+      "logic": {
+        "or": [
+          { "==": [{ "count": [{ "param": "ids" }] }, 0] },
+          { "all": [{ "param": "ids" }, { "!=": [{ "entry": [{ "var": "" }] }, null] }] }
+        ]
+      },
+      "examples": [
+        { "args": { "ids": ["rule_14", "char_razorfin_abolisher"] }, "expect": true },
+        { "args": { "ids": ["rule_14", "no_such_entry"] }, "expect": false },
+        { "args": { "ids": [] }, "expect": true }
+      ]
+    },
+    {
+      "id": "contradiction_well_formed",
+      "name": "Contradiction — sources and resolutions present",
+      "description": "A contradiction proposal names at least one source entry and proposes at least one resolution. Inlined as sources-non-empty / resolutions-proposed in all 6 entries. Context {proposal}.",
+      "tags": ["validation", "contradictions"],
+      "params": {},
+      "logic": {
+        "and": [
+          { ">=": [{ "count": [{ "var": "proposal.data.source_entries" }] }, 1] },
+          { ">=": [{ "count": [{ "var": "proposal.data.proposed_resolutions" }] }, 1] }
+        ]
+      },
+      "examples": [
+        { "data": { "proposal": { "data": { "source_entries": ["rule_14"], "proposed_resolutions": [{ "resolution_id": "a" }] } } }, "expect": true },
+        { "data": { "proposal": { "data": { "source_entries": [], "proposed_resolutions": [{ "resolution_id": "a" }] } } }, "expect": false }
+      ]
+    },
+    {
+      "id": "contradiction_chosen_is_proposed",
+      "name": "Contradiction — chosen resolution is one of the proposed",
+      "description": "chosen_resolution is absent (open vote) or equals the resolution_id of one of proposed_resolutions. Inlined as chosen-is-proposed in all 6 entries. Context {proposal}.",
+      "tags": ["validation", "contradictions"],
+      "params": {},
+      "logic": {
+        "or": [
+          { "!": { "var": "proposal.data.chosen_resolution" } },
+          { "in": [{ "var": "proposal.data.chosen_resolution" }, { "map": [{ "var": "proposal.data.proposed_resolutions" }, { "var": "resolution_id" }] }] }
+        ]
+      },
+      "examples": [
+        { "data": { "proposal": { "data": { "chosen_resolution": "a", "proposed_resolutions": [{ "resolution_id": "a" }, { "resolution_id": "b" }] } } }, "expect": true },
+        { "data": { "proposal": { "data": { "proposed_resolutions": [{ "resolution_id": "a" }] } } }, "expect": true },
+        { "data": { "proposal": { "data": { "chosen_resolution": "zzz", "proposed_resolutions": [{ "resolution_id": "a" }] } } }, "expect": false }
+      ]
+    },
+    {
+      "id": "contradiction_resolution_kept",
+      "name": "Contradiction — a resolved entry keeps its choice",
+      "description": "Once a contradiction is resolved its chosen_resolution is history: a new version keeps it. Inlined as resolution-kept in the 4 resolved entries. Context {entry, proposal}.",
+      "tags": ["validation", "contradictions", "governance"],
+      "params": {},
+      "logic": { "==": [{ "var": "proposal.data.chosen_resolution" }, { "var": "entry.data.chosen_resolution" }] },
+      "examples": [
+        { "data": { "entry": { "data": { "chosen_resolution": "a" } }, "proposal": { "data": { "chosen_resolution": "a" } } }, "expect": true },
+        { "data": { "entry": { "data": { "chosen_resolution": "a" } }, "proposal": { "data": { "chosen_resolution": "b" } } }, "expect": false }
+      ]
+    }
+  ]
+}

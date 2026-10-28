@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2.0",
+  "schema_version": "0.3.0",
   "generated_at": "2026-10-19",
   "description": "Versioned, voteable data-layer schema for the Dimensions RPG (chaosD6). Every entity (rule, effect, skill, class, character, creature, item, etc.) is a VersionedEntry. Governance = Radicle git branches propose new versions, peers sign votes, a rebalance pass updates weights, and the engine loads the highest-weight canonical version at session start.",
   "entry_contract": {
@@ -31,7 +31,14 @@
           }
         ],
         "notes": "optional free-form rationale from the proposer",
-        "data": "the actual mechanical payload; shape depends on the collection"
+        "data": "the actual mechanical payload; shape depends on the collection",
+        "logic": {
+          "description": "JsonLogic block (json-logic-js 2.x) describing the version mechanically — sibling of data. Shared logic is referenced from data/logic_rules.json with {\"rule\": [id, {params}]}; see logic_rules.json#entry_logic_shape and game/tools/logic/README.md",
+          "prerequisites": "[ {id, description, when: <logic over the battle context>} ] — all must hold before the entry may be used / cast / triggered",
+          "effects": "[ {id, description, target, unit, value: <logic>} ] — the outcome maths",
+          "validation": "[ {id, description, assert: <logic over {entry, proposal}>} ] — invariants every new version must keep; the engine also runs logic_rules.json#collection_validation[collection]",
+          "references": "[ logic_rules id ] — named rules used (filled by tools/logic-apply.mjs)"
+        }
       }
     ]
   },
@@ -49,7 +56,8 @@
     "sync_protocol": "data = free-form protocol parameters per entry (tiers, phases, intervals, flows, algorithms); numbers are the tunables the community votes on",
     "hashgraph_events": "data = { scope: dimension|door|strong_region, emitted_by, finality, payload:{field: type-description} }",
     "dimension_session": "data = { shape: {field: type-description} } describing dimension.json / doors/<DoorId>.json / local client state",
-    "governance": "data = free-form per entry: branch layout, voting thresholds, rebalance script contract, fork policy, write permissions"
+    "governance": "data = free-form per entry: branch layout, voting thresholds, rebalance script contract, fork policy, write permissions",
+    "logic_rules": "data/logic_rules.json — the named JsonLogic rules + custom operation vocabulary + collection_validation + power_score formulas. Not a VersionedEntry collection: entries are { id, name, description, tags, params, logic, examples }. Change by proposal like any rule."
   },
   "sync_contract": {
     "description": "How the data layer participates in the P2P / Radicle / hashgraph sync model.",
@@ -70,6 +78,11 @@
       "events": "hashgraph_events.json",
       "session_shapes": "dimension_session.json",
       "governance": "governance.json"
+    },
+    "logic_engine": {
+      "description": "game/logic-engine.mjs loads data/ + logic_rules.json, expands rule references, evaluates against a context and validates proposals; tools/logic-check.mjs is the regression (every active version re-validated as a proposal — a WARN is a data contradiction to fix by proposal); tools/rebalance.mjs implements governance_rebalance_script on top of it (report | check <proposal.json> [--apply]).",
+      "proposal_file": "{ collection, entry_id | entry:{id,name,tags}, version:{ version, origin, author_peer_id, parent_version, notes, data, logic? } } — see game/tools/proposals/*.json examples",
+      "gate": "the tally script must call validateProposal() and the rebalance check before a proposal may become canonical (rebalance_within_tolerance in governance_voting)"
     }
   }
 }

@@ -1,0 +1,105 @@
+{
+  "collection": "classes",
+  "description": "Shared-rule candidates found while authoring classes.logic.json — inlined there for now (same shape as a logic_rules entry). Every one of the 33 class blocks repeats class_card_held, class_card_token_count, class_card_indestructible and the three validations; the ability gate and the EP stance repeat in subsets.",
+  "candidates": [
+    {
+      "id": "class_card_held",
+      "name": "Class card sits in the permanents",
+      "description": "Rule 9: the class ability is available only while the class card is among the caster's permanents (it always is for a living character, but creatures and class-less contexts fail it).",
+      "tags": ["classes", "rule_9", "permanent"],
+      "params": { "permanents": { "type": "[entry_id]" }, "id": { "type": "string" } },
+      "logic": { "includes": [{ "param": "permanents" }, { "param": "id" }] },
+      "examples": [
+        { "args": { "permanents": ["class_reaver"], "id": "class_reaver" }, "expect": true },
+        { "args": { "permanents": [], "id": "class_reaver" }, "expect": false }
+      ]
+    },
+    {
+      "id": "class_card_token_count",
+      "name": "Class card — one 6-token per colour",
+      "description": "The class card enters with one token of fixed value 6 (fixed_power_6) per listed colour; this is the count. Pair with fixed_power_6 for the value.",
+      "tags": ["classes", "rule_9", "tokens"],
+      "params": { "colors": { "type": "[element_id]" } },
+      "logic": { "count": [{ "param": "colors" }] },
+      "examples": [
+        { "args": { "colors": ["elem_vitality", "elem_fire"] }, "expect": 2 }
+      ]
+    },
+    {
+      "id": "class_card_indestructible",
+      "name": "Class card — Rule 24 never destroys it",
+      "description": "using_rule_24 with is_class_card true: whatever the die, the class card is not destroyed (Rule 9). Supersedes the classes.json note 'destroy cost = point-buy all colours at 6'.",
+      "tags": ["classes", "rule_9", "rule_24"],
+      "params": { "die": { "type": "number" } },
+      "logic": { "rule": ["using_rule_24", { "die": { "param": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] },
+      "examples": [
+        { "args": { "die": 6 }, "expect": false }
+      ]
+    },
+    {
+      "id": "class_ability_ready",
+      "name": "Class ability gate by ability_kind",
+      "description": "once_per_round: not used this round; tap: card untapped (untap by emitting each listed colour once); static: always ready.",
+      "tags": ["classes", "rule_9"],
+      "params": { "kind": { "type": "string" }, "used_this_round": { "type": "boolean", "default": false }, "tapped": { "type": "boolean", "default": false } },
+      "logic": { "if": [{ "==": [{ "param": "kind" }, "once_per_round"] }, { "!": { "param": "used_this_round" } }, { "==": [{ "param": "kind" }, "tap"] }, { "!": { "param": "tapped" } }, true] },
+      "examples": [
+        { "args": { "kind": "tap", "tapped": true }, "expect": false },
+        { "args": { "kind": "once_per_round", "used_this_round": false }, "expect": true },
+        { "args": { "kind": "static", "tapped": true, "used_this_round": true }, "expect": true }
+      ]
+    },
+    {
+      "id": "class_ep_stance",
+      "name": "Empty-action stance of the EP classes",
+      "description": "peer.mjs: a Reaver's EP and EM fight as Attack, a Barbarian's EP as Block, a Monk's EP as Move; everything else is unchanged. Used by class_reaver / class_barbarian / class_monk and by action_empty_posture / action_empty_move.",
+      "tags": ["classes", "actions", "rule_9", "pc_override"],
+      "params": { "action": { "type": "string" }, "permanents": { "type": "[entry_id]" } },
+      "logic": { "if": [
+        { "and": [{ "includes": [{ "param": "permanents" }, "class_reaver"] }, { "in": [{ "param": "action" }, ["EP", "EM"]] }] }, "A",
+        { "and": [{ "includes": [{ "param": "permanents" }, "class_barbarian"] }, { "==": [{ "param": "action" }, "EP"] }] }, "B",
+        { "and": [{ "includes": [{ "param": "permanents" }, "class_monk"] }, { "==": [{ "param": "action" }, "EP"] }] }, "M",
+        { "param": "action" }
+      ] },
+      "examples": [
+        { "args": { "action": "EM", "permanents": ["class_reaver"] }, "expect": "A" },
+        { "args": { "action": "EP", "permanents": ["class_monk"] }, "expect": "M" },
+        { "args": { "action": "EM", "permanents": ["class_monk"] }, "expect": "EM" },
+        { "args": { "action": "P", "permanents": ["class_barbarian"] }, "expect": "P" }
+      ]
+    },
+    {
+      "id": "valid_ability_kinds",
+      "name": "ability_kind vocabulary",
+      "description": "once_per_round | static | tap (classes.json notes).",
+      "tags": ["validation", "classes"],
+      "params": {},
+      "logic": ["once_per_round", "static", "tap"],
+      "examples": []
+    },
+    {
+      "id": "count_within_one",
+      "name": "List length within +-1 of canonical",
+      "description": "Validation: |count(proposal list) − count(canonical list)| <= 1. Used for class colours; applicable to element_cost, combos and dice patterns too.",
+      "tags": ["validation", "rebalance"],
+      "params": { "current": { "type": "array" }, "proposal": { "type": "array" } },
+      "logic": { "<=": [{ "abs": [{ "-": [{ "count": [{ "param": "proposal" }] }, { "count": [{ "param": "current" }] }] }] }, 1] },
+      "examples": [
+        { "args": { "current": ["a", "b", "c"], "proposal": ["a", "b"] }, "expect": true },
+        { "args": { "current": ["a", "b", "c"], "proposal": ["a"] }, "expect": false }
+      ]
+    },
+    {
+      "id": "heal_capped",
+      "name": "Heal capped at the missing life",
+      "description": "min(amount, max0(life_max − life)) — Healer, Guardian, Noble lifesteal, Overlord armor.",
+      "tags": ["life", "heal"],
+      "params": { "amount": { "type": "number" }, "life": { "type": "number" }, "life_max": { "type": "number" } },
+      "logic": { "min": [{ "max0": [{ "param": "amount" }] }, { "max0": [{ "-": [{ "param": "life_max" }, { "param": "life" }] }] }] },
+      "examples": [
+        { "args": { "amount": 2, "life": 3, "life_max": 4 }, "expect": 1 },
+        { "args": { "amount": 1, "life": 4, "life_max": 4 }, "expect": 0 }
+      ]
+    }
+  ]
+}

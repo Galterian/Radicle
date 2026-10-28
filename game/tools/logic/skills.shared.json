@@ -1,0 +1,87 @@
+{
+  "collection": "skills",
+  "description": "Shared-rule candidates found while authoring skills.logic.json — inlined there for now; the integrator may merge these into data/logic_rules.json (same shape as a logic_rules entry).",
+  "candidates": [
+    {
+      "id": "skill_rides_on",
+      "name": "Skill rides on the action family",
+      "description": "A skill with action_type `family` may be played when the caster's action is that code, or — for Move and Posture skills — an empty action (EP / EM), per peer.mjs ridesFor(). Repeated in every one of the 14 skill prerequisites.",
+      "tags": ["skills", "instant", "rule_8"],
+      "params": { "action": { "type": "string" }, "family": { "type": "string", "description": "A | B | M | P" } },
+      "logic": { "or": [{ "==": [{ "param": "action" }, { "param": "family" }] }, { "and": [{ "in": [{ "param": "family" }, ["M", "P"]] }, { "in": [{ "param": "action" }, ["EP", "EM"]] }] }] },
+      "examples": [
+        { "args": { "action": "EP", "family": "P" }, "expect": true },
+        { "args": { "action": "EP", "family": "A" }, "expect": false },
+        { "args": { "action": "A", "family": "A" }, "expect": true }
+      ]
+    },
+    {
+      "id": "permanent_not_held",
+      "name": "Permanent not already in the holding",
+      "description": "A permanent skill / effect may only be played while it is not yet among the caster's permanents. Used by the 5 permanent skills; the effects collection has the same need.",
+      "tags": ["permanent", "rule_12"],
+      "params": { "permanents": { "type": "[entry_id]" }, "id": { "type": "string" } },
+      "logic": { "!": { "includes": [{ "param": "permanents" }, { "param": "id" }] } },
+      "examples": [
+        { "args": { "permanents": ["class_monk"], "id": "skill_taunt" }, "expect": true },
+        { "args": { "permanents": ["skill_taunt"], "id": "skill_taunt" }, "expect": false }
+      ]
+    },
+    {
+      "id": "enemy_in_contact",
+      "name": "Target is an enemy in contact",
+      "description": "in_contact AND is_enemy — the single most repeated prerequisite across skills, classes and actions (A-skills, Bluff, Counter Spell, Priest, Witch, Manipulator, Avenger, Attack, Combo).",
+      "tags": ["range", "alliance", "rule_7"],
+      "params": { "dist": { "type": "number" }, "a_alliance": { "type": "string" }, "b_alliance": { "type": "string" } },
+      "logic": { "and": [{ "rule": ["in_contact", { "dist": { "param": "dist" } }] }, { "rule": ["is_enemy", { "a_alliance": { "param": "a_alliance" }, "b_alliance": { "param": "b_alliance" } }] }] },
+      "examples": [
+        { "args": { "dist": 1, "a_alliance": "player", "b_alliance": "npc_b" }, "expect": true },
+        { "args": { "dist": 2, "a_alliance": "player", "b_alliance": "npc_b" }, "expect": false },
+        { "args": { "dist": 1, "a_alliance": "player", "b_alliance": "npc_a" }, "expect": false }
+      ]
+    },
+    {
+      "id": "ally_in_contact",
+      "name": "Target is an ally (or self) in contact",
+      "description": "in_contact AND is_ally — Healer, Overlord, Warrior, Transmuter, Trade.",
+      "tags": ["range", "alliance"],
+      "params": { "dist": { "type": "number" }, "a_alliance": { "type": "string" }, "b_alliance": { "type": "string" } },
+      "logic": { "and": [{ "rule": ["in_contact", { "dist": { "param": "dist" } }] }, { "rule": ["is_ally", { "a_alliance": { "param": "a_alliance" }, "b_alliance": { "param": "b_alliance" } }] }] },
+      "examples": [
+        { "args": { "dist": 1, "a_alliance": "player", "b_alliance": "npc_a" }, "expect": true },
+        { "args": { "dist": 1, "a_alliance": "player", "b_alliance": "npc_b" }, "expect": false }
+      ]
+    },
+    {
+      "id": "rule_8_outcome_returns",
+      "name": "Rule 8 pc override over the `outcome` context",
+      "description": "rule_8_instant_returns bound to the round-maths context the resolver supplies: outcome.took_with / took_without / dealt_with / dealt_without (healed_* default 0). Repeated verbatim in the 9 non-permanent skills.",
+      "tags": ["instant", "rule_8", "pc_override"],
+      "params": {},
+      "logic": { "rule": ["rule_8_instant_returns", { "took_with": { "var": "outcome.took_with" }, "took_without": { "var": "outcome.took_without" }, "dealt_with": { "var": "outcome.dealt_with" }, "dealt_without": { "var": "outcome.dealt_without" }, "healed_with": { "var": "outcome.healed_with" }, "healed_without": { "var": "outcome.healed_without" } }] },
+      "examples": [
+        { "data": { "outcome": { "took_with": 1, "took_without": 1, "dealt_with": 0, "dealt_without": 0 } }, "expect": true },
+        { "data": { "outcome": { "took_with": 0, "took_without": 1, "dealt_with": 0, "dealt_without": 0 } }, "expect": false }
+      ]
+    },
+    {
+      "id": "valid_point_buy_stats",
+      "name": "point_buy_stat vocabulary",
+      "description": "Values a skill's point_buy_stat may take besides null: 'any' (roll against the highest stat) or a stat key in either spelling the data uses (stat_vitality … / vitality …). Used in all 14 skill validations.",
+      "tags": ["validation", "skills", "point_buy"],
+      "params": {},
+      "logic": ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"],
+      "examples": []
+    },
+    {
+      "id": "highest_stat",
+      "name": "Highest of the four stats",
+      "description": "The stat an 'any' point-buy rolls against (Sanctuary placement, Druid defence token): max(vitality, world, matter, will).",
+      "tags": ["point_buy", "stats"],
+      "params": { "stats": { "type": "stats" } },
+      "logic": { "max": [{ "var": "vitality" }, { "var": "world" }, { "var": "matter" }, { "var": "will" }] },
+      "note": "json-logic cannot path into a param expression; merge as a custom op `stat_max(stats)` or expand with four `stat_of`-style reads of the caller's unit instead.",
+      "examples": []
+    }
+  ]
+}

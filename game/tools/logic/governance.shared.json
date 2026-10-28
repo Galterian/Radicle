@@ -1,0 +1,132 @@
+{
+  "collection": "governance",
+  "note": "Shared-rule candidates from governance.logic.json. The vote-weight and tally formulas are repeated inline in governance_voting (vote_weight, tally_weight, lifecycle_status, weight_reaches_accept_threshold, superseded_weight) and evt_vote (vote_weight, signed_weight); the override lookups appear 6x in governance_voting and 2x in governance_forks. Same shape as data/logic_rules.json entries.",
+  "entries": [
+    {
+      "id": "vote_weight",
+      "name": "Governance — weight of one vote",
+      "description": "governance_voting.vote_weight_formula: min(0.10, 0.01 x (1 + log2(1 + times_used_in_dimension)) x (1 + 0.1 x dimensions_played_in)). json-logic has no log2, so the caller passes log2_1p_times_used = log2(1 + times_used_in_dimension) (0 for an unused entry, 1 for once, 3 for 7 uses).",
+      "tags": [ "governance", "vote", "weight" ],
+      "params": {
+        "log2_1p_times_used": { "type": "number" },
+        "dimensions_played_in": { "type": "number", "default": 0 },
+        "base": { "type": "number", "default": 0.01 },
+        "cap": { "type": "number", "default": 0.1 }
+      },
+      "logic": { "min": [ { "param": "cap" }, { "*": [ { "param": "base" }, { "+": [ 1, { "param": "log2_1p_times_used" } ] }, { "+": [ 1, { "*": [ 0.1, { "param": "dimensions_played_in" } ] } ] } ] } ] },
+      "examples": [
+        { "args": { "log2_1p_times_used": 0, "dimensions_played_in": 0 }, "expect": 0.01 },
+        { "args": { "log2_1p_times_used": 3, "dimensions_played_in": 3 }, "expect": 0.052 },
+        { "args": { "log2_1p_times_used": 10, "dimensions_played_in": 20 }, "expect": 0.1 }
+      ]
+    },
+    {
+      "id": "tally_weight",
+      "name": "Governance — tally weight of a proposal",
+      "description": "clamp(sum(+1 weights) - sum(-1 weights), 0, 1) (governance_voting.proposal_lifecycle[1]). Pass the two weight lists.",
+      "tags": [ "governance", "vote", "weight" ],
+      "params": {
+        "plus": { "type": "[number]" },
+        "minus": { "type": "[number]" }
+      },
+      "logic": { "min": [ 1, { "max0": [ { "-": [ { "sum": [ { "param": "plus" } ] }, { "sum": [ { "param": "minus" } ] } ] } ] } ] },
+      "examples": [
+        { "args": { "plus": [ 0.5, 0.3 ], "minus": [ 0.1 ] }, "expect": 0.7 },
+        { "args": { "plus": [ 0.1 ], "minus": [ 0.5 ] }, "expect": 0 },
+        { "args": { "plus": [ 0.9, 0.9 ], "minus": [] }, "expect": 1 }
+      ]
+    },
+    {
+      "id": "collection_accept_threshold",
+      "name": "Governance — accept_threshold for a collection",
+      "description": "governance_voting.per_collection_overrides.<collection>.accept_threshold when present, else governance_voting.accept_threshold. Read via catalog lookup so it follows the active version.",
+      "tags": [ "governance", "threshold" ],
+      "params": {
+        "collection": { "type": "string" }
+      },
+      "logic": { "if": [ { "!!": { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "param": "collection" }, ".accept_threshold" ] } ] } }, { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "param": "collection" }, ".accept_threshold" ] } ] }, { "entry": [ "governance_voting", "accept_threshold" ] } ] },
+      "examples": [
+        { "args": { "collection": "rules" }, "expect": 0.75 },
+        { "args": { "collection": "effects" }, "expect": 0.6 }
+      ]
+    },
+    {
+      "id": "collection_quorum",
+      "name": "Governance — quorum_voters for a collection",
+      "description": "governance_voting.per_collection_overrides.<collection>.quorum_voters when present, else governance_voting.quorum_voters.",
+      "tags": [ "governance", "threshold" ],
+      "params": {
+        "collection": { "type": "string" }
+      },
+      "logic": { "if": [ { "!!": { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "param": "collection" }, ".quorum_voters" ] } ] } }, { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "param": "collection" }, ".quorum_voters" ] } ] }, { "entry": [ "governance_voting", "quorum_voters" ] } ] },
+      "examples": [
+        { "args": { "collection": "governance" }, "expect": 20 },
+        { "args": { "collection": "skills" }, "expect": 7 }
+      ]
+    },
+    {
+      "id": "proposal_lifecycle_status",
+      "name": "Governance — status decision at tally time",
+      "description": "canonical when weight >= accept AND voters >= quorum AND age_s >= min_age_s AND within tolerance; rejected when weight <= reject_threshold OR (age_s > max_age_s AND voters < quorum); otherwise proposal. Thresholds default to governance_voting's canonical numbers; `raw_weight` is the unclamped sum(+w) - sum(-w) so the negative reject_threshold can be reached, `weight` the clamped tally.",
+      "tags": [ "governance", "lifecycle" ],
+      "params": {
+        "weight": { "type": "number" },
+        "raw_weight": { "type": "number" },
+        "voters": { "type": "number" },
+        "age_s": { "type": "number" },
+        "within_tolerance": { "type": "boolean", "default": true },
+        "accept": { "type": "number", "default": { "entry": [ "governance_voting", "accept_threshold" ] } },
+        "reject": { "type": "number", "default": { "entry": [ "governance_voting", "reject_threshold" ] } },
+        "quorum": { "type": "number", "default": { "entry": [ "governance_voting", "quorum_voters" ] } },
+        "min_age_s": { "type": "number", "default": { "entry": [ "governance_voting", "min_age_s" ] } },
+        "max_age_s": { "type": "number", "default": { "entry": [ "governance_voting", "max_age_s" ] } }
+      },
+      "logic": {
+        "if": [
+          { "and": [
+            { ">=": [ { "param": "weight" }, { "param": "accept" } ] },
+            { ">=": [ { "param": "voters" }, { "param": "quorum" } ] },
+            { ">=": [ { "param": "age_s" }, { "param": "min_age_s" } ] },
+            { "param": "within_tolerance" }
+          ] }, "canonical",
+          { "or": [
+            { "<=": [ { "param": "raw_weight" }, { "param": "reject" } ] },
+            { "and": [ { ">": [ { "param": "age_s" }, { "param": "max_age_s" } ] }, { "<": [ { "param": "voters" }, { "param": "quorum" } ] } ] }
+          ] }, "rejected",
+          "proposal"
+        ]
+      },
+      "examples": [
+        { "args": { "weight": 0.7, "raw_weight": 0.7, "voters": 8, "age_s": 90000 }, "expect": "canonical" },
+        { "args": { "weight": 0, "raw_weight": -0.4, "voters": 8, "age_s": 90000 }, "expect": "rejected" },
+        { "args": { "weight": 0.7, "raw_weight": 0.7, "voters": 3, "age_s": 3000000 }, "expect": "rejected" },
+        { "args": { "weight": 0.5, "raw_weight": 0.5, "voters": 8, "age_s": 90000 }, "expect": "proposal" }
+      ]
+    },
+    {
+      "id": "known_collection_ids",
+      "name": "Collection ids of the data layer",
+      "description": "The 18 governed collections of data/index.json (logic_rules excluded: it has no write policy). Used by governance_voting.overrides_name_known_collections and governance_write_permissions (collections_are_known_ids, every_collection_covered, uncovered_collections).",
+      "tags": [ "validation", "collections" ],
+      "params": {},
+      "logic": [ "concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills", "classes", "characters", "creatures", "terrain_items", "game_modes", "contradictions", "sync_protocol", "hashgraph_events", "dimension_session", "governance" ],
+      "examples": []
+    },
+    {
+      "id": "interval_elapsed",
+      "name": "Cadence — an interval has passed since the last run",
+      "description": "now_s - last_s >= interval_s. Used by governance_branch_layout.release_due, governance_voting.tally_due, governance_rebalance_script.run_due, sync_radicle_push.interval_elapsed.",
+      "tags": [ "cadence", "interval" ],
+      "params": {
+        "now_s": { "type": "number" },
+        "last_s": { "type": "number" },
+        "interval_s": { "type": "number" }
+      },
+      "logic": { ">=": [ { "-": [ { "param": "now_s" }, { "param": "last_s" } ] }, { "param": "interval_s" } ] },
+      "examples": [
+        { "args": { "now_s": 7200, "last_s": 0, "interval_s": 3600 }, "expect": true },
+        { "args": { "now_s": 100, "last_s": 0, "interval_s": 3600 }, "expect": false }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,632 @@
+{
+  "collection": "classes",
+  "notes": "Rule 9: the class card is a permanent the character enters the dimension with; one token of fixed value 6 per listed colour (fixed_power_6), never destroyable (using_rule_24 with is_class_card true always fails — the data note 'destroy cost = point-buy all colours at 6' is superseded). ability_kind: once_per_round (caster.class_used_this_round must be false), tap (caster.class_tapped must be false; untap by emitting each listed colour once), static (always on while the card is held). Only reaver/barbarian/monk (EP stance), guardian (regen), noble (lifesteal), assassin (+1 after first hit) are wired in peer.mjs — their implemented semantics are encoded here; the other abilities follow the paper text. Assumed context fields beyond the README shape: caster.class_used_this_round, caster.class_tapped, caster.moved_this_round, caster.dealt_damage_this_round, caster.nearby_traps, caster.discard_actions/discard_effects/discard_skills, caster.hand_effects, caster.hand_non_action, caster.skills_played, caster.fallen_allies_on_tile, caster.archived_creatures, target.deck_size, target.has_armor_token, cast.target_token_power, cast.ally_agrees, dimension.library_size, outcome.combat_damage_dealt.",
+  "entries": {
+    "class_weapon_master": {
+      "description": "Class permanent (5 colours, one 6-token each, indestructible). once_per_round: at the end-of-turn refill the holder draws one card beyond the hand limit of 5. Nothing else changes; not wired in the pc game yet.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_weapon_master"] } },
+        { "id": "not_used_this_round", "description": "once_per_round: the ability has not been used this round.", "when": { "!": { "var": "caster.class_used_this_round" } } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_drawn", "description": "Refill to 5 plus one extra card.", "target": "caster", "unit": "cards", "value": { "+": [{ "rule": ["hand_refill", { "hand_size": { "var": "caster.hand_size" } }] }, 1] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_animator": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: move one trap card lying within contact range to the caster's tile or an adjacent tile, where it stays a trap. Untap by emitting souls, concentration and harmony once each.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_animator"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "trap_nearby", "description": "At least one trap lies within contact range.", "when": { ">=": [{ "count": [{ "var": "caster.nearby_traps" }] }, 1] } },
+        { "id": "destination_nearby", "description": "The destination tile is the caster's own or an adjacent tile.", "when": { "rule": ["in_contact", { "dist": { "var": "dist" } }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "traps_moved", "description": "One trap relocates by at most one hex.", "target": "tile", "unit": "hexes", "value": { "min": [1, { "var": "dist" }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_druid": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). tap: perform a point-buy (Rule 20) against the stat of any colour and put the resulting die as a defence (shield) token on the caster's tile; the token absorbs one landing hit and is destroyable under Rule 24 by a die >= its value.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_druid"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "point_buy_dice", "description": "Dice rolled for the defence token: dice_count of the caster's highest stat (any colour may be chosen).", "target": "tile", "unit": "die", "value": { "rule": ["point_buy_dice_count", { "stat": { "max": [{ "var": "caster.stats.vitality" }, { "var": "caster.stats.world" }, { "var": "caster.stats.matter" }, { "var": "caster.stats.will" }] } }] } },
+        { "id": "shield_token_value", "description": "The defence token's value is the die rolled.", "target": "tile", "unit": "tokens", "value": { "var": "die" } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_enchanter": {
+      "description": "Class permanent (6 colours, 6-tokens, indestructible). once_per_round: during a non-Posture action (A, B or M) the holder emits one element, so a non-instant cast advances although Rule 20 would normally only allow Posture / Empty Posture to emit.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_enchanter"] } },
+        { "id": "not_used_this_round", "description": "once_per_round: the ability has not been used this round.", "when": { "!": { "var": "caster.class_used_this_round" } } },
+        { "id": "non_posture_action", "description": "The caster's action is Attack, Block or Move.", "when": { "in": [{ "var": "caster.action" }, ["A", "B", "M"]] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "may_emit_this_action", "description": "The action emits one element even though it is not a Posture.", "target": "caster", "unit": "tokens", "value": { "or": [{ "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] }, { "in": [{ "var": "caster.action" }, ["A", "B", "M"]] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_elementalist": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). tap: when the holder emits an element (Posture / Empty Posture) they may take an element token (point-buy die) and add it to the cast as point-buy damage: round_half_up(die / 10) extra damage on the cast's target.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_elementalist"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "emitting_action", "description": "The caster emits this action (Posture or Empty Posture).", "when": { "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "point_buy_damage", "description": "Extra damage from the element token: its die /10 rounded half up (5 or 6 -> 1).", "target": "target", "unit": "damage", "value": { "round_div10": [{ "var": "die" }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_transmuter": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). static: the holder may cast an effect card held by an ally in contact as if it were their own, or lend their own castable effect to allies in contact. Element cost and Rule 21 damage are the caster's.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_transmuter"] } },
+        { "id": "ally_in_contact", "description": "The target is an ally in contact.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_ally", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "borrowed_cast_allowed", "description": "The borrowed effect may be cast when the caster's action can emit and none of its elements is barred.", "target": "caster", "unit": "cards", "value": { "and": [{ "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] }, { "rule": ["elements_not_disabled", { "elements": { "root": "elements" }, "disabled": { "root": "caster.disabled_elems" } }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_alchemist": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). tap: draw the top effect card of the Dimension Library, look at it and place it face down as a trap on the caster's tile or an adjacent tile. Requires a non-empty Library.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_alchemist"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "library_not_empty", "description": "The Dimension Library still holds cards.", "when": { ">": [{ "var": "dimension.library_size" }, 0] } },
+        { "id": "trap_tile_nearby", "description": "The trap goes on the caster's own or an adjacent tile.", "when": { "rule": ["in_contact", { "dist": { "var": "dist" } }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "traps_placed", "description": "One Library effect becomes a trap.", "target": "tile", "unit": "cards", "value": { "min": [1, { "var": "dimension.library_size" }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_summoner": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). tap: a stat-buy channeling in any of the character's colours — each emission banks the caster's stat for the element emitted until the bank reaches the creature's stat sum; the creature from the Library then appears on the caster's tile as an ally with fixed power 6 (Rule 24 needs a 6). When the class card is removed the summoned creatures go to the caster's archive.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_summoner"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "emitting_action", "description": "Channeling emits: Posture or Empty Posture.", "when": { "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "stat_buy_need", "description": "The bank must reach the summoned creature's stat sum.", "target": "caster", "unit": "stat", "value": { "rule": ["stat_sum_of", { "stats": { "var": "target.stats" } }] } },
+        { "id": "emissions_needed", "description": "Upper bound of emissions at current stats over the elements being banked.", "target": "caster", "unit": "actions", "value": { "rule": ["stat_buy_emissions_needed", { "need": { "rule": ["stat_sum_of", { "stats": { "var": "target.stats" } }] }, "caster": { "root": "caster" }, "elements": { "root": "elements" } }] } },
+        { "id": "summon_completes", "description": "The creature appears when the bank covers the need.", "target": "caster", "unit": "tokens", "value": { "rule": ["stat_buy_paid", { "bank": { "var": "cast.bank" }, "need": { "var": "cast.need" } }] } },
+        { "id": "summon_power", "description": "The summoned creature's token has fixed power 6.", "target": "tile", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_illusionist": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: this action one point of damage to the holder and to every creature in contact with the holder is ignored (one point per protected unit, combat or effect).",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_illusionist"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "damage_ignored_per_unit", "description": "1 for the holder and for each unit in contact, 0 for anyone farther away.", "target": "everyone", "unit": "damage", "value": { "if": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, 1, 0] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_healer": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: restore one life token to the holder or to an allied creature/character in contact; never above life_max.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_healer"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "ally_in_contact_hurt", "description": "The target (self or ally) is in contact and below full life.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_ally", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { "<": [{ "var": "target.life" }, { "var": "target.life_max" }] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "life_restored", "description": "One life, capped at the target's missing life.", "target": "target", "unit": "life", "value": { "min": [1, { "max0": [{ "-": [{ "var": "target.life_max" }, { "var": "target.life" }] }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_priest": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). tap: an enemy player in contact discards one card of the holder's choice from their hand; instants have priority when they are present. Needs a target with at least one card in hand.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_priest"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "enemy_player_in_contact_with_hand", "description": "The target is an enemy character in contact holding at least one card.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_enemy", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { "==": [{ "var": "target.kind" }, "character"] }, { ">=": [{ "var": "target.hand_size" }, 1] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_discarded", "description": "The target discards one card.", "target": "target", "unit": "cards", "value": { "min": [1, { "var": "target.hand_size" }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_prophet": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). tap: look at the top five cards of the deck of a player in contact (fewer if the deck is shorter). Information only; nothing moves.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_prophet"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "player_in_contact", "description": "The target is a character in contact.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "==": [{ "var": "target.kind" }, "character"] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_revealed", "description": "Up to five cards from the top of the target's deck.", "target": "target", "unit": "cards", "value": { "min": [5, { "max0": [{ "var": "target.deck_size" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_seeker": {
+      "description": "Class permanent (7 colours, 6-tokens, indestructible). tap: choose a non-action card in hand; its locations in this Dimension are revealed. If the Dimension Library holds a copy, that copy is placed face down as a trap on an unknown tile.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_seeker"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "non_action_card_in_hand", "description": "The caster holds at least one skill or effect card.", "when": { ">=": [{ "var": "caster.hand_non_action" }, 1] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "traps_placed", "description": "One Library copy becomes a trap when the Library is not empty.", "target": "tile", "unit": "cards", "value": { "min": [1, { "max0": [{ "var": "dimension.library_size" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_paladin": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: return one action card from the holder's discard pile to hand. Requires an action card in the discard; the hand may exceed 5 until the next refill.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_paladin"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "action_in_discard", "description": "The discard pile holds at least one action card.", "when": { ">=": [{ "var": "caster.discard_actions" }, 1] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_returned", "description": "One action card moves from discard to hand.", "target": "caster", "unit": "cards", "value": { "min": [1, { "max0": [{ "var": "caster.discard_actions" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_cleric": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). tap: a trap within contact range is revealed and disabled; if a character or monster stands on that tile the trap card goes to their discard pile instead of firing.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_cleric"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "trap_nearby", "description": "At least one trap lies within contact range.", "when": { "and": [{ ">=": [{ "count": [{ "var": "caster.nearby_traps" }] }, 1] }, { "rule": ["in_contact", { "dist": { "var": "dist" } }] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "traps_disabled", "description": "One trap disabled.", "target": "tile", "unit": "cards", "value": { "min": [1, { "count": [{ "var": "caster.nearby_traps" }] }] } },
+        { "id": "trap_to_occupant_discard", "description": "True when a unit stands on the trap tile: the trap card goes to that unit's discard.", "target": "tile", "unit": "cards", "value": { "in": [{ "var": "target.kind" }, ["character", "creature"]] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_guardian": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). static, implemented in peer.mjs: at end of turn, if the holder's tile never changed this round (moved_this_round false) and the holder is alive, restore one life token, capped at life_max. The flag resets every turn.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_guardian"] } },
+        { "id": "stayed_and_alive", "description": "The holder did not move this round and is alive.", "when": { "and": [{ "!": { "var": "caster.moved_this_round" } }, { ">": [{ "var": "caster.life" }, 0] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "life_restored", "description": "One life at end of turn, never above life_max.", "target": "caster", "unit": "life", "value": { "if": [{ "and": [{ "!": { "var": "caster.moved_this_round" } }, { ">": [{ "var": "caster.life" }, 0] }] }, { "min": [1, { "max0": [{ "-": [{ "var": "caster.life_max" }, { "var": "caster.life" }] }] }] }, 0] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "stays_static", "description": "The regen stays a static ability.", "assert": { "==": [{ "var": "proposal.data.ability_kind" }, "static"] } }
+      ]
+    },
+    "class_manipulator": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). once_per_round: an enemy player in contact acts like a monster this turn — one random action card is drawn from their hand and they must play it. Needs a target with at least one action card in hand.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_manipulator"] } },
+        { "id": "not_used_this_round", "description": "once_per_round: the ability has not been used this round.", "when": { "!": { "var": "caster.class_used_this_round" } } },
+        { "id": "enemy_player_in_contact_with_hand", "description": "The target is an enemy character in contact holding at least one card.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_enemy", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { "==": [{ "var": "target.kind" }, "character"] }, { ">=": [{ "var": "target.hand_size" }, 1] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "forced_actions", "description": "The target's free choice collapses to one forced action card.", "target": "target", "unit": "actions", "value": 1 },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_bard": {
+      "description": "Class permanent (8 colours, 6-tokens, indestructible). static: whenever the holder plays a skill, every player in contact also uses that skill if their action allows it (same action_type family). Each copy obeys its own prerequisites.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_bard"] } },
+        { "id": "skill_played", "description": "The holder plays at least one skill this action.", "when": { ">=": [{ "count": [{ "var": "caster.skills_played" }] }, 1] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "skills_echoed_to_player", "description": "A player in contact echoes every skill the holder played (0 when out of contact).", "target": "everyone", "unit": "cards", "value": { "if": [{ "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "==": [{ "var": "target.kind" }, "character"] }] }, { "count": [{ "var": "caster.skills_played" }] }, 0] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_shaman": {
+      "description": "Class permanent (6 colours, 6-tokens, indestructible). tap: return one effect card from the holder's discard pile to hand. Requires an effect card in the discard.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_shaman"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "effect_in_discard", "description": "The discard pile holds at least one effect card.", "when": { ">=": [{ "var": "caster.discard_effects" }, 1] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_returned", "description": "One effect card moves from discard to hand.", "target": "caster", "unit": "cards", "value": { "min": [1, { "max0": [{ "var": "caster.discard_effects" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_necromancer": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: instantly reanimate an allied creature that fell on the holder's tile, or one of the holder's archived creatures; it returns as an ally with a fixed power of 6. Destroying the reanimated creature takes a Rule 24 point-buy of Harmony AND Concentration (non-contiguous emissions allowed) each reaching 6.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_necromancer"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "body_available", "description": "A fallen ally lies on the holder's tile or an archived creature exists.", "when": { "or": [{ ">=": [{ "var": "caster.fallen_allies_on_tile" }, 1] }, { ">=": [{ "var": "caster.archived_creatures" }, 1] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "reanimated_power", "description": "The reanimated creature's token has fixed power 6.", "target": "tile", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "reanimated_destroyed", "description": "A Rule 24 die against the reanimated creature must reach 6.", "target": "tile", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] } }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_witch": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: an enemy player in contact puts up to three cards from hand into their discard; the holder picks them by colour (card back / element). Needs a target with at least one card in hand.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_witch"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "enemy_player_in_contact_with_hand", "description": "The target is an enemy character in contact holding at least one card.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_enemy", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { "==": [{ "var": "target.kind" }, "character"] }, { ">=": [{ "var": "target.hand_size" }, 1] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_discarded", "description": "Up to three cards leave the target's hand.", "target": "target", "unit": "cards", "value": { "min": [3, { "max0": [{ "var": "target.hand_size" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_restaurateur": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). static: when a Rule 24 point-buy of the holder would destroy a token (die >= token power), the holder may instead take the token under their control on the same tile or over one of their permanents (replacing the die there if applicable).",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_restaurateur"] } },
+        { "id": "destroy_roll_succeeds", "description": "The Rule 24 die reaches the targeted token's power (class cards excluded).", "when": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "var": "cast.target_token_power" } }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "tokens_captured", "description": "One token changes owner instead of being destroyed; it keeps its value.", "target": "caster", "unit": "tokens", "value": { "if": [{ "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "var": "cast.target_token_power" } }] }, { "var": "cast.target_token_power" }, 0] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_warrior": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). static: at end of round the holder may relocate themself or an allied player in contact by one tile (the destination must be free).",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_warrior"] } },
+        { "id": "ally_or_self_in_contact", "description": "The unit to relocate is the holder or an allied character in contact.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_ally", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "relocation_hexes", "description": "The relocated unit moves exactly one hex.", "target": "target", "unit": "hexes", "value": 1 },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_ranger": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: place any effect card from hand face down as a trap on the holder's own tile. Requires an effect card in hand.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_ranger"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "effect_in_hand", "description": "The caster holds at least one effect card.", "when": { ">=": [{ "var": "caster.hand_effects" }, 1] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "traps_placed", "description": "One hand effect becomes a trap on the holder's tile (distance 0).", "target": "tile", "unit": "cards", "value": { "min": [1, { "max0": [{ "var": "caster.hand_effects" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_kensei": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap: return one skill card from the holder's discard pile to hand. Requires a skill card in the discard.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_kensei"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "skill_in_discard", "description": "The discard pile holds at least one skill card.", "when": { ">=": [{ "var": "caster.discard_skills" }, 1] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_returned", "description": "One skill card moves from discard to hand.", "target": "caster", "unit": "cards", "value": { "min": [1, { "max0": [{ "var": "caster.discard_skills" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_reaver": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). static, implemented in peer.mjs: the holder's Empty Posture AND Empty Move fight as an Attack (combat type A, base damage 1, A>P edge); with no character target the adjacent enemy that costs least is struck. The holder may emit elements during an Attack, so non-instant casts continue on A as well as P/EP. Sanctuary and hand bookkeeping still see the declared EP.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_reaver"] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "combat_action", "description": "The action combat is judged on: EP and EM become A, everything else unchanged.", "target": "caster", "unit": "actions", "value": { "if": [{ "in": [{ "var": "caster.action" }, ["EP", "EM"]] }, "A", { "var": "caster.action" }] } },
+        { "id": "combat_damage", "description": "Matrix damage of the stance action against the defender.", "target": "target", "unit": "damage", "value": { "rule": ["rps_edge", { "actor": { "if": [{ "in": [{ "var": "caster.action" }, ["EP", "EM"]] }, "A", { "var": "caster.action" }] }, "defender": { "var": "defender.action" } }] } },
+        { "id": "may_emit", "description": "Emission is allowed on Posture, Empty Posture and Attack (declared or stance).", "target": "caster", "unit": "tokens", "value": { "or": [{ "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] }, { "in": [{ "var": "caster.action" }, ["A", "EM"]] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "stays_static", "description": "The stance stays a static ability.", "assert": { "==": [{ "var": "proposal.data.ability_kind" }, "static"] } }
+      ]
+    },
+    "class_barbarian": {
+      "description": "Class permanent (2 colours, 6-tokens, indestructible). static, implemented in peer.mjs: the holder's Empty Posture fights as a Block (scores 1 on each adjacent enemy attacking the holder, B>A edge). Paper text also allows emitting during Block; the pc resolver does not carry a cast on B yet.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_barbarian"] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "combat_action", "description": "The action combat is judged on: EP becomes B, everything else unchanged.", "target": "caster", "unit": "actions", "value": { "if": [{ "==": [{ "var": "caster.action" }, "EP"] }, "B", { "var": "caster.action" }] } },
+        { "id": "combat_damage", "description": "Matrix damage of the stance action against the defender.", "target": "target", "unit": "damage", "value": { "rule": ["rps_edge", { "actor": { "if": [{ "==": [{ "var": "caster.action" }, "EP"] }, "B", { "var": "caster.action" }] }, "defender": { "var": "defender.action" } }] } },
+        { "id": "may_emit", "description": "Paper: emission is allowed on Posture, Empty Posture and Block.", "target": "caster", "unit": "tokens", "value": { "or": [{ "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] }, { "==": [{ "var": "caster.action" }, "B"] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "stays_static", "description": "The stance stays a static ability.", "assert": { "==": [{ "var": "proposal.data.ability_kind" }, "static"] } }
+      ]
+    },
+    "class_overlord": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). tap: the holder or an ally in contact gains one armor life token (+1 life). Non-cumulative: a unit that already carries the armor token cannot receive a second; once the token is lost the ability may grant it again.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_overlord"] } },
+        { "id": "untapped", "description": "tap: the class card is untapped.", "when": { "!": { "var": "caster.class_tapped" } } },
+        { "id": "ally_in_contact_without_armor", "description": "The target (self or ally) is in contact and has no armor token yet.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_ally", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { "!": { "var": "target.has_armor_token" } }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "armor_life", "description": "One extra life token on the target.", "target": "target", "unit": "life", "value": { "if": [{ "var": "target.has_armor_token" }, 0, 1] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_rogue": {
+      "description": "Class permanent (3 colours, 6-tokens, indestructible). tap (once per round): the holder's Move or Empty Move triggers no trap, does not reveal unrevealed tiles it crosses and does not wake monsters.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_rogue"] } },
+        { "id": "untapped_and_unused", "description": "tap and once per round: untapped and not yet used this round.", "when": { "and": [{ "!": { "var": "caster.class_tapped" } }, { "!": { "var": "caster.class_used_this_round" } }] } },
+        { "id": "moving", "description": "The caster's action is Move or Empty Move.", "when": { "in": [{ "var": "caster.action" }, ["M", "EM"]] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "traps_triggered", "description": "Traps triggered by this move: 0.", "target": "caster", "unit": "tokens", "value": 0 },
+        { "id": "hexes_moved", "description": "Move walks 1 hex; Empty Move walks ceil(dist/2).", "target": "caster", "unit": "hexes", "value": { "if": [{ "==": [{ "var": "caster.action" }, "EM"] }, { "ceil": [{ "/": [{ "var": "dist" }, 2] }] }, 1] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_avenger": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). static: two cards in the hand of an enemy player in contact are revealed to the holder (card backs already tell skill / action / effect; the ability shows the faces). Information only.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_avenger"] } },
+        { "id": "enemy_player_in_contact", "description": "The target is an enemy character in contact.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_enemy", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { "==": [{ "var": "target.kind" }, "character"] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "cards_revealed", "description": "Two cards of the target's hand (fewer if the hand is smaller).", "target": "target", "unit": "cards", "value": { "min": [2, { "max0": [{ "var": "target.hand_size" }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "has_text", "description": "The ability text is kept.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 10] } }
+      ]
+    },
+    "class_monk": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). static, implemented in peer.mjs: the holder's Empty Posture fights as a (non-empty) Move for the combat maths (M>B edge, loses to P). Casting continues while moving: Move and Empty Move carry the emission instead of interrupting the cast (Rule 19 exception).",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_monk"] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "combat_action", "description": "The action combat is judged on: EP becomes M, everything else unchanged.", "target": "caster", "unit": "actions", "value": { "if": [{ "==": [{ "var": "caster.action" }, "EP"] }, "M", { "var": "caster.action" }] } },
+        { "id": "combat_damage", "description": "Matrix damage of the stance action against the defender.", "target": "target", "unit": "damage", "value": { "rule": ["rps_edge", { "actor": { "if": [{ "==": [{ "var": "caster.action" }, "EP"] }, "M", { "var": "caster.action" }] }, "defender": { "var": "defender.action" } }] } },
+        { "id": "may_emit", "description": "Emission is allowed on Posture, Empty Posture, Move and Empty Move.", "target": "caster", "unit": "tokens", "value": { "or": [{ "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] }, { "in": [{ "var": "caster.action" }, ["M", "EM"]] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "stays_static", "description": "The stance stays a static ability.", "assert": { "==": [{ "var": "proposal.data.ability_kind" }, "static"] } }
+      ]
+    },
+    "class_noble": {
+      "description": "Class permanent (4 colours, 6-tokens, indestructible). static, implemented in peer.mjs: whenever the holder deals combat damage (matrix / Attack damage, not effect damage) they heal the same amount, capped at life_max and only while alive.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_noble"] } },
+        { "id": "dealt_combat_damage", "description": "The holder dealt at least one combat damage this action and is alive.", "when": { "and": [{ ">": [{ "var": "outcome.combat_damage_dealt" }, 0] }, { ">": [{ "var": "caster.life" }, 0] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "combat_damage_vs_defender", "description": "Combat damage the holder's action scores on one defender.", "target": "target", "unit": "damage", "value": { "rule": ["rps_edge", { "actor": { "var": "caster.action" }, "defender": { "var": "defender.action" } }] } },
+        { "id": "life_healed", "description": "Heal equal to the combat damage dealt, capped at the missing life.", "target": "caster", "unit": "life", "value": { "min": [{ "max0": [{ "var": "outcome.combat_damage_dealt" }] }, { "max0": [{ "-": [{ "var": "caster.life_max" }, { "var": "caster.life" }] }] }] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "stays_static", "description": "Lifesteal stays a static ability.", "assert": { "==": [{ "var": "proposal.data.ability_kind" }, "static"] } }
+      ]
+    },
+    "class_assassin": {
+      "description": "Class permanent (5 colours, 6-tokens, indestructible). static, implemented in peer.mjs: once the holder has dealt combat damage this round (dealt_damage_this_round), every later Attack that lands (matrix damage >= 1) deals +1 extra damage. The flag is resolver-local and resets each round.",
+      "prerequisites": [
+        { "id": "class_card_held", "description": "The class card sits in the caster's permanents.", "when": { "includes": [{ "var": "caster.permanents" }, "class_assassin"] } },
+        { "id": "already_connected", "description": "The holder has already dealt combat damage this round and is Attacking.", "when": { "and": [{ "!!": { "var": "caster.dealt_damage_this_round" } }, { "==": [{ "var": "caster.action" }, "A"] }] } }
+      ],
+      "effects": [
+        { "id": "token_value", "description": "Every colour token of the class card has fixed value 6.", "target": "caster", "unit": "tokens", "value": { "rule": ["fixed_power_6", {}] } },
+        { "id": "token_count", "description": "One token per listed colour.", "target": "caster", "unit": "tokens", "value": { "count": [{ "var": "entry.data.colors" }] } },
+        { "id": "bonus_damage", "description": "+1 when the Attack lands and the holder already connected this round, else 0.", "target": "target", "unit": "damage", "value": { "if": [{ "and": [{ "!!": { "var": "caster.dealt_damage_this_round" } }, { "==": [{ "var": "caster.action" }, "A"] }, { ">=": [{ "rule": ["rps_edge", { "actor": { "var": "caster.action" }, "defender": { "var": "defender.action" } }] }, 1] }] }, 1, 0] } },
+        { "id": "indestructible", "description": "Rule 24 never destroys the class card.", "target": "caster", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "rule": ["fixed_power_6", {}] }, "is_class_card": true }] } }
+      ],
+      "validation": [
+        { "id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": { "<=": [{ "abs": [{ "-": [{ "count": [{ "var": "proposal.data.colors" }] }, { "count": [{ "var": "entry.data.colors" }] }] }] }, 1] } },
+        { "id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": { "in": [{ "var": "proposal.data.ability_kind" }, ["once_per_round", "static", "tap"]] } },
+        { "id": "stays_static", "description": "The damage rider stays a static ability.", "assert": { "==": [{ "var": "proposal.data.ability_kind" }, "static"] } }
+      ]
+    }
+  }
+}

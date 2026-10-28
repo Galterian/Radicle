@@ -1,0 +1,496 @@
+{
+  "collection": "creatures",
+  "description": "Shared-rule candidates repeated across the 29 creature blocks (and characters). Same shape as data/logic_rules.json entries; the integrator merges them.",
+  "entries": [
+    {
+      "id": "within_delta",
+      "name": "Two numbers differ by at most delta",
+      "description": "abs(a − b) ≤ delta — used four times per creature (each stat ±5) and once per character (stat sum ±5).",
+      "tags": [
+        "validation",
+        "rebalance"
+      ],
+      "params": {
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        },
+        "delta": {
+          "type": "number",
+          "default": 5
+        }
+      },
+      "logic": {
+        "<=": [
+          {
+            "abs": [
+              {
+                "-": [
+                  {
+                    "param": "a"
+                  },
+                  {
+                    "param": "b"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "param": "delta"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "a": 17,
+            "b": 20
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "a": 10,
+            "b": 16
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "unit_stats_within_5",
+      "name": "Unit — each stat within ±5 of canonical",
+      "description": "Every one of vitality/world/matter/will moved at most 5 between entry.data.stats and proposal.data.stats. Context {entry, proposal}.",
+      "tags": [
+        "validation",
+        "creatures",
+        "characters"
+      ],
+      "params": {},
+      "logic": {
+        "and": [
+          {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "var": "proposal.data.stats.vitality"
+                      },
+                      {
+                        "var": "entry.data.stats.vitality"
+                      }
+                    ]
+                  }
+                ]
+              },
+              5
+            ]
+          },
+          {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "var": "proposal.data.stats.world"
+                      },
+                      {
+                        "var": "entry.data.stats.world"
+                      }
+                    ]
+                  }
+                ]
+              },
+              5
+            ]
+          },
+          {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "var": "proposal.data.stats.matter"
+                      },
+                      {
+                        "var": "entry.data.stats.matter"
+                      }
+                    ]
+                  }
+                ]
+              },
+              5
+            ]
+          },
+          {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "var": "proposal.data.stats.will"
+                      },
+                      {
+                        "var": "entry.data.stats.will"
+                      }
+                    ]
+                  }
+                ]
+              },
+              5
+            ]
+          }
+        ]
+      },
+      "examples": []
+    },
+    {
+      "id": "dice_pattern_valid",
+      "name": "Creature — dice_pattern null or A/B/M/P letters",
+      "description": "null means the default BMAP 4d6; otherwise 3–6 face letters.",
+      "tags": [
+        "validation",
+        "creatures",
+        "rule_5"
+      ],
+      "params": {
+        "pattern": {
+          "type": "string|null"
+        }
+      },
+      "logic": {
+        "or": [
+          {
+            "==": [
+              {
+                "param": "pattern"
+              },
+              null
+            ]
+          },
+          {
+            "matches": [
+              {
+                "param": "pattern"
+              },
+              "^[ABMP]{3,6}$"
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "pattern": null
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "pattern": "BAAPM"
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "pattern": "XY"
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "effect_exists_or_null",
+      "name": "Effect id resolves in the catalog (or is null)",
+      "description": "innate_effect / dispelable_by style references: null, or {\"entry\": [id, \"element_cost\"]} is not null.",
+      "tags": [
+        "validation",
+        "catalog"
+      ],
+      "params": {
+        "id": {
+          "type": "string|null"
+        }
+      },
+      "logic": {
+        "or": [
+          {
+            "==": [
+              {
+                "param": "id"
+              },
+              null
+            ]
+          },
+          {
+            "!=": [
+              {
+                "entry": [
+                  {
+                    "param": "id"
+                  },
+                  "element_cost"
+                ]
+              },
+              null
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "id": null
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "id": "effect_earthquake"
+          },
+          "expect": true
+        },
+        {
+          "args": {
+            "id": "effect_nope"
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "rider_bonus",
+      "name": "Creature — on-action rider bonus",
+      "description": "bonus_damage when the revealed action equals the rider action, else 0.",
+      "tags": [
+        "damage",
+        "creatures"
+      ],
+      "params": {
+        "action": {
+          "type": "string"
+        },
+        "rider_action": {
+          "type": "string"
+        },
+        "bonus": {
+          "type": "number"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "==": [
+              {
+                "param": "action"
+              },
+              {
+                "param": "rider_action"
+              }
+            ]
+          },
+          {
+            "param": "bonus"
+          },
+          0
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "action": "A",
+            "rider_action": "A",
+            "bonus": 1
+          },
+          "expect": 1
+        },
+        {
+          "args": {
+            "action": "B",
+            "rider_action": "A",
+            "bonus": 1
+          },
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "monster_regeneration",
+      "name": "Rule 3 — monster regenerates when unengaged",
+      "description": "Life restored this turn: life_max − life when no enemy is in contact (dist > 1), 0 otherwise.",
+      "tags": [
+        "life",
+        "rule_3",
+        "creatures"
+      ],
+      "params": {
+        "dist": {
+          "type": "number"
+        },
+        "life": {
+          "type": "number"
+        },
+        "life_max": {
+          "type": "number"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "<=": [
+              {
+                "param": "dist"
+              },
+              1
+            ]
+          },
+          0,
+          {
+            "max0": [
+              {
+                "-": [
+                  {
+                    "param": "life_max"
+                  },
+                  {
+                    "param": "life"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "dist": 3,
+            "life": 2,
+            "life_max": 6
+          },
+          "expect": 4
+        },
+        {
+          "args": {
+            "dist": 1,
+            "life": 2,
+            "life_max": 6
+          },
+          "expect": 0
+        }
+      ]
+    },
+    {
+      "id": "dice_thrown",
+      "name": "Rule 5 — dice thrown per action",
+      "description": "Pattern length, or 4 for the default BMAP set when the pattern is null.",
+      "tags": [
+        "rule_5",
+        "creatures"
+      ],
+      "params": {
+        "pattern": {
+          "type": "string|null"
+        }
+      },
+      "logic": {
+        "if": [
+          {
+            "==": [
+              {
+                "param": "pattern"
+              },
+              null
+            ]
+          },
+          4,
+          {
+            "len": [
+              {
+                "param": "pattern"
+              }
+            ]
+          }
+        ]
+      },
+      "examples": [
+        {
+          "args": {
+            "pattern": null
+          },
+          "expect": 4
+        },
+        {
+          "args": {
+            "pattern": "BAAPM"
+          },
+          "expect": 5
+        }
+      ]
+    },
+    {
+      "id": "rider_shape_valid",
+      "name": "Creature — on_action_rider shape",
+      "description": "null or { action ∈ action codes, bonus_damage 1..3 }. Context {proposal}.",
+      "tags": [
+        "validation",
+        "creatures"
+      ],
+      "params": {},
+      "logic": {
+        "or": [
+          {
+            "==": [
+              {
+                "var": "proposal.data.on_action_rider"
+              },
+              null
+            ]
+          },
+          {
+            "and": [
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.on_action_rider.action"
+                  },
+                  {
+                    "rule": [
+                      "valid_action_codes",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.on_action_rider.bonus_damage"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.on_action_rider.bonus_damage"
+                  },
+                  3
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "examples": []
+    }
+  ]
+}

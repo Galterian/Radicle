@@ -1,0 +1,41 @@
+{
+  "collection": "battle_system",
+  "description": "Shared-rule candidates found while authoring battle_system.logic.json — inlined there for now (same shape as a logic_rules entry).",
+  "candidates": [
+    {
+      "id": "actions_per_round_pc",
+      "name": "Actions per round of a pc character",
+      "description": "Catalog lookup of battle_system_core.turn_structure.actions_per_round_pc (3) so rules / effects / game modes do not hard-code the number.",
+      "tags": ["battle_system", "rule_7"],
+      "params": {},
+      "logic": { "entry": ["battle_system_core", "turn_structure.actions_per_round_pc"] },
+      "examples": [
+        { "data": {}, "expect": 3 }
+      ]
+    },
+    {
+      "id": "matrix_has_edge",
+      "name": "Validation — the edge list holds (actor > defender) with bonus 1",
+      "description": "True when some edge of the list has the given actor, defender and bonus_damage_to_actor 1. The 4-cycle validation calls it four times; creatures / game modes that override the matrix can reuse it.",
+      "tags": ["validation", "battle_system", "rule_7"],
+      "params": { "edges": { "type": "[edge]" }, "actor": { "type": "string" }, "defender": { "type": "string" } },
+      "logic": { "some": [{ "param": "edges" }, { "and": [{ "==": [{ "var": "actor" }, { "param": "actor" }] }, { "==": [{ "var": "defender" }, { "param": "defender" }] }, { "==": [{ "var": "bonus_damage_to_actor" }, 1] }] }] },
+      "note": "Call with literal actor / defender codes (the iterating body only sees the current edge; a var-based code would need {\"root\": ...}).",
+      "examples": [
+        { "args": { "edges": [{ "actor": "A", "defender": "P", "bonus_damage_to_actor": 1 }], "actor": "A", "defender": "P" }, "expect": true },
+        { "args": { "edges": [{ "actor": "A", "defender": "P", "bonus_damage_to_actor": 1 }], "actor": "P", "defender": "A" }, "expect": false }
+      ]
+    },
+    {
+      "id": "rounding_contract",
+      "name": "Rounding contract check",
+      "description": "Self-test of the half-up rounding every /10 in the paper uses: 5 → 1, 4 → 0, 0.5 → 1. Cheap regression for custom-op registration; could become a logic_rules example instead.",
+      "tags": ["battle_system", "rule_21", "validation"],
+      "params": {},
+      "logic": { "and": [{ "==": [{ "round_div10": [5] }, 1] }, { "==": [{ "round_div10": [4] }, 0] }, { "==": [{ "round_half_up": [0.5] }, 1] }] },
+      "examples": [
+        { "data": {}, "expect": true }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "collection": "elements",
+  "description": "Shared-rule candidates found while authoring elements.logic.json (all 10 elements repeat the same prerequisites, effects and validation modulo the element id). Shape of data/logic_rules.json entries.",
+  "entries": [
+    {
+      "id": "element_delta",
+      "name": "Rule 18 / 21 — one element's stat delta",
+      "description": "Stat points one element contributes to the Rule 21 sum: max(stat_of(caster, element) − stat_of(defender, element), 0). The per-element body of rule_21_delta_damage; inlined as `delta` in all 10 elements and as element-delta in rule_18_element_emit.",
+      "tags": ["rule_18", "rule_21", "elements", "damage"],
+      "params": { "caster": { "type": "unit" }, "defender": { "type": "unit" }, "element": { "type": "element_id" } },
+      "logic": { "max0": [{ "-": [{ "stat_of": [{ "param": "caster" }, { "param": "element" }] }, { "stat_of": [{ "param": "defender" }, { "param": "element" }] }] }] },
+      "examples": [
+        { "args": { "caster": { "stats": { "vitality": 10, "world": 10, "matter": 16, "will": 10 } }, "defender": { "stats": { "vitality": 10, "world": 10, "matter": 8, "will": 10 } }, "element": "elem_fire" }, "expect": 8 },
+        { "args": { "caster": { "stats": { "vitality": 10, "world": 10, "matter": 6, "will": 10 } }, "defender": { "stats": { "vitality": 10, "world": 10, "matter": 8, "will": 10 } }, "element": "elem_fire" }, "expect": 0 }
+      ]
+    },
+    {
+      "id": "element_castable",
+      "name": "Element — may be emitted by this caster",
+      "description": "The element is not barred by a Disable on the caster and the caster has a positive stat behind it. Inlined as the two prerequisites (not-disabled, caster-has-stat) of all 10 elements. Pass `caster` as {\"root\": \"caster\"} (elements_not_disabled iterates).",
+      "tags": ["cast", "elements", "disable"],
+      "params": { "caster": { "type": "unit" }, "element": { "type": "element_id" } },
+      "logic": {
+        "and": [
+          { "none": [{ "var": "caster.disabled_elems" }, { "==": [{ "var": "" }, { "param": "element" }] }] },
+          { ">": [{ "stat_of": [{ "param": "caster" }, { "param": "element" }] }, 0] }
+        ]
+      },
+      "examples": [
+        { "args": { "caster": { "stats": { "vitality": 10, "world": 10, "matter": 16, "will": 10 }, "disabled_elems": [] }, "element": "elem_fire" }, "data": { "caster": { "disabled_elems": [] } }, "expect": true },
+        { "args": { "caster": { "stats": { "vitality": 10, "world": 10, "matter": 16, "will": 10 }, "disabled_elems": ["elem_fire"] }, "element": "elem_fire" }, "data": { "caster": { "disabled_elems": ["elem_fire"] } }, "expect": false }
+      ]
+    },
+    {
+      "id": "element_stat_consistent",
+      "name": "Element — stat column unchanged and reciprocated",
+      "description": "A new version keeps the element's `stat`, that stat entry exists and its `elements` list names this element, and the element id is one of valid_element_ids. Inlined as stat-unchanged / stat-lists-element / id-valid in all 10 elements. Context {entry, proposal}.",
+      "tags": ["validation", "elements", "stats"],
+      "params": {},
+      "logic": {
+        "and": [
+          { "==": [{ "var": "proposal.data.stat" }, { "var": "entry.data.stat" }] },
+          { "includes": [{ "entry": [{ "var": "proposal.data.stat" }, "elements"] }, { "var": "entry.id" }] },
+          { "in": [{ "var": "entry.id" }, { "rule": ["valid_element_ids", {}] }] }
+        ]
+      },
+      "examples": [
+        { "data": { "entry": { "id": "elem_fire", "data": { "stat": "stat_matter" } }, "proposal": { "data": { "stat": "stat_matter" } } }, "expect": true },
+        { "data": { "entry": { "id": "elem_fire", "data": { "stat": "stat_matter" } }, "proposal": { "data": { "stat": "stat_will" } } }, "expect": false }
+      ]
+    }
+  ]
+}
