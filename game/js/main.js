@@ -372,9 +372,13 @@ const isAction = (c) => !!c && c.kind !== 'skill' && c.kind !== 'effect';
 // the Attack (and on an Empty Move, which fights as an Attack for them).
 const EVERY_INSTANT = new Set(['effect_the_void', 'effect_light_darkness', 'effect_teleportation', 'effect_emotions_bombard']);
 const castInstant = (card, every) => every ? EVERY_INSTANT.has(card.effect_id) : !!card.is_instant;
-const myWorldStat = () => { const me = state.entities.find(p => p.peer_id === state.myPeerId); return Math.max(1, Number(me?.stat_world ?? me?.stats?.world) || 10); };
-const summonLength = (card) => Math.max(1, Math.ceil((card.summon?.need || 30) / myWorldStat()));
+// Stat buy (Summoning, Golems, Elementals, Resurrect): emissions bank my stat for the
+// card's elements in turn until the bank covers the need.
+const ELEM_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
+const myStatFor = (el) => { const me = state.entities.find(p => p.peer_id === state.myPeerId); const k = ELEM_STAT[el] || 'world'; return Math.max(1, Number(me?.[`stat_${k}`] ?? me?.stats?.[k]) || 10); };
+const summonLength = (card) => { const need = card.summon?.need ?? 30; if (need <= 0 || !card.element_cost.length) return 1; let bank = 0, n = 0; while (bank < need && n < 40) { bank += myStatFor(card.element_cost[n % card.element_cost.length]); n++; } return Math.max(1, n); };
 const castLength = (card, every) => castInstant(card, every) ? 1 : (card.summon ? summonLength(card) : Math.max(1, card.element_cost.length)) + (every ? 1 : 0);
+const summonLabel = (sm) => !sm ? '' : sm.pending ? ' · ✝ nothing to raise — stand by a fallen unit or an ally' : sm.ward ? ` · ✝ ward ${sm.name}` : sm.revive ? ` · ✝ raise ${sm.name} Σ${sm.need}` : ` · 🐾 ${sm.bind ? 'bind ' : ''}${sm.name} Σ${sm.need}`;
 const effectDoubled = () => state.queuedEffect !== null && state.queuedEffect2 !== null;
 // Rule 22: effect B chains onto A when B's first element is A's last one.
 const chainsOnto = (prev, next) => !!prev && !!next && prev.effect_id !== next.effect_id && next.element_cost[0] === prev.element_cost[prev.element_cost.length - 1];
@@ -571,7 +575,7 @@ function renderDeck() {
       const twin = !effectQueued && state.hand.some((c, j) => j !== i && isEffect(c) && c.effect_id === card.effect_id);
       const canChain = !effectQueued && chainable(card);
       const tag = link >= 0 ? `⛓ ${link + 2}nd` : dbl ? 'double' : kindTag;
-      const sm = card.summon ? ` · 🐾 ${card.summon.bind ? 'bind ' : ''}${card.summon.name} Σ${card.summon.need}` : '';
+      const sm = summonLabel(card.summon);
       cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}✺ ${card.name}</div><div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}</div>`;
       if (twin) slot.title = `${card.text || card.name}\n\nYou hold two: pick both to cast them together (Rule 23 ∀)`;
       else if (canChain) slot.title = `${card.text || card.name}\n\nChains onto ${chainTail().name}: its ${elemGlyphs(card.element_cost.slice(0, 1))} is emitted once for both (Rule 22)`;
@@ -694,6 +698,10 @@ function renderRoster() {
   const el = document.getElementById('roster');
   el.innerHTML = '';
   const activeFilter = state.ui.logFilterPeerId;
+  const head = document.createElement('div');
+  head.className = 'ros-head';
+  head.innerHTML = '<span>Unit</span><span class="team">Ally</span>';
+  el.appendChild(head);
   for (const e of state.entities) {
     const row = document.createElement('div');
     row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''}`;
@@ -1049,10 +1057,10 @@ function renderPerms() {
     const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && (state.bonusMode || plans.length > 0));
     const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
       : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${key || '·'})`
-      : p.id === 'effect_summoning' ? `Summoning (6) — holds ${mySummoned()?.name || 'your creature'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
+      : SUMMON_PERM_IDS.has(p.id) ? `${p.name} (6) — holds ${mySummoned().map(x => x.name).join(', ') || 'your creature / ward'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
       : p.name;
     const cd = p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}` : p.die ? `⚄${p.die}` : 'perm';
-    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${p.id === 'effect_summoning' ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
@@ -1060,10 +1068,21 @@ function renderPerms() {
   el.hidden = perms.length === 0;
   el.querySelectorAll('.perm.clickable').forEach(d => d.addEventListener('click', () => clickPermanent(Number(d.dataset.k))));
 }
-// The creature my Summoning holds, as the roster knows it.
+const SUMMON_PERM_IDS = new Set(['effect_summoning', 'effect_golems_earth', 'effect_golems_water', 'effect_golems_air', 'effect_elementals_air', 'effect_elementals_water', 'effect_elementals_earth', 'effect_resurrect_death_ward']);
+// The creatures my permanents hold, as the roster knows them.
 function mySummoned() {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
-  return me?.summoned_peer_id ? state.entities.find(p => p.peer_id === me.summoned_peer_id) || { name: me.summoned_peer_id } : null;
+  return String(me?.summoned_csv || '').split(',').filter(Boolean).map(id => state.entities.find(p => p.peer_id === id) || { name: id });
+}
+// Team label (user spec): a creature belongs to "<Owner> Team" when summoned, bound or
+// raised, else it is a "Monster"; characters read You / <name> Team / Ally / Enemy.
+function teamLabel(e) {
+  const owner = e.owner_peer_id ? state.entities.find(p => p.peer_id === e.owner_peer_id) : null;
+  if (e.owner_peer_id) return `${owner?.peer_id === state.myPeerId ? 'Your' : (owner?.name || peerShort(e.owner_peer_id))} Team`;
+  if (e.creature_id || e.source_id?.startsWith('mon_')) return e.alliance === 'npc_b' ? 'Monster' : 'Ally';
+  if (e.peer_id === state.myPeerId) return 'You';
+  if (e.alliance === 'player') return `${e.name} Team`;
+  return e.alliance === 'npc_a' ? 'Ally' : 'Enemy';
 }
 // Keys 9 0 - = address the n-th permanent WITH an ability.
 function clickPermanentKey(n) {

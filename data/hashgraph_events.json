@@ -2,56 +2,4695 @@
   "collection": "hashgraph_events",
   "notes": "Event vocabulary of the local hashgraph every player keeps for the Dimension part they hold. Each event is wrapped in the message_envelope defined in sync_protocol.json (sync_handshake_per_action.data.message_envelope): self_parent + other_parent hashes give gossip-about-gossip, signatures give authorship, and the deterministic resolver (battle_system.json) gives every peer the same state hash. For now events are exchanged as plain JSON.",
   "entries": [
-    { "id": "evt_genesis", "name": "Genesis", "tags": ["lifecycle"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_0_setup", "sync_join_flow"], "vote_log": [], "notes": "", "data": {
-      "scope": "dimension", "emitted_by": "opening players", "finality": "signed by all opening players",
-      "payload": { "dimension_id": "string", "dimension_name": "string", "rules_snapshot_commit": "git commit hash of data/", "tileset_size": "WxH", "map_seed": "hex (drives rule_0_setup hidden placement so every later part reveals identical traps/monsters)", "owners": ["peer_id"] } } } ] },
-
-    { "id": "evt_join", "name": "Join", "tags": ["lifecycle", "door"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_join_flow", "action_enter_dimension"], "vote_log": [], "notes": "", "data": {
-      "scope": "door", "emitted_by": "joining peer", "finality": "accepted by strong-region members of the entry tile (or self if alone)",
-      "payload": { "door_id": "string", "flow": "open_dimension | join_near_friend | join_new_location", "character_id": "char_* id", "class_id": "class_* id", "deck_commitment": "hash of the shuffled deck order (rule_0_setup, rule_10)", "entry_tile": { "x": "int", "y": "int" }, "adopted_head": "hashgraph head the peer synced from" } } } ] },
-
-    { "id": "evt_leave", "name": "Leave", "tags": ["lifecycle"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["action_travel_door"], "vote_log": [], "notes": "", "data": {
-      "scope": "door", "emitted_by": "leaving peer (or strong region on timeout)", "finality": "gossiped; recorded at next Radicle push",
-      "payload": { "reason": "voluntary | travel_door | timeout | desynced", "tile_left": { "x": "int", "y": "int" }, "character_card_stays_on_tile": true } } } ] },
-
-    { "id": "evt_action_commit", "name": "ActionCommit", "tags": ["turn", "handshake"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_handshake_per_action", "rule_8_card_declare_sequence"], "vote_log": [], "notes": "Phase 1 of the per-action handshake.", "data": {
-      "scope": "strong_region", "emitted_by": "each actor", "finality": "all strong-region members must emit one per action",
-      "payload": { "commitment": "sha256(action_code + effect_ids + skill_ids + target + salt)", "empty_move_announced": "bool (rule_6: Empty Move is declared openly before flipping)" } } } ] },
-
-    { "id": "evt_action_reveal", "name": "ActionReveal", "tags": ["turn", "handshake"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_handshake_per_action", "rule_15_target_follow", "rule_16_combo"], "vote_log": [], "notes": "Phase 2 of the per-action handshake. Peers verify sha256 against evt_action_commit.", "data": {
-      "scope": "strong_region", "emitted_by": "each actor", "finality": "verified by all strong-region members",
-      "payload": { "action": "A | B | M | P | EP | EM (actions.json codes)", "effects": ["effect_* ids being cast or channelled this action"], "skills": ["skill_* ids"], "class_ability_tapped": "bool", "target": { "kind": "tile | character | creature", "ref": "id or {x,y}" }, "combo_step": "int | null (rule_16)", "salt": "hex" } } } ] },
-
-    { "id": "evt_instant", "name": "InstantResponse", "tags": ["turn", "handshake"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_17_skills", "rule_24_destroy_permanent_token"], "vote_log": [], "notes": "Phase 3: skills played as instants, point-buy attempts to destroy permanents, class abilities.", "data": {
-      "scope": "strong_region", "emitted_by": "any strong-region member", "finality": "optional; window closes when every member sends InstantResponse or pass",
-      "payload": { "pass": "bool", "skill_id": "skill_* | null", "point_buy": { "target_token": "token id", "dice_count": "int" }, "class_ability": "class_* | null" } } } ] },
-
-    { "id": "evt_dice", "name": "DiceRoll", "tags": ["turn", "random"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_5_monster_dice", "rule_12_permanent_types"], "vote_log": [], "notes": "Not a separately rolled event: any D6 in the game is derived from the salts revealed in this action. This event only records the derivation for auditing.", "data": {
-      "scope": "strong_region", "emitted_by": "the peer that applies the roll (monster controller or point-buyer)", "finality": "verifiable by all",
-      "payload": { "purpose": "monster_action | point_buy | trap_power | other", "roll_index": "int", "inputs": ["salts used"], "result": ["ints 1..6"] } } } ] },
-
-    { "id": "evt_state_hash", "name": "StateHash", "tags": ["turn", "consensus"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["rule_13_evaluation", "battle_system_core"], "vote_log": [], "notes": "Phase 4/5: the action is final when all strong-region StateHash payloads match.", "data": {
-      "scope": "strong_region", "emitted_by": "each member", "finality": "action finalized on unanimous match; otherwise dispute",
-      "payload": { "state_hash": "sha256 of the canonical region state after resolution", "damage_applied": [ { "target": "id", "amount": "int", "source": "action | effect_* | trap" } ], "tokens_changed": [ { "tile": {"x":"int","y":"int"}, "token": "element/permanent/life token descriptor", "op": "add | remove | flip | update" } ] } } } ] },
-
-    { "id": "evt_turn_commit", "name": "TurnCommit", "tags": ["turn", "gossip"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_turn_commit", "rule_10_draw"], "vote_log": [], "notes": "Once per turn, gossiped to reachable and far regions.", "data": {
-      "scope": "dimension", "emitted_by": "one elected member per strong region (lowest peer_id hash)", "finality": "gossip; merges additively",
-      "payload": { "turn": "int", "region_state_hash": "sha256", "map_delta": [ { "tile": {"x":"int","y":"int"}, "revealed": "bool", "owner": "peer_id | null", "permanents": ["effect_* / class_* / tower ids"], "creature": "mon_* | null" } ], "positions": { "peer_id": {"x":"int","y":"int"} }, "hashgraph_head": "sha256", "draws": [ { "peer_id": "string", "cards_drawn": "int (rule_10: up to 5 in hand)" } ] } } } ] },
-
-    { "id": "evt_map_extend", "name": "MapExtend", "tags": ["map", "door"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_join_flow", "rule_0_setup"], "vote_log": [], "notes": "Emitted by join_new_location: adds a block of tiles and a new DoorId.", "data": {
-      "scope": "dimension", "emitted_by": "new-location joiner", "finality": "pushed to Radicle immediately; accepted by others on poll",
-      "payload": { "new_door_id": "string", "block_origin": {"x":"int","y":"int"}, "block_size": "WxH", "block_seed": "hex (derived from map_seed + block_origin)", "rooted_at_head": "sha256 of the pushed head the joiner started from" } } } ] },
-
-    { "id": "evt_merge", "name": "MergeEvent", "tags": ["hashgraph", "merge"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_divergence_merge"], "vote_log": [], "notes": "Two previously unmet hashgraph parts become one.", "data": {
-      "scope": "dimension", "emitted_by": "all strong-region members present at first contact", "finality": "signed by all present",
-      "payload": { "heads_merged": ["sha256", "sha256"], "common_ancestor": "sha256", "door_ids_unified": ["string"], "conflicts_resolved": [ { "tile": {"x":"int","y":"int"}, "winner": "peer_id", "rule": "earlier_consensus_timestamp | resolver" } ], "turn_adopted": "int" } } } ] },
-
-    { "id": "evt_radicle_push", "name": "RadiclePush", "tags": ["radicle", "interval"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["sync_radicle_push"], "vote_log": [], "notes": "Records which peer pushed which head for which interval, so the lottery can be audited.", "data": {
-      "scope": "door", "emitted_by": "elected pusher", "finality": "gossip",
-      "payload": { "interval_index": "int (floor(unix_time / radicle_push_interval_s))", "commit": "git commit hash on ActiveDimensions/<DimensionName>", "head_pushed": "sha256" } } } ] },
-
-    { "id": "evt_vote", "name": "GovernanceVote", "tags": ["governance", "vote"], "versions": [ { "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null, "rebalance_links": ["governance_voting", "governance_rebalance_script"], "vote_log": [], "notes": "A vote cast in-game is a hashgraph event first; the Radicle pusher batches votes into proposals/* branches at the interval. This is how in-Dimension usage telemetry can weight the vote.", "data": {
-      "scope": "dimension", "emitted_by": "any player", "finality": "gossip; tallied at governance interval",
-      "payload": { "entry_id": "any VersionedEntry id (effect_*, skill_*, class_*, rule_*, ...)", "version": "proposal version string", "signal": "+1 | -1 | abstain", "usage_evidence": { "times_used_in_dimension": "int", "turns_held": "int" }, "counter_proposal": "optional data payload the voter suggests instead" } } } ] }
+    {
+      "id": "evt_genesis",
+      "name": "Genesis",
+      "tags": [
+        "lifecycle"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_0_setup",
+            "sync_join_flow"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "scope": "dimension",
+            "emitted_by": "opening players",
+            "finality": "signed by all opening players",
+            "payload": {
+              "dimension_id": "string",
+              "dimension_name": "string",
+              "rules_snapshot_commit": "git commit hash of data/",
+              "tileset_size": "WxH",
+              "map_seed": "hex (drives rule_0_setup hidden placement so every later part reveals identical traps/monsters)",
+              "owners": [
+                "peer_id"
+              ]
+            }
+          },
+          "logic": {
+            "description": "Governs the first event of a Dimension's hashgraph: scope dimension, emitted by the opening players, final when signed by all of them. Payload fixes dimension ids, the rules snapshot commit, tileset_size WxH, the map_seed every later part derives hidden placement from, and the owners. The runtime deviates: peer.mjs emits an evt_genesis from EVERY peer at startup (each process starts its own tape rather than adopting the opener's), rules_snapshot_commit is the literal 'local', owners is hard-coded to ['peer:player-1'], an extra reveal_radius field is added and the signature is a stub. Context assumed: envelope {type, payload, actor_peer_id}, emitter {id, role}, scope, hashgraph.length, dimension.initial_size.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "first_event_of_hashgraph",
+                "description": "Genesis is only valid as the very first event of the local hashgraph.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "hashgraph.length"
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "emitter_is_owner",
+                "description": "The emitter is one of the declared owners.",
+                "when": {
+                  "includes": [
+                    {
+                      "var": "envelope.payload.owners"
+                    },
+                    {
+                      "var": "emitter.id"
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "tileset_size",
+                "description": "tileset_size string WxH from the initial block size (rule_0_setup; peer.mjs INITIAL_SIZE 5 -> '5x5').",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    {
+                      "var": "dimension.initial_size"
+                    },
+                    "x",
+                    {
+                      "var": "dimension.initial_size"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "owners_count",
+                "description": "How many opening players must sign for finality.",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.owners"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "finalized",
+                "description": "finality: every owner has signed.",
+                "target": "everyone",
+                "value": {
+                  "subset_of": [
+                    {
+                      "var": "envelope.payload.owners"
+                    },
+                    {
+                      "var": "signers"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "seed_and_snapshot_present",
+                "description": "map_seed and rules_snapshot_commit are what make later parts reproducible; they must stay.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "map_seed",
+                      "rules_snapshot_commit",
+                      "owners"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_join",
+      "name": "Join",
+      "tags": [
+        "lifecycle",
+        "door"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_join_flow",
+            "action_enter_dimension"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "scope": "door",
+            "emitted_by": "joining peer",
+            "finality": "accepted by strong-region members of the entry tile (or self if alone)",
+            "payload": {
+              "door_id": "string",
+              "flow": "open_dimension | join_near_friend | join_new_location",
+              "character_id": "char_* id",
+              "class_id": "class_* id",
+              "deck_commitment": "hash of the shuffled deck order (rule_0_setup, rule_10)",
+              "entry_tile": {
+                "x": "int",
+                "y": "int"
+              },
+              "adopted_head": "hashgraph head the peer synced from"
+            }
+          },
+          "logic": {
+            "description": "Governs a peer entering through a Door: scope door, emitted by the joining peer, accepted by the strong-region members of the entry tile (or by itself when alone). Payload carries door_id, flow (open_dimension | join_near_friend | join_new_location), character / class ids, the deck commitment (hash of the shuffled deck order), entry_tile and the adopted head. The runtime deviates: flow is chosen by alliance (player -> open_dimension, else join_near_friend), class_id is null, an extra creature_id is sent, adopted_head is always null, deck_commitment is sha256 of the card-id list, and the event is appended locally without any acceptance round. Context assumed: envelope, emitter, scope, peers[] {tile, life}, region.strong.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "flow_in_vocabulary",
+                "description": "flow is one of the sync_join_flow flows.",
+                "when": {
+                  "in": [
+                    {
+                      "var": "envelope.payload.flow"
+                    },
+                    [
+                      "open_dimension",
+                      "join_near_friend",
+                      "join_new_location"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "entry_tile_free",
+                "description": "No living unit occupies the entry tile.",
+                "when": {
+                  "none": [
+                    {
+                      "var": "peers"
+                    },
+                    {
+                      "and": [
+                        {
+                          ">": [
+                            {
+                              "var": "life"
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "==": [
+                            {
+                              "hex_distance": [
+                                {
+                                  "root": "envelope.payload.entry_tile"
+                                },
+                                {
+                                  "var": "tile"
+                                }
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "deck_commitment_present",
+                "description": "The deck order commitment is a hash string (rule_0_setup / rule_10 integrity).",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "envelope.payload.deck_commitment"
+                        }
+                      ]
+                    },
+                    "string"
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "accepted_by_self",
+                "description": "finality: with no strong-region member at the entry tile the joiner accepts its own join.",
+                "target": "caster",
+                "value": {
+                  "==": [
+                    {
+                      "count": [
+                        {
+                          "var": "region.strong"
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "accepted",
+                "description": "finality: every strong-region member of the entry tile accepted (or self when alone).",
+                "target": "caster",
+                "value": {
+                  "or": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "region.strong"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "var": "region.strong"
+                        },
+                        {
+                          "var": "acceptors"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "runtime_flow",
+                "description": "Deviation: peer.mjs derives the flow from alliance instead of the join UI.",
+                "target": "caster",
+                "value": {
+                  "if": [
+                    {
+                      "==": [
+                        {
+                          "var": "me.alliance"
+                        },
+                        "player"
+                      ]
+                    },
+                    "open_dimension",
+                    "join_near_friend"
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "flow_vocabulary_unchanged",
+                "description": "The flow field still names the three join flows.",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.flow"
+                        },
+                        "open_dimension"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.flow"
+                        },
+                        "join_near_friend"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.flow"
+                        },
+                        "join_new_location"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_leave",
+      "name": "Leave",
+      "tags": [
+        "lifecycle"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_travel_door"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "scope": "door",
+            "emitted_by": "leaving peer (or strong region on timeout)",
+            "finality": "gossiped; recorded at next Radicle push",
+            "payload": {
+              "reason": "voluntary | travel_door | timeout | desynced",
+              "tile_left": {
+                "x": "int",
+                "y": "int"
+              },
+              "character_card_stays_on_tile": true
+            }
+          },
+          "logic": {
+            "description": "Governs a peer leaving a Door: scope door, emitted by the leaving peer or by its strong region on timeout, gossiped and recorded at the next Radicle push. Payload: reason (voluntary | travel_door | timeout | desynced), the tile left, and the fixed flag that the character card stays on the tile as a map item. The runtime deviates: peer.mjs never emits evt_leave — a silent peer simply drops out of livePeers after 20 s without a snapshot, and summoned companions `vanish` locally; nothing marks the tile. Context assumed: envelope, emitter, scope, silence_s (seconds since the leaver's last envelope).",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "reason_in_vocabulary",
+                "description": "reason is one of voluntary, travel_door, timeout, desynced.",
+                "when": {
+                  "in": [
+                    {
+                      "var": "envelope.payload.reason"
+                    },
+                    [
+                      "voluntary",
+                      "travel_door",
+                      "timeout",
+                      "desynced"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "timeout_after_handshake_timeout",
+                "description": "A timeout leave may only be raised by the strong region after handshake_timeout_s of silence.",
+                "when": {
+                  "or": [
+                    {
+                      "!=": [
+                        {
+                          "var": "envelope.payload.reason"
+                        },
+                        "timeout"
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "silence_s"
+                        },
+                        {
+                          "entry": [
+                            "sync_handshake_per_action",
+                            "handshake_timeout_s"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "card_stays_on_tile",
+                "description": "The character card remains on tile_left as a map item until the next push records the departure.",
+                "target": "tile",
+                "value": {
+                  "var": "entry.data.payload.character_card_stays_on_tile"
+                }
+              },
+              {
+                "id": "emitted_by_region",
+                "description": "True when the strong region, not the peer itself, raised the leave (timeout or desynced).",
+                "target": "everyone",
+                "value": {
+                  "in": [
+                    {
+                      "var": "envelope.payload.reason"
+                    },
+                    [
+                      "timeout",
+                      "desynced"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "runtime_dropped_from_roster",
+                "description": "Deviation: peer.mjs drops a peer from the live roster once its snapshot is older than 20 s — no leave event.",
+                "target": "target",
+                "value": {
+                  ">": [
+                    {
+                      "var": "silence_s"
+                    },
+                    20
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "card_stays_flag_true",
+                "description": "character_card_stays_on_tile stays true (the map item rule of sync_join_flow.leave_dimension).",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.payload.character_card_stays_on_tile"
+                    },
+                    true
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_action_commit",
+      "name": "ActionCommit",
+      "tags": [
+        "turn",
+        "handshake"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_handshake_per_action",
+            "rule_8_card_declare_sequence"
+          ],
+          "vote_log": [],
+          "notes": "Phase 1 of the per-action handshake.",
+          "data": {
+            "scope": "strong_region",
+            "emitted_by": "each actor",
+            "finality": "all strong-region members must emit one per action",
+            "payload": {
+              "commitment": "sha256(action_code + effect_ids + skill_ids + target + salt)",
+              "empty_move_announced": "bool (rule_6: Empty Move is declared openly before flipping)"
+            }
+          },
+          "logic": {
+            "description": "Governs phase 1 of the per-action handshake: scope strong_region, one commit per actor per action, final only when every strong-region member has committed. Payload: commitment = sha256 over action code, effect ids, skill ids, target and salt; empty_move_announced is true when the actor openly declares Empty Move (rule_6). The runtime deviates: the hash also covers trance options, the effect chain step, destroy stat and bonus-round plan; the commit is also sent over the Nostr bus and mirrored to an optional discovery server; the strong set is frozen at this moment (freezeRoundMembers) and stragglers are forfeited after COMMIT_WAIT_MS 800 (hard cap 2 x ROUND_SEC) rather than handshake_timeout_s. Context assumed: envelope, emitter, scope, phase, declared.action, commits_seen (ids for this action), region.strong.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitted_at_planning_end",
+                "description": "A commit closes the planning window of the current action.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "phase"
+                    },
+                    "planning"
+                  ]
+                }
+              },
+              {
+                "id": "one_commit_per_actor",
+                "description": "An actor commits once per action.",
+                "when": {
+                  "!": {
+                    "includes": [
+                      {
+                        "var": "commits_seen"
+                      },
+                      {
+                        "var": "emitter.id"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "id": "empty_move_announced_iff_em",
+                "description": "rule_6: empty_move_announced is true exactly when the declared action is Empty Move.",
+                "when": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "envelope.payload.empty_move_announced"
+                      }
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "declared.action"
+                        },
+                        "EM"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "action_in_strong_region",
+                "description": "The actor is within the strong radius of sync_region_tiers.",
+                "when": {
+                  "<=": [
+                    {
+                      "hex_distance": [
+                        {
+                          "var": "me.tile"
+                        },
+                        {
+                          "var": "emitter.tile"
+                        }
+                      ]
+                    },
+                    {
+                      "entry": [
+                        "sync_region_tiers",
+                        "tiers.0.strong_radius_tiles"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "members_outstanding",
+                "description": "Strong-region members whose commit for this action is still missing.",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "filter": [
+                        {
+                          "var": "region.strong"
+                        },
+                        {
+                          "!": {
+                            "includes": [
+                              {
+                                "root": "commits_seen"
+                              },
+                              {
+                                "var": ""
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "all_committed",
+                "description": "finality: every strong-region member has committed (reveal may start).",
+                "target": "everyone",
+                "value": {
+                  "subset_of": [
+                    {
+                      "var": "region.strong"
+                    },
+                    {
+                      "var": "commits_seen"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "straggler_plays_ep",
+                "description": "A member still missing after the handshake timeout is resolved as Empty Posture.",
+                "target": "target",
+                "value": {
+                  "if": [
+                    {
+                      ">=": [
+                        {
+                          "var": "elapsed_s"
+                        },
+                        {
+                          "entry": [
+                            "sync_handshake_per_action",
+                            "handshake_timeout_s"
+                          ]
+                        }
+                      ]
+                    },
+                    "EP",
+                    null
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "commitment_is_salted_sha256",
+                "description": "The commitment description keeps sha256 and the salt (secrecy of face-down cards).",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.commitment"
+                        },
+                        "sha256"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.commitment"
+                        },
+                        "salt"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_action_reveal",
+      "name": "ActionReveal",
+      "tags": [
+        "turn",
+        "handshake"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_handshake_per_action",
+            "rule_15_target_follow",
+            "rule_16_combo"
+          ],
+          "vote_log": [],
+          "notes": "Phase 2 of the per-action handshake. Peers verify sha256 against evt_action_commit.",
+          "data": {
+            "scope": "strong_region",
+            "emitted_by": "each actor",
+            "finality": "verified by all strong-region members",
+            "payload": {
+              "action": "A | B | M | P | EP | EM (actions.json codes)",
+              "effects": [
+                "effect_* ids being cast or channelled this action"
+              ],
+              "skills": [
+                "skill_* ids"
+              ],
+              "class_ability_tapped": "bool",
+              "target": {
+                "kind": "tile | character | creature",
+                "ref": "id or {x,y}"
+              },
+              "combo_step": "int | null (rule_16)",
+              "salt": "hex"
+            }
+          },
+          "logic": {
+            "description": "Governs phase 2 of the handshake: scope strong_region, each actor reveals action (actions.json code), effects, skills, class ability, target {kind, ref}, combo_step and the salt; peers verify sha256 against the commit. The runtime deviates: the action may also be 'BT' (a trance pair carried in `trance`), effects are full objects (id, elements, step/of, every, aura, summon ...) not ids, extra fields destroy / bonus / skill_names are sent, class_ability_tapped is always false and combo_step always null; the reveal is NOT verified against the commitment; reveals are waited for from the strong set PLUS every peer whose commit was seen, and every reveal held is resolved whatever tier its actor is in. Context assumed: envelope, emitter, scope, phase, commits_seen, reveal.recomputed_commitment, commit.commitment, region.strong.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "commit_seen_first",
+                "description": "The actor's commit for this action was received before its reveal.",
+                "when": {
+                  "includes": [
+                    {
+                      "var": "commits_seen"
+                    },
+                    {
+                      "var": "emitter.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "reveal_phase_open",
+                "description": "Reveals are sent once every strong member committed or the commit window expired.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "phase"
+                    },
+                    "reveal"
+                  ]
+                }
+              },
+              {
+                "id": "action_code_valid",
+                "description": "action is an actions.json battle code (peer.mjs also sends BT for a trance).",
+                "when": {
+                  "or": [
+                    {
+                      "in": [
+                        {
+                          "var": "envelope.payload.action"
+                        },
+                        {
+                          "rule": [
+                            "valid_action_codes",
+                            {}
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "envelope.payload.action"
+                        },
+                        "BT"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "target_kind_valid",
+                "description": "target.kind is tile, character or creature when a target is given.",
+                "when": {
+                  "or": [
+                    {
+                      "==": [
+                        {
+                          "var": "envelope.payload.target"
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "envelope.payload.target.kind"
+                        },
+                        [
+                          "tile",
+                          "character",
+                          "creature"
+                        ]
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "commitment_verified",
+                "description": "sha256 over the revealed plaintext + salt equals the commit (runtime supplies reveal.recomputed_commitment; peer.mjs skips this).",
+                "target": "everyone",
+                "value": {
+                  "==": [
+                    {
+                      "var": "reveal.recomputed_commitment"
+                    },
+                    {
+                      "var": "commit.commitment"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "waited_for",
+                "description": "Deviation (peer.mjs expectedMembers('reveal')): the strong set plus every peer whose commit was seen.",
+                "target": "everyone",
+                "value": {
+                  "merge": [
+                    {
+                      "var": "region.strong"
+                    },
+                    {
+                      "filter": [
+                        {
+                          "var": "commits_seen"
+                        },
+                        {
+                          "!": {
+                            "includes": [
+                              {
+                                "root": "region.strong"
+                              },
+                              {
+                                "var": ""
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "effect_count",
+                "description": "Effects declared with this action (0 or 1 in peer.mjs; a chain step rides as step/of).",
+                "target": "caster",
+                "unit": "cards",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.effects"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "non_instant_cast_allowed",
+                "description": "Rule 20: a non-instant effect may only be emitted on Posture / Empty Posture.",
+                "target": "caster",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": {
+                        "var": "envelope.payload.action"
+                      },
+                      "is_instant": {
+                        "var": "effect.is_instant"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "action_and_salt_present",
+                "description": "action and salt are what the commitment is verified against; they must stay.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "action",
+                      "salt",
+                      "target"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "action_can_cast_non_instant",
+              "valid_action_codes"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_instant",
+      "name": "InstantResponse",
+      "tags": [
+        "turn",
+        "handshake"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_17_skills",
+            "rule_24_destroy_permanent_token"
+          ],
+          "vote_log": [],
+          "notes": "Phase 3: skills played as instants, point-buy attempts to destroy permanents, class abilities.",
+          "data": {
+            "scope": "strong_region",
+            "emitted_by": "any strong-region member",
+            "finality": "optional; window closes when every member sends InstantResponse or pass",
+            "payload": {
+              "pass": "bool",
+              "skill_id": "skill_* | null",
+              "point_buy": {
+                "target_token": "token id",
+                "dice_count": "int"
+              },
+              "class_ability": "class_* | null"
+            }
+          },
+          "logic": {
+            "description": "Governs phase 3, the instant window: any strong-region member may respond with a skill, a point-buy destroy attempt (rule_24) or a class ability, or pass; the window closes when every member answered. The runtime deviates: peer.mjs has no instant phase or pass message — instants (effects flagged is_instant), skills and the point-buy `destroy` all ride inside evt_action_reveal and are resolved in the same deterministic pass; rule 8 pc override returns a no-benefit instant to hand. Context assumed: envelope, emitter, scope, region.strong, responded (ids), caster (unit), token {power, is_class_card, element}, die.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_in_strong_region",
+                "description": "Only strong-region members respond in the instant window.",
+                "when": {
+                  "includes": [
+                    {
+                      "var": "region.strong_or_self"
+                    },
+                    {
+                      "var": "emitter.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "pass_or_one_response",
+                "description": "Either pass, or at least one of skill_id, point_buy, class_ability is given.",
+                "when": {
+                  "or": [
+                    {
+                      "!!": {
+                        "var": "envelope.payload.pass"
+                      }
+                    },
+                    {
+                      "!!": {
+                        "var": "envelope.payload.skill_id"
+                      }
+                    },
+                    {
+                      "!!": {
+                        "var": "envelope.payload.point_buy"
+                      }
+                    },
+                    {
+                      "!!": {
+                        "var": "envelope.payload.class_ability"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "window_still_open",
+                "description": "The emitter has not already answered this window.",
+                "when": {
+                  "!": {
+                    "includes": [
+                      {
+                        "var": "responded"
+                      },
+                      {
+                        "var": "emitter.id"
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "window_closed",
+                "description": "finality: every strong-region member sent an InstantResponse or pass.",
+                "target": "everyone",
+                "value": {
+                  "subset_of": [
+                    {
+                      "var": "region.strong"
+                    },
+                    {
+                      "var": "responded"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point_buy_dice",
+                "description": "Rule 20 dice a destroy attempt rolls: dice_count of the caster's stat behind the targeted token's element.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          {
+                            "var": "token.element"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "destroy_succeeds",
+                "description": "Rule 24: the die destroys the token when it is at least the token's power; never the class card.",
+                "target": "target",
+                "value": {
+                  "rule": [
+                    "using_rule_24",
+                    {
+                      "die": {
+                        "var": "die"
+                      },
+                      "power": {
+                        "var": "token.power"
+                      },
+                      "is_class_card": {
+                        "var": "token.is_class_card"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point_buy_shape_kept",
+                "description": "point_buy keeps target_token and dice_count.",
+                "assert": {
+                  "subset_of": [
+                    [
+                      "target_token",
+                      "dice_count"
+                    ],
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.payload.point_buy"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "point_buy_dice_count",
+              "using_rule_24"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_dice",
+      "name": "DiceRoll",
+      "tags": [
+        "turn",
+        "random"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_5_monster_dice",
+            "rule_12_permanent_types"
+          ],
+          "vote_log": [],
+          "notes": "Not a separately rolled event: any D6 in the game is derived from the salts revealed in this action. This event only records the derivation for auditing.",
+          "data": {
+            "scope": "strong_region",
+            "emitted_by": "the peer that applies the roll (monster controller or point-buyer)",
+            "finality": "verifiable by all",
+            "payload": {
+              "purpose": "monster_action | point_buy | trap_power | other",
+              "roll_index": "int",
+              "inputs": [
+                "salts used"
+              ],
+              "result": [
+                "ints 1..6"
+              ]
+            }
+          },
+          "logic": {
+            "description": "Governs the audit record of a D6 derivation: scope strong_region, emitted by the peer applying the roll, verifiable by all. Payload: purpose (monster_action | point_buy | trap_power | other), roll_index, the salts used and the resulting 1..6 values; the contract derives roll = 1 + (sha256(concat(salts) + roll_index) mod 6). The runtime deviates: evt_dice is never emitted; dice come from effects.mjs rollDice(seed) = successive bytes of sha256(seed) mod 6 + 1 where the seed is the ACTOR's own reveal salt + purpose + action index (not the concatenation of all members' salts), so the roll is reproducible by every peer but is not bias-resistant against the actor. Context assumed: envelope, emitter, scope, salt_digest_int, stat.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "purpose_in_vocabulary",
+                "description": "purpose is monster_action, point_buy, trap_power or other.",
+                "when": {
+                  "in": [
+                    {
+                      "var": "envelope.payload.purpose"
+                    },
+                    [
+                      "monster_action",
+                      "point_buy",
+                      "trap_power",
+                      "other"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "inputs_present",
+                "description": "At least one salt feeds the derivation and roll_index is non-negative.",
+                "when": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "count": [
+                            {
+                              "var": "envelope.payload.inputs"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "envelope.payload.roll_index"
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "results_in_d6_range",
+                "description": "Every result is an integer 1..6.",
+                "when": {
+                  "none": [
+                    {
+                      "var": "envelope.payload.result"
+                    },
+                    {
+                      "or": [
+                        {
+                          "<": [
+                            {
+                              "var": ""
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          ">": [
+                            {
+                              "var": ""
+                            },
+                            6
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "die_from_digest",
+                "description": "1 + (digest mod 6) where salt_digest_int is sha256(concat(salts) + roll_index) as an integer (hashing is outside json-logic).",
+                "target": "everyone",
+                "unit": "die",
+                "value": {
+                  "+": [
+                    1,
+                    {
+                      "%": [
+                        {
+                          "var": "salt_digest_int"
+                        },
+                        6
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point_buy_succeeds",
+                "description": "Rule 20: for purpose point_buy the dice sum must stay at or under the stat.",
+                "target": "caster",
+                "value": {
+                  "rule": [
+                    "point_buy_succeeds",
+                    {
+                      "dice": {
+                        "var": "envelope.payload.result"
+                      },
+                      "stat": {
+                        "var": "stat"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point_buy_token_value",
+                "description": "Rule 20: the highest die is the token value.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "point_buy_token_value",
+                    {
+                      "dice": {
+                        "var": "envelope.payload.result"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "dice_rolled",
+                "description": "How many dice the record holds.",
+                "target": "everyone",
+                "unit": "die",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.result"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "result_stays_d6",
+                "description": "The result field still describes 1..6 values.",
+                "assert": {
+                  "matches": [
+                    {
+                      "var": "proposal.data.payload.result.0"
+                    },
+                    "1\\.\\.6"
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "point_buy_succeeds",
+              "point_buy_token_value"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_state_hash",
+      "name": "StateHash",
+      "tags": [
+        "turn",
+        "consensus"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_13_evaluation",
+            "battle_system_core"
+          ],
+          "vote_log": [],
+          "notes": "Phase 4/5: the action is final when all strong-region StateHash payloads match.",
+          "data": {
+            "scope": "strong_region",
+            "emitted_by": "each member",
+            "finality": "action finalized on unanimous match; otherwise dispute",
+            "payload": {
+              "state_hash": "sha256 of the canonical region state after resolution",
+              "damage_applied": [
+                {
+                  "target": "id",
+                  "amount": "int",
+                  "source": "action | effect_* | trap"
+                }
+              ],
+              "tokens_changed": [
+                {
+                  "tile": {
+                    "x": "int",
+                    "y": "int"
+                  },
+                  "token": "element/permanent/life token descriptor",
+                  "op": "add | remove | flip | update"
+                }
+              ]
+            }
+          },
+          "logic": {
+            "description": "Governs phases 4/5: every strong-region member runs the deterministic resolver, signs the resulting state hash, and the action is final on unanimous match; a mismatch is a dispute. Payload: state_hash, damage_applied [{target, amount, source}], tokens_changed [{tile, token, op}]. The runtime deviates: the hash covers only the entities inside the EMITTER's strong set, so two peers' hashes legitimately differ and checkStateHash compares entity by entity (tile, life) instead, logging 'STATE DIVERGENCE' without any dispute or replay; the payload adds region, bonus_rounds, vanished, journey_results and actions, tokens_changed is always [], and the event is not relayed over the Nostr bus. Context assumed: envelope, emitter, scope, reveals_seen, region.strong, hashes_seen (list), responders, mine.state_hash.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "all_reveals_in_or_expired",
+                "description": "The resolver runs after every waited-for reveal arrived or the reveal window expired.",
+                "when": {
+                  "or": [
+                    {
+                      "subset_of": [
+                        {
+                          "var": "region.strong"
+                        },
+                        {
+                          "var": "reveals_seen"
+                        }
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "elapsed_s"
+                        },
+                        {
+                          "entry": [
+                            "sync_handshake_per_action",
+                            "handshake_timeout_s"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "hash_is_string",
+                "description": "state_hash is a sha256 hex string.",
+                "when": {
+                  "matches": [
+                    {
+                      "var": "envelope.payload.state_hash"
+                    },
+                    "^[0-9a-f]{64}$"
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "unanimous",
+                "description": "Every hash seen for this action equals mine.",
+                "target": "everyone",
+                "value": {
+                  "none": [
+                    {
+                      "var": "hashes_seen"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "var": ""
+                        },
+                        {
+                          "root": "mine.state_hash"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "finalized",
+                "description": "finality: all strong members reported and all hashes match.",
+                "target": "everyone",
+                "value": {
+                  "and": [
+                    {
+                      "subset_of": [
+                        {
+                          "var": "region.strong"
+                        },
+                        {
+                          "var": "responders"
+                        }
+                      ]
+                    },
+                    {
+                      "none": [
+                        {
+                          "var": "hashes_seen"
+                        },
+                        {
+                          "!=": [
+                            {
+                              "var": ""
+                            },
+                            {
+                              "root": "mine.state_hash"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "total_damage",
+                "description": "Sum of damage_applied amounts in this action.",
+                "target": "everyone",
+                "unit": "damage",
+                "value": {
+                  "sum": [
+                    {
+                      "map": [
+                        {
+                          "var": "envelope.payload.damage_applied"
+                        },
+                        {
+                          "var": "amount"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "tokens_changed",
+                "description": "Number of token operations recorded (always 0 in peer.mjs).",
+                "target": "everyone",
+                "unit": "tokens",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.tokens_changed"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "state_hash_is_sha256",
+                "description": "state_hash stays a sha256 of the canonical region state.",
+                "assert": {
+                  "matches": [
+                    {
+                      "var": "proposal.data.payload.state_hash"
+                    },
+                    "sha256"
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_turn_commit",
+      "name": "TurnCommit",
+      "tags": [
+        "turn",
+        "gossip"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_turn_commit",
+            "rule_10_draw"
+          ],
+          "vote_log": [],
+          "notes": "Once per turn, gossiped to reachable and far regions.",
+          "data": {
+            "scope": "dimension",
+            "emitted_by": "one elected member per strong region (lowest peer_id hash)",
+            "finality": "gossip; merges additively",
+            "payload": {
+              "turn": "int",
+              "region_state_hash": "sha256",
+              "map_delta": [
+                {
+                  "tile": {
+                    "x": "int",
+                    "y": "int"
+                  },
+                  "revealed": "bool",
+                  "owner": "peer_id | null",
+                  "permanents": [
+                    "effect_* / class_* / tower ids"
+                  ],
+                  "creature": "mon_* | null"
+                }
+              ],
+              "positions": {
+                "peer_id": {
+                  "x": "int",
+                  "y": "int"
+                }
+              },
+              "hashgraph_head": "sha256",
+              "draws": [
+                {
+                  "peer_id": "string",
+                  "cards_drawn": "int (rule_10: up to 5 in hand)"
+                }
+              ]
+            }
+          },
+          "logic": {
+            "description": "Governs the once-per-turn gossip to reachable and far regions: scope dimension, emitted by one elected member per strong region (lowest peer_id hash), merging additively. Payload: turn, region_state_hash, map_delta, positions, hashgraph_head and the draws (rule_10 refill to 5). The runtime deviates: every peer emits its own evt_turn_commit at its turn boundary (endRound) — no election; map_delta is absent (map blocks travel separately), positions are axial {q,r} for every peer heard, draws covers only the emitter; it is sent over libp2p only. Context assumed: envelope, emitter, scope, round, clock.rounds_per_turn, region.lowest_hash_member, caster.hand_size, peers[].",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "turn_boundary",
+                "description": "Emitted after the last action of the turn (round index rounds_per_turn - 1).",
+                "when": {
+                  "==": [
+                    {
+                      "var": "round"
+                    },
+                    {
+                      "-": [
+                        {
+                          "var": "clock.rounds_per_turn"
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_is_elected",
+                "description": "The emitter is the strong region's elected member (lowest peer_id hash); peer.mjs lets every peer emit.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.id"
+                    },
+                    {
+                      "var": "region.lowest_hash_member"
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "cards_drawn",
+                "description": "Rule 10: cards the emitter draws at turn end to refill the hand to 5.",
+                "target": "caster",
+                "unit": "cards",
+                "value": {
+                  "rule": [
+                    "hand_refill",
+                    {
+                      "hand_size": {
+                        "var": "caster.hand_size"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "dimension_turn",
+                "description": "turn_counter_rule: max of the committed turn and every peer's turn.",
+                "target": "everyone",
+                "value": {
+                  "max": [
+                    {
+                      "var": "envelope.payload.turn"
+                    },
+                    {
+                      "max_of": [
+                        {
+                          "map": [
+                            {
+                              "var": "peers"
+                            },
+                            {
+                              "var": "turn"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "map_delta_size",
+                "description": "Tiles changed since the previous TurnCommit (0 in peer.mjs, which omits map_delta).",
+                "target": "everyone",
+                "unit": "hexes",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.map_delta"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_matches_sync_turn_commit",
+                "description": "Every payload key of sync_turn_commit is present here (the two entries describe the same message).",
+                "assert": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "entry": [
+                            "sync_turn_commit",
+                            "payload"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "proposal.data.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "hand_refill"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_map_extend",
+      "name": "MapExtend",
+      "tags": [
+        "map",
+        "door"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_join_flow",
+            "rule_0_setup"
+          ],
+          "vote_log": [],
+          "notes": "Emitted by join_new_location: adds a block of tiles and a new DoorId.",
+          "data": {
+            "scope": "dimension",
+            "emitted_by": "new-location joiner",
+            "finality": "pushed to Radicle immediately; accepted by others on poll",
+            "payload": {
+              "new_door_id": "string",
+              "block_origin": {
+                "x": "int",
+                "y": "int"
+              },
+              "block_size": "WxH",
+              "block_seed": "hex (derived from map_seed + block_origin)",
+              "rooted_at_head": "sha256 of the pushed head the joiner started from"
+            }
+          },
+          "logic": {
+            "description": "Governs adding a block of tiles and a new DoorId when a peer joins at a new location: scope dimension, pushed to Radicle immediately, accepted by others on poll. Payload: new_door_id, block_origin, block_size WxH (= the initial tileset), block_seed derived from map_seed + block_origin, rooted_at_head. The runtime deviates: peer.mjs emits evt_map_extend whenever revealAround discovers hexes (a disc block of reveal radius 10 around a position, grow-only), not only on join_new_location; the payload is {block} with the block's q,r,radius,by,at; it is relayed over the Nostr bus and complemented by an evt_map_sync event (not in this vocabulary) carrying whole block lists. Context assumed: envelope, emitter, scope, join.flow, dimension.doors, dimension.tileset.initial_size, dimension.map_seed.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "flow_is_new_location",
+                "description": "Only the join_new_location flow mints a block.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "join.flow"
+                    },
+                    "join_new_location"
+                  ]
+                }
+              },
+              {
+                "id": "door_id_fresh",
+                "description": "new_door_id is not already a Door of the Dimension.",
+                "when": {
+                  "!": {
+                    "includes": [
+                      {
+                        "var": "dimension.doors"
+                      },
+                      {
+                        "var": "envelope.payload.new_door_id"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "id": "rooted_at_known_head",
+                "description": "rooted_at_head names the pushed head the joiner started from.",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "envelope.payload.rooted_at_head"
+                        }
+                      ]
+                    },
+                    "string"
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "block_size",
+                "description": "The new block is the size of the initial tileset (rule_0_setup).",
+                "target": "tile",
+                "value": {
+                  "var": "dimension.tileset.initial_size"
+                }
+              },
+              {
+                "id": "block_seed_input",
+                "description": "The string hashed into block_seed: map_seed + ':' + origin x,y (hashing is outside json-logic).",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    {
+                      "var": "dimension.map_seed"
+                    },
+                    ":",
+                    {
+                      "var": "envelope.payload.block_origin.x"
+                    },
+                    ",",
+                    {
+                      "var": "envelope.payload.block_origin.y"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "runtime_block_hexes",
+                "description": "Deviation: peer.mjs adds a disc of reveal radius r around the revealer: 3r(r+1)+1 hexes (331 for r=10).",
+                "target": "tile",
+                "unit": "hexes",
+                "value": {
+                  "+": [
+                    {
+                      "*": [
+                        3,
+                        {
+                          "var": "envelope.payload.block.radius"
+                        },
+                        {
+                          "+": [
+                            {
+                              "var": "envelope.payload.block.radius"
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "seed_derivation_kept",
+                "description": "block_seed stays derived from map_seed so hidden placement is reproducible.",
+                "assert": {
+                  "matches": [
+                    {
+                      "var": "proposal.data.payload.block_seed"
+                    },
+                    "map_seed"
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_merge",
+      "name": "MergeEvent",
+      "tags": [
+        "hashgraph",
+        "merge"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_divergence_merge"
+          ],
+          "vote_log": [],
+          "notes": "Two previously unmet hashgraph parts become one.",
+          "data": {
+            "scope": "dimension",
+            "emitted_by": "all strong-region members present at first contact",
+            "finality": "signed by all present",
+            "payload": {
+              "heads_merged": [
+                "sha256",
+                "sha256"
+              ],
+              "common_ancestor": "sha256",
+              "door_ids_unified": [
+                "string"
+              ],
+              "conflicts_resolved": [
+                {
+                  "tile": {
+                    "x": "int",
+                    "y": "int"
+                  },
+                  "winner": "peer_id",
+                  "rule": "earlier_consensus_timestamp | resolver"
+                }
+              ],
+              "turn_adopted": "int"
+            }
+          },
+          "logic": {
+            "description": "Governs two unmet hashgraph parts becoming one: scope dimension, emitted by all strong-region members present at first contact, signed by all present. Payload: heads_merged, common_ancestor, door_ids_unified, conflicts_resolved [{tile, winner, rule}], turn_adopted = max(turn). The runtime deviates: evt_merge is never emitted; peer.mjs has no part merge (see sync_divergence_merge) — the only convergence is the grow-only union of map blocks and the max-turn clock rule. Context assumed: envelope, emitter, scope, region.strong, signers, parts.a / parts.b.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "two_distinct_heads",
+                "description": "Exactly two different heads are merged.",
+                "when": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "envelope.payload.heads_merged"
+                            }
+                          ]
+                        },
+                        2
+                      ]
+                    },
+                    {
+                      "distinct": [
+                        {
+                          "var": "envelope.payload.heads_merged"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "common_ancestor_known",
+                "description": "The common ancestor (the push both parts descend from) is known.",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "envelope.payload.common_ancestor"
+                        }
+                      ]
+                    },
+                    "string"
+                  ]
+                }
+              },
+              {
+                "id": "conflict_rules_valid",
+                "description": "Every resolved conflict names its rule: earlier_consensus_timestamp or resolver.",
+                "when": {
+                  "none": [
+                    {
+                      "var": "envelope.payload.conflicts_resolved"
+                    },
+                    {
+                      "!": {
+                        "in": [
+                          {
+                            "var": "rule"
+                          },
+                          [
+                            "earlier_consensus_timestamp",
+                            "resolver"
+                          ]
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "turn_adopted",
+                "description": "The merged region adopts max(turn) of the two parts.",
+                "target": "everyone",
+                "value": {
+                  "max": [
+                    {
+                      "var": "parts.a.turn"
+                    },
+                    {
+                      "var": "parts.b.turn"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "signed_by_all_present",
+                "description": "finality: every strong-region member present has signed.",
+                "target": "everyone",
+                "value": {
+                  "subset_of": [
+                    {
+                      "var": "region.strong"
+                    },
+                    {
+                      "var": "signers"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "doors_unified",
+                "description": "How many DoorIds now alias one holder set.",
+                "target": "everyone",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.door_ids_unified"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "conflicts_count",
+                "description": "Tiles that needed a winner.",
+                "target": "everyone",
+                "unit": "hexes",
+                "value": {
+                  "count": [
+                    {
+                      "var": "envelope.payload.conflicts_resolved"
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "conflict_rule_vocabulary_kept",
+                "description": "conflicts_resolved[].rule still offers earlier_consensus_timestamp and resolver.",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.conflicts_resolved.0.rule"
+                        },
+                        "earlier_consensus_timestamp"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.conflicts_resolved.0.rule"
+                        },
+                        "resolver"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_radicle_push",
+      "name": "RadiclePush",
+      "tags": [
+        "radicle",
+        "interval"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "sync_radicle_push"
+          ],
+          "vote_log": [],
+          "notes": "Records which peer pushed which head for which interval, so the lottery can be audited.",
+          "data": {
+            "scope": "door",
+            "emitted_by": "elected pusher",
+            "finality": "gossip",
+            "payload": {
+              "interval_index": "int (floor(unix_time / radicle_push_interval_s))",
+              "commit": "git commit hash on ActiveDimensions/<DimensionName>",
+              "head_pushed": "sha256"
+            }
+          },
+          "logic": {
+            "description": "Governs the audit record of an interval push: scope door, emitted by the elected pusher, gossiped. Payload: interval_index = floor(unix_time / radicle_push_interval_s), the git commit on ActiveDimensions/<DimensionName>, head_pushed. The runtime deviates: every peer emits one after each of its own door pushes (every RADICLE_PUSH_SEC = 60 s, no lottery); the payload is {door, commit, head_pushed, explorer_url, tree_url} without interval_index. Context assumed: envelope, emitter, scope, now_s, lottery.winner, me.id.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_is_elected_pusher",
+                "description": "Only the lottery winner (or grace fallback) of sync_radicle_push pushes.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.id"
+                    },
+                    {
+                      "var": "lottery.winner"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "interval_index_matches_clock",
+                "description": "The recorded interval_index is the current floor(now / radicle_push_interval_s).",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.payload.interval_index"
+                    },
+                    {
+                      "floor": [
+                        {
+                          "/": [
+                            {
+                              "var": "now_s"
+                            },
+                            {
+                              "entry": [
+                                "sync_radicle_push",
+                                "radicle_push_interval_s"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "interval_index",
+                "description": "floor(unix_time / radicle_push_interval_s).",
+                "target": "everyone",
+                "value": {
+                  "floor": [
+                    {
+                      "/": [
+                        {
+                          "var": "now_s"
+                        },
+                        {
+                          "entry": [
+                            "sync_radicle_push",
+                            "radicle_push_interval_s"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "commit_path",
+                "description": "Where the push landed: the door file of sync_radicle_push.paths.",
+                "target": "tile",
+                "value": {
+                  "cat": [
+                    "ActiveDimensions/",
+                    {
+                      "var": "dimension.name"
+                    },
+                    "/doors/",
+                    {
+                      "var": "door_id"
+                    },
+                    ".json"
+                  ]
+                }
+              },
+              {
+                "id": "runtime_pushes_per_hour",
+                "description": "Deviation: with RADICLE_PUSH_SEC = 60 each peer pushes 60 times per contract interval.",
+                "target": "everyone",
+                "value": {
+                  "floor": [
+                    {
+                      "/": [
+                        {
+                          "entry": [
+                            "sync_radicle_push",
+                            "radicle_push_interval_s"
+                          ]
+                        },
+                        {
+                          "var": "runtime.radicle_push_sec"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "interval_index_formula_kept",
+                "description": "interval_index stays defined via radicle_push_interval_s.",
+                "assert": {
+                  "matches": [
+                    {
+                      "var": "proposal.data.payload.interval_index"
+                    },
+                    "radicle_push_interval_s"
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "evt_vote",
+      "name": "GovernanceVote",
+      "tags": [
+        "governance",
+        "vote"
+      ],
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "governance_voting",
+            "governance_rebalance_script"
+          ],
+          "vote_log": [],
+          "notes": "A vote cast in-game is a hashgraph event first; the Radicle pusher batches votes into proposals/* branches at the interval. This is how in-Dimension usage telemetry can weight the vote.",
+          "data": {
+            "scope": "dimension",
+            "emitted_by": "any player",
+            "finality": "gossip; tallied at governance interval",
+            "payload": {
+              "entry_id": "any VersionedEntry id (effect_*, skill_*, class_*, rule_*, ...)",
+              "version": "proposal version string",
+              "signal": "+1 | -1 | abstain",
+              "usage_evidence": {
+                "times_used_in_dimension": "int",
+                "turns_held": "int"
+              },
+              "counter_proposal": "optional data payload the voter suggests instead"
+            }
+          },
+          "logic": {
+            "description": "Governs an in-game governance vote: scope dimension, any player, gossiped and tallied at the governance interval. Payload: entry_id, proposal version, signal (+1 | -1 | abstain), usage_evidence {times_used_in_dimension, turns_held} and an optional counter_proposal. The vote weight follows governance_voting: w = 0.01 x (1 + log2(1 + times_used)) x (1 + 0.1 x dimensions_played_in), capped at 0.10 per peer per proposal; json-logic has no log2 so the runtime supplies log2_1p_times_used = log2(1 + times_used_in_dimension). The runtime deviates: evt_vote is never emitted and there is no tally — tools/rebalance.mjs appends proposal versions at weight 0 directly. Context assumed: envelope, emitter {id, pubkey}, scope, votes_seen_keys (peer:entry:version strings), log2_1p_times_used, dimensions_played_in.",
+            "prerequisites": [
+              {
+                "id": "envelope_type_matches",
+                "description": "The envelope type is this event id.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "envelope.type"
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "scope_matches",
+                "description": "The event is applied at the entry's scope.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "scope"
+                    },
+                    {
+                      "var": "entry.data.scope"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "emitter_role_matches",
+                "description": "The emitter's role is the entry's emitted_by role.",
+                "when": {
+                  "==": [
+                    {
+                      "var": "emitter.role"
+                    },
+                    {
+                      "var": "entry.data.emitted_by"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_has_contract_keys",
+                "description": "Every key of the contract payload is present in the envelope payload.",
+                "when": {
+                  "subset_of": [
+                    {
+                      "keys": [
+                        {
+                          "var": "entry.data.payload"
+                        }
+                      ]
+                    },
+                    {
+                      "keys": [
+                        {
+                          "var": "envelope.payload"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "signal_in_vocabulary",
+                "description": "signal is +1, -1 or abstain.",
+                "when": {
+                  "in": [
+                    {
+                      "var": "envelope.payload.signal"
+                    },
+                    [
+                      "+1",
+                      "-1",
+                      "abstain",
+                      1,
+                      -1
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "voter_has_signing_key",
+                "description": "governance_voting.who_may_vote: any peer with a signing key.",
+                "when": {
+                  "==": [
+                    {
+                      "typeof": [
+                        {
+                          "var": "emitter.pubkey"
+                        }
+                      ]
+                    },
+                    "string"
+                  ]
+                }
+              },
+              {
+                "id": "not_a_duplicate",
+                "description": "vote_integrity: one vote per (peer_id, entry_id, version).",
+                "when": {
+                  "!": {
+                    "includes": [
+                      {
+                        "var": "votes_seen_keys"
+                      },
+                      {
+                        "cat": [
+                          {
+                            "var": "emitter.id"
+                          },
+                          ":",
+                          {
+                            "var": "envelope.payload.entry_id"
+                          },
+                          ":",
+                          {
+                            "var": "envelope.payload.version"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "id": "usage_evidence_non_negative",
+                "description": "usage_evidence counters are non-negative numbers (must be backed by TurnCommit history).",
+                "when": {
+                  "and": [
+                    {
+                      ">=": [
+                        {
+                          "var": "envelope.payload.usage_evidence.times_used_in_dimension"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "envelope.payload.usage_evidence.turns_held"
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "vote_weight_uncapped",
+                "description": "0.01 x (1 + log2(1 + times_used)) x (1 + 0.1 x dimensions_played_in) with log2_1p_times_used supplied by the runtime.",
+                "target": "proposal",
+                "value": {
+                  "*": [
+                    0.01,
+                    {
+                      "+": [
+                        1,
+                        {
+                          "var": "log2_1p_times_used"
+                        }
+                      ]
+                    },
+                    {
+                      "+": [
+                        1,
+                        {
+                          "*": [
+                            0.1,
+                            {
+                              "var": "dimensions_played_in"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "vote_weight",
+                "description": "The uncapped weight capped at 0.10 per peer per proposal.",
+                "target": "proposal",
+                "value": {
+                  "min": [
+                    0.1,
+                    {
+                      "*": [
+                        0.01,
+                        {
+                          "+": [
+                            1,
+                            {
+                              "var": "log2_1p_times_used"
+                            }
+                          ]
+                        },
+                        {
+                          "+": [
+                            1,
+                            {
+                              "*": [
+                                0.1,
+                                {
+                                  "var": "dimensions_played_in"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "signed_weight",
+                "description": "+w for +1, -w for -1, 0 for abstain — the term the tally sums.",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "in": [
+                        {
+                          "var": "envelope.payload.signal"
+                        },
+                        [
+                          "+1",
+                          1
+                        ]
+                      ]
+                    },
+                    {
+                      "min": [
+                        0.1,
+                        {
+                          "*": [
+                            0.01,
+                            {
+                              "+": [
+                                1,
+                                {
+                                  "var": "log2_1p_times_used"
+                                }
+                              ]
+                            },
+                            {
+                              "+": [
+                                1,
+                                {
+                                  "*": [
+                                    0.1,
+                                    {
+                                      "var": "dimensions_played_in"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "envelope.payload.signal"
+                        },
+                        [
+                          "-1",
+                          -1
+                        ]
+                      ]
+                    },
+                    {
+                      "-": [
+                        0,
+                        {
+                          "min": [
+                            0.1,
+                            {
+                              "*": [
+                                0.01,
+                                {
+                                  "+": [
+                                    1,
+                                    {
+                                      "var": "log2_1p_times_used"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "+": [
+                                    1,
+                                    {
+                                      "*": [
+                                        0.1,
+                                        {
+                                          "var": "dimensions_played_in"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "scope_in_vocabulary",
+                "description": "scope is dimension, door or strong_region.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "proposal.data.scope"
+                    },
+                    [
+                      "dimension",
+                      "door",
+                      "strong_region"
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "scope_and_finality_unchanged",
+                "description": "scope and the finality vocabulary stay as canonical.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.scope"
+                        },
+                        {
+                          "var": "entry.data.scope"
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "proposal.data.finality"
+                        },
+                        {
+                          "var": "entry.data.finality"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "payload_keys_unchanged",
+                "description": "The payload keeps exactly the canonical key set.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "proposal.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "count": [
+                            {
+                              "keys": [
+                                {
+                                  "var": "entry.data.payload"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload"
+                            }
+                          ]
+                        },
+                        {
+                          "keys": [
+                            {
+                              "var": "entry.data.payload"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "signal_vocabulary_kept",
+                "description": "signal still offers +1, -1 and abstain, and usage_evidence keeps times_used_in_dimension (the weight input).",
+                "assert": {
+                  "and": [
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.signal"
+                        },
+                        "\\+1"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.signal"
+                        },
+                        "-1"
+                      ]
+                    },
+                    {
+                      "matches": [
+                        {
+                          "var": "proposal.data.payload.signal"
+                        },
+                        "abstain"
+                      ]
+                    },
+                    {
+                      "subset_of": [
+                        [
+                          "times_used_in_dimension"
+                        ],
+                        {
+                          "keys": [
+                            {
+                              "var": "proposal.data.payload.usage_evidence"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
+          }
+        }
+      ]
+    }
   ]
 }

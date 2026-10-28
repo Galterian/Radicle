@@ -149,5 +149,44 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('summoning ∀ with the creature dead fizzles', gone.status, 'fizzled');
 }
 
+// Golems (user spec): Souls, Harmony in turn — emission 1 banks World (12), emission 2 Will (6),
+// emission 3 World again … until the bank covers 24: 12, 18, 30 → done at the third.
+{
+  const stats = { C: M(10, 12, 10, 6), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  const cast = { actor: 'C', effect_id: 'effect_golems_earth', elements: ['elem_souls', 'elem_harmony'], salt: 's', target: null, is_instant: false, of: 3, summon: { creature_id: 'mon_golem_living', name: 'Living Golem', need: 24 } };
+  const g1 = resolveEffect(world(stats, tiles, sides), { ...cast, step: 1, kept: null });
+  eq('golems step 1 banks World', [g1.status, g1.kept], ['casting', [12]]);
+  const g2 = resolveEffect(world(stats, tiles, sides), { ...cast, step: 2, kept: g1.kept });
+  eq('golems step 2 banks Will', [g2.status, g2.kept], ['casting', [12, 6]]);
+  const g3 = resolveEffect(world(stats, tiles, sides), { ...cast, step: 3, kept: g2.kept });
+  eq('golems step 3 (World again) pays 24 → permanent + golem', [g3.status, g3.kept, g3.permanents, g3.summon.creature_id], ['done', [12, 6, 12], [{ on: 'C', id: 'effect_golems_earth' }], 'mon_golem_living']);
+  // Elementals: Harmony (Will 6), Concentration (Will 6) … need 30 → five emissions.
+  const e = { ...cast, effect_id: 'effect_elementals_air', elements: ['elem_harmony', 'elem_concentration'], of: 5, summon: { creature_id: 'mon_elemental_world', name: 'World Elemental', need: 30 } };
+  const e4 = resolveEffect(world(stats, tiles, sides), { ...e, step: 4, kept: [6, 6, 6] });
+  eq('elementals short at 24/30 keeps casting', [e4.status, e4.kept], ['casting', [6, 6, 6, 6]]);
+  const e5 = resolveEffect(world(stats, tiles, sides), { ...e, step: 5, kept: e4.kept });
+  eq('elementals paid at 30 → permanent + elemental', [e5.status, e5.summon.creature_id, e5.permanents], ['done', 'mon_elemental_world', [{ on: 'C', id: 'effect_elementals_air' }]]);
+}
+// Resurrect / Death Ward (user spec): Vitality stat buy next to a fallen unit; the raised one
+// comes back (a player at full life, a creature as my ally). Ward: an ally next to me, no bank.
+{
+  const stats = { C: M(10, 12, 10, 6), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  const cast = { actor: 'C', effect_id: 'effect_resurrect_death_ward', elements: ['elem_vitality'], salt: 's', target: null, is_instant: false, of: 2, summon: { revive: 'E', creature_id: 'mon_x', name: 'X', need: 20 } };
+  const r1 = resolveEffect(world(stats, tiles, sides, { life: { E: 0 } }), { ...cast, step: 1, kept: null });
+  eq('resurrect step 1 banks Vitality 10/20', [r1.status, r1.kept], ['casting', [10]]);
+  const r2 = resolveEffect(world(stats, tiles, sides, { life: { E: 0 } }), { ...cast, step: 2, kept: r1.kept });
+  eq('resurrect paid → raise E', [r2.status, r2.summon.revive, r2.permanents], ['done', 'E', [{ on: 'C', id: 'effect_resurrect_death_ward' }]]);
+  const up = resolveEffect(world(stats, tiles, sides), { ...cast, step: 2, kept: [10] });
+  eq('resurrect with the unit alive again fizzles', up.status, 'fizzled');
+  const far = resolveEffect(world(stats, { ...tiles, E: { q: 3, r: 0 } }, sides, { life: { E: 0 } }), { ...cast, step: 2, kept: [10] });
+  eq('resurrect with the corpse out of reach fizzles', far.status, 'fizzled');
+  const ward = resolveEffect(world(stats, tiles, sides), { ...cast, of: 1, step: 1, kept: null, summon: { ward: 'A', name: 'A', need: 0 } });
+  eq('death ward on the ally next to me: permanent at once', [ward.status, ward.summon.ward, ward.permanents], ['done', 'A', [{ on: 'C', id: 'effect_resurrect_death_ward' }]]);
+  const foe = resolveEffect(world(stats, tiles, sides), { ...cast, of: 1, step: 1, kept: null, summon: { ward: 'E', name: 'E', need: 0 } });
+  eq('death ward on an enemy fizzles', foe.status, 'fizzled');
+  const none = resolveEffect(world(stats, tiles, sides), { ...cast, of: 1, step: 1, kept: null, summon: { pending: true, need: 0 } });
+  eq('resurrect with nothing to aim at fizzles', none.status, 'fizzled');
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nall checks passed');
 process.exit(fails ? 1 : 0);

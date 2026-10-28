@@ -1,0 +1,59 @@
+{
+  "collection": "dimension_session",
+  "note": "Shared-rule candidates from dimension_session.logic.json. object_keys_unchanged (hashgraph_events.shared.json) covers the three shape_keys_unchanged asserts; active_dimension_path and max_turn_rule (sync_protocol.shared.json) cover descriptor_path / door_path / merged_turn. Listed here: what is specific to the session shapes.",
+  "entries": [
+    {
+      "id": "shape_has_keys",
+      "name": "Validation — a shape object keeps the named keys",
+      "description": "subset_of(required, keys(shape)). Used by session_dimension_descriptor (identity_keys_present, tileset_keys_kept, turn_keeps_max_seen), session_door (head_and_members_present, member_item_keys_kept), session_local_state (character_has_four_stats, cards_keep_hand_and_commitment, region_peers_tiers_kept), and the *_present asserts in sync_protocol / hashgraph_events. `required` is a literal array of strings.",
+      "tags": [ "validation", "shape" ],
+      "params": {
+        "required": { "type": "[string]" },
+        "shape": { "type": "object" }
+      },
+      "logic": { "subset_of": [ { "param": "required" }, { "keys": [ { "param": "shape" } ] } ] },
+      "examples": [
+        { "args": { "required": [ "a" ], "shape": { "a": 1, "b": 2 } }, "expect": true },
+        { "args": { "required": [ "a", "z" ], "shape": { "a": 1 } }, "expect": false }
+      ]
+    },
+    {
+      "id": "door_is_stale",
+      "name": "Door — last push predates the current interval",
+      "description": "doc.last_push.interval_index < interval_index. Used by session_door.is_stale and sync_join_flow.new_location_needs_stale_door.",
+      "tags": [ "door", "radicle" ],
+      "params": {
+        "last_interval": { "type": "number" },
+        "interval_index": { "type": "number" }
+      },
+      "logic": { "<": [ { "param": "last_interval" }, { "param": "interval_index" } ] },
+      "examples": [
+        { "args": { "last_interval": 3, "interval_index": 5 }, "expect": true },
+        { "args": { "last_interval": 5, "interval_index": 5 }, "expect": false }
+      ]
+    },
+    {
+      "id": "valid_door_statuses",
+      "name": "Door status pattern",
+      "description": "Regex source for session_door.status: active | stale | merged_into:<DoorId> | closed.",
+      "tags": [ "validation", "door" ],
+      "params": {},
+      "logic": "^(active|stale|merged_into:.+|closed)$",
+      "examples": []
+    },
+    {
+      "id": "magnet_door_id",
+      "name": "DoorId is a magnet URI with the urn:dim topic",
+      "description": "matches(s, '^magnet:\\\\?xt=urn:dim:'). Used by session_door.door_identity_present and sync_join_flow.door_id_is_magnet.",
+      "tags": [ "door", "magnet" ],
+      "params": {
+        "s": { "type": "string" }
+      },
+      "logic": { "matches": [ { "param": "s" }, "^magnet:\\?xt=urn:dim:" ] },
+      "examples": [
+        { "args": { "s": "magnet:?xt=urn:dim:Ashfall&dn=clan" }, "expect": true },
+        { "args": { "s": "door-primary" }, "expect": false }
+      ]
+    }
+  ]
+}

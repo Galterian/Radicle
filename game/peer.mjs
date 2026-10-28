@@ -180,6 +180,21 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills'
 }
 // elem_* → character stat key the element maps to (per elements.json data.stat).
 // Used by the effect-damage math to look up the right stat for Σ(me - enemy).
+// Golems and elementals (user spec): fixed stat blocks, summoned by their own
+// effects. They live in the creature table like any monster (so a companion
+// process can be one), but Summoning's random library skips them.
+const BUILT_IN_CREATURES = {
+  mon_golem_worldlives:   { name: 'WorldLives Golem',   stats: { vitality: 10, world: 9,  matter: 5,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
+  mon_golem_lifematters:  { name: 'LifeMatters Golem',  stats: { vitality: 10, world: 5,  matter: 9,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
+  mon_golem_worldmatters: { name: 'WorldMatters Golem', stats: { vitality: 5,  world: 10, matter: 9,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
+  mon_golem_living:       { name: 'Living Golem',       stats: { vitality: 20, world: 2,  matter: 2,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
+  mon_elemental_world:    { name: 'World Elemental',    stats: { vitality: 5,  world: 20, matter: 5,  will: 0 }, life: 3, actions: 1, kind: 'elemental' },
+  mon_elemental_vital:    { name: 'Vital Elemental',    stats: { vitality: 20, world: 5,  matter: 5,  will: 0 }, life: 3, actions: 1, kind: 'elemental' },
+  mon_elemental_matter:   { name: 'Matter Elemental',   stats: { vitality: 5,  world: 5,  matter: 20, will: 0 }, life: 3, actions: 1, kind: 'elemental' },
+};
+for (const [id, b] of Object.entries(BUILT_IN_CREATURES)) {
+  data.creatures[id] = { id, name: b.name, tags: ['summon_only', b.kind], data: { stats: { ...b.stats }, life: b.life, actions_per_round: b.actions, dice_pattern: null, innate_effect: null, innate_effect_text: '', on_action_rider: null, built_in: b.kind } };
+}
 const ELEM_TO_STAT = {};
 for (const [id, e] of Object.entries(data.elements)) ELEM_TO_STAT[id] = (e.data?.stat || '').replace(/^stat_/, '');
 
@@ -426,31 +441,71 @@ const disablesJson = () => JSON.stringify(entity.disables);
 const EVERY_INSTANT = new Set(['effect_the_void', 'effect_light_darkness', 'effect_teleportation', 'effect_emotions_bombard']);
 const castInstant = (c, every) => every ? EVERY_INSTANT.has(c.effect_id) : !!c.is_instant;
 const statSumOf = (st) => (st?.vitality || 0) + (st?.world || 0) + (st?.matter || 0) + (st?.will || 0);
-// Summoning emits Souls until the bank (my World stat per emission) covers the creature's stat sum.
-const summonLength = (c) => Math.max(1, Math.ceil((c.summon?.need || 30) / Math.max(1, entity.stats.world + entity.statTokens.filter(t => t.stat === 'world').reduce((a, t) => a + t.value, 0))));
-const castLength = (c, every) => castInstant(c, every) ? 1 : (c.summon ? summonLength(c) : Math.max(1, c.element_cost.length)) + (every ? 1 : 0);
-// A creature as a card (the archive holds these; Summoning plays them).
+// Stat buy (Summoning, Golems, Elementals, Resurrect): every emission banks my
+// stat for the element going out — the card's elements in turn — until the
+// bank covers `need`. The card shows how many emissions that takes at my stats.
+const myStatNow = (el) => Math.max(0, (entity.stats[ELEM_TO_STAT[el]] ?? 0) + entity.statTokens.filter(t => t.stat === ELEM_TO_STAT[el]).reduce((a, t) => a + t.value, 0));
+const summonLength = (c) => {
+  const need = c.summon?.need ?? 30;
+  if (need <= 0 || !c.element_cost.length) return 1;
+  let bank = 0, n = 0;
+  while (bank < need && n < 40) { bank += Math.max(1, myStatNow(c.element_cost[n % c.element_cost.length])); n++; }
+  return Math.max(1, n);
+};
+const castLength = (c, every) => castInstant(c, every) ? 1 : (c.summon !== undefined && c.summon !== null ? summonLength(c) : Math.max(1, c.element_cost.length)) + (every ? 1 : 0);
+// A creature as a card (the archive holds these; Summoning / Resurrect play them).
 const creatureCard = (creatureId) => { const e = data.creatures[creatureId]; return e ? { card_id: `${creatureId}#${randomBytes(3).toString('hex')}`, kind: 'creature', creature_id: creatureId, name: e.name, stat_sum: statSumOf(e.data?.stats), text: e.data?.innate_effect_text || '' } : null; };
+// Which permanents hold a creature (and what they are called in the log).
+const SUMMON_PERMS = { effect_summoning: 'Summoning', effect_golems_earth: 'Golems', effect_golems_water: 'Golems', effect_golems_air: 'Golems', effect_elementals_air: 'Elementals', effect_elementals_water: 'Elementals', effect_elementals_earth: 'Elementals', effect_resurrect_death_ward: 'Resurrect' };
+const RESURRECT = 'effect_resurrect_death_ward';
 // Permanents with a fixed life: how many turns past the one they were placed in.
 const PERM_TURNS = { effect_oblivion: 1 };
 const dropPermanent = (id) => {
   const had = entity.permanents.has(id);
   entity.permanents.delete(id); delete entity.permPower[id]; delete entity.permUntil[id]; entity.everyPerms.delete(id);
   if (id === 'effect_shield') entity.shieldElems = entity.shieldElems.filter(x => !x.permanent);
-  if (had && id === 'effect_summoning') onSummonEnd();
+  if (had && id in SUMMON_PERMS) onSummonEnd(id);
+  if (had && id === RESURRECT) entity.wards = [];
+  // The card that made this permanent leaves the holding for the discard pile.
+  if (had) releaseHeld(id);
 };
-entity.summoned = null;     // { peer_id, creature_id, name, bound } — the creature my Summoning holds
-let companion = null;       // the process I spawned for it
+// Permanent cards (user spec): a card whose permanent landed is not discarded —
+// it sits in my permanents holding until the permanent falls, then it is discarded.
+const heldCards = [];
+const holdCard = (cid) => { for (let i = hand.length - 1; i >= 0; i--) if (hand[i].card_id === cid) { heldCards.push(...hand.splice(i, 1)); console.log(`[${PEER_LABEL}] ${heldCards[heldCards.length - 1].name} goes to my permanents holding (${heldCards.length} held)`); } };
+const releaseHeld = (permId) => { for (let i = heldCards.length - 1; i >= 0; i--) { const c = heldCards[i]; if (c.effect_id === permId || c.skill_id === permId) { discard.push(...heldCards.splice(i, 1)); console.log(`[${PEER_LABEL}] ${c.name} leaves the holding for the discard pile`); } } };
+entity.summons = [];        // [{ peer_id, creature_id, name, bound, perm, mode }] — creatures my permanents hold
+entity.wards = [];          // peer ids under my Death Ward
+const companions = [];      // processes I spawned: { peer_id, label, proc, port, perm }
 let summonSeq = 0;
-const vanishedThisAction = [];   // { peer_id, name, q, r } — for the UI (💨), rides out with the state hash
+const vanishedThisAction = [];   // { peer_id, name, q, r, bound } — for the UI (💨), rides out with the state hash
 const freePort = () => new Promise((res, rej) => { const sv = net.createServer(); sv.on('error', rej); sv.listen(0, '127.0.0.1', () => { const prt = sv.address().port; sv.close(() => res(prt)); }); });
-// The Summoning is paid: spawn the creature next to me (or note the one bound to me).
-async function onSummoned(sm) {
+// A stat buy is paid: spawn the creature next to me, or note the one bound /
+// raised for me, or set a Death Ward on an ally.
+async function onSummoned(permId, sm) {
+  const label = SUMMON_PERMS[permId] || permId;
   if (sm.archive_card_id) { const i = archive.findIndex(c => c.card_id === sm.archive_card_id); if (i >= 0) archive.splice(i, 1); }
-  if (entity.summoned) { console.log(`[${PEER_LABEL}] a second Summoning — the first creature (${entity.summoned.name}) is released`); onSummonEnd(); }
+  if (sm.ward) {
+    if (!entity.wards.includes(sm.ward)) entity.wards.push(sm.ward);
+    console.log(`[${PEER_LABEL}] Death Ward on ${sm.name || sm.ward.slice(0, 12)}: when they would die they stand at 1 hp on their entry hex`);
+    return;
+  }
+  if (sm.revive) {
+    if (sm.is_player) {
+      // A player is back at full life — the permanent did its work and is spent.
+      console.log(`[${PEER_LABEL}] ${label} paid (${sm.need}): ${sm.name} is back among the living — the permanent is spent`);
+      dropPermanent(permId);
+      return;
+    }
+    entity.summons.push({ peer_id: sm.revive, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'revive' });
+    console.log(`[${PEER_LABEL}] ${label} paid (${sm.need}): ${sm.name} rises again as my ally`);
+    return;
+  }
+  // One creature per permanent: a new cast on the same permanent releases the old one.
+  if (entity.summons.some(x => x.perm === permId)) { console.log(`[${PEER_LABEL}] a new ${label} — the creature it held is released`); onSummonEnd(permId); }
   if (sm.bind) {
-    entity.summoned = { peer_id: sm.bind, creature_id: sm.creature_id, name: sm.name, bound: true };
-    console.log(`[${PEER_LABEL}] Summoning ∀: ${sm.name} (${sm.bind.slice(0, 12)}) is bound to me`);
+    entity.summons.push({ peer_id: sm.bind, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'bind' });
+    console.log(`[${PEER_LABEL}] ${label} ∀: ${sm.name} (${sm.bind.slice(0, 12)}) is bound to me`);
     return;
   }
   const cre = data.creatures[sm.creature_id];
@@ -460,14 +515,14 @@ async function onSummoned(sm) {
   const ring1 = hexNeighbours(entity.tile.q, entity.tile.r);
   const ring2 = [...new Set(ring1.flatMap(t => hexNeighbours(t.q, t.r)).map(t => `${t.q},${t.r}`))].map(k => k.split(',').map(Number)).map(([q, r]) => ({ q, r }));
   const tile = [...ring1, ...ring2].find(t => dimMap.has(t.q, t.r) && !occ.has(`${t.q},${t.r}`));
-  if (!tile) { console.log(`[${PEER_LABEL}] Summoning: no free tile around me — the creature cannot enter`); return; }
-  const label = `${PEER_LABEL}-sum${++summonSeq}`;
+  if (!tile) { console.log(`[${PEER_LABEL}] ${label}: no free tile around me — the creature cannot enter`); return; }
+  const tag = `${PEER_LABEL}-sum${++summonSeq}`;
   const [pL, pH, pG] = await Promise.all([freePort(), freePort(), freePort()]);
-  const blocksFile = path.join(os.tmpdir(), `chaos-summon-${label.replace(/[^a-z0-9._-]+/gi, '_')}-${Date.now()}.json`);
+  const blocksFile = path.join(os.tmpdir(), `chaos-summon-${tag.replace(/[^a-z0-9._-]+/gi, '_')}-${Date.now()}.json`);
   fsSync.writeFileSync(blocksFile, JSON.stringify(dimMap.blocks()));
   const env = {
     ...process.env,
-    PEER_LABEL: label, ALLIANCE: MY_SIDE === 'A' ? 'npc_a' : 'npc_b', ENTITY_NAME: `${cre.name} (${PEER_LABEL}'s)`,
+    PEER_LABEL: tag, ALLIANCE: MY_SIDE === 'A' ? 'npc_a' : 'npc_b', ENTITY_NAME: `${cre.name} (${PEER_LABEL}'s)`,
     CHARACTER_ID: '', CREATURE_ID: sm.creature_id, START_TILE: JSON.stringify(tile),
     PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
     MAP_SEED, MAP_BLOCKS_FILE: blocksFile, BOOTSTRAP: [...myMaddrs, ...BOOTSTRAP_MADDRS].join(','), PEER_GUN_URLS: [myGunUrl, ...PEER_GUN_URLS].join(','),
@@ -477,52 +532,62 @@ async function onSummoned(sm) {
   const proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   proc.stdout.on('data', b => process.stdout.write(b));
   proc.stderr.on('data', b => process.stderr.write(b));
-  proc.on('exit', (c) => { console.log(`[${PEER_LABEL}] summoned ${label} left (${c ?? 'signal'})`); if (companion?.proc === proc) companion = null; });
-  companion = { peer_id: `peer:${label}`, label, proc, port: pH };
-  entity.summoned = { peer_id: `peer:${label}`, creature_id: sm.creature_id, name: cre.name, bound: false };
-  console.log(`[${PEER_LABEL}] Summoning paid (${sm.need}): ${cre.name} enters at (${tile.q},${tile.r}) as ${label}`);
+  proc.on('exit', (c) => { console.log(`[${PEER_LABEL}] summoned ${tag} left (${c ?? 'signal'})`); const i = companions.findIndex(x => x.proc === proc); if (i >= 0) companions.splice(i, 1); });
+  companions.push({ peer_id: `peer:${tag}`, label: tag, proc, port: pH, perm: permId });
+  entity.summons.push({ peer_id: `peer:${tag}`, creature_id: sm.creature_id, name: cre.name, bound: false, perm: permId, mode: 'spawn' });
+  console.log(`[${PEER_LABEL}] ${label} paid (${sm.need}): ${cre.name} enters at (${tile.q},${tile.r}) as ${tag}`);
 }
-// My Summoning permanent is gone: the creature vanishes (it watches my snapshot
-// and leaves by itself); its card goes to my archive.
-function onSummonEnd() {
-  const sm = entity.summoned;
-  if (!sm) return;
-  entity.summoned = null;
-  const where = peersPublic.get(sm.peer_id);
-  vanishedThisAction.push({ peer_id: sm.peer_id, name: sm.name, q: where?.tile_q ?? null, r: where?.tile_r ?? null, bound: !!sm.bound });
-  const card = creatureCard(sm.creature_id);
-  if (card) archiveCard(card);
-  console.log(`[${PEER_LABEL}] the Summoning falls — ${sm.name} ${sm.bound ? 'is released' : 'vanishes'}; its card goes to my archive (${archive.length})`);
-  if (companion) {
+// A creature-holding permanent is gone: its creature vanishes (companion: told
+// directly; bound: it watches my snapshot); its card goes to my archive.
+function onSummonEnd(permId) {
+  const label = SUMMON_PERMS[permId] || permId;
+  for (let i = entity.summons.length - 1; i >= 0; i--) {
+    const sm = entity.summons[i];
+    if (sm.perm !== permId) continue;
+    entity.summons.splice(i, 1);
+    const where = peersPublic.get(sm.peer_id);
+    vanishedThisAction.push({ peer_id: sm.peer_id, name: sm.name, q: where?.tile_q ?? null, r: where?.tile_r ?? null, bound: sm.mode === 'bind' });
+    const card = creatureCard(sm.creature_id);
+    if (card) archiveCard(card);
+    console.log(`[${PEER_LABEL}] the ${label} falls — ${sm.name} ${sm.mode === 'bind' ? 'is released' : sm.mode === 'revive' ? 'falls again' : 'vanishes'}; its card goes to my archive (${archive.length})`);
+  }
+  for (let i = companions.length - 1; i >= 0; i--) {
+    const c = companions[i];
+    if (c.perm !== permId) continue;
     // Tell it directly (it is my child on this machine), then make sure it is gone.
-    const { proc: pr, port } = companion;
-    fetch(`http://127.0.0.1:${port}/summon-release`, { signal: AbortSignal.timeout(1500) }).catch(() => {});
-    setTimeout(() => { try { pr.kill(); } catch {} }, 10_000);
-    companion = null;
+    fetch(`http://127.0.0.1:${c.port}/summon-release`, { signal: AbortSignal.timeout(1500) }).catch(() => {});
+    setTimeout(() => { try { c.proc.kill(); } catch {} }, 10_000);
+    companions.splice(i, 1);
   }
 }
-// Owner → companion heartbeat: while I hold the Summoning, my creature hears it from me directly.
+// Owner → companion heartbeat: while I hold its permanent, my creature hears it from me directly.
 setInterval(() => {
-  if (!companion || !entity.permanents.has('effect_summoning')) return;
-  fetch(`http://127.0.0.1:${companion.port}/summon-hold`, { signal: AbortSignal.timeout(1500) }).catch(() => {});
+  for (const c of companions) if (entity.permanents.has(c.perm)) fetch(`http://127.0.0.1:${c.port}/summon-hold`, { signal: AbortSignal.timeout(1500) }).catch(() => {});
 }, 2000);
-// ∀ Summoning bound me (a creature in view) to `owner`: I fight on their side
-// and follow them until their Summoning permanent falls.
-let boundOriginalAlliance = null;
-function becomeBound(owner) {
+// Bound to `owner` (∀ Summoning took me, or Resurrect raised me): I fight on
+// their side and follow them until the permanent that holds me falls.
+let boundOriginalAlliance = null, boundMode = null, boundPerm = null;
+function becomeBound(owner, permId, mode) {
   if (IS_COMPANION) return;
   const o = peersPublic.get(owner);
   const side = o ? sideOf(o.alliance) : 'A';
   if (boundOriginalAlliance === null) boundOriginalAlliance = entity.alliance;
   entity.alliance = side === 'A' ? 'npc_a' : 'npc_b'; MY_SIDE = side;
-  ownerPeerId = owner; ownerSeenHolding = true;
-  console.log(`[${PEER_LABEL}] bound by ${owner.slice(0, 12)}'s Summoning — I fight for side ${side} now`);
+  ownerPeerId = owner; ownerSeenHolding = true; boundMode = mode; boundPerm = permId;
+  console.log(`[${PEER_LABEL}] ${mode === 'revive' ? 'raised' : 'bound'} by ${owner.slice(0, 12)}'s ${SUMMON_PERMS[permId] || permId} — I fight for side ${side} now`);
   publishPublicState().catch(() => {});
 }
-// Companion / bound creature: watch the owner's snapshot; when their Summoning
-// permanent is gone (or they are dead), vanish (companion) or go back (bound).
+// Resurrect reached me: back at full life (a creature also becomes the raiser's ally).
+function onRevived(owner, permId) {
+  entity.life = entity.lifeMax; entity.lockList = []; syncLost();
+  console.log(`[${PEER_LABEL}] raised by ${owner.slice(0, 12)} — back at ${entity.life} hp`);
+  if (entity.kind === 'creature') becomeBound(owner, permId, 'revive');
+  else publishPublicState().catch(() => {});
+}
+// Companion / bound creature: when the permanent that holds me is gone (or the
+// owner fell), vanish (companion), fall again (raised) or go back (bound).
 let ownerSeenHolding = false, vanishing = false;
-let ownerHoldAt = Date.now();   // companion: when my owner last told me they still hold the Summoning
+let ownerHoldAt = Date.now();   // companion: when my owner last told me they still hold the permanent
 function vanish(why) {
   if (vanishing) return;
   vanishing = true; entity.life = 0;
@@ -538,14 +603,17 @@ setInterval(() => {
     return;
   }
   const o = peersPublic.get(ownerPeerId);
-  const holds = !!o && String(o.permanents_csv || '').split(',').includes('effect_summoning') && (o.life ?? 1) > 0;
+  const holds = !!o && String(o.permanents_csv || '').split(',').includes(boundPerm) && (o.life ?? 1) > 0;
   if (holds) { ownerSeenHolding = true; return; }
-  if (!o) return;   // no word from the owner — not a release
-  if (!ownerSeenHolding) return;   // never saw them hold it — nothing to release from
-  // ∀-bound creature: the owner's Summoning is gone (or they fell) — back to my own side.
-  console.log(`[${PEER_LABEL}] the Summoning that bound me is gone — back to my own side`);
-  entity.alliance = boundOriginalAlliance || ALLIANCE; MY_SIDE = sideOf(entity.alliance); boundOriginalAlliance = null;
-  ownerPeerId = null; ownerSeenHolding = false;
+  if (!o || !ownerSeenHolding) return;   // no word from the owner yet — not a release
+  if (boundMode === 'revive') {
+    console.log(`[${PEER_LABEL}] the ${SUMMON_PERMS[boundPerm] || 'permanent'} that raised me is gone — I fall again`);
+    entity.life = 0;
+  } else {
+    console.log(`[${PEER_LABEL}] the ${SUMMON_PERMS[boundPerm] || 'permanent'} that bound me is gone — back to my own side`);
+    entity.alliance = boundOriginalAlliance || ALLIANCE; MY_SIDE = sideOf(entity.alliance);
+  }
+  boundOriginalAlliance = null; boundMode = null; boundPerm = null; ownerPeerId = null; ownerSeenHolding = false;
   publishPublicState().catch(() => {});
 }, 1500);
 const tileTokensJson = () => JSON.stringify(entity.tileTokens);
@@ -676,8 +744,17 @@ if (entity.kind === 'character') {
       scope: rule.scope || (rule.teleportSelf ? 'tile' : 'self'),
       text: d.text,
       tags: e.tags || [],
-      // Summoning: the "Library's top creature" — a random one, fixed when the card is dealt.
-      summon: id === 'effect_summoning' ? (() => { const ids = Object.keys(data.creatures); const cid = ids[Math.floor(Math.random() * ids.length)]; return { creature_id: cid, name: data.creatures[cid].name, need: statSumOf(data.creatures[cid].data?.stats) }; })() : null,
+      // Stat-buy summons: the creature rides along from the deal. Summoning: a random
+      // library creature ("Library's top"); Golems / Elementals: a random one of their
+      // kind, fixed need 24 / 30; Resurrect decides at queue time (what lies next to me).
+      summon: (() => {
+        const kind = id === 'effect_summoning' ? null : id.startsWith('effect_golems') ? 'golem' : id.startsWith('effect_elementals') ? 'elemental' : id === 'effect_resurrect_death_ward' ? 'resurrect' : undefined;
+        if (kind === undefined) return null;
+        if (kind === 'resurrect') return { pending: true, need: 0 };
+        const ids = Object.keys(data.creatures).filter(cid => (data.creatures[cid].data?.built_in || null) === kind);
+        const cid = ids[Math.floor(Math.random() * ids.length)];
+        return { creature_id: cid, name: data.creatures[cid].name, need: kind ? (d.stat_buy_total || (kind === 'golem' ? 24 : 30)) : statSumOf(data.creatures[cid].data?.stats) };
+      })(),
     });
   }
 }
@@ -705,7 +782,7 @@ const discard = [];
 const archive = [];
 const willArchive = new Set();   // card_ids marked for the archive this action
 const DECK_MIN = 15;
-const circulating = () => deck.length + discard.length + hand.length;
+const circulating = () => deck.length + discard.length + hand.length + heldCards.length;
 const archiveRoom = () => circulating() - willArchive.size - DECK_MIN;   // how many more cards may leave the deck
 const archiveCard = (c) => { if (c) archive.push(c); };
 let queued = [];           // one element: slot index (int) | 'EP' | 'EM'
@@ -764,7 +841,23 @@ let target = null;         // peer_id string | { q, r } tile object | null
 // card. ∀ (two copies): the nearest visible enemy creature within 10 hexes is
 // bound to me instead of summoning a new one.
 function prepareSummon(card, every) {
-  if (!card || card.effect_id !== 'effect_summoning') return;
+  if (!card || !(card.effect_id in SUMMON_PERMS)) return;
+  if (card.effect_id === RESURRECT) {
+    // Resurrect: the dead unit next to me (the one I right-clicked first), else an
+    // archived creature to spawn, else Death Ward on the ally next to me.
+    const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+    const adj = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && Number.isInteger(p.tile_q) && hexDistance(here, p) <= 1);
+    const dead = adj.filter(p => (p.life ?? 1) <= 0);
+    const pick = (typeof target === 'string' && dead.find(p => p.peer_id === target)) || dead.sort((a, b) => a.peer_id.localeCompare(b.peer_id))[0];
+    if (pick) { card.summon = { revive: pick.peer_id, creature_id: pick.creature_id || null, is_player: !pick.creature_id, name: pick.name, need: (pick.stat_vitality || 0) + (pick.stat_world || 0) + (pick.stat_matter || 0) + (pick.stat_will || 0) }; return; }
+    const arch = archive.find(c => c.kind === 'creature');
+    if (arch) { card.summon = { creature_id: arch.creature_id, name: arch.name, need: arch.stat_sum, archive_card_id: arch.card_id }; return; }
+    const allies = adj.filter(p => p.life > 0 && sideOf(p.alliance) === MY_SIDE);
+    const ally = (typeof target === 'string' && allies.find(p => p.peer_id === target)) || allies.sort((a, b) => a.peer_id.localeCompare(b.peer_id))[0];
+    card.summon = ally ? { ward: ally.peer_id, name: ally.name, need: 0 } : { pending: true, need: 0 };
+    return;
+  }
+  if (card.effect_id !== 'effect_summoning') return;   // golems / elementals keep the creature they were dealt with
   if (every) {
     const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
     const c = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.creature_id && sideOf(p.alliance) !== MY_SIDE && p.life > 0 && hexDistance(here, p) <= 10)
@@ -791,7 +884,7 @@ const castingForUI = () => {
     join_elem: jn ? jn.elem : null, join_tail: jn ? jn.tail.card_id : null,
   };
 };
-const handMsg = (extra = {}) => ({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], deck_min: DECK_MIN, circulating: circulating(), turn: hg.turn, round: hg.round, casting: castingForUI(), lost_actions: entity.lostActions, destroy: queuedDestroy, queued_chain: queuedChain, aura: queuedAura, bonus: bonusForUI(), ...extra });
+const handMsg = (extra = {}) => ({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), turn: hg.turn, round: hg.round, casting: castingForUI(), lost_actions: entity.lostActions, destroy: queuedDestroy, queued_chain: queuedChain, aura: queuedAura, bonus: bonusForUI(), ...extra });
 let locked = false;
 const willDiscard = new Set();   // card_ids the player marked to drop at turn end (rule 7: characters MAY discard leftovers)
 
@@ -919,7 +1012,7 @@ function currentStateSnapshot(slim = false) {
     peer_id: PEER_ID_STRING, character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: entity.alliance, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
-    owner_peer_id: ownerPeerId || '', summoned_peer_id: entity.summoned?.peer_id || '',
+    owner_peer_id: ownerPeerId || '', summoned_csv: entity.summons.map(x => x.peer_id).join(','), wards_csv: entity.wards.join(','), entry_q: START_TILE.q, entry_r: START_TILE.r,
     turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt,
     map_blocks: dimMap ? dimMap.blockCount() : 0,
     stat_vitality: entity.stats.vitality, stat_world: entity.stats.world, stat_matter: entity.stats.matter, stat_will: entity.stats.will,
@@ -1336,8 +1429,11 @@ async function doPlanningEnd() {
   // round loop keeps running so the clock stays aligned with the live mesh
   // (joiners sync against us) and the standoff check can lift when someone new
   // arrives — but a corpse must not keep swinging.
-  if (entity.life <= 0) { myLastReveal = null; return; }
+  // A corpse still freezes its member set like everyone else — otherwise a peer
+  // that joins mid-action (a freshly summoned creature) is in the dead peer's
+  // resolution but in nobody else's, and the two sides disagree on a hit.
   freezeRoundMembers();
+  if (entity.life <= 0) { myLastReveal = null; return; }
   // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
   if (ALLIANCE !== 'player') await npcPlan();
 
@@ -2363,7 +2459,27 @@ async function doResolution() {
       if (actor === PEER_ID_STRING || defId === PEER_ID_STRING) log(`[${PEER_LABEL}] cast ${eff.effect_id} [${eff.elements.join('+')}] ${actor.slice(0, 8)} → ${defId.slice(0, 8)}: ${legs.map(l => `${l.kind} Σ${l.sum}`).join(' + ')}${spent ? ` (shield −${spent})` : ''}${zoned ? ' (no-damage zone)' : ''} → ${dmg} dmg`);
     }
   }
-  return { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers };
+  // Death Ward: a warded unit that would die this action keeps 1 hp and is moved
+  // out to its entry hex (if free); the ward is spent. Every peer derives it from
+  // the warder's snapshot (wards_csv) and the victim's entry_q/entry_r.
+  const wardFired = [];
+  for (const [victim, list] of [...damage.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const total = list.reduce((a, d) => a + d.amount, 0);
+    const life = lifeOf(victim);
+    if (life <= 0 || total < life) continue;
+    const warder = [...view.values()].filter(v => v?.peer_id && v.peer_id !== victim && (v.life ?? 0) > 0 && hasPerm(v.peer_id, 'effect_resurrect_death_ward') && csvSet(v.wards_csv).has(victim)).map(v => v.peer_id).sort()[0];
+    if (!warder) continue;
+    let over = total - (life - 1);
+    for (let i = list.length - 1; i >= 0 && over > 0; i--) { const cut = Math.min(list[i].amount, over); list[i].amount -= cut; over -= cut; }
+    damage.set(victim, list.filter(d => d.amount > 0));
+    const v = view.get(victim);
+    const entry = v && Number.isInteger(v.entry_q) && Number.isInteger(v.entry_r) ? { q: v.entry_q, r: v.entry_r } : null;
+    const taken = (q, r) => [...view.values()].some(o => o?.peer_id && o.peer_id !== victim && (o.life ?? 0) > 0 && (() => { const t = nextTiles.get(o.peer_id) || { q: o.tile_q, r: o.tile_r }; return t.q === q && t.r === r; })());
+    if (entry && !taken(entry.q, entry.r)) nextTiles.set(victim, entry);
+    wardFired.push({ victim, warder, moved: !!entry && nextTiles.get(victim) === entry });
+    if (victim === PEER_ID_STRING || warder === PEER_ID_STRING) log(`[${PEER_LABEL}] death ward: ${victim.slice(0, 8)} would fall — stands at 1 hp${entry ? ` back at (${entry.q},${entry.r})` : ''}`);
+  }
+  return { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, wardFired };
   };
 
   const sumDmg = list => (list || []).reduce((s, d) => s + d.amount, 0);
@@ -2448,6 +2564,7 @@ async function doResolution() {
     real.brokenShield = real.brokenShield || b.res.brokenShield;
     real.lifestealForMe.amount += b.res.lifestealForMe.amount;
     real.disableTriggers.unshift(...b.res.disableTriggers);
+    real.wardFired.unshift(...b.res.wardFired);
   }
   bonusRuns.reverse();
   real.bonusRuns = bonusRuns;
@@ -2455,7 +2572,14 @@ async function doResolution() {
   };
   const real = runRound(revealsThisTurn, false);
   const viewReal = viewSnap(), bonusDmgReal = bonusDmgToMe;
-  const { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, bonusRuns } = real;
+  const { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, bonusRuns, wardFired } = real;
+  // My Death Ward fired: the permanent is spent (its card goes to the discard pile).
+  for (const w of wardFired) {
+    if (w.warder !== PEER_ID_STRING) continue;
+    entity.wards = entity.wards.filter(x => x !== w.victim);
+    dropPermanent(RESURRECT);
+    console.log(`[${PEER_LABEL}] my Death Ward saved ${w.victim.slice(0, 8)} — the permanent is spent`);
+  }
   // My Disable fired: the permanent is spent, the bar stands for the turn.
   for (const t of disableTriggers) {
     if (t.holder !== PEER_ID_STRING) continue;
@@ -2507,8 +2631,10 @@ async function doResolution() {
     if (oc.disableElem && actor === PEER_ID_STRING) entity.disables.push({ elem: oc.disableElem.elem, on: oc.disableElem.on, until_turn: hg.turn });
     if (actor === PEER_ID_STRING) drawForMe += oc.draw || 0;
     if (oc.summon) {
-      if (actor === PEER_ID_STRING) onSummoned(oc.summon).catch(e => console.warn(`[${PEER_LABEL}] summoning failed: ${e.message}`));
-      if (oc.summon.bind === PEER_ID_STRING) becomeBound(actor);
+      if (actor === PEER_ID_STRING) onSummoned(eff.effect_id, oc.summon).catch(e => console.warn(`[${PEER_LABEL}] summoning failed: ${e.message}`));
+      if (oc.summon.bind === PEER_ID_STRING) becomeBound(actor, eff.effect_id, 'bind');
+      if (oc.summon.revive) console.log(`[${PEER_LABEL}] resurrect: ${actor.slice(0, 14)} raises ${oc.summon.revive.slice(0, 14)} (${oc.notes.join('; ')})`);
+      if (oc.summon.revive === PEER_ID_STRING) onRevived(actor, eff.effect_id);
     }
     if (actor === PEER_ID_STRING || oc.locks.some(l => l.on === PEER_ID_STRING) || oc.statTokens.some(t => t.on === PEER_ID_STRING)) {
       console.log(`[${PEER_LABEL}] effect ${eff.effect_id} by ${actor.slice(0, 8)}: ${oc.tokens.length} token(s), ${oc.statTokens.length} stat token(s), ${oc.locks.length} lock(s), ${oc.zones.length} zone hexes${oc.notes.length ? ` — ${oc.notes.join('; ')}` : ''}`);
@@ -2740,7 +2866,13 @@ async function endRound() {
     if (gone.length) console.log(`[${PEER_LABEL}] archived: ${gone.join(', ')} (${archive.length} in the archive, ${circulating()} circulating)`);
     for (const id of willArchive) if (!inCast.has(id)) willArchive.delete(id);
   }
-  for (let i = hand.length - 1; i >= 0; i--) if (playedIds.has(hand[i].card_id)) discard.push(...hand.splice(i, 1));
+  for (let i = hand.length - 1; i >= 0; i--) {
+    if (!playedIds.has(hand[i].card_id)) continue;
+    const c = hand[i];
+    // A permanent skill that took hold sits in the holding until it falls.
+    if (c.kind === 'skill' && c.is_permanent && entity.permanents.has(c.skill_id)) heldCards.push(...hand.splice(i, 1));
+    else discard.push(...hand.splice(i, 1));
+  }
   // Effect cards (Rule 19/20): a complete cast leaves the hand whether it
   // landed, found nobody or was blocked — the elements are spent (permanents
   // already took hold via entity.permanents). One still emitting elements, or
@@ -2759,7 +2891,12 @@ async function endRound() {
     const complete = r.castStatus === 'done' || (r.effectStep >= r.effectOf && !stillCasting);
     // A completed entry leaves the hand (unless Rule 8 sent it back); a failed
     // point-buy re-emits the same element next action.
-    if (complete && !retry && !returned.has(r.effectCardId)) { dropCard(r.effectCardId); if (r.effectCardId2) dropCard(r.effectCardId2); }
+    if (complete && !retry && !returned.has(r.effectCardId)) {
+      // A permanent that took hold keeps its card(s) in the holding; anything else is discarded.
+      const held = r.castStatus === 'done' && r.effectPermanent && entity.permanents.has(r.effectId);
+      const leave = held ? holdCard : dropCard;
+      leave(r.effectCardId); if (r.effectCardId2) leave(r.effectCardId2);
+    }
     const emitted = retry ? ch.step - 1 : ch.step;
     if (r.castKept) { const at = chainAt(ch.entries, ch.step); if (at) at.entry.kept = r.castKept; }
     if ((emitted >= ch.total || (complete && ch.entries.length === 1)) && !retry) {
@@ -3203,7 +3340,7 @@ setTimeout(() => { publishDoor().catch(() => {}); setInterval(() => publishDoor(
 // -------- browser UI socket --------
 const uiHttp = http.createServer(async (req, res) => {
   if (IS_COMPANION && req.url === '/summon-hold') { ownerHoldAt = Date.now(); res.writeHead(204); return res.end(); }
-  if (IS_COMPANION && req.url === '/summon-release') { res.writeHead(204); res.end(); vanish('the Summoning that held me is gone'); return; }
+  if (IS_COMPANION && req.url === '/summon-release') { res.writeHead(204); res.end(); vanish('the permanent that held me is gone'); return; }
   if (req.url === '/status') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
@@ -3222,7 +3359,7 @@ const uiHttp = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary() }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary() }));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
@@ -3302,6 +3439,7 @@ wss.on('connection', (ws) => {
         if (typeof t === 'string') target = t;
         else if (t && typeof t === 'object' && typeof t.q === 'number' && typeof t.r === 'number') target = { q: t.q, r: t.r };
         else target = null;
+        if (queuedEffect !== null && !casting && hand[queuedEffect]?.effect_id === RESURRECT) { prepareSummon(hand[queuedEffect], false); broadcastUI(handMsg()); }
       }
       if (m.kind === 'lock') { locked = true; }
       if (m.kind === 'bonus') {
@@ -3407,4 +3545,4 @@ console.log(`[${PEER_LABEL}] map: seed ${MAP_SEED}, ${dimMap.size()} hexes in ${
 await enterPhase('planning');
 
 // Clean shutdown.
-process.on('SIGINT', async () => { console.log(`[${PEER_LABEL}] shutting down`); try { companion?.proc.kill(); } catch {} try { await libp2p.stop(); } catch {} process.exit(0); });
+process.on('SIGINT', async () => { console.log(`[${PEER_LABEL}] shutting down`); for (const c of companions) { try { c.proc.kill(); } catch {} } try { await libp2p.stop(); } catch {} process.exit(0); });

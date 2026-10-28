@@ -110,11 +110,16 @@ function startAgent(peerId, port, attempt = 0) {
     // Rule 21 effect-damage path in the resolver. A Summoning needs no enemy
     // in reach — start it whenever one is in sight.
     const effIdx = a.hand.findIndex(isEffect);
-    const sumIdx = a.hand.findIndex(c => isEffect(c) && c.effect_id === 'effect_summoning');
+    // Stat buys (Summoning, Golems, Elementals): start whenever an enemy is in sight.
+    // Resurrect only with a fallen unit or an ally next to me (else it has nothing to aim at).
+    const nextToMe = [...a.peers.values()].filter(p => p.peer_id !== peerId && Number.isInteger(p.tile_q) && dist(p) <= 1);
+    const canRaise = nextToMe.some(p => (p.life ?? 1) <= 0 || (p.alliance !== 'npc_b' && p.life > 0));
+    const sumIdx = a.hand.findIndex(c => isEffect(c) && (c.effect_types || []).includes('stat_buy') && (c.effect_id !== 'effect_resurrect_death_ward' || canRaise));
     if (sumIdx >= 0 && near && Math.random() < 0.5) {
       const p = slotOf('P');
+      const dead = nextToMe.find(p => (p.life ?? 1) <= 0);
       queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, sumIdx);
-      send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+      send({ kind: 'target', target: (a.hand[sumIdx].effect_id === 'effect_resurrect_death_ward' && dead) ? dead.peer_id : near.peer_id }); send({ kind: 'lock' });
       a.summons = (a.summons || 0) + 1;
       return;
     }
@@ -138,7 +143,11 @@ function startAgent(peerId, port, attempt = 0) {
     }
     // Hunt the nearest living monster (that is what stresses the resolver);
     // wander 3–9 hexes only when none is known.
-    if (near) a.dest = { q: near.tile_q, r: near.tile_r };
+    // Holding Resurrect with a corpse in view: walk to it (the raise needs contact).
+    const corpse = a.hand.some(c => isEffect(c) && c.effect_id === 'effect_resurrect_death_ward')
+      ? [...a.peers.values()].filter(p => p.peer_id !== peerId && (p.life ?? 1) <= 0 && Number.isInteger(p.tile_q) && dist(p) <= 8).sort((x, y) => dist(x) - dist(y))[0] : null;
+    if (corpse) a.dest = { q: corpse.tile_q, r: corpse.tile_r };
+    else if (near) a.dest = { q: near.tile_q, r: near.tile_r };
     else if (!a.dest || (a.dest.q === me.tile_q && a.dest.r === me.tile_r) || Math.random() < 0.15) {
       const cands = [...a.map.tiles()].filter(t => { const d = hexDistance({ q: me.tile_q, r: me.tile_r }, t); return d >= 3 && d <= 9; });
       a.dest = cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;

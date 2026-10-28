@@ -5,27 +5,302 @@
     {
       "id": "contra_life_vs_printed_hits",
       "name": "Printed creature hits disagree with the Rule 14 life formula",
-      "tags": ["open", "life", "creatures"],
+      "tags": [
+        "open",
+        "life",
+        "creatures"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 0.0, "status": "proposal", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_14", "mon_cloudhearth_drake_2a", "mon_tangle_spider_2b", "mon_bant_battlemage_3p", "mon_rhox_brute", "mon_ember_weaver"],
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "proposal",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_14",
+            "mon_cloudhearth_drake_2a",
+            "mon_tangle_spider_2b",
+            "mon_bant_battlemage_3p",
+            "mon_rhox_brute",
+            "mon_ember_weaver"
+          ],
           "vote_log": [],
           "notes": "Detected by recomputing round_half_up(sum(stats)/10) for every card. The JSON currently stores the PRINTED value in data.life; the engine must pick one source of truth.",
           "data": {
-            "source_entries": ["rule_14", "mon_cloudhearth_drake_2a", "mon_tangle_spider_2b", "mon_bant_battlemage_3p", "mon_rhox_brute", "mon_ember_weaver"],
+            "source_entries": [
+              "rule_14",
+              "mon_cloudhearth_drake_2a",
+              "mon_tangle_spider_2b",
+              "mon_bant_battlemage_3p",
+              "mon_rhox_brute",
+              "mon_ember_weaver"
+            ],
             "description": "Rule 14 Part B: life = sum(stats)/10 rounded. Five creature cards print a different hit count.",
             "evidence": [
-              { "entry": "mon_cloudhearth_drake_2a", "stats": "13;8;18;15", "sum": 54, "formula_life": 5, "printed_hits": 6 },
-              { "entry": "mon_tangle_spider_2b",     "stats": "15;20;10;20", "sum": 65, "formula_life": 7, "printed_hits": 4 },
-              { "entry": "mon_bant_battlemage_3p",   "stats": "12;20;16;16", "sum": 64, "formula_life": 6, "printed_hits": 5 },
-              { "entry": "mon_rhox_brute",           "stats": "20;10;10;10", "sum": 50, "formula_life": 5, "printed_hits": 6 },
-              { "entry": "mon_ember_weaver",         "stats": "15;20;10;20", "sum": 65, "formula_life": 7, "printed_hits": 6 }
+              {
+                "entry": "mon_cloudhearth_drake_2a",
+                "stats": "13;8;18;15",
+                "sum": 54,
+                "formula_life": 5,
+                "printed_hits": 6
+              },
+              {
+                "entry": "mon_tangle_spider_2b",
+                "stats": "15;20;10;20",
+                "sum": 65,
+                "formula_life": 7,
+                "printed_hits": 4
+              },
+              {
+                "entry": "mon_bant_battlemage_3p",
+                "stats": "12;20;16;16",
+                "sum": 64,
+                "formula_life": 6,
+                "printed_hits": 5
+              },
+              {
+                "entry": "mon_rhox_brute",
+                "stats": "20;10;10;10",
+                "sum": 50,
+                "formula_life": 5,
+                "printed_hits": 6
+              },
+              {
+                "entry": "mon_ember_weaver",
+                "stats": "15;20;10;20",
+                "sum": 65,
+                "formula_life": 7,
+                "printed_hits": 6
+              }
             ],
             "proposed_resolutions": [
-              { "resolution_id": "formula_wins", "text": "Engine derives life from stats at load time; data.life becomes a cached, non-authoritative field. New versions of the five creatures set life to the formula value." },
-              { "resolution_id": "card_wins",    "text": "Printed hits are deliberate design (e.g. Tangle Spider is fragile but strong). Add an optional data.life_override to creatures; Rule 14 gets a new version: 'unless the card prints otherwise'." },
-              { "resolution_id": "fix_stats",    "text": "Keep the printed hits and adjust each creature's stats so the formula matches (rebalance script proposes the minimal stat delta)." }
+              {
+                "resolution_id": "formula_wins",
+                "text": "Engine derives life from stats at load time; data.life becomes a cached, non-authoritative field. New versions of the five creatures set life to the formula value."
+              },
+              {
+                "resolution_id": "card_wins",
+                "text": "Printed hits are deliberate design (e.g. Tangle Spider is fragile but strong). Add an optional data.life_override to creatures; Rule 14 gets a new version: 'unless the card prints otherwise'."
+              },
+              {
+                "resolution_id": "fix_stats",
+                "text": "Keep the printed hits and adjust each creature's stats so the formula matches (rebalance script proposes the minimal stat delta)."
+              }
+            ]
+          },
+          "logic": {
+            "description": "Open. Rule 14 Part B derives life as round_half_up(sum(stats) / 10) (life_from_stats) but five creature cards print a different hit count: Cloudhearth Drake 54 -> 5 vs 6, Tangle Spider 65 -> 7 vs 4, Bant Battlemage 64 -> 6 vs 5, Rhox Brute 50 -> 5 vs 6, Ember Weaver 65 -> 7 vs 6. The collection rule unit_life_matches_stats flags exactly these five as WARN until a resolution wins: formula_wins (engine derives life, data.life is a cache), card_wins (optional life_override + Rule 14 'unless the card prints otherwise') or fix_stats (rebalance the stats to match the printed hits).",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "Every source entry (rule_14 and the five creatures) exists in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id, null while the vote is open.",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "printed-minus-formula",
+                "description": "Per evidence row: printed hits minus the Rule 14 formula life (non-zero = the clash).",
+                "target": "proposal",
+                "unit": "life",
+                "value": {
+                  "map": [
+                    {
+                      "var": "entry.data.evidence"
+                    },
+                    {
+                      "-": [
+                        {
+                          "var": "printed_hits"
+                        },
+                        {
+                          "var": "formula_life"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "formula-life-from-catalog",
+                "description": "The formula life recomputed from the canonical stats of the first flagged creature (Cloudhearth Drake).",
+                "target": "proposal",
+                "unit": "life",
+                "value": {
+                  "rule": [
+                    "life_from_stats",
+                    {
+                      "stats": {
+                        "entry": [
+                          "mon_cloudhearth_drake_2a",
+                          "stats"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "still-open",
+                "description": "True while no resolution has been chosen.",
+                "target": "proposal",
+                "value": {
+                  "!": {
+                    "var": "entry.data.chosen_resolution"
+                  }
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "evidence-kept",
+                "description": "The evidence rows stay (at least as many as the canonical version).",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.evidence"
+                        }
+                      ]
+                    },
+                    {
+                      "count": [
+                        {
+                          "var": "entry.data.evidence"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "life_from_stats"
             ]
           }
         }
@@ -34,21 +309,307 @@
     {
       "id": "contra_razorfin_stat_sum",
       "name": "Razorfin Abolisher stats sum to 30, species rule says 40",
-      "tags": ["open", "stats", "characters"],
+      "tags": [
+        "open",
+        "stats",
+        "characters"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 0.0, "status": "proposal", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["char_razorfin_abolisher", "game_concept", "rule_14"],
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "proposal",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "char_razorfin_abolisher",
+            "game_concept",
+            "rule_14"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
-            "source_entries": ["char_razorfin_abolisher", "game_concept", "rule_14"],
+            "source_entries": [
+              "char_razorfin_abolisher",
+              "game_concept",
+              "rule_14"
+            ],
             "description": "Card prints 5; 5; 20; 0 (4 hits). The concept states every playable race has sum(stats) = 40 and Rule 14 gives 4 life only for 40. 30 would give 3 life.",
-            "evidence": [ { "entry": "char_razorfin_abolisher", "stats": "5;5;20;0", "sum": 30, "formula_life": 3, "printed_hits": 4, "expected_sum": 40 } ],
+            "evidence": [
+              {
+                "entry": "char_razorfin_abolisher",
+                "stats": "5;5;20;0",
+                "sum": 30,
+                "formula_life": 3,
+                "printed_hits": 4,
+                "expected_sum": 40
+              }
+            ],
             "proposed_resolutions": [
-              { "resolution_id": "typo_15_5_20_0", "text": "Treat it as a typo: Vitality 15 (sum 40). Matches the +Space adept flavour (high Matter) and keeps 4 life." },
-              { "resolution_id": "typo_5_15_20_0", "text": "Treat it as a typo: World 15 (sum 40)." },
-              { "resolution_id": "intentional_30", "text": "Keep 30 as a deliberate weak-but-adept character; new version with life 3 and a compensating property proposed by the rebalance script." }
+              {
+                "resolution_id": "typo_15_5_20_0",
+                "text": "Treat it as a typo: Vitality 15 (sum 40). Matches the +Space adept flavour (high Matter) and keeps 4 life."
+              },
+              {
+                "resolution_id": "typo_5_15_20_0",
+                "text": "Treat it as a typo: World 15 (sum 40)."
+              },
+              {
+                "resolution_id": "intentional_30",
+                "text": "Keep 30 as a deliberate weak-but-adept character; new version with life 3 and a compensating property proposed by the rebalance script."
+              }
+            ]
+          },
+          "logic": {
+            "description": "Open. char_razorfin_abolisher prints stats 5/5/20/0 (sum 30) and 4 hits, while the concept's species_sum_rule says playable races have sum 40 and Rule 14 gives 4 life only for 40 (30 -> 3). Resolutions: typo_15_5_20_0 (Vitality 15), typo_5_15_20_0 (World 15) or intentional_30 (keep 30, life 3, compensating property). The collection rule unit_life_matches_stats flags the character as WARN meanwhile.",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "char_razorfin_abolisher, game_concept and rule_14 exist in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id, null while the vote is open.",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "stat-sum",
+                "description": "The character's canonical stat sum (30, expected 40).",
+                "target": "proposal",
+                "unit": "stat",
+                "value": {
+                  "rule": [
+                    "stat_sum_of",
+                    {
+                      "stats": {
+                        "entry": [
+                          "char_razorfin_abolisher",
+                          "stats"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "missing-points",
+                "description": "Points short of the species sum of 40.",
+                "target": "proposal",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        40,
+                        {
+                          "rule": [
+                            "stat_sum_of",
+                            {
+                              "stats": {
+                                "entry": [
+                                  "char_razorfin_abolisher",
+                                  "stats"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "formula-life",
+                "description": "Life the Rule 14 formula gives for the printed stats (3) versus the printed 4.",
+                "target": "proposal",
+                "unit": "life",
+                "value": {
+                  "rule": [
+                    "life_from_stats",
+                    {
+                      "stats": {
+                        "entry": [
+                          "char_razorfin_abolisher",
+                          "stats"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "clash-present",
+                "description": "True while the canonical stat sum differs from 40.",
+                "target": "proposal",
+                "value": {
+                  "!=": [
+                    {
+                      "rule": [
+                        "stat_sum_of",
+                        {
+                          "stats": {
+                            "entry": [
+                              "char_razorfin_abolisher",
+                              "stats"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    40
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "evidence-kept",
+                "description": "The evidence rows stay.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.evidence"
+                        }
+                      ]
+                    },
+                    {
+                      "count": [
+                        {
+                          "var": "entry.data.evidence"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "life_from_stats",
+              "stat_sum_of"
             ]
           }
         }
@@ -57,18 +618,220 @@
     {
       "id": "contra_rule0_duplicate_numbering",
       "name": "Two paragraphs numbered Rule 0 and a late Rule 25 all describe setup",
-      "tags": ["resolved", "rules"],
+      "tags": [
+        "resolved",
+        "rules"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_0_setup", "rule_25_tileset_initial_deploy"],
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "resolved",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_0_setup",
+            "rule_25_tileset_initial_deploy"
+          ],
           "vote_log": [],
           "notes": "Resolved by author decision on 2026-10-19.",
           "data": {
-            "source_entries": ["rule_0_setup", "rule_25_tileset_initial_deploy"],
+            "source_entries": [
+              "rule_0_setup",
+              "rule_25_tileset_initial_deploy"
+            ],
             "description": "Rule 0 (tileset) and Rule 0 (character deck) share a number; Rule 25 re-states the tileset deployment with more detail (player-count sizes, entry-point order by Will).",
-            "proposed_resolutions": [ { "resolution_id": "merge_into_rule0", "text": "rule_0_setup v1.1.0 merges all three; rule_25 marked superseded (weight 0). Chosen." } ],
+            "proposed_resolutions": [
+              {
+                "resolution_id": "merge_into_rule0",
+                "text": "rule_0_setup v1.1.0 merges all three; rule_25 marked superseded (weight 0). Chosen."
+              }
+            ],
             "chosen_resolution": "merge_into_rule0"
+          },
+          "logic": {
+            "description": "Resolved (merge_into_rule0). Two paper paragraphs were numbered Rule 0 (tileset, character deck) and Rule 25 restated the tileset deployment. rule_0_setup v1.1.0 merges all three and rule_25_tileset_initial_deploy is superseded (weight 0, superseded_by = rule_0_setup). The logic checks that the pointer still exists so the merge cannot silently unravel.",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "rule_0_setup and rule_25_tileset_initial_deploy exist in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id (merge_into_rule0).",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "rule-25-points-at-rule-0",
+                "description": "True while rule_25's active data still says superseded_by rule_0_setup.",
+                "target": "proposal",
+                "value": {
+                  "==": [
+                    {
+                      "entry": [
+                        "rule_25_tileset_initial_deploy",
+                        "superseded_by"
+                      ]
+                    },
+                    "rule_0_setup"
+                  ]
+                }
+              },
+              {
+                "id": "rule-0-carries-tileset",
+                "description": "True while rule_0_setup's text still carries the tileset paragraph.",
+                "target": "proposal",
+                "value": {
+                  "matches": [
+                    {
+                      "entry": [
+                        "rule_0_setup",
+                        "text"
+                      ]
+                    },
+                    "Tileset"
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolution-kept",
+                "description": "A resolved contradiction keeps its chosen resolution (history).",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.chosen_resolution"
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -76,18 +839,218 @@
     {
       "id": "contra_rule14_triple",
       "name": "Three different rules numbered 14",
-      "tags": ["resolved", "rules"],
+      "tags": [
+        "resolved",
+        "rules"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_14"],
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "resolved",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_14"
+          ],
           "vote_log": [],
           "notes": "Resolved by author decision on 2026-10-19.",
           "data": {
-            "source_entries": ["rule_14"],
+            "source_entries": [
+              "rule_14"
+            ],
             "description": "Acquisition/trade, Life and Adjacency are all 'Rule 14'.",
-            "proposed_resolutions": [ { "resolution_id": "parts_a_b_c", "text": "Keep one entry rule_14 with Parts A/B/C so cross-references to 'Rule 14' in the paper stay valid. Chosen." } ],
+            "proposed_resolutions": [
+              {
+                "resolution_id": "parts_a_b_c",
+                "text": "Keep one entry rule_14 with Parts A/B/C so cross-references to 'Rule 14' in the paper stay valid. Chosen."
+              }
+            ],
             "chosen_resolution": "parts_a_b_c"
+          },
+          "logic": {
+            "description": "Resolved (parts_a_b_c). Acquisition/trade, Life and Adjacency were all numbered Rule 14 on paper; one entry rule_14 keeps them as Parts A / B / C so paper cross-references to 'Rule 14' stay valid. The logic checks the three parts are still present in rule_14's text.",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "rule_14 exists in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id (parts_a_b_c).",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "rule-14-has-three-parts",
+                "description": "True while rule_14's active text carries Part A, Part B and Part C in order.",
+                "target": "proposal",
+                "value": {
+                  "matches": [
+                    {
+                      "entry": [
+                        "rule_14",
+                        "text"
+                      ]
+                    },
+                    "Part A[\\s\\S]*Part B[\\s\\S]*Part C"
+                  ]
+                }
+              },
+              {
+                "id": "rule-14-number",
+                "description": "The unified entry keeps number 14.",
+                "target": "proposal",
+                "value": {
+                  "==": [
+                    {
+                      "entry": [
+                        "rule_14",
+                        "number"
+                      ]
+                    },
+                    "14"
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolution-kept",
+                "description": "A resolved contradiction keeps its chosen resolution (history).",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.chosen_resolution"
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -95,18 +1058,230 @@
     {
       "id": "contra_rule21_rounding",
       "name": "Rule 21 says 'rounded up at mathematical principle' but its example rounds 4 down to 0",
-      "tags": ["resolved", "math"],
+      "tags": [
+        "resolved",
+        "math"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["rule_21_effect_damage", "rule_14", "battle_system_core"],
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "resolved",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_21_effect_damage",
+            "rule_14",
+            "battle_system_core"
+          ],
           "vote_log": [],
           "notes": "Resolved on 2026-10-19: round-half-up (0.5 -> 1, 0.4 -> 0), not ceiling. Engine formula recorded in battle_system_core.resolution_math.",
           "data": {
-            "source_entries": ["rule_21_effect_damage"],
+            "source_entries": [
+              "rule_21_effect_damage"
+            ],
             "description": "'Rounded up' would make 4 points = 1 damage, contradicting Example 2 in the same rule.",
-            "proposed_resolutions": [ { "resolution_id": "round_half_up", "text": "Interpret as standard rounding at the nearest multiple of 10. Chosen." }, { "resolution_id": "ceiling", "text": "Interpret literally as ceiling; rewrite Example 2." } ],
+            "proposed_resolutions": [
+              {
+                "resolution_id": "round_half_up",
+                "text": "Interpret as standard rounding at the nearest multiple of 10. Chosen."
+              },
+              {
+                "resolution_id": "ceiling",
+                "text": "Interpret literally as ceiling; rewrite Example 2."
+              }
+            ],
             "chosen_resolution": "round_half_up"
+          },
+          "logic": {
+            "description": "Resolved (round_half_up). Rule 21 says 'rounded up at mathematical principle' yet its Example 2 rounds 4 points down to 0; a ceiling would give 1. The ruling is standard rounding at the nearest multiple of 10 (round_div10: 5 -> 1, 4 -> 0), recorded in rule_21.formula and battle_system_core.resolution_math. The logic re-evaluates both examples so a change to the rounding operator shows up here.",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "rule_21_effect_damage exists in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id (round_half_up).",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "example-1-damage",
+                "description": "Rule 21 Example 1: 3 + 2 = 5 points -> 1 damage.",
+                "target": "proposal",
+                "unit": "damage",
+                "value": {
+                  "round_div10": [
+                    5
+                  ]
+                }
+              },
+              {
+                "id": "example-2-damage",
+                "description": "Rule 21 Example 2: 2 + 2 = 4 points -> 0 damage (the ceiling reading would give 1).",
+                "target": "proposal",
+                "unit": "damage",
+                "value": {
+                  "round_div10": [
+                    4
+                  ]
+                }
+              },
+              {
+                "id": "formula-recorded",
+                "description": "True while rule_21's formula field still names round_half_up.",
+                "target": "proposal",
+                "value": {
+                  "matches": [
+                    {
+                      "entry": [
+                        "rule_21_effect_damage",
+                        "formula"
+                      ]
+                    },
+                    "round_half_up"
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolution-kept",
+                "description": "A resolved contradiction keeps its chosen resolution (history).",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.chosen_resolution"
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]
@@ -114,18 +1289,266 @@
     {
       "id": "contra_golems_stat_totals",
       "name": "Golem variants stat-buy totals",
-      "tags": ["resolved", "effects"],
+      "tags": [
+        "resolved",
+        "effects"
+      ],
       "versions": [
         {
-          "version": "1.0.0", "weight": 0.0, "status": "resolved", "origin": "paper_rules", "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-          "rebalance_links": ["effect_golems_earth", "effect_golems_water", "effect_golems_air"],
+          "version": "1.0.0",
+          "weight": 0.0,
+          "status": "resolved",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "effect_golems_earth",
+            "effect_golems_water",
+            "effect_golems_air"
+          ],
           "vote_log": [],
           "notes": "Checked on 2026-10-19: the three Golem variants (10;5;9;0 / 10;9;5;0 / 9;5;10;0) all total 24; the three Elementals (5;5;20;0 / 5;20;5;0 / 20;5;5;0) all total 30. No change needed; recorded so the check is not repeated.",
           "data": {
-            "source_entries": ["effect_golems_earth", "effect_golems_water", "effect_golems_air"],
+            "source_entries": [
+              "effect_golems_earth",
+              "effect_golems_water",
+              "effect_golems_air"
+            ],
             "description": "Suspected mismatch between Golem variant totals.",
-            "proposed_resolutions": [ { "resolution_id": "no_change", "text": "Totals already consistent at 24. Chosen." } ],
+            "proposed_resolutions": [
+              {
+                "resolution_id": "no_change",
+                "text": "Totals already consistent at 24. Chosen."
+              }
+            ],
             "chosen_resolution": "no_change"
+          },
+          "logic": {
+            "description": "Resolved (no_change). A suspected mismatch between the three Golem variants' stat-buy totals: all three print stat_buy_total 24 (summon stats 10/5/9/0, 10/9/5/0, 9/5/10/0 each sum 24) and the three Elementals total 30. Recorded so the check is not repeated; the logic re-reads the three totals from the catalog and reports whether they still agree.",
+            "prerequisites": [
+              {
+                "id": "sources-exist",
+                "description": "The three Golem effects exist in the catalog.",
+                "when": {
+                  "all": [
+                    {
+                      "var": "entry.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "chosen-resolution",
+                "description": "The winning resolution id (no_change).",
+                "target": "proposal",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "entry.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "golem-totals",
+                "description": "stat_buy_total of the earth / water / air Golem as currently in the catalog.",
+                "target": "proposal",
+                "unit": "stat",
+                "value": {
+                  "merge": [
+                    [
+                      {
+                        "entry": [
+                          "effect_golems_earth",
+                          "stat_buy_total"
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "entry": [
+                          "effect_golems_water",
+                          "stat_buy_total"
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "entry": [
+                          "effect_golems_air",
+                          "stat_buy_total"
+                        ]
+                      }
+                    ]
+                  ]
+                }
+              },
+              {
+                "id": "totals-agree",
+                "description": "True while the three totals are equal and 24.",
+                "target": "proposal",
+                "value": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "entry": [
+                            "effect_golems_earth",
+                            "stat_buy_total"
+                          ]
+                        },
+                        24
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "entry": [
+                            "effect_golems_water",
+                            "stat_buy_total"
+                          ]
+                        },
+                        24
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "entry": [
+                            "effect_golems_air",
+                            "stat_buy_total"
+                          ]
+                        },
+                        24
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "sources-non-empty",
+                "description": "At least one source entry is named.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.source_entries"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "sources-resolve",
+                "description": "Every source entry exists in the catalog.",
+                "assert": {
+                  "all": [
+                    {
+                      "var": "proposal.data.source_entries"
+                    },
+                    {
+                      "!=": [
+                        {
+                          "entry": [
+                            {
+                              "var": ""
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolutions-proposed",
+                "description": "At least one resolution is proposed.",
+                "assert": {
+                  ">=": [
+                    {
+                      "count": [
+                        {
+                          "var": "proposal.data.proposed_resolutions"
+                        }
+                      ]
+                    },
+                    1
+                  ]
+                }
+              },
+              {
+                "id": "chosen-is-proposed",
+                "description": "chosen_resolution, when set, is one of the proposed resolution ids.",
+                "assert": {
+                  "or": [
+                    {
+                      "!": {
+                        "var": "proposal.data.chosen_resolution"
+                      }
+                    },
+                    {
+                      "in": [
+                        {
+                          "var": "proposal.data.chosen_resolution"
+                        },
+                        {
+                          "map": [
+                            {
+                              "var": "proposal.data.proposed_resolutions"
+                            },
+                            {
+                              "var": "resolution_id"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "resolution-kept",
+                "description": "A resolved contradiction keeps its chosen resolution (history).",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.chosen_resolution"
+                    },
+                    {
+                      "var": "entry.data.chosen_resolution"
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": []
           }
         }
       ]

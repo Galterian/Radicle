@@ -1,0 +1,69 @@
+1. Summoning(6)  - Souls
+Permanent with power (6). - This meand that the permanent is created into the player's permanents holdings (this permanent has no abilities so no keyboard mapping from the list after the key 8 -> 9, 0, -, =, ....). The permanent is alway with power 6 (no need to roll dices to cerate to get the biggest number of 6). So the opponent destroying the permanent should thow a 6 to destroy it. Once destroed the summoned creature will vanish immediatelly (do it with vanishing permanent utf8 icon).
+Stat buy (channeling) - you spend rounds emiting Souls until teh summary value at least matches sum of the Stats of the summoned creature.
+
+Perform Summoning of your archive creature or Library’s top creature until the Stat spent is rounded to the creature's Stats. - In PC game this is a random creature. The summoned creature enters in the unocupied tile next to yours.
+
+Upon Summoning destruction: put the creature into your archives. - Important: Archive is a new conception. Each player has archive deck on the very left and bottom. On clicking the archive you may select a card from your hand. Upon resolution phase it goes to the archive instead of discard pile. If you double click the archive a new popup with the archived card will appear. You may choose a card to put it into your discard pile. Remember your deck could not be less that 15 cards.
+
+∀: Perform Summoning of unknown creature from the tileset. - summon a creature in your visible area that will become an ally and will follow you until someone destroys the Summoning(6) permanent.
+
+
+So first you need to implement the arhives conception and the UX.
+
+1. General. - teher should be an Ally label over the event log creature list. Where the the creature in Ally is labled with "PlayerX Team" or "Monster" in case it is in common monster alliance.
+Gneeral: If I did not mentioned this already: Permanents when successfull casted they are not discared but put into your permanents holdings (if this permanent has abilities so do a keyboard mapping from the list after the key 8 -> 9, 0, -, =, .... so each permanent with ability in the holding has a keyboard shortcut)
+
+
+
+
+2. Golems(6) (Souls, Harmony)
+Permanent. Stat buy (channeling) - same conception as Elementals, each turn you add Stat to the Permanent "completeness counter" (do that for the Summoning as well), until it is equal or bigger than the randomized new creature stats - in this case the golem has clear stats with sum 24.
+Since the Effect is (Souls, Harmony), when start casting it the first round you add your World(Souls) stat value to the counter, then the next round your eimit Harmony and add your Will(Harmony) stat to the counter, and the next round you again add your World(Souls) ...
+Perform summoning a creature until the sum of your Stats spent can be rounded to 24. The creature always follow you and stays next to your tile.
+
+LifeMatters golem: vitality: 10; World:5; Matter:9; Will:0;  
+ (2 hits)          2 actions per turn
+
+
+
+There are 4 types of golems: the other omnes are:
+WorldLives Golem: vitality: 10; World:9; Matter:5; Will:0;
+(2 hits)            2
+
+LifeMatters golem: vitality: 10; World:5; Matter:9; Will:0;  
+ (2 hits)          2 actions per turn
+ 
+WorldMatters golem: vitality: 5; World:10; Matter:9; Will:0;  
+ (2 hits)          2 actions per turn
+ 
+Living golem: vitality: 20; World:2; Matter:2; Will:0;  
+ (2 hits)          2 actions per turn
+
+
+
+
+
+3. Elementals(6) (Harmony, Concentration)
+Uses the same conception, except that the Stats are different:
+Perform summoning a creature until the sum of your Stats spent can be rounded to 30. The creature always follows you and stays onto your tile. 
+You emit Harmony, then Concentration than again Harmony, then Concentration to the counter.
+
+World elemental: vitality: 5; World:20; Matter:5; Will:0;
+ (3 hits)              1 action
+ 
+Vital elemental: vitality: 20; World:5; Matter:5; Will:0;
+ (3 hits)              1 action
+Matter elemental: vitality: 5; World:5; Matter:20; Will:0;
+ (3 hits)              1 action
+
+
+
+4. Resurrect/Death Ward(6) (Vitality)
+
+Permanent until complete casting. Stat buy (channeling). - whenever you are close to a dead unit (monster or player) marker you may resurect it by each turn spending stat buy (adding your stat to a counter) Vitality. And when the stat is equal or bigger the creature is back to play if it is player at max HP, and the monster is bak to life at full HP but now is your ally.
+Start spawning an archived creature as an ally until the Stat spent is rounded to the creature's Stats.
+Again the permanent is with power 6, so teh enemy must destroy it with dice 6.
+
+When a creature vanishes it is put again in your archives.
+-: Can be cast as Permanent (Death Ward): If you have no dead player or monster nearby but there is another ally, you amy play this card as a permanent (not discared when complete casting). When the target dies, move it out on its Door entry place at 1 Hp.

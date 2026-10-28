@@ -1,0 +1,202 @@
+{
+  "collection": "governance",
+  "entries": {
+    "governance_branch_layout": {
+      "description": "Governs the Radicle repository layout: main (released data/, written only by the release script), develop (accepted proposals, written by the tally script), proposals/<entry_id>-<unix_ts> (one new version object per branch), forks/<fork_name> (a group's own data/ tree) and ActiveDimensions/<DimensionName> (live session artefacts, written by pushers). Tunable: release.cadence_s (604800 = 7 days) between data-vX.Y.Z tags; clients compare rules_snapshot_commit at session open. file_rules: never edit a version in place, ids are never reused, proposals touch one entry unless produced by the rebalance script. The runtime deviates: peer.mjs writes only ActiveDimensions/<dim> (dimension.json + doors/<peer>.json) into each peer's own Radicle namespace and mirrors it via git-remote-rad; no release script, tally script, main / develop merge or proposals/* branch exists in code — tools/rebalance.mjs --apply appends proposal versions straight into data/. Context assumed: branch (name string), writer.role (release_script | tally_script | proposer | rebalance_script | fork_owner | pusher), now_s, last_release_s, entry_id, unix_ts, fork_name, dimension.name.",
+      "prerequisites": [
+        { "id": "branch_name_known", "description": "The branch matches one of the five layout patterns.", "when": { "or": [
+          { "==": [ { "var": "branch" }, "main" ] },
+          { "==": [ { "var": "branch" }, "develop" ] },
+          { "matches": [ { "var": "branch" }, "^proposals/[A-Za-z0-9_.-]+-[0-9]+$" ] },
+          { "matches": [ { "var": "branch" }, "^forks/[A-Za-z0-9_.-]+$" ] },
+          { "matches": [ { "var": "branch" }, "^ActiveDimensions/[^/]+$" ] }
+        ] } },
+        { "id": "main_written_by_release_script", "description": "branches.main.writes: only the release script merges develop into main.", "when": { "or": [ { "!=": [ { "var": "branch" }, "main" ] }, { "==": [ { "var": "writer.role" }, "release_script" ] } ] } },
+        { "id": "develop_written_by_tally_script", "description": "branches.develop.writes: only the tally script merges proposals/* into develop.", "when": { "or": [ { "!=": [ { "var": "branch" }, "develop" ] }, { "==": [ { "var": "writer.role" }, "tally_script" ] } ] } },
+        { "id": "proposal_written_by_proposer_or_script", "description": "branches.proposals.writes: the proposer, the rebalance script (counter-proposals) and vote_log appends.", "when": { "or": [ { "!": { "matches": [ { "var": "branch" }, "^proposals/" ] } }, { "in": [ { "var": "writer.role" }, [ "proposer", "rebalance_script", "voter" ] ] } ] } },
+        { "id": "active_dimension_written_by_pusher", "description": "branches.ActiveDimensions.writes: elected pushers only (peer.mjs: every peer, in its own namespace).", "when": { "or": [ { "!": { "matches": [ { "var": "branch" }, "^ActiveDimensions/" ] } }, { "==": [ { "var": "writer.role" }, "pusher" ] } ] } }
+      ],
+      "effects": [
+        { "id": "release_due", "description": "A release is due once release.cadence_s have passed since the last data-v tag.", "target": "proposal", "value": { ">=": [ { "-": [ { "var": "now_s" }, { "var": "last_release_s" } ] }, { "var": "entry.data.release.cadence_s" } ] } },
+        { "id": "next_release_at_s", "description": "last release + cadence_s.", "target": "proposal", "value": { "+": [ { "var": "last_release_s" }, { "var": "entry.data.release.cadence_s" } ] } },
+        { "id": "releases_per_max_age", "description": "How many release windows a proposal can live through before governance_voting.max_age_s expires it (4 with the canonical numbers).", "target": "proposal", "value": { "floor": [ { "/": [ { "entry": [ "governance_voting", "max_age_s" ] }, { "var": "entry.data.release.cadence_s" } ] } ] } },
+        { "id": "proposal_branch_name", "description": "proposals/<entry_id>-<unix_ts>.", "target": "proposal", "value": { "cat": [ "proposals/", { "var": "entry_id" }, "-", { "var": "unix_ts" } ] } },
+        { "id": "fork_branch_name", "description": "forks/<fork_name>.", "target": "proposal", "value": { "cat": [ "forks/", { "var": "fork_name" } ] } },
+        { "id": "dimension_branch_name", "description": "ActiveDimensions/<DimensionName> (what peer.mjs actually pushes).", "target": "tile", "value": { "cat": [ "ActiveDimensions/", { "var": "dimension.name" } ] } }
+      ],
+      "validation": [
+        { "id": "branch_names_unchanged", "description": "The five branch patterns stay exactly as canonical.", "assert": { "and": [
+          { "==": [ { "count": [ { "keys": [ { "var": "proposal.data.branches" } ] } ] }, { "count": [ { "keys": [ { "var": "entry.data.branches" } ] } ] } ] },
+          { "subset_of": [ { "keys": [ { "var": "proposal.data.branches" } ] }, { "keys": [ { "var": "entry.data.branches" } ] } ] }
+        ] } },
+        { "id": "every_branch_has_content_and_writes", "description": "Each branch entry documents content and writes.", "assert": { "none": [ { "values": [ { "var": "proposal.data.branches" } ] }, { "or": [ { "!=": [ { "typeof": [ { "var": "content" } ] }, "string" ] }, { "!=": [ { "typeof": [ { "var": "writes" } ] }, "string" ] } ] } ] } },
+        { "id": "release_cadence_in_range", "description": "release.cadence_s is between one day and governance_voting.max_age_s (a proposal must be able to ship before it expires).", "assert": { "and": [
+          { ">=": [ { "var": "proposal.data.release.cadence_s" }, 86400 ] },
+          { "<=": [ { "var": "proposal.data.release.cadence_s" }, { "entry": [ "governance_voting", "max_age_s" ] } ] }
+        ] } },
+        { "id": "file_rules_kept", "description": "At least the three file rules remain and the never-edit-in-place rule is among them.", "assert": { "and": [
+          { ">=": [ { "count": [ { "var": "proposal.data.file_rules" } ] }, 3 ] },
+          { "some": [ { "var": "proposal.data.file_rules" }, { "matches": [ { "var": "" }, "in place" ] } ] }
+        ] } }
+      ]
+    },
+    "governance_voting": {
+      "description": "Governs how proposal versions gain weight and change status. Tunables: tally_interval_s (3600) between tallies; quorum_voters (7) distinct voters; accept_threshold (0.6) and reject_threshold (-0.3) on the tally weight; min_age_s (86400) before acceptance; max_age_s (2592000) after which an under-quorum proposal is rejected; per_collection_overrides raise accept_threshold / quorum for concept, stats, elements (0.9 / 25), rules and sync_protocol (0.75 / 15) and governance (0.8 / 20). Vote weight w = 0.01 x (1 + log2(1 + times_used_in_dimension)) x (1 + 0.1 x dimensions_played_in) capped at 0.10 — json-logic has no log2, so the runtime supplies log2_1p_times_used. Tally weight = clamp(sum(+1 w) - sum(-1 w), 0, 1); canonical when weight >= accept AND voters >= quorum AND age >= min_age AND rebalance within tolerance; rejected when weight <= reject OR age > max_age without quorum; the previous canonical becomes superseded at new weight - 0.01. The runtime deviates: no tally runs anywhere; tools/rebalance.mjs --apply appends proposals at weight 0 and status proposal, and peer.mjs pickActive loads the highest-weight version that is neither rejected nor superseded (the engine's activeVersion only excludes rejected). Context assumed: collection, proposal_meta {age_s, voters}, votes {plus: [w], minus: [w]}, scores {current, proposal}, log2_1p_times_used, dimensions_played_in, voter.pubkey, vote_key, votes_seen_keys, now_s, last_tally_s.",
+      "prerequisites": [
+        { "id": "proposal_old_enough", "description": "age >= min_age_s before a proposal can become canonical.", "when": { ">=": [ { "var": "proposal_meta.age_s" }, { "var": "entry.data.min_age_s" } ] } },
+        { "id": "proposal_not_expired", "description": "age <= max_age_s; older proposals without quorum are rejected.", "when": { "<=": [ { "var": "proposal_meta.age_s" }, { "var": "entry.data.max_age_s" } ] } },
+        { "id": "quorum_reached", "description": "Distinct voters >= the collection's quorum (per_collection_overrides.<collection>.quorum_voters, else quorum_voters).", "when": { ">=": [ { "var": "proposal_meta.voters" }, { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } }, { "var": "entry.data.quorum_voters" } ] } ] } },
+        { "id": "weight_reaches_accept_threshold", "description": "Tally weight >= the collection's accept_threshold (override or base).", "when": { ">=": [ { "min": [ 1, { "max0": [ { "-": [ { "sum": [ { "var": "votes.plus" } ] }, { "sum": [ { "var": "votes.minus" } ] } ] } ] } ] }, { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".accept_threshold" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".accept_threshold" ] } }, { "var": "entry.data.accept_threshold" } ] } ] } },
+        { "id": "rebalance_within_tolerance", "description": "governance_rebalance_script: |proposal score - current score| <= per_entry_relative x current.", "when": { "rule": [ "within_tolerance", { "current": { "var": "scores.current" }, "proposal": { "var": "scores.proposal" }, "relative": { "entry": [ "governance_rebalance_script", "tolerance.per_entry_relative" ] } } ] } },
+        { "id": "voter_has_signing_key", "description": "who_may_vote: any peer with a signing key.", "when": { "==": [ { "typeof": [ { "var": "voter.pubkey" } ] }, "string" ] } },
+        { "id": "vote_not_duplicate", "description": "vote_integrity: one vote per (peer_id, entry_id, version).", "when": { "!": { "includes": [ { "var": "votes_seen_keys" }, { "var": "vote_key" } ] } } }
+      ],
+      "effects": [
+        { "id": "vote_weight_uncapped", "description": "0.01 x (1 + log2(1 + times_used)) x (1 + 0.1 x dimensions_played_in), log2 supplied as log2_1p_times_used.", "target": "proposal", "value": { "*": [ 0.01, { "+": [ 1, { "var": "log2_1p_times_used" } ] }, { "+": [ 1, { "*": [ 0.1, { "var": "dimensions_played_in" } ] } ] } ] } },
+        { "id": "vote_weight", "description": "The per-peer weight capped at 0.10.", "target": "proposal", "value": { "min": [ 0.1, { "*": [ 0.01, { "+": [ 1, { "var": "log2_1p_times_used" } ] }, { "+": [ 1, { "*": [ 0.1, { "var": "dimensions_played_in" } ] } ] } ] } ] } },
+        { "id": "tally_weight", "description": "clamp(sum(+1 w) - sum(-1 w), 0, 1).", "target": "proposal", "value": { "min": [ 1, { "max0": [ { "-": [ { "sum": [ { "var": "votes.plus" } ] }, { "sum": [ { "var": "votes.minus" } ] } ] } ] } ] } },
+        { "id": "effective_accept_threshold", "description": "per_collection_overrides.<collection>.accept_threshold or the base accept_threshold.", "target": "proposal", "value": { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".accept_threshold" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".accept_threshold" ] } }, { "var": "entry.data.accept_threshold" } ] } },
+        { "id": "effective_quorum", "description": "per_collection_overrides.<collection>.quorum_voters or the base quorum_voters.", "target": "proposal", "value": { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } }, { "var": "entry.data.quorum_voters" } ] } },
+        { "id": "lifecycle_status", "description": "proposal_lifecycle at tally time: canonical | rejected | proposal.", "target": "proposal", "value": { "if": [
+          { "and": [
+            { ">=": [ { "min": [ 1, { "max0": [ { "-": [ { "sum": [ { "var": "votes.plus" } ] }, { "sum": [ { "var": "votes.minus" } ] } ] } ] } ] }, { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".accept_threshold" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".accept_threshold" ] } }, { "var": "entry.data.accept_threshold" } ] } ] },
+            { ">=": [ { "var": "proposal_meta.voters" }, { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } }, { "var": "entry.data.quorum_voters" } ] } ] },
+            { ">=": [ { "var": "proposal_meta.age_s" }, { "var": "entry.data.min_age_s" } ] },
+            { "rule": [ "within_tolerance", { "current": { "var": "scores.current" }, "proposal": { "var": "scores.proposal" }, "relative": { "entry": [ "governance_rebalance_script", "tolerance.per_entry_relative" ] } } ] }
+          ] }, "canonical",
+          { "or": [
+            { "<=": [ { "-": [ { "sum": [ { "var": "votes.plus" } ] }, { "sum": [ { "var": "votes.minus" } ] } ] }, { "var": "entry.data.reject_threshold" } ] },
+            { "and": [
+              { ">": [ { "var": "proposal_meta.age_s" }, { "var": "entry.data.max_age_s" } ] },
+              { "<": [ { "var": "proposal_meta.voters" }, { "if": [ { "!!": { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } } }, { "var": { "cat": [ "entry.data.per_collection_overrides.", { "var": "collection" }, ".quorum_voters" ] } }, { "var": "entry.data.quorum_voters" } ] } ] }
+            ] }
+          ] }, "rejected",
+          "proposal"
+        ] } },
+        { "id": "superseded_weight", "description": "The previous canonical keeps new weight - 0.01 as the fallback.", "target": "proposal", "value": { "max0": [ { "-": [ { "min": [ 1, { "max0": [ { "-": [ { "sum": [ { "var": "votes.plus" } ] }, { "sum": [ { "var": "votes.minus" } ] } ] } ] } ] }, 0.01 ] } ] } },
+        { "id": "tally_due", "description": "A tally runs every tally_interval_s.", "target": "proposal", "value": { ">=": [ { "-": [ { "var": "now_s" }, { "var": "last_tally_s" } ] }, { "var": "entry.data.tally_interval_s" } ] } },
+        { "id": "tallies_before_acceptance", "description": "Minimum tallies a proposal waits through: min_age_s / tally_interval_s (24).", "target": "proposal", "value": { "floor": [ { "/": [ { "var": "entry.data.min_age_s" }, { "var": "entry.data.tally_interval_s" } ] } ] } }
+      ],
+      "validation": [
+        { "id": "accept_threshold_in_unit_interval", "description": "0 < accept_threshold <= 1.", "assert": { "and": [ { ">": [ { "var": "proposal.data.accept_threshold" }, 0 ] }, { "<=": [ { "var": "proposal.data.accept_threshold" }, 1 ] } ] } },
+        { "id": "reject_threshold_negative", "description": "reject_threshold < 0 and not below -1.", "assert": { "and": [ { "<": [ { "var": "proposal.data.reject_threshold" }, 0 ] }, { ">=": [ { "var": "proposal.data.reject_threshold" }, -1 ] } ] } },
+        { "id": "quorum_positive_integer", "description": "quorum_voters is an integer >= 1.", "assert": { "and": [ { ">=": [ { "var": "proposal.data.quorum_voters" }, 1 ] }, { "==": [ { "floor": [ { "var": "proposal.data.quorum_voters" } ] }, { "var": "proposal.data.quorum_voters" } ] } ] } },
+        { "id": "ages_ordered", "description": "0 < tally_interval_s <= min_age_s < max_age_s.", "assert": { "and": [
+          { ">": [ { "var": "proposal.data.tally_interval_s" }, 0 ] },
+          { "<=": [ { "var": "proposal.data.tally_interval_s" }, { "var": "proposal.data.min_age_s" } ] },
+          { "<": [ { "var": "proposal.data.min_age_s" }, { "var": "proposal.data.max_age_s" } ] }
+        ] } },
+        { "id": "overrides_name_known_collections", "description": "per_collection_overrides keys are collection ids.", "assert": { "subset_of": [ { "keys": [ { "var": "proposal.data.per_collection_overrides" } ] }, [ "concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills", "classes", "characters", "creatures", "terrain_items", "game_modes", "contradictions", "sync_protocol", "hashgraph_events", "dimension_session", "governance" ] ] } },
+        { "id": "overrides_are_stricter", "description": "Every override keeps accept_threshold in (0,1] and at least the base, and quorum at least the base quorum.", "assert": { "none": [ { "values": [ { "var": "proposal.data.per_collection_overrides" } ] }, { "or": [
+          { "<": [ { "var": "accept_threshold" }, { "root": "proposal.data.accept_threshold" } ] },
+          { ">": [ { "var": "accept_threshold" }, 1 ] },
+          { "<": [ { "var": "quorum_voters" }, { "root": "proposal.data.quorum_voters" } ] }
+        ] } ] } },
+        { "id": "lifecycle_statuses_unchanged", "description": "proposal_lifecycle keeps its five steps over the statuses proposal / canonical / rejected / superseded.", "assert": { "and": [
+          { "==": [ { "count": [ { "var": "proposal.data.proposal_lifecycle" } ] }, { "count": [ { "var": "entry.data.proposal_lifecycle" } ] } ] },
+          { "subset_of": [ { "map": [ { "var": "proposal.data.proposal_lifecycle" }, { "var": "status" } ] }, [ "proposal", "canonical", "rejected", "superseded" ] ] }
+        ] } },
+        { "id": "weight_formula_capped", "description": "vote_weight_formula still names the 0.10 cap and log2 usage scaling.", "assert": { "and": [ { "matches": [ { "var": "proposal.data.vote_weight_formula" }, "0\\.10" ] }, { "matches": [ { "var": "proposal.data.vote_weight_formula" }, "log2" ] } ] } }
+      ]
+    },
+    "governance_rebalance_script": {
+      "description": "Governs the deterministic rebalance pass every proposal goes through. power_score per collection (effect, skill, class, creature, character) is the JsonLogic of logic_rules power_score_*; tolerance.per_entry_relative (0.15): a proposal passes as-is when |score(proposal) - score(current)| <= 0.15 x current; tolerance.per_collection_mean_drift (0.05): otherwise the counter-deltas must bring the rebalance_links closure mean back within 5 %. counter_proposal_algorithm: delta = proposal - current; walk rebalance_links breadth-first (depth <= 2) distributing -delta proportionally to each linked entry's score; a nerf first tries a compensating property on the same entry; counters land on the same proposals/* branch; run every tally_interval_s and on every push. The runtime: tools/rebalance.mjs implements steps 1-5 (validate, score, 15 % test, BFS counters, report to tools/out/) and with --apply appends versions at weight 0 directly into data/ — there is no proposals/* branch, and the mean-drift check (per_collection_mean_drift) is not applied. Context assumed: collection, data (the version's data for scoring), scores {current, proposal, closure_mean_current, closure_mean_proposal}, link.score, links.scores, now_s, last_run_s.",
+      "prerequisites": [
+        { "id": "scores_available", "description": "Both power scores are numbers.", "when": { "and": [ { "==": [ { "typeof": [ { "var": "scores.current" } ] }, "number" ] }, { "==": [ { "typeof": [ { "var": "scores.proposal" } ] }, "number" ] } ] } },
+        { "id": "collection_is_scored", "description": "A power_score formula exists for the collection (effects, skills, classes, creatures, characters); other collections skip the rebalance.", "when": { "in": [ { "var": "collection" }, [ "effects", "skills", "classes", "creatures", "characters" ] ] } },
+        { "id": "within_per_entry_tolerance", "description": "Accept as-is: |delta| <= per_entry_relative x current.", "when": { "rule": [ "within_tolerance", { "current": { "var": "scores.current" }, "proposal": { "var": "scores.proposal" }, "relative": { "var": "entry.data.tolerance.per_entry_relative" } } ] } },
+        { "id": "closure_mean_within_drift", "description": "Or the linked counter-deltas keep the closure mean within per_collection_mean_drift.", "when": { "rule": [ "within_tolerance", { "current": { "var": "scores.closure_mean_current" }, "proposal": { "var": "scores.closure_mean_proposal" }, "relative": { "var": "entry.data.tolerance.per_collection_mean_drift" } } ] } },
+        { "id": "run_due", "description": "run_at: every tally_interval_s (or immediately on a new proposal push).", "when": { "or": [ { "!!": { "var": "new_proposal_pushed" } }, { ">=": [ { "-": [ { "var": "now_s" }, { "var": "last_run_s" } ] }, { "entry": [ "governance_voting", "tally_interval_s" ] } ] } ] } }
+      ],
+      "effects": [
+        { "id": "delta", "description": "power_score(proposal) - power_score(current canonical).", "target": "proposal", "unit": "stat", "value": { "-": [ { "var": "scores.proposal" }, { "var": "scores.current" } ] } },
+        { "id": "accept_as_is", "description": "|delta| <= per_entry_relative x current.", "target": "proposal", "value": { "rule": [ "within_tolerance", { "current": { "var": "scores.current" }, "proposal": { "var": "scores.proposal" }, "relative": { "var": "entry.data.tolerance.per_entry_relative" } } ] } },
+        { "id": "is_nerf", "description": "delta < 0: prefer a compensating property on the same entry.", "target": "proposal", "value": { "<": [ { "var": "scores.proposal" }, { "var": "scores.current" } ] } },
+        { "id": "tolerance_band", "description": "The absolute band a proposal may move inside: per_entry_relative x |current|.", "target": "proposal", "unit": "stat", "value": { "*": [ { "var": "entry.data.tolerance.per_entry_relative" }, { "abs": [ { "var": "scores.current" } ] } ] } },
+        { "id": "counter_delta_for_link", "description": "-delta x link.score / sum(links.scores): the share of the compensation one linked entry absorbs.", "target": "proposal", "unit": "stat", "value": { "if": [ { ">": [ { "sum": [ { "var": "links.scores" } ] }, 0 ] }, { "*": [ { "-": [ { "var": "scores.current" }, { "var": "scores.proposal" } ] }, { "/": [ { "var": "link.score" }, { "sum": [ { "var": "links.scores" } ] } ] } ] }, 0 ] } },
+        { "id": "score_of_data", "description": "power_score of {data} by collection — the same formulas tools/rebalance.mjs evaluates.", "target": "proposal", "unit": "stat", "value": { "if": [
+          { "==": [ { "var": "collection" }, "effects" ] }, { "rule": [ "power_score_effect", {} ] },
+          { "==": [ { "var": "collection" }, "skills" ] }, { "rule": [ "power_score_skill", {} ] },
+          { "==": [ { "var": "collection" }, "classes" ] }, { "rule": [ "power_score_class", {} ] },
+          { "==": [ { "var": "collection" }, "creatures" ] }, { "rule": [ "power_score_creature", {} ] },
+          { "==": [ { "var": "collection" }, "characters" ] }, { "rule": [ "power_score_character", {} ] },
+          null
+        ] } }
+      ],
+      "validation": [
+        { "id": "per_entry_tolerance_in_range", "description": "0 < per_entry_relative <= 0.5.", "assert": { "and": [ { ">": [ { "var": "proposal.data.tolerance.per_entry_relative" }, 0 ] }, { "<=": [ { "var": "proposal.data.tolerance.per_entry_relative" }, 0.5 ] } ] } },
+        { "id": "mean_drift_tighter_than_entry", "description": "0 < per_collection_mean_drift <= per_entry_relative.", "assert": { "and": [ { ">": [ { "var": "proposal.data.tolerance.per_collection_mean_drift" }, 0 ] }, { "<=": [ { "var": "proposal.data.tolerance.per_collection_mean_drift" }, { "var": "proposal.data.tolerance.per_entry_relative" } ] } ] } },
+        { "id": "power_score_collections_unchanged", "description": "power_score keeps exactly effect, skill, class, creature, character.", "assert": { "and": [
+          { "==": [ { "count": [ { "keys": [ { "var": "proposal.data.power_score" } ] } ] }, { "count": [ { "keys": [ { "var": "entry.data.power_score" } ] } ] } ] },
+          { "subset_of": [ { "keys": [ { "var": "proposal.data.power_score" } ] }, [ "effect", "skill", "class", "creature", "character" ] ] }
+        ] } },
+        { "id": "algorithm_kept", "description": "counter_proposal_algorithm keeps at least the delta / accept / distribute steps and names rebalance_links.", "assert": { "and": [
+          { ">=": [ { "count": [ { "var": "proposal.data.counter_proposal_algorithm" } ] }, 3 ] },
+          { "some": [ { "var": "proposal.data.counter_proposal_algorithm" }, { "matches": [ { "var": "" }, "rebalance_links" ] } ] }
+        ] } }
+      ]
+    },
+    "governance_forks": {
+      "description": "Governs forks: forks/<name> starts as a copy of develop; Dimensions opened under a fork record the fork's rules_snapshot_commit and only players on that fork can join; fork owners vote with the same rules inside the fork; merging back opens proposals/fork-<name>-<ts> with the full diff, judged as one proposal with the accept_threshold of the strictest touched collection and quorum doubled; the rebalance script may split it per entry when split_allowed is set. The runtime: no fork tooling exists — peer.mjs plays one data/ tree and writes rules_snapshot_commit 'local'; nothing checks a joiner's snapshot against the Dimension's. Context assumed: branch, touched_collections (ids), fork_name, unix_ts, dimension.rules_snapshot_commit, me.rules_snapshot_commit, branch.split_allowed.",
+      "prerequisites": [
+        { "id": "fork_branch_name_valid", "description": "A fork lives at forks/<name>.", "when": { "matches": [ { "var": "branch" }, "^forks/[A-Za-z0-9_.-]+$" ] } },
+        { "id": "joiner_on_same_fork", "description": "create: only players whose data/ snapshot equals the Dimension's rules_snapshot_commit may join.", "when": { "==": [ { "var": "dimension.rules_snapshot_commit" }, { "var": "me.rules_snapshot_commit" } ] } },
+        { "id": "merge_back_branch_valid", "description": "merge_back: the proposal branch is proposals/fork-<name>-<ts>.", "when": { "or": [ { "!": { "var": "merging_back" } }, { "matches": [ { "var": "merge_branch" }, "^proposals/fork-[A-Za-z0-9_.-]+-[0-9]+$" ] } ] } },
+        { "id": "touches_at_least_one_collection", "description": "A merge-back diff touches at least one collection.", "when": { ">=": [ { "count": [ { "var": "touched_collections" } ] }, 1 ] } }
+      ],
+      "effects": [
+        { "id": "merge_back_accept_threshold", "description": "The strictest accept_threshold among touched collections (override, else governance_voting.accept_threshold).", "target": "proposal", "value": { "max_of": [ { "map": [ { "var": "touched_collections" }, { "if": [ { "!!": { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "var": "" }, ".accept_threshold" ] } ] } }, { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "var": "" }, ".accept_threshold" ] } ] }, { "entry": [ "governance_voting", "accept_threshold" ] } ] } ] } ] } },
+        { "id": "merge_back_quorum", "description": "Twice the strictest quorum among touched collections.", "target": "proposal", "value": { "*": [ 2, { "max_of": [ { "map": [ { "var": "touched_collections" }, { "if": [ { "!!": { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "var": "" }, ".quorum_voters" ] } ] } }, { "entry": [ "governance_voting", { "cat": [ "per_collection_overrides.", { "var": "" }, ".quorum_voters" ] } ] }, { "entry": [ "governance_voting", "quorum_voters" ] } ] } ] } ] } ] } },
+        { "id": "merge_back_branch_name", "description": "proposals/fork-<name>-<ts>.", "target": "proposal", "value": { "cat": [ "proposals/fork-", { "var": "fork_name" }, "-", { "var": "unix_ts" } ] } },
+        { "id": "may_split", "description": "partial_merge: the rebalance script may split the fork proposal per entry when split_allowed is set on the branch.", "target": "proposal", "value": { "!!": { "var": "branch.split_allowed" } } }
+      ],
+      "validation": [
+        { "id": "fork_sections_unchanged", "description": "create, play, merge_back and partial_merge stay the four sections.", "assert": { "and": [
+          { "==": [ { "count": [ { "keys": [ { "var": "proposal.data" } ] } ] }, { "count": [ { "keys": [ { "var": "entry.data" } ] } ] } ] },
+          { "subset_of": [ { "keys": [ { "var": "proposal.data" } ] }, [ "create", "play", "merge_back", "partial_merge" ] ] }
+        ] } },
+        { "id": "sections_are_text", "description": "Every section is a documented string.", "assert": { "none": [ { "values": [ { "var": "proposal.data" } ] }, { "or": [ { "!=": [ { "typeof": [ { "var": "" } ] }, "string" ] }, { "<": [ { "len": [ { "var": "" } ] }, 20 ] } ] } ] } },
+        { "id": "merge_back_keeps_strictest_and_doubled", "description": "merge_back still applies the strictest threshold and a doubled quorum.", "assert": { "and": [ { "matches": [ { "var": "proposal.data.merge_back" }, "strictest" ] }, { "matches": [ { "var": "proposal.data.merge_back" }, "quorum doubled" ] } ] } }
+      ]
+    },
+    "governance_write_permissions": {
+      "description": "Governs which governance route may write each collection: vote-driven (rules, battle_system, actions, effects, skills, classes, characters, creatures, terrain_items, game_modes, sync_protocol, hashgraph_events, dimension_session, governance) go through proposals/* + governance_voting; paper-only (stats, elements) need the concept-level thresholds (0.9 / 25 voters); rebalance-only (concept) text may change only alongside a rebalance report; resolution-vote (contradictions) picks a winning resolution that becomes a new version on the source entries. Every known collection except logic_rules is covered exactly once. The runtime: no write check exists — tools/rebalance.mjs --apply writes any collection's data/ file; peer.mjs only reads data/. Context assumed: collection, branch, policy (route name), votes.weight, proposal_meta.voters, rebalance_report.",
+      "prerequisites": [
+        { "id": "collection_in_policy", "description": "The collection is listed under the route being used.", "when": { "includes": [ { "var": { "cat": [ "entry.data.", { "var": "policy" }, ".collections" ] } }, { "var": "collection" } ] } },
+        { "id": "vote_driven_uses_proposal_branch", "description": "vote-driven collections are written through a proposals/* branch.", "when": { "or": [ { "!": { "includes": [ { "var": "entry.data.vote-driven.collections" }, { "var": "collection" } ] } }, { "matches": [ { "var": "branch" }, "^proposals/" ] } ] } },
+        { "id": "paper_only_needs_concept_thresholds", "description": "paper-only collections need governance_voting's concept override (weight >= 0.9, voters >= 25).", "when": { "or": [ { "!": { "includes": [ { "var": "entry.data.paper-only.collections" }, { "var": "collection" } ] } }, { "and": [
+          { ">=": [ { "var": "votes.weight" }, { "entry": [ "governance_voting", "per_collection_overrides.concept.accept_threshold" ] } ] },
+          { ">=": [ { "var": "proposal_meta.voters" }, { "entry": [ "governance_voting", "per_collection_overrides.concept.quorum_voters" ] } ] }
+        ] } ] } },
+        { "id": "rebalance_only_needs_report", "description": "rebalance-only collections change only alongside a rebalance report.", "when": { "or": [ { "!": { "includes": [ { "var": "entry.data.rebalance-only.collections" }, { "var": "collection" } ] } }, { "!!": { "var": "rebalance_report" } } ] } },
+        { "id": "resolution_vote_names_resolution", "description": "resolution-vote collections need the winning resolution id.", "when": { "or": [ { "!": { "includes": [ { "var": "entry.data.resolution-vote.collections" }, { "var": "collection" } ] } }, { "==": [ { "typeof": [ { "var": "resolution_id" } ] }, "string" ] } ] } }
+      ],
+      "effects": [
+        { "id": "policy_of_collection", "description": "Which route governs the collection (null when uncovered).", "target": "proposal", "value": { "if": [
+          { "includes": [ { "var": "entry.data.vote-driven.collections" }, { "var": "collection" } ] }, "vote-driven",
+          { "includes": [ { "var": "entry.data.paper-only.collections" }, { "var": "collection" } ] }, "paper-only",
+          { "includes": [ { "var": "entry.data.rebalance-only.collections" }, { "var": "collection" } ] }, "rebalance-only",
+          { "includes": [ { "var": "entry.data.resolution-vote.collections" }, { "var": "collection" } ] }, "resolution-vote",
+          null
+        ] } },
+        { "id": "collections_covered", "description": "Number of collections some route covers.", "target": "proposal", "value": { "count": [ { "merge": [ { "var": "entry.data.vote-driven.collections" }, { "var": "entry.data.paper-only.collections" }, { "var": "entry.data.rebalance-only.collections" }, { "var": "entry.data.resolution-vote.collections" } ] } ] } },
+        { "id": "uncovered_collections", "description": "Known collection ids no route covers (empty with the canonical data).", "target": "proposal", "value": { "filter": [ [ "concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills", "classes", "characters", "creatures", "terrain_items", "game_modes", "contradictions", "sync_protocol", "hashgraph_events", "dimension_session", "governance" ], { "!": { "or": [
+          { "includes": [ { "root": "entry.data.vote-driven.collections" }, { "var": "" } ] },
+          { "includes": [ { "root": "entry.data.paper-only.collections" }, { "var": "" } ] },
+          { "includes": [ { "root": "entry.data.rebalance-only.collections" }, { "var": "" } ] },
+          { "includes": [ { "root": "entry.data.resolution-vote.collections" }, { "var": "" } ] }
+        ] } } ] } }
+      ],
+      "validation": [
+        { "id": "policy_names_unchanged", "description": "The four routes vote-driven / paper-only / rebalance-only / resolution-vote stay exactly.", "assert": { "and": [
+          { "==": [ { "count": [ { "keys": [ { "var": "proposal.data" } ] } ] }, 4 ] },
+          { "subset_of": [ { "keys": [ { "var": "proposal.data" } ] }, [ "vote-driven", "paper-only", "rebalance-only", "resolution-vote" ] ] }
+        ] } },
+        { "id": "collections_are_known_ids", "description": "Every listed collection is a known collection id.", "assert": { "subset_of": [ { "merge": [ { "var": "proposal.data.vote-driven.collections" }, { "var": "proposal.data.paper-only.collections" }, { "var": "proposal.data.rebalance-only.collections" }, { "var": "proposal.data.resolution-vote.collections" } ] }, [ "concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills", "classes", "characters", "creatures", "terrain_items", "game_modes", "contradictions", "sync_protocol", "hashgraph_events", "dimension_session", "governance" ] ] } },
+        { "id": "routes_disjoint", "description": "No collection is listed under two routes.", "assert": { "distinct": [ { "merge": [ { "var": "proposal.data.vote-driven.collections" }, { "var": "proposal.data.paper-only.collections" }, { "var": "proposal.data.rebalance-only.collections" }, { "var": "proposal.data.resolution-vote.collections" } ] } ] } },
+        { "id": "every_collection_covered", "description": "Every known collection has a write route.", "assert": { "subset_of": [ [ "concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills", "classes", "characters", "creatures", "terrain_items", "game_modes", "contradictions", "sync_protocol", "hashgraph_events", "dimension_session", "governance" ], { "merge": [ { "var": "proposal.data.vote-driven.collections" }, { "var": "proposal.data.paper-only.collections" }, { "var": "proposal.data.rebalance-only.collections" }, { "var": "proposal.data.resolution-vote.collections" } ] } ] } },
+        { "id": "every_route_has_policy_text", "description": "Each route documents its policy string.", "assert": { "none": [ { "values": [ { "var": "proposal.data" } ] }, { "!=": [ { "typeof": [ { "var": "policy" } ] }, "string" ] } ] } }
+      ]
+    }
+  }
+}

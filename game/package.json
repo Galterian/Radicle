@@ -9,7 +9,10 @@
     "peer": "node peer.mjs",
     "ui": "node ui-server.mjs",
     "radicle": "node radicle-adapter.mjs init",
-    "all": "node start-all.mjs"
+    "all": "node start-all.mjs",
+    "logic:check": "node tools/logic-check.mjs",
+    "logic:apply": "node tools/logic-apply.mjs",
+    "rebalance": "node tools/rebalance.mjs"
   },
   "dependencies": {
     "@chainsafe/libp2p-noise": "17.0.0",
@@ -21,6 +24,7 @@
     "@multiformats/multiaddr": "^13.0.3",
     "express": "4.21.1",
     "gun": "0.2020.1240",
+    "json-logic-js": "^2.0.5",
     "libp2p": "3.5.1",
     "ws": "8.18.0"
   }

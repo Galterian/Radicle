@@ -1,0 +1,270 @@
+{
+  "id": "abm_generic_manifest",
+  "version":  "0.27",
+  "schemaType": "manifest",
+  "schemaVersion": "1.0",
+  "description": "Manifest for processing ABM XML files",
+  "environment": "prod",
+  "routes": [
+    {
+      "name": "",
+      "type": "Normalizer",
+      "version": "1.0.0",
+      "normalization": {
+        "extractionFields": [
+          {
+            "name": "raw-xml",
+            "type": "string",
+            "method": "EntireXml"
+          },
+          {
+            "name": "html",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentSet/inlineXML/html/body",
+            "encoded": true
+          },
+          {
+            "name": "headline",
+            "type": "string",
+            "location": "//headline",
+            "encoded": true
+          },
+          {
+            "name": "language",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentMeta/language/@tag"
+          },
+          {
+            "name": "infoSource",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentMeta/infoSource[@role='isrol:origcont']/@qcode"
+          },
+          {
+            "name": "translated",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentMeta/infoSource[@role='isrol:translated']/@qcode"
+          },
+          {
+            "name": "chainnum",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/itemMeta/memberOf/@literal"
+          },
+          {
+            "name": "subjectCodes",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentMeta/subject",
+            "multiple": true,
+            "selector": {
+              "type": "Attribute",
+              "name": "qcode"
+            }
+          },
+          {
+            "name": "subjectTypes",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentMeta/subject",
+            "multiple": true,
+            "selector": {
+              "type": "Attribute",
+              "name": "type"
+            }
+          },
+          {
+            "name": "subjectWhys",
+            "type": "string",
+            "location": "//newsMessage/itemSet/newsItem/contentMeta/subject",
+            "multiple": true,
+            "selector": {
+              "type": "Attribute",
+              "name": "why"
+            }
+          }
+        ],
+        "rules": [{
+          "phaseName": "processingPhase",
+          "phaseRules": [
+            {
+              "targetProperty": "normalizerOutput",
+              "rule": {
+                "normalize-xml": [
+                  {"var": "content" },
+                  {"var": "extractionFields"}
+                ]
+              }
+            }]
+        }]
+      },
+      "routes": [
+        {
+          "name": "",
+          "type": "enricher",
+          "version": "1.0.0",
+          "enrichment": {
+            "rules": [
+              {
+                "phaseName": "processing",
+                "phaseRules": [
+                  {
+                    "targetProperty": "provider",
+                    "rule": {
+                      "if": [
+                        {"or": [
+                          {"==":[{"var": "infoSource"}, "abmprov:AGEFI"]},
+                          {"and": [
+                            {"==":[{ "var": "infoSource"}, "abmprov:DJ"]},
+                            {"==":[{ "var": "translated"}, "abmprov:AGEFI"]}
+                          ]}
+                        ]},
+                        "AGAB",
+                        {"or": [
+                          {"==":[{"var": "infoSource"}, "abmprov:ABMFN"]},
+                          {"and": [
+                            {"==":[{ "var": "infoSource"}, "abmprov:DJ"]},
+                            {"==":[{ "var": "translated"}, "abmprov:ABMFN"]}
+                          ]}
+                        ]},
+                        "ABM",
+                        {"or": [
+                          {"==":[{"var": "infoSource"}, "abmprov:ABMFN/FL"]},
+                          {"and": [
+                            {"==":[{ "var": "infoSource"}, "abmprov:DJ"]},
+                            {"==":[{ "var": "translated"}, "abmprov:ABMFN/FL"]}
+                          ]}
+                        ]},
+                        "ABM_F",
+                        ""
+                      ]}
+                  },
+                  {
+                    "targetProperty": "headline",
+                    "rule": {
+                      "tableparse":
+                      [
+                        { "body": { "var": "headline"} },
+                        { "content-type": { "const": "text"} },
+                        { "is-body": { "const": "false"} },
+                        { "arguments": { "const": "ADVPARAFMT=;FIXEDSUPPORT=;FNCSPCCMPR=;NOSPCCMPR=;PARSETYPE=pr;UTFEXT=pr;PADTHRESH=3.0;STRIPLEVEL=1"} },
+                        { "stylesheet": { "const": ""} },
+                        { "ignore-non-ascii": { "const": "false"} },
+                        { "query-set": { "const": ""} },
+                        { "response-types": { "const": "text"} }
+                      ]},
+                    "description": "Rule to send the headline content to table parse with the given parsing type"
+                  },
+                  {
+                    "targetProperty": "body",
+                    "rule": {"if": [{"!=": [{"var": "html"}, ""] },
+                      {
+                        "tableparse":
+                        [
+                          { "body": {"if": [
+                            {"==": [{"var": "provider"}, "AGAB"] },
+                            { "replace-range": [{ "var": "html" }, "<p><strong>", "</strong></p>", ""]},
+                            { "var": "html" }
+                          ]} },
+                          { "content-type": { "const": "html"} },
+                          { "is-body": { "const": "true"} },
+                          { "arguments": { "const": "ADVPARAFMT=;FIXEDSUPPORT=;FNCSPCCMPR=;NOSPCCMPR=;PARSETYPE=pr;UTFEXT=pr;PADTHRESH=3.0;STRIPLEVEL=1;RKWIDTH=80"} },
+                          { "stylesheet": { "const": ""} },
+                          { "ignore-non-ascii": { "const": "false"} },
+                          { "query-set": { "const": ""} },
+                          { "response-types": { "const": "text"} }
+                      ]},
+                      ""
+                    ]}
+                  },
+                  {
+                    "targetProperty": "headline",
+                    "rule": {"html-decode": { "var": "headline" }}
+                  },
+                  {
+                    "targetProperty": "body",
+                    "rule": {"html-decode": { "var": "body" }}
+                  },
+                  {
+                    "targetProperty": "body",
+                    "rule": {
+                      "replace": [
+                        {"replace": [
+                          {"replace": [ {"var": "body"}, "’", "'"] }, "“", "\""]}, "”", "\"" ]
+                    }
+                  },
+                  {
+                    "targetProperty": "headline",
+                    "rule": {"map-non-iso-symbols": { "var": "headline" }}
+                  },
+                  {
+                    "targetProperty": "body",
+                    "rule": {"map-non-iso-symbols": { "var": "body" }}
+                  },
+                  {
+                    "targetProperty": "body",
+                    "rule": {
+                      "replace": [{"var": "body"}, " -- ", " - " ]
+                    }
+                  },
+                  {
+                    "targetProperty": "this-property-is-not-used",
+                    "rule": {
+                      "process-abm": []
+                    }
+                  },
+                  {
+                    "targetProperty": "codelines",
+                    "rule": { "var": "nrs-codeline" }
+                  },
+                  {
+                    "targetProperty": "codelines",
+                    "rule": {
+                      "if": [
+                        {"and": [
+                          {"==":[{"var": "provider"}, "AGAB"]},
+                          { "in": [ "abmcode:agefi-djf1-curated", { "var": "raw-xml" } ]}
+                        ]},
+                        {"replace": [{"cat": [{"var": "codelines"}, " ", "P/AGTR"]}, "N/DJF1", ""]},
+                        {"var": "codelines"}
+                      ]}
+                  },
+                  {
+                    "targetProperty": "codelines",
+                    "rule": {
+                      "if": [
+                        { "in": [ "abmcode:abmfn-djd1-curated", { "var": "raw-xml" } ]},
+                        {"replace": [{"cat": [{"var": "codelines"}, " ", "P/AABM"]}, "N/DJD1", ""]},
+                        {"var": "codelines"}
+                      ]}
+                  }
+                ]
+              },
+              {
+                "phaseName": "outputs",
+                "phaseRules": [
+                  {
+                    "targetProperty": "headline",
+                    "rule": { "replace": [{ "var": "headline" }, "\n", " "] }
+                  },
+                  {
+                    "targetProperty": "codelines",
+                    "rule": { "var": "codelines" }
+                  },
+                  {
+                    "targetProperty": "servicecode",
+                    "rule": { "var": "service-code" }
+                  }
+                ]
+              }
+            ]
+          },
+          "routes": [
+            {
+              "name": "story",
+              "type": "producer",
+              "version": "1.0.0"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "date_modified": ""
+}
