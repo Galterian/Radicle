@@ -33,9 +33,15 @@ import { fancyLabel } from './js/names.js';
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
+// Assets live outside the game/ dir (schema + mapping JSON copied here, binary
+// Sprites/Sounds/Images symlinked to ../../warlords_battlecry_resources). The
+// browser renderer resolves resource paths quoted in data/*.json via /assets/.
+const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
 const LAUNCHER_MODE = process.env.LAUNCHER_MODE === '1';
 
-const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript;charset=utf-8', '.css':'text/css;charset=utf-8', '.json':'application/json;charset=utf-8' };
+const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript;charset=utf-8', '.css':'text/css;charset=utf-8', '.json':'application/json;charset=utf-8',
+  '.png':'image/png', '.bmp':'image/bmp', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.svg':'image/svg+xml',
+  '.wav':'audio/wav', '.ogg':'audio/ogg', '.mp3':'audio/mpeg' };
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
@@ -549,6 +555,10 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (p.startsWith('/data/')) return serve(path.join(DATA_DIR, p.slice('/data/'.length).replace(/\.\./g, '')));
+  // Resources quoted in data/*.json (sprites + sounds, mapping files, schema).
+  // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
+  // readFile follows them, and the path-traversal check happens before.
+  if (p.startsWith('/assets/')) return serve(path.join(ASSETS_DIR, p.slice('/assets/'.length).replace(/\.\./g, '')));
   const rel = p === '/' ? '/index.html' : p;
   const abs = path.join(__dirname, rel.replace(/\.\./g, ''));
   if (!abs.startsWith(__dirname)) { res.writeHead(403); return res.end('forbidden'); }

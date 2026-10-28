@@ -4,122 +4,576 @@
     {
       "id": "action_attack",
       "name": "Attack",
-      "tags": ["basic"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["action_block", "action_posture", "action_move"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "A", "text": "Aggression in all forms toward its goal. Dimensions does not track weapon type; attack skills specify weapon uniqueness.", "rps_wins_against": ["P"], "rps_loses_against": ["B"], "can_cast_non_instant_effects": false, "targets_enemy": true, "targets_tile": false }
-      }]
+      "tags": [
+        "basic"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "generic melee hit sounds (pick randomly) + battle marker",
+        "confidence": "high",
+        "wbc3_name": "Crossed burning swords icon (battle marker)",
+        "wbc3_code": "EEBX",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sword.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Whack.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Attack00.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Attack01.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Attack02.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_block",
+            "action_posture",
+            "action_move"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "A",
+            "text": "Aggression in all forms toward its goal. Dimensions does not track weapon type; attack skills specify weapon uniqueness.",
+            "rps_wins_against": [
+              "P"
+            ],
+            "rps_loses_against": [
+              "B"
+            ],
+            "can_cast_non_instant_effects": false,
+            "targets_enemy": true,
+            "targets_tile": false
+          }
+        }
+      ]
     },
     {
       "id": "action_block",
       "name": "Block",
-      "tags": ["basic"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["action_attack", "action_move"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "B", "text": "Any defensive action. Deals 1 damage to each enemy who attacked you. Does not target.", "rps_wins_against": ["A"], "rps_loses_against": ["M"], "can_cast_non_instant_effects": false, "targets_enemy": false, "targets_tile": false }
-      }]
+      "tags": [
+        "basic"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "shield clang + shield gem icon",
+        "confidence": "high",
+        "wbc3_name": "Shieldgem icons in 8 player colours",
+        "wbc3_code": "ESHD",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Shieldgem icons in 8 player colours/Shieldgem icons in 8 player colours - idle [ESHD].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Clank.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_attack",
+            "action_move"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "B",
+            "text": "Any defensive action. Deals 1 damage to each enemy who attacked you. Does not target.",
+            "rps_wins_against": [
+              "A"
+            ],
+            "rps_loses_against": [
+              "M"
+            ],
+            "can_cast_non_instant_effects": false,
+            "targets_enemy": false,
+            "targets_tile": false
+          }
+        }
+      ]
     },
     {
       "id": "action_move",
       "name": "Move",
-      "tags": ["basic"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["action_block", "action_posture"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "M", "text": "Body movement and / or movement on the tileset. One tile per Move. Move skills describe maneuver or body interaction.", "rps_wins_against": ["B"], "rps_loses_against": ["P"], "can_cast_non_instant_effects": false, "targets_enemy": true, "targets_tile": true }
-      }]
+      "tags": [
+        "basic"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "footsteps + footprints along the hex path",
+        "confidence": "high",
+        "wbc3_name": "Footprints small ground marks",
+        "wbc3_code": "EDFS",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Footprints small ground marks/Footprints small ground marks - idle [EDFS].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Walk.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/FastWalk.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_block",
+            "action_posture"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "M",
+            "text": "Body movement and / or movement on the tileset. One tile per Move. Move skills describe maneuver or body interaction.",
+            "rps_wins_against": [
+              "B"
+            ],
+            "rps_loses_against": [
+              "P"
+            ],
+            "can_cast_non_instant_effects": false,
+            "targets_enemy": true,
+            "targets_tile": true
+          }
+        }
+      ]
     },
     {
       "id": "action_posture",
       "name": "Posture",
-      "tags": ["basic", "casting"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["action_move", "action_attack"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "P", "text": "Mental states, waiting / skill / effect / aiming. Only during Posture can non-instant effects be made. Posture skills impact enemy mentally.", "rps_wins_against": ["M"], "rps_loses_against": ["A"], "can_cast_non_instant_effects": true, "targets_enemy": false, "targets_tile": false }
-      }]
+      "tags": [
+        "basic",
+        "casting"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "faint rings while concentrating/casting",
+        "confidence": "medium",
+        "wbc3_name": "Spell effect faint rings",
+        "wbc3_code": "EZ14",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_move",
+            "action_attack"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "P",
+            "text": "Mental states, waiting / skill / effect / aiming. Only during Posture can non-instant effects be made. Posture skills impact enemy mentally.",
+            "rps_wins_against": [
+              "M"
+            ],
+            "rps_loses_against": [
+              "A"
+            ],
+            "can_cast_non_instant_effects": true,
+            "targets_enemy": false,
+            "targets_tile": false
+          }
+        }
+      ]
     },
     {
       "id": "action_empty_posture",
       "name": "Empty Posture",
-      "tags": ["basic", "empty"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["action_empty_move"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "EP", "text": "No action card played; can still cast effects. Doesn't gain Posture's benefits. Can be converted to Empty Move (declared first). Always returns to hand after resolution.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": true, "targets_enemy": false, "targets_tile": false }
-      }]
+      "tags": [
+        "basic",
+        "empty"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "soft UI pad sound (no card played)",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Pad.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_empty_move"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "EP",
+            "text": "No action card played; can still cast effects. Doesn't gain Posture's benefits. Can be converted to Empty Move (declared first). Always returns to hand after resolution.",
+            "rps_wins_against": [],
+            "rps_loses_against": [],
+            "can_cast_non_instant_effects": true,
+            "targets_enemy": false,
+            "targets_tile": false
+          }
+        }
+      ]
     },
     {
       "id": "action_empty_move",
       "name": "Empty Move",
-      "tags": ["basic", "empty"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["action_empty_posture"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "EM", "text": "Special way of playing Empty Posture; declared first; moves character halfway toward target tile.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": true, "targets_enemy": false, "targets_tile": true }
-      }]
+      "tags": [
+        "basic",
+        "empty"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "half-step footsteps",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Walk.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "action_empty_posture"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "EM",
+            "text": "Special way of playing Empty Posture; declared first; moves character halfway toward target tile.",
+            "rps_wins_against": [],
+            "rps_loses_against": [],
+            "can_cast_non_instant_effects": true,
+            "targets_enemy": false,
+            "targets_tile": true
+          }
+        }
+      ]
     },
     {
       "id": "action_combo",
       "name": "Combo (meta)",
-      "tags": ["meta"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": [],
-        "vote_log": [], "notes": "",
-        "data": { "code": "COMBO", "text": "Character-card-defined sequence; completing it with enemy contact grants +1 bonus damage.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": false }
-      }]
+      "tags": [
+        "meta"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "floating damage digits for the +1 combo bonus",
+        "confidence": "medium",
+        "wbc3_name": "Digit glyphs 0-9 (floating numbers)",
+        "wbc3_code": "ERNX",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Digit glyphs 0-9 (floating numbers)/Digit glyphs 0-9 (floating numbers) - idle [ERNX].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/xp.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/GainedLevel.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "COMBO",
+            "text": "Character-card-defined sequence; completing it with enemy contact grants +1 bonus damage.",
+            "rps_wins_against": [],
+            "rps_loses_against": [],
+            "can_cast_non_instant_effects": false
+          }
+        }
+      ]
     },
     {
       "id": "action_trade",
       "name": "Trade (meta)",
-      "tags": ["meta"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["rule_14"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "TRADE", "text": "Spend an action to swap archives with an adjacent character moving toward you.", "rps_wins_against": [], "rps_loses_against": [], "can_cast_non_instant_effects": false }
-      }]
+      "tags": [
+        "meta"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "WBC3 merchant sound + item icons",
+        "confidence": "medium",
+        "wbc3_name": "Dialoginventory icon sheet (many small item icons)",
+        "wbc3_code": "IDLG",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Dialoginventory icon sheet (many small item icons)/Dialoginventory icon sheet (many small item icons) - idle [IDLG].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/merchant.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_14"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "TRADE",
+            "text": "Spend an action to swap archives with an adjacent character moving toward you.",
+            "rps_wins_against": [],
+            "rps_loses_against": [],
+            "can_cast_non_instant_effects": false
+          }
+        }
+      ]
     },
     {
       "id": "action_enter_dimension",
       "name": "Enter Dimension (meta)",
-      "tags": ["meta", "transition"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["rule_0_setup"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "ENTER", "text": "Drop onto starting tile; counts as a Move action; Instants may be cast during entry.", "rps_wins_against": [], "rps_loses_against": [] }
-      }]
+      "tags": [
+        "meta",
+        "transition"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "arrival pillar of light on the starting tile",
+        "confidence": "medium",
+        "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)",
+        "wbc3_code": "EZ09",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Embark.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Land.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "rule_0_setup"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "ENTER",
+            "text": "Drop onto starting tile; counts as a Move action; Instants may be cast during entry.",
+            "rps_wins_against": [],
+            "rps_loses_against": []
+          }
+        }
+      ]
     },
     {
       "id": "action_travel_door",
       "name": "Travel through Dimension Door (meta)",
-      "tags": ["meta", "transition"],
-      "versions": [{
-        "version": "1.0.0", "weight": 1.0, "status": "canonical", "origin": "paper_rules",
-        "author_peer_id": "", "created_at": "2026-10-19", "parent_version": null,
-        "rebalance_links": ["item_dimension_door"],
-        "vote_log": [], "notes": "",
-        "data": { "code": "DOOR", "text": "Immediate with ally agreement; otherwise channel 'dimension value' rounds to open.", "rps_wins_against": [], "rps_loses_against": [] }
-      }]
+      "tags": [
+        "meta",
+        "transition"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "WBC3 Black Portal as the dimension door",
+        "confidence": "medium",
+        "wbc3_name": "Black Portal",
+        "wbc3_code": "BMBP",
+        "wbc3_race": "Neutral",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Disembark.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Fade.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
+      "versions": [
+        {
+          "version": "1.0.0",
+          "weight": 1,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-10-19",
+          "parent_version": null,
+          "rebalance_links": [
+            "item_dimension_door"
+          ],
+          "vote_log": [],
+          "notes": "",
+          "data": {
+            "code": "DOOR",
+            "text": "Immediate with ally agreement; otherwise channel 'dimension value' rounds to open.",
+            "rps_wins_against": [],
+            "rps_loses_against": []
+          }
+        }
+      ]
     }
   ]
 }
