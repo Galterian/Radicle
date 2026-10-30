@@ -38,10 +38,17 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #stage { width: 100%; height: 100%; background: #080a10; border: 1px solid #1a1f29; border-radius: 6px; display: block; cursor: crosshair; }
 #stage.panning { cursor: grabbing; }
 
-#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+/* Flex column with no outer scroll — the roster takes its natural size at the
+   top and the event log fills the rest; #log carries overflow-y so it scrolls
+   on its own clock while the roster stays pinned above it. If #panel also
+   scrolled, the whole stack would scroll as one and push the log off-screen
+   below a long roster. */
+#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
 #panel small { color: #566379; font-weight: 400; }
-#roster { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
+/* Roster takes at most ~55% of the panel so a long cast list never pushes the
+   event log off-screen. Scrolls on its own when it exceeds that. */
+#roster { display: flex; flex-direction: column; gap: 6px; flex: 0 1 auto; max-height: 55%; overflow-y: auto; }
 .ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; }
 .ros:hover { background: #1a2130; }
 .ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
@@ -72,7 +79,11 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #log-filter-chip button { background: #a08eff22; border: 0; color: #d7cfff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; padding: 0; }
 #log-filter-chip button:hover { background: #a08eff44; }
 
-#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* Scrolls on its own; min-height keeps a floor so the log is always visible
+   below the roster even when the roster is at its 55% cap. New rows prepend
+   at the top, so scrolling down reaches turn 1 — the full history is capped
+   at 120 rows (see logUI). */
+#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 auto; min-height: 160px; overflow-y: auto; }
 #log li { padding: 2px 4px; border-left: 2px solid #333; margin: 2px 0; color: #9ab0cc; word-break: break-word; }
 #log li[hidden] { display: none; }
 #log li.evt { border-color: #5e7eb5; }
@@ -529,6 +540,106 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
   display: flex; flex-direction: column; gap: 4px; max-width: 260px;
 }
 
+/* --- Element emission overlay ----------------------------------------- */
+/* Vanishing chip above a unit the moment it emits an element (Posture /
+   Reaver Attack / Monk Move / Rule-24 destroy). Fades on its own clock
+   driven by renderElementEmitOverlay(). */
+#element-emit-layer {
+  position: fixed; inset: 0; z-index: 29; pointer-events: none;
+}
+.element-emit-overlay {
+  --ee-tint: #9bb3d6;
+  position: fixed;
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px 3px 4px;
+  background: #0b0d12e6;
+  border: 1px solid var(--ee-tint);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px #000a, 0 0 10px color-mix(in srgb, var(--ee-tint) 45%, transparent);
+  max-width: 220px;
+  transition: opacity .12s ease;
+  will-change: transform, opacity;
+}
+.element-emit-overlay .ee-icon {
+  width: 24px; height: 24px; object-fit: cover; object-position: 0 50%;
+  border-radius: 50%;
+  background: #0b0d12;
+  border: 1px solid var(--ee-tint);
+  image-rendering: pixelated;
+}
+.element-emit-overlay .ee-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #0b0d12; color: var(--ee-tint);
+  border: 1px solid var(--ee-tint);
+  font-size: 14px; line-height: 1;
+}
+.element-emit-overlay .ee-body { min-width: 0; }
+.element-emit-overlay .ee-name {
+  font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: var(--ee-tint);
+  text-shadow: 0 1px 2px #000;
+}
+.element-emit-overlay .ee-sub {
+  font: 400 10px/1.25 ui-sans-serif, system-ui, sans-serif;
+  color: #c8d4e3;
+  margin-top: 1px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- Feature-consumed overlay ----------------------------------------- */
+/* A larger card than the element badge: it's a one-shot pickup, so we take
+   the moment to show the building icon, its name/kind, the description, and
+   a "consumed" tag before it fades out and the sprite disappears from the
+   hex. Positioned above the hex by renderFeatureVanishOverlay(). */
+#feature-vanish-layer {
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+}
+.feature-vanish-overlay {
+  position: fixed;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 10px 6px 6px;
+  background: #0b0d12ee;
+  border: 1px solid #c9a56a;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px #000b, 0 0 14px #c9a56a55;
+  max-width: 260px;
+  transform-origin: 50% 100%;
+  transition: opacity .12s ease;
+  will-change: transform, opacity;
+}
+.feature-vanish-overlay .fv-icon {
+  width: 48px; height: 48px; object-fit: contain; object-position: 50% 50%;
+  background: #080a10; border: 1px solid #2a3448; border-radius: 4px;
+  image-rendering: pixelated;
+}
+.feature-vanish-overlay .fv-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: 4px;
+  background: #080a10; border: 1px solid #2a3448;
+  color: #c9a56a; font-size: 28px; line-height: 1;
+}
+.feature-vanish-overlay .fv-body { min-width: 0; flex: 1 1 auto; }
+.feature-vanish-overlay .fv-name {
+  font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: #ffe6b0; text-shadow: 0 1px 2px #000;
+}
+.feature-vanish-overlay .fv-name .fv-kind { color: #8aa0bf; font-weight: 400; }
+.feature-vanish-overlay .fv-desc {
+  font: 400 10px/1.3 ui-sans-serif, system-ui, sans-serif;
+  color: #c8d4e3;
+  margin-top: 3px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.feature-vanish-overlay .fv-done {
+  margin-top: 4px;
+  font: 700 9px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: #78b56a;
+}
+
 /* --- Deck slot: skill icon alongside the always-visible rule line ------ */
 .slot .card .skill-slot-icon {
   position: absolute; right: 4px; top: 20px;
@@ -559,6 +670,21 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #object-card .oc-body { flex: 1 1 auto; min-width: 0; }
 #object-card .oc-name { font-weight: 600; font-size: 13px; color: #e8ecf1; padding-right: 18px; }
 #object-card .oc-kind { color: #8aa0bf; margin-top: 2px; text-transform: lowercase; }
+#object-card .oc-stats { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#object-card .oc-stats[hidden] { display: none; }
+#object-card .oc-pill {
+  display: inline-flex; align-items: center;
+  padding: 1px 7px; border-radius: 10px;
+  font: 600 10px/1.3 ui-monospace, Consolas, monospace;
+  background: #0b0d12; color: #c8d4e3; border: 1px solid #2a3448;
+}
+#object-card .oc-pill.elem {
+  --pill-tint: #78b56a;
+  color: var(--pill-tint); border-color: var(--pill-tint);
+  background: color-mix(in srgb, var(--pill-tint) 10%, #0b0d12);
+}
+#object-card .oc-pill.hp { color: #ffe6b0; border-color: #4a3a1f; background: #1a1409; }
+#object-card .oc-pill.thresh { color: #e3a04a; border-color: #4a301f; background: #1a0f09; }
 #object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; }
 #object-card .oc-coords { color: #6a7a92; margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
 #object-card .oc-close {

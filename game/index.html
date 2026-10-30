@@ -110,6 +110,17 @@
        clicks. -->
   <div id="skill-reveal-layer"></div>
 
+  <!-- Element emission overlay: a small vanishing chip above a unit the moment
+       it emits an element. Icon + name + one-line "what this element does"
+       helper. Populated by state.ui.emitBadges from the reveal payload. -->
+  <div id="element-emit-layer"></div>
+
+  <!-- Feature-consumed overlay: when a unit steps onto a map building /
+       landmark, the icon + its description rise and fade away as the building
+       is marked consumed. Populated by maybeConsumeFeature(); renderer stops
+       drawing the hex's sprite via features.js markFeatureConsumed(). -->
+  <div id="feature-vanish-layer"></div>
+
   <!-- Map-object info: left-click a hex holding a building / landmark / scatter
        (and no unit) to open; Esc or a click elsewhere closes. -->
   <div id="object-card" hidden>
@@ -118,6 +129,7 @@
     <div class="oc-body">
       <div class="oc-name"></div>
       <div class="oc-kind"></div>
+      <div class="oc-stats" hidden></div>
       <div class="oc-desc"></div>
       <div class="oc-coords"></div>
     </div>

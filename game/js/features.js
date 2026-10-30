@@ -25,6 +25,18 @@ const listeners = new Set();
 export function onFeaturesChanged(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function notify() { for (const fn of listeners) { try { fn(); } catch { /* ignore */ } } }
 
+// Client-local "stepped on, picked up" bookkeeping. featureAt early-returns
+// null for a hex marked consumed so the renderer stops drawing the sprite and
+// no further object cards surface for it. Deterministic parity with Godot is
+// unaffected — the resolver never sees this set.
+const _consumed = new Set();   // "q,r"
+export function markFeatureConsumed(q, r) {
+  _consumed.add(`${q},${r}`);
+  notify();
+}
+export function isFeatureConsumed(q, r) { return _consumed.has(`${q},${r}`); }
+export function clearConsumedFeatures() { _consumed.clear(); notify(); }
+
 export function loadFeatures() {
   if (!loading) {
     loading = fetch('/assets/features/feature_table.json')
@@ -86,6 +98,7 @@ function isCandidate(seed, q, r, biomeAt) {
 // derive it from biomeFor(seedHex).
 export function featureAt(seedHex, q, r, biomeAt = null) {
   if (!catalog) return null;
+  if (_consumed.has(`${q},${r}`)) return null;
   const bAt = biomeAt || biomeFor(seedHex).biomeAt;
   if (!isCandidate(seedHex, q, r, bAt)) return null;
   const bt = bAt(q, r);
