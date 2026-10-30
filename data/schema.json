@@ -6,9 +6,7 @@
     "id": "stable kebab-case id, unique across the collection; never reused",
     "collection": "which top-level file this entry lives in (see index.json collections)",
     "name": "human-readable name",
-    "tags": [
-      "optional free-form tags used by the rebalance script to find related entries"
-    ],
+    "tags": ["optional free-form tags used by the rebalance script to find related entries"],
     "versions": [
       {
         "version": "semver-ish string; v1.0.0 is the paper-rules original",
@@ -18,18 +16,8 @@
         "author_peer_id": "Radicle peer id of the proposer; empty for paper_rules",
         "created_at": "ISO-8601 date",
         "parent_version": "the version this one derives from, or null if root",
-        "rebalance_links": [
-          "list of entity ids that are mechanically coupled; if the rebalance script bumps this entry it will propose counter-balance deltas on these"
-        ],
-        "vote_log": [
-          {
-            "peer_id": "signed-vote author",
-            "signal": "+1 | -1 | abstain",
-            "weight_contribution": "float; signed to add/subtract from weight",
-            "signed_at": "ISO-8601",
-            "signature": "detached signature over {entry_id, version, signal}"
-          }
-        ],
+        "rebalance_links": ["list of entity ids that are mechanically coupled; if the rebalance script bumps this entry it will propose counter-balance deltas on these"],
+        "vote_log": [{"peer_id": "signed-vote author", "signal": "+1 | -1 | abstain", "weight_contribution": "float; signed to add/subtract from weight", "signed_at": "ISO-8601", "signature": "detached signature over {entry_id, version, signal}"}],
         "notes": "optional free-form rationale from the proposer",
         "data": "the actual mechanical payload; shape depends on the collection",
         "logic": {

@@ -121,9 +121,40 @@ export function activeVersion(entry) {
 }
 // Serialise like the repo does: 2-space JSON, integer weights as x.0, and the
 // file's own line ending (the data files are committed with CRLF).
+// JsonLogic is "pseudo-minimised" (user request 2026-10-30): every rule block
+// (`{id, description, when|assert|value…}`), every named rule `logic`, every
+// `examples` row, `references` / `tags` / `colors` lists and any object under
+// a `when` / `assert` / `value` / `logic` key is written on ONE line, so a
+// block reads as one rule per line; the surrounding structure keeps the
+// 2-space layout and no opening bracket ever sits alone on a line.
+const ONE_LINE_KEYS = new Set(['when', 'assert', 'value', 'logic', 'params', 'args', 'rebalance_links', 'vote_log', 'tags', 'colors', 'references', 'element_cost', 'effect_types', 'combo', 'stats', 'requires_permanents', 'dice', 'yields', 'requirement', 'resources']);
+const isRuleBlock = (v) => v && typeof v === 'object' && !Array.isArray(v) && typeof v.id === 'string' && ('when' in v || 'assert' in v || 'value' in v || 'expect' in v);
+const isExample = (v) => v && typeof v === 'object' && !Array.isArray(v) && 'args' in v && 'expect' in v;
+export function compactJson(value, indent = 0, key = null) {
+  const pad = ' '.repeat(indent);
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (key !== null && ONE_LINE_KEYS.has(key) && key !== 'logic') return oneLine(value);
+  if (key === 'logic' && !('description' in value && ('prerequisites' in value || 'effects' in value || 'validation' in value))) return oneLine(value);
+  if (isRuleBlock(value) || isExample(value)) return oneLine(value);
+  if (Array.isArray(value)) {
+    if (!value.length) return '[]';
+    if (value.every(v => v === null || typeof v !== 'object')) return oneLine(value);
+    return `[\n${value.map(v => `${pad}  ${compactJson(v, indent + 2, null)}`).join(',\n')}\n${pad}]`;
+  }
+  const keys = Object.keys(value);
+  if (!keys.length) return '{}';
+  return `{\n${keys.map(k => `${pad}  ${JSON.stringify(k)}: ${compactJson(value[k], indent + 2, k)}`).join(',\n')}\n${pad}}`;
+}
+// One line with a space after `:` and `,` so a long rule still scans (a real
+// serialiser, not a regex over the JSON text — descriptions may contain `,{`).
+const oneLine = (v) => {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(oneLine).join(', ')}]`;
+  return `{${Object.keys(v).map(k => `${JSON.stringify(k)}: ${oneLine(v[k])}`).join(', ')}}`;
+};
 export function writeDataFile(file, json) {
   const prev = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-  let text = JSON.stringify(json, null, 2).replace(/("weight(?:_contribution)?": )(-?\d+)(,?)$/gm, '$1$2.0$3') + '\n';
+  let text = compactJson(json).replace(/("weight(?:_contribution)?": )(-?\d+)(,?)$/gm, '$1$2.0$3') + '\n';
   if (prev.includes('\r\n')) text = text.replace(/\n/g, '\r\n');
   fs.writeFileSync(file, text);
 }

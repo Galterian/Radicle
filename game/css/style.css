@@ -313,6 +313,20 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #perms .perm.clickable:hover { outline: 1px solid #ffe66e; }
 #perms .perm.active { background: #ffe66e; color: #0b0d12; }
 #perms .perm.active .cd, #perms .perm.active .k { color: #3a3a1a; }
+/* Class cards (user ruling 2026-10-30): one chip per colour (stat group); struck-down colours en-gray. */
+.chip { display: inline-block; min-width: 11px; padding: 1px 3px; margin-left: 2px; border-radius: 3px; font: 600 8px/1 ui-monospace, Menlo, Consolas, monospace; color: #0b0d12; vertical-align: middle; }
+.chip.vitality { background: #6ad99f; } .chip.world { background: #6a9ce3; } .chip.matter { background: #e36666; } .chip.will { background: #d08ae0; }
+.chip.down, .pill.cls.archived .chip { background: #3a3f4a; color: #7b8291; text-decoration: line-through; }
+.chip.done { opacity: 0.45; }
+.chip.clickable { cursor: pointer; outline: 1px solid transparent; }
+.chip.clickable:hover { outline-color: #ffe66e; }
+.chip.armed { outline: 2px solid #ffe66e; }
+.chip.active { background: #ffe66e; color: #0b0d12; }
+.ros .stats .pill.cls { border-color: #e3c36a; color: #f0dca0; font-weight: 400; }
+.ros .stats .pill.cls.archived { color: #7b8291; border-color: #3a3f4a; }
+#perms .perm.class-card { border-color: #8f7a2a; background: linear-gradient(180deg, #2a2416 0%, #1a160f 100%); min-width: 74px; }
+#perms .perm.class-card.recast, #perms .perm.class-card.untap { border-style: dashed; }
+#perms .perm.class-card .chips { margin-top: 4px; }
 
 /* Haste: picking the bonus round tints the hand; cards already committed to it are held. */
 #slots.haste-mode .slot:not(.disabled) .card { box-shadow: 0 0 0 1px #ffe66e inset; }
