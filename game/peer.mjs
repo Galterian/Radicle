@@ -3652,6 +3652,32 @@ async function doResolution() {
   // tile) so the floater can lerp from actor → aim like damage does; omitted
   // for self-only actions (Block, Posture, Empty Posture).
   const actionSummary = [];
+  // Which element (if any) the action pushes out this tick. The UI uses this
+  // for the vanishing emit-badge overlay. Postures emit their effect's current
+  // step; a Rule-24 destroy emits the primary element of the chosen stat; an
+  // Attack/Move that emits (Reaver, Monk) falls back to the actor's adept
+  // element. Everything else returns null and no badge is drawn.
+  const emittedElementFor = (actorId, source) => {
+    const eff = source?.effect;
+    if (eff && Array.isArray(eff.elements) && eff.elements.length) {
+      const step = Math.max(1, eff.step ?? 1);
+      return eff.elements[Math.min(step, eff.elements.length) - 1] || null;
+    }
+    const d = source?.destroy;
+    if (d && d.stat) {
+      const statEntry = data.stats?.[`stat_${d.stat}`] || data.stats?.[d.stat];
+      const list = statEntry?.data?.elements || statEntry?.elements;
+      if (Array.isArray(list) && list.length) return list[0];
+    }
+    const act = source?.action;
+    const trance = Array.isArray(source?.trance) ? source.trance : null;
+    const anyEmit = (trance ? trance : [act]).some(c => c === 'P' || c === 'EP' || c === 'A' || c === 'M');
+    if (!anyEmit) return null;
+    const a = view.get(actorId);
+    const srcId = a?.source_id || a?.character_id || a?.creature_id;
+    const entry = srcId ? (data.characters?.[srcId] || data.creatures?.[srcId]) : null;
+    return entry?.data?.adept_element || null;
+  };
   for (const b of bonusRuns) {
     const actor = view.get(b.actor);
     if (!actor) continue;
@@ -3661,6 +3687,7 @@ async function doResolution() {
     actionSummary.push({
       actor: b.actor, action: bb.action, declared: bb.action, skills: bb.skills || [], bonus: true, bonus_k: b.seq, pre: !!b.pre,
       effects: bb.effect ? [{ effect_id: bb.effect.effect_id, name: bb.effect.name, elements: bb.effect.elements || [] }] : [],
+      emitted_element: emittedElementFor(b.actor, bb),
       trance: bb.trance || null, played: b.res.byActor.get(b.actor)?.played ? [...b.res.byActor.get(b.actor).played].sort() : null,
       from_q: actor.tile_q, from_r: actor.tile_r, target_q: aim?.q, target_r: aim?.r,
     });
@@ -3675,6 +3702,7 @@ async function doResolution() {
     actionSummary.push({
       actor: r.actor, action: r.action, declared: r.declared ?? r.action, skills: r.skills || [],
       effects: r.effect ? [{ effect_id: r.effect.effect_id, name: r.effect.name, elements: r.effect.elements || [] }] : [],
+      emitted_element: emittedElementFor(r.actor, r),
       trance: r.trance || null, played: r.trance ? [...r.played].sort() : null,
       from_q: actor.tile_q, from_r: actor.tile_r,
       target_q: aim?.q, target_r: aim?.r,

@@ -6,7 +6,7 @@ import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
-import { featureAt } from './features.js';
+import { featureAt, markFeatureConsumed, isFeatureConsumed } from './features.js';
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack } from './skill_card.js';
@@ -54,6 +54,12 @@ const entityExtraById = new Map();
 // info-sheet path; description is the long-form logic text from the active
 // version (abbreviated at render time).
 const classById = new Map();
+// Element catalog, keyed by element id (e.g. "elem_fire"). Used by the
+// vanishing emit-badge overlay above each unit the moment it emits an element,
+// and by hover-card chip tints. Short description is clipped from the active
+// version's logic.description before ", powered by …" — the opening clause is
+// the human sentence; the rest is rule machinery.
+const elementById = new Map();
 let _entityExtraReady = false;
 const _entityListeners = new Set();
 function _notifyEntityExtra() { for (const fn of _entityListeners) { try { fn(); } catch { /* ignore */ } } }
@@ -71,7 +77,8 @@ Promise.all([
   fetch('/data/characters.json').then(r => r.ok ? r.json() : null).catch(() => null),
   fetch('/data/creatures.json').then(r => r.ok ? r.json() : null).catch(() => null),
   fetch('/data/classes.json').then(r => r.ok ? r.json() : null).catch(() => null),
-]).then(([chars, mons, classes]) => {
+  fetch('/data/elements.json').then(r => r.ok ? r.json() : null).catch(() => null),
+]).then(([chars, mons, classes, elements]) => {
   for (const doc of [chars, mons]) {
     for (const e of doc?.entries || []) {
       if (!e || !e.id) continue;
@@ -115,9 +122,60 @@ Promise.all([
       infoPath: sprites.info?.path || null,
     });
   }
+  for (const e of elements?.entries || []) {
+    if (!e || !e.id) continue;
+    const ver = activeVersionLocal(e) || {};
+    const data = ver.data || {};
+    const logic = ver.logic || {};
+    const res = e.resources || {};
+    const sprites = res.sprites || {};
+    const descRaw = typeof logic.description === 'string' ? logic.description : '';
+    // The sentence reads "X element (hint), powered by stat_Y: emitted …" —
+    // clip at the first ", powered by" (or first full stop) for a one-line
+    // overlay sub-caption. Falls back to the element name.
+    let short = descRaw.split(/, powered by/)[0];
+    short = short.split(/\.(?=\s|$)/)[0].trim();
+    if (!short) short = e.name || e.id.replace(/^elem_/, '');
+    elementById.set(e.id, {
+      id: e.id,
+      name: e.name || e.id.replace(/^elem_/, ''),
+      colorHint: data.color_hint || '',
+      stat: data.stat || null,
+      tags: Array.isArray(e.tags) ? e.tags.slice() : [],
+      shortDesc: short,
+      // Prefer a UI info sprite (clean single frame) over the full idle sheet.
+      iconPath: res.icon?.path || sprites.info?.path || sprites.effect?.path || null,
+    });
+  }
   _entityExtraReady = true;
   _notifyEntityExtra();
 }).catch(() => { /* best-effort */ });
+
+// Color per element color_hint. Falls back to parsing the first word of the
+// hint. Used both by the vanishing emit badge border and by hover chips so a
+// unit's live element reads at a glance.
+function elementTint(colorHint) {
+  const m = {
+    'red-flesh': '#d6565a', 'orange-red': '#ff8847', 'cyan-ice': '#6bd4e3',
+    'yellow-gold': '#f0c861', 'blue-sea': '#5a9cd6', 'green-earth': '#78b56a',
+    'violet-mind': '#a08eff', 'gray-mist': '#aab2bd', 'black-void': '#2c2e38',
+    'white-light': '#eef4ff', 'brown-earth': '#8a6a3a', 'silver-time': '#c7d1dc',
+    'gold-harmony': '#f6d774', 'purple-souls': '#a08eff',
+  };
+  if (m[colorHint]) return m[colorHint];
+  const lower = (colorHint || '').toLowerCase();
+  if (/red|flesh/.test(lower)) return '#d6565a';
+  if (/orange/.test(lower)) return '#ff8847';
+  if (/yellow|gold/.test(lower)) return '#f0c861';
+  if (/green|earth/.test(lower)) return '#78b56a';
+  if (/blue|sea|water/.test(lower)) return '#5a9cd6';
+  if (/cyan|ice/.test(lower)) return '#6bd4e3';
+  if (/violet|purple|mind|soul/.test(lower)) return '#a08eff';
+  if (/white|silver|light/.test(lower)) return '#eef4ff';
+  if (/brown/.test(lower)) return '#8a6a3a';
+  if (/gray|grey|mist/.test(lower)) return '#aab2bd';
+  return '#9bb3d6';
+}
 
 const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -343,7 +401,10 @@ function logUI(text, kind = 'evt', opts = null) {
   }
   const log = document.getElementById('log');
   log.prepend(li);
-  while (log.children.length > 120) log.lastChild.remove();
+  // Keep enough history that the user can scroll back to turn 1 of the match.
+  // ~2000 lines is still cheap DOM-wise; the roster + log live in a scrolling
+  // panel so the browser only paints the visible slice anyway.
+  while (log.children.length > 2000) log.lastChild.remove();
   applyLogFilterRow(li);
 }
 
@@ -1138,6 +1199,64 @@ function renderRevealOverlay() {
   }
 }
 
+// Element emission overlay — a small chip with the element's icon, name and a
+// one-line description that rises above the unit and fades out. Reads
+// state.ui.emitBadges set by the reveal handler; shares its clock pattern
+// with renderRevealOverlay() so motion is consistent.
+const _emitEls = new Map();
+function renderElementEmitOverlay() {
+  const layer = document.getElementById('element-emit-layer');
+  const canvas = document.getElementById('stage');
+  if (!layer || !canvas || !rendererRef) return;
+  const now = performance.now();
+  const badges = state.ui.emitBadges || {};
+  const rect = canvas.getBoundingClientRect();
+  const z = rendererRef.zoom();
+  const origin = rendererRef.toWorld(0, 0);
+  const liveIds = new Set();
+  for (const [pid, badge] of Object.entries(badges)) {
+    if (!badge) continue;
+    const t = (now - badge.startAt) / badge.duration;
+    if (t <= 0 || t >= 1) continue;
+    const el = elementById.get(badge.element);
+    if (!el) continue;
+    const e = state.entities.find(x => x.peer_id === pid);
+    if (!e || !Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    liveIds.add(pid);
+    let node = _emitEls.get(pid);
+    if (!node || node.dataset.key !== `${badge.element}|${badge.startAt}`) {
+      if (node) node.remove();
+      node = document.createElement('div');
+      node.className = 'element-emit-overlay';
+      node.dataset.peerId = pid;
+      node.dataset.key = `${badge.element}|${badge.startAt}`;
+      const src = el.iconPath ? assetUrl(el.iconPath) : '';
+      node.innerHTML = `
+        ${src ? `<img class="ee-icon" src="${escHtml(src)}" alt="">` : '<span class="ee-glyph">◉</span>'}
+        <div class="ee-body">
+          <div class="ee-name">${escHtml(el.name)}</div>
+          <div class="ee-sub">${escHtml(el.shortDesc)}</div>
+        </div>`;
+      node.style.setProperty('--ee-tint', elementTint(el.colorHint));
+      layer.appendChild(node);
+      _emitEls.set(pid, node);
+    }
+    // Rise + fade on the badge's own clock (steeper fade in the last third).
+    const alpha = t < 0.65 ? 1 : Math.max(0, 1 - (t - 0.65) / 0.35);
+    const rise = 16 * t;
+    const w = rendererRef.tilePx(e.tile_q, e.tile_r);
+    const cx = (w.x - origin.x) * z + rect.left;
+    const cy = (w.y - origin.y) * z + rect.top;
+    node.style.opacity = String(alpha);
+    node.style.transform = `translate(-50%, calc(-100% - ${rise}px))`;
+    node.style.left = `${cx}px`;
+    node.style.top = `${cy - 44}px`;
+  }
+  for (const [pid, node] of _emitEls) {
+    if (!liveIds.has(pid)) { node.remove(); _emitEls.delete(pid); }
+  }
+}
+
 // Rebuilding the hover card innerHTML every mousemove would thrash the DOM;
 // instead, re-render on identity + state changes only, and let the mouse move
 // just reposition. The key is `pid|objKey|life|perms|hand`.
@@ -1267,6 +1386,31 @@ function renderHoverCard(clientX, clientY) {
 // {label, kind, path, id, biome, desc, q, r} or null.
 function objectAt(q, r) {
   if (!Number.isInteger(q) || !Number.isInteger(r) || !state.map.has(q, r)) return null;
+  // Player-created obstacles (Creation walls) take priority over map scenery:
+  // if a wall is standing on this hex, that's what you're asking about. Return
+  // a synthetic object with the Earth element and remaining hp so the detail
+  // card can surface "how much Earth is left to destroy it".
+  for (const ob of (state.obstacles || [])) {
+    if (ob.q === q && ob.r === r) {
+      const owner = state.entities.find(e => e.peer_id === ob.owner);
+      const mine = ob.owner === state.myPeerId;
+      const elem = ob.elem || 'elem_earth';
+      const el = elementById.get(elem) || null;
+      const threshold = Math.max(1, Math.ceil((Number(ob.hp) || 0) / 2));
+      return {
+        id: ob.id || 'creation_wall', label: ob.label || 'Brick Wall',
+        kind: 'wall', path: null, q, r,
+        obstacle: true, mine,
+        owner_name: owner ? owner.name : '',
+        owner_short: owner ? peerShort(owner.peer_id) : '',
+        hp: Number(ob.hp) || 0,
+        element: elem, element_name: el?.name || elem.replace(/^elem_/, ''),
+        element_tint: el ? elementTint(el.colorHint) : '#78b56a',
+        threshold,
+        desc: `${el ? el.name : 'Earth'} wall token placed by Creation. Impassable for low-Matter creatures; destroyed when an enemy emits ${el ? el.name : 'Earth'} and clears every point of its remaining hp (either outright above half, or whittled by Matter-chip damage each action). Allies walk through.`,
+      };
+    }
+  }
   const seed = state.map.seed;
   let o = null;
   if (bigFeatureAt) { try { o = bigFeatureAt(seed, q, r); } catch { o = null; } if (o && !o.kind) o = { ...o, kind: 'bigfeature' }; }
@@ -1283,12 +1427,33 @@ function showObjectCard(obj, clientX, clientY) {
   const card = document.getElementById('object-card');
   if (!card || !obj) return;
   const img = card.querySelector('img');
-  const src = assetUrl(obj.path) || '';
+  // Walls don't have an atlas path — paint the element icon instead so the
+  // card is never empty on the left.
+  const src = obj.obstacle && !obj.path
+    ? (elementById.get(obj.element)?.iconPath ? assetUrl(elementById.get(obj.element).iconPath) : '')
+    : (assetUrl(obj.path) || '');
   if (img.getAttribute('src') !== src) img.src = src;
   img.hidden = !src;
   img.alt = obj.label || obj.kind;
   card.querySelector('.oc-name').textContent = obj.label || obj.kind;
-  card.querySelector('.oc-kind').textContent = `${obj.kind}${obj.family ? ` · ${obj.family}` : ''}${obj.biome ? ` · ${obj.biome}` : ''}`;
+  card.querySelector('.oc-kind').textContent = obj.obstacle
+    ? `${obj.kind}${obj.owner_short ? ` · ${obj.mine ? 'yours' : obj.owner_name || obj.owner_short}` : ''}`
+    : `${obj.kind}${obj.family ? ` · ${obj.family}` : ''}${obj.biome ? ` · ${obj.biome}` : ''}`;
+  // Stat pills: for an obstacle, show the element it answers to and the hp
+  // threshold needed to destroy it outright. For anything else, hide the row.
+  const statsEl = card.querySelector('.oc-stats');
+  if (statsEl) {
+    if (obj.obstacle) {
+      statsEl.hidden = false;
+      statsEl.innerHTML = `
+        <span class="oc-pill elem" style="--pill-tint: ${obj.element_tint}">${escHtml(obj.element_name)}</span>
+        <span class="oc-pill hp" title="remaining hit points — at 0 the wall crumbles">${obj.hp} hp</span>
+        <span class="oc-pill thresh" title="an enemy emitting ${escHtml(obj.element_name)} this high destroys it outright; otherwise Matter chips it">destroy &gt; ${obj.threshold}</span>`;
+    } else {
+      statsEl.hidden = true;
+      statsEl.innerHTML = '';
+    }
+  }
   card.querySelector('.oc-desc').textContent = obj.desc;
   card.querySelector('.oc-coords').textContent = `hex (${obj.q}, ${obj.r})${obj.id && obj.id !== obj.label ? ` · ${obj.id}` : ''}`;
   card.hidden = false;
@@ -1811,6 +1976,19 @@ function connect() {
               duration: 2200 + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay),
               bonusKey: a.bonus ? `${env.turn}:${env.round}` : null,
             };
+            // Element emission vanishing icon: resolver stamped `emitted_element`
+            // on the action if a Posture / Reaver Attack / Monk Move / Rule-24
+            // destroy pushed an element this tick. Separate overlay from the
+            // skill-reveal chip so a cast with no net emission (e.g. an
+            // interrupted channel) still gets its action chip.
+            if (a.emitted_element) {
+              state.ui.emitBadges ||= {};
+              state.ui.emitBadges[a.actor] = {
+                element: a.emitted_element,
+                startAt: performance.now() + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay),
+                duration: 2600,
+              };
+            }
             if (a.bonus) logUI(`  ⚡ ${peerShort(a.actor)} ${a.pre ? 'balefire first' : `bonus round ${(a.bonus_k || 0) + 1}`}: ${composeLabel(a)}`, 'phase', { peerId: a.actor });
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
@@ -1903,11 +2081,107 @@ function connect() {
 
 function mergeEntities(incoming) {
   const byId = new Map(state.entities.map(e => [e.peer_id, e]));
+  // Remember who was on which tile before the merge so we can detect every
+  // unit that just stepped onto a new hex and consume any building there.
+  const prev = new Map();
+  for (const e of state.entities) prev.set(e.peer_id, { q: e.tile_q, r: e.tile_r });
   for (const p of incoming) {
     if (!p || !p.peer_id) continue;
     byId.set(p.peer_id, { ...(byId.get(p.peer_id) || {}), ...p });
   }
   state.entities = [...byId.values()];
+  for (const e of state.entities) {
+    const was = prev.get(e.peer_id);
+    if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    if (was && was.q === e.tile_q && was.r === e.tile_r) continue;
+    maybeConsumeFeature(e);
+  }
+}
+
+// A unit just stepped onto (tile_q, tile_r). If a feature sits here, trigger
+// its effect: log the description to the event log, mark the hex consumed so
+// the renderer stops drawing it, and schedule a vanishing overlay above the
+// hex that shows the icon + description one last time. Big landmarks and
+// player-created walls are left alone — only feature-table buildings and
+// scatter decorations are "pick-ups".
+const _featureVanish = new Map();  // "q,r" -> { startAt, duration, label, kind, src, desc }
+function maybeConsumeFeature(entity) {
+  if (!entity || !Number.isInteger(entity.tile_q) || !Number.isInteger(entity.tile_r)) return;
+  const q = entity.tile_q, r = entity.tile_r;
+  if (isFeatureConsumed(q, r)) return;
+  // objectAt priority order: obstacle (wall) first, then bigfeature, feature,
+  // scatter. We only want to consume `feature` entries here — bigfeatures are
+  // landmarks (keeps, forests, lakes) that stay put, and player walls are
+  // their own thing. Call featureAt directly to skip the other layers.
+  const seed = state.map?.seed;
+  if (!seed) return;
+  const f = featureAt(seed, q, r);
+  if (!f) return;
+  markFeatureConsumed(q, r);
+  const src = f.path ? assetUrl(f.path) : '';
+  const desc = (typeof f.desc === 'string' && f.desc.trim())
+    || featureDescById.get(f.id) || featureDescById.get(f.label)
+    || KIND_DESC[f.kind] || KIND_DESC.building || '';
+  _featureVanish.set(`${q},${r}`, {
+    q, r, startAt: performance.now(), duration: 2800,
+    label: f.label || f.id || f.kind, kind: f.kind || 'building',
+    src, desc,
+  });
+  // Log to the event panel so the record is scrollable with the rest of the
+  // match. Prefix with 🏛 so a scan picks it out.
+  const who = entity.peer_id === state.myPeerId ? 'you' : (entity.name || peerShort(entity.peer_id));
+  logUI(`🏛 ${who} stepped onto ${f.label || f.kind} at (${q},${r}) — ${abbreviate(desc, 180)}`, 'phase');
+  // Nudge the renderer so the sprite disappears at the same frame the badge
+  // starts rising.
+  try { rendererRef?.repaint?.(); } catch { /* best-effort */ }
+}
+
+function renderFeatureVanishOverlay() {
+  const layer = document.getElementById('feature-vanish-layer');
+  const canvas = document.getElementById('stage');
+  if (!layer || !canvas || !rendererRef) return;
+  const now = performance.now();
+  const rect = canvas.getBoundingClientRect();
+  const z = rendererRef.zoom();
+  const origin = rendererRef.toWorld(0, 0);
+  const live = new Set();
+  for (const [key, v] of _featureVanish) {
+    const t = (now - v.startAt) / v.duration;
+    if (t >= 1) continue;
+    live.add(key);
+    let node = layer.querySelector(`[data-k="${CSS.escape(key)}"]`);
+    if (!node) {
+      node = document.createElement('div');
+      node.className = 'feature-vanish-overlay';
+      node.dataset.k = key;
+      node.innerHTML = `
+        ${v.src ? `<img class="fv-icon" src="${escHtml(v.src)}" alt="">` : '<span class="fv-glyph">🏛</span>'}
+        <div class="fv-body">
+          <div class="fv-name">${escHtml(v.label)} <span class="fv-kind">· ${escHtml(v.kind)}</span></div>
+          <div class="fv-desc">${escHtml(abbreviate(v.desc, 200))}</div>
+          <div class="fv-done">consumed</div>
+        </div>`;
+      layer.appendChild(node);
+    }
+    const alpha = t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+    const rise = 28 * t;
+    const scale = 1 - 0.08 * t;
+    const w = rendererRef.tilePx(v.q, v.r);
+    const cx = (w.x - origin.x) * z + rect.left;
+    const cy = (w.y - origin.y) * z + rect.top;
+    node.style.opacity = String(alpha);
+    node.style.transform = `translate(-50%, calc(-100% - ${rise}px)) scale(${scale})`;
+    node.style.left = `${cx}px`;
+    node.style.top = `${cy - 40}px`;
+  }
+  // Drop expired overlays and their DOM.
+  for (const key of [..._featureVanish.keys()]) {
+    if (!live.has(key)) {
+      _featureVanish.delete(key);
+      const node = layer.querySelector(`[data-k="${CSS.escape(key)}"]`);
+      if (node) node.remove();
+    }
+  }
 }
 
 connect();
@@ -2499,6 +2773,8 @@ function wireInput() {
     // frame so it tracks the camera / zoom (positions read renderer.toWorld
     // and renderer.tilePx, same bridge used by __chaosObjects).
     renderRevealOverlay();
+    renderElementEmitOverlay();
+    renderFeatureVanishOverlay();
     requestAnimationFrame(raf);
   }
   raf();
