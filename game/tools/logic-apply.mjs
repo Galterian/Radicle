@@ -66,4 +66,5 @@ for (const [id, block] of Object.entries(map.entries)) {
   entry.versions[entry.versions.indexOf(v)] = out;
 }
 console.log(`${collection}: ${added} added, ${replaced} replaced, ${kept} kept (use --replace to overwrite)${dryRun ? ' [dry-run]' : ''}`);
-if (!dryRun && (added || replaced)) fs.writeFileSync(dataPath, JSON.stringify(json, null, 2) + '\n');
+// Compact writer (2026-10-30): one JsonLogic rule per line, opening brackets on the key's line (logic-engine compactJson).
+if (!dryRun && (added || replaced)) writeDataFile(dataPath, json);

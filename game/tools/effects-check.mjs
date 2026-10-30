@@ -1,7 +1,7 @@
 // Effect engine check against the worked examples from the pc rule overrides.
 //   node tools/effects-check.mjs
 import { createHash } from 'node:crypto';
-import { diceCount, pointBuy, resolveEffect, roundHalfUp10 } from '../effects.mjs';
+import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum } from '../effects.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 let fails = 0;
@@ -76,6 +76,9 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   console.log(`ok   fireball token leg: ${oc.status === 'retry' ? 'point-buy failed → retry' : `die ${oc.hits[0].legs[1].sum} → ${legs[1]} dmg`}`);
   const oc2 = resolveEffect(world(stats, tiles, sides, { pen: { C: { elem_fire: 7 } } }), cast);
   if (oc2.status === 'done') eq('fireball countered main leg', dmgTo(oc2, 'E')[0], 0); else console.log('ok   fireball countered: point-buy failed → retry');
+  // Elementalist (class, user ruling 2026-10-30): the extra point-buy die rides on the main leg before rounding: 16 + 5 = 21 → 2; 16 + 9 = 25 → 3.
+  const ocB = resolveEffect(world(stats, tiles, sides), { ...cast, boost: 9 });
+  if (ocB.status === 'done') eq('fireball with an Elementalist boost of 9 on the main leg (16 + 9 = 25 → 3)', dmgTo(ocB, 'E')[0], 3); else console.log('ok   fireball boost: point-buy failed → retry');
 }
 // Rule 15 target choice: no declared target → the enemy my cast hurts most, lowest life next.
 {
@@ -186,6 +189,199 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('death ward on an enemy fizzles', foe.status, 'fizzled');
   const none = resolveEffect(world(stats, tiles, sides), { ...cast, of: 1, step: 1, kept: null, summon: { pending: true, need: 0 } });
   eq('resurrect with nothing to aim at fizzles', none.status, 'fizzled');
+}
+
+// Channel tokens (user ruling 2026-10-29): Harm / Combustion / The Void / Light-Darkness are
+// permanent-until-round-end channels. The cast fires its own leg once and registers the channel;
+// each subsequent action peer.mjs re-fires the (non-permanent, non-emission) leg via
+// resolveEffect({..._channel_tick: true}). Stop condition: adjacency for Harm/Combustion,
+// round-end for The Void/Light-Darkness.
+{
+  const stats = { C: M(10, 10, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  // Harm: cast with Vitality element. Permanent + channel registered + Vitality shield token on caster's tile.
+  const harm = { actor: 'C', effect_id: 'effect_harm', elements: ['elem_vitality'], salt: 'h', target: { kind: 'character', ref: 'E' }, is_instant: false, of: 1, step: 1, kept: null };
+  const oc = resolveEffect(world(stats, tiles, sides), harm);
+  eq('harm cast lands permanent on caster', oc.permanents, [{ on: 'C', id: 'effect_harm' }]);
+  eq('harm cast registers a break-stop channel on target E', oc.channels, [{ on: 'C', effect_id: 'effect_harm', target: 'E', elements: ['elem_vitality'], salt: 'h', stop: 'break' }]);
+  // The shield token's die value comes from a point-buy against Vitality (same seed on every peer).
+  const vitTokens = oc.tokens.filter(t => t.kind === 'shield' && t.elem === 'elem_vitality' && t.q === 0 && t.r === 0);
+  eq('harm cast puts a Vitality shield token on the caster', vitTokens.length, 1);
+  // Tick mode: no new permanent, no new channel, damage fresh-rolls on caster's current Vitality.
+  const tick = resolveEffect(world(stats, tiles, sides), { ...harm, is_instant: true, _channel_tick: true, kept: [0] });
+  eq('harm tick does not re-land the permanent', tick.permanents, []);
+  eq('harm tick does not re-register the channel', tick.channels, []);
+  eq('harm tick still hurts the target', (tick.hits.find(h => h.victim === 'E')?.legs?.length || 0) > 0, true);
+  // Combustion tick: statPenalty on Harmony, no permanent re-landing.
+  const comb = { actor: 'C', effect_id: 'effect_combustion', elements: ['elem_harmony'], salt: 'c', target: { kind: 'character', ref: 'E' }, is_instant: false, of: 1, step: 1, kept: null };
+  const cb = resolveEffect(world(stats, tiles, sides), comb);
+  eq('combustion cast registers a channel + permanent', [cb.permanents, cb.channels[0]?.stop], [[{ on: 'C', id: 'effect_combustion' }], 'break']);
+  const cbTick = resolveEffect(world(stats, tiles, sides), { ...comb, is_instant: true, _channel_tick: true });
+  eq('combustion tick stacks another Harmony penalty on target', cbTick.statTokens.some(t => t.on === 'E' && t.elem === 'elem_harmony' && t.value < 0) && cbTick.permanents.length === 0 && cbTick.channels.length === 0, true);
+  // The Void: round-end channel, voids this action + Concentration bonus on caster's tile.
+  const voidC = { actor: 'C', effect_id: 'effect_the_void', elements: ['elem_concentration'], salt: 'v', target: null, is_instant: true, of: 1, step: 1, kept: null };
+  const voc = resolveEffect(world(stats, tiles, sides), voidC);
+  eq('the void voids damage this action and banks a Concentration token', [voc.voidFor, voc.tokens.filter(t => t.kind === 'bonus' && t.elem === 'elem_concentration').length], [['C'], 1]);
+  eq('the void registers a break-stop channel + permanent', [voc.channels[0]?.stop, voc.permanents], ['break', [{ on: 'C', id: 'effect_the_void' }]]);
+  const vocTick = resolveEffect(world(stats, tiles, sides), { ...voidC, _channel_tick: true });
+  eq('the void tick keeps voiding damage but does not re-register', [vocTick.voidFor, vocTick.channels], [['C'], []]);
+  // Light / Darkness: zone over self + 6 neighbours, Fire bonus token on caster, round-end channel.
+  const ld = { actor: 'C', effect_id: 'effect_light_darkness', elements: ['elem_fire'], salt: 'l', target: null, is_instant: true, of: 1, step: 1, kept: null };
+  const ldOc = resolveEffect(world(stats, tiles, sides), ld);
+  eq('light/darkness puts no-damage zone on self + 6 neighbours', ldOc.zones.length, 7);
+  eq('light/darkness registers a break-stop channel + permanent', [ldOc.channels[0]?.stop, ldOc.permanents], ['break', [{ on: 'C', id: 'effect_light_darkness' }]]);
+  const ldTick = resolveEffect(world(stats, tiles, sides), { ...ld, _channel_tick: true });
+  eq('light/darkness tick re-fires zones but not channel', [ldTick.zones.length, ldTick.channels], [7, []]);
+}
+
+// Traps (Rule 2/4, user spec 2026-10-29): Poison damages AND leaves itself under me as a 'targeted' trap;
+// Sleep / Confusion are 'enter' traps that become the owner's perm on the victim; Traps Mastery lays the
+// attached card; Space Bending with nobody in reach lays the attached card on a random free tile within 10.
+{
+  const stats = { C: M(10, 10, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  const w = world(stats, tiles, sides);
+  w.freeTilesWithin = (q, r, d) => [{ q: 3, r: 0 }, { q: 4, r: 0 }, { q: 5, r: -1 }];
+  const poison = { actor: 'C', effect_id: 'effect_poison', elements: ['elem_water', 'elem_vitality'], salt: 'p', target: { kind: 'character', ref: 'E' }, is_instant: false, card_id: 'card-p1' };
+  const po = resolveEffect(w, poison);
+  eq('poison hits E and leaves a targeted trap under C', [po.status, po.hits.map(h => h.victim), po.traps.map(t => [t.q, t.r, t.trigger, t.mode, t.power, t.card_id])], ['done', ['E'], [[0, 0, 'targeted', 'damage', 20, 'card-p1']]]);
+  const alone = { C: { q: 0, r: 0 }, E: { q: 5, r: 0 }, F: { q: 6, r: 0 }, A: { q: -1, r: 0 } };
+  const wa = world(stats, alone, sides); wa.freeTilesWithin = w.freeTilesWithin;
+  const poAlone = resolveEffect(wa, poison);
+  eq('poison with nobody in reach still sets the trap (not fizzled)', [poAlone.status, poAlone.hits.length, poAlone.traps.length], ['done', 0, 1]);
+  const sleep = resolveEffect(w, { actor: 'C', effect_id: 'effect_sleep', elements: ['elem_souls', 'elem_concentration'], salt: 's', target: null, is_instant: false, card_id: 'card-s1' });
+  eq('sleep: enter trap in perm mode under C, no permanent yet', [sleep.status, sleep.traps[0]?.trigger, sleep.traps[0]?.mode, sleep.permanents], ['done', 'enter', 'perm', []]);
+  const tm = { actor: 'C', effect_id: 'effect_traps_mastery', elements: ['elem_space'], salt: 't', target: null, is_instant: false, attach: { effect_id: 'effect_fireball', elements: ['elem_fire', 'elem_fire'], card_id: 'card-fb' } };
+  const tmo = resolveEffect(w, tm);
+  eq('traps mastery: permanent + attached fireball as a targeted trap held by it', [tmo.permanents, tmo.traps.map(t => [t.effect_id, t.trigger, t.holder, t.card_id])], [[{ on: 'C', id: 'effect_traps_mastery' }], [['effect_fireball', 'targeted', 'effect_traps_mastery', 'card-fb']]]);
+  eq('traps mastery without an attachment fizzles', resolveEffect(w, { ...tm, attach: null }).status, 'fizzled');
+  const sb = { actor: 'C', effect_id: 'effect_space_bending', elements: ['elem_space'], salt: 'b', target: null, is_instant: false, attach: { effect_id: 'effect_lightning', elements: ['elem_fire', 'elem_air'], card_id: 'card-l' } };
+  const sbo = resolveEffect(wa, sb);
+  eq('space bending alone lays the attached card as an enter trap on a free tile within 10', [sbo.status, sbo.traps.length, sbo.traps[0]?.trigger, [3, 4, 5].includes(sbo.traps[0]?.q)], ['done', 1, 'enter', true]);
+  eq('space bending with an enemy in reach damages + locks, no trap', [resolveEffect(w, { ...sb, target: { kind: 'character', ref: 'E' } }).traps.length, resolveEffect(w, { ...sb, target: { kind: 'character', ref: 'E' } }).locks.length], [0, 1]);
+  // User ruling 2026-10-30: with a Library the alt trap is a RANDOM library card (library: true, no card_id), not the attached one.
+  const wl = world(stats, alone, sides); wl.freeTilesWithin = w.freeTilesWithin; wl.library = () => [{ effect_id: 'effect_fireball', elements: ['elem_fire', 'elem_fire'] }, { effect_id: 'effect_drain', elements: ['elem_souls', 'elem_harmony'] }];
+  const sbl = resolveEffect(wl, sb);
+  eq('space bending alone with a Library lays a random library card (library: true, no card id)', [sbl.status, sbl.traps.length, sbl.traps[0]?.library, sbl.traps[0]?.card_id, ['effect_fireball', 'effect_drain'].includes(sbl.traps[0]?.effect_id)], ['done', 1, true, null, true]);
+  // Trap damage: power 20 per element vs the victim's stat, /10. Water+Vitality vs Matter 8 / Vitality 10 → 12 + 10 = 22 → 2.
+  eq('trap damage 20/20 vs 8/10 → 22', trapDamageSum(['elem_water', 'elem_vitality'], el => ({ elem_water: 8, elem_vitality: 10 })[el]), 22);
+}
+
+// Teleportation (user spec 2026-10-29): the chosen tile within 10 takes me, or the adjacent ally with
+// less life (tie → me); no tile chosen → a random free tile within 10.
+{
+  const stats = { C: M(10, 10, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  const w = world(stats, tiles, sides, { life: { C: 4, A: 2 } });
+  w.freeTilesWithin = () => [{ q: 3, r: 0 }, { q: 4, r: 0 }];
+  const tp = { actor: 'C', effect_id: 'effect_teleportation', elements: ['elem_space'], salt: 'tp', target: { kind: 'tile', ref: { q: 2, r: 2 } }, is_instant: false };
+  eq('teleport sends the weaker adjacent ally to the chosen tile', resolveEffect(w, tp).moves, [{ who: 'A', q: 2, r: 2, reason: 'teleported' }]);
+  const we = world(stats, tiles, sides, { life: { C: 4, A: 4 } }); we.freeTilesWithin = w.freeTilesWithin;
+  eq('teleport on equal life sends me', resolveEffect(we, tp).moves[0].who, 'C');
+  const noT = resolveEffect(we, { ...tp, target: null });
+  eq('teleport without a tile picks a random free tile within 10', [noT.status, [3, 4].includes(noT.moves[0]?.q)], ['done', true]);
+  eq('teleport to a tile beyond 10 falls back to a random tile', resolveEffect(we, { ...tp, target: { kind: 'tile', ref: { q: 30, r: 0 } } }).moves[0].q <= 4, true);
+}
+
+// Banish / Creation / Spirit Link (user spec 2026-10-29).
+{
+  const stats = { C: M(10, 14, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 12, 8, 10) };
+  const w = world(stats, tiles, sides);
+  w.freeTilesWithin = (q, r, d) => [{ q: 2, r: 0 }, { q: 20, r: 0 }, { q: 21, r: -1 }];
+  const bn = { actor: 'C', effect_id: 'effect_banish', elements: ['elem_space', 'elem_souls'], salt: 'bn', target: { kind: 'character', ref: 'E' }, is_instant: false };
+  const bo = resolveEffect(w, bn);
+  eq('banish: World 14 beats 10 → E lands ≥18 hexes away', [bo.status, bo.moves[0]?.who, bo.moves[0]?.q >= 20], ['done', 'E', true]);
+  const wk = world({ ...stats, C: M(10, 8, 16, 12) }, tiles, sides); wk.freeTilesWithin = w.freeTilesWithin;
+  eq('banish fizzles when my World does not beat the target', resolveEffect(wk, bn).status, 'fizzled');
+  const cr = { actor: 'C', effect_id: 'effect_creation', elements: ['elem_earth'], salt: 'cr', target: { kind: 'tile', ref: { q: 0, r: -1 } }, is_instant: false };
+  eq('creation puts a 5 hp Earth obstacle on the chosen free neighbour', resolveEffect(w, cr).obstacles, [{ by: 'C', q: 0, r: -1, hp: 5, elem: 'elem_earth' }]);
+  const auto = resolveEffect(w, { ...cr, target: null }).obstacles[0];
+  eq('creation without a tile picks the free neighbour nearest the closest enemy', [auto.hp, Math.max(Math.abs(auto.q - 1), Math.abs(auto.r), Math.abs(auto.q + auto.r - 1)) <= 1], [5, true]);
+  eq('creation onto an occupied neighbour falls back to an automatic one', resolveEffect(w, { ...cr, target: { kind: 'tile', ref: { q: 1, r: 0 } } }).obstacles.length, 1);
+  const sl = { actor: 'C', effect_id: 'effect_spirit_link', elements: ['elem_souls'], salt: 'sl', target: null, is_instant: false, link: { peer_id: 'A', stat: 'world' } };
+  eq('spirit link adds the ally\'s World 12 to mine + permanent', [resolveEffect(w, sl).links, resolveEffect(w, sl).permanents], [[{ on: 'C', from: 'A', stat: 'world', value: 12 }], [{ on: 'C', id: 'effect_spirit_link' }]]);
+  eq('spirit link ∀ links all four stats', resolveEffect(w, { ...sl, every: true }).links.map(l => l.stat), ['vitality', 'world', 'will', 'matter']);
+  eq('spirit link on an enemy fizzles', resolveEffect(w, { ...sl, link: { peer_id: 'E', stat: 'world' } }).status, 'fizzled');
+}
+
+// Balefire rework (user spec 2026-10-29): the completed cast deals its delta damage, lands Balefire(6) and draws 5;
+// it completes even with nobody in reach (Rule 18 — the elements went out).
+{
+  const stats = { C: M(10, 14, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 12, 8, 10) };
+  const bf = { actor: 'C', effect_id: 'effect_balefire', elements: ['elem_fire', 'elem_harmony', 'elem_time'], salt: 'bf', target: { kind: 'character', ref: 'E' }, is_instant: false, step: 3, of: 3 };
+  const o = resolveEffect(world(stats, tiles, sides), bf);
+  eq('balefire: damage + Balefire(6) permanent + 5 cards', [o.status, o.hits.map(h => h.victim), o.permanents, o.draw], ['done', ['E'], [{ on: 'C', id: 'effect_balefire' }], 5]);
+  const alone = resolveEffect(world(stats, { ...tiles, E: { q: 5, r: 0 }, F: { q: 6, r: 0 } }, sides), bf);
+  eq('balefire with nobody in reach still lands the permanent', [alone.status, alone.hits.length, alone.permanents.length, alone.draw], ['done', 0, 1, 5]);
+}
+
+// Force Pull / Artifice tile token / Ageing feature (user spec 2026-10-29).
+{
+  const stats = { C: M(10, 14, 30, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 12, 8, 10) };
+  const w = world(stats, tiles, sides);
+  // A Fire(3) bonus token lies under enemy E (adjacent); nothing under ally A.
+  w.tileTokensAt = (q, r) => (q === 1 && r === 0) ? [{ id: 'tk1', kind: 'bonus', elem: 'elem_fire', value: 3, owner: 'E', item: 'Sphere of Fire' }] : [];
+  const th = { actor: 'C', effect_id: 'effect_throw', elements: ['elem_air'], salt: 'th', target: { kind: 'character', ref: 'E' }, is_instant: false };
+  const po = resolveEffect(w, th);
+  eq('force pull: Matter 30 pulls the Fire(3) token under E onto my tile, no damage', [po.status, po.hits.length, po.pulls.map(p => [p.token_id, p.owner, p.q, p.r])], ['done', 0, [['tk1', 'E', 0, 0]]]);
+  w.tileTokensAt = (q, r) => (q === -1 && r === 0) ? [{ id: 'tk2', kind: 'bonus', elem: 'elem_fire', value: 3, owner: 'A' }] : [];
+  eq('force pull ignores a token under an ally → Smash damage instead', [resolveEffect(w, th).pulls.length, resolveEffect(w, th).hits.length], [0, 1]);
+  const ar = { actor: 'C', effect_id: 'effect_artifice', elements: ['elem_earth'], salt: 'ar', target: { kind: 'tile', ref: { q: 0, r: -1 } }, is_instant: false, elem: 'elem_fire' };
+  const ao = resolveEffect(w, ar);
+  eq('artifice with a neighbour tile puts a Fire bonus token there and no holding token', [ao.tokens.map(t => [t.kind, t.elem, t.q, t.r]), ao.statTokens.length], [[['bonus', 'elem_fire', 0, -1]], 0]);
+  eq('artifice without a tile keeps the Earth holding token', resolveEffect(w, { ...ar, target: null }).statTokens.map(t => [t.on, t.elem]), [['C', 'elem_earth']]);
+  const far = { C: { q: 0, r: 0 }, E: { q: 6, r: 0 }, F: { q: 7, r: 0 }, A: { q: -1, r: 0 } };
+  const wa = world(stats, far, sides); wa.freeTilesWithin = () => [{ q: 1, r: 0 }, { q: 0, r: 1 }];
+  const ag = resolveEffect(wa, { actor: 'C', effect_id: 'effect_aging', elements: ['elem_time', 'elem_souls'], salt: 'ag', target: null, is_instant: false });
+  eq('ageing with nobody in reach raises a feature on a free tile within 2', [ag.status, ag.tokens.length, !!ag.tokens[0]?.item, ag.tokens[0]?.kind], ['done', 1, true, 'bonus']);
+  eq('ageing with an enemy in reach keeps its penalties', resolveEffect(w, { actor: 'C', effect_id: 'effect_aging', elements: ['elem_time', 'elem_souls'], salt: 'ag', target: { kind: 'character', ref: 'E' }, is_instant: false }).statTokens.length, 2);
+}
+
+// Map surgery (user spec 2026-10-29): Metaphysics unites (nearby feature/trap → chosen free tile), Disruption splits
+// (any trap in view → chosen free tile), Mind Blast switches my tile with the chosen one, Awake moves an adjacent ally / me.
+{
+  const stats = { C: M(10, 14, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 12, 8, 10) };
+  const far = { C: { q: 0, r: 0 }, E: { q: 5, r: 0 }, F: { q: 6, r: 0 }, A: { q: -1, r: 0 } };
+  const mk = (tl) => {
+    const w = world(stats, tl, sides);
+    w.tileTokensAt = (q, r) => (q === 0 && r === -1) ? [{ id: 'f1', kind: 'bonus', elem: 'elem_souls', value: 6, owner: 'A', item: 'Sacred Land' }] : [];
+    w.trapsAt = (q, r) => (q === 5 && r === 0) ? [{ id: 't9', owner: 'E', effect_id: 'effect_poison' }] : [];
+    w.obstacleAt = () => null;
+    w.freeTilesWithin = () => [{ q: 2, r: 2 }, { q: 3, r: 0 }, { q: 1, r: 1 }];
+    return w;
+  };
+  const meta = { actor: 'C', effect_id: 'effect_metaphysics', elements: ['elem_space', 'elem_earth'], salt: 'mp', target: { kind: 'tile', ref: { q: 2, r: 2 } }, is_instant: false };
+  const mo = resolveEffect(mk(far), meta);
+  eq('metaphysics (no enemy adjacent) moves the Sacred Land next to me onto the chosen tile', [mo.status, mo.relocations, mo.hits.length], ['done', [{ kind: 'token', owner: 'A', id: 'f1', label: 'Sacred Land', by: 'C', q: 2, r: 2 }], 0]);
+  eq('metaphysics with an enemy adjacent deals damage, no surgery', [resolveEffect(mk(tiles), { ...meta, target: { kind: 'character', ref: 'E' } }).hits.length, resolveEffect(mk(tiles), meta).relocations.length], [1, 0]);
+  const dis = { ...meta, effect_id: 'effect_disruption', elements: ['elem_souls', 'elem_harmony'] };
+  eq('disruption moves the trap under the far enemy onto the chosen tile', resolveEffect(mk(far), dis).relocations, [{ kind: 'trap', owner: 'E', id: 't9', label: 'effect_poison', q: 2, r: 2 }]);
+  const mb = { actor: 'C', effect_id: 'effect_mind_blast', elements: ['elem_concentration'], salt: 'mb', target: { kind: 'tile', ref: { q: 5, r: 0 } }, is_instant: false, step: 1, of: 1, kept: [4] };
+  const mbo = resolveEffect(mk(far), mb);
+  eq('mind blast switches me with the enemy on the chosen tile and carries its trap over', [mbo.moves.map(m => [m.who, m.q, m.r]), mbo.relocations.map(r => [r.kind, r.q, r.r]), mbo.hits.length], [[['C', 5, 0], ['E', 0, 0]], [['trap', 0, 0]], 0]);
+  eq('mind blast on an enemy target keeps its point-buy damage leg', resolveEffect(mk(tiles), { ...mb, target: { kind: 'character', ref: 'E' } }).hits.length, 1);
+  const aw = { actor: 'C', effect_id: 'effect_awake', elements: ['elem_harmony'], salt: 'aw', target: { kind: 'tile', ref: { q: 3, r: 0 } }, is_instant: false };
+  eq('awake moves the adjacent ally first', resolveEffect(mk(far), aw).moves, [{ who: 'A', q: 3, r: 0, reason: 'awakened' }]);
+  eq('awake without an adjacent ally moves me', resolveEffect(mk({ ...far, A: { q: -4, r: 0 } }), aw).moves[0].who, 'C');
+  eq('awake without a tile fizzles', resolveEffect(mk(far), { ...aw, target: null }).status, 'fizzled');
+}
+
+// Blessing / Phantom / Possess / Vision (user spec 2026-10-29).
+{
+  const stats = { C: M(12, 14, 16, 12), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 12, 8, 10) };
+  const w = world(stats, tiles, sides, { perms: { E: ['effect_haste'] } });
+  const bl = { actor: 'C', effect_id: 'effect_blessing_curse', elements: ['elem_time'], salt: 'bl', target: { kind: 'character', ref: 'E' }, is_instant: false, attach: { effect_id: 'effect_fireball', elements: ['elem_fire', 'elem_fire'], card_id: 'card-fb' } };
+  const bo = resolveEffect(w, bl);
+  eq('blessing: permanent + the attached fireball as an unbreakable channel held by it', [bo.permanents, bo.channels.map(c => [c.effect_id, c.stop, c.holder, c.card_id])], [[{ on: 'C', id: 'effect_blessing_curse' }], [['effect_fireball', 'never', 'effect_blessing_curse', 'card-fb']]]);
+  eq('blessing without an attachment fizzles', resolveEffect(w, { ...bl, attach: null }).status, 'fizzled');
+  eq('phantom flags the spawn + permanent', [resolveEffect(w, { actor: 'C', effect_id: 'effect_phantom', elements: ['elem_vitality', 'elem_souls', 'elem_space'], salt: 'ph', target: null, is_instant: false }).phantom, resolveEffect(w, { actor: 'C', effect_id: 'effect_phantom', elements: ['elem_vitality', 'elem_souls', 'elem_space'], salt: 'ph', target: null, is_instant: false }).permanents.length], [true, 1]);
+  const ps = { actor: 'C', effect_id: 'effect_possess_phylactery', elements: ['elem_vitality'], salt: 'ps', target: { kind: 'character', ref: 'E' }, is_instant: false };
+  eq('possess: Σ54 beats Σ38 → E is bound to me', [resolveEffect(w, ps).possess, resolveEffect(w, ps).permanents.length], [{ bind: 'E' }, 1]);
+  eq('possess: the permanent lands in the POSSESSED unit\'s holding, marked by the possessor (user ruling 2026-10-30)', resolveEffect(w, ps).permanents, [{ on: 'E', id: 'effect_possess_phylactery', by: 'C' }]);
+  eq('possess against a stronger Σ fizzles', resolveEffect(world({ ...stats, E: M(20, 20, 20, 20) }, tiles, sides), ps).status, 'fizzled');
+  eq('phylactery shatters the named enemy permanent', resolveEffect(w, { ...ps, phylactery: { peer_id: 'E', perm: 'effect_haste' } }).possess, { phylactery: { peer_id: 'E', perm: 'effect_haste' } });
+  eq('phylactery on a permanent the enemy does not hold fizzles', resolveEffect(w, { ...ps, phylactery: { peer_id: 'E', perm: 'effect_aura' } }).status, 'fizzled');
+  const vi = { actor: 'C', effect_id: 'effect_vision', elements: ['elem_time'], salt: 'vi', target: { kind: 'character', ref: 'E' }, is_instant: false };
+  eq('vision: World 14 beats 10 → peek at E\'s hand', resolveEffect(w, vi).peeks, [{ by: 'C', kind: 'hand', of: 'E' }]);
+  eq('vision on a tile reveals the map there', resolveEffect(w, { ...vi, target: { kind: 'tile', ref: { q: 4, r: 4 } } }).peeks, [{ by: 'C', kind: 'tile', q: 4, r: 4 }]);
+  eq('vision against a higher World fizzles', resolveEffect(world({ ...stats, C: M(12, 8, 16, 12) }, tiles, sides), vi).status, 'fizzled');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall checks passed');

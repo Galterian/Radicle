@@ -53,7 +53,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -65,6 +65,223 @@
           "data": {
             "stat": "stat_vitality",
             "color_hint": "red-flesh"
+          },
+          "logic": {
+            "description": "Vitality element (red-flesh), powered by stat_vitality: emitted with the caster's Vitality and resisted with the defender's Vitality (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(vitality) dice. Used by 16 effects: Super Sense, Super Force, Harm, Sound Wave, Drain, Emotions Bombard, Potion Brew, Nature Embrace, Resurrect / Death Ward, Fossilization, Inner Fire, Phantom, Possess / Phylactery, Poison, Turn Life, Petrify. Force Shield's Vitality die is subtracted from the incoming effect sum (pc).",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Vitality for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_vitality"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Vitality is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_vitality"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Vitality.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_vitality"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Vitality.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_vitality"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_vitality"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_vitality"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_vitality"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -125,7 +342,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -137,6 +354,223 @@
           "data": {
             "stat": "stat_world",
             "color_hint": "violet"
+          },
+          "logic": {
+            "description": "Souls element (violet), powered by stat_world: emitted with the caster's World and resisted with the defender's World (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(world) dice. Used by 15 effects: Summoning, Aura, Spirit Link, Banish, Oblivion, Sleep, Aging, Space Bending, Golems (earth / water / air), Confusion, Phantom, Disruption, Domination; the stat-buy summons bank World per Souls emission.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Souls for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_souls"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's World is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_souls"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's World.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_souls"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's World.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_souls"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_souls"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_souls"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_souls"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -193,7 +627,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -205,6 +639,223 @@
           "data": {
             "stat": "stat_world",
             "color_hint": "indigo"
+          },
+          "logic": {
+            "description": "Time element (indigo), powered by stat_world: emitted with the caster's World and resisted with the defender's World (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(world) dice. Used by 7 effects: Blessing / Curse, Oblivion, Aging, Delay Time, Balefire, Vision, Haste (Haste ∀ draws +1 card per turn).",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Time for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_time"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's World is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_time"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's World.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_time"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's World.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_time"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_time"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_time"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_time"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -278,7 +929,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -290,6 +941,223 @@
           "data": {
             "stat": "stat_world",
             "color_hint": "deep-blue"
+          },
+          "logic": {
+            "description": "Space element (deep-blue), powered by stat_world: emitted with the caster's World and resisted with the defender's World (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(world) dice. Used by 11 effects: Sound Wave, Banish, Teleportation, Space Bending, Invisibility, Metaphysics, Confusion, Phantom, Meteor Shower, Traps Mastery, Dark Matter. Adept element of Razorfin Abolisher (power 20, Rule 16).",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Space for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_space"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's World is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_space"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's World.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_space"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's World.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_space"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_space"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_space"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_space"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -363,7 +1231,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -375,6 +1243,223 @@
           "data": {
             "stat": "stat_matter",
             "color_hint": "sky-blue"
+          },
+          "logic": {
+            "description": "Air element (sky-blue), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(matter) dice. Used by 6 effects: Sound Wave, Lightning (∀: target loses 2 actions), Throw, Blizzard, Awe, Fear.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Air for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_air"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_air"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_air"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_air"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_air"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_air"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_air"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -448,7 +1533,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -460,6 +1545,223 @@
           "data": {
             "stat": "stat_matter",
             "color_hint": "aqua"
+          },
+          "logic": {
+            "description": "Water element (aqua), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(matter) dice. Used by 6 effects: Mutate, Ice Blast, Blizzard, Poison, Love, Mists.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Water for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_water"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_water"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_water"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_water"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_water"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_water"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_water"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -533,7 +1835,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -545,6 +1847,223 @@
           "data": {
             "stat": "stat_matter",
             "color_hint": "brown"
+          },
+          "logic": {
+            "description": "Earth element (brown), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(matter) dice. Used by 6 effects: Artifice, Creation, Fossilization, Metaphysics, Meteor Shower, Earthquake.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Earth for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_earth"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_earth"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_earth"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_earth"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_earth"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_earth"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_earth"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -601,7 +2120,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -613,6 +2132,223 @@
           "data": {
             "stat": "stat_matter",
             "color_hint": "orange-red"
+          },
+          "logic": {
+            "description": "Fire element (orange-red), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum (Fireball = fire, fire -> round_div10(2 x max(matter delta, 0)) plus a fire tile token, pc); its point-buy rolls point_buy_dice_count(matter) dice. Used by 9 effects: Invisibility, Lightning, Fireball, Balefire, Ice Blast, Inner Fire, Light / Darkness, Dark Matter, Anger.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Fire for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_fire"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_fire"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_fire"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_fire"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_fire"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_fire"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_fire"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -669,7 +2405,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -681,6 +2417,223 @@
           "data": {
             "stat": "stat_will",
             "color_hint": "silver"
+          },
+          "logic": {
+            "description": "Concentration element (silver), powered by stat_will: emitted with the caster's Will and resisted with the defender's Will (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(will) dice. Used by 10 effects: Sleep, Shield (∀: permanent), Empower, Disable (∀: bars everyone), Elementals (air / water / earth), The Void, Meteor Shower, Mind Blast.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Concentration for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_concentration"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Will is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_concentration"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Will.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_concentration"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Will.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_concentration"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_concentration"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_concentration"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_concentration"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -754,7 +2707,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -766,6 +2719,223 @@
           "data": {
             "stat": "stat_will",
             "color_hint": "gold"
+          },
+          "logic": {
+            "description": "Harmony element (gold), powered by stat_will: emitted with the caster's Will and resisted with the defender's Will (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(will) dice. The most used element, in 20 effects: Drain, Emotions Bombard, Mutate, Elementals (air / water / earth), Balefire, Golems (earth / water / air), Awake, Combustion, Disruption, Turn Life, Love, Awe, Domination, Anger, Petrify, Fear; the stat-buy summons bank Will per Harmony emission.",
+            "prerequisites": [
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Harmony for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_harmony"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Will is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_harmony"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            ],
+            "effects": [
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Will.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_harmony"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Will.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_harmony"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_harmony"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_harmony"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_harmony"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
+            ],
+            "validation": [
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]

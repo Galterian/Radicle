@@ -214,7 +214,7 @@ function apply(collection, entryId, newEntry, version, counters) {
   if (entryId) { const e = json.entries.find(x => x.id === entryId); e.versions.push(version); }
   else json.entries.push({ id: newEntry.id, name: newEntry.name || newEntry.id, tags: newEntry.tags || [], ...(newEntry.resources ? { resources: newEntry.resources } : {}), versions: [version] });
   for (const cp of counters) { if (!cp.valid) { console.log(`  skipped counter on ${cp.entry_id}: ${cp.failures.map(f => f.id).join(', ')}`); continue; } const j = load(cp.collection); j.entries.find(x => x.id === cp.entry_id).versions.push(cp.version); }
-  for (const [c, j] of touch) fs.writeFileSync(path.join(DATA_DIR, `${c}.json`), JSON.stringify(j, null, 2) + '\n');
+  for (const [c, j] of touch) writeDataFile(path.join(DATA_DIR, `${c}.json`), j);   // compact writer: one rule per line
   console.log(`applied: ${[...touch.keys()].join(', ')} (new version objects appended; proposals/<entry>-<ts> branch is yours to open)`);
 }
 

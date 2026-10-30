@@ -379,6 +379,30 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
   font-style: italic;
   overflow-wrap: anywhere;
 }
+/* B2: full class identity block — a portrait + name + description row that
+   sits under the chips when the entity owns a class_* permanent. Matches the
+   other hc-* vocabulary (same gold accent as the .hc-chip.cls summary chip
+   above it). */
+#hover-card .hc-class {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 5px 6px; border-radius: 4px;
+  background: #1a1608; border: 1px solid #ffe66e33;
+}
+#hover-card .hc-class-icon {
+  width: 36px; height: 36px; flex: 0 0 auto;
+  object-fit: cover; object-position: 50% 0;
+  border-radius: 3px; background: #0b0d12;
+  image-rendering: pixelated;
+}
+#hover-card .hc-class-body { flex: 1 1 auto; min-width: 0; }
+#hover-card .hc-class-name {
+  color: #ffe66e; font-weight: 600; font-size: 11px;
+  text-transform: capitalize;
+}
+#hover-card .hc-class-desc {
+  color: #d9d1a8; font-size: 10px; line-height: 1.4; margin-top: 2px;
+  overflow-wrap: anywhere;
+}
 
 /* Inline effect-reference icon beside a mentioned effect name inside a
    .skill-card-text. The icon is a tiny .skill-icon with its own glyph
@@ -403,10 +427,23 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
        and the deck slots). The icon is a <canvas> with a glyph fallback
        behind it so the card paints BEFORE the sprite loads. ------------- */
 .skill-card {
+  position: relative;
   display: flex; gap: 6px; align-items: flex-start;
   background: #141926; border: 1px solid #262e3c; border-radius: 5px;
   padding: 5px 6px; color: #c8d4e3; font-size: 10.5px; line-height: 1.3;
   min-height: 36px;
+}
+/* B1: strip shortcut key (9 / 0 / - / =) painted in the top-right of a
+   SkillCard. The caller passes `keyBadge: '9'` via fillSkillCardStack items;
+   the badge is positioned absolute so it doesn't shift the body text. */
+.skill-card .skill-card-key {
+  position: absolute; top: 3px; right: 4px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #0b0d12cc; color: #ffd68a;
+  border: 1px solid #a08eff55; border-radius: 3px;
+  font: 600 9px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: .04em; pointer-events: none;
 }
 .skill-card-strip   { background: linear-gradient(180deg, #171d2b 0%, #10151e 100%); }
 .skill-card-tooltip { background: #141a24; border-color: #2a3344; }
@@ -535,6 +572,30 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 .ros .pill.clickable:hover { outline: 1px solid #ffe66e; }
 .ros .pill.active { background: #ffe66e; color: #0b0d12; font-weight: 600; }
 
+/* B3: stat-picker consistency with the skill-pick popover. The clickable
+   V/W/M/Wi stat pills on the caster's row (destroy / artifice / spirit-link
+   picker) adopt the same card-face look as a .skill-card — the body still
+   belongs to the pill-render path above, but the surface reads as a card so
+   the player sees the "pick an ability" context the same everywhere. Only
+   the four stat pills get this; `.pill.perm` and `.pill.cls` keep their own
+   silhouettes above. */
+.ros .stats .pill.v.clickable,
+.ros .stats .pill.w.clickable,
+.ros .stats .pill.m.clickable,
+.ros .stats .pill.wi.clickable {
+  padding: 4px 8px; border-radius: 5px;
+  background: linear-gradient(180deg, #171d2b 0%, #10151e 100%);
+  border: 1px solid #2a3344;
+  border-left-width: 2px;
+  box-shadow: 0 1px 0 #0006;
+}
+.ros .stats .pill.v.clickable:hover,
+.ros .stats .pill.w.clickable:hover,
+.ros .stats .pill.m.clickable:hover,
+.ros .stats .pill.wi.clickable:hover {
+  background: linear-gradient(180deg, #1b2238 0%, #0e1322 100%);
+}
+
 /* Permanents strip right of the deck (Rule 12/23/24): small cards with their die. */
 #perms { display: flex; gap: 6px; margin-left: 14px; margin-bottom: 2px; align-items: flex-end; }
 #perms .perm {
@@ -549,6 +610,20 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #perms .perm.clickable:hover { outline: 1px solid #ffe66e; }
 #perms .perm.active { background: #ffe66e; color: #0b0d12; }
 #perms .perm.active .cd, #perms .perm.active .k { color: #3a3a1a; }
+/* Class cards (user ruling 2026-10-30): one chip per colour (stat group); struck-down colours en-gray. */
+.chip { display: inline-block; min-width: 11px; padding: 1px 3px; margin-left: 2px; border-radius: 3px; font: 600 8px/1 ui-monospace, Menlo, Consolas, monospace; color: #0b0d12; vertical-align: middle; }
+.chip.vitality { background: #6ad99f; } .chip.world { background: #6a9ce3; } .chip.matter { background: #e36666; } .chip.will { background: #d08ae0; }
+.chip.down, .pill.cls.archived .chip { background: #3a3f4a; color: #7b8291; text-decoration: line-through; }
+.chip.done { opacity: 0.45; }
+.chip.clickable { cursor: pointer; outline: 1px solid transparent; }
+.chip.clickable:hover { outline-color: #ffe66e; }
+.chip.armed { outline: 2px solid #ffe66e; }
+.chip.active { background: #ffe66e; color: #0b0d12; }
+.ros .stats .pill.cls { border-color: #e3c36a; color: #f0dca0; font-weight: 400; }
+.ros .stats .pill.cls.archived { color: #7b8291; border-color: #3a3f4a; }
+#perms .perm.class-card { border-color: #8f7a2a; background: linear-gradient(180deg, #2a2416 0%, #1a160f 100%); min-width: 74px; }
+#perms .perm.class-card.recast, #perms .perm.class-card.untap { border-style: dashed; }
+#perms .perm.class-card .chips { margin-top: 4px; }
 
 /* Haste: picking the bonus round tints the hand; cards already committed to it are held. */
 #slots.haste-mode .slot:not(.disabled) .card { box-shadow: 0 0 0 1px #ffe66e inset; }
