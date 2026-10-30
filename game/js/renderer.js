@@ -323,6 +323,39 @@ export function createRenderer(canvas, state) {
       ctx.font = 'bold 8px ui-monospace, Consolas, monospace';
       ctx.textAlign = 'center';
       ctx.fillText(String(t.value), tx, ty + 3);
+      // World-generated features (Shrine, Grove, Crystal …) carry their name over the die so the land reads at a glance.
+      if (t.world && t.item) {
+        ctx.font = '7px ui-sans-serif, system-ui, sans-serif';
+        ctx.fillStyle = ELEM_COLOR[t.elem] || '#ccc';
+        ctx.globalAlpha = 0.85;
+        ctx.fillText(t.item, tx - 4, ty - 8);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Obstacles (Creation): a wall glyph with its hit points, centre of the hex.
+    for (const o of (state.obstacles || [])) {
+      const { x, y } = tilePx(o.q, o.r);
+      if (!inView(x, y)) continue;
+      ctx.font = `${Math.round(HEX_SIZE * 0.9)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#c9a56a';
+      ctx.fillText('🧱', x, y + HEX_SIZE * 0.3);
+      ctx.font = 'bold 8px ui-monospace, Consolas, monospace';
+      ctx.fillStyle = '#ffe6b0';
+      ctx.fillText(`${o.hp}`, x + HEX_SIZE * 0.4, y - HEX_SIZE * 0.35);
+    }
+    // Traps I know of (mine; the ones Super Sense shows me), top-left of the hex.
+    for (const t of (state.traps || [])) {
+      const { x, y } = tilePx(t.q, t.r);
+      const tx = x - HEX_SIZE * 0.45, ty = y - HEX_SIZE * H_SQUASH * 0.45;
+      if (!inView(tx, ty)) continue;
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = t.mine ? 0.95 : 0.8;
+      ctx.fillStyle = t.mine ? '#9fd38a' : '#e3a04a';
+      ctx.fillText('🪤', tx, ty + 4);
+      ctx.globalAlpha = 1;
     }
 
     // Track self's actually-drawn pixel so the destination arrow starts from

@@ -1006,7 +1006,7 @@
       ]
     },
     "effect_throw": {
-      "description": "Implemented as plain delta damage (Rule 21 on Matter via Air) to one enemy in contact. The paper option of throwing a location-token permanent to a nearby location by beating its element with a point-buy die is not yet implemented in the engine. Aura / Aura ∀ widen the hit.",
+      "description": "Reworked 2026-10-29 as Force Smash / Pull. With an enemy in contact: delta damage on Air (Will). Otherwise Force Pull: a bonus tile token on an adjacent tile not under an ally (the element where my stat is biggest first) is contested with an Air point-buy as under Rule 24 — the die ≥ the token value moves the token onto my tile (general_ux_tokens: one per element, bigger wins).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -1039,103 +1039,6 @@
               }
             ]
           }
-        },
-        {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "if": [
-                  {
-                    "var": "cast.aura"
-                  },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
-                ]
-              }
-            ]
-          }
         }
       ],
       "effects": [
@@ -1157,6 +1060,66 @@
                 "elements": {
                   "root": "elements"
                 }
+              }
+            ]
+          }
+        },
+        {
+          "id": "force_pull",
+          "description": "No enemy in reach → the adjacent bonus token (not under an ally; my biggest stat's element first) is pulled onto my tile when my Air die is at least its value.",
+          "target": "tile",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "var": "token.value"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "one_token_per_element",
+          "description": "general_ux_tokens: one token per element on a tile — the new one stands only if it is bigger than the one already there.",
+          "target": "tile",
+          "unit": "rule",
+          "value": {
+            ">": [
+              {
+                "var": "token.value"
+              },
+              {
+                "max_of": [
+                  {
+                    "map": [
+                      {
+                        "filter": [
+                          {
+                            "var": "tile.tokens"
+                          },
+                          {
+                            "==": [
+                              {
+                                "var": "elem"
+                              },
+                              {
+                                "root": "token.elem"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "value"
+                      }
+                    ]
+                  }
+                ]
               }
             ]
           }
@@ -1234,10 +1197,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_metaphysics": {
-      "description": "Implemented as delta damage (Rule 21 over Space→World and Earth→Matter) to one enemy in contact. The map surgery (unite two unknown tiles, or known tiles when beating the creature stats) is not yet implemented in the engine. Aura / Aura ∀ widen the hit.",
+      "description": "Reworked 2026-10-29 (unite). With an enemy in contact: delta damage (Space, Earth). With no enemy in reach: the left-clicked visible tile receives the nearest trap / building / artefact from around me (within 1 hex of me; the owner moves it at resolution).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -1272,8 +1236,8 @@
           }
         },
         {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "id": "tile_within_reach",
+          "description": "The left-clicked tile lies within 10 hexes of the caster (general_ux_range_cast_target); none chosen → the engine picks (random / nearest).",
           "when": {
             "or": [
               {
@@ -1285,84 +1249,11 @@
                 ]
               },
               {
-                "if": [
+                "<=": [
                   {
-                    "var": "cast.aura"
+                    "var": "dist"
                   },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
+                  10
                 ]
               }
             ]
@@ -1391,6 +1282,13 @@
               }
             ]
           }
+        },
+        {
+          "id": "map_surgery",
+          "description": "No enemy in reach → the nearest adjacent trap / obstacle / feature token moves onto the chosen tile.",
+          "target": "tile",
+          "unit": "relocation",
+          "value": true
         }
       ],
       "validation": [
@@ -1493,10 +1391,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_disruption": {
-      "description": "Implemented as delta damage (Rule 21 over Souls→World and Harmony→Will) to one enemy in contact. Splitting an unknown tile into two (or known tiles when beating the creature stats) is not yet implemented in the engine. Aura / Aura ∀ widen the hit.",
+      "description": "Reworked 2026-10-29 (split). With an enemy in contact: delta damage (Souls, Harmony). Otherwise the left-clicked tile receives a trap from ANY known location — even one under an enemy; without a trap in view the nearest building / artefact moves instead.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -1531,8 +1430,8 @@
           }
         },
         {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "id": "tile_within_reach",
+          "description": "The left-clicked tile lies within 10 hexes of the caster (general_ux_range_cast_target); none chosen → the engine picks (random / nearest).",
           "when": {
             "or": [
               {
@@ -1544,84 +1443,11 @@
                 ]
               },
               {
-                "if": [
+                "<=": [
                   {
-                    "var": "cast.aura"
+                    "var": "dist"
                   },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
+                  10
                 ]
               }
             ]
@@ -1650,6 +1476,13 @@
               }
             ]
           }
+        },
+        {
+          "id": "map_surgery",
+          "description": "No enemy in reach → any known trap (closest first, even under an enemy) moves onto the chosen tile; else the nearest feature token.",
+          "target": "tile",
+          "unit": "relocation",
+          "value": true
         }
       ],
       "validation": [
@@ -1752,10 +1585,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_balefire": {
-      "description": "Implemented. Delta damage (Rule 21 over Fire, Harmony, Time) to one enemy in contact. pc override of the paper \"extra round\": when the cast lands (at least 1 damage reaches a victim this action) the caster draws 5 cards at once and gets 3 bonus plans for the next action. A cast that fizzles or is fully shielded grants nothing. Aura / Aura ∀ widen the hit.",
+      "description": "Reworked 2026-10-29 (user spec). Delta damage (Fire, Harmony, Time) to one enemy in contact — the cast completes even with nobody in reach. On completion the caster holds Balefire as a temporary permanent (fixed power 6; falls at the end of the caster's NEXT turn, or to a Fire/Harmony/Time point-buy rolling 6) and draws 5 cards. While it stands every card in hand — basic actions included — is an instant: up to 9 bonus plans ride on each action (10 cards a round), yet only ONE element is emitted per action (general_ux_instants / Rule 20).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -1788,103 +1622,6 @@
               }
             ]
           }
-        },
-        {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "if": [
-                  {
-                    "var": "cast.aura"
-                  },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
-                ]
-              }
-            ]
-          }
         }
       ],
       "effects": [
@@ -1912,17 +1649,58 @@
         },
         {
           "id": "cards_drawn_on_land",
-          "description": "Cards drawn when the Balefire lands (pc override of the extra round).",
+          "description": "Cards drawn when the Balefire completes.",
           "target": "caster",
           "unit": "cards",
           "value": 5
         },
         {
-          "id": "bonus_plans_next_action",
-          "description": "Bonus plans the caster may queue on the next action when the Balefire landed.",
+          "id": "bonus_plans_while_held",
+          "description": "Bonus plans (instants) the holder may queue on each action while Balefire stands — every card is an instant then; still one element emission per action.",
           "target": "caster",
           "unit": "actions",
-          "value": 3
+          "value": 9
+        },
+        {
+          "id": "permanent_turns",
+          "description": "Turns the temporary permanent lasts: until the end of the caster's next turn.",
+          "target": "caster",
+          "unit": "turns",
+          "value": 1
+        },
+        {
+          "id": "permanent_power",
+          "description": "Rule 24 threshold of the permanent: fixed 6 (no placement die).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "fixed_power_6",
+              {}
+            ]
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "rule": [
+                    "fixed_power_6",
+                    {}
+                  ]
+                }
+              }
+            ]
+          }
         }
       ],
       "validation": [
@@ -1997,10 +1775,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_poison": {
-      "description": "Implemented as delta damage (Rule 21 over Water→Matter and Vitality) to one enemy in contact. Leaving the card as a trap on the caster tile after casting is not yet implemented in the engine. Aura / Aura ∀ widen the hit.",
+      "description": "Implemented (2026-10-29). Delta damage (Water, Vitality) to one enemy in contact — with nobody in reach the cast still completes — and the card stays face down under the caster as a trap (power 20 per element). It springs on the first enemy that targets the caster while they stand on it: Σ max(0, 20 − enemy stat) per element ÷10; then the card is discarded. User ruling 2026-10-30: the card, lying under me, goes back to MY discard pile when it springs.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -2033,103 +1812,6 @@
               }
             ]
           }
-        },
-        {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "if": [
-                  {
-                    "var": "cast.aura"
-                  },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
-                ]
-              }
-            ]
-          }
         }
       ],
       "effects": [
@@ -2151,6 +1833,77 @@
                 "elements": {
                   "root": "elements"
                 }
+              }
+            ]
+          }
+        },
+        {
+          "id": "trap_trigger",
+          "description": "Springs on the first enemy whose reveal declares the trap owner as target while the owner stands on the trap tile; the card then goes to the discard pile.",
+          "target": "tile",
+          "unit": "trigger",
+          "value": "targeted"
+        },
+        {
+          "id": "trap_damage",
+          "description": "When the trap springs: Σ over its elements of max(0, 20 − victim stat) ÷10 rounded half up (the same shields / zones / Void as a cast apply).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "round_div10": [
+              {
+                "sum": [
+                  {
+                    "map": [
+                      {
+                        "var": "elements"
+                      },
+                      {
+                        "max0": [
+                          {
+                            "-": [
+                              20,
+                              {
+                                "stat_of": [
+                                  {
+                                    "root": "target"
+                                  },
+                                  {
+                                    "var": ""
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "trap_card_routing",
+          "description": "User ruling 2026-10-30: a trap under its owner goes back to the OWNER's discard pile; a trap on an unoccupied tile (enter trigger) goes to the discard pile of the unit that dealt with it (sprang it, or a Cleric with someone on the tile). Library-generated traps only ever exist as that card for the one who dealt with them.",
+          "target": "card",
+          "unit": "discard_pile",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "trap.trigger"
+                  },
+                  "enter"
+                ]
+              },
+              {
+                "var": "trap.victim"
+              },
+              {
+                "var": "trap.owner"
               }
             ]
           }
@@ -2228,10 +1981,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_space_bending": {
-      "description": "Implemented. Delta damage (Rule 21 over Space and Souls, both World) to one enemy in contact and the target loses its next action (×2 on a ∀ double cast; the paper cumulative lock per cast is honoured by casting again). The bonus Library effect over an unknown tile is not yet implemented in the engine.",
+      "description": "Implemented (2026-10-29, alt leg reworked 2026-10-30). Delta damage (Space) + 1 lost action on one enemy in contact. With nobody in reach the alt leg fires: a RANDOM effect card out of the Dimension Library (every peer picks the same; nothing leaves my hand) is laid as an enter-trap (power 20 per element) on a random free known tile within 10 hexes. Whoever deals with that trap (takes its damage, or a Cleric disables it with someone on the tile) gets the card in THEIR discard pile (library: true).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -2261,103 +2015,6 @@
                 "disabled": {
                   "root": "caster.disabled_elems"
                 }
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "if": [
-                  {
-                    "var": "cast.aura"
-                  },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
-                ]
               }
             ]
           }
@@ -2398,6 +2055,96 @@
               },
               2,
               1
+            ]
+          }
+        },
+        {
+          "id": "alt_trap_within_10",
+          "description": "Nobody in reach: a random library card as an enter-trap on a random free tile within 10 hexes.",
+          "target": "tile",
+          "unit": "trap",
+          "value": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "cast.recipients"
+                  },
+                  0
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "dimension.library_size"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "trap_damage",
+          "description": "When the trap springs: Σ over its elements of max(0, 20 − victim stat) ÷10 rounded half up (the same shields / zones / Void as a cast apply).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "round_div10": [
+              {
+                "sum": [
+                  {
+                    "map": [
+                      {
+                        "var": "elements"
+                      },
+                      {
+                        "max0": [
+                          {
+                            "-": [
+                              20,
+                              {
+                                "stat_of": [
+                                  {
+                                    "root": "target"
+                                  },
+                                  {
+                                    "var": ""
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "trap_card_routing",
+          "description": "User ruling 2026-10-30: a trap under its owner goes back to the OWNER's discard pile; a trap on an unoccupied tile (enter trigger) goes to the discard pile of the unit that dealt with it (sprang it, or a Cleric with someone on the tile). Library-generated traps only ever exist as that card for the one who dealt with them.",
+          "target": "card",
+          "unit": "discard_pile",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "trap.trigger"
+                  },
+                  "enter"
+                ]
+              },
+              {
+                "var": "trap.victim"
+              },
+              {
+                "var": "trap.owner"
+              }
             ]
           }
         }
@@ -2474,7 +2221,8 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_turn_life": {
       "description": "Implemented, instant. Three-way resolution (pc ruling): a right-clicked adjacent living ally is healed round(caster Vitality ÷10) and nothing is damaged; otherwise an enemy in contact (right-clicked, else the one hurt most) takes Rule 21 delta damage over Vitality and Harmony; if no enemy is in reach the caster heals itself by round(Vitality ÷10). Heals are capped at max life by the peer. Rule 8 pc override: an instant that gave no benefit returns to hand.",
@@ -2838,7 +2586,7 @@
       ]
     },
     "effect_harm": {
-      "description": "Implemented, instant point-buy damage: the single Vitality emission buys a die (6·n dice nearest the stat, sum ≤ stat, keep the highest); the kept die ÷10 rounded half up is dealt to one enemy in contact (right-clicked, else hurt most). A failed roll re-emits that element next action. The paper channeling (defense token every action until contact) is not modelled; Aura / Aura ∀ widen the hit.",
+      "description": "Implemented as a channel (general_ux_channeling, 2026-10-29). The Vitality emission buys dice; the kept die ÷10 is dealt to one enemy in contact and a Vitality shield token goes on the caster's tile. The card becomes a temporary permanent (power = smallest die) that re-fires the damage leg every subsequent action until the caster breaks concentration (A/B/M/EM or a non-Vitality emission) or the permanent is destroyed by Rule 24.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -2968,6 +2716,25 @@
               }
             ]
           }
+        },
+        {
+          "id": "channel_holds",
+          "description": "general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.",
+          "when": {
+            "!": {
+              "in": [
+                {
+                  "var": "caster.action"
+                },
+                [
+                  "A",
+                  "B",
+                  "M",
+                  "EM"
+                ]
+              ]
+            }
+          }
         }
       ],
       "effects": [
@@ -3018,6 +2785,26 @@
                     "var": "cast.kept"
                   }
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "channel_tick",
+          "description": "Every subsequent action the channel re-fires its leg (point-buy damage on the target) with the caster's current stats, at no further cost, until broken.",
+          "target": "caster",
+          "unit": "per_action",
+          "value": true
+        },
+        {
+          "id": "channel_permanent_power",
+          "description": "The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "min_of": [
+              {
+                "var": "cast.dice"
               }
             ]
           }
@@ -3107,10 +2894,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_mind_blast": {
-      "description": "Implemented, instant point-buy damage over Concentration (Will): kept die ÷10 rounded half up to one enemy in contact, and the caster takes the same amount it dealt (selfDamageEqual). Switching two tiles is not yet implemented in the engine. Aura / Aura ∀ widen the hit (self damage per hit).",
+      "description": "Reworked 2026-10-29 (switch). With an enemy in contact: Concentration point-buy damage to the enemy and the same to me. With no enemy in reach: the left-clicked tile and my tile swap everything on them — units, traps, obstacles, feature tokens (the owners move their things at resolution).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -3145,8 +2933,8 @@
           }
         },
         {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "id": "tile_within_reach",
+          "description": "The left-clicked tile lies within 10 hexes of the caster (general_ux_range_cast_target); none chosen → the engine picks (random / nearest).",
           "when": {
             "or": [
               {
@@ -3158,84 +2946,11 @@
                 ]
               },
               {
-                "if": [
+                "<=": [
                   {
-                    "var": "cast.aura"
+                    "var": "dist"
                   },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
+                  10
                 ]
               }
             ]
@@ -3310,6 +3025,13 @@
               }
             ]
           }
+        },
+        {
+          "id": "map_surgery",
+          "description": "No enemy in reach → my tile and the chosen tile exchange their units, traps, obstacles and tokens.",
+          "target": "tile",
+          "unit": "relocation",
+          "value": true
         }
       ],
       "validation": [
@@ -3396,7 +3118,8 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_drain": {
       "description": "Implemented point-buy damage: one die per emission (Vitality, then Harmony→Will), Σ kept dice ÷10 rounded half up to one enemy in contact, and the caster is healed by the damage actually dealt (healDealt, capped at max life). A failed roll re-emits only that element. The paper inverse option is the default pc behaviour (damage + life). Aura / Aura ∀ widen the hit.",
@@ -4637,7 +4360,7 @@
       ]
     },
     "effect_aging": {
-      "description": "Implemented as stat penalties, no life damage: at completion the caster buys a Time die and a Souls die (both on World) and each lands as a −die token on the target World stat (two penalty tokens) for one enemy in contact. Failed rolls retry the cast. The Library bonus effect over a known location is not yet implemented. Aura / Aura ∀ widen the recipients.",
+      "description": "Reworked 2026-10-29. With an enemy in contact: Time and Souls dice (World) land as −die penalty tokens on the target's stats. With no enemy in reach: a random building / artefact (Shrine, Sphere of Fire, School, Sacred Land, … — a bonus tile token with an item label, general_ux_token_generated) appears on a random free tile within 2 hexes.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -4667,103 +4390,6 @@
                 "disabled": {
                   "root": "caster.disabled_elems"
                 }
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_in_reach",
-          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "if": [
-                  {
-                    "var": "cast.aura"
-                  },
-                  {
-                    "rule": [
-                      "in_view",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        },
-                        "radius": 10
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_is_enemy",
-          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "rule": [
-                  "is_enemy",
-                  {
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "id": "target_alive",
-          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
-          "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                ">": [
-                  {
-                    "var": "target.life"
-                  },
-                  0
-                ]
               }
             ]
           }
@@ -4812,6 +4438,56 @@
           "unit": "die",
           "value": {
             "var": "die"
+          }
+        },
+        {
+          "id": "alt_feature_within_2",
+          "description": "No enemy in reach → a random feature token (item + element + value from the FEATURES catalog) on a random free tile within 2 hexes (deterministic from the reveal salt).",
+          "target": "tile",
+          "unit": "token",
+          "value": {
+            "var": "feature.value"
+          }
+        },
+        {
+          "id": "one_token_per_element",
+          "description": "general_ux_tokens: one token per element on a tile — the new one stands only if it is bigger than the one already there.",
+          "target": "tile",
+          "unit": "rule",
+          "value": {
+            ">": [
+              {
+                "var": "token.value"
+              },
+              {
+                "max_of": [
+                  {
+                    "map": [
+                      {
+                        "filter": [
+                          {
+                            "var": "tile.tokens"
+                          },
+                          {
+                            "==": [
+                              {
+                                "var": "elem"
+                              },
+                              {
+                                "root": "token.elem"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
           }
         }
       ],
@@ -4915,10 +4591,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_combustion": {
-      "description": "Implemented, instant: a Harmony point-buy (Will) lands as a −die token on the Will stat of one enemy in contact (stat penalty). The paper defence-token-over-the-effect channeling is not modelled. A failed roll re-emits. Aura / Aura ∀ widen the recipients.",
+      "description": "Implemented as a channel (general_ux_channeling, 2026-10-29). Each action a Harmony point-buy penalty token lands on the target while the caster keeps the Harmony channel; the card is a temporary permanent with power = smallest die.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -5048,6 +4725,25 @@
               }
             ]
           }
+        },
+        {
+          "id": "channel_holds",
+          "description": "general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.",
+          "when": {
+            "!": {
+              "in": [
+                {
+                  "var": "caster.action"
+                },
+                [
+                  "A",
+                  "B",
+                  "M",
+                  "EM"
+                ]
+              ]
+            }
+          }
         }
       ],
       "effects": [
@@ -5092,6 +4788,26 @@
           "unit": "die",
           "value": {
             "var": "die"
+          }
+        },
+        {
+          "id": "channel_tick",
+          "description": "Every subsequent action the channel re-fires its leg (a Harmony penalty token on the target) with the caster's current stats, at no further cost, until broken.",
+          "target": "caster",
+          "unit": "per_action",
+          "value": true
+        },
+        {
+          "id": "channel_permanent_power",
+          "description": "The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "min_of": [
+              {
+                "var": "cast.dice"
+              }
+            ]
           }
         }
       ],
@@ -5179,7 +4895,8 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_mutate": {
       "description": "Implemented. One point-buy on the caster stat of the first element (Water→Matter): on the caster (default) or a right-clicked ally the highest die becomes a + token on the recipient SMALLEST stat and the smallest die a − token on its BIGGEST stat (ties: vitality < world < will < matter; 10/10/10/10 → +6 Vitality, −2 Matter); on a right-clicked adjacent enemy it is mirrored (−big on their biggest, +small on their smallest). Tokens are permanents removable by Rule 24. A failed roll retries.",
@@ -5809,7 +5526,7 @@
       ]
     },
     "effect_artifice": {
-      "description": "Implemented. An Earth point-buy becomes a +die token on the caster Matter stat, permanent until destroyed under Rule 24 (die ≥ token value). The alternative of putting the token over a location is not yet implemented. Under Aura the adjacent allies also receive one.",
+      "description": "Reworked 2026-10-29. An Earth point-buy; the kept die becomes a bonus tile token on the left-clicked tile (mine or an adjacent one) of the element I clicked (general_ux_tokens; none clicked → a random element). Without a chosen tile the die lands as a +die token on my Matter stat as before. One token per element per tile — a bigger one replaces a smaller one of mine. Permanent until destroyed under Rule 24.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -5868,6 +5585,30 @@
               }
             ]
           }
+        },
+        {
+          "id": "tile_within_reach",
+          "description": "The left-clicked tile lies within 1 hexes of the caster (general_ux_range_cast_target); none chosen → the engine picks (random / nearest).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "dist"
+                  },
+                  1
+                ]
+              }
+            ]
+          }
         }
       ],
       "effects": [
@@ -5920,6 +5661,56 @@
                     }
                   ]
                 }
+              }
+            ]
+          }
+        },
+        {
+          "id": "tile_bonus_token",
+          "description": "A chosen tile → a bonus tile token worth the kept die, of the clicked (else random) element.",
+          "target": "tile",
+          "unit": "token",
+          "value": {
+            "var": "die"
+          }
+        },
+        {
+          "id": "one_token_per_element",
+          "description": "general_ux_tokens: one token per element on a tile — the new one stands only if it is bigger than the one already there.",
+          "target": "tile",
+          "unit": "rule",
+          "value": {
+            ">": [
+              {
+                "var": "token.value"
+              },
+              {
+                "max_of": [
+                  {
+                    "map": [
+                      {
+                        "filter": [
+                          {
+                            "var": "tile.tokens"
+                          },
+                          {
+                            "==": [
+                              {
+                                "var": "elem"
+                              },
+                              {
+                                "root": "token.elem"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "value"
+                      }
+                    ]
+                  }
+                ]
               }
             ]
           }
@@ -6009,7 +5800,8 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_fossilization": {
       "description": "Implemented. One enemy in contact loses the remaining actions of this turn (lock rest of turn), and the caster buys an Earth bonus token and an Earth damage-shield token on its own tile (a failed token roll retries the cast). The paper alternative Vitality bonus token is not offered. Aura / Aura ∀ widen the locked recipients.",
@@ -7967,7 +7759,7 @@
       ]
     },
     "effect_the_void": {
-      "description": "Implemented. The caster takes no damage at all during the action in which the cast completes (voidFor); it does not last the turn. ∀ double cast: resolved as an instant chain (EVERY_INSTANT). The paper channeling token is not modelled. Rule 8 pc override applies when cast as an instant.",
+      "description": "Implemented as a channel (general_ux_channeling, 2026-10-29). I take no damage on the cast action and on every subsequent action while I keep the Concentration channel (no A/B/M/EM, no other element); a Concentration bonus token goes on my tile. ∀: instant.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -8000,6 +7792,25 @@
               }
             ]
           }
+        },
+        {
+          "id": "channel_holds",
+          "description": "general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.",
+          "when": {
+            "!": {
+              "in": [
+                {
+                  "var": "caster.action"
+                },
+                [
+                  "A",
+                  "B",
+                  "M",
+                  "EM"
+                ]
+              ]
+            }
+          }
         }
       ],
       "effects": [
@@ -8009,6 +7820,26 @@
           "target": "caster",
           "unit": "damage",
           "value": 0
+        },
+        {
+          "id": "channel_tick",
+          "description": "Every subsequent action the channel re-fires its leg (take no damage this action + a Concentration bonus token on my tile) with the caster's current stats, at no further cost, until broken.",
+          "target": "caster",
+          "unit": "per_action",
+          "value": true
+        },
+        {
+          "id": "channel_permanent_power",
+          "description": "The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "min_of": [
+              {
+                "var": "cast.dice"
+              }
+            ]
+          }
         }
       ],
       "validation": [
@@ -8099,10 +7930,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_light_darkness": {
-      "description": "Implemented. The caster hex and its six neighbours become a no-damage zone until the end of the turn: nobody deals damage to units standing in them (Blizzard casts excepted). ∀ double cast: resolved as an instant chain (EVERY_INSTANT). The Fire channeling token is not modelled.",
+      "description": "Implemented as a channel (general_ux_channeling, 2026-10-29). The no-damage zone over my tile and its neighbours is renewed every action while I keep the Fire channel; a Fire bonus token goes on my tile. ∀: instant.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -8135,6 +7967,25 @@
               }
             ]
           }
+        },
+        {
+          "id": "channel_holds",
+          "description": "general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.",
+          "when": {
+            "!": {
+              "in": [
+                {
+                  "var": "caster.action"
+                },
+                [
+                  "A",
+                  "B",
+                  "M",
+                  "EM"
+                ]
+              ]
+            }
+          }
         }
       ],
       "effects": [
@@ -8144,6 +7995,26 @@
           "target": "tile",
           "unit": "hexes",
           "value": 7
+        },
+        {
+          "id": "channel_tick",
+          "description": "Every subsequent action the channel re-fires its leg (the no-damage zone on my tile and its six neighbours + a Fire bonus token on my tile) with the caster's current stats, at no further cost, until broken.",
+          "target": "caster",
+          "unit": "per_action",
+          "value": true
+        },
+        {
+          "id": "channel_permanent_power",
+          "description": "The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "min_of": [
+              {
+                "var": "cast.dice"
+              }
+            ]
+          }
         }
       ],
       "validation": [
@@ -8234,10 +8105,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_teleportation": {
-      "description": "Implemented. The caster moves to the right-clicked tile if it is free at resolution (ctx.isFree); without a free tile target the cast fizzles. Teleporting another subject is not yet implemented. ∀ double cast: resolved as an instant chain (EVERY_INSTANT), the paper unknown-location option is not modelled.",
+      "description": "Implemented (2026-10-29). The left-clicked free tile within 10 hexes (general_ux_range_cast_target; none chosen or not free → a random free known tile within 10) receives me or the adjacent ally with less life (tie → me). ∀: instant (general_ux_instants).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -8273,11 +8145,11 @@
         },
         {
           "id": "free_tile_target",
-          "description": "The right-clicked target is a tile (q, r), and the engine requires it to be free (ctx.isFree) at resolution.",
+          "description": "Either no tile was chosen (random free tile within 10) or the chosen tile is within 10 hexes of the caster; it must be free at resolution.",
           "when": {
-            "and": [
+            "or": [
               {
-                "!=": [
+                "==": [
                   {
                     "var": "target"
                   },
@@ -8285,31 +8157,11 @@
                 ]
               },
               {
-                "and": [
+                "<=": [
                   {
-                    "==": [
-                      {
-                        "typeof": [
-                          {
-                            "var": "target.q"
-                          }
-                        ]
-                      },
-                      "number"
-                    ]
+                    "var": "dist"
                   },
-                  {
-                    "==": [
-                      {
-                        "typeof": [
-                          {
-                            "var": "target.r"
-                          }
-                        ]
-                      },
-                      "number"
-                    ]
-                  }
+                  10
                 ]
               }
             ]
@@ -8330,6 +8182,28 @@
               {
                 "var": "target"
               }
+            ]
+          }
+        },
+        {
+          "id": "who_moves",
+          "description": "The adjacent ally with the lowest life below mine moves; otherwise I do.",
+          "target": "self_or_ally",
+          "unit": "subject",
+          "value": {
+            "if": [
+              {
+                "<": [
+                  {
+                    "var": "target.life"
+                  },
+                  {
+                    "var": "caster.life"
+                  }
+                ]
+              },
+              "ally",
+              "self"
             ]
           }
         }
@@ -8422,7 +8296,8 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_summoning": {
       "description": "Implemented stat buy (channeling). Summons the caster archived creature (or the Library top creature); the need is that creature stat sum (cast.need). Every emission banks the caster stat behind the element going out (card elements round-robin) until the bank is at least the need (creature stat sum); no dice, so nothing fails — a low stat only takes longer. The creature appears as the caster ally on completion and the card stays as a permanent with FIXED power 6 (Rule 24: the destroyer needs a 6); on destruction the creature vanishes and its card goes to the owner archive. The ∀ double cast instead binds an unknown creature in view: it must still be alive, visible and within 10 hexes at completion, otherwise the cast fizzles.",
@@ -10576,7 +10451,7 @@
       ]
     },
     "effect_super_sense": {
-      "description": "Not yet implemented in the engine (no EFFECT_RULES entry; resolveEffect fizzles). Paper: a Vitality point-buy permanent; while it stands the caster may look at a neighbouring location without activating its trap and reveals its contents to the others. Removing the Super Sense permanent evades one damage. Placed with a point-buy die as Rule 24 power. No ∀ bonus on the card.",
+      "description": "Implemented 2026-10-29. A Vitality permanent (power = placement die). While it stands the traps on the six tiles around me are known to me without springing them (they stay where they are; the UI lists them). The first point of damage that would land on me is evaded instead and the permanent is spent for it.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -10614,7 +10489,7 @@
       "effects": [
         {
           "id": "permanent_power",
-          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "description": "Rule 24 threshold of the permanent: the kept point-buy die of its placement.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -10623,7 +10498,7 @@
         },
         {
           "id": "destroyed_by_rule_24",
-          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -10634,32 +10509,7 @@
                   "var": "die"
                 },
                 "power": {
-                  "max_of": [
-                    {
-                      "map": [
-                        {
-                          "filter": [
-                            {
-                              "var": "caster.tokens"
-                            },
-                            {
-                              "==": [
-                                {
-                                  "var": "elem"
-                                },
-                                {
-                                  "root": "elements.0"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "var": "value"
-                        }
-                      ]
-                    }
-                  ]
+                  "var": "power"
                 }
               }
             ]
@@ -10667,15 +10517,15 @@
         },
         {
           "id": "damage_evaded_on_removal",
-          "description": "Damage evaded by removing the permanent.",
+          "description": "Damage evaded when the permanent is spent (the first point that would land).",
           "target": "caster",
           "unit": "damage",
           "value": 1
         },
         {
           "id": "scout_reach",
-          "description": "Hex distance of the location that may be looked at.",
-          "target": "tile",
+          "description": "Hexes around me whose traps I see.",
+          "target": "caster",
           "unit": "hexes",
           "value": 1
         }
@@ -10764,10 +10614,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_spirit_link": {
-      "description": "Not yet implemented in the engine. Paper: a Souls permanent that connects one stat of two friendly subjects — the chosen element value is drawn as dice and put over the card and the sum becomes the new stat value for both. ∀ double cast: connect all elements (all four stats). Placed with a point-buy die as Rule 24 power.",
+      "description": "Implemented (2026-10-29). The clicked ally stat (else the biggest stat among my living allies) is added to my stat while the permanent stands — not a token, so it overrides nothing; my life maximum follows (general_ux_hitpoints_calculations). ∀: all four stats.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -10802,61 +10653,31 @@
           }
         },
         {
-          "id": "two_friendly_subjects_in_contact",
-          "description": "The linked subject is a living ally in contact (or the caster itself).",
+          "id": "ally_alive",
+          "description": "The linked unit is a living ally (any distance).",
           "when": {
-            "or": [
+            "and": [
               {
-                "==": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "==": [
-                  {
-                    "var": "target.id"
-                  },
-                  {
-                    "var": "caster.id"
-                  }
-                ]
-              },
-              {
-                "and": [
-                  {
-                    "rule": [
-                      "is_ally",
-                      {
-                        "a_alliance": {
-                          "var": "caster.alliance"
-                        },
-                        "b_alliance": {
-                          "var": "target.alliance"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "rule": [
-                      "in_contact",
-                      {
-                        "dist": {
-                          "var": "dist"
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    ">": [
-                      {
-                        "var": "target.life"
+                "!": {
+                  "rule": [
+                    "is_enemy",
+                    {
+                      "a_alliance": {
+                        "var": "caster.alliance"
                       },
-                      0
-                    ]
-                  }
+                      "b_alliance": {
+                        "var": "target.alliance"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
                 ]
               }
             ]
@@ -10866,30 +10687,16 @@
       "effects": [
         {
           "id": "linked_stat_sum",
-          "description": "The new shared value of the linked stat: caster stat + target stat behind the first cast element.",
-          "target": "target",
+          "description": "My stat while linked = my base stat + the ally's current base stat for the chosen stat.",
+          "target": "caster",
           "unit": "stat",
           "value": {
             "+": [
               {
-                "stat_of": [
-                  {
-                    "var": "caster"
-                  },
-                  {
-                    "var": "elements.0"
-                  }
-                ]
+                "var": "caster.stats.world"
               },
               {
-                "stat_of": [
-                  {
-                    "var": "target"
-                  },
-                  {
-                    "var": "elements.0"
-                  }
-                ]
+                "var": "target.stats.world"
               }
             ]
           }
@@ -11051,10 +10858,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_blessing_curse": {
-      "description": "Not yet implemented in the engine. Paper: a Time permanent that turns a target effect into a permanent effect (the target effect card is put under Blessing / Curse and keeps acting while it stands). ∀ double cast: remove one of your Blessings to instantly negate an enemy effect. Placed with a point-buy die as Rule 24 power; destroying it releases the effect beneath.",
+      "description": "Implemented 2026-10-29. A Time permanent (power = placement die) that takes a second effect card from my hand (the one I clicked; else the one with most elements) and keeps it as a permanent effect: it re-fires every action with my current stats, for free, as long as Blessing stands (no concentration to break). Selecting Blessing again with another card replaces the first (old to the discard pile). Destroyed under Rule 24 → the attached card goes to the graveyard. ∀ (user ruling 2026-10-30): with TWO Blessing / Curse permanents, the second is spent — to my discard pile — the moment an enemy effect is about to touch me (damage, a lock, a penalty token, a forced move, an affliction, a possession, a hand peek, a trap) and that part of the effect is negated; one negation per action.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -11087,34 +10895,31 @@
               }
             ]
           }
+        },
+        {
+          "id": "effect_attached",
+          "description": "A second effect card from the hand is attached (cast.attach); without one the cast fizzles.",
+          "when": {
+            "!=": [
+              {
+                "var": "cast.attach"
+              },
+              null
+            ]
+          }
         }
       ],
       "effects": [
         {
           "id": "effects_made_permanent",
-          "description": "Effects put under this card.",
-          "target": "target",
-          "unit": "tokens",
+          "description": "Attached effect cards that re-fire each action while Blessing stands.",
+          "target": "caster",
+          "unit": "cards",
           "value": 1
         },
         {
-          "id": "negations_when_every",
-          "description": "Enemy effects negated by removing a Blessing (∀ only).",
-          "target": "all_enemies",
-          "unit": "tokens",
-          "value": {
-            "if": [
-              {
-                "var": "cast.every"
-              },
-              1,
-              0
-            ]
-          }
-        },
-        {
           "id": "permanent_power",
-          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "description": "Rule 24 threshold of the permanent: the kept point-buy die of its placement.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -11123,7 +10928,7 @@
         },
         {
           "id": "destroyed_by_rule_24",
-          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -11134,33 +10939,34 @@
                   "var": "die"
                 },
                 "power": {
-                  "max_of": [
-                    {
-                      "map": [
-                        {
-                          "filter": [
-                            {
-                              "var": "caster.tokens"
-                            },
-                            {
-                              "==": [
-                                {
-                                  "var": "elem"
-                                },
-                                {
-                                  "root": "elements.0"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "var": "value"
-                        }
-                      ]
-                    }
-                  ]
+                  "var": "power"
                 }
+              }
+            ]
+          }
+        },
+        {
+          "id": "every_negates",
+          "description": "∀: the second Blessing negates one hostile effect on its holder and is spent.",
+          "target": "caster",
+          "unit": "negation",
+          "value": {
+            "and": [
+              {
+                "var": "caster.blessing_every"
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
               }
             ]
           }
@@ -11237,27 +11043,12 @@
               "permanent"
             ]
           }
-        },
-        {
-          "id": "keeps_every_bonus",
-          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
-          "assert": {
-            "==": [
-              {
-                "typeof": [
-                  {
-                    "var": "proposal.data.every_bonus"
-                  }
-                ]
-              },
-              "string"
-            ]
-          }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_banish": {
-      "description": "Not yet implemented in the engine. Paper: relocate a subject against its will anywhere onto a known (open) tile or an unknown tile; the subject is an enemy in contact (stat vs stat over Space→World and Souls→World decides). ∀ double cast: relocate a whole tile against its will onto an unknown or known tile. Not a permanent.",
+      "description": "Implemented (2026-10-29). On an enemy in contact: if my World (Space, Souls) beats theirs the enemy is relocated to a random free known tile about 20 hexes away (≥18; the farthest known free tile when the map is not that wide yet). Otherwise the cast fizzles.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -11411,6 +11202,13 @@
               }
             ]
           }
+        },
+        {
+          "id": "banish_distance",
+          "description": "Target distance of the relocation (≥18 hexes when such a free tile is known).",
+          "target": "target",
+          "unit": "hexes",
+          "value": 20
         }
       ],
       "validation": [
@@ -11529,10 +11327,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_sleep": {
-      "description": "Not yet implemented in the engine. Paper: set as a trap on the caster location; an enemy in contact cannot cast effects; when the trap resolves on an enemy it becomes a permanent targeting the trapped character with power 20 point-buy (the enemy needs a Rule 24 point-buy ≥ 20 — i.e. several dice — to break it). Trap power 20 per Sleep cast (×2 on a ∀ double cast).",
+      "description": "Implemented (2026-10-29). The card lies face down under the caster; the first enemy that steps onto the tile springs it: the caster gains the card as a permanent (fixed power 6, Rule 24 — user ruling 2026-10-30: \"power 20 is my bad\") and the victim cannot cast effects while in contact with me while that permanent stands. Trap card routing per user ruling 2026-10-30 (see trap_card_routing).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -11614,6 +11413,44 @@
                     }
                   ]
                 }
+              }
+            ]
+          }
+        },
+        {
+          "id": "trap_trigger",
+          "description": "Springs on the first enemy that steps onto the trap tile.",
+          "target": "tile",
+          "unit": "trigger",
+          "value": "enter"
+        },
+        {
+          "id": "affliction",
+          "description": "While the owner holds the sprung permanent: the victim cannot cast effects while in contact with me.",
+          "target": "target",
+          "unit": "affliction",
+          "value": "effect_sleep"
+        },
+        {
+          "id": "trap_card_routing",
+          "description": "User ruling 2026-10-30: a trap under its owner goes back to the OWNER's discard pile; a trap on an unoccupied tile (enter trigger) goes to the discard pile of the unit that dealt with it (sprang it, or a Cleric with someone on the tile). Library-generated traps only ever exist as that card for the one who dealt with them.",
+          "target": "card",
+          "unit": "discard_pile",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "trap.trigger"
+                  },
+                  "enter"
+                ]
+              },
+              {
+                "var": "trap.victim"
+              },
+              {
+                "var": "trap.owner"
               }
             ]
           }
@@ -11703,10 +11540,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_confusion": {
-      "description": "Not yet implemented in the engine. Paper: set as a trap on the caster location; the trapped target cannot perform any basic action except Empty Posture (not even Empty Move); on trap resolve it becomes a permanent on the trapped character with power 20 point-buy. Trap power 20 per cast (×2 on a ∀ double cast).",
+      "description": "Implemented (2026-10-29). The card lies face down under the caster; the first enemy that steps onto the tile springs it: the caster gains the card as a permanent (fixed power 6, Rule 24 — user ruling 2026-10-30: \"power 20 is my bad\") and the victim can only Empty Posture while that permanent stands. Trap card routing per user ruling 2026-10-30 (see trap_card_routing).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -11768,6 +11606,44 @@
           "target": "target",
           "unit": "actions",
           "value": 1
+        },
+        {
+          "id": "trap_trigger",
+          "description": "Springs on the first enemy that steps onto the trap tile.",
+          "target": "tile",
+          "unit": "trigger",
+          "value": "enter"
+        },
+        {
+          "id": "affliction",
+          "description": "While the owner holds the sprung permanent: the victim can only Empty Posture.",
+          "target": "target",
+          "unit": "affliction",
+          "value": "effect_confusion"
+        },
+        {
+          "id": "trap_card_routing",
+          "description": "User ruling 2026-10-30: a trap under its owner goes back to the OWNER's discard pile; a trap on an unoccupied tile (enter trigger) goes to the discard pile of the unit that dealt with it (sprang it, or a Cleric with someone on the tile). Library-generated traps only ever exist as that card for the one who dealt with them.",
+          "target": "card",
+          "unit": "discard_pile",
+          "value": {
+            "if": [
+              {
+                "==": [
+                  {
+                    "var": "trap.trigger"
+                  },
+                  "enter"
+                ]
+              },
+              {
+                "var": "trap.victim"
+              },
+              {
+                "var": "trap.owner"
+              }
+            ]
+          }
         }
       ],
       "validation": [
@@ -11882,10 +11758,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_delay_time": {
-      "description": "Not yet implemented in the engine. Paper: a Time, Time permanent; all affected adjacent enemies perform one less action per round until someone destroys it; at first contact an enemy still finishes its current action, and an enemy always keeps at least one action per round. Placed with a point-buy die as Rule 24 power.",
+      "description": "Implemented (2026-10-29). While the permanent stands, each adjacent enemy loses the last action of every turn per holder adjacent to them (two holders leave only the first action). Judged at planning, so the action in progress at first contact still completes; at least one action per turn remains.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -11923,12 +11800,14 @@
       "effects": [
         {
           "id": "actions_lost_per_round",
-          "description": "Actions each adjacent enemy loses per round while the permanent stands, floored so at least one action remains.",
+          "description": "Actions an adjacent enemy loses per turn: one per adjacent Delay Time holder, at most actions_per_round − 1.",
           "target": "all_enemies",
           "unit": "actions",
           "value": {
             "min": [
-              1,
+              {
+                "var": "cast.holders_adjacent"
+              },
               {
                 "max0": [
                   {
@@ -12070,10 +11949,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_empower": {
-      "description": "Not yet implemented in the engine. Paper: a Concentration point-buy permanent; remove it at any time to gain one bonus action spendable only for emitting an element (speeds up a cast). Instant (may be cast on any action). Placed with a point-buy die as Rule 24 power.",
+      "description": "Implemented (2026-10-29). While held, the next cast with elements left puts two elements out in one action (step +1) and the permanent is spent at that resolution. The one-element-per-action rule is broken only for that cast.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -12111,9 +11991,9 @@
       "effects": [
         {
           "id": "bonus_emission_actions_on_removal",
-          "description": "Bonus emission-only actions gained when the permanent is removed.",
+          "description": "Extra elements emitted in the action that spends Empower.",
           "target": "caster",
-          "unit": "actions",
+          "unit": "emissions",
           "value": 1
         },
         {
@@ -12254,10 +12134,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_awake": {
-      "description": "Not yet implemented in the engine. Paper: Harmony channeling — move a terrain card, wall token, ally or yourself (one hex per Awake); draw a Harmony token every action until contact. ∀ double cast: both Awakes combine into one permanent that adds the target stat to your stat (Will via Harmony).",
+      "description": "Implemented 2026-10-29. The left-clicked unoccupied tile within 10 hexes receives one adjacent thing of mine: an ally next to me, me, or an unoccupied trap / obstacle next to me (allies first, then me, then traps). No tile → fizzles. ∀ unchanged.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -12292,12 +12173,12 @@
           }
         },
         {
-          "id": "subject_in_contact",
-          "description": "The moved subject is the caster, or an ally / tile item in contact.",
+          "id": "free_tile_within_10",
+          "description": "The chosen tile is free and within 10 hexes (general_ux_range_cast_target).",
           "when": {
-            "or": [
+            "and": [
               {
-                "==": [
+                "!=": [
                   {
                     "var": "target"
                   },
@@ -12305,23 +12186,11 @@
                 ]
               },
               {
-                "==": [
+                "<=": [
                   {
-                    "var": "target.id"
+                    "var": "dist"
                   },
-                  {
-                    "var": "caster.id"
-                  }
-                ]
-              },
-              {
-                "rule": [
-                  "in_contact",
-                  {
-                    "dist": {
-                      "var": "dist"
-                    }
-                  }
+                  10
                 ]
               }
             ]
@@ -12330,33 +12199,11 @@
       ],
       "effects": [
         {
-          "id": "hexes_moved",
-          "description": "Hexes the subject is moved.",
-          "target": "target",
-          "unit": "hexes",
-          "value": 1
-        },
-        {
-          "id": "stat_added_when_every",
-          "description": "Stat added to the caster Will on a ∀ double cast (the target stat behind Harmony), 0 otherwise.",
-          "target": "caster",
-          "unit": "stat",
-          "value": {
-            "if": [
-              {
-                "var": "cast.every"
-              },
-              {
-                "stat_of": [
-                  {
-                    "var": "target"
-                  },
-                  "elem_harmony"
-                ]
-              },
-              0
-            ]
-          }
+          "id": "map_surgery",
+          "description": "An adjacent ally (else me, else an adjacent unoccupied trap / obstacle) moves onto the chosen free tile.",
+          "target": "tile",
+          "unit": "relocation",
+          "value": true
         }
       ],
       "validation": [
@@ -12418,39 +12265,12 @@
               1
             ]
           }
-        },
-        {
-          "id": "keeps_type_channeling",
-          "description": "effect_types keeps \"channeling\".",
-          "assert": {
-            "includes": [
-              {
-                "var": "proposal.data.effect_types"
-              },
-              "channeling"
-            ]
-          }
-        },
-        {
-          "id": "keeps_every_bonus",
-          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
-          "assert": {
-            "==": [
-              {
-                "typeof": [
-                  {
-                    "var": "proposal.data.every_bonus"
-                  }
-                ]
-              },
-              "string"
-            ]
-          }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_creation": {
-      "description": "Not yet implemented in the engine. Paper: an Earth point-buy channeling permanent that places an impassable (for low-Matter creatures) wall token on an adjacent tile with power 20 × the number of Creations cast (2 on a ∀ double cast), plus an Earth bonus token on that tile. To destroy the wall an enemy must emit Earth beating the wall (die sum > wall / 2× wall).",
+      "description": "Implemented (2026-10-29). An Earth obstacle with 5 hp appears on the left-clicked adjacent free tile (else the free neighbour nearest the closest enemy). The caster's side walks over it; an enemy moving or aiming into it is held there and knocks round(Matter ÷10) off it per action (Matter under 5 scratches nothing). At 0 hp it is gone. The card is spent (no permanent in the holding).",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -12546,57 +12366,20 @@
       "effects": [
         {
           "id": "wall_power",
-          "description": "Power of the wall token: 20 per Creation in the cast.",
+          "description": "Obstacle hit points.",
           "target": "tile",
-          "unit": "die",
-          "value": {
-            "*": [
-              20,
-              {
-                "if": [
-                  {
-                    "var": "cast.every"
-                  },
-                  2,
-                  1
-                ]
-              }
-            ]
-          }
+          "unit": "hp",
+          "value": 5
         },
         {
-          "id": "earth_tokens_on_tile",
-          "description": "Earth bonus tokens put on the wall tile.",
+          "id": "obstacle_wear_per_hit",
+          "description": "What an enemy moving into the obstacle knocks off it: round(Matter ÷10).",
           "target": "tile",
-          "unit": "tokens",
-          "value": 1
-        },
-        {
-          "id": "destroyed_by_rule_24",
-          "description": "An enemy Earth point-buy whose dice reach the wall power removes it.",
-          "target": "tile",
-          "unit": "die",
+          "unit": "hp",
           "value": {
-            "rule": [
-              "using_rule_24",
+            "round_div10": [
               {
-                "die": {
-                  "var": "die"
-                },
-                "power": {
-                  "*": [
-                    20,
-                    {
-                      "if": [
-                        {
-                          "var": "cast.every"
-                        },
-                        2,
-                        1
-                      ]
-                    }
-                  ]
-                }
+                "var": "target.stats.matter"
               }
             ]
           }
@@ -12686,10 +12469,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_vision": {
-      "description": "Not yet implemented in the engine. Paper: a Time scout — look at any unknown tile of the tileset, or look at the enemy hand (stat vs stat over World decides). ∀ double cast: take a chosen effect from the Dimension Library and put it into your discard pile. Vision also reveals invisible units. Not a permanent.",
+      "description": "Implemented 2026-10-29 (scout). A left-clicked tile → the map around it is revealed to me and a popup names what lies there (units, traps, obstacles, tokens). An enemy in contact instead → if my World beats theirs, they show me their hand (popup with the card names; the peek travels as an evt_peek envelope to me only). ∀ library leg: not implemented.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -12722,50 +12506,41 @@
               }
             ]
           }
+        },
+        {
+          "id": "tile_or_enemy",
+          "description": "Either a tile was chosen or an enemy stands in reach.",
+          "when": {
+            "!=": [
+              {
+                "var": "target"
+              },
+              null
+            ]
+          }
         }
       ],
       "effects": [
         {
           "id": "tiles_revealed",
-          "description": "Unknown tiles revealed (or enemy hands looked at).",
+          "description": "A chosen tile → the disc around it becomes known to me (reveal radius).",
           "target": "tile",
-          "unit": "tokens",
+          "unit": "tiles",
           "value": 1
         },
         {
-          "id": "hand_peek_margin",
-          "description": "Stat edge for peeking at the enemy hand: max(caster World − enemy World, 0) ÷10 rounded; 0 means the peek fails.",
+          "id": "hand_peek",
+          "description": "An enemy in reach → I see their hand when my World is strictly above theirs.",
           "target": "target",
-          "unit": "stat",
+          "unit": "peek",
           "value": {
-            "rule": [
-              "rule_21_delta_damage",
+            ">": [
               {
-                "caster": {
-                  "root": "caster"
-                },
-                "defender": {
-                  "root": "defender"
-                },
-                "elements": {
-                  "root": "elements"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "library_cards_when_every",
-          "description": "Library effects taken into the discard pile (∀ only).",
-          "target": "caster",
-          "unit": "cards",
-          "value": {
-            "if": [
-              {
-                "var": "cast.every"
+                "var": "caster.stats.world"
               },
-              1,
-              0
+              {
+                "var": "defender.stats.world"
+              }
             ]
           }
         }
@@ -12841,27 +12616,12 @@
               "scout"
             ]
           }
-        },
-        {
-          "id": "keeps_every_bonus",
-          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
-          "assert": {
-            "==": [
-              {
-                "typeof": [
-                  {
-                    "var": "proposal.data.every_bonus"
-                  }
-                ]
-              },
-              "string"
-            ]
-          }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_phantom": {
-      "description": "Not yet implemented in the engine. Paper: a Vitality, Souls, Space permanent that creates a mirror of the caster acting in its stead while the caster stays on its tile; the phantom is destroyed upon taking any damage; the caster may enter the mirror character at any time. Placed with a point-buy die as Rule 24 power.",
+      "description": "Implemented 2026-10-29. A permanent (power = placement die): a mirror of me — same character, stats, class and deck — steps onto the free tile next to me and fights for my side, driven by the engine, while the permanent stands. It shatters at the first point of damage it takes, and leaves when the permanent falls.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -12899,21 +12659,21 @@
       "effects": [
         {
           "id": "mirrors_created",
-          "description": "Mirror characters created.",
+          "description": "Copies of the caster on the board.",
           "target": "caster",
-          "unit": "tokens",
+          "unit": "units",
           "value": 1
         },
         {
           "id": "damage_that_destroys",
-          "description": "Any damage of at least this much destroys the phantom.",
+          "description": "Damage that undoes a mirror.",
           "target": "caster",
           "unit": "damage",
           "value": 1
         },
         {
           "id": "permanent_power",
-          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "description": "Rule 24 threshold of the permanent: the kept point-buy die of its placement.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -12922,7 +12682,7 @@
         },
         {
           "id": "destroyed_by_rule_24",
-          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -12933,32 +12693,7 @@
                   "var": "die"
                 },
                 "power": {
-                  "max_of": [
-                    {
-                      "map": [
-                        {
-                          "filter": [
-                            {
-                              "var": "caster.tokens"
-                            },
-                            {
-                              "==": [
-                                {
-                                  "var": "elem"
-                                },
-                                {
-                                  "root": "elements.0"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "var": "value"
-                        }
-                      ]
-                    }
-                  ]
+                  "var": "power"
                 }
               }
             ]
@@ -13037,10 +12772,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_traps_mastery": {
-      "description": "Not yet implemented in the engine. Paper: a Space permanent under which an effect card is placed as a trap, cast with power 20 × the number of times Traps mastery has been cast (×2 on a ∀ double cast); it does not trigger on the caster but on an approaching enemy. Placed with a point-buy die as Rule 24 power.",
+      "description": "Implemented (2026-10-29). A permanent (fixed power 6) that lays an effect card from my hand (the one I clicked; else the one with most elements) face down under me as a trap with power 20 per element. It springs on the first enemy that targets me while I stand on it (Σ max(0, 20 − stat) ÷10), then both cards are discarded. Destroying the permanent (Rule 24) springs the trap for nothing.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -13071,6 +12807,18 @@
                   "root": "caster.disabled_elems"
                 }
               }
+            ]
+          }
+        },
+        {
+          "id": "effect_attached",
+          "description": "A second effect card from the hand is attached as the trap payload (cast.attach); without one the cast fizzles.",
+          "when": {
+            "!=": [
+              {
+                "var": "cast.attach"
+              },
+              null
             ]
           }
         }
@@ -13155,6 +12903,53 @@
               }
             ]
           }
+        },
+        {
+          "id": "trap_trigger",
+          "description": "Springs on the first enemy whose reveal declares the trap owner as target while the owner stands on the trap tile; the card then goes to the discard pile.",
+          "target": "tile",
+          "unit": "trigger",
+          "value": "targeted"
+        },
+        {
+          "id": "trap_damage",
+          "description": "When the trap springs: Σ over its elements of max(0, 20 − victim stat) ÷10 rounded half up (the same shields / zones / Void as a cast apply).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "round_div10": [
+              {
+                "sum": [
+                  {
+                    "map": [
+                      {
+                        "var": "elements"
+                      },
+                      {
+                        "max0": [
+                          {
+                            "-": [
+                              20,
+                              {
+                                "stat_of": [
+                                  {
+                                    "root": "target"
+                                  },
+                                  {
+                                    "var": ""
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "validation": [
@@ -13229,10 +13024,11 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_possess_phylactery": {
-      "description": "Not yet implemented in the engine. Paper: a Vitality point-buy permanent — swap yourself with any creature from your archives (your character goes to the archives); on destruction of the Possess swap back (also usable with Golems and Elementals). Alt Phylactery: destroy one permanent effect at any time. Placed with a point-buy die as Rule 24 power.",
+      "description": "Implemented 2026-10-29, reworked 2026-10-30 (user ruling): Possess is NOT an alliance change. With an enemy in contact whose Σ stats my Σ stats beat, the Possess permanent (fixed power 6) lands in the POSSESSED unit's holding; while it stands there and I live, I no longer play my hero — my action card and target drive the possessed unit (reveal field proxy), my hero only holds (EP) — and the unit fights on my side (effective side override; its alliance field is unchanged). The enemy's first job is to destroy that permanent: an ally adjacent to the possessed unit emitting a World element aims at it first under Rule 24. When it falls (or I die) the unit is free and my Possess card goes to my discard pile. Phylactery: at any action the holder names an enemy permanent (class cards excepted) — it shatters at the end of that action and the Possess permanent is spent, wherever it stands.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -13265,35 +13061,59 @@
               }
             ]
           }
+        },
+        {
+          "id": "stat_sum_beats_target",
+          "description": "Σ of my four stats is strictly above the target's Σ (else the cast fizzles).",
+          "when": {
+            ">": [
+              {
+                "rule": [
+                  "stat_sum_of",
+                  {
+                    "stats": {
+                      "var": "caster.stats"
+                    }
+                  }
+                ]
+              },
+              {
+                "rule": [
+                  "stat_sum_of",
+                  {
+                    "stats": {
+                      "var": "target.stats"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "effects": [
         {
-          "id": "units_swapped",
-          "description": "Creatures swapped in for the caster.",
-          "target": "caster",
-          "unit": "tokens",
-          "value": 1
-        },
-        {
           "id": "permanents_destroyed_alt",
-          "description": "Permanents destroyed by the Phylactery alternative.",
+          "description": "Phylactery: enemy permanents shattered (no roll) when the holder spends Possess for it.",
           "target": "target",
-          "unit": "tokens",
+          "unit": "permanents",
           "value": 1
         },
         {
           "id": "permanent_power",
-          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "description": "Rule 24 threshold of the permanent: fixed 6 (no placement die).",
           "target": "caster",
           "unit": "die",
           "value": {
-            "var": "die"
+            "rule": [
+              "fixed_power_6",
+              {}
+            ]
           }
         },
         {
           "id": "destroyed_by_rule_24",
-          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.",
           "target": "caster",
           "unit": "die",
           "value": {
@@ -13304,36 +13124,46 @@
                   "var": "die"
                 },
                 "power": {
-                  "max_of": [
-                    {
-                      "map": [
-                        {
-                          "filter": [
-                            {
-                              "var": "caster.tokens"
-                            },
-                            {
-                              "==": [
-                                {
-                                  "var": "elem"
-                                },
-                                {
-                                  "root": "elements.0"
-                                }
-                              ]
-                            }
-                          ]
-                        },
-                        {
-                          "var": "value"
-                        }
-                      ]
-                    }
+                  "rule": [
+                    "fixed_power_6",
+                    {}
                   ]
                 }
               }
             ]
           }
+        },
+        {
+          "id": "permanent_on_possessed",
+          "description": "The permanent lands in the possessed unit's holding, marked by the possessor.",
+          "target": "target",
+          "unit": "permanent",
+          "value": {
+            "rule": [
+              "stat_sum_of",
+              {
+                "stats": {
+                  "var": "caster.stats"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "possessor_drives",
+          "description": "The possessor's picked action and target are the possessed unit's reveal; the possessor's hero holds.",
+          "target": "target",
+          "unit": "proxy",
+          "value": {
+            "var": "cast.proxy"
+          }
+        },
+        {
+          "id": "first_rule_24_target",
+          "description": "An ally adjacent to the possessed unit emitting World aims at the Possess permanent first.",
+          "target": "target",
+          "unit": "priority",
+          "value": 1
         }
       ],
       "validation": [
@@ -13420,7 +13250,8 @@
             ]
           }
         }
-      ]
+      ],
+      "references": []
     },
     "effect_love": {
       "description": "Not yet implemented in the engine (creature innate, not in the player deck; dealt to the awakened creature hand per Rule 3). Paper: the target cannot deal damage to the caster until it visits its tower. A permanent on the creature placed with a point-buy die as Rule 24 power; the target is an enemy in contact.",
