@@ -66,6 +66,54 @@ export function terrainAt(seed, q, r) {
   return { type, fill: BIOME_FILL[type] || '#1a1f2a' };
 }
 
+// ---- world-generated features (user spec general_ux_token_generated, 2026-10-30) ----
+// Every hex derives from (seed, q, r) whether it carries a terrain region token or a building /
+// artefact — the same on every peer and in the UI, with nothing to sync. Features are bonus tile
+// tokens (`kind: 'bonus'`, an element, a value, an `item` label) the resolver counts like any
+// token lying on the tile (stat bonus while standing there, life maximum, Force Pull, Rule 24,
+// Metaphysics / Disruption relocation). Density ≈ one feature per 5 hexes: terrain regions are
+// low-frequency element patches (hash over a 4-hex cell) with a token on about one hex in three of
+// the patch; buildings / artefacts land on about one hex in fourteen outside the start area.
+const ELEMS = ['elem_vitality', 'elem_souls', 'elem_time', 'elem_space', 'elem_air', 'elem_water', 'elem_earth', 'elem_fire', 'elem_concentration', 'elem_harmony'];
+export const WORLD_BUILDINGS = [
+  { item: 'Shrine', elem: 'elem_souls', value: 4, kind_id: 'tower_souls' },
+  { item: 'Sphere of Fire', elem: 'elem_fire', value: 5, kind_id: 'tower_fire' },
+  { item: 'Healing Spring', elem: 'elem_vitality', value: 4, kind_id: 'tower_vitality' },
+  { item: 'School', elem: 'elem_concentration', value: 4, kind_id: 'tower_concentration' },
+  { item: 'Academy', elem: 'elem_harmony', value: 5, kind_id: 'tower_harmony' },
+  { item: 'Sacred Land', elem: 'elem_souls', value: 6, kind_id: 'item_element_bonus_terrain' },
+  { item: 'Obelisk of Time', elem: 'elem_time', value: 4, kind_id: 'tower_time' },
+  { item: 'Rift', elem: 'elem_space', value: 4, kind_id: 'tower_space' },
+  { item: 'Windmill', elem: 'elem_air', value: 3, kind_id: 'tower_air' },
+  { item: 'Well', elem: 'elem_water', value: 3, kind_id: 'tower_water' },
+  { item: 'Standing Stones', elem: 'elem_earth', value: 4, kind_id: 'tower_earth' },
+  { item: 'Crystal of Vitality', elem: 'elem_vitality', value: 6, kind_id: 'crystal_vitality' },
+  { item: 'Crystal of Matter', elem: 'elem_earth', value: 6, kind_id: 'crystal_matter' },
+  { item: 'Crystal of Will', elem: 'elem_harmony', value: 6, kind_id: 'crystal_will' },
+  { item: 'Crystal of World', elem: 'elem_time', value: 6, kind_id: 'crystal_world' },
+  { item: 'Artifact', elem: 'elem_space', value: 5, kind_id: 'item_artifact' },
+];
+const REGION_NAMES = { elem_vitality: 'Grove', elem_souls: 'Graveyard', elem_time: 'Ruins', elem_space: 'Void Scar', elem_air: 'Highland', elem_water: 'Marsh', elem_earth: 'Rockfield', elem_fire: 'Ashfield', elem_concentration: 'Monastery Grounds', elem_harmony: 'Meadow' };
+// The element patch a hex belongs to (4-hex cells so a region spans several hexes), or null for 3 cells in 5.
+export function regionAt(seed, q, r) {
+  const cq = Math.floor(q / 4), cr = Math.floor(r / 4);
+  const h = hash32(`${seed}:region:${cq}:${cr}`);
+  if (h % 5 < 3) return null;
+  return ELEMS[(h >>> 3) % ELEMS.length];
+}
+// The world feature on a hex, or null. The start disc (within 2 of the origin) stays clear.
+export function featureAt(seed, q, r) {
+  if (Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r)) <= 2) return null;
+  const h = hash32(`${seed}:feature:${q}:${r}`);
+  if (h % 14 === 0) {
+    const b = WORLD_BUILDINGS[(h >>> 4) % WORLD_BUILDINGS.length];
+    return { id: `world:${q},${r}`, kind: 'bonus', elem: b.elem, value: b.value, item: b.item, kind_id: b.kind_id, q, r, world: true };
+  }
+  const reg = regionAt(seed, q, r);
+  if (reg && (h >>> 8) % 3 === 0) return { id: `world:${q},${r}`, kind: 'bonus', elem: reg, value: 1 + ((h >>> 12) % 4), item: REGION_NAMES[reg], kind_id: 'item_element_bonus_terrain', q, r, world: true };
+  return null;
+}
+
 export function createKnownMap(seed, blocks = []) {
   const byId = new Map();
   const tiles = new Set();

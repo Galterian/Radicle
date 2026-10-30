@@ -297,10 +297,19 @@ export function makeSkillIcon(id, { size = 32, title = null } = {}) {
 //   variant: 'strip'     — nutrition-label row (default — roster permanent)
 //            'reveal'    — larger pop above the unit on reveal
 //            'tooltip'   — narrow format in the hover card
-export function makeSkillCard(id, { variant = 'strip', nameOverride = null, textOverride = null, badge = null, iconSize = null } = {}) {
+export function makeSkillCard(id, { variant = 'strip', nameOverride = null, textOverride = null, badge = null, keyBadge = null, iconSize = null } = {}) {
   const el = document.createElement('div');
   el.className = `skill-card skill-card-${variant}`;
   el.dataset.id = id || '';
+  // Corner key badge (B1): a one-character shortcut (9 / 0 / - / =) painted in
+  // the top-right. Pinned via absolute position so it doesn't push the body
+  // text around. Caller passes `keyBadge: '9'` from permShortcutsForIds(…).
+  if (keyBadge) {
+    const kb = document.createElement('span');
+    kb.className = 'skill-card-key';
+    kb.textContent = keyBadge;
+    el.appendChild(kb);
+  }
   const info = skillInfo(id);
   const title = nameOverride || info?.name || (id ? String(id).replace(/^skill_/, '').replace(/_/g, ' ') : '—');
   const text = textOverride || info?.text || '';
@@ -361,12 +370,22 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
 // Fill an existing container with a stack of SkillCards. Pure function — the
 // caller owns the container (so repeated renderRoster calls can clear + refill
 // without this module hanging onto per-row state).
-export function fillSkillCardStack(container, ids, opts = {}) {
+//
+// `items` accepts either plain string ids OR objects `{id, key}` where `key`
+// drives the per-card corner shortcut badge (B1). Existing callers that pass
+// an array of strings keep working — the per-item branch only kicks in when
+// the entry is an object.
+export function fillSkillCardStack(container, items, opts = {}) {
   if (!container) return;
   container.innerHTML = '';
-  for (const id of ids || []) {
+  for (const item of items || []) {
+    if (!item) continue;
+    const id = typeof item === 'string' ? item : item.id;
     if (!id) continue;
-    container.appendChild(makeSkillCard(id, opts));
+    const perItem = typeof item === 'string'
+      ? null
+      : { keyBadge: item.key || item.keyBadge || null };
+    container.appendChild(makeSkillCard(id, perItem ? { ...opts, ...perItem } : opts));
   }
 }
 

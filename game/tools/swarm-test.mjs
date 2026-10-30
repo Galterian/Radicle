@@ -23,6 +23,12 @@ const DIM = process.argv[4] || `Swarm-${String(now.getHours()).padStart(2, '0')}
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Class colours (user ruling 2026-10-30): the agents strike an adjacent enemy's class colour by colour and use
+// their own class ability, so the swarm exercises both resolver paths. Canonical data only.
+const readData = (f) => JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'data', f), 'utf8'));
+const canon = (e) => e.versions.find(v => v.status === 'canonical') || e.versions[e.versions.length - 1];
+const ELEM_TO_STAT = Object.fromEntries(readData('elements.json').entries.map(e => [e.id, (canon(e).data?.stat || '').replace(/^stat_/, '')]));
+const CLASS_COLOURS = Object.fromEntries(readData('classes.json').entries.map(e => { const cols = {}; for (const el of canon(e).data?.colors || []) { const st = ELEM_TO_STAT[el]; if (st) (cols[st] ||= []).push(el); } return [e.id, cols]; }));
 
 async function api(route, body, base = launcher) {
   const r = await fetch(`${base}${route}`, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -78,6 +84,25 @@ function startAgent(peerId, port, attempt = 0) {
       send({ kind: 'bonus', plans });
       a.hastes = (a.hastes || 0) + plans.length;
     }
+    // Class strike (user ruling 2026-10-30): an adjacent enemy with a standing class colour — emit that colour
+    // on a Posture against it (needs a die of 6). Also recast / untap my own class when it is owed.
+    const cs = a.classState || null;
+    if (cs && (cs.archived || cs.tapped) && Math.random() < 0.5) {
+      const owed = Object.keys(cs.colours || {}).filter(s => !(cs.progress?.done || []).includes(s));
+      if (owed.length) { send({ kind: 'destroy', stat: owed[0], ...(cs.archived ? { recast: true } : { untap: true }) }); if (near) send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.classRecasts = (a.classRecasts || 0) + 1; return; }
+    }
+    if (near && dist(near) <= 1 && near.class_id && !near.class_archived && Math.random() < 0.3) {
+      const down = String(near.class_down_csv || '').split(',').filter(Boolean);
+      const stat = Object.keys(CLASS_COLOURS[near.class_id] || {}).find(s => !down.includes(s));
+      if (stat) { send({ kind: 'destroy', stat, class: near.peer_id, elem: CLASS_COLOURS[near.class_id][stat][0] }); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.classStrikes = (a.classStrikes || 0) + 1; return; }
+    }
+    // My class ability (tap / once per action): click it on about every other action it is ready; a card-attach
+    // class gets an effect / non-action card attached first.
+    if (cs && !cs.archived && !cs.tapped && !a.queuedClass && Math.random() < 0.5) {
+      const needs = cs.needs;
+      if (needs === 'attach_effect' || needs === 'attach_nonaction') { const i = a.hand.findIndex(c => needs === 'attach_effect' ? isEffect(c) : (!!c && c.kind !== 'action')); if (i >= 0) send({ kind: 'attach', slot: i }); }
+      if (!needs || needs !== 'enemy' || (near && dist(near) <= 1)) { send({ kind: 'class_ability' }); a.queuedClass = true; a.classUses = (a.classUses || 0) + 1; }
+    }
     const tranceIdx = a.hand.findIndex(c => isSkill(c) && c.is_trance);
     // Battle Trance: two options (Attack + a different code, Block preferred).
     if (tranceIdx >= 0 && actionIdx.length >= 2 && near && dist(near) <= 3 && Math.random() < 0.6) {
@@ -123,12 +148,27 @@ function startAgent(peerId, port, attempt = 0) {
       a.summons = (a.summons || 0) + 1;
       return;
     }
-    if (near && dist(near) <= 1 && effIdx >= 0 && Math.random() < 0.5) {
+    // A channel just cast (Harm, The Void, …): hold the Posture a couple of actions so it ticks
+    // instead of breaking on the next move (general_ux_channeling).
+    if (a.holdFor > 0) {
+      a.holdFor--;
       const p = slotOf('P');
-      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, effIdx);
-      send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'));
+      if (near) send({ kind: 'target', target: near.peer_id });
+      send({ kind: 'lock' });
       return;
     }
+    const castEffect = (idx) => {
+      const p = slotOf('P');
+      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, idx);
+      if ((a.hand[idx].effect_types || []).includes('channeling')) a.holdFor = 2;
+      send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+    };
+    if (near && dist(near) <= 1 && effIdx >= 0 && Math.random() < 0.5) { castEffect(effIdx); return; }
+    // Set-up effects (traps, permanents, relocations — anything not aimed at a target) go out
+    // while the enemy is still a few hexes off.
+    const setupIdx = a.hand.findIndex(c => isEffect(c) && c.scope !== 'target' && !(c.effect_types || []).includes('stat_buy'));
+    if (near && dist(near) > 1 && setupIdx >= 0 && Math.random() < 0.35) { castEffect(setupIdx); return; }
     if (near && dist(near) <= 1 && Math.random() < 0.75) {
       const s = slotOf('A') >= 0 ? slotOf('A') : slotOf('B');
       if (s >= 0) { queue(s, skillsFor(a.hand[s].code)); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.attacks++; return; }
@@ -165,7 +205,7 @@ function startAgent(peerId, port, attempt = 0) {
     const m = JSON.parse(e.data);
     if (m.kind === 'hello') { a.me = m.peer_id; a.hand = m.hand || []; if (m.map) { a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); } for (const p of m.peers || []) a.peers.set(p.peer_id, p); log(`  ${peerId} hello: map ${a.map.size()} hexes / ${a.map.blockCount()} blocks`); }
     if (m.kind === 'map') { if (m.map.seed !== a.map.seed) a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); }
-    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; }
+    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; if (m.class_state) a.classState = m.class_state; if (m.queued_class_ability !== undefined) a.queuedClass = !!m.queued_class_ability; }
     if (m.kind === 'peers') for (const p of m.peers || []) a.peers.set(p.peer_id, { ...(a.peers.get(p.peer_id) || {}), ...p });
     if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
   };
@@ -244,7 +284,7 @@ async function audit(label) {
 const endAt = Date.now() + minutes * 60_000;
 while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 

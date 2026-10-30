@@ -138,34 +138,8 @@
       "purpose": "shared JsonLogic vocabulary (named rules, custom ops, collection validation, power-score formulas) — not a VersionedEntry collection"
     }
   ],
-  "load_order_for_engine": [
-    "concept",
-    "stats",
-    "elements",
-    "rules",
-    "battle_system",
-    "actions",
-    "effects",
-    "skills",
-    "classes",
-    "terrain_items",
-    "characters",
-    "creatures",
-    "game_modes",
-    "contradictions",
-    "governance",
-    "sync_protocol",
-    "hashgraph_events",
-    "dimension_session"
-  ],
-  "notes": [
-    "The engine loads each collection, resolves the highest-weight non-rejected version per entry, and freezes that view for the Dimension session.",
-    "Changes mid-session do not retroactively apply; a Dimension inherits the rules snapshot of the session it was opened under (recorded in ActiveDimensions/<id>/rules_snapshot_commit).",
-    "contradictions.json holds the FIRST governance proposals (status proposal) plus resolved history (status resolved, weight 0).",
-    "governance.json, sync_protocol.json, hashgraph_events.json and dimension_session.json are the machine-readable form of the P2P / Radicle / hashgraph game idea; concept.json keeps only the narrative summary.",
-    "Entry counts in `collections` are informational; the editor and engine must trust the files, not these numbers.",
-    "Every active version carries a  block (JsonLogic). Named rules live once in logic_rules.json; game/logic-engine.mjs evaluates them; tools/logic-check.mjs and tools/rebalance.mjs validate data and proposals. Authoring guide: game/tools/logic/README.md."
-  ],
+  "load_order_for_engine": ["concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills", "classes", "terrain_items", "characters", "creatures", "game_modes", "contradictions", "governance", "sync_protocol", "hashgraph_events", "dimension_session"],
+  "notes": ["The engine loads each collection, resolves the highest-weight non-rejected version per entry, and freezes that view for the Dimension session.", "Changes mid-session do not retroactively apply; a Dimension inherits the rules snapshot of the session it was opened under (recorded in ActiveDimensions/<id>/rules_snapshot_commit).", "contradictions.json holds the FIRST governance proposals (status proposal) plus resolved history (status resolved, weight 0).", "governance.json, sync_protocol.json, hashgraph_events.json and dimension_session.json are the machine-readable form of the P2P / Radicle / hashgraph game idea; concept.json keeps only the narrative summary.", "Entry counts in `collections` are informational; the editor and engine must trust the files, not these numbers.", "Every active version carries a  block (JsonLogic). Named rules live once in logic_rules.json; game/logic-engine.mjs evaluates them; tools/logic-check.mjs and tools/rebalance.mjs validate data and proposals. Authoring guide: game/tools/logic/README.md."],
   "examples": {
     "ActiveDimensions": "examples/ActiveDimensions/<DimensionName>/ - a filled-in dimension.json + doors/<DoorId>.json pair following dimension_session.json shapes"
   }

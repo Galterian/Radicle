@@ -9,8 +9,14 @@ ps -eo pid,comm,args | grep -E '^ *[0-9]+ +node +.*\.mjs' | grep -v bash | awk '
 sleep 1
 node --check peer.mjs
 setsid nohup node start-all.mjs < /dev/null > /tmp/chaos-A.log 2>&1 &
-sleep 4
-A=$(grep -oE 'open http://127.0.0.1:[0-9]+' /tmp/chaos-A.log | grep -oE '[0-9]+$')
+# Wait for the launcher (a cold start can take more than a few seconds; with set -e a too-early grep used to end the run silently).
+A=""
+for i in $(seq 1 40); do
+  A=$(grep -oE 'open http://127.0.0.1:[0-9]+' /tmp/chaos-A.log 2>/dev/null | grep -oE '[0-9]+$' || true)
+  [ -n "$A" ] && break
+  sleep 1
+done
+[ -n "$A" ] || { echo "launcher A did not come up:"; tail -20 /tmp/chaos-A.log; exit 1; }
 echo "launcher A :$A"
 # Second identity / second clone (launcher C) if it is set up — one player joins through it.
 C=""
