@@ -13,6 +13,15 @@ import { biomeFor, BIOME_FILL } from './biome.js';
 export const INITIAL_SIZE = 5;
 export const DEFAULT_REVEAL_RADIUS = 10;
 
+// Fog-of-war sight (used by the browser renderer and, in a follow-up pass,
+// by the resolver's monster AI). A hex is "currently in sight" when it is
+// within HERO_SIGHT_RADIUS of my hero or any teammate; a monster's awareness
+// range is MONSTER_SIGHT_RADIUS (used by the follow-nearest AI). Allies on my
+// team share sight — union of each ally's disc = what I see this frame.
+export const HERO_SIGHT_RADIUS = 10;
+export const ALLY_SIGHT_RADIUS = 10;
+export const MONSTER_SIGHT_RADIUS = 2;
+
 export const tileKey = (q, r) => `${q},${r}`;
 
 // FNV-1a over a string → 32-bit unsigned. Same result in Node and browsers,

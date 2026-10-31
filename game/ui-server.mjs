@@ -29,6 +29,7 @@ import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { hexDistance } from './js/hex.js';
 import { createKnownMap, initialBlock, seedForDimension } from './js/map.js';
 import { fancyLabel } from './js/names.js';
+import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -444,6 +445,52 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length };
 }
 
+// Restore a dimension from a local TMJ autosave / hard save on this box.
+// The TMJ already carries dim_id / dim_name / seed; we hand them to the peer
+// via env + RESTORE_FROM_TMJ, which hydrates `dimMap`, `entity.obstacles`,
+// `entity.tileTokens` and `entity.traps` before the first round.
+async function restoreDimension({ tmjPath, label }) {
+  if (!tmjPath) throw new Error('restoreDimension: tmjPath required');
+  const absPath = path.resolve(tmjPath);
+  const raw = await fs.readFile(absPath, 'utf8');
+  const map = JSON.parse(raw);
+  const props = Object.fromEntries((map.properties || []).map(p => [p.name, p.value]));
+  if (!String(props.schema_version || '').startsWith('chaosd6-tmj-')) throw new Error(`not a chaosD6 TMJ: ${absPath}`);
+  const DIM_NAME = String(props.dim_name || 'Restored-Dimension');
+  const DIM_ID   = String(props.dim_id   || `dim-${slug(DIM_NAME)}`);
+  const DOOR_ID  = 'door-primary';
+  const MAP_SEED = String(props.seed || '');
+  if (startedDimension) return { ...startedDimension, status: 'already-running' };
+  const ip = defaultPublicIp();
+  const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  const peerLabel = (label || '').trim() || 'player-1';
+  const portLibp2p = await freePort(7420);
+  const portHttp   = await freePort(7430);
+  const portGun    = await freePort(7520);
+  startedDimension = { peerPort: portHttp, dimensionName: DIM_NAME };
+  console.log(`[launcher] restoring ${DIM_NAME} from ${absPath}  (dim_id=${DIM_ID}, seed=${MAP_SEED})`);
+  spawnChild(`peer:${peerLabel}`, [path.join(__dirname, 'peer.mjs')], {
+    PEER_LABEL:        peerLabel,
+    ALLIANCE:          'player',
+    ENTITY_NAME:       peerLabel,
+    CHARACTER_ID:      'char_exuberant_firestroker',
+    CREATURE_ID:       '',
+    START_TILE:        JSON.stringify({ q: 1, r: 2 }),
+    PEER_PORT_LIBP2P:  String(portLibp2p),
+    PEER_PORT_HTTP:    String(portHttp),
+    PEER_PORT_GUN:     String(portGun),
+    DIM_NAME, DIM_ID, DOOR_ID,
+    MAP_SEED,
+    RESTORE_FROM_TMJ:  absPath,
+    JOIN_SYNC_WAIT_MS: '500',
+    ...commonPeerEnv(),
+    ...netEnv,
+  });
+  const ok = await waitForPort(portHttp);
+  if (!ok) throw new Error(`peer did not come up on :${portHttp}`);
+  return { peerPort: portHttp, status: 'restored', dimension: DIM_NAME, tmj: absPath };
+}
+
 async function readBody(req) {
   const chunks = []; let n = 0;
   for await (const c of req) { chunks.push(c); n += c.length; if (n > 65536) throw new Error('body too large'); }
@@ -455,6 +502,14 @@ async function handleApi(req, res, p) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   if (req.method === 'GET' && p === '/api/network') {
     return json(200, { ok: true, candidates: candidateIps(), default: defaultPublicIp(), relays: DEFAULT_RELAYS, radicle: radicleEnv.enabled ? { rid: radicleEnv.rid, nid: radicleEnv.nid } : null });
+  }
+  if (req.method === 'GET' && (p === '/dimensions/local' || p === '/api/dimensions/local')) {
+    // Local TMJ autosaves / hard saves on this box — picked by the launcher's
+    // "restore" mode so the user can keep playing a dimension that went
+    // offline. The route is intentionally shallow; the TMJ file names (dim_id)
+    // are the stable identity.
+    try { const items = await listLocalTmjSaves(DIMENSIONS_DIR); return json(200, { ok: true, baseDir: DIMENSIONS_DIR, items }); }
+    catch (e) { return json(200, { ok: false, error: e.message, baseDir: DIMENSIONS_DIR, items: [] }); }
   }
   if (req.method === 'GET' && p === '/api/dimensions') {
     try {
@@ -477,6 +532,7 @@ async function handleApi(req, res, p) {
       let out;
       if (body.mode === 'host' || body.mode === 'start') out = await startDimension(body);
       else if (body.mode === 'join') out = await joinDimension(body);
+      else if (body.mode === 'restore') out = await restoreDimension(body);
       else throw new Error(`unknown mode "${body.mode}"`);
       return json(200, { ok: true, ...out });
     } catch (e) {

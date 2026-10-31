@@ -49,9 +49,10 @@ import net from 'node:net';
 
 import { pushDimension, radicleEnv } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
-import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt } from './js/map.js';
+import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt } from './js/features.js';
+import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -123,7 +124,20 @@ try {
   if (process.env.MAP_BLOCKS_FILE) fsSync.rm(process.env.MAP_BLOCKS_FILE, { force: true }, () => {});
 } catch (e) { console.warn(`[${PEER_LABEL}] could not read seed map blocks: ${e.message}`); seedBlocks = []; }
 if (!Array.isArray(seedBlocks)) seedBlocks = [];
+// Local TMJ restore (set by the launcher when the user picks "Load a saved
+// dimension"): hydrate blocks / obstacles / tokens / traps before the resolver
+// state is built so the first revealAround on top sees a populated dimMap.
+// A broken file falls back to a normal boot (don't crash the peer).
+let _restoredTmj = null;
+if (process.env.RESTORE_FROM_TMJ) {
+  try {
+    _restoredTmj = await autosaveLoadTmj(process.env.RESTORE_FROM_TMJ);
+    for (const t of _restoredTmj.tiles || []) seedBlocks.push(discBlock(t.q, t.r, 0, 'restore', new Date().toISOString()));
+    console.log(`[${PEER_LABEL}] restore: ${process.env.RESTORE_FROM_TMJ} → ${_restoredTmj.tiles?.length || 0} tiles, ${_restoredTmj.obstacles?.length || 0} obstacles (schema ${_restoredTmj.meta?.schema_version})`);
+  } catch (e) { console.warn(`[${PEER_LABEL}] RESTORE_FROM_TMJ failed (${e.message}) — booting normally`); _restoredTmj = null; }
+}
 let dimMap = null;   // created once Gun is up (see "the dimension map" below)
+let _autosave = null;   // local TMJ autosave controller (see game/tools/autosave.mjs); _autosave?.markDirty() is a safe no-op before start()
 const PEER_GUN_URLS     = (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
 const BOOTSTRAP_MADDRS  = (process.env.BOOTSTRAP || '').split(',').filter(Boolean);        // libp2p peers
 const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 60);            // demo: 60s instead of 3600s
@@ -1225,6 +1239,7 @@ function addMapBlock(b, via) {
   blockAddedAt.push(Date.now());
   console.log(`[${PEER_LABEL}] map +${b.id} via ${via} by ${b.by || '?'} → ${dimMap.size()} hexes in ${dimMap.blockCount()} blocks`);
   broadcastUI({ kind: 'map', map: mapSummary() });
+  _autosave?.markDirty();   // the known tileset grew — a tick from now this reaches disk
   return true;
 }
 gunMap.map().on((b) => { if (b && typeof b === 'object') addMapBlock(b, 'gun'); });
@@ -3114,10 +3129,12 @@ async function doResolution() {
       entity.traps.push({ id, q: tp.q, r: tp.r, effect_id: tp.effect_id, elements: tp.elements, card_id: tp.card_id, power: tp.power, trigger: tp.trigger, mode: tp.mode, holder: tp.holder, ...(tp.library ? { library: true } : {}) });
       if (tp.card_id) holdCard(tp.card_id);
       console.log(`[${PEER_LABEL}] trap ${tp.effect_id} laid at (${tp.q},${tp.r}) [${tp.trigger}/${tp.mode}]`);
+      _autosave?.markDirty();
     }
     for (const ob of oc.obstacles || []) if (ob.by === PEER_ID_STRING && !quiet) {
       entity.obstacles.push({ id: `${PEER_ID_STRING.slice(-8)}#${hg.action}#ob${entity.obstacles.length}`, q: ob.q, r: ob.r, hp: ob.hp, elem: ob.elem });
       console.log(`[${PEER_LABEL}] creation: Earth obstacle (${ob.hp} hp) at (${ob.q},${ob.r})`);
+      _autosave?.markDirty();
     }
     for (const lk of oc.links || []) if (lk.on === PEER_ID_STRING && !quiet) {
       entity.links = entity.links.filter(l => l.stat !== lk.stat);
@@ -3270,7 +3287,7 @@ async function doResolution() {
     const ob = entity.obstacles.find(o => o.id === h.id);
     if (!ob) continue;
     ob.hp -= h.amount;
-    if (ob.hp <= 0) { entity.obstacles = entity.obstacles.filter(o => o.id !== h.id); console.log(`[${PEER_LABEL}] my obstacle at (${ob.q},${ob.r}) crumbles under ${h.by.slice(0, 8)}`); }
+    if (ob.hp <= 0) { entity.obstacles = entity.obstacles.filter(o => o.id !== h.id); console.log(`[${PEER_LABEL}] my obstacle at (${ob.q},${ob.r}) crumbles under ${h.by.slice(0, 8)}`); _autosave?.markDirty(); }
   }
   // Traps of mine that sprang: gone from the tile, their card to the discard pile. A fired
   // perm-trap (Sleep, Confusion) comes up as my permanent instead (permanentsToAdd below).
@@ -3286,6 +3303,7 @@ async function doResolution() {
       if (ts.mode === 'damage' || ts.disabled) releaseHeldCard(ts.card_id, !cardToVictim);
       if (ts.holder) dropPermanent(ts.holder);
       console.log(`[${PEER_LABEL}] my trap ${ts.effect_id} ${ts.disabled ? 'is disabled' : `sprang on ${ts.victim.slice(0, 8)}`}${cardToVictim ? ' — its card is theirs now' : ''}`);
+      _autosave?.markDirty();
     }
     const receiver = ts.disabled ? ts.to : ts.victim;
     if (cardToVictim && receiver === PEER_ID_STRING && receiver !== ts.owner && data.effects[ts.effect_id]) {
@@ -3346,6 +3364,7 @@ async function doResolution() {
     entity.traps.push({ id, q: tp.q, r: tp.r, effect_id: tp.effect_id, elements: tp.elements, card_id: tp.card_id, power: tp.power, trigger: tp.trigger, mode: tp.mode, holder: tp.holder, ...(tp.library ? { library: true } : {}) });
     if (tp.card_id) holdCard(tp.card_id);
     console.log(`[${PEER_LABEL}] class trap ${tp.effect_id} laid at (${tp.q},${tp.r}) [${tp.trigger}/${tp.mode}${tp.library ? '/library' : ''}]`);
+    _autosave?.markDirty();
   }
   // Druid: my defence token on my tile.
   for (const tk of classAbilityOut.tokens) if (tk.by === PEER_ID_STRING) {
@@ -3353,6 +3372,7 @@ async function doResolution() {
     if (same && same.value >= tk.value) continue;
     if (same) entity.tileTokens = entity.tileTokens.filter(x => x !== same);
     entity.tileTokens.push({ id: `${PEER_ID_STRING.slice(-8)}#${hg.action}#c${entity.tileTokens.length}`, kind: tk.kind, elem: tk.elem, value: tk.value, q: tk.q, r: tk.r });
+    _autosave?.markDirty();
   }
   // Necromancer: a fallen ally creature rises (held by the class), or an archived creature of mine enters.
   for (const rv of classAbilityOut.revives) {
@@ -3754,6 +3774,11 @@ function reshuffleIfEmpty() {
 // refills only at turn end), buffers reset, counters advance. Instants the
 // resolver judged useless (`returnedCardIds`) stay in hand (Rule 8 pc override).
 async function endRound() {
+  // Autosave: an action has resolved — regardless of whether traps / tokens /
+  // obstacles changed in this one, mark the state dirty so a quiet turn still
+  // rolls to disk. The resolver's push / filter sites above also mark dirty
+  // for the specific mutation, so this call is a safety net.
+  _autosave?.markDirty();
   const returned = new Set(myLastReveal?.returnedCardIds || []);
   const playedIds = new Set((myLastReveal?.skillCardIds || []).filter(id => !returned.has(id)));
   // Haste bonus round: its action card, skills and instant are spent too.
@@ -4520,7 +4545,61 @@ await emitEnvelope({
 });
 await revealAround(entity.tile.q, entity.tile.r);
 console.log(`[${PEER_LABEL}] map: seed ${MAP_SEED}, ${dimMap.size()} hexes in ${dimMap.blockCount()} blocks (reveal radius ${REVEAL_RADIUS})`);
+
+// Hydrate obstacles / tokens / traps from a restored TMJ (map blocks were
+// already seeded via `seedBlocks` above). Only my own obstacles / tokens /
+// traps go onto `entity.*` — those belong to this peer. Other peers'
+// obstacles come back through gossip once they rejoin.
+if (_restoredTmj) {
+  const mine = (o) => !o?.owner || o.owner === PEER_ID_STRING;
+  for (const o of _restoredTmj.obstacles || []) if (mine(o)) entity.obstacles.push({ id: String(o.id || `restored-ob${entity.obstacles.length}`), q: o.q, r: o.r, hp: o.hp, elem: o.elem });
+  for (const tk of _restoredTmj.tokens || []) if (!tk.owner || tk.owner === PEER_ID_STRING) entity.tileTokens.push({ id: String(tk.id || `restored-tk${entity.tileTokens.length}`), kind: tk.kind || 'bonus', elem: tk.elem, value: tk.value, q: tk.q, r: tk.r, ...(tk.item ? { item: tk.item } : {}) });
+  for (const tp of _restoredTmj.traps || []) if (!tp.owner || tp.owner === PEER_ID_STRING) entity.traps.push({ id: String(tp.id || `restored-tp${entity.traps.length}`), q: tp.q, r: tp.r, effect_id: tp.effect_id, elements: tp.elements || [], card_id: tp.card_id, power: tp.power, trigger: tp.trigger, mode: tp.mode, holder: tp.holder });
+  console.log(`[${PEER_LABEL}] restore: hydrated ${entity.obstacles.length} obstacles, ${entity.tileTokens.length} tokens, ${entity.traps.length} traps`);
+}
+
+// Local TMJ autosave (game/tools/autosave.mjs). Takes a snapshot of the
+// grow-only known map, my obstacles / tokens / traps and the live roster;
+// writes `data/dimensions/<dim_id>/map_autosave.tmj` every AUTOSAVE_INTERVAL_MS
+// (default 60 s) when the state is dirty. On shutdown it renames the
+// autosave file to `map_hard.tmj` so the launcher's restore list can show it.
+const AUTOSAVE_INTERVAL_MS = Number(process.env.AUTOSAVE_INTERVAL_MS || 60_000);
+const getSnapshot = () => ({
+  seed: MAP_SEED,
+  bounds: dimMap.bounds(),
+  blocks: dimMap.blocks(),
+  obstacles: entity.obstacles,
+  tokens: entity.tileTokens,
+  traps: entity.traps,
+  entities: livePeers().map(p => ({
+    peer_id: p.peer_id,
+    source_id: p.character_id || p.creature_id || '',
+    alliance: p.alliance || '',
+    name: p.name || p.peer_id,
+    hp: p.life ?? 0,
+    hp_max: p.life_max ?? 0,
+    tile_q: p.tile_q ?? 0,
+    tile_r: p.tile_r ?? 0,
+    class_id: p.class_id || entity.classId || '',
+  })),
+  meta: { dim_id: DIM_ID, dim_name: DIM_NAME, peer_id: PEER_ID_STRING, peer_label: PEER_LABEL, turn: hg.turn, round: hg.round },
+});
+try {
+  _autosave = autosaveStart({ dimensionId: DIM_ID, dimensionName: DIM_NAME, mapSeed: MAP_SEED, intervalMs: AUTOSAVE_INTERVAL_MS, getSnapshot });
+  console.log(`[${PEER_LABEL}] autosave: every ${AUTOSAVE_INTERVAL_MS}ms → ${_autosave.path}`);
+} catch (e) { console.warn(`[${PEER_LABEL}] autosave disabled: ${e.message}`); }
+
 await enterPhase('planning');
 
-// Clean shutdown.
-process.on('SIGINT', async () => { console.log(`[${PEER_LABEL}] shutting down`); for (const c of companions) { try { c.proc.kill(); } catch {} } try { await libp2p.stop(); } catch {} process.exit(0); });
+// Clean shutdown. Flush the autosave to its hard-save name before killing
+// companions / libp2p so the file is coherent on disk.
+async function _gracefulShutdown(sig) {
+  console.log(`[${PEER_LABEL}] shutting down (${sig})`);
+  try { await _autosave?.stop(); } catch {}
+  for (const c of companions) { try { c.proc.kill(); } catch {} }
+  try { await libp2p.stop(); } catch {}
+  process.exit(0);
+}
+process.on('SIGINT',  () => { _gracefulShutdown('SIGINT').catch(() => process.exit(1)); });
+process.on('SIGTERM', () => { _gracefulShutdown('SIGTERM').catch(() => process.exit(1)); });
+process.on('beforeExit', () => { try { _autosave?.hardSave(); } catch {} });
