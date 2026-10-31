@@ -342,6 +342,38 @@
   .modal .diff { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 8px 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
   .modal .diff.before { color: var(--bad); }
   .modal .diff.after { color: var(--good); }
+
+  /* Validate modal — big enough to show a run of entries. */
+  .validate-modal { width: min(900px, 94vw); max-height: 86vh; display: flex; flex-direction: column; }
+  .validate-body { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 8px 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 8px 0; }
+  .validate-body .v-file { color: var(--section); font-weight: 700; margin-top: 8px; }
+  .validate-body .v-ok   { color: var(--good); }
+  .validate-body .v-warn { color: var(--warn); }
+  .validate-body .v-fail { color: var(--bad); }
+  .validate-body .v-entry { padding-left: 10px; }
+  .validate-body .v-issue { padding-left: 24px; }
+
+  /* Per-version Logic section — sits just above the full tree. */
+  .logic-section { margin: 14px 0 4px; border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; background: var(--bg); }
+  .logic-section > .logic-head { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; user-select: none; }
+  .logic-section > .logic-head::before { content: "▸"; display: inline-block; width: 10px; color: var(--fg-mute); transition: transform .12s ease; }
+  .logic-section.open > .logic-head::before { transform: rotate(90deg); }
+  .logic-section .logic-counts { color: var(--fg-dim); font-family: ui-monospace, Consolas, monospace; letter-spacing: 0; text-transform: none; }
+  .logic-section .logic-body { display: none; margin-top: 8px; }
+  .logic-section.open .logic-body { display: block; }
+  .logic-section .logic-desc { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; color: var(--fg); margin-bottom: 8px; white-space: pre-wrap; }
+  .logic-section h5 { margin: 10px 0 4px; font-size: 10px; color: var(--rule); text-transform: uppercase; letter-spacing: 0.08em; }
+  .logic-section .logic-item { padding: 4px 0; border-top: 1px dashed var(--border); }
+  .logic-section .logic-item:first-of-type { border-top: 0; }
+  .logic-section .logic-item .l-id { color: var(--accent2); font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+  .logic-section .logic-item .l-desc { color: var(--fg); font-size: 12px; margin: 2px 0 4px; }
+  .logic-section .logic-block { background: var(--bg-paper); border: 1px solid var(--border); border-radius: 3px; padding: 6px 8px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; white-space: pre; overflow-x: auto; color: var(--fg); cursor: text; }
+  .logic-section .logic-block.editable:hover { background: var(--bg-raised); }
+  .logic-section .logic-block.editing { outline: 1px solid var(--section); white-space: pre; }
+  .logic-section .logic-refs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .logic-section .logic-refs .ref { font-family: ui-monospace, Consolas, monospace; font-size: 11px; padding: 2px 6px; border-radius: 3px; background: var(--bg-chip); color: var(--accent2); }
+  .logic-section .logic-refs .ref.dangling { background: transparent; border: 1px solid var(--bad); color: var(--bad); }
+  .logic-section .logic-empty { color: var(--fg-mute); font-style: italic; font-size: 11px; }
   .modal .actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
 
   a { color: var(--accent2); text-decoration: none; }
@@ -361,6 +393,7 @@
   <button id="forget" class="ghost" title="Forget the remembered folder" style="display:none">Forget folder</button>
   <input type="search" id="search" placeholder="Filter entries by id, name, tag…">
   <button id="save" class="primary" disabled>Save all</button>
+  <button id="validate-all" title="Check every loaded entry's structure + JsonLogic references against data/schema.json">Validate</button>
   <button id="export-bundle" title="Pack every loaded file into one dimensions-bundle.json for distribution">Export bundle</button>
   <span class="status" id="status">starting…</span>
 </header>
@@ -375,6 +408,18 @@
   <nav id="toc"></nav>
 </main>
 <div class="toast" id="toast"></div>
+
+<!-- validation report dialog -->
+<div class="modal-backdrop" id="validate-modal">
+  <div class="modal validate-modal">
+    <h3>Validation report</h3>
+    <div id="validate-summary" class="label"></div>
+    <div id="validate-body" class="validate-body"></div>
+    <div class="actions">
+      <button id="validate-close" class="primary">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- confirm dialog -->
 <div class="modal-backdrop" id="confirm-modal">
@@ -1400,6 +1445,14 @@ function renderEntryShell(filename, entry, bodyBuilder, { isRule } = {}) {
     addRow("links", linksRow);
     art.appendChild(grid);
 
+    // JsonLogic section — a dedicated viewer/editor for v.logic sitting between
+    // the metadata grid and the raw tree. Reads prerequisites/effects/validation
+    // as arrays of {id, description, when|value|assert: <jsonlogic>} and
+    // paints each rule as a monospace block. Click a block to edit raw JSON;
+    // malformed JSON reverts with a toast. References pills highlight any
+    // dangling rule id (missing from data/logic_rules.json).
+    art.appendChild(renderLogicSection(filename, entry, v));
+
     // Full tree view for the whole version
     const treeLabel = document.createElement("div"); treeLabel.style.fontSize = "10px"; treeLabel.style.color = "var(--fg-mute)"; treeLabel.style.textTransform = "uppercase"; treeLabel.style.letterSpacing = "0.06em"; treeLabel.style.margin = "14px 0 4px"; treeLabel.textContent = "full tree · click any value to edit";
     art.appendChild(treeLabel);
@@ -1410,6 +1463,264 @@ function renderEntryShell(filename, entry, bodyBuilder, { isRule } = {}) {
     }));
   }
   return art;
+}
+
+/* ============================================================ */
+/*  JsonLogic viewer / editor + reference lookups               */
+/* ============================================================ */
+// A rule id is "defined" if `data/logic_rules.json` has an entry with that id.
+// Called by the Logic section to flag dangling `references` and by validateAll
+// to accrue warnings. Rebuilt from state each call — cheap vs 215 entries.
+function definedRuleIds() {
+  const out = new Set();
+  const f = state.files["logic_rules.json"];
+  if (!f) return out;
+  for (const e of (f.data?.entries || [])) if (e && typeof e.id === "string") out.add(e.id);
+  return out;
+}
+
+// Pretty-print a JsonLogic value with 2-space indent and a hard cap so a
+// huge rule doesn't blow the viewport. Falls back to String() if cyclic.
+function fmtLogic(value) {
+  try {
+    const t = JSON.stringify(value, null, 2);
+    return t.length > 2400 ? t.slice(0, 2400) + "\n…(truncated — click to edit)" : t;
+  } catch { return String(value); }
+}
+
+function renderLogicSection(filename, entry, v) {
+  const sec = document.createElement("section");
+  sec.className = "logic-section";
+  const head = document.createElement("div"); head.className = "logic-head";
+  const logic = v.logic || {};
+  const nPre = Array.isArray(logic.prerequisites) ? logic.prerequisites.length : 0;
+  const nEff = Array.isArray(logic.effects) ? logic.effects.length : 0;
+  const nVal = Array.isArray(logic.validation) ? logic.validation.length : 0;
+  const nRef = Array.isArray(logic.references) ? logic.references.length : 0;
+  const title = document.createElement("span");
+  title.textContent = "logic (JsonLogic)";
+  const counts = document.createElement("span");
+  counts.className = "logic-counts";
+  counts.textContent = `· pre ${nPre} · eff ${nEff} · val ${nVal} · ref ${nRef}`;
+  head.appendChild(title); head.appendChild(counts);
+  sec.appendChild(head);
+  const body = document.createElement("div"); body.className = "logic-body";
+  sec.appendChild(body);
+  // Open by default when the version actually carries a logic block, so
+  // existing content is immediately visible. Collapsed otherwise.
+  if (nPre || nEff || nVal || nRef || logic.description) sec.classList.add("open");
+  head.onclick = () => sec.classList.toggle("open");
+
+  // Description — click-to-edit prose.
+  const descWrap = document.createElement("div"); descWrap.className = "logic-desc";
+  proseEditable(descWrap, () => logic.description, (nv) => {
+    v.logic = v.logic || {}; v.logic.description = nv; markDirty(filename); renderAll();
+  }, filename, { label: "logic.description" });
+  body.appendChild(descWrap);
+
+  // Lists: prerequisites / effects / validation.
+  const KEY_FIELD = { prerequisites: "when", effects: "value", validation: "assert" };
+  for (const section of ["prerequisites", "effects", "validation"]) {
+    const h = document.createElement("h5"); h.textContent = section + ` (${(logic[section] || []).length})`;
+    body.appendChild(h);
+    const items = Array.isArray(logic[section]) ? logic[section] : [];
+    if (!items.length) {
+      const empty = document.createElement("div"); empty.className = "logic-empty"; empty.textContent = "no " + section;
+      body.appendChild(empty);
+      continue;
+    }
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const row = document.createElement("div"); row.className = "logic-item";
+      const id = document.createElement("div"); id.className = "l-id"; id.textContent = item?.id || "(no id)";
+      row.appendChild(id);
+      if (item?.description) {
+        const d = document.createElement("div"); d.className = "l-desc"; d.textContent = item.description;
+        row.appendChild(d);
+      }
+      // Target / unit chips (effects only).
+      if (section === "effects" && (item?.target || item?.unit)) {
+        const chips = document.createElement("div"); chips.className = "pill-row"; chips.style.margin = "2px 0 4px";
+        if (item.target) { const p = document.createElement("span"); p.className = "pill tag"; p.textContent = "→ " + item.target; chips.appendChild(p); }
+        if (item.unit)   { const p = document.createElement("span"); p.className = "pill tag"; p.textContent = item.unit; chips.appendChild(p); }
+        row.appendChild(chips);
+      }
+      // The JsonLogic payload — the `when` / `value` / `assert` field.
+      const key = KEY_FIELD[section];
+      const block = document.createElement("pre"); block.className = "logic-block editable";
+      block.textContent = fmtLogic(item?.[key]);
+      block.title = "click to edit — paste valid JSON";
+      block.onclick = () => editLogicBlock(block, item, key, filename);
+      row.appendChild(block);
+      body.appendChild(row);
+    }
+  }
+
+  // References — dangling rule ids painted in red.
+  const refs = Array.isArray(logic.references) ? logic.references : [];
+  const refH = document.createElement("h5"); refH.textContent = `references (${refs.length})`;
+  body.appendChild(refH);
+  if (!refs.length) {
+    const empty = document.createElement("div"); empty.className = "logic-empty"; empty.textContent = "no references";
+    body.appendChild(empty);
+  } else {
+    const defined = definedRuleIds();
+    const row = document.createElement("div"); row.className = "logic-refs";
+    for (const ref of refs) {
+      const p = document.createElement("span");
+      p.className = "ref" + (defined.has(ref) ? "" : " dangling");
+      p.textContent = ref;
+      p.title = defined.has(ref) ? "defined in logic_rules.json" : "DANGLING — no entry with this id in logic_rules.json";
+      row.appendChild(p);
+    }
+    body.appendChild(row);
+  }
+
+  return sec;
+}
+
+// Swap a <pre class="logic-block"> for a textarea; commit on blur or Ctrl+Enter.
+// Reverts (and toasts) if the textarea doesn't parse as JSON. Treats the
+// nested JsonLogic as an opaque payload — the editor doesn't need to know
+// which ops are valid, only that it round-trips through JSON.
+function editLogicBlock(block, item, key, filename) {
+  if (block.classList.contains("editing")) return;
+  const original = fmtLogic(item?.[key]);
+  const ta = document.createElement("textarea");
+  ta.value = original;
+  ta.style.width = "100%";
+  ta.style.minHeight = Math.min(400, Math.max(80, original.split("\n").length * 16)) + "px";
+  ta.style.font = "11px ui-monospace, Consolas, monospace";
+  ta.style.background = "var(--bg-paper)";
+  ta.style.color = "var(--fg)";
+  ta.style.border = "1px solid var(--section)";
+  ta.style.borderRadius = "3px";
+  ta.style.padding = "6px 8px";
+  block.replaceWith(ta);
+  ta.focus();
+  const commit = async () => {
+    const text = ta.value.trim();
+    let parsed;
+    try { parsed = text === "" ? null : JSON.parse(text); }
+    catch (e) { toast("logic block: invalid JSON — " + e.message, "err"); return; }
+    const ok = await confirmChange("logic." + key, original, text);
+    if (!ok) { renderAll(); return; }
+    item[key] = parsed;
+    markDirty(filename);
+    renderAll();
+  };
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { renderAll(); }
+    else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(); }
+  });
+  ta.addEventListener("blur", () => { if (ta.value !== original) commit(); else renderAll(); });
+}
+
+/* ============================================================ */
+/*  Validate — structural + logic-shape checks across all files */
+/* ============================================================ */
+// Walks every loaded data/*.json and surfaces (level, text) pairs for each
+// entry. Levels: "fail" = schema-breaking, "warn" = dangling / soft issue,
+// "ok" = no issues on this entry. Opens the Validate modal with a summary +
+// one line per entry (groups collapsed by file).
+function validateAll() {
+  const results = {};   // filename -> [{entryId, level, issues:[...]}]
+  const STATUS = new Set(["canonical", "proposal", "superseded", "rejected", "resolved"]);
+  const ORIGIN = new Set(ORIGIN_OPTIONS);
+  const defined = definedRuleIds();
+  let totalFail = 0, totalWarn = 0, totalOk = 0, totalEntries = 0;
+  for (const [filename, f] of Object.entries(state.files)) {
+    const perFile = [];
+    const entries = Array.isArray(f.data?.entries) ? f.data.entries : null;
+    if (!entries) {
+      perFile.push({ entryId: "(file)", level: "warn", issues: ["no .entries array — likely not an entry collection; skipped"] });
+      results[filename] = perFile;
+      continue;
+    }
+    for (const e of entries) {
+      const issues = [];
+      let level = "ok";
+      const push = (lv, msg) => { issues.push(msg); if (lv === "fail") level = "fail"; else if (lv === "warn" && level !== "fail") level = "warn"; };
+      if (typeof e?.id !== "string" || !e.id) push("fail", "missing id");
+      else if (!/^[a-z0-9][a-z0-9_]*$/.test(e.id)) push("warn", `id "${e.id}" not snake_case`);
+      if (e && typeof e.name !== "string") push("warn", "missing name");
+      if (!Array.isArray(e?.versions) || !e.versions.length) push("fail", "versions[] missing or empty");
+      else for (let i = 0; i < e.versions.length; i++) {
+        const v = e.versions[i];
+        const vprefix = `v[${i}]`;
+        if (typeof v?.version !== "string") push("fail", `${vprefix}.version missing`);
+        if (typeof v?.weight !== "number" || v.weight < 0 || v.weight > 1) push("fail", `${vprefix}.weight not in [0,1]`);
+        if (!STATUS.has(v?.status)) push("fail", `${vprefix}.status "${v?.status}" not one of ${[...STATUS].join("|")}`);
+        if (v?.origin && !ORIGIN.has(v.origin)) push("warn", `${vprefix}.origin "${v.origin}" not standard`);
+        if (v?.created_at && !/^\d{4}-\d{2}-\d{2}/.test(v.created_at)) push("warn", `${vprefix}.created_at not ISO-8601`);
+        // Logic shape.
+        if (v?.logic) {
+          const L = v.logic;
+          for (const key of ["prerequisites", "effects", "validation"]) {
+            if (L[key] !== undefined && !Array.isArray(L[key])) push("fail", `${vprefix}.logic.${key} not an array`);
+            else if (Array.isArray(L[key])) {
+              const KEY_FIELD = { prerequisites: "when", effects: "value", validation: "assert" };
+              for (let j = 0; j < L[key].length; j++) {
+                const it = L[key][j];
+                if (!it || typeof it !== "object") { push("fail", `${vprefix}.logic.${key}[${j}] not an object`); continue; }
+                if (typeof it.id !== "string") push("warn", `${vprefix}.logic.${key}[${j}].id missing`);
+                if (!(KEY_FIELD[key] in it)) push("warn", `${vprefix}.logic.${key}[${j}].${KEY_FIELD[key]} missing`);
+              }
+            }
+          }
+          if (L.references !== undefined) {
+            if (!Array.isArray(L.references)) push("fail", `${vprefix}.logic.references not an array`);
+            else {
+              for (const ref of L.references) {
+                if (typeof ref !== "string") { push("warn", `${vprefix}.logic.references has non-string`); continue; }
+                if (defined.size && !defined.has(ref)) push("warn", `${vprefix}.logic.references → "${ref}" not in logic_rules.json`);
+              }
+            }
+          }
+          if (L.description !== undefined && typeof L.description !== "string") push("warn", `${vprefix}.logic.description not a string`);
+        }
+      }
+      perFile.push({ entryId: e?.id || "(no id)", level, issues });
+      totalEntries++;
+      if (level === "fail") totalFail++;
+      else if (level === "warn") totalWarn++;
+      else totalOk++;
+    }
+    results[filename] = perFile;
+  }
+  renderValidateReport(results, { totalEntries, totalFail, totalWarn, totalOk });
+}
+
+function renderValidateReport(results, totals) {
+  const modal = $("#validate-modal");
+  const summary = $("#validate-summary");
+  const body = $("#validate-body");
+  summary.innerHTML = `<span class="v-ok">${totals.totalOk} ok</span>  ·  <span class="v-warn">${totals.totalWarn} warn</span>  ·  <span class="v-fail">${totals.totalFail} fail</span>  ·  ${totals.totalEntries} entries across ${Object.keys(results).length} files`;
+  body.innerHTML = "";
+  const files = Object.keys(results).sort();
+  for (const filename of files) {
+    const perFile = results[filename];
+    const fileHit = perFile.some(x => x.level !== "ok");
+    const h = document.createElement("div"); h.className = "v-file";
+    const counts = perFile.reduce((a, x) => (a[x.level]++, a), { ok: 0, warn: 0, fail: 0 });
+    h.textContent = `${filename}  —  ok ${counts.ok}  warn ${counts.warn}  fail ${counts.fail}`;
+    body.appendChild(h);
+    if (!fileHit) continue;
+    for (const r of perFile) {
+      if (r.level === "ok") continue;
+      const line = document.createElement("div");
+      line.className = "v-entry v-" + r.level;
+      line.textContent = `${r.level.toUpperCase()}  ${r.entryId}`;
+      body.appendChild(line);
+      for (const iss of r.issues) {
+        const sub = document.createElement("div");
+        sub.className = "v-issue v-" + r.level;
+        sub.textContent = "· " + iss;
+        body.appendChild(sub);
+      }
+    }
+  }
+  modal.classList.add("show");
 }
 
 /* ============================================================ */
@@ -1867,6 +2178,12 @@ $("#open").onclick = openFolder;
 $("#forget").onclick = forgetFolder;
 $("#save").onclick = saveAll;
 $("#export-bundle").onclick = exportBundle;
+$("#validate-all").onclick = () => {
+  if (!Object.keys(state.files).length) { toast("open a data folder first", "err"); return; }
+  validateAll();
+};
+$("#validate-close").onclick = () => $("#validate-modal").classList.remove("show");
+$("#validate-modal").addEventListener("click", (ev) => { if (ev.target.id === "validate-modal") $("#validate-modal").classList.remove("show"); });
 
 /** Pack every loaded file into one JSON and trigger a browser download. Matches bundle.py shape. */
 function exportBundle() {
