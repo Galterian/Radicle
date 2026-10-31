@@ -6,7 +6,7 @@ import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
-import { featureAt, markFeatureConsumed, isFeatureConsumed } from './features.js';
+import { featureAt, markFeatureConsumed, isFeatureConsumed, isLabyrinthWallAt } from './features.js';
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack } from './skill_card.js';
@@ -272,16 +272,19 @@ function applyMap(m) {
   }
 }
 
-// Build the "blocked" set the pathfinder uses: every alive entity other than
-// me stands on an impassable tile.
+// Build the blocked-tile predicate the pathfinder uses: every alive entity
+// other than me stands on an impassable tile, and every labyrinth-wall hex is
+// static scenery nobody can step onto. Labyrinth walls are a pure function of
+// (seed, q, r), so the predicate stays deterministic.
 function blockedTilesExcluding(myPeerId) {
-  const blocked = new Set();
+  const occ = new Set();
   for (const p of state.entities) {
     if (!p || p.life <= 0 || p.peer_id === myPeerId) continue;
     if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
-    blocked.add(`${p.tile_q},${p.tile_r}`);
+    occ.add(`${p.tile_q},${p.tile_r}`);
   }
-  return blocked;
+  const seed = state.map.seed;
+  return (q, r) => occ.has(`${q},${r}`) || isLabyrinthWallAt(seed, q, r);
 }
 
 // Cancel an in-progress multi-round journey. Called from any manual action the

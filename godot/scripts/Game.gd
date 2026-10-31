@@ -195,8 +195,13 @@ func blocked_map(except: Entity = null) -> Dictionary:
 	# Unwalkable biomes (water, lava, mountains, cliffs) are impassable for the
 	# pathfinder. The biome sampler is pure (seed, q, r), so this stays consistent
 	# as the map grows via reveal_around.
+	# Labyrinth walls (Features.gd#_labyrinth_wall_at — parity mirror of
+	# features.js#labyrinthWallAt) are static impassable scenery owned by nobody.
+	# Pure (seed, q, r), so same hexes are blocked on every peer.
 	for h in gen.tiles():
 		if not gen.terrain_at(h.x, h.y).walkable:
+			b[Hex.key_of(h)] = true
+		elif gen.features != null and gen.features.is_labyrinth_wall(h.x, h.y, gen.biome):
 			b[Hex.key_of(h)] = true
 	return b
 
@@ -348,6 +353,12 @@ func _resolve() -> void:
 		for k in claimed.keys():
 			if claimed[k] != e:
 				blocked[k] = true
+		# Labyrinth walls (parity mirror of features.js#labyrinthWallAt via
+		# Features.gd#is_labyrinth_wall) are static impassable scenery.
+		if gen.features != null:
+			for h in gen.tiles():
+				if gen.features.is_labyrinth_wall(h.x, h.y, gen.biome):
+					blocked[Hex.key_of(h)] = true
 		var path := Pathfinding.find_path(e.hex, tgt, blocked, func(h): return gen.has(h))
 		if path.is_empty():
 			hud.log_line("%s cannot reach %s" % [e.display_name, Hex.key_of(tgt)], Color(0.6, 0.6, 0.6))
