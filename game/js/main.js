@@ -5,6 +5,14 @@
 import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, featureAt } from './map.js';
+import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
+
+// Unit voice lines / fx from the curated WBC3 collection. `M` toggles mute.
+const sounds = createSoundBank();
+try { sounds.set(localStorage.getItem('chaosd6.muted') === '1'); } catch { /* no storage */ }
+let rendererRef = null;   // set in wireInput(); the ws handler needs it for attack triggers
+const sourceIdOf = (p) => p?.source_id || p?.sourceId || p?.character_id || p?.creature_id || null;
+const resOf = (p) => resourcesFor(sourceIdOf(p));
 
 // Direct DOM poke rather than importing from launcher.js — launcher.js is the
 // one that imports *us*, so pulling a symbol back creates a cycle that in a
@@ -788,7 +796,10 @@ function renderRoster() {
       return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="class${state_}${archived ? ' — the owner recasts it by emitting every colour' : ''}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
     })();
     const team = teamLabel(e);
-    row.innerHTML = `<span class="nm">${e.name}<span class="team ${/Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally'}" title="ally">${team}</span></span>
+    const res = resOf(e);
+    const thumb = res?.portrait?.path ? `<img class="thumb" src="${assetUrl(res.portrait.path)}" alt="">`
+      : res?.sprites?.info?.path ? `<img class="thumb info" src="${assetUrl(res.sprites.info.path)}" alt="">` : '';
+    row.innerHTML = `${thumb}<span class="nm">${e.name}<span class="team ${/Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally'}" title="ally">${team}</span></span>
       <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
@@ -1306,8 +1317,17 @@ function connect() {
           // (turn, round, actor) since every peer's echoed state_hash carries
           // the same payload.
           state._loggedAction ||= new Set();
+          state._animAction ||= new Set();
           state.ui.revealBadges ||= {};
           for (const a of env.payload.actions || []) {
+            // Sprite swing for every revealed Attack (all peers, de-duped per
+            // turn/round/actor) — the attack sheet plays once then returns to idle.
+            const animKey = `${env.turn}:${env.round}:${a.actor}`;
+            if (!state._animAction.has(animKey)) {
+              state._animAction.add(animKey);
+              if (a.action === 'A') rendererRef?.trigger(a.actor, 'attack');
+              if (state._animAction.size > 500) state._animAction = new Set([...state._animAction].slice(-100));
+            }
             const ak = `${env.turn}:${env.round}:${a.actor}${a.bonus ? `:bonus${a.bonus_k || 0}` : ''}`;
             if (state._loggedAction.has(ak)) continue;
             state._loggedAction.add(ak);
@@ -1332,6 +1352,8 @@ function connect() {
               a.trance.forEach((c, i) => { if (!Array.isArray(a.played) || a.played.includes(i)) icons.push({ action: c }); });
               icons.push({ action: 'BT' });
             } else icons.push({ action: a.action });
+            // Each revealed skill plays its mapped WBC3 fx sound (data/skills.json resources.sounds.fx) — the bank throttles repeats.
+            for (const id of a.skills || []) sounds.play(resourcesFor(id), 'fx', { volume: 0.55 });
             for (const id of a.skills || []) if (id !== 'skill_battle_trance') icons.push({ skill: id });
             for (const e of a.effects || []) icons.push({ effect: e.effect_id, glyph: `✺${elemGlyphs(e.elements)}` });
             const startAt = at0;
@@ -1595,13 +1617,19 @@ function wireInput() {
     else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
     else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
     else if (ev.key === 'q' || ev.key === 'Q') clickClassCard();   // my class ability (user ruling 2026-10-30)
+    else if (ev.key === 'm' || ev.key === 'M') {
+      const muted = sounds.toggle();
+      try { localStorage.setItem('chaosd6.muted', muted ? '1' : '0'); } catch { /* no storage */ }
+      logUI(muted ? 'sound muted' : 'sound on', 'phase');
+    }
   });
 
   const canvas = document.getElementById('stage');
   // Test hook (tools/ui-check.mjs): the canvas chip text is not in the DOM.
   window.__chaosDebug = () => ({ queuedLabel: queuedLabel(), badges: { ...(state.ui.revealBadges || {}) }, icons: state.ui.floatingIcons.map(f => f.skill || f.action) });
 
-  const renderer = createRenderer(canvas, {
+  // ws handler needs this to trigger attack animations on reveal.
+  const renderer = rendererRef = createRenderer(canvas, {
     get entities() {
       return state.entities.map(p => {
         const isMe = p.peer_id === state.myPeerId;
@@ -1683,6 +1711,7 @@ function wireInput() {
       return;
     }
     state.ui.selectedTarget = t;
+    if (occupant && occupant.peer_id === state.myPeerId) sounds.play(resOf(occupant), 'select');
     setLogFilter(occupant ? occupant.peer_id : null);
     // general_ux_range_cast_target: with a tile-taking effect queued (Teleport, Creation, Awake, Vision,
     // Artifice, Metaphysics, Disruption, Mind Blast) the left-clicked tile is the cast's target.

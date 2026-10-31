@@ -1,0 +1,942 @@
+[
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 0",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 0/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 0 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 1",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 1 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 2",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 2/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 2 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 3",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 3/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 3 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 4",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 4/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 4 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 5",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 5/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 5 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 6",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 6/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 6 -\u2026.png"
+],
+[
+"Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 7",
+null,
+"extracted/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 7/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 7 -\u2026.png"
+],
+[
+"Arrow projectile (directions)",
+"EMA0",
+"extracted/Sprites/Effects/Effects1/Arrow projectile (directions)/Arrow projectile (directions) - idle [EMA0].png"
+],
+[
+"Arrow projectile variant",
+"EMA5",
+"extracted/Sprites/Effects/Effects1/Arrow projectile variant/Arrow projectile variant - idle [EMA5].png"
+],
+[
+"Arrowbolt projectile variant",
+"EMA1",
+"extracted/Sprites/Effects/Effects1/Arrowbolt projectile variant/Arrowbolt projectile variant - idle [EMA1].png"
+],
+[
+"Blood splatter (red) and green ichor splatter",
+"EDBL",
+"extracted/Sprites/Effects/Effects1/Blood splatter (red) and green ichor splatter/Blood splatter (red) and green ichor splatter - idle [EDBL].png"
+],
+[
+"Blue crystaldiamond icons",
+"EZ36",
+"extracted/Sprites/Effects/Effects1/Blue crystaldiamond icons/Blue crystaldiamond icons - idle [EZ36].png"
+],
+[
+"Blue ring markers",
+"EZ73",
+"extracted/Sprites/Effects/Effects1/Blue ring markers/Blue ring markers - idle [EZ73].png"
+],
+[
+"Bluewhite arcs",
+"EZ75",
+"extracted/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png"
+],
+[
+"Bluewhite ring burst",
+"EZ64",
+"extracted/Sprites/Effects/Effects1/Bluewhite ring burst/Bluewhite ring burst - idle [EZ64].png"
+],
+[
+"Bonebody debris pieces",
+"EDTH",
+"extracted/Sprites/Effects/Effects1/Bonebody debris pieces/Bonebody debris pieces - idle [EDTH].png"
+],
+[
+"Building debris rubble chunks (sheet 2)",
+"EDB1",
+"extracted/Sprites/Effects/Effects1/Building debris rubble chunks (sheet 2)/Building debris rubble chunks (sheet 2) - idle [EDB1].png"
+],
+[
+"Building debris rubble chunks (sheet 3)",
+"EDB2",
+"extracted/Sprites/Effects/Effects1/Building debris rubble chunks (sheet 3)/Building debris rubble chunks (sheet 3) - idle [EDB2].png"
+],
+[
+"Building debris rubble chunks (sheet)",
+"EDB0",
+"extracted/Sprites/Effects/Effects1/Building debris rubble chunks (sheet)/Building debris rubble chunks (sheet) - idle [EDB0].png"
+],
+[
+"Crossed burning swords icon (battle marker)",
+"EEBX",
+"extracted/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png"
+],
+[
+"Cursormarker icons (small)",
+"ECM0",
+"extracted/Sprites/Effects/Effects1/Cursormarker icons (small)/Cursormarker icons (small) - idle [ECM0].png"
+],
+[
+"Cyan arc markers",
+"EZ71",
+"extracted/Sprites/Effects/Effects1/Cyan arc markers/Cyan arc markers - idle [EZ71].png"
+],
+[
+"Cyan beams",
+"EZ63",
+"extracted/Sprites/Effects/Effects1/Cyan beams/Cyan beams - idle [EZ63].png"
+],
+[
+"Cyan dome shield arcs",
+"EZ41",
+"extracted/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png"
+],
+[
+"Cyan horizontal beams",
+"EZ51",
+"extracted/Sprites/Effects/Effects1/Cyan horizontal beams/Cyan horizontal beams - idle [EZ51].png"
+],
+[
+"Cyan ice shards",
+"EZ56",
+"extracted/Sprites/Effects/Effects1/Cyan ice shards/Cyan ice shards - idle [EZ56].png"
+],
+[
+"Cyan star sparkles",
+"EZ53",
+"extracted/Sprites/Effects/Effects1/Cyan star sparkles/Cyan star sparkles - idle [EZ53].png"
+],
+[
+"Debris trail 1",
+"EDT1",
+"extracted/Sprites/Effects/Effects1/Debris trail 1/Debris trail 1 - idle [EDT1].png"
+],
+[
+"Debris trail 2",
+"EDT2",
+"extracted/Sprites/Effects/Effects1/Debris trail 2/Debris trail 2 - idle [EDT2].png"
+],
+[
+"Decorative scrollbanner glyph",
+"EZDW",
+"extracted/Sprites/Effects/Effects1/Decorative scrollbanner glyph/Decorative scrollbanner glyph - idle [Ezdw].png"
+],
+[
+"Dialoginventory icon sheet (many small item icons)",
+"IDLG",
+"extracted/Sprites/Effects/Effects1/Dialoginventory icon sheet (many small item icons)/Dialoginventory icon sheet (many small item icons) - idle [IDLG].png"
+],
+[
+"Digit glyphs 0-9 (floating numbers)",
+"ERNX",
+"extracted/Sprites/Effects/Effects1/Digit glyphs 0-9 (floating numbers)/Digit glyphs 0-9 (floating numbers) - idle [ERNX].png"
+],
+[
+"Elliptical area overlay size 1 (32x24; decodes as gradient wedge - lik\u2026",
+null,
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 1 (32x24; decodes as gradient wedge - lik\u2026/Elliptical area overlay size 1 (32x24; decodes as gradient wedge - lik\u2026.png"
+],
+[
+"Elliptical area overlay size 10 (320x240)",
+"EEE9",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 10 (320x240)/Elliptical area overlay size 10 (320x240) - idle [EEE9].png"
+],
+[
+"Elliptical area overlay size 2",
+"EEE1",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 2/Elliptical area overlay size 2 - idle [EEE1].png"
+],
+[
+"Elliptical area overlay size 3",
+"EEE2",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 3/Elliptical area overlay size 3 - idle [EEE2].png"
+],
+[
+"Elliptical area overlay size 4",
+"EEE3",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 4/Elliptical area overlay size 4 - idle [EEE3].png"
+],
+[
+"Elliptical area overlay size 5",
+"EEE4",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 5/Elliptical area overlay size 5 - idle [EEE4].png"
+],
+[
+"Elliptical area overlay size 6",
+"EEE5",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 6/Elliptical area overlay size 6 - idle [EEE5].png"
+],
+[
+"Elliptical area overlay size 7",
+"EEE6",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 7/Elliptical area overlay size 7 - idle [EEE6].png"
+],
+[
+"Elliptical area overlay size 8",
+"EEE7",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 8/Elliptical area overlay size 8 - idle [EEE7].png"
+],
+[
+"Elliptical area overlay size 9",
+"EEE8",
+"extracted/Sprites/Effects/Effects1/Elliptical area overlay size 9/Elliptical area overlay size 9 - idle [EEE8].png"
+],
+[
+"Fire arrow projectile",
+"EMA2",
+"extracted/Sprites/Effects/Effects1/Fire arrow projectile/Fire arrow projectile - idle [EMA2].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 0",
+"EFB0",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 0/Fire dragon breath (orange flames) - direction 0 - idle [Efb0].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 1",
+"EFB1",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 1/Fire dragon breath (orange flames) - direction 1 - idle [Efb1].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 2",
+"EFB2",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 2/Fire dragon breath (orange flames) - direction 2 - idle [Efb2].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 3",
+"EFB3",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 3/Fire dragon breath (orange flames) - direction 3 - idle [Efb3].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 4",
+"EFB4",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 4/Fire dragon breath (orange flames) - direction 4 - idle [Efb4].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 5",
+"EFB5",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 5/Fire dragon breath (orange flames) - direction 5 - idle [Efb5].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 6",
+"EFB6",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 6/Fire dragon breath (orange flames) - direction 6 - idle [Efb6].png"
+],
+[
+"Fire dragon breath (orange flames) - direction 7",
+"EFB7",
+"extracted/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 7/Fire dragon breath (orange flames) - direction 7 - idle [Efb7].png"
+],
+[
+"Fire flames (torchburning)",
+"EZ42",
+"extracted/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png"
+],
+[
+"Fireball explosion (growing orange blast)",
+"EX02",
+"extracted/Sprites/Effects/Effects1/Fireball explosion (growing orange blast)/Fireball explosion (growing orange blast) - idle [EX02].png"
+],
+[
+"Fireexplosion burst animation (large)",
+"EF01",
+"extracted/Sprites/Effects/Effects1/Fireexplosion burst animation (large)/Fireexplosion burst animation (large) - idle [EF01].png"
+],
+[
+"Fireexplosion burst animation (small)",
+"EF04",
+"extracted/Sprites/Effects/Effects1/Fireexplosion burst animation (small)/Fireexplosion burst animation (small) - idle [EF04].png"
+],
+[
+"Fireexplosion burst animation 2",
+"EF02",
+"extracted/Sprites/Effects/Effects1/Fireexplosion burst animation 2/Fireexplosion burst animation 2 - idle [EF02].png"
+],
+[
+"Fireexplosion burst animation 3",
+"EF03",
+"extracted/Sprites/Effects/Effects1/Fireexplosion burst animation 3/Fireexplosion burst animation 3 - idle [EF03].png"
+],
+[
+"Footprints small ground marks",
+"EDFS",
+"extracted/Sprites/Effects/Effects1/Footprints small ground marks/Footprints small ground marks - idle [EDFS].png"
+],
+[
+"Glow orb row (small)",
+"EPF1",
+"extracted/Sprites/Effects/Effects1/Glow orb row (small)/Glow orb row (small) - idle [EPF1].png"
+],
+[
+"Green dome arcs",
+"EZ43",
+"extracted/Sprites/Effects/Effects1/Green dome arcs/Green dome arcs - idle [EZ43].png"
+],
+[
+"Green dotted rings",
+"EZ76",
+"extracted/Sprites/Effects/Effects1/Green dotted rings/Green dotted rings - idle [EZ76].png"
+],
+[
+"Green ring markers",
+"EZ72",
+"extracted/Sprites/Effects/Effects1/Green ring markers/Green ring markers - idle [EZ72].png"
+],
+[
+"Green sparkle clusters",
+"EZ77",
+"extracted/Sprites/Effects/Effects1/Green sparkle clusters/Green sparkle clusters - idle [EZ77].png"
+],
+[
+"Greencyan-green dragon breath - possibly Dragonlichenecrotic or Celest\u2026",
+null,
+"extracted/Sprites/Effects/Effects1/Greencyan-green dragon breath - possibly Dragonlichenecrotic or Celest\u2026/Greencyan-green dragon breath - possibly Dragonlichenecrotic or Celest\u2026.png"
+],
+[
+"Grey arc sweeps",
+"EZ66",
+"extracted/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png"
+],
+[
+"Grey arcs",
+"EZ70",
+"extracted/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png"
+],
+[
+"Grey crescent arcs",
+"EZ61",
+"extracted/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png"
+],
+[
+"Grey glowing orb projectile growing (sizes)",
+"EPF0",
+"extracted/Sprites/Effects/Effects1/Grey glowing orb projectile growing (sizes)/Grey glowing orb projectile growing (sizes) - idle [EPF0].png"
+],
+[
+"Grey ring arcs",
+"EZ54",
+"extracted/Sprites/Effects/Effects1/Grey ring arcs/Grey ring arcs - idle [EZ54].png"
+],
+[
+"Grey rings",
+"EZ60",
+"extracted/Sprites/Effects/Effects1/Grey rings/Grey rings - idle [EZ60].png"
+],
+[
+"Grey smoke wisps",
+"EZ38",
+"extracted/Sprites/Effects/Effects1/Grey smoke wisps/Grey smoke wisps - idle [EZ38].png"
+],
+[
+"Greybrown dust puffs",
+"EZ39",
+"extracted/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png"
+],
+[
+"Greywhite large sparkle burst",
+"EZ78",
+"extracted/Sprites/Effects/Effects1/Greywhite large sparkle burst/Greywhite large sparkle burst - idle [EZ78].png"
+],
+[
+"Heart icons (healingcharm)",
+"EZ23",
+"extracted/Sprites/Effects/Effects1/Heart icons (healingcharm)/Heart icons (healingcharm) - idle [EZ23].png"
+],
+[
+"Hero death banner picture (fallen warrior)",
+"EZDD",
+"extracted/Sprites/Effects/Effects1/Hero death banner picture (fallen warrior)/Hero death banner picture (fallen warrior) - idle [Ezdd].png"
+],
+[
+"Hero victory banner picture (warrior with raised sword)",
+"EZDV",
+"extracted/Sprites/Effects/Effects1/Hero victory banner picture (warrior with raised sword)/Hero victory banner picture (warrior with raised sword) - idle [Ezdv].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 0",
+"EIB0",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 0/Ice dragon breath (cyan) - Frost dragon - direction 0 - idle [EIB0].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 1",
+"EIB1",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 1/Ice dragon breath (cyan) - Frost dragon - direction 1 - idle [EIB1].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 2",
+"EIB2",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 2/Ice dragon breath (cyan) - Frost dragon - direction 2 - idle [EIB2].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 3",
+"EIB3",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 3/Ice dragon breath (cyan) - Frost dragon - direction 3 - idle [EIB3].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 4",
+"EIB4",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 4/Ice dragon breath (cyan) - Frost dragon - direction 4 - idle [EIB4].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 5",
+"EIB5",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 5/Ice dragon breath (cyan) - Frost dragon - direction 5 - idle [EIB5].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 6",
+"EIB6",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 6/Ice dragon breath (cyan) - Frost dragon - direction 6 - idle [EIB6].png"
+],
+[
+"Ice dragon breath (cyan) - Frost dragon - direction 7",
+"EIB7",
+"extracted/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 7/Ice dragon breath (cyan) - Frost dragon - direction 7 - idle [EIB7].png"
+],
+[
+"Large smokedust explosion animation",
+"EMX1",
+"extracted/Sprites/Effects/Effects1/Large smokedust explosion animation/Large smokedust explosion animation - idle [EMX1].png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 0",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 0/Lightning dragon breath (blue-purple) - Storm dragon - direction 0 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 1",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 1/Lightning dragon breath (blue-purple) - Storm dragon - direction 1 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 2",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 2/Lightning dragon breath (blue-purple) - Storm dragon - direction 2 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 3",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 3/Lightning dragon breath (blue-purple) - Storm dragon - direction 3 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 4",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 4/Lightning dragon breath (blue-purple) - Storm dragon - direction 4 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 5",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 5/Lightning dragon breath (blue-purple) - Storm dragon - direction 5 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 6",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 6/Lightning dragon breath (blue-purple) - Storm dragon - direction 6 - i\u2026.png"
+],
+[
+"Lightning dragon breath (blue-purple) - Storm dragon - direction 7",
+null,
+"extracted/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 7/Lightning dragon breath (blue-purple) - Storm dragon - direction 7 - i\u2026.png"
+],
+[
+"Minimapresource icons mine carts (gold, metal, stone, crystal) with va\u2026",
+null,
+"extracted/Sprites/Effects/Effects1/Minimapresource icons mine carts (gold, metal, stone, crystal) with va\u2026/Minimapresource icons mine carts (gold, metal, stone, crystal) with va\u2026.png"
+],
+[
+"Missile projectile (small bolts)",
+"EMM0",
+"extracted/Sprites/Effects/Effects1/Missile projectile (small bolts)/Missile projectile (small bolts) - idle [EMM0].png"
+],
+[
+"Missile projectile (thin)",
+"EMM3",
+"extracted/Sprites/Effects/Effects1/Missile projectile (thin)/Missile projectile (thin) - idle [EMM3].png"
+],
+[
+"Missile projectile variant",
+"EMM5",
+"extracted/Sprites/Effects/Effects1/Missile projectile variant/Missile projectile variant - idle [EMM5].png"
+],
+[
+"Objectivetarget ring marker - black",
+"EOSK",
+"extracted/Sprites/Effects/Effects1/Objectivetarget ring marker - black/Objectivetarget ring marker - black - idle [EOSK].png"
+],
+[
+"Objectivetarget ring marker - blue",
+"EOSB",
+"extracted/Sprites/Effects/Effects1/Objectivetarget ring marker - blue/Objectivetarget ring marker - blue - idle [EOSB].png"
+],
+[
+"Objectivetarget ring marker - green",
+"EOSG",
+"extracted/Sprites/Effects/Effects1/Objectivetarget ring marker - green/Objectivetarget ring marker - green - idle [EOSG].png"
+],
+[
+"Objectivetarget ring marker - purple",
+"EOSP",
+"extracted/Sprites/Effects/Effects1/Objectivetarget ring marker - purple/Objectivetarget ring marker - purple - idle [EOSP].png"
+],
+[
+"Objectivetarget ring marker - red",
+"EOSR",
+"extracted/Sprites/Effects/Effects1/Objectivetarget ring marker - red/Objectivetarget ring marker - red - idle [EOSR].png"
+],
+[
+"Objectivetarget ring marker - yellow",
+"EOSY",
+"extracted/Sprites/Effects/Effects1/Objectivetarget ring marker - yellow/Objectivetarget ring marker - yellow - idle [EOSY].png"
+],
+[
+"Orange ember sparks",
+"EZ27",
+"extracted/Sprites/Effects/Effects1/Orange ember sparks/Orange ember sparks - idle [EZ27].png"
+],
+[
+"Orange fireball orbs",
+"EZ40",
+"extracted/Sprites/Effects/Effects1/Orange fireball orbs/Orange fireball orbs - idle [EZ40].png"
+],
+[
+"Orange glowing rings",
+"EZ28",
+"extracted/Sprites/Effects/Effects1/Orange glowing rings/Orange glowing rings - idle [EZ28].png"
+],
+[
+"Orange ring markers",
+"EZ33",
+"extracted/Sprites/Effects/Effects1/Orange ring markers/Orange ring markers - idle [EZ33].png"
+],
+[
+"Orange rings",
+"EZ31",
+"extracted/Sprites/Effects/Effects1/Orange rings/Orange rings - idle [EZ31].png"
+],
+[
+"Orangeyellow flame drip columns",
+"EZ29",
+"extracted/Sprites/Effects/Effects1/Orangeyellow flame drip columns/Orangeyellow flame drip columns - idle [EZ29].png"
+],
+[
+"Particle set blue sparks + crystals",
+"EPA3",
+"extracted/Sprites/Effects/Effects1/Particle set blue sparks + crystals/Particle set blue sparks + crystals - idle [EPA3].png"
+],
+[
+"Particle set cyan sparks",
+"EPA4",
+"extracted/Sprites/Effects/Effects1/Particle set cyan sparks/Particle set cyan sparks - idle [EPA4].png"
+],
+[
+"Particle set green sparks",
+"EPA2",
+"extracted/Sprites/Effects/Effects1/Particle set green sparks/Particle set green sparks - idle [EPA2].png"
+],
+[
+"Particle set orange sparks",
+"EPA6",
+"extracted/Sprites/Effects/Effects1/Particle set orange sparks/Particle set orange sparks - idle [EPA6].png"
+],
+[
+"Particle set red sparks",
+"EPA1",
+"extracted/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png"
+],
+[
+"Particle set white sparksrings",
+"EPA0",
+"extracted/Sprites/Effects/Effects1/Particle set white sparksrings/Particle set white sparksrings - idle [EPA0].png"
+],
+[
+"Particle set yellow sparks + X marks",
+"EPA5",
+"extracted/Sprites/Effects/Effects1/Particle set yellow sparks + X marks/Particle set yellow sparks + X marks - idle [EPA5].png"
+],
+[
+"Pinkred sparkles",
+"EZ50",
+"extracted/Sprites/Effects/Effects1/Pinkred sparkles/Pinkred sparkles - idle [EZ50].png"
+],
+[
+"Purple dome arcs",
+"EZ44",
+"extracted/Sprites/Effects/Effects1/Purple dome arcs/Purple dome arcs - idle [EZ44].png"
+],
+[
+"Purple domeshield arcs",
+"EZ37",
+"extracted/Sprites/Effects/Effects1/Purple domeshield arcs/Purple domeshield arcs - idle [EZ37].png"
+],
+[
+"Purple ring with + sign (buff marker)",
+"EZ67",
+"extracted/Sprites/Effects/Effects1/Purple ring with + sign (buff marker)/Purple ring with + sign (buff marker) - idle [EZ67].png"
+],
+[
+"Red X cancel marker (sizes)",
+"EMC0",
+"extracted/Sprites/Effects/Effects1/Red X cancel marker (sizes)/Red X cancel marker (sizes) - idle [EMC0].png"
+],
+[
+"Red X cancel marker variant",
+"EMC1",
+"extracted/Sprites/Effects/Effects1/Red X cancel marker variant/Red X cancel marker variant - idle [EMC1].png"
+],
+[
+"Red beamline effect",
+"EMF0",
+"extracted/Sprites/Effects/Effects1/Red beamline effect/Red beamline effect - idle [Emf0].png"
+],
+[
+"Red crescent arcs",
+"EZ55",
+"extracted/Sprites/Effects/Effects1/Red crescent arcs/Red crescent arcs - idle [EZ55].png"
+],
+[
+"Red horizontal beams",
+"EZ52",
+"extracted/Sprites/Effects/Effects1/Red horizontal beams/Red horizontal beams - idle [EZ52].png"
+],
+[
+"Red ring markers",
+"EZ74",
+"extracted/Sprites/Effects/Effects1/Red ring markers/Red ring markers - idle [EZ74].png"
+],
+[
+"Shieldgem icons in 8 player colours",
+"ESHD",
+"extracted/Sprites/Effects/Effects1/Shieldgem icons in 8 player colours/Shieldgem icons in 8 player colours - idle [ESHD].png"
+],
+[
+"Small coloured dotsparticles column",
+"ERIX",
+"extracted/Sprites/Effects/Effects1/Small coloured dotsparticles column/Small coloured dotsparticles column - idle [ERIX].png"
+],
+[
+"Small debris fragments A",
+"EDBA",
+"extracted/Sprites/Effects/Effects1/Small debris fragments A/Small debris fragments A - idle [EDBA].png"
+],
+[
+"Small debris fragments D",
+"EDBD",
+"extracted/Sprites/Effects/Effects1/Small debris fragments D/Small debris fragments D - idle [EDBD].png"
+],
+[
+"Small debris fragments I",
+"EDBI",
+"extracted/Sprites/Effects/Effects1/Small debris fragments I/Small debris fragments I - idle [EDBI].png"
+],
+[
+"Small dust puffs",
+"EZ24",
+"extracted/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png"
+],
+[
+"Small orange sparks",
+"EZ26",
+"extracted/Sprites/Effects/Effects1/Small orange sparks/Small orange sparks - idle [EZ26].png"
+],
+[
+"Small projectile bolt",
+"EMS1",
+"extracted/Sprites/Effects/Effects1/Small projectile bolt/Small projectile bolt - idle [EMS1].png"
+],
+[
+"Small projectile dart",
+"EMS0",
+"extracted/Sprites/Effects/Effects1/Small projectile dart/Small projectile dart - idle [EMS0].png"
+],
+[
+"Small white rings",
+"EZ57",
+"extracted/Sprites/Effects/Effects1/Small white rings/Small white rings - idle [EZ57].png"
+],
+[
+"Small white starbursts",
+"EZ34",
+"extracted/Sprites/Effects/Effects1/Small white starbursts/Small white starbursts - idle [EZ34].png"
+],
+[
+"Smoke puff shot smoke (40x40)",
+"EMRL",
+"extracted/Sprites/Effects/Effects1/Smoke puff shot smoke (40x40)/Smoke puff shot smoke (40x40) - idle [EMRL].png"
+],
+[
+"Smokedust cloud explosion",
+"EX01",
+"extracted/Sprites/Effects/Effects1/Smokedust cloud explosion/Smokedust cloud explosion - idle [EX01].png"
+],
+[
+"Smokedust puff animation",
+"EMX0",
+"extracted/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png"
+],
+[
+"Spearjavelin projectile",
+"EMA6",
+"extracted/Sprites/Effects/Effects1/Spearjavelin projectile/Spearjavelin projectile - idle [EMA6].png"
+],
+[
+"Spell effect cyan energy shards",
+"EZ03",
+"extracted/Sprites/Effects/Effects1/Spell effect cyan energy shards/Spell effect cyan energy shards - idle [EZ03].png"
+],
+[
+"Spell effect cyan sparkle burst",
+"EZ00",
+"extracted/Sprites/Effects/Effects1/Spell effect cyan sparkle burst/Spell effect cyan sparkle burst - idle [EZ00].png"
+],
+[
+"Spell effect faint rings",
+"EZ14",
+"extracted/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png"
+],
+[
+"Spell effect faint white rings",
+"EZ08",
+"extracted/Sprites/Effects/Effects1/Spell effect faint white rings/Spell effect faint white rings - idle [EZ08].png"
+],
+[
+"Spell effect green hooded figure sprites (phantom)",
+"EZ22",
+"extracted/Sprites/Effects/Effects1/Spell effect green hooded figure sprites (phantom)/Spell effect green hooded figure sprites (phantom) - idle [EZ22].png"
+],
+[
+"Spell effect orange glowing ring eye",
+"EZ06",
+"extracted/Sprites/Effects/Effects1/Spell effect orange glowing ring eye/Spell effect orange glowing ring eye - idle [EZ06].png"
+],
+[
+"Spell effect pale starburst",
+"EZ20",
+"extracted/Sprites/Effects/Effects1/Spell effect pale starburst/Spell effect pale starburst - idle [EZ20].png"
+],
+[
+"Spell effect purplewhite glowing orbs",
+"EZ05",
+"extracted/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png"
+],
+[
+"Spell effect red oval blobs",
+"EZ17",
+"extracted/Sprites/Effects/Effects1/Spell effect red oval blobs/Spell effect red oval blobs - idle [EZ17].png"
+],
+[
+"Spell effect small purple ringspiral",
+"EZ02",
+"extracted/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png"
+],
+[
+"Spell effect small sparks",
+"EZ16",
+"extracted/Sprites/Effects/Effects1/Spell effect small sparks/Spell effect small sparks - idle [EZ16].png"
+],
+[
+"Spell effect starburst (large)",
+"EZ19",
+"extracted/Sprites/Effects/Effects1/Spell effect starburst (large)/Spell effect starburst (large) - idle [EZ19].png"
+],
+[
+"Spell effect starburst sparkles",
+"EZ15",
+"extracted/Sprites/Effects/Effects1/Spell effect starburst sparkles/Spell effect starburst sparkles - idle [EZ15].png"
+],
+[
+"Spell effect tall whiteblue flame columns (summon pillar)",
+null,
+"extracted/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09\u2026.png"
+],
+[
+"Spell effect tiny sparkles",
+"EZ21",
+"extracted/Sprites/Effects/Effects1/Spell effect tiny sparkles/Spell effect tiny sparkles - idle [EZ21].png"
+],
+[
+"Spell effect vertical lightning boltspillars",
+"EZ11",
+"extracted/Sprites/Effects/Effects1/Spell effect vertical lightning boltspillars/Spell effect vertical lightning boltspillars - idle [EZ11].png"
+],
+[
+"Spell effect white glowing orb growing",
+"EZ07",
+"extracted/Sprites/Effects/Effects1/Spell effect white glowing orb growing/Spell effect white glowing orb growing - idle [EZ07].png"
+],
+[
+"Spell effect white rings",
+"EZ04",
+"extracted/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png"
+],
+[
+"Spell effect white smoke cloud ring (large)",
+"EZ13",
+"extracted/Sprites/Effects/Effects1/Spell effect white smoke cloud ring (large)/Spell effect white smoke cloud ring (large) - idle [EZ13].png"
+],
+[
+"Spell effect white smoke puffs",
+"EZ18",
+"extracted/Sprites/Effects/Effects1/Spell effect white smoke puffs/Spell effect white smoke puffs - idle [EZ18].png"
+],
+[
+"Spell effect white smoke rings",
+"EZ10",
+"extracted/Sprites/Effects/Effects1/Spell effect white smoke rings/Spell effect white smoke rings - idle [EZ10].png"
+],
+[
+"Spell effect yellow ring markers",
+"EZ12",
+"extracted/Sprites/Effects/Effects1/Spell effect yellow ring markers/Spell effect yellow ring markers - idle [EZ12].png"
+],
+[
+"Spell effect yellow sparkle cloud (very wide sheet)",
+"EZ01",
+"extracted/Sprites/Effects/Effects1/Spell effect yellow sparkle cloud (very wide sheet)/Spell effect yellow sparkle cloud (very wide sheet) - idle [EZ01].png"
+],
+[
+"Thin horizontal line effect 0",
+"ETX0",
+"extracted/Sprites/Effects/Effects1/Thin horizontal line effect 0/Thin horizontal line effect 0 - idle [ETX0].png"
+],
+[
+"Thin horizontal line effect 1",
+"ETX1",
+"extracted/Sprites/Effects/Effects1/Thin horizontal line effect 1/Thin horizontal line effect 1 - idle [ETX1].png"
+],
+[
+"Thin horizontal line effect 2",
+"ETX2",
+"extracted/Sprites/Effects/Effects1/Thin horizontal line effect 2/Thin horizontal line effect 2 - idle [ETX2].png"
+],
+[
+"Thin horizontal line effect 3",
+"ETX3",
+"extracted/Sprites/Effects/Effects1/Thin horizontal line effect 3/Thin horizontal line effect 3 - idle [ETX3].png"
+],
+[
+"Thrown axeweapon projectile",
+"EMA4",
+"extracted/Sprites/Effects/Effects1/Thrown axeweapon projectile/Thrown axeweapon projectile - idle [EMA4].png"
+],
+[
+"Thrown stonerock projectile",
+"EMA3",
+"extracted/Sprites/Effects/Effects1/Thrown stonerock projectile/Thrown stonerock projectile - idle [EMA3].png"
+],
+[
+"Tiny yellow dots",
+"EZ35",
+"extracted/Sprites/Effects/Effects1/Tiny yellow dots/Tiny yellow dots - idle [EZ35].png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 0",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 0/Violetblue dragon breath - possibly Celestial dragon - direction 0 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 1",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 1/Violetblue dragon breath - possibly Celestial dragon - direction 1 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 2",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 2/Violetblue dragon breath - possibly Celestial dragon - direction 2 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 3",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 3/Violetblue dragon breath - possibly Celestial dragon - direction 3 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 4",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 4/Violetblue dragon breath - possibly Celestial dragon - direction 4 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 5",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 5/Violetblue dragon breath - possibly Celestial dragon - direction 5 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 6",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 6/Violetblue dragon breath - possibly Celestial dragon - direction 6 - i\u2026.png"
+],
+[
+"Violetblue dragon breath - possibly Celestial dragon - direction 7",
+null,
+"extracted/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 7/Violetblue dragon breath - possibly Celestial dragon - direction 7 - i\u2026.png"
+],
+[
+"Weatherlandscape preview thumbnails (4 skies)",
+"EWTH",
+"extracted/Sprites/Effects/Effects1/Weatherlandscape preview thumbnails (4 skies)/Weatherlandscape preview thumbnails (4 skies) - idle [EWTH].png"
+],
+[
+"White sparkle orbs (large)",
+"EZ32",
+"extracted/Sprites/Effects/Effects1/White sparkle orbs (large)/White sparkle orbs (large) - idle [EZ32].png"
+],
+[
+"Yellow crescent arcs",
+"EZ62",
+"extracted/Sprites/Effects/Effects1/Yellow crescent arcs/Yellow crescent arcs - idle [EZ62].png"
+],
+[
+"Yellow light orb glow growing (sizes)",
+"ELIT",
+"extracted/Sprites/Effects/Effects1/Yellow light orb glow growing (sizes)/Yellow light orb glow growing (sizes) - idle [ELIT].png"
+],
+[
+"Yellow lightning bolt flame",
+"EZ30",
+"extracted/Sprites/Effects/Effects1/Yellow lightning bolt flame/Yellow lightning bolt flame - idle [EZ30].png"
+],
+[
+"Yellow ring with + sign (buff marker)",
+"EZ68",
+"extracted/Sprites/Effects/Effects1/Yellow ring with + sign (buff marker)/Yellow ring with + sign (buff marker) - idle [EZ68].png"
+],
+[
+"Yellow smileysun face icons",
+"EZ25",
+"extracted/Sprites/Effects/Effects1/Yellow smileysun face icons/Yellow smileysun face icons - idle [EZ25].png"
+],
+[
+"Yellow sparks",
+"EZ65",
+"extracted/Sprites/Effects/Effects1/Yellow sparks/Yellow sparks - idle [EZ65].png"
+]
+]

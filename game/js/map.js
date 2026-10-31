@@ -8,6 +8,7 @@
 // gossipsub, the Nostr bus, or a Door on Radicle). Hex content is derived from
 // (dimension seed, q, r) so every peer that materialises a hex gets the same.
 import { hexDistance } from './hex.js';
+import { biomeFor, BIOME_FILL } from './biome.js';
 
 export const INITIAL_SIZE = 5;
 export const DEFAULT_REVEAL_RADIUS = 10;
@@ -55,17 +56,14 @@ export function* blockTiles(b) {
   }
 }
 
-const TERRAIN = [
-  { type: 'ash',    fill: '#141a24', alt: '#101620' },
-  { type: 'cinder', fill: '#1b1a22', alt: '#17161e' },
-  { type: 'basalt', fill: '#111a1e', alt: '#0e161a' },
-  { type: 'ember',  fill: '#201913', alt: '#1b150f' },
-];
-
+// Terrain type for a hex is "which biome does Biome.gd / biome.js pick here" —
+// a pure function of (seed, q, r). The renderer uses `type` to look up a PNG
+// from assets/terrain/terrain_tiles.json and `fill` as a fallback flat-poly
+// colour until the PNG resolves. Both runtimes (Godot + browser) must agree
+// bit-for-bit so a dimension renders the same whichever client drew it.
 export function terrainAt(seed, q, r) {
-  const h = hash32(`${seed}:${q}:${r}`);
-  const t = TERRAIN[h % TERRAIN.length];
-  return { type: t.type, fill: ((q + r) & 1) ? t.alt : t.fill };
+  const type = biomeFor(seed).biomeAt(q, r);
+  return { type, fill: BIOME_FILL[type] || '#1a1f2a' };
 }
 
 // ---- world-generated features (user spec general_ux_token_generated, 2026-10-30) ----
