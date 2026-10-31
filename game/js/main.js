@@ -906,6 +906,11 @@ function hexDistanceTo(e) {
   if (!me || !Number.isInteger(me.tile_q) || !Number.isInteger(q)) return Infinity;
   return hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, { tile_q: q, tile_r: r });
 }
+// Persists across re-renders so the user's open rows stay open when the
+// snapshot ticks (which rebuilds the whole roster DOM). Default: ONLY my own
+// row is expanded — the user sees their stats at a glance and expands others
+// on demand.
+const _expandedRosterIds = new Set();
 function renderRoster() {
   const el = document.getElementById('roster');
   el.innerHTML = '';
@@ -914,9 +919,12 @@ function renderRoster() {
   head.className = 'ros-head';
   head.innerHTML = '<span>Unit</span><span class="team">Ally</span>';
   el.appendChild(head);
+  // On first roster render after connect, auto-expand my own row.
+  if (state.myPeerId && !_expandedRosterIds.size) _expandedRosterIds.add(state.myPeerId);
   for (const e of state.entities) {
     const row = document.createElement('div');
-    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''}`;
+    const expanded = _expandedRosterIds.has(e.peer_id);
+    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
@@ -993,7 +1001,7 @@ function renderRoster() {
       const state_ = archived ? ' · archived' : tapped ? ' · tapped' : '';
       return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="class${state_}${archived ? ' — the owner recasts it by emitting every colour' : ''}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
     })();
-    row.innerHTML = `${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}</span>
+    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}</span>
       <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
@@ -1092,7 +1100,16 @@ function renderRoster() {
         logUI(`💀 Phylactery → ${e.name}'s ${pillEl.dataset.perm.replace(/^(skill|effect)_/, '')} shatters at the end of this action`, 'phase');
         return;
       }
-      setLogFilter(activeFilter === e.peer_id ? null : e.peer_id);
+      // The funnel chip in the row corner is the dedicated filter action; a
+      // bare click on the row toggles the detail view (collapsed → expanded).
+      if (ev.target.closest('.ros-filter')) {
+        ev.stopPropagation();
+        setLogFilter(activeFilter === e.peer_id ? null : e.peer_id);
+        return;
+      }
+      if (_expandedRosterIds.has(e.peer_id)) _expandedRosterIds.delete(e.peer_id);
+      else _expandedRosterIds.add(e.peer_id);
+      row.classList.toggle('expanded');
     });
     el.appendChild(row);
   }
