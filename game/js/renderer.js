@@ -1,5 +1,10 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
 import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
+import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame } from './sprites.js';
+import { hash32 } from './map.js';
+import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
+import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
+import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
 const ALLIANCE_COLOR = {
   'player':  '#6ad9ff',
@@ -58,13 +63,62 @@ export function createRenderer(canvas, state) {
   // last whole-tile position — so interrupted moves blend smoothly).
   const moves = new Map();  // peerId -> { fromPx, toQ, toR, startAt }
 
+  // Per-entity sprite animator (created lazily once the entity's resources
+  // are known) + last drawn position, used to derive the facing direction.
+  const anims = new Map();  // peerId -> { anim, sourceId, lastX, lastY, dir, wasDead }
+  loadFrames(); loadResources(); loadTerrain(); loadScatter(); loadBigFeatures(); loadFeatures();
+  onAssetsChanged(() => render());    // repaint when a sheet / tile / json lands
+  // Scatter and feature catalogs arrive asynchronously after the first render.
+  // The tile cache keys off (mapVersion, seed) so a plain repaint wouldn't
+  // rebuild the scatter/feature draw lists — bump catalogEpoch so the cache
+  // notices and rebuilds. PNG loads (not catalog loads) only need a repaint
+  // because the lists already contain the item, just waiting on the image.
+  let catalogEpoch = 0;
+  onScatterChanged(() => { catalogEpoch++; render(); });
+  onBigFeaturesChanged(() => { catalogEpoch++; render(); });
+  onFeaturesChanged(() => { catalogEpoch++; render(); });
+
+  // Kills the player wants to see land: main.js calls renderer.trigger(peerId,
+  // 'attack' | 'cast') when an action resolves so the sprite swings.
+  function trigger(peerId, name) { const a = anims.get(peerId); if (a?.anim) a.anim.trigger(name); }
+
   // Known tiles + fog frontier, rebuilt only when the map version changes.
-  const tileCache = { version: -1, tiles: [], frontier: [] };
+  // Scatter and feature lists are derived from the same set of known tiles so
+  // they stay in lock-step with the terrain pass; both are y-sorted (matching
+  // Godot's ScatterLayer / FeatureLayer custom sort) so overlapping sprites
+  // stack back-to-front correctly.
+  const tileCache = { version: -1, seed: null, epoch: -1, tiles: [], frontier: [], scatter: [], bigfeatures: [], features: [] };
   function tilesFor(map, version) {
-    if (tileCache.version !== version) {
+    if (tileCache.version !== version || tileCache.seed !== map.seed || tileCache.epoch !== catalogEpoch) {
       tileCache.version = version;
-      tileCache.tiles = [...map.tiles()].map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: map.terrain(t.q, t.r).fill }));
+      tileCache.seed = map.seed;
+      tileCache.epoch = catalogEpoch;
+      tileCache.tiles = [...map.tiles()].map(t => {
+        const terr = map.terrain(t.q, t.r);
+        // Deterministic variant per hex so the tiling doesn't shimmer. Not
+        // modded here — sprites.terrainTile wraps against the per-biome list
+        // length (20 variants per biome today, previously 4).
+        const variant = hash32(`${map.seed}:v:${t.q}:${t.r}`) & 0x7fffffff;
+        return { q: t.q, r: t.r, ...hexToPixel(t.q, t.r), fill: terr.fill, type: terr.type, variant };
+      });
+      // Draw order: top rows first so tile edges overlap in iso fashion.
+      tileCache.tiles.sort((a, b) => a.y - b.y || a.x - b.x);
       tileCache.frontier = map.frontier().map(t => ({ q: t.q, r: t.r, ...hexToPixel(t.q, t.r) }));
+      // Build scatter/feature draw lists once per map version. Both are pure
+      // functions of (seed, q, r) so the only time they can change is when
+      // more hexes are revealed (which bumps mapVersion).
+      tileCache.scatter = [];
+      tileCache.bigfeatures = [];
+      tileCache.features = [];
+      for (const t of tileCache.tiles) {
+        const s = scatterAt(map.seed, t.q, t.r);
+        if (s) tileCache.scatter.push({ q: t.q, r: t.r, x: t.x, y: t.y, s });
+        const b = bigFeatureAt(map.seed, t.q, t.r);
+        if (b) tileCache.bigfeatures.push({ q: t.q, r: t.r, x: t.x, y: t.y, b });
+        const f = featureAt(map.seed, t.q, t.r);
+        if (f) tileCache.features.push({ q: t.q, r: t.r, x: t.x, y: t.y, f });
+      }
+      // Already y-sorted courtesy of iterating `tileCache.tiles` in draw order.
     }
     return tileCache;
   }
@@ -253,15 +307,32 @@ export function createRenderer(canvas, state) {
     // the unknown hexes touching the known world, drawn as faint dashed
     // outlines so the edge of the revealed dimension is visible.
     const { tiles, frontier } = tilesFor(state.map, state.mapVersion);
-    const showLabels = zoom >= 0.75;
+    const showLabels = zoom >= 0.75 && state.ui.showCoords;
     ctx.lineWidth = 1;
+    // Terrain PNGs are flat-top WBC3 hexes authored at `tile_w × tile_h`
+    // (assets/terrain/terrain_tiles.json → "hex"). Our game hex is 2*HEX_SIZE
+    // wide, so the scale that maps the PNG's long axis onto our hex is
+    // (2*HEX_SIZE / tile_w); then the Godot client bumps that by 1.10 so
+    // alpha-masked edges overlap neighbours instead of showing seams. Match
+    // that exactly so both runtimes land the same pixel size.
+    const tm = terrainMeta();
+    const tileScale = tm && tm.tile_w
+      ? ((2 * HEX_SIZE) / tm.tile_w) * 1.10
+      : ((2 * HEX_SIZE) / (tm?.size || 320)) * 1.10;
     for (const t of tiles) {
       if (!inView(t.x, t.y)) continue;
-      hexPath(t.x, t.y);
-      ctx.fillStyle = t.fill;
-      ctx.fill();
-      ctx.strokeStyle = '#232a38';
-      ctx.stroke();
+      const img = terrainTile(t.type, t.variant);
+      if (img) {
+        const dw = img.img.naturalWidth * tileScale, dh = img.img.naturalHeight * tileScale;
+        ctx.drawImage(img.img, t.x - dw / 2, t.y - dh / 2, dw, dh);
+        if (zoom >= 1.1) { hexPath(t.x, t.y); ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.stroke(); }
+      } else {
+        hexPath(t.x, t.y);
+        ctx.fillStyle = t.fill;
+        ctx.fill();
+        ctx.strokeStyle = '#232a38';
+        ctx.stroke();
+      }
       if (showLabels) {
         ctx.fillStyle = '#2f3a4a';
         ctx.font = '9px ui-monospace, Consolas, monospace';
@@ -278,6 +349,67 @@ export function createRenderer(canvas, state) {
       ctx.stroke();
     }
     ctx.restore();
+
+    // Scatter overlays (z-order 3 in Godot — above terrain, below features).
+    // 2D canvas has no z buffer, so order == paint order: terrain painted
+    // above (z=0), scatter now, features below (z=5), entities last (z=10).
+    // Match ScatterLayer.gd's sizing: target height ≈ 0.55 hex with a small
+    // hash-based jitter so overlays don't align into visible rows.
+    const hexH = HEX_SIZE * 2 * H_SQUASH;
+    const hexW = Math.sqrt(3) * HEX_SIZE;
+    const { scatter: scatterItems, bigfeatures: bigItems, features: featureItems } = tileCache;
+    for (const it of scatterItems) {
+      if (!inView(it.x, it.y)) continue;
+      const tex = scatterImage(it.s.path);
+      if (!tex) continue;
+      const h32 = hash32(`${state.map.seed}:sj:${it.q}:${it.r}`);
+      const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.55;
+      const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.42;
+      const sizeJit = 0.85 + (((h32 >> 8) & 0xFF) / 255) * 0.35;
+      const sy = tex.img.naturalHeight || 1;
+      const sx = tex.img.naturalWidth || 1;
+      const target = hexH * 0.55 * sizeJit;
+      const scale = Math.min(0.9, Math.max(0.08, target / sy));
+      const dw = sx * scale, dh = sy * scale;
+      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.15 + jy, dw, dh);
+    }
+
+    // Big features (forest clumps, boulder piles, ruins) — z-order 4 in Godot,
+    // between scatter and buildings so a tower never hides under a canopy.
+    // Sizing mirrors BigFeatureLayer.gd: ~2 hex widths wide, uniform scale
+    // clamped to [0.25, 1.4], base anchored just below the hex centre, with a
+    // small "bj" jitter so neighbouring trees never share a baseline exactly.
+    for (const it of bigItems) {
+      if (!inView(it.x, it.y, HEX_SIZE * 3)) continue;
+      const tex = bigFeatureImage(it.b.path);
+      if (!tex) continue;
+      const sx = tex.img.naturalWidth || 1;
+      const sy = tex.img.naturalHeight || 1;
+      const scale = Math.min(1.4, Math.max(0.25, (hexW * 2) / sx));
+      const dw = sx * scale, dh = sy * scale;
+      const h32 = hash32(`${state.map.seed}:bj:${it.q}:${it.r}`);
+      const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.22;
+      const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.15;
+      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.35 + jy, dw, dh);
+    }
+
+    // Features (buildings / permanents) — z-order 5 in Godot. Larger target
+    // size (≈1.1 hex) with a tiny jitter so adjacent features in a long biome
+    // strip don't line up into visible rows.
+    for (const it of featureItems) {
+      if (!inView(it.x, it.y)) continue;
+      const tex = featureImage(it.f.path);
+      if (!tex) continue;
+      const h32 = hash32(`${state.map.seed}:j:${it.q}:${it.r}`);
+      const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.18;
+      const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.12;
+      const sy = tex.img.naturalHeight || 1;
+      const sx = tex.img.naturalWidth || 1;
+      const target = hexH * 1.1;
+      const scale = Math.min(1.2, Math.max(0.25, target / sy));
+      const dw = sx * scale, dh = sy * scale;
+      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
+    }
 
     // Target highlight.
     if (state.ui.hoverTile) {
@@ -364,37 +496,65 @@ export function createRenderer(canvas, state) {
     let selfDrawnPx = null;
     // Entities. Dead entities render as a faded tombstone so a wiped ally still
     // leaves a marker on the map (otherwise it looks like the piece vanished).
-    for (const e of state.entities) {
+    // Y-sort so a unit lower on the screen is painted over one behind it.
+    const drawOrder = [...state.entities].sort((a, b) => positions.get(a.peerId).y - positions.get(b.peerId).y);
+    for (const e of drawOrder) {
       const dead = e.life <= 0;
       const { x, y } = positions.get(e.peerId);
       if (e.isSelf) selfDrawnPx = { x, y };
       const color = ALLIANCE_COLOR[e.alliance] || '#ccc';
 
-      ctx.save();
-      if (dead) ctx.globalAlpha = 0.35;
-
-      // Shadow + body (iso-ish lozenge).
-      ctx.beginPath();
-      ctx.ellipse(x, y + 10, 20, 6, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.lineWidth = e.isSelf ? 3 : 2;
-      ctx.strokeStyle = e.isSelf ? '#ffe66e' : '#0b0d12';
-      ctx.stroke();
-
-      if (dead) {
-        ctx.strokeStyle = '#e36666';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x - 12, y - 18); ctx.lineTo(x + 12, y + 6);
-        ctx.moveTo(x + 12, y - 18); ctx.lineTo(x - 12, y + 6);
-        ctx.stroke();
+      // Sprite book-keeping: create the animator once resources resolve,
+      // derive facing from the drawn-position delta, flag walking while the
+      // slide is still in flight.
+      let a = anims.get(e.peerId);
+      if (!a) { a = { anim: null, sourceId: null, lastX: x, lastY: y, dir: 4, wasDead: dead }; anims.set(e.peerId, a); }
+      if (!a.anim || a.sourceId !== e.sourceId || a.team !== color) {
+        const res = resourcesFor(e.sourceId);
+        if (res) { a.anim = createUnitAnim(res, { team: color }); a.sourceId = e.sourceId; a.team = color; }
       }
+      const mv = moves.get(e.peerId);
+      const moving = !!mv && (now - mv.startAt) < MOVE_DURATION_MS && (mv.fromPx.x !== tilePx(mv.toQ, mv.toR).x || mv.fromPx.y !== tilePx(mv.toQ, mv.toR).y);
+      const ddx = x - a.lastX, ddy = y - a.lastY;
+      if (moving && (Math.abs(ddx) > 0.05 || Math.abs(ddy) > 0.05)) a.dir = dirIndexFromVector(ddx, ddy);
+      a.lastX = x; a.lastY = y;
+      if (a.anim) a.anim.tick(now, { moving, dirIdx: a.dir, dead });
+
+      ctx.save();
+
+      // Ground ring: alliance colour, brighter for the player's own hero.
+      ctx.beginPath();
+      ctx.ellipse(x, y + 4, 22, 9, 0, 0, Math.PI * 2);
+      ctx.fillStyle = dead ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.35)';
+      ctx.fill();
+      ctx.lineWidth = e.isSelf ? 2.5 : 1.5;
+      ctx.strokeStyle = e.isSelf ? '#ffe66e' : color;
+      ctx.globalAlpha = dead ? 0.4 : 0.9;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, dead ? 0.75 : 1) : false;
+      if (!drewSprite) {
+        // Fallback disc marker while the sheet is loading / no resources.
+        if (dead) ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = e.isSelf ? 3 : 2;
+        ctx.strokeStyle = e.isSelf ? '#ffe66e' : '#0b0d12';
+        ctx.stroke();
+        if (dead) {
+          ctx.strokeStyle = '#e36666';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x - 12, y - 18); ctx.lineTo(x + 12, y + 6);
+          ctx.moveTo(x + 12, y - 18); ctx.lineTo(x - 12, y + 6);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+      const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
 
       // Health pips.
       const lifeMax = Math.max(1, e.lifeMax || 1);
@@ -404,11 +564,13 @@ export function createRenderer(canvas, state) {
         ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
       }
 
-      // Label.
-      ctx.fillStyle = '#e8ecf1';
+      // Label (outlined so it reads over textured tiles).
       ctx.font = '11px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText(e.name, x, y - 28);
+      ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineJoin = 'round';
+      ctx.strokeText(e.name, x, top - 6);
+      ctx.fillStyle = dead ? '#9aa0a8' : '#e8ecf1';
+      ctx.fillText(e.name, x, top - 6);
 
       // Queued-action chip over the player's head during planning. Once
       // committed, keep the letter as-is until the next round — only the
@@ -439,9 +601,10 @@ export function createRenderer(canvas, state) {
         ctx.fillText(text, x, y - 40 - 6 * bt);
         ctx.restore();
       } else if (e.isSelf && e.queuedCode) {
-        ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
-        ctx.fillText(`[${e.queuedCode}]`, x, y - 40);
+        ctx.strokeText(`[${e.queuedCode}]`, x, top - 18);
+        ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
+        ctx.fillText(`[${e.queuedCode}]`, x, top - 18);
       }
 
       ctx.restore();
@@ -573,7 +736,17 @@ export function createRenderer(canvas, state) {
         // The ➙ standoff glyph points right by default; rotate it so each
         // arrow actually faces the enemy it's drifting toward. Other icons
         // are drawn upright.
-        if (f.action === 'STANDOFF') {
+        // Skills with a mapped WBC3 effect strip (data/skills.json
+        // resources.sprites.effect) animate that strip over the actor; the
+        // glyph is the fallback while the image loads or when none is mapped.
+        const strip = f.skill ? effectStrip(resourcesFor(f.skill)?.sprites?.effect?.path) : null;
+        if (strip) {
+          drawEffectFrame(ctx, strip, t, x, y, 44);
+          ctx.font = 'bold 11px "Segoe UI Emoji", "Apple Color Emoji", ui-sans-serif, system-ui';
+          ctx.lineWidth = 3;
+          ctx.strokeText(spec.glyph, x + 16, y + 16);
+          ctx.fillText(spec.glyph, x + 16, y + 16);
+        } else if (f.action === 'STANDOFF') {
           const ang = Math.atan2(to.y - from.y, to.x - from.x);
           ctx.translate(x, y);
           ctx.rotate(ang);
@@ -596,5 +769,5 @@ export function createRenderer(canvas, state) {
   // loop if any entity is mid-slide.
   const renderPublic = () => { render(); scheduleIfAnimating(); };
 
-  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom, wasDrag, recentre, isPanned: () => cam.manual };
+  return { render: renderPublic, tilePx, toWorld, pickHex, zoom: () => zoom, wasDrag, recentre, isPanned: () => cam.manual, trigger };
 }

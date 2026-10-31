@@ -1,0 +1,369 @@
+{
+  "min_separation": 1,
+  "density": {
+    "grass": 0.42,
+    "high_grass": 0.45,
+    "grass_coast": 0.38,
+    "dirt": 0.3,
+    "high_dirt": 0.28,
+    "desert": 0.22,
+    "desert_cliffs": 0.18,
+    "snow": 0.32,
+    "snow_coast": 0.3,
+    "rock": 0.25,
+    "rock_coast": 0.22,
+    "rock_cliffs": 0.15,
+    "jungle": 0.48,
+    "marsh": 0.25,
+    "mountains": 0.0,
+    "water": 0.0,
+    "lava": 0.0,
+    "caverns": 0.0
+  },
+  "items": [
+    {
+      "id": "wbc3/FPPE",
+      "label": "Grass tuft",
+      "path": "assets/terrain_scatter/grass_tuft_fppe.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPPV",
+      "label": "Flowers",
+      "path": "assets/terrain_scatter/flowers_fppv.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPPH",
+      "label": "Yellow flowers",
+      "path": "assets/terrain_scatter/yellow_flowers_fpph.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPPC",
+      "label": "Pink flowers",
+      "path": "assets/terrain_scatter/pink_flowers_fppc.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPP1",
+      "label": "Clover patch",
+      "path": "assets/terrain_scatter/clover_patch_fpp1.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPP9",
+      "label": "Bluebells",
+      "path": "assets/terrain_scatter/bluebells_fpp9.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPPG",
+      "label": "Fern",
+      "path": "assets/terrain_scatter/fern_fppg.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPPD",
+      "label": "Reeds",
+      "path": "assets/terrain_scatter/reeds_fppd.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPP2",
+      "label": "Small bush",
+      "path": "assets/terrain_scatter/small_bush_fpp2.png",
+      "family": "GrassPlants",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPM0",
+      "label": "Deciduous tree",
+      "path": "assets/terrain_scatter/deciduous_tree_fpm0.png",
+      "family": "GrassTrees",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "jungle"
+      ]
+    },
+    {
+      "id": "wbc3/FPM8",
+      "label": "Large leafy tree",
+      "path": "assets/terrain_scatter/large_leafy_tree_fpm8.png",
+      "family": "GrassTrees",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "jungle"
+      ]
+    },
+    {
+      "id": "wbc3/FPMB",
+      "label": "Sapling / small tree",
+      "path": "assets/terrain_scatter/sapling_small_tree_fpmb.png",
+      "family": "GrassTrees",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "jungle"
+      ]
+    },
+    {
+      "id": "wbc3/FPM7",
+      "label": "Large tree cluster",
+      "path": "assets/terrain_scatter/large_tree_cluster_fpm7.png",
+      "family": "GrassTrees",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "jungle"
+      ]
+    },
+    {
+      "id": "wbc3/FGM2",
+      "label": "Grey boulder",
+      "path": "assets/terrain_scatter/grey_boulder_fgm2.png",
+      "family": "GrassMisc",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast",
+        "dirt",
+        "rock_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FGM7",
+      "label": "Pebble",
+      "path": "assets/terrain_scatter/pebble_fgm7.png",
+      "family": "GrassMisc",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast",
+        "dirt",
+        "rock_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FGMB",
+      "label": "Fallen log",
+      "path": "assets/terrain_scatter/fallen_log_fgmb.png",
+      "family": "GrassMisc",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast",
+        "dirt",
+        "rock_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FGM0",
+      "label": "Standing stone / obelisk on round base",
+      "path": "assets/terrain_scatter/standing_stone_obelisk_on_round_base_fgm0.png",
+      "family": "GrassMisc",
+      "biomes": [
+        "grass",
+        "high_grass",
+        "grass_coast",
+        "dirt",
+        "rock_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FRD3",
+      "label": "Boulder",
+      "path": "assets/terrain_scatter/boulder_frd3.png",
+      "family": "DirtMisc",
+      "biomes": [
+        "dirt",
+        "high_dirt",
+        "desert"
+      ]
+    },
+    {
+      "id": "wbc3/FRD4",
+      "label": "Boulder cluster",
+      "path": "assets/terrain_scatter/boulder_cluster_frd4.png",
+      "family": "DirtMisc",
+      "biomes": [
+        "dirt",
+        "high_dirt",
+        "desert"
+      ]
+    },
+    {
+      "id": "wbc3/FTB0",
+      "label": "Bare dead tree",
+      "path": "assets/terrain_scatter/bare_dead_tree_ftb0.png",
+      "family": "DirtTrees",
+      "biomes": [
+        "dirt",
+        "high_dirt"
+      ]
+    },
+    {
+      "id": "wbc3/FTP1",
+      "label": "Dead tree with sparse leaves",
+      "path": "assets/terrain_scatter/dead_tree_with_sparse_leaves_ftp1.png",
+      "family": "DirtTrees",
+      "biomes": [
+        "dirt",
+        "high_dirt"
+      ]
+    },
+    {
+      "id": "wbc3/FWD0",
+      "label": "Wooden wreckage / collapsed hut",
+      "path": "assets/terrain_scatter/wooden_wreckage_collapsed_hut_fwd0.png",
+      "family": "DirtMisc",
+      "biomes": [
+        "dirt",
+        "high_dirt",
+        "desert"
+      ]
+    },
+    {
+      "id": "wbc3/FDP0",
+      "label": "Palm tree",
+      "path": "assets/terrain_scatter/palm_tree_fdp0.png",
+      "family": "DesertTrees",
+      "biomes": [
+        "desert",
+        "desert_cliffs"
+      ]
+    },
+    {
+      "id": "wbc3/FDP7",
+      "label": "Yucca/agave plant",
+      "path": "assets/terrain_scatter/yucca_agave_plant_fdp7.png",
+      "family": "DesertTrees",
+      "biomes": [
+        "desert",
+        "desert_cliffs"
+      ]
+    },
+    {
+      "id": "wbc3/FDM2",
+      "label": "Broken column on plinth",
+      "path": "assets/terrain_scatter/broken_column_on_plinth_fdm2.png",
+      "family": "DesertMisc",
+      "biomes": [
+        "desert",
+        "desert_cliffs"
+      ]
+    },
+    {
+      "id": "wbc3/FDM5",
+      "label": "Small tent",
+      "path": "assets/terrain_scatter/small_tent_fdm5.png",
+      "family": "DesertMisc",
+      "biomes": [
+        "desert",
+        "desert_cliffs"
+      ]
+    },
+    {
+      "id": "wbc3/FPB0",
+      "label": "Snow-covered pine",
+      "path": "assets/terrain_scatter/snow_covered_pine_fpb0.png",
+      "family": "SnowTrees",
+      "biomes": [
+        "snow",
+        "snow_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FPB5",
+      "label": "Snow-covered pine (small)",
+      "path": "assets/terrain_scatter/snow_covered_pine_small_fpb5.png",
+      "family": "SnowTrees",
+      "biomes": [
+        "snow",
+        "snow_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FRB0",
+      "label": "Snow-covered boulder",
+      "path": "assets/terrain_scatter/snow_covered_boulder_frb0.png",
+      "family": "SnowMisc",
+      "biomes": [
+        "snow",
+        "snow_coast",
+        "rock",
+        "rock_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FRM0",
+      "label": "Snow-covered rock",
+      "path": "assets/terrain_scatter/snow_covered_rock_frm0.png",
+      "family": "SnowMisc",
+      "biomes": [
+        "snow",
+        "snow_coast",
+        "rock",
+        "rock_coast"
+      ]
+    },
+    {
+      "id": "wbc3/FSF0",
+      "label": "Snowy fallen log",
+      "path": "assets/terrain_scatter/snowy_fallen_log_fsf0.png",
+      "family": "SnowMisc",
+      "biomes": [
+        "snow",
+        "snow_coast",
+        "rock",
+        "rock_coast"
+      ]
+    }
+  ]
+}

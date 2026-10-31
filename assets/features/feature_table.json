@@ -1,0 +1,1757 @@
+{
+  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall; desc_status=placeholder marks purposes not yet backed by rules.",
+  "min_separation": 4,
+  "density": {
+    "grass": 0.088,
+    "high_grass": 0.08,
+    "grass_coast": 0.096,
+    "dirt": 0.08,
+    "high_dirt": 0.08,
+    "desert": 0.064,
+    "snow": 0.072,
+    "snow_coast": 0.088,
+    "rock": 0.104,
+    "rock_coast": 0.088,
+    "jungle": 0.112,
+    "marsh": 0.08,
+    "caverns": 0.128,
+    "desert_cliffs": 0,
+    "rock_cliffs": 0,
+    "mountains": 0,
+    "water": 0,
+    "lava": 0
+  },
+  "by_biome": {
+    "grass": [
+      {
+        "id": "Empire/Library",
+        "label": "Library",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
+        "kind": "building",
+        "desc": "Archive of lore. Visiting reveals one hidden skill of a nearby creature.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shrine",
+        "label": "Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+        "kind": "building",
+        "desc": "Neutral shrine. Resting here restores 1 life per quiet round."
+      },
+      {
+        "id": "Neutral/Gold Mine (size 1)",
+        "label": "Gold Mine (size 1)",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+        "kind": "building",
+        "desc": "Resource node. Controlling it yields gold each turn."
+      },
+      {
+        "id": "Knights/Cathedral",
+        "label": "Cathedral",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Knights/Cathedral/Cathedral - base [BPCA].png",
+        "kind": "building",
+        "desc": "Great cathedral. Sanctuary: no attacks may be declared on this hex.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Fey/Faerie Ring",
+        "label": "Faerie Ring",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - base [BPFR].png",
+        "kind": "building",
+        "desc": "Mushroom ring. Resting here teleports you to another ring next round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x1 horizontal)",
+        "label": "Walls (neutral, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 1x2 vertical)",
+        "label": "Walls (neutral, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x2 joint)",
+        "label": "Walls (neutral, 2x2 joint)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png",
+        "kind": "wall",
+        "desc": "Stone wall corner. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 2x1 horizontal)",
+        "label": "Walls (good, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 2x1 horizontal)/Walls (good, 2x1 horizontal) - base [BWG1].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 1x2 vertical)",
+        "label": "Walls (good, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 1x2 vertical)/Walls (good, 1x2 vertical) - base [BWG2].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Empire)",
+        "label": "Tower (Empire)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Empire)/Tower (Empire) - base [BWTH].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Knights)",
+        "label": "Tower (Knights)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - base [BWTC].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Knights/Keep (level 1)",
+        "label": "Keep (level 1)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Knights/Keep (level 1)/Keep (level 1) - base [BKK0].png",
+        "kind": "building",
+        "desc": "Knight keep. Stronghold: defenders inside ignore the first hit each round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Empire/Archway",
+        "label": "Archway",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "building",
+        "desc": "Imperial archway. Waypoint: moving through it costs no movement.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Empire/Barn",
+        "label": "Barn",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Barn/Barn - base [BABN].png",
+        "kind": "building",
+        "desc": "Farm barn. Supply point: resting here refills one consumable card.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Fey/Magic Pool",
+        "label": "Magic Pool",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Magic Pool/Magic Pool - base [BPMP].png",
+        "kind": "building",
+        "desc": "Fey magic pool. Resting here restores 1 life and refreshes a skill.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Bandit camp)",
+        "label": "Lair (Bandit camp)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Bandit camp)/Lair (Bandit camp) - base [BLBM].png",
+        "kind": "building",
+        "desc": "Bandit camp. Hostile lair: first visitor fights a bandit for loot.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "high_grass": [
+      {
+        "id": "Neutral/Shrine",
+        "label": "Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+        "kind": "building",
+        "desc": "Neutral shrine. Resting here restores 1 life per quiet round."
+      },
+      {
+        "id": "Neutral/Celestial Temple",
+        "label": "Celestial Temple",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
+        "kind": "building",
+        "desc": "Temple of the heavens. Resting here cleanses a curse or poison.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/White Tree",
+        "label": "White Tree",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
+        "kind": "building",
+        "desc": "Sacred white tree. Resting beneath it restores 1 life and clears fear.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Fey/Unicorn Grove",
+        "label": "Unicorn Grove",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - base [BAUG].png",
+        "kind": "building",
+        "desc": "Unicorn grove. Units resting here cannot be ambushed.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/White Tower (level 2)",
+        "label": "White Tower (level 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 2)/White Tower (level 2) - base [BKE1].png",
+        "kind": "building",
+        "desc": "High Elf tower. Standing here reveals 8 hexes and blocks ambush.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 2x1 horizontal)",
+        "label": "Walls (good, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 2x1 horizontal)/Walls (good, 2x1 horizontal) - base [BWG1].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 1x2 vertical)",
+        "label": "Walls (good, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 1x2 vertical)/Walls (good, 1x2 vertical) - base [BWG2].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Wall of Thorns",
+        "label": "Wall of Thorns",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
+        "kind": "wall",
+        "desc": "Living thorn hedge. Cover; entering costs 1 life unless you are Fey.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Wood Elf)",
+        "label": "Tower (Wood Elf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Wood Elf)/Tower (Wood Elf) - base [BWTW].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/Forest Tower",
+        "label": "Forest Tower",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Wood Elves/Forest Tower/Forest Tower - base [BPFT].png",
+        "kind": "building",
+        "desc": "Wood Elf tree tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Fey/Magic Pool",
+        "label": "Magic Pool",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Magic Pool/Magic Pool - base [BPMP].png",
+        "kind": "building",
+        "desc": "Fey magic pool. Resting here restores 1 life and refreshes a skill.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/Magic Well",
+        "label": "Magic Well",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Wood Elves/Magic Well/Magic Well - base [BPMW].png",
+        "kind": "building",
+        "desc": "Wood Elf magic well. Drinking here refreshes one used skill.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/Healing Orb",
+        "label": "Healing Orb",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png",
+        "kind": "building",
+        "desc": "Healing orb. Any unit ending its turn adjacent heals 1 life.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "grass_coast": [
+      {
+        "id": "Empire/Library",
+        "label": "Library",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Empire/Library/Library - base [BPLI].png",
+        "kind": "building",
+        "desc": "Archive of lore. Visiting reveals one hidden skill of a nearby creature.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shrine",
+        "label": "Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png",
+        "kind": "building",
+        "desc": "Neutral shrine. Resting here restores 1 life per quiet round."
+      },
+      {
+        "id": "Shared/Tower (High Elf)",
+        "label": "Tower (High Elf)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Barbarians/Mill",
+        "label": "Mill",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Mill/Mill - base [BPMI].png",
+        "kind": "building",
+        "desc": "Windmill. Supplies grain: allied units resting adjacent heal 1 extra life.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x1 horizontal)",
+        "label": "Walls (neutral, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 1x2 vertical)",
+        "label": "Walls (neutral, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 2x1 horizontal)",
+        "label": "Walls (good, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 2x1 horizontal)/Walls (good, 2x1 horizontal) - base [BWG1].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 1x2 vertical)",
+        "label": "Walls (good, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 1x2 vertical)/Walls (good, 1x2 vertical) - base [BWG2].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Empire)",
+        "label": "Tower (Empire)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Empire)/Tower (Empire) - base [BWTH].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Knights/Keep (level 1)",
+        "label": "Keep (level 1)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Knights/Keep (level 1)/Keep (level 1) - base [BKK0].png",
+        "kind": "building",
+        "desc": "Knight keep. Stronghold: defenders inside ignore the first hit each round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Empire/Archway",
+        "label": "Archway",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "Stone span. On grass coast: the only legal crossing — hold it to pin the other side."
+      },
+      {
+        "id": "High Elves/Healer",
+        "label": "Healer",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/High Elves/Healer/Healer - base [BPHE].png",
+        "kind": "building",
+        "desc": "Healer's house. Resting here restores all lost life once per visit.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shop (Blacksmith)",
+        "label": "Shop (Blacksmith)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Shop (Blacksmith)/Shop (Blacksmith) - base [BSBS].png",
+        "kind": "building",
+        "desc": "Blacksmith. Trading post: upgrade one weapon card for gold.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shop (Alchemist)",
+        "label": "Shop (Alchemist)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Neutral/Shop (Alchemist)/Shop (Alchemist) - base [BSAL].png",
+        "kind": "building",
+        "desc": "Alchemist. Trading post: buy a potion card for gold.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Stone Bridge (Archway)",
+        "label": "Stone Bridge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "Stone bridge over the shallows. The only legal crossing — hold it to block the other side."
+      }
+    ],
+    "dirt": [
+      {
+        "id": "Neutral/Gold Mine (size 1)",
+        "label": "Gold Mine (size 1)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 1)/Gold Mine (size 1) - base [BRG0].png",
+        "kind": "building",
+        "desc": "Resource node. Controlling it yields gold each turn."
+      },
+      {
+        "id": "Neutral/Metal Mine (size 2)",
+        "label": "Metal Mine (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+        "kind": "building",
+        "desc": "Metal mine. Controlling it yields metal for weapon upgrades each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Barbarians/Scout Tower",
+        "label": "Scout Tower",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Scout Tower/Scout Tower - base [BPST].png",
+        "kind": "building",
+        "desc": "Barbarian scout tower. Standing on it reveals the map 8 hexes around.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Barbarians/Camp",
+        "label": "Camp",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Camp/Camp - base [BACA].png",
+        "kind": "building",
+        "desc": "Barbarian camp. Resting here restores 1 life; ambushers get +1 Attack.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Barbarians/Fortress (level 2)",
+        "label": "Fortress (level 2)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 2)/Fortress (level 2) - base [BKB1].png",
+        "kind": "building",
+        "desc": "Barbarian fortress. Stronghold: defenders inside ignore the first hit.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x1 horizontal)",
+        "label": "Walls (neutral, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 1x2 vertical)",
+        "label": "Walls (neutral, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x2 joint)",
+        "label": "Walls (neutral, 2x2 joint)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png",
+        "kind": "wall",
+        "desc": "Stone wall corner. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 2x1 horizontal)",
+        "label": "Walls (evil, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x1 horizontal)/Walls (evil, 2x1 horizontal) - base [BWE1].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 1x2 vertical)",
+        "label": "Walls (evil, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 1x2 vertical)/Walls (evil, 1x2 vertical) - base [BWE2].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ramparts",
+        "label": "Ramparts",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+        "kind": "wall",
+        "desc": "Earthen rampart. Cover: defenders on this hex gain +1 Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Barbarian)",
+        "label": "Tower (Barbarian)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Barbarian)/Tower (Barbarian) - base [BWTB].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Orc)",
+        "label": "Tower (Orc)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Orc)/Tower (Orc) - base [BWTO].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Orcs/Goblin Tower",
+        "label": "Goblin Tower",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Orcs/Goblin Tower/Goblin Tower - base [BAGT].png",
+        "kind": "building",
+        "desc": "Goblin watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Bandit camp)",
+        "label": "Lair (Bandit camp)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Bandit camp)/Lair (Bandit camp) - base [BLBM].png",
+        "kind": "building",
+        "desc": "Bandit camp. Hostile lair: first visitor fights a bandit for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Goblin)",
+        "label": "Lair (Goblin)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Goblin)/Lair (Goblin) - base [BLGL].png",
+        "kind": "building",
+        "desc": "Goblin lair. Hostile lair: first visitor fights goblins for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Gnoll hut)",
+        "label": "Lair (Gnoll hut)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Gnoll hut)/Lair (Gnoll hut) - base [BLGH].png",
+        "kind": "building",
+        "desc": "Gnoll hut. Hostile lair: first visitor fights a gnoll for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Orcs/Hovel",
+        "label": "Hovel",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Orcs/Hovel/Hovel - base [BPOH].png",
+        "kind": "building",
+        "desc": "Orc hovel. Resting here restores 1 life; orcs rest for 2.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Undead/Gravestone",
+        "label": "Gravestone",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Undead/Gravestone/Gravestone - base [BAGR].png",
+        "kind": "building",
+        "desc": "Lone gravestone. Marker: a fallen hero's card may be recovered here.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shop (Blacksmith)",
+        "label": "Shop (Blacksmith)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Shop (Blacksmith)/Shop (Blacksmith) - base [BSBS].png",
+        "kind": "building",
+        "desc": "Blacksmith. Trading post: upgrade one weapon card for gold.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "high_dirt": [
+      {
+        "id": "Neutral/Gold Mine (size 3)",
+        "label": "Gold Mine (size 3)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Gold Mine (size 3)/Gold Mine (size 3) - base [BRG2].png",
+        "kind": "building",
+        "desc": "Rich gold mine. Controlling it yields extra gold each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Stone Quarry (size 2)",
+        "label": "Stone Quarry (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+        "kind": "building",
+        "desc": "Stone quarry. Controlling it yields stone each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Barbarians/Scout Tower",
+        "label": "Scout Tower",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Barbarians/Scout Tower/Scout Tower - base [BPST].png",
+        "kind": "building",
+        "desc": "Barbarian scout tower. Standing on it reveals the map 8 hexes around.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Minotaurs/Lookout",
+        "label": "Lookout",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - base [BPLO].png",
+        "kind": "building",
+        "desc": "Minotaur lookout. Standing on it reveals the map 8 hexes around.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Minotaurs/Henge",
+        "label": "Henge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Minotaurs/Henge/Henge - base [BPHG].png",
+        "kind": "building",
+        "desc": "Standing stones. Resting here grants +1 range to the next ranged attack.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x1 horizontal)",
+        "label": "Walls (neutral, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 1x2 vertical)",
+        "label": "Walls (neutral, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x2 joint)",
+        "label": "Walls (neutral, 2x2 joint)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png",
+        "kind": "wall",
+        "desc": "Stone wall corner. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 2x1 horizontal)",
+        "label": "Walls (evil, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x1 horizontal)/Walls (evil, 2x1 horizontal) - base [BWE1].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 1x2 vertical)",
+        "label": "Walls (evil, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 1x2 vertical)/Walls (evil, 1x2 vertical) - base [BWE2].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ramparts",
+        "label": "Ramparts",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+        "kind": "wall",
+        "desc": "Earthen rampart. Cover: defenders on this hex gain +1 Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Orc)",
+        "label": "Tower (Orc)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Orc)/Tower (Orc) - base [BWTO].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Minotaur)",
+        "label": "Tower (Minotaur)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Minotaur)/Tower (Minotaur) - base [BWTR].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Dark Dwarf)",
+        "label": "Tower (Dark Dwarf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Dark Dwarf)/Tower (Dark Dwarf) - base [BWTA].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Goblin)",
+        "label": "Lair (Goblin)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Goblin)/Lair (Goblin) - base [BLGL].png",
+        "kind": "building",
+        "desc": "Goblin lair. Hostile lair: first visitor fights goblins for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Harpy nest)",
+        "label": "Lair (Harpy nest)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Harpy nest)/Lair (Harpy nest) - base [BLHN].png",
+        "kind": "building",
+        "desc": "Harpy nest. Hostile lair: first visitor fights a harpy for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Minotaurs/Altar of Sartek",
+        "label": "Altar of Sartek",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Minotaurs/Altar of Sartek/Altar of Sartek - base [BPDA].png",
+        "kind": "building",
+        "desc": "Minotaur blood altar. Winning a fight adjacent heals the victor 1 life.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Undead/Barrow",
+        "label": "Barrow",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Undead/Barrow/Barrow - base [BPBA].png",
+        "kind": "building",
+        "desc": "Burial mound. Opening it (rest here) draws a relic card or wakes a wight.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "desert": [
+      {
+        "id": "Neutral/Stone Quarry (size 2)",
+        "label": "Stone Quarry (size 2)",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+        "kind": "building",
+        "desc": "Stone quarry. Controlling it yields stone each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Metal Mine (size 2)",
+        "label": "Metal Mine (size 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 2)/Metal Mine (size 2) - base [BRM1].png",
+        "kind": "building",
+        "desc": "Metal mine. Controlling it yields metal for weapon upgrades each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Ssrathi/Sun Temple (level 2)",
+        "label": "Sun Temple (level 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 2)/Sun Temple (level 2) - base [BKL1].png",
+        "kind": "building",
+        "desc": "Ssrathi sun temple. Resting here at noon restores 2 life.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Minotaurs/Ziggurat (level 2)",
+        "label": "Ziggurat (level 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 2)/Ziggurat (level 2) - base [BKH1].png",
+        "kind": "building",
+        "desc": "Minotaur ziggurat. Stronghold: defenders here cannot be pushed back.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Swarm/Dunekeep (level 2)",
+        "label": "Dunekeep (level 2)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 2)/Dunekeep (level 2) - base [BKR1].png",
+        "kind": "building",
+        "desc": "Swarm dunekeep. Stronghold: defenders inside ignore the first hit.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 2x1 horizontal)",
+        "label": "Walls (evil, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x1 horizontal)/Walls (evil, 2x1 horizontal) - base [BWE1].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 1x2 vertical)",
+        "label": "Walls (evil, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 1x2 vertical)/Walls (evil, 1x2 vertical) - base [BWE2].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ramparts",
+        "label": "Ramparts",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+        "kind": "wall",
+        "desc": "Earthen rampart. Cover: defenders on this hex gain +1 Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Orcs/Goblin Tower",
+        "label": "Goblin Tower",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Orcs/Goblin Tower/Goblin Tower - base [BAGT].png",
+        "kind": "building",
+        "desc": "Goblin watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Ssrathi)",
+        "label": "Tower (Ssrathi)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Ssrathi)/Tower (Ssrathi) - base [BWTL].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Swarm)",
+        "label": "Tower (Swarm)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Swarm)/Tower (Swarm) - base [BWTE].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Swarm/Watcher",
+        "label": "Watcher",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Swarm/Watcher/Watcher - base [BPWA].png",
+        "kind": "building",
+        "desc": "Swarm watcher spire. Standing on it reveals 8 hexes around.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Harpy nest)",
+        "label": "Lair (Harpy nest)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Harpy nest)/Lair (Harpy nest) - base [BLHN].png",
+        "kind": "building",
+        "desc": "Harpy nest. Hostile lair: first visitor fights a harpy for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Ssrathi/Hatchery",
+        "label": "Hatchery",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Ssrathi/Hatchery/Hatchery - base [BPHA].png",
+        "kind": "building",
+        "desc": "Ssrathi hatchery. Lair: first visitor fights hatchlings for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Ssrathi/Scrying Pool",
+        "label": "Scrying Pool",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Ssrathi/Scrying Pool/Scrying Pool - base [BPYP].png",
+        "kind": "building",
+        "desc": "Scrying pool. Visiting reveals the map 6 hexes further around it.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "desert_cliffs": [],
+    "snow": [
+      {
+        "id": "Neutral/Celestial Temple",
+        "label": "Celestial Temple",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Celestial Temple/Celestial Temple - base [BTCE].png",
+        "kind": "building",
+        "desc": "Temple of the heavens. Resting here cleanses a curse or poison.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Crystal Mine (size 2)",
+        "label": "Crystal Mine (size 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+        "kind": "building",
+        "desc": "Crystal mine. Controlling it yields crystal for spells each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/White Tower (level 2)",
+        "label": "White Tower (level 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 2)/White Tower (level 2) - base [BKE1].png",
+        "kind": "building",
+        "desc": "High Elf tower. Standing here reveals 8 hexes and blocks ambush.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/Dragonstone",
+        "label": "Dragonstone",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/Dragonstone/Dragonstone - base [BPDI].png",
+        "kind": "building",
+        "desc": "Dragon-bone monolith. Flyers resting here gain +1 movement next turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Swarm/Shrine of Melkor",
+        "label": "Shrine of Melkor",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Swarm/Shrine of Melkor/Shrine of Melkor - base [BPSK].png",
+        "kind": "building",
+        "desc": "Shrine of the Swarm god. Resting here grants +1 to the next Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 2x1 horizontal)",
+        "label": "Walls (good, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 2x1 horizontal)/Walls (good, 2x1 horizontal) - base [BWG1].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (good, 1x2 vertical)",
+        "label": "Walls (good, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (good, 1x2 vertical)/Walls (good, 1x2 vertical) - base [BWG2].png",
+        "kind": "wall",
+        "desc": "White stone wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Wall of Ice",
+        "label": "Wall of Ice",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Wall of Ice/Wall of Ice - base [BWIC].png",
+        "kind": "wall",
+        "desc": "Wall of ice. Cover: ranged attacks on this hex -1; melts if lava is adjacent.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (High Elf)",
+        "label": "Tower (High Elf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/White Tower (level 3)",
+        "label": "White Tower (level 3)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 3)/White Tower (level 3) - base [BKE2].png",
+        "kind": "building",
+        "desc": "High Elf tower. Standing here reveals 8 hexes and blocks ambush.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Fey)",
+        "label": "Tower (Fey)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Fey)/Tower (Fey) - base [BWTF].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Plaguelords/Ice Cave",
+        "label": "Ice Cave",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Plaguelords/Ice Cave/Ice Cave - base [BPIC].png",
+        "kind": "building",
+        "desc": "Ice cave. Shelter: units resting here ignore cold damage.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/Dragon Shrine",
+        "label": "Dragon Shrine",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/Dragon Shrine/Dragon Shrine - base [BPDS].png",
+        "kind": "building",
+        "desc": "Shrine to the dragons. Resting here grants fire resistance for a round.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "snow_coast": [
+      {
+        "id": "Shared/Tower (High Elf)",
+        "label": "Tower (High Elf)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Shared/Tower (High Elf)/Tower (High Elf) - base [BWTM].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/Dragonstone",
+        "label": "Dragonstone",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/Dragonstone/Dragonstone - base [BPDI].png",
+        "kind": "building",
+        "desc": "Dragon-bone monolith. Flyers resting here gain +1 movement next turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/White Tower (level 1)",
+        "label": "White Tower (level 1)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/High Elves/White Tower (level 1)/White Tower (level 1) - base [BKE0].png",
+        "kind": "building",
+        "desc": "High Elf tower. Standing here reveals 8 hexes and blocks ambush.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Knights/Shrine of the Sword",
+        "label": "Shrine of the Sword",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Knights/Shrine of the Sword/Shrine of the Sword - base [BPSS].png",
+        "kind": "building",
+        "desc": "Warrior shrine. Resting here grants +1 to the next Attack.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ramparts",
+        "label": "Ramparts",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+        "kind": "wall",
+        "desc": "Earthen rampart. Cover: defenders on this hex gain +1 Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Wall of Ice",
+        "label": "Wall of Ice",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Wall of Ice/Wall of Ice - base [BWIC].png",
+        "kind": "wall",
+        "desc": "Wall of ice. Cover: ranged attacks on this hex -1; melts if lava is adjacent.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Fey)",
+        "label": "Tower (Fey)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Fey)/Tower (Fey) - base [BWTF].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Plaguelords/Ice Cave",
+        "label": "Ice Cave",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Plaguelords/Ice Cave/Ice Cave - base [BPIC].png",
+        "kind": "building",
+        "desc": "Ice cave. Shelter: units resting here ignore cold damage.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/Dragon Shrine",
+        "label": "Dragon Shrine",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/High Elves/Dragon Shrine/Dragon Shrine - base [BPDS].png",
+        "kind": "building",
+        "desc": "Shrine to the dragons. Resting here grants fire resistance for a round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "High Elves/Healer",
+        "label": "Healer",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/High Elves/Healer/Healer - base [BPHE].png",
+        "kind": "building",
+        "desc": "Healer's house. Resting here restores all lost life once per visit.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shop (Alchemist)",
+        "label": "Shop (Alchemist)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Neutral/Shop (Alchemist)/Shop (Alchemist) - base [BSAL].png",
+        "kind": "building",
+        "desc": "Alchemist. Trading post: buy a potion card for gold.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ice Bridge (Archway)",
+        "label": "Ice Bridge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "A span of iced-over stone. Narrow footing — one unit at a time; falling off ends your turn."
+      }
+    ],
+    "rock": [
+      {
+        "id": "Neutral/Stone Quarry (size 2)",
+        "label": "Stone Quarry (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 2)/Stone Quarry (size 2) - base [BRS1].png",
+        "kind": "building",
+        "desc": "Stone quarry. Controlling it yields stone each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Metal Mine (size 3)",
+        "label": "Metal Mine (size 3)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Metal Mine (size 3)/Metal Mine (size 3) - base [BRM2].png",
+        "kind": "building",
+        "desc": "Deep metal mine. Controlling it yields extra metal each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Dwarves/Furnace (level 3)",
+        "label": "Furnace (level 3)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 3)/Furnace (level 3) - base [BKA2].png",
+        "kind": "building",
+        "desc": "Dark Dwarf furnace. Stronghold; adjacent hexes count as lava-warm.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Dwarf)",
+        "label": "Tower (Dwarf)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Dwarf)/Tower (Dwarf) - base [BWTD].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dwarves/Foundry",
+        "label": "Foundry",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dwarves/Foundry/Foundry - base [BPFO].png",
+        "kind": "building",
+        "desc": "Dwarven foundry. Trading post: upgrade one armour card for metal.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x1 horizontal)",
+        "label": "Walls (neutral, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 1x2 vertical)",
+        "label": "Walls (neutral, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x2 joint)",
+        "label": "Walls (neutral, 2x2 joint)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png",
+        "kind": "wall",
+        "desc": "Stone wall corner. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ramparts",
+        "label": "Ramparts",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+        "kind": "wall",
+        "desc": "Earthen rampart. Cover: defenders on this hex gain +1 Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Elves/Kargothian Gate",
+        "label": "Kargothian Gate",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
+        "kind": "wall",
+        "desc": "Dark Elf gatehouse. Chokepoint: only one unit may pass per round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Dark Dwarf)",
+        "label": "Tower (Dark Dwarf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Dark Dwarf)/Tower (Dark Dwarf) - base [BWTA].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dwarves/Citadel (level 1)",
+        "label": "Citadel (level 1)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 1)/Citadel (level 1) - base [BKD0].png",
+        "kind": "building",
+        "desc": "Dwarven citadel. Stronghold: defenders inside ignore the first hit.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Lair (Harpy nest)",
+        "label": "Lair (Harpy nest)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Lair (Harpy nest)/Lair (Harpy nest) - base [BLHN].png",
+        "kind": "building",
+        "desc": "Harpy nest. Hostile lair: first visitor fights a harpy for loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Dwarves/Guild",
+        "label": "Guild",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Dark Dwarves/Guild/Guild - base [BAGU].png",
+        "kind": "building",
+        "desc": "Dark Dwarf guild hall. Trading post: swap one card for a random one.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Dwarves/Supply Depot",
+        "label": "Supply Depot",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Dwarves/Supply Depot/Supply Depot - base [BPSD].png",
+        "kind": "building",
+        "desc": "Supply depot. Resting here refills one consumable card.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "rock_coast": [
+      {
+        "id": "Neutral/Stone Quarry (size 1)",
+        "label": "Stone Quarry (size 1)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png",
+        "kind": "building",
+        "desc": "Small quarry. Controlling it yields stone for walls and towers.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Knights)",
+        "label": "Tower (Knights)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Knights)/Tower (Knights) - base [BWTC].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Minotaurs/Lookout",
+        "label": "Lookout",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - base [BPLO].png",
+        "kind": "building",
+        "desc": "Minotaur lookout. Standing on it reveals the map 8 hexes around.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Knights/Keep (level 2)",
+        "label": "Keep (level 2)",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Knights/Keep (level 2)/Keep (level 2) - base [BKK1].png",
+        "kind": "building",
+        "desc": "Knight keep. Stronghold: defenders inside ignore the first hit each round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 2x1 horizontal)",
+        "label": "Walls (neutral, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (neutral, 1x2 vertical)",
+        "label": "Walls (neutral, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+        "kind": "wall",
+        "desc": "Stone wall segment. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Ramparts",
+        "label": "Ramparts",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png",
+        "kind": "wall",
+        "desc": "Earthen rampart. Cover: defenders on this hex gain +1 Block.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Elves/Kargothian Gate",
+        "label": "Kargothian Gate",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
+        "kind": "bridge",
+        "desc": "Stone span. On rock coast: the only legal crossing — hold it to pin the other side."
+      },
+      {
+        "id": "Shared/Tower (Dwarf)",
+        "label": "Tower (Dwarf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Dwarf)/Tower (Dwarf) - base [BWTD].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Dwarves/Supply Depot",
+        "label": "Supply Depot",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Dwarves/Supply Depot/Supply Depot - base [BPSD].png",
+        "kind": "building",
+        "desc": "Supply depot. Resting here refills one consumable card.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Dwarves/Trader",
+        "label": "Trader",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Dwarves/Trader/Trader - base [BPTR].png",
+        "kind": "building",
+        "desc": "Dark Dwarf trader. Trading post: swap one card for a random one.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Shop (Blacksmith)",
+        "label": "Shop (Blacksmith)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Neutral/Shop (Blacksmith)/Shop (Blacksmith) - base [BSBS].png",
+        "kind": "building",
+        "desc": "Blacksmith. Trading post: upgrade one weapon card for gold.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Toll Bridge (Gate)",
+        "label": "Toll Bridge",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
+        "kind": "bridge",
+        "desc": "Toll bridge over a sea-rift. Whoever holds it collects 1 gold from each unit that crosses."
+      }
+    ],
+    "rock_cliffs": [],
+    "mountains": [],
+    "jungle": [
+      {
+        "id": "Wood Elves/Tree of Life",
+        "label": "Tree of Life",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Wood Elves/Tree of Life/Tree of Life - base [BATL].png",
+        "kind": "building",
+        "desc": "Tree of Life. Resting here restores 2 life per quiet round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/White Tree",
+        "label": "White Tree",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png",
+        "kind": "building",
+        "desc": "Sacred white tree. Resting beneath it restores 1 life and clears fear.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Fey/Faerie Ring",
+        "label": "Faerie Ring",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - base [BPFR].png",
+        "kind": "building",
+        "desc": "Mushroom ring. Resting here teleports you to another ring next round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Fey/Unicorn Grove",
+        "label": "Unicorn Grove",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - base [BAUG].png",
+        "kind": "building",
+        "desc": "Unicorn grove. Units resting here cannot be ambushed.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Orcs/Totem",
+        "label": "Totem",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Orcs/Totem/Totem - base [BWTP].png",
+        "kind": "building",
+        "desc": "Orc war totem. Allied units adjacent gain +1 Attack while it stands.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Wall of Thorns",
+        "label": "Wall of Thorns",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
+        "kind": "wall",
+        "desc": "Living thorn hedge. Cover; entering costs 1 life unless you are Fey.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Wood Elf)",
+        "label": "Tower (Wood Elf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Wood Elf)/Tower (Wood Elf) - base [BWTW].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/Forest Tower",
+        "label": "Forest Tower",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Wood Elves/Forest Tower/Forest Tower - base [BPFT].png",
+        "kind": "building",
+        "desc": "Wood Elf tree tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Ssrathi)",
+        "label": "Tower (Ssrathi)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Ssrathi)/Tower (Ssrathi) - base [BWTL].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Wood Elves/Magic Well",
+        "label": "Magic Well",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Wood Elves/Magic Well/Magic Well - base [BPMW].png",
+        "kind": "building",
+        "desc": "Wood Elf magic well. Drinking here refreshes one used skill.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Ssrathi/Scrying Pool",
+        "label": "Scrying Pool",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Ssrathi/Scrying Pool/Scrying Pool - base [BPYP].png",
+        "kind": "building",
+        "desc": "Scrying pool. Visiting reveals the map 6 hexes further around it.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Ssrathi/Sacred Pool",
+        "label": "Sacred Pool",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - base [BPCP].png",
+        "kind": "building",
+        "desc": "Ssrathi sacred pool. Resting here restores 2 life.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Snake/Dragon Temple",
+        "label": "Snake/Dragon Temple",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Neutral/SnakeDragon Temple/SnakeDragon Temple - base [BTDR].png",
+        "kind": "building",
+        "desc": "Serpent temple. Guarded ruin: first visitor draws a bonus card.",
+        "desc_status": "placeholder"
+      }
+    ],
+    "marsh": [
+      {
+        "id": "Shared/Wall of Thorns",
+        "label": "Wall of Thorns",
+        "weight": 4,
+        "path": "assets/Sprites/Buildings/Shared/Wall of Thorns/Wall of Thorns - base [BWBR].png",
+        "kind": "building",
+        "desc": "Living thorn hedge. Cover; entering costs 1 life unless you are Fey.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Plaguelords/Plague Shrine",
+        "label": "Plague Shrine",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Plaguelords/Plague Shrine/Plague Shrine - base [BPPS].png",
+        "kind": "building",
+        "desc": "Diseased altar. Units ending a turn here lose 1 life unless undead.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Plaguelords/Hall of Plague (level 2)",
+        "label": "Hall of Plague (level 2)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 2)/Hall of Plague (level 2) - base [BKG1].png",
+        "kind": "building",
+        "desc": "Plaguelord hall. Stronghold; non-undead inside lose 1 life per round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Daemons/Gallows",
+        "label": "Gallows",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Daemons/Gallows/Gallows - base [BPGA].png",
+        "kind": "building",
+        "desc": "Gallows. Fear aura: enemies adjacent lose 1 Posture at round start.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Elves/Tomb",
+        "label": "Tomb",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Elves/Tomb/Tomb - base [BPTO].png",
+        "kind": "building",
+        "desc": "Sealed tomb. Opening it (rest here) draws a relic card or a curse.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 2x1 horizontal)",
+        "label": "Walls (evil, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x1 horizontal)/Walls (evil, 2x1 horizontal) - base [BWE1].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 1x2 vertical)",
+        "label": "Walls (evil, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 1x2 vertical)/Walls (evil, 1x2 vertical) - base [BWE2].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Plaguelords)",
+        "label": "Tower (Plaguelords)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Plaguelords)/Tower (Plaguelords) - base [BWTG].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Undead)",
+        "label": "Tower (Undead)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - base [BWTU].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Undead/Graveyard",
+        "label": "Graveyard",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Undead/Graveyard/Graveyard - base [BAGY].png",
+        "kind": "building",
+        "desc": "Graveyard. Undead resting here restore 2 life; others may be haunted.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Undead/Gravestone",
+        "label": "Gravestone",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Undead/Gravestone/Gravestone - base [BAGR].png",
+        "kind": "building",
+        "desc": "Lone gravestone. Marker: a fallen hero's card may be recovered here.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Undead/Barrow",
+        "label": "Barrow",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Undead/Barrow/Barrow - base [BPBA].png",
+        "kind": "building",
+        "desc": "Burial mound. Opening it (rest here) draws a relic card or wakes a wight.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Causeway (Archway)",
+        "label": "Causeway",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Empire/Archway/Archway - base [BPAC].png",
+        "kind": "bridge",
+        "desc": "Raised causeway over bog. Non-cavalry crossing elsewhere lose 1 move — this hex is the dry road."
+      }
+    ],
+    "water": [],
+    "lava": [],
+    "caverns": [
+      {
+        "id": "Neutral/Black Portal",
+        "label": "Black Portal",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+        "kind": "building",
+        "desc": "Black portal. Resting here teleports you to another portal next round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Infernal Temple",
+        "label": "Infernal Temple",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - base [BTIN].png",
+        "kind": "building",
+        "desc": "Daemonic temple. Resting here trades 1 life for a bonus action card.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Neutral/Crystal Mine (size 2)",
+        "label": "Crystal Mine (size 2)",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Neutral/Crystal Mine (size 2)/Crystal Mine (size 2) - base [BRC1].png",
+        "kind": "building",
+        "desc": "Crystal mine. Controlling it yields crystal for spells each turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Elves/Dark Tower (level 3)",
+        "label": "Dark Tower (level 3)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 3)/Dark Tower (level 3) - base [BKT2].png",
+        "kind": "building",
+        "desc": "Dark Elf tower. Stronghold; occupant sees the whole revealed map.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Daemons/Pit",
+        "label": "Pit",
+        "weight": 3,
+        "path": "assets/Sprites/Buildings/Daemons/Pit/Pit - base [BAPI].png",
+        "kind": "building",
+        "desc": "Daemon pit. Falling in costs 1 life; climbing out ends your turn.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Plaguelords/Hydra Cave",
+        "label": "Hydra Cave",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Plaguelords/Hydra Cave/Hydra Cave - base [BPHC].png",
+        "kind": "building",
+        "desc": "Hydra cave. Hostile lair: first visitor fights a hydra for rare loot.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 2x1 horizontal)",
+        "label": "Walls (evil, 2x1 horizontal)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x1 horizontal)/Walls (evil, 2x1 horizontal) - base [BWE1].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Walls (evil, 1x2 vertical)",
+        "label": "Walls (evil, 1x2 vertical)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Walls (evil, 1x2 vertical)/Walls (evil, 1x2 vertical) - base [BWE2].png",
+        "kind": "wall",
+        "desc": "Black iron wall. Blocks line of sight; cover: ranged attacks on this hex -1.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Dark Elves/Kargothian Gate",
+        "label": "Kargothian Gate",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - base [BAAG].png",
+        "kind": "wall",
+        "desc": "Dark Elf gatehouse. Chokepoint: only one unit may pass per round.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Daemon)",
+        "label": "Tower (Daemon)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Daemon)/Tower (Daemon) - base [BWTV].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Shared/Tower (Dark Elf)",
+        "label": "Tower (Dark Elf)",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Shared/Tower (Dark Elf)/Tower (Dark Elf) - base [BWTK].png",
+        "kind": "building",
+        "desc": "Watch tower. Standing on it grants +1 range and reveals 8 hexes.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Plaguelords/Fire Cave",
+        "label": "Fire Cave",
+        "weight": 2,
+        "path": "assets/Sprites/Buildings/Plaguelords/Fire Cave/Fire Cave - base [BPFC].png",
+        "kind": "building",
+        "desc": "Fire cave. Shelter from the dark; resting here restores 1 life.",
+        "desc_status": "placeholder"
+      },
+      {
+        "id": "Daemons/Portal",
+        "label": "Portal",
+        "weight": 1,
+        "path": "assets/Sprites/Buildings/Daemons/Portal/Portal - base [BPPO].png",
+        "kind": "building",
+        "desc": "Daemon portal. Resting here teleports you to another portal next round.",
+        "desc_status": "placeholder"
+      }
+    ]
+  },
+  "_density_scaled": true
+}
