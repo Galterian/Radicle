@@ -582,12 +582,6 @@ const server = http.createServer(async (req, res) => {
     catch { res.writeHead(404); res.end('not found'); }
   };
   if (p.startsWith('/api/')) return handleApi(req, res, p);
-  if (p.startsWith('/assets/')) {
-    // Static art: sheets are big and immutable, let the browser cache them.
-    const abs = path.resolve(ASSETS_DIR, '.' + p.slice('/assets'.length).replace(/\.\./g, ''));
-    if (!abs.startsWith(ASSETS_DIR)) { res.writeHead(403); return res.end('forbidden'); }
-    return serve(abs, 'public, max-age=3600');
-  }
   const rMatch = p.match(/^\/r\/([^/]+)\/(commits|tree)\/([^/]+)(\/.*)?$/);
   if (rMatch) {
     if (!radicleEnv.enabled) { res.writeHead(503); return res.end('radicle remote push disabled'); }
@@ -618,7 +612,11 @@ const server = http.createServer(async (req, res) => {
   // Resources quoted in data/*.json (sprites + sounds, mapping files, schema).
   // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
   // readFile follows them, and the path-traversal check happens before.
-  if (p.startsWith('/assets/')) return serve(path.join(ASSETS_DIR, p.slice('/assets/'.length).replace(/\.\./g, '')));
+  if (p.startsWith('/assets/')) {
+    const abs = path.resolve(ASSETS_DIR, '.' + p.slice('/assets'.length).replace(/\.\./g, ''));
+    if (!abs.startsWith(ASSETS_DIR)) { res.writeHead(403); return res.end('forbidden'); }
+    return serve(abs);
+  }
   const rel = p === '/' ? '/index.html' : p;
   const abs = path.join(__dirname, rel.replace(/\.\./g, ''));
   if (!abs.startsWith(__dirname)) { res.writeHead(403); return res.end('forbidden'); }

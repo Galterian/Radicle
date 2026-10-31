@@ -24,3 +24,4 @@ _test/*.log
 
 # dev UI audit output (screenshots, scratch probes)
 game/tools/out/
+map_autosave.tmj
