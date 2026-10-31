@@ -1031,7 +1031,8 @@ function renderRoster() {
       const state_ = archived ? ' · archived' : tapped ? ' · tapped' : '';
       return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="class${state_}${archived ? ' — the owner recasts it by emitting every colour' : ''}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
     })();
-    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}</span>
+    const team = teamLabel(e);
+    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}<span class="team ${/Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally'}" title="ally">${escHtml(team)}</span></span>
       <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
@@ -1997,8 +1998,7 @@ function connect() {
           state.ui.revealBadges ||= {};
           for (const a of env.payload.actions || []) {
             // Sprite swing for every revealed Attack (all peers, de-duped per
-            // turn/round/actor) — the attack sheet plays once then returns to
-            // idle.
+            // turn/round/actor) — the attack sheet plays once then returns to idle.
             const animKey = `${env.turn}:${env.round}:${a.actor}`;
             if (!state._animAction.has(animKey)) {
               state._animAction.add(animKey);
@@ -2431,13 +2431,19 @@ function wireInput() {
     }
     else if (ev.key === 'g' || ev.key === 'G') state.ui.showCoords = !state.ui.showCoords;
     else if (ev.key === 'q' || ev.key === 'Q') clickClassCard();   // my class ability (user ruling 2026-10-30)
+    else if (ev.key === 'm' || ev.key === 'M') {
+      const muted = sounds.toggle();
+      try { localStorage.setItem('chaosd6.muted', muted ? '1' : '0'); } catch { /* no storage */ }
+      logUI(muted ? 'sound muted' : 'sound on', 'phase');
+    }
   });
 
   const canvas = document.getElementById('stage');
   // Test hook (tools/ui-check.mjs): the canvas chip text is not in the DOM.
   window.__chaosDebug = () => ({ queuedLabel: queuedLabel(), badges: { ...(state.ui.revealBadges || {}) }, icons: state.ui.floatingIcons.map(f => f.skill || f.action) });
 
-  const renderer = createRenderer(canvas, {
+  // ws handler needs this to trigger attack animations on reveal.
+  const renderer = rendererRef = createRenderer(canvas, {
     get entities() {
       return state.entities.map(p => {
         const isMe = p.peer_id === state.myPeerId;
@@ -2552,8 +2558,8 @@ function wireInput() {
       return;
     }
     state.ui.selectedTarget = t;
-    setLogFilter(occupant ? occupant.peer_id : null);
     if (occupant && occupant.peer_id === state.myPeerId) sounds.play(resOf(occupant), 'select');
+    setLogFilter(occupant ? occupant.peer_id : null);
     // general_ux_range_cast_target: with a tile-taking effect queued (Teleport, Creation, Awake, Vision,
     // Artifice, Metaphysics, Disruption, Mind Blast) the left-clicked tile is the cast's target.
     const qe = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
