@@ -1033,7 +1033,7 @@ function renderRoster() {
     })();
     const team = teamLabel(e);
     const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
-    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}<span class="team ${teamClass}" title="ally"></span></span>
+    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}<span class="team" title="ally"></span></span>
       <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
@@ -1045,7 +1045,9 @@ function renderRoster() {
       </span>
       ${permIds.length ? '<div class="perm-cards" data-count="' + permIds.length + '"></div>' : ''}
       </span>`;
-    row.querySelector('.team').textContent = team;
+    const teamBadge = row.querySelector('.team');
+    teamBadge.classList.add(teamClass);
+    teamBadge.textContent = team;
     // Build the permanents stack as real SkillCard DOM, not innerHTML strings
     // — the icon canvas has to be a live node so the sprite paints into it.
     if (permIds.length) {
