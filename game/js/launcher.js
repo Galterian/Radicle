@@ -36,6 +36,10 @@ async function launch() {
     const name = document.getElementById('host-name').value.trim() || 'Ashfall-Micro';
     const publicIp = document.getElementById('host-ip').value || null;
     body = { mode: 'host', dimensionName: name, publicIp };
+  } else if (mode === 'restore') {
+    const tmjPath = document.getElementById('pick-restore').value;
+    if (!tmjPath) { msg.textContent = 'no saved dimension picked'; btn.disabled = false; hideEntering(); return; }
+    body = { mode: 'restore', tmjPath };
   } else {
     const side = document.getElementById('pick-side').value;
     const kind = document.getElementById('pick-kind').value;
@@ -78,11 +82,12 @@ async function renderLauncher() {
   // dimension-entry flow uses — different label, same spinner.
   showEntering('fetching dimensions, characters and relay candidates', 'ChaosD6 — getting ready to pick a dimension');
 
-  const [dimsRes, charsRes, creasRes, netRes] = await Promise.all([
+  const [dimsRes, charsRes, creasRes, netRes, localRes] = await Promise.all([
     fetch('/api/dimensions').then(r => r.json()).catch(e => ({ ok: false, items: [], reason: String(e) })),
     fetch('/data/characters.json').then(r => r.json()),
     fetch('/data/creatures.json').then(r => r.json()),
     fetch('/api/network').then(r => r.json()).catch(() => ({ candidates: [{ address: '127.0.0.1', kind: 'loopback', iface: 'lo' }], default: '127.0.0.1' })),
+    fetch('/dimensions/local').then(r => r.json()).catch(() => ({ ok: false, items: [] })),
   ]);
 
   const hostIp = document.getElementById('host-ip');
@@ -159,16 +164,30 @@ async function renderLauncher() {
   const takenLabels = new Set(items.flatMap(d => (d.members || []).map(m => String(m.peer_id || '').replace(/^peer:/, ''))));
   document.getElementById('pick-label').placeholder = fancyLabel(takenLabels);
 
+  // Local TMJ autosaves on this box — populates the restore panel.
+  const pickRestore = document.getElementById('pick-restore');
+  const localItems = (localRes && localRes.items) || [];
+  const whenAgo = iso => { const s = Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 1000)); return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
+  for (const it of localItems) {
+    const o = document.createElement('option');
+    o.value = it.path;
+    o.textContent = `${it.dim_name || it.dim_id}  (${it.kind}, saved ${whenAgo(it.saved_at)})`;
+    pickRestore.appendChild(o);
+  }
+
   // `host` is always available; `join-door` enables only when at least one
-  // alive player Door is publishing; `join-random` stays disabled.
+  // alive player Door is publishing; `join-random` stays disabled; `restore`
+  // enables only when at least one local TMJ was found.
   const modes = document.querySelectorAll('input[name="mode"]');
   const joinDoorRadio = document.querySelector('input[name="mode"][value="join-door"]');
   joinDoorRadio.disabled = liveDoors.length === 0;
   if (liveDoors.length) joinDoorRadio.checked = true;
+  const restoreRadio = document.querySelector('input[name="mode"][value="restore"]');
+  restoreRadio.disabled = localItems.length === 0;
   function syncPanels() {
     const mode = document.querySelector('input[name="mode"]:checked').value;
     for (const el of document.querySelectorAll('.mode-panel')) el.hidden = el.dataset.for !== mode;
-    document.querySelector('.join-opts').hidden = mode === 'host';
+    document.querySelector('.join-opts').hidden = (mode === 'host' || mode === 'restore');
   }
   for (const m of modes) m.addEventListener('change', syncPanels); syncPanels();
   document.getElementById('go').disabled = false;

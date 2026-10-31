@@ -24,6 +24,7 @@
         <label><input type="radio" name="mode" value="join-door" disabled> Join a Dimension through a <b>player's Door</b> (you arrive next to them)</label>
         <label><input type="radio" name="mode" value="join-random" disabled> Join a Dimension at a <b>random unknown place</b></label>
         <label><input type="radio" name="mode" value="host" checked> Start a <b>NEW Dimension</b> (you open its first Doors)</label>
+        <label><input type="radio" name="mode" value="restore" disabled> <b>Load a saved dimension</b> from this computer (local TMJ autosave)</label>
       </fieldset>
 
       <div class="mode-panel" data-for="join-door">
@@ -39,6 +40,11 @@
         <label>Dimension name<input type="text" id="host-name" value="Ashfall-Micro" maxlength="40"></label>
         <label>Direct-link address<select id="host-ip"></select></label>
         <div id="host-ip-hint" class="hint">Players everywhere reach each other over the public Nostr bus — no port forwarding, no host. This address is only used for an optional faster direct link to players on the same network.</div>
+      </div>
+
+      <div class="mode-panel" data-for="restore">
+        <label>Saved dimension<select id="pick-restore"></select></label>
+        <div class="hint">Autosaves live in <code>data/dimensions/&lt;dim_id&gt;/</code>. A <b>hard</b> file was written at a clean shutdown; an <b>autosave</b> is the running peer's last 60-second snapshot. Picking one spawns a fresh peer with the tileset, obstacles and tokens hydrated — the dimension continues from where it stopped.</div>
       </div>
 
       <fieldset class="join-opts" hidden>

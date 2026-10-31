@@ -4,7 +4,7 @@
 
 import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
-import { createKnownMap, initialBlock } from './map.js';
+import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, markFeatureConsumed, isFeatureConsumed, isLabyrinthWallAt } from './features.js';
 import { scatterAt } from './scatter.js';
@@ -900,6 +900,36 @@ function worldFeatures() {
   return list;
 }
 // Hex distance from my unit to another roster entry (Infinity when either tile is unknown).
+// Fog of war: a hex is "in sight this frame" when it sits within sight range
+// of my hero or any teammate — allies share their disc into one combined
+// visible region. The resulting Set<"q,r"> is read by the renderer to dim
+// known-but-out-of-sight tiles and to hide enemies the team can't see.
+// Monster sight is handled by resolver AI (not shown on the map). HERO +
+// ALLY share the 10-hex ring; everything else contributes nothing.
+function recomputeSightSet() {
+  const set = new Set();
+  if (!state.entities || !state.entities.length) { state.ui.sightSet = set; return; }
+  const addDisc = (q, r, radius) => {
+    const R = Math.max(0, radius | 0);
+    for (let dq = -R; dq <= R; dq++) {
+      const lo = Math.max(-R, -dq - R);
+      const hi = Math.min(R, -dq + R);
+      for (let dr = lo; dr <= hi; dr++) set.add(`${q + dq},${r + dr}`);
+    }
+  };
+  for (const e of state.entities) {
+    if (e.life <= 0) continue;
+    if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    const mine = e.peer_id === state.myPeerId;
+    const ownedByMe = e.owner_peer_id === state.myPeerId;
+    const alliedChar = e.alliance === 'player' || e.alliance === 'npc_a';
+    if (!(mine || ownedByMe || alliedChar)) continue;   // enemies don't share sight
+    const radius = mine ? HERO_SIGHT_RADIUS : ALLY_SIGHT_RADIUS;
+    addDisc(e.tile_q, e.tile_r, radius);
+  }
+  state.ui.sightSet = set;
+}
+
 function hexDistanceTo(e) {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   const q = e.tile_q ?? e.tile?.q, r = e.tile_r ?? e.tile?.r;
@@ -2788,6 +2818,7 @@ function wireInput() {
       const res = me ? resOf(me) : null;
       if (res) { readyPlayed = true; sounds.play(res, 'ready', { volume: 0.7 }); }
     }
+    recomputeSightSet();
     renderer.render();
     // Floating SkillCard DOM over revealing units — pinned to the canvas each
     // frame so it tracks the camera / zoom (positions read renderer.toWorld
