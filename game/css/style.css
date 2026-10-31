@@ -31,10 +31,27 @@ body { display: flex; flex-direction: column; }
 .pill.phase { background: #3a2c66; color: #e0d7ff; }
 .pill.timer { background: #2a1a1a; color: #ffb0b0; min-width: 56px; text-align: center; }
 
-/* The single grid row may shrink below its content (minmax(0, 1fr)) so a long
-   roster or log never stretches the page: the side panel scrolls internally
-   and the canvas always fits between the two pinned bars. */
-main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minmax(0, 1fr); gap: 10px; padding: 10px; flex: 1 1 auto; min-height: 0; }
+/* Two columns, two rows. The side panel is a single grid cell that spans
+   both rows — so it reaches the viewport bottom while the deck-bar lives in
+   its own cell under the canvas. Previous layout left a 320×deck-bar-height
+   gap at the bottom-right because the footer sat below <main> with a
+   margin-right offset; moving the footer into main + spanning the panel
+   fixes that without any JS. */
+main {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "stage panel"
+    "deck  panel";
+  gap: 10px;
+  padding: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+#stage { grid-area: stage; }
+#panel { grid-area: panel; }
+#deck-bar { grid-area: deck; }
 #stage { width: 100%; height: 100%; background: #080a10; border: 1px solid #1a1f29; border-radius: 6px; display: block; cursor: crosshair; }
 #stage.panning { cursor: grabbing; }
 
@@ -46,13 +63,28 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
 #panel small { color: #566379; font-weight: 400; }
-/* Roster takes at most ~55% of the panel so a long cast list never pushes the
-   event log off-screen. Scrolls on its own when it exceeds that. */
-#roster { display: flex; flex-direction: column; gap: 6px; flex: 0 1 auto; max-height: 55%; overflow-y: auto; }
-.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; }
+/* Roster and event log share the panel 50/50. The log always sits pinned at
+   the panel's bottom; the roster scrolls internally when the cast list grows
+   beyond its half. No empty gap: the two halves together fill the panel. */
+#roster { display: flex; flex-direction: column; gap: 6px; flex: 1 1 50%; min-height: 0; max-height: 50%; overflow-y: auto; }
+.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; position: relative; }
 .ros:hover { background: #1a2130; }
 .ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
-.ros .nm { color: #e0e6ef; display: flex; align-items: center; gap: 6px; }
+/* Collapsible roster rows: by default only the head (thumb + name + hp line)
+   shows. A caret in the top-right flips when the row toggles open. Click the
+   .ros row anywhere outside the filter funnel to toggle. Full details (stats
+   pills, class chips, perms, afflictions) only render when expanded, so a
+   long cast list stays scannable. */
+.ros::after { content: "▸"; position: absolute; top: 6px; right: 8px; font-size: 10px; color: #6a7a92; transition: transform .12s ease; }
+.ros.expanded::after { transform: rotate(90deg); color: #c8d4e3; }
+.ros .stats,
+.ros .perm-cards { display: none; }
+.ros.expanded .stats { display: flex; }
+.ros.expanded .perm-cards { display: flex; }
+.ros .ros-filter { position: absolute; top: 4px; right: 24px; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #6a7a92; border: 1px solid #26303f; border-radius: 50%; background: transparent; cursor: pointer; padding: 0; line-height: 1; }
+.ros .ros-filter:hover { color: #a08eff; border-color: #a08eff55; background: #1b1a2e; }
+.ros.filter-active .ros-filter { color: #a08eff; border-color: #a08eff; }
+.ros .nm { color: #e0e6ef; display: flex; align-items: center; gap: 6px; padding-right: 44px; }
 /* "Ally" column (user spec): whose team a unit fights for. */
 .ros-head { display: flex; justify-content: space-between; padding: 0 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #6a7a92; }
 .ros .team { font: 600 9px/1 ui-monospace, Menlo, Consolas, monospace; padding: 2px 5px; border-radius: 3px; background: #0f131b; color: #c8d4e3; border: 1px solid #26303f; text-transform: none; letter-spacing: 0; }
@@ -79,11 +111,11 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #log-filter-chip button { background: #a08eff22; border: 0; color: #d7cfff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; padding: 0; }
 #log-filter-chip button:hover { background: #a08eff44; }
 
-/* Scrolls on its own; min-height keeps a floor so the log is always visible
-   below the roster even when the roster is at its 55% cap. New rows prepend
-   at the top, so scrolling down reaches turn 1 — the full history is capped
-   at 120 rows (see logUI). */
-#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 auto; min-height: 160px; overflow-y: auto; }
+/* The log pins to the bottom of the panel by always being the last flex
+   child and taking its 50% share. Scrolls internally so turn 1 is reachable
+   (prepend direction: new rows on top, scroll DOWN to reach the oldest).
+   History is capped generously (see logUI). */
+#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 50%; min-height: 0; overflow-y: auto; }
 #log li { padding: 2px 4px; border-left: 2px solid #333; margin: 2px 0; color: #9ab0cc; word-break: break-word; }
 #log li[hidden] { display: none; }
 #log li.evt { border-color: #5e7eb5; }
@@ -110,11 +142,10 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 /* Hide filtered rows regardless of their display mode (flex for handshake etc.). */
 #log li[hidden] { display: none !important; }
 
-/* No longer fixed — it's a flex child so main can shrink around it.
-   `margin-right` leaves a column aligned with the event-log panel in <main>
-   (panel is 320px wide with a 10px gap and 10px padding), so the deck bar
-   lives under the canvas only and never visually overlaps the log. */
-#deck-bar { flex: 0 0 auto; position: sticky; bottom: 0; z-index: 10; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; margin-right: calc(320px + 20px); }
+/* Lives in the "deck" grid area under the canvas — no manual margin needed;
+   the grid reserves the column for the panel to the right. Keeps its own
+   background + top border so it reads as a footer against the canvas. */
+#deck-bar { z-index: 10; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; }
 #deck-row { display: flex; justify-content: center; align-items: flex-end; gap: 14px; max-width: 1020px; margin: 0 auto; }
 #slots { display: flex; gap: 6px; align-items: flex-end; }
 /* Push the EM/EP slot apart from the dealt hand so it doesn't feel like one of

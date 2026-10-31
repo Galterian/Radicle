@@ -98,6 +98,42 @@
       </div>
       <ol id="log"></ol>
     </aside>
+
+    <footer id="deck-bar" hidden>
+      <div id="deck-row">
+        <aside id="archive-pile" title="Archive — click, then a hand card: it goes to the archive at this resolution instead of the discard pile · double-click: open the archive">
+          <div class="pile archive"><span class="pile-count" id="archive-count">0</span><span class="pile-label">arch</span></div>
+        </aside>
+        <div id="slots">
+          <div class="slot" data-slot="0"><div class="k">1</div><div class="card"></div></div>
+          <div class="slot" data-slot="1"><div class="k">2</div><div class="card"></div></div>
+          <div class="slot" data-slot="2"><div class="k">3</div><div class="card"></div></div>
+          <div class="slot" data-slot="3"><div class="k">4</div><div class="card"></div></div>
+          <div class="slot" data-slot="4"><div class="k">5</div><div class="card"></div></div>
+          <div class="slot" data-slot="5" hidden><div class="k">6</div><div class="card"></div></div>
+          <div class="slot" data-slot="6" hidden><div class="k">7</div><div class="card"></div></div>
+          <div class="slot" data-slot="7" hidden><div class="k"></div><div class="card"></div></div>
+          <div class="slot" data-slot="8" hidden><div class="k"></div><div class="card"></div></div>
+          <div class="slot" data-slot="9" hidden><div class="k"></div><div class="card"></div></div>
+          <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">Empty</div><div class="ds"></div><div class="cd">EP · EM if tile</div></div></div>
+        </div>
+        <aside id="deck-pile" title="deck remaining · discard pile">
+          <div class="pile deck"><span class="pile-count" id="deck-count">0</span><span class="pile-label">deck</span></div>
+          <div class="pile discard"><span class="pile-count" id="discard-count">0</span><span class="pile-label">disc</span></div>
+        </aside>
+        <aside id="perms" hidden></aside>
+      </div>
+      <div id="archive-popup" hidden>
+        <div class="ap-card">
+          <header><span>Archive</span><span id="ap-sub"></span><button id="ap-close" title="close (Esc)">✕</button></header>
+          <div id="ap-list"></div>
+          <footer id="ap-foot">click a card to put it onto your discard pile · creature cards stay for Summoning</footer>
+        </div>
+      </div>
+      <div id="hint">
+        <b>1-5</b> pick an action · <b>8</b> Empty · <b>Space</b> commit · <b>right-click a slot</b> to toggle discard · <b>archive pile</b> (far left): click, then a card → it is archived at this resolution; double-click opens it · <b>left-click a hex</b> to focus / target an enemy for a queued Attack (on a building or landmark it opens the object card; <b>Esc</b> closes) · <b>hold left &amp; drag</b> to pan the map (<b>C</b> recentres on you) · <b>wheel</b> zooms · <b>right-click a hex</b> to stage a move or journey toward it (second right-click or double-click commits) · <b>✦ skill</b> cards attach to the first matching action — Attack/Block skills are greyed out until you hold that card, Move/Posture skills can ride on Empty instead · <b>Battle trance</b>: pick one or two actions (Empty fills the rest) · the chip over a unit reads <code>[EM + A + ✦BT + ✦Po]</code> = its actions, then its skills (an unplayed trance option is in parentheses) · <b>M</b> mute · <b>G</b> hex coords
+      </div>
+    </footer>
   </main>
 
   <!-- Hover card body is rebuilt by renderHoverCard() each mousemove — the
@@ -134,42 +170,6 @@
       <div class="oc-coords"></div>
     </div>
   </div>
-
-  <footer id="deck-bar" hidden>
-    <div id="deck-row">
-      <aside id="archive-pile" title="Archive — click, then a hand card: it goes to the archive at this resolution instead of the discard pile · double-click: open the archive">
-        <div class="pile archive"><span class="pile-count" id="archive-count">0</span><span class="pile-label">arch</span></div>
-      </aside>
-      <div id="slots">
-        <div class="slot" data-slot="0"><div class="k">1</div><div class="card"></div></div>
-        <div class="slot" data-slot="1"><div class="k">2</div><div class="card"></div></div>
-        <div class="slot" data-slot="2"><div class="k">3</div><div class="card"></div></div>
-        <div class="slot" data-slot="3"><div class="k">4</div><div class="card"></div></div>
-        <div class="slot" data-slot="4"><div class="k">5</div><div class="card"></div></div>
-        <div class="slot" data-slot="5" hidden><div class="k">6</div><div class="card"></div></div>
-        <div class="slot" data-slot="6" hidden><div class="k">7</div><div class="card"></div></div>
-        <div class="slot" data-slot="7" hidden><div class="k"></div><div class="card"></div></div>
-        <div class="slot" data-slot="8" hidden><div class="k"></div><div class="card"></div></div>
-        <div class="slot" data-slot="9" hidden><div class="k"></div><div class="card"></div></div>
-        <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">Empty</div><div class="ds"></div><div class="cd">EP · EM if tile</div></div></div>
-      </div>
-      <aside id="deck-pile" title="deck remaining · discard pile">
-        <div class="pile deck"><span class="pile-count" id="deck-count">0</span><span class="pile-label">deck</span></div>
-        <div class="pile discard"><span class="pile-count" id="discard-count">0</span><span class="pile-label">disc</span></div>
-      </aside>
-      <aside id="perms" hidden></aside>
-    </div>
-    <div id="archive-popup" hidden>
-      <div class="ap-card">
-        <header><span>Archive</span><span id="ap-sub"></span><button id="ap-close" title="close (Esc)">✕</button></header>
-        <div id="ap-list"></div>
-        <footer id="ap-foot">click a card to put it onto your discard pile · creature cards stay for Summoning</footer>
-      </div>
-    </div>
-    <div id="hint">
-      <b>1-5</b> pick an action · <b>8</b> Empty · <b>Space</b> commit · <b>right-click a slot</b> to toggle discard · <b>archive pile</b> (far left): click, then a card → it is archived at this resolution; double-click opens it · <b>left-click a hex</b> to focus / target an enemy for a queued Attack (on a building or landmark it opens the object card; <b>Esc</b> closes) · <b>hold left &amp; drag</b> to pan the map (<b>C</b> recentres on you) · <b>wheel</b> zooms · <b>right-click a hex</b> to stage a move or journey toward it (second right-click or double-click commits) · <b>✦ skill</b> cards attach to the first matching action — Attack/Block skills are greyed out until you hold that card, Move/Posture skills can ride on Empty instead · <b>Battle trance</b>: pick one or two actions (Empty fills the rest) · the chip over a unit reads <code>[EM + A + ✦BT + ✦Po]</code> = its actions, then its skills (an unplayed trance option is in parentheses) · <b>M</b> mute · <b>G</b> hex coords
-    </div>
-  </footer>
 
   <script type="module" src="/js/launcher.js"></script>
 </body>
