@@ -13,6 +13,26 @@ extends RefCounted
 ##      If any neighbour wins with a smaller hash, this hex loses -> skip.
 ##      (Lowest-hash hex wins; produces spacing without needing global state.)
 ##   4. Pick the feature from catalog[biome] by weight-roll on another hash.
+##
+## A second pass stamps labyrinth-wall arcs on open ground — see
+## _labyrinth_wall_at(). This is a parity mirror of features.js#labyrinthWallAt
+## and must match salt names, roll ranges, and the half-circle formula exactly.
+
+## Labyrinth-wall placer parameters (parity mirror of features.js#labyrinthWallAt).
+const LAB_SEED_RATE: float = 1.0 / 300.0
+# Flat-top hex directions, matches Hex.DIRS order exactly.
+const LAB_DIRS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1),
+	Vector2i(-1, 0), Vector2i(-1, 1), Vector2i(0, 1),
+]
+const LAB_BIOMES := {"grass": true, "high_grass": true, "dirt": true, "high_dirt": true}
+# WBC3 wall sprites reused verbatim from feature_table.json (`kind: "wall"`).
+const LAB_WALL_PATHS: Array[String] = [
+	"assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png",
+	"assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
+	"assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
+]
+const LAB_DESC := "Fallen rampart of a long-abandoned keep. Impassable scenery — units must path around."
 
 var seed_hex: String
 var _catalog: Dictionary = {}         # biome -> Array[Dictionary{id,label,weight,path,kind}]
@@ -148,8 +168,79 @@ func _pick_idx(q: int, r: int, choices: Array, biome: Biome) -> int:
 	return ranks[skip_tier]
 
 
+## Labyrinth-wall placer — parity mirror of features.js#labyrinthWallAt.
+## A sparse second pass puts "labyrinth seed hexes" on open ground; each seed
+## stamps a 4-hex half-circle of impassable wall scenery. Pure (seed, q, r).
+##
+## Half-circle formula (hex 6-neighbour order 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE):
+##   pivot plus four adjacent neighbours around orientation `d`, forming a
+##   C-shape (5 hexes); then drop one of the four shoulder hexes by hash → 4.
+func _labyrinth_wall_at(q: int, r: int, biome: Biome) -> Dictionary:
+	if biome == null: return {}
+	# Any seed within radius 2 could place a wall on (q, r) — the furthest wall
+	# from its pivot is distance 1, radius 2 leaves a small headroom.
+	for dq in range(-2, 3):
+		var lo := maxi(-2, -dq - 2)
+		var hi := mini(2, -dq + 2)
+		for dr in range(lo, hi + 1):
+			var sq := q + dq
+			var sr := r + dr
+			var sbt := biome.biome_at(sq, sr)
+			if not LAB_BIOMES.has(sbt): continue
+			# Parity mirror of features.js#labyrinthWallAt step 1: seed roll.
+			if _roll01(sq, sr, "lw:seed") >= LAB_SEED_RATE: continue
+			# Parity mirror step 2: pick orientation d ∈ 0..5.
+			var d := int(_roll01(sq, sr, "lw:orient") * 6.0) % 6
+			# Four shoulder offsets around d: CW d, CW d+1, CCW d, CCW d-1.
+			var shoulder: Array[Vector2i] = [
+				LAB_DIRS[d],
+				LAB_DIRS[(d + 1) % 6],
+				LAB_DIRS[(d + 5) % 6],
+				LAB_DIRS[(d + 4) % 6],
+			]
+			# Parity mirror step 3: deterministic shoulder index to drop (0..3).
+			var drop := int(_roll01(sq, sr, "lw:drop") * 4.0) % 4
+			# Pivot is always kept.
+			if sq == q and sr == r:
+				return _lab_wall_feature(sq, sr, 0, 0, biome.biome_at(q, r))
+			for i in range(4):
+				if i == drop: continue
+				var off: Vector2i = shoulder[i]
+				var tq := sq + off.x
+				var tr := sr + off.y
+				if tq != q or tr != r: continue
+				# Shoulder lands here. Only keep it on an open biome — walls on
+				# water/cliffs/mountains would look wrong and are already blocked
+				# by biome walkability anyway.
+				if not LAB_BIOMES.has(biome.biome_at(tq, tr)): return {}
+				return _lab_wall_feature(sq, sr, off.x, off.y, biome.biome_at(tq, tr))
+	return {}
+
+
+func _lab_wall_feature(sq: int, sr: int, odq: int, odr: int, biome_type: String) -> Dictionary:
+	var idx := int(_h32("%s:lw:sprite:%d:%d:%d:%d" % [seed_hex, sq, sr, odq, odr])) % LAB_WALL_PATHS.size()
+	return {
+		"path": LAB_WALL_PATHS[idx],
+		"label": "Labyrinth Wall",
+		"kind": "wall",
+		"desc": LAB_DESC,
+		"blocking": true,
+		"id": "labyrinth_wall/%d,%d:%d,%d" % [sq, sr, odq, odr],
+		"biome": biome_type,
+	}
+
+
+## Boolean variant for pathfinding — parity mirror of features.js#isLabyrinthWallAt.
+func is_labyrinth_wall(q: int, r: int, biome: Biome) -> bool:
+	return not _labyrinth_wall_at(q, r, biome).is_empty()
+
+
 ## {path, label, kind, biome, id} for a feature on (q, r), or {} if none.
 func feature_at(q: int, r: int, biome: Biome) -> Dictionary:
+	# Labyrinth walls win over vanilla features — parity mirror of
+	# features.js#featureAt: wall-first, Poisson pipeline second.
+	var lw := _labyrinth_wall_at(q, r, biome)
+	if not lw.is_empty(): return lw
 	if not _loaded: return {}
 	if not _is_candidate(q, r, biome): return {}
 	var btype := biome.biome_at(q, r)

@@ -307,6 +307,13 @@ export function createRenderer(canvas, state) {
     // the unknown hexes touching the known world, drawn as faint dashed
     // outlines so the edge of the revealed dimension is visible.
     const { tiles, frontier } = tilesFor(state.map, state.mapVersion);
+    // Fog of war: a hex is "currently in sight" when state.ui.sightSet
+    // (set by main.js#recomputeSightSet) contains "q,r". Known-but-out-of-
+    // sight hexes get a dark overlay below; enemies drop out of the entity
+    // draw loop. The set is absent before main.js's first raf — fall back to
+    // "everything in sight" so the first few frames don't black-paint.
+    const sightSet = state.ui?.sightSet || null;
+    const inSight = sightSet ? (q, r) => sightSet.has(`${q},${r}`) : () => true;
     const showLabels = zoom >= 0.75 && state.ui.showCoords;
     ctx.lineWidth = 1;
     // Terrain PNGs are flat-top WBC3 hexes authored at `tile_w × tile_h`
@@ -490,6 +497,22 @@ export function createRenderer(canvas, state) {
       ctx.globalAlpha = 1;
     }
 
+    // Fog overlay: dark hex on every known tile that isn't in state.ui.sightSet
+    // this frame. Painted AFTER terrain/features/scatter/walls so everything
+    // in those hexes dims uniformly; painted BEFORE entities so my hero and
+    // teammates still render at full brightness on top.
+    if (sightSet) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(6, 10, 18, 0.55)';
+      for (const t of tiles) {
+        if (!inView(t.x, t.y)) continue;
+        if (inSight(t.q, t.r)) continue;
+        hexPath(t.x, t.y);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     // Track self's actually-drawn pixel so the destination arrow starts from
     // the marker (not from the tile centre of a cell the marker is only
     // halfway into).
@@ -500,6 +523,15 @@ export function createRenderer(canvas, state) {
     const drawOrder = [...state.entities].sort((a, b) => positions.get(a.peerId).y - positions.get(b.peerId).y);
     for (const e of drawOrder) {
       const dead = e.life <= 0;
+      // Fog of war: enemies the team can't currently see simply don't paint.
+      // My own hero, teammates (alliance player / npc_a) and units I own
+      // always paint — the sightSet check only culls opponents.
+      const mine = e.isSelf;
+      const ownedByMe = e.owner_peer_id && state.myPeerId && e.owner_peer_id === state.myPeerId;
+      const alliedChar = e.alliance === 'player' || e.alliance === 'npc_a';
+      if (sightSet && !mine && !ownedByMe && !alliedChar
+          && Number.isInteger(e.tile_q) && Number.isInteger(e.tile_r)
+          && !inSight(e.tile_q, e.tile_r)) continue;
       const { x, y } = positions.get(e.peerId);
       if (e.isSelf) selfDrawnPx = { x, y };
       const color = ALLIANCE_COLOR[e.alliance] || '#ccc';

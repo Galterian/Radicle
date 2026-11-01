@@ -4,25 +4,72 @@
     {
       "id": "action_attack",
       "name": "Attack",
-      "tags": ["basic"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "generic melee hit sounds (pick randomly) + battle marker", "confidence": "high", "wbc3_name": "Crossed burning swords icon (battle marker)", "wbc3_code": "EEBX", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Sword.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/Whack.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/Attack00.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/Attack01.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/Attack02.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "basic"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "generic melee hit sounds (pick randomly) + battle marker",
+        "confidence": "high",
+        "wbc3_name": "Crossed burning swords icon (battle marker)",
+        "wbc3_code": "EEBX",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sword.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Whack.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Attack00.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Attack01.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Attack02.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["action_block", "action_posture", "action_move"],
+          "rebalance_links": [
+            "action_block",
+            "action_posture",
+            "action_move"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
             "code": "A",
             "text": "Aggression in all forms toward its goal. Dimensions does not track weapon type; attack skills specify weapon uniqueness.",
-            "rps_wins_against": ["P"],
-            "rps_loses_against": ["B"],
+            "rps_wins_against": [
+              "P"
+            ],
+            "rps_loses_against": [
+              "B"
+            ],
             "can_cast_non_instant_effects": false,
             "targets_enemy": true,
             "targets_tile": false
@@ -30,23 +77,262 @@
           "logic": {
             "description": "Attack card (A). Needs the card in hand and an enemy in contact (or an empty tile, which makes it a one-hex movement intent without damage). Combat damage = 1 base + 1 vs Posture / Empty Posture (A>P), 0 vs Block (B>A: the attacker takes 1 from the blocker unless they hold Ranged Weapon), 1 vs Move. Cannot emit non-instant effects (Reaver excepted); instants ride on it. Rule 15 follow: an Attack may chase a moving target.",
             "prerequisites": [
-              {"id": "card_in_hand", "description": "An Attack card is in the caster's hand.", "when": {"!!": {"var": "caster.hand_has.A"}}},
-              {"id": "target_in_contact", "description": "The right-clicked target is in contact (distance <= 1).", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}},
-              {"id": "enemy_or_tile", "description": "The target is an enemy unit or an empty tile.", "when": {"or": [{"==": [{"var": "target.kind"}, null]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}}
+              {
+                "id": "card_in_hand",
+                "description": "An Attack card is in the caster's hand.",
+                "when": {
+                  "!!": {
+                    "var": "caster.hand_has.A"
+                  }
+                }
+              },
+              {
+                "id": "target_in_contact",
+                "description": "The right-clicked target is in contact (distance <= 1).",
+                "when": {
+                  "rule": [
+                    "in_contact",
+                    {
+                      "dist": {
+                        "var": "dist"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "enemy_or_tile",
+                "description": "The target is an enemy unit or an empty tile.",
+                "when": {
+                  "or": [
+                    {
+                      "==": [
+                        {
+                          "var": "target.kind"
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "rule": [
+                        "is_enemy",
+                        {
+                          "a_alliance": {
+                            "var": "caster.alliance"
+                          },
+                          "b_alliance": {
+                            "var": "target.alliance"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "combat_damage", "description": "Matrix damage of the Attack against the defender's action (A>P/EP 2, vs M 1, vs B 0).", "target": "target", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}},
-              {"id": "damage_taken_from_block", "description": "Damage the attacker takes back from a blocking defender: 1, or 0 with Ranged Weapon.", "target": "caster", "unit": "damage", "value": {"if": [{"and": [{"==": [{"var": "defender.action"}, "B"]}, {"!": {"includes": [{"var": "caster.permanents"}, "skill_ranged_weapon"]}}]}, {"rule": ["rps_edge", {"actor": "B", "defender": "A"}]}, 0]}},
-              {"id": "hexes_moved", "description": "Swinging into an empty tile steps one hex toward it; a unit target is not approached.", "target": "caster", "unit": "hexes", "value": {"if": [{"==": [{"var": "target.kind"}, null]}, 1, 0]}},
-              {"id": "may_cast_non_instant", "description": "Attack does not emit (Rule 20), except the Reaver stance.", "target": "caster", "unit": "tokens", "value": {"or": [{"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}}]}, {"includes": [{"var": "caster.permanents"}, "class_reaver"]}]}}
+              {
+                "id": "combat_damage",
+                "description": "Matrix damage of the Attack against the defender's action (A>P/EP 2, vs M 1, vs B 0).",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": {
+                        "var": "caster.action"
+                      },
+                      "defender": {
+                        "var": "defender.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "damage_taken_from_block",
+                "description": "Damage the attacker takes back from a blocking defender: 1, or 0 with Ranged Weapon.",
+                "target": "caster",
+                "unit": "damage",
+                "value": {
+                  "if": [
+                    {
+                      "and": [
+                        {
+                          "==": [
+                            {
+                              "var": "defender.action"
+                            },
+                            "B"
+                          ]
+                        },
+                        {
+                          "!": {
+                            "includes": [
+                              {
+                                "var": "caster.permanents"
+                              },
+                              "skill_ranged_weapon"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "rule": [
+                        "rps_edge",
+                        {
+                          "actor": "B",
+                          "defender": "A"
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "hexes_moved",
+                "description": "Swinging into an empty tile steps one hex toward it; a unit target is not approached.",
+                "target": "caster",
+                "unit": "hexes",
+                "value": {
+                  "if": [
+                    {
+                      "==": [
+                        {
+                          "var": "target.kind"
+                        },
+                        null
+                      ]
+                    },
+                    1,
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "may_cast_non_instant",
+                "description": "Attack does not emit (Rule 20), except the Reaver stance.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "or": [
+                    {
+                      "rule": [
+                        "action_can_cast_non_instant",
+                        {
+                          "action": {
+                            "var": "caster.action"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "includes": [
+                        {
+                          "var": "caster.permanents"
+                        },
+                        "class_reaver"
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays A.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "wins_against_posture", "description": "Attack beats exactly Posture in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_wins_against"}, "P"]}, {"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 1]}]}},
-              {"id": "loses_against_block", "description": "Attack loses exactly to Block in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_loses_against"}, "B"]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 1]}]}},
-              {"id": "no_non_instant_casting", "description": "Attack keeps can_cast_non_instant_effects false.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, false]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays A.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "wins_against_posture",
+                "description": "Attack beats exactly Posture in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_wins_against"
+                        },
+                        "P"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "loses_against_block",
+                "description": "Attack loses exactly to Block in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_loses_against"
+                        },
+                        "B"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "no_non_instant_casting",
+                "description": "Attack keeps can_cast_non_instant_effects false.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    false
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "in_contact", "is_enemy", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "in_contact",
+              "is_enemy",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -54,25 +340,59 @@
     {
       "id": "action_block",
       "name": "Block",
-      "tags": ["basic"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "shield clang + shield gem icon", "confidence": "high", "wbc3_name": "Shieldgem icons in 8 player colours", "wbc3_code": "ESHD", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Shieldgem icons in 8 player colours/Shieldgem icons in 8 player colours - idle [ESHD].png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Clank.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/DoubleClang.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "basic"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "shield clang + shield gem icon",
+        "confidence": "high",
+        "wbc3_name": "Shieldgem icons in 8 player colours",
+        "wbc3_code": "ESHD",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Shieldgem icons in 8 player colours/Shieldgem icons in 8 player colours - idle [ESHD].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Clank.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["action_attack", "action_move"],
+          "rebalance_links": [
+            "action_attack",
+            "action_move"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
             "code": "B",
             "text": "Any defensive action. Deals 1 damage to each enemy who attacked you. Does not target.",
-            "rps_wins_against": ["A"],
-            "rps_loses_against": ["M"],
+            "rps_wins_against": [
+              "A"
+            ],
+            "rps_loses_against": [
+              "M"
+            ],
             "can_cast_non_instant_effects": false,
             "targets_enemy": false,
             "targets_tile": false
@@ -80,20 +400,200 @@
           "logic": {
             "description": "Block card (B). Needs the card in hand; takes no target. Scores 1 damage on every enemy in contact whose Attack is aimed at the blocker (B>A), 0 on anyone else; a Ranged Weapon attacker is out of reach. Loses to Move (M>B: the blocker takes 1 from a mover). Cannot emit non-instant effects (Barbarian paper exception).",
             "prerequisites": [
-              {"id": "card_in_hand", "description": "A Block card is in the caster's hand.", "when": {"!!": {"var": "caster.hand_has.B"}}}
+              {
+                "id": "card_in_hand",
+                "description": "A Block card is in the caster's hand.",
+                "when": {
+                  "!!": {
+                    "var": "caster.hand_has.B"
+                  }
+                }
+              }
             ],
             "effects": [
-              {"id": "combat_damage_per_attacker", "description": "1 on each adjacent enemy attacking the blocker, 0 if that attacker holds Ranged Weapon or does not Attack.", "target": "all_enemies", "unit": "damage", "value": {"if": [{"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"==": [{"var": "defender.action"}, "A"]}, {"!": {"includes": [{"var": "defender.permanents"}, "skill_ranged_weapon"]}}]}, {"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, 0]}},
-              {"id": "damage_taken", "description": "What the defender's action scores on the blocker (Move 1, Attack 0, others 0).", "target": "caster", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": {"var": "defender.action"}, "defender": {"var": "caster.action"}}]}},
-              {"id": "may_cast_non_instant", "description": "Block does not emit (Rule 20).", "target": "caster", "unit": "tokens", "value": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}}]}}
+              {
+                "id": "combat_damage_per_attacker",
+                "description": "1 on each adjacent enemy attacking the blocker, 0 if that attacker holds Ranged Weapon or does not Attack.",
+                "target": "all_enemies",
+                "unit": "damage",
+                "value": {
+                  "if": [
+                    {
+                      "and": [
+                        {
+                          "rule": [
+                            "in_contact",
+                            {
+                              "dist": {
+                                "var": "dist"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "==": [
+                            {
+                              "var": "defender.action"
+                            },
+                            "A"
+                          ]
+                        },
+                        {
+                          "!": {
+                            "includes": [
+                              {
+                                "var": "defender.permanents"
+                              },
+                              "skill_ranged_weapon"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "rule": [
+                        "rps_edge",
+                        {
+                          "actor": {
+                            "var": "caster.action"
+                          },
+                          "defender": {
+                            "var": "defender.action"
+                          }
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "damage_taken",
+                "description": "What the defender's action scores on the blocker (Move 1, Attack 0, others 0).",
+                "target": "caster",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": {
+                        "var": "defender.action"
+                      },
+                      "defender": {
+                        "var": "caster.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "may_cast_non_instant",
+                "description": "Block does not emit (Rule 20).",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": {
+                        "var": "caster.action"
+                      }
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays B.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "wins_against_attack", "description": "Block beats exactly Attack in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_wins_against"}, "A"]}, {"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 1]}]}},
-              {"id": "loses_against_move", "description": "Block loses exactly to Move in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_loses_against"}, "M"]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 1]}]}},
-              {"id": "no_non_instant_casting", "description": "Block keeps can_cast_non_instant_effects false.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, false]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays B.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "wins_against_attack",
+                "description": "Block beats exactly Attack in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_wins_against"
+                        },
+                        "A"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "loses_against_move",
+                "description": "Block loses exactly to Move in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_loses_against"
+                        },
+                        "M"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "no_non_instant_casting",
+                "description": "Block keeps can_cast_non_instant_effects false.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    false
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "in_contact", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "in_contact",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -101,25 +601,59 @@
     {
       "id": "action_move",
       "name": "Move",
-      "tags": ["basic"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "footsteps + footprints along the hex path", "confidence": "high", "wbc3_name": "Footprints small ground marks", "wbc3_code": "EDFS", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Footprints small ground marks/Footprints small ground marks - idle [EDFS].png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Walk.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/FastWalk.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "basic"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "footsteps + footprints along the hex path",
+        "confidence": "high",
+        "wbc3_name": "Footprints small ground marks",
+        "wbc3_code": "EDFS",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Footprints small ground marks/Footprints small ground marks - idle [EDFS].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Walk.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/FastWalk.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["action_block", "action_posture"],
+          "rebalance_links": [
+            "action_block",
+            "action_posture"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
             "code": "M",
             "text": "Body movement and / or movement on the tileset. One tile per Move. Move skills describe maneuver or body interaction.",
-            "rps_wins_against": ["B"],
-            "rps_loses_against": ["P"],
+            "rps_wins_against": [
+              "B"
+            ],
+            "rps_loses_against": [
+              "P"
+            ],
             "can_cast_non_instant_effects": false,
             "targets_enemy": true,
             "targets_tile": true
@@ -127,21 +661,186 @@
           "logic": {
             "description": "Move card (M). Needs the card in hand and a target (tile or unit); the caster steps exactly one hex along the shortest path toward it, walking around occupied hexes. Scores 1 on a blocker in contact (M>B), takes 1 from a Posture (P>M). Interrupts a non-instant cast (Rule 19) except for the Monk; Move skills ride on it.",
             "prerequisites": [
-              {"id": "card_in_hand", "description": "A Move card is in the caster's hand.", "when": {"!!": {"var": "caster.hand_has.M"}}},
-              {"id": "has_target", "description": "A destination tile or unit is chosen at distance >= 1.", "when": {"and": [{"!=": [{"var": "target"}, null]}, {">=": [{"var": "dist"}, 1]}]}}
+              {
+                "id": "card_in_hand",
+                "description": "A Move card is in the caster's hand.",
+                "when": {
+                  "!!": {
+                    "var": "caster.hand_has.M"
+                  }
+                }
+              },
+              {
+                "id": "has_target",
+                "description": "A destination tile or unit is chosen at distance >= 1.",
+                "when": {
+                  "and": [
+                    {
+                      "!=": [
+                        {
+                          "var": "target"
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "dist"
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "hexes_moved", "description": "One hex toward the target.", "target": "caster", "unit": "hexes", "value": 1},
-              {"id": "combat_damage", "description": "Matrix damage of the Move against the defender (1 vs Block, else 0).", "target": "target", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}},
-              {"id": "may_cast_non_instant", "description": "Move does not emit (Rule 19/20), except the Monk stance.", "target": "caster", "unit": "tokens", "value": {"or": [{"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}}]}, {"includes": [{"var": "caster.permanents"}, "class_monk"]}]}}
+              {
+                "id": "hexes_moved",
+                "description": "One hex toward the target.",
+                "target": "caster",
+                "unit": "hexes",
+                "value": 1
+              },
+              {
+                "id": "combat_damage",
+                "description": "Matrix damage of the Move against the defender (1 vs Block, else 0).",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": {
+                        "var": "caster.action"
+                      },
+                      "defender": {
+                        "var": "defender.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "may_cast_non_instant",
+                "description": "Move does not emit (Rule 19/20), except the Monk stance.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "or": [
+                    {
+                      "rule": [
+                        "action_can_cast_non_instant",
+                        {
+                          "action": {
+                            "var": "caster.action"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "includes": [
+                        {
+                          "var": "caster.permanents"
+                        },
+                        "class_monk"
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays M.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "wins_against_block", "description": "Move beats exactly Block in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_wins_against"}, "B"]}, {"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 1]}]}},
-              {"id": "loses_against_posture", "description": "Move loses exactly to Posture in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_loses_against"}, "P"]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 1]}]}},
-              {"id": "no_non_instant_casting", "description": "Move keeps can_cast_non_instant_effects false.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, false]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays M.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "wins_against_block",
+                "description": "Move beats exactly Block in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_wins_against"
+                        },
+                        "B"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "loses_against_posture",
+                "description": "Move loses exactly to Posture in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_loses_against"
+                        },
+                        "P"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "no_non_instant_casting",
+                "description": "Move keeps can_cast_non_instant_effects false.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    false
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -149,25 +848,56 @@
     {
       "id": "action_posture",
       "name": "Posture",
-      "tags": ["basic", "casting"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "faint rings while concentrating/casting", "confidence": "medium", "wbc3_name": "Spell effect faint rings", "wbc3_code": "EZ14", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Magic.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "basic",
+        "casting"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "faint rings while concentrating/casting",
+        "confidence": "medium",
+        "wbc3_name": "Spell effect faint rings",
+        "wbc3_code": "EZ14",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["action_move", "action_attack"],
+          "rebalance_links": [
+            "action_move",
+            "action_attack"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
             "code": "P",
             "text": "Mental states, waiting / skill / effect / aiming. Only during Posture can non-instant effects be made. Posture skills impact enemy mentally.",
-            "rps_wins_against": ["M"],
-            "rps_loses_against": ["A"],
+            "rps_wins_against": [
+              "M"
+            ],
+            "rps_loses_against": [
+              "A"
+            ],
             "can_cast_non_instant_effects": true,
             "targets_enemy": false,
             "targets_tile": false
@@ -175,21 +905,198 @@
           "logic": {
             "description": "Posture card (P). Needs the card in hand; takes no target. The only real action that emits an element for a non-instant cast (Rule 20); Posture skills ride on it. Scores 1 on every adjacent enemy playing Move / Empty Move / Empty Posture (P>M), takes 2 from an Attack (A>P).",
             "prerequisites": [
-              {"id": "card_in_hand", "description": "A Posture card is in the caster's hand.", "when": {"!!": {"var": "caster.hand_has.P"}}}
+              {
+                "id": "card_in_hand",
+                "description": "A Posture card is in the caster's hand.",
+                "when": {
+                  "!!": {
+                    "var": "caster.hand_has.P"
+                  }
+                }
+              }
             ],
             "effects": [
-              {"id": "may_cast_non_instant", "description": "Posture emits: non-instant effects may advance.", "target": "caster", "unit": "tokens", "value": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}}]}},
-              {"id": "elements_allowed", "description": "The emission must not use an element a Disable barred for the caster.", "target": "caster", "unit": "tokens", "value": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "combat_damage_per_enemy", "description": "1 on each adjacent enemy playing M/EM/EP, 0 otherwise.", "target": "all_enemies", "unit": "damage", "value": {"if": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, 0]}},
-              {"id": "damage_taken", "description": "What the defender's action scores on the poser (Attack 2, others 0).", "target": "caster", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": {"var": "defender.action"}, "defender": {"var": "caster.action"}}]}}
+              {
+                "id": "may_cast_non_instant",
+                "description": "Posture emits: non-instant effects may advance.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": {
+                        "var": "caster.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "elements_allowed",
+                "description": "The emission must not use an element a Disable barred for the caster.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": {
+                        "root": "elements"
+                      },
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "combat_damage_per_enemy",
+                "description": "1 on each adjacent enemy playing M/EM/EP, 0 otherwise.",
+                "target": "all_enemies",
+                "unit": "damage",
+                "value": {
+                  "if": [
+                    {
+                      "rule": [
+                        "in_contact",
+                        {
+                          "dist": {
+                            "var": "dist"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "rule": [
+                        "rps_edge",
+                        {
+                          "actor": {
+                            "var": "caster.action"
+                          },
+                          "defender": {
+                            "var": "defender.action"
+                          }
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "damage_taken",
+                "description": "What the defender's action scores on the poser (Attack 2, others 0).",
+                "target": "caster",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": {
+                        "var": "defender.action"
+                      },
+                      "defender": {
+                        "var": "caster.action"
+                      }
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays P.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "wins_against_move", "description": "Posture beats exactly Move in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_wins_against"}, "M"]}, {"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 1]}]}},
-              {"id": "loses_against_attack", "description": "Posture loses exactly to Attack in the 4-cycle.", "assert": {"and": [{"includes": [{"var": "proposal.data.rps_loses_against"}, "A"]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 1]}]}},
-              {"id": "casts_non_instant", "description": "Posture keeps can_cast_non_instant_effects true.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, true]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays P.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "wins_against_move",
+                "description": "Posture beats exactly Move in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_wins_against"
+                        },
+                        "M"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "loses_against_attack",
+                "description": "Posture loses exactly to Attack in the 4-cycle.",
+                "assert": {
+                  "and": [
+                    {
+                      "includes": [
+                        {
+                          "var": "proposal.data.rps_loses_against"
+                        },
+                        "A"
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "casts_non_instant",
+                "description": "Posture keeps can_cast_non_instant_effects true.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    true
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "elements_not_disabled",
+              "in_contact",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -197,18 +1104,36 @@
     {
       "id": "action_empty_posture",
       "name": "Empty Posture",
-      "tags": ["basic", "empty"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "soft UI pad sound (no card played)", "confidence": "low", "sprites": {}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Pad.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "basic",
+        "empty"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "soft UI pad sound (no card played)",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Pad.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["action_empty_move"],
+          "rebalance_links": [
+            "action_empty_move"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
@@ -223,21 +1148,173 @@
           "logic": {
             "description": "Empty Posture (EP): no card is played, so it is always available and returns nothing to the discard. It emits (casts advance) but has no bonus of its own: an attacking enemy reads it as Posture (takes 2), a posing enemy reads it as Move (takes 1), Move and Block neutralise it. Class stances rewrite it for the combat maths: Reaver -> A, Barbarian -> B, Monk -> M. Move and Posture skills ride on it. Sanctuary only protects while the declared action is EP.",
             "prerequisites": [
-              {"id": "always_available", "description": "No card is needed; EP can always be declared.", "when": true}
+              {
+                "id": "always_available",
+                "description": "No card is needed; EP can always be declared.",
+                "when": true
+              }
             ],
             "effects": [
-              {"id": "may_cast_non_instant", "description": "Empty Posture emits.", "target": "caster", "unit": "tokens", "value": {"rule": ["action_can_cast_non_instant", {"action": "EP"}]}},
-              {"id": "combat_action", "description": "The action combat is judged on after class stances: A / B / M for Reaver / Barbarian / Monk, else EP.", "target": "caster", "unit": "actions", "value": {"if": [{"includes": [{"var": "caster.permanents"}, "class_reaver"]}, "A", {"includes": [{"var": "caster.permanents"}, "class_barbarian"]}, "B", {"includes": [{"var": "caster.permanents"}, "class_monk"]}, "M", "EP"]}},
-              {"id": "combat_damage", "description": "EP deals nothing by itself (matrix row 0).", "target": "target", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": "EP", "defender": {"var": "defender.action"}}]}},
-              {"id": "damage_taken", "description": "What the defender's action scores on a plain EP (Attack 2, Posture 1, Move/Block 0).", "target": "caster", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": {"var": "defender.action"}, "defender": "EP"}]}},
-              {"id": "cards_discarded", "description": "No card leaves the hand.", "target": "caster", "unit": "cards", "value": 0}
+              {
+                "id": "may_cast_non_instant",
+                "description": "Empty Posture emits.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": "EP"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "combat_action",
+                "description": "The action combat is judged on after class stances: A / B / M for Reaver / Barbarian / Monk, else EP.",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "if": [
+                    {
+                      "includes": [
+                        {
+                          "var": "caster.permanents"
+                        },
+                        "class_reaver"
+                      ]
+                    },
+                    "A",
+                    {
+                      "includes": [
+                        {
+                          "var": "caster.permanents"
+                        },
+                        "class_barbarian"
+                      ]
+                    },
+                    "B",
+                    {
+                      "includes": [
+                        {
+                          "var": "caster.permanents"
+                        },
+                        "class_monk"
+                      ]
+                    },
+                    "M",
+                    "EP"
+                  ]
+                }
+              },
+              {
+                "id": "combat_damage",
+                "description": "EP deals nothing by itself (matrix row 0).",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": "EP",
+                      "defender": {
+                        "var": "defender.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "damage_taken",
+                "description": "What the defender's action scores on a plain EP (Attack 2, Posture 1, Move/Block 0).",
+                "target": "caster",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": {
+                        "var": "defender.action"
+                      },
+                      "defender": "EP"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "cards_discarded",
+                "description": "No card leaves the hand.",
+                "target": "caster",
+                "unit": "cards",
+                "value": 0
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays EP.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "outside_the_cycle", "description": "An empty action has no edges of its own.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 0]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 0]}]}},
-              {"id": "casts_non_instant", "description": "Empty Posture keeps can_cast_non_instant_effects true.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, true]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays EP.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "outside_the_cycle",
+                "description": "An empty action has no edges of its own.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "casts_non_instant",
+                "description": "Empty Posture keeps can_cast_non_instant_effects true.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    true
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -245,18 +1322,36 @@
     {
       "id": "action_empty_move",
       "name": "Empty Move",
-      "tags": ["basic", "empty"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "half-step footsteps", "confidence": "low", "sprites": {}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Walk.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "basic",
+        "empty"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "half-step footsteps",
+        "confidence": "low",
+        "sprites": {},
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Walk.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["action_empty_posture"],
+          "rebalance_links": [
+            "action_empty_posture"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
@@ -271,22 +1366,205 @@
           "logic": {
             "description": "Empty Move (EM): a declared-first way of playing Empty Posture; always available, no card. The caster walks ceil(dist/2) hexes along the shortest path toward the target tile (min 1 when the target is not the own tile), at the lowest movement priority (A > M > EM at a shared destination). It still emits (Rule 20) and has no bonus: Block reads it as Move (takes 1), Posture reads it as Move (takes 1). Reaver: fights as an Attack.",
             "prerequisites": [
-              {"id": "always_available", "description": "No card is needed; EM can always be declared (before the flip).", "when": true},
-              {"id": "target_tile", "description": "A destination tile at distance >= 1 is chosen.", "when": {"and": [{"!=": [{"var": "target"}, null]}, {">=": [{"var": "dist"}, 1]}]}}
+              {
+                "id": "always_available",
+                "description": "No card is needed; EM can always be declared (before the flip).",
+                "when": true
+              },
+              {
+                "id": "target_tile",
+                "description": "A destination tile at distance >= 1 is chosen.",
+                "when": {
+                  "and": [
+                    {
+                      "!=": [
+                        {
+                          "var": "target"
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      ">=": [
+                        {
+                          "var": "dist"
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "hexes_moved", "description": "Halfway toward the target: ceil(dist / 2), at least 1.", "target": "caster", "unit": "hexes", "value": {"max": [1, {"ceil": [{"/": [{"var": "dist"}, 2]}]}]}},
-              {"id": "may_cast_non_instant", "description": "Empty Move emits like Empty Posture.", "target": "caster", "unit": "tokens", "value": {"rule": ["action_can_cast_non_instant", {"action": "EP"}]}},
-              {"id": "combat_action", "description": "The action combat is judged on: A for a Reaver, else EM.", "target": "caster", "unit": "actions", "value": {"if": [{"includes": [{"var": "caster.permanents"}, "class_reaver"]}, "A", "EM"]}},
-              {"id": "damage_taken", "description": "What the defender's action scores on a plain EM (Posture 1, Block 1 per the data edges, Attack 0).", "target": "caster", "unit": "damage", "value": {"if": [{"==": [{"var": "defender.action"}, "B"]}, 1, {"rule": ["rps_edge", {"actor": {"var": "defender.action"}, "defender": "EM"}]}]}}
+              {
+                "id": "hexes_moved",
+                "description": "Halfway toward the target: ceil(dist / 2), at least 1.",
+                "target": "caster",
+                "unit": "hexes",
+                "value": {
+                  "max": [
+                    1,
+                    {
+                      "ceil": [
+                        {
+                          "/": [
+                            {
+                              "var": "dist"
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "may_cast_non_instant",
+                "description": "Empty Move emits like Empty Posture.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": "EP"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "combat_action",
+                "description": "The action combat is judged on: A for a Reaver, else EM.",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "if": [
+                    {
+                      "includes": [
+                        {
+                          "var": "caster.permanents"
+                        },
+                        "class_reaver"
+                      ]
+                    },
+                    "A",
+                    "EM"
+                  ]
+                }
+              },
+              {
+                "id": "damage_taken",
+                "description": "What the defender's action scores on a plain EM (Posture 1, Block 1 per the data edges, Attack 0).",
+                "target": "caster",
+                "unit": "damage",
+                "value": {
+                  "if": [
+                    {
+                      "==": [
+                        {
+                          "var": "defender.action"
+                        },
+                        "B"
+                      ]
+                    },
+                    1,
+                    {
+                      "rule": [
+                        "rps_edge",
+                        {
+                          "actor": {
+                            "var": "defender.action"
+                          },
+                          "defender": "EM"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays EM.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "outside_the_cycle", "description": "An empty action has no edges of its own.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 0]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 0]}]}},
-              {"id": "casts_non_instant", "description": "Empty Move keeps can_cast_non_instant_effects true.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, true]}},
-              {"id": "targets_tile", "description": "Empty Move keeps targeting a tile.", "assert": {"==": [{"!!": {"var": "proposal.data.targets_tile"}}, true]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays EM.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "outside_the_cycle",
+                "description": "An empty action has no edges of its own.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "casts_non_instant",
+                "description": "Empty Move keeps can_cast_non_instant_effects true.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    true
+                  ]
+                }
+              },
+              {
+                "id": "targets_tile",
+                "description": "Empty Move keeps targeting a tile.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.targets_tile"
+                      }
+                    },
+                    true
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -294,12 +1572,39 @@
     {
       "id": "action_combo",
       "name": "Combo (meta)",
-      "tags": ["meta"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "floating damage digits for the +1 combo bonus", "confidence": "medium", "wbc3_name": "Digit glyphs 0-9 (floating numbers)", "wbc3_code": "ERNX", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Digit glyphs 0-9 (floating numbers)/Digit glyphs 0-9 (floating numbers) - idle [ERNX].png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/xp.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/GainedLevel.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "meta"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "floating damage digits for the +1 combo bonus",
+        "confidence": "medium",
+        "wbc3_name": "Digit glyphs 0-9 (floating numbers)",
+        "wbc3_code": "ERNX",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Digit glyphs 0-9 (floating numbers)/Digit glyphs 0-9 (floating numbers) - idle [ERNX].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/xp.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/GainedLevel.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -318,19 +1623,195 @@
           "logic": {
             "description": "Combo (meta): the character card lists a sequence of action codes; when the caster completes that sequence over consecutive actions while in contact with an enemy, the final action deals +1 bonus damage to that enemy. Not a card; no edges of its own; never emits.",
             "prerequisites": [
-              {"id": "combo_completed", "description": "The caster's last actions complete the character's combo sequence.", "when": {"!!": {"var": "caster.combo_complete"}}},
-              {"id": "enemy_in_contact", "description": "An enemy is in contact when the combo completes.", "when": {"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}}
+              {
+                "id": "combo_completed",
+                "description": "The caster's last actions complete the character's combo sequence.",
+                "when": {
+                  "!!": {
+                    "var": "caster.combo_complete"
+                  }
+                }
+              },
+              {
+                "id": "enemy_in_contact",
+                "description": "An enemy is in contact when the combo completes.",
+                "when": {
+                  "and": [
+                    {
+                      "rule": [
+                        "in_contact",
+                        {
+                          "dist": {
+                            "var": "dist"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "rule": [
+                        "is_enemy",
+                        {
+                          "a_alliance": {
+                            "var": "caster.alliance"
+                          },
+                          "b_alliance": {
+                            "var": "target.alliance"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "bonus_damage", "description": "+1 damage on the enemy in contact when the combo completes.", "target": "target", "unit": "damage", "value": {"if": [{"and": [{"!!": {"var": "caster.combo_complete"}}, {"rule": ["in_contact", {"dist": {"var": "dist"}}]}]}, 1, 0]}},
-              {"id": "total_damage", "description": "Matrix damage of the completing action plus the combo bonus.", "target": "target", "unit": "damage", "value": {"+": [{"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, {"if": [{"and": [{"!!": {"var": "caster.combo_complete"}}, {"rule": ["in_contact", {"dist": {"var": "dist"}}]}]}, 1, 0]}]}}
+              {
+                "id": "bonus_damage",
+                "description": "+1 damage on the enemy in contact when the combo completes.",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "if": [
+                    {
+                      "and": [
+                        {
+                          "!!": {
+                            "var": "caster.combo_complete"
+                          }
+                        },
+                        {
+                          "rule": [
+                            "in_contact",
+                            {
+                              "dist": {
+                                "var": "dist"
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    1,
+                    0
+                  ]
+                }
+              },
+              {
+                "id": "total_damage",
+                "description": "Matrix damage of the completing action plus the combo bonus.",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "+": [
+                    {
+                      "rule": [
+                        "rps_edge",
+                        {
+                          "actor": {
+                            "var": "caster.action"
+                          },
+                          "defender": {
+                            "var": "defender.action"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "if": [
+                        {
+                          "and": [
+                            {
+                              "!!": {
+                                "var": "caster.combo_complete"
+                              }
+                            },
+                            {
+                              "rule": [
+                                "in_contact",
+                                {
+                                  "dist": {
+                                    "var": "dist"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        1,
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays COMBO.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "outside_the_cycle", "description": "A meta action has no edges of its own.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 0]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 0]}]}},
-              {"id": "no_non_instant_casting", "description": "Combo keeps can_cast_non_instant_effects false.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, false]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays COMBO.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "outside_the_cycle",
+                "description": "A meta action has no edges of its own.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "no_non_instant_casting",
+                "description": "Combo keeps can_cast_non_instant_effects false.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    false
+                  ]
+                }
+              }
             ],
-            "references": ["in_contact", "is_enemy", "rps_edge"]
+            "references": [
+              "in_contact",
+              "is_enemy",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -338,18 +1819,43 @@
     {
       "id": "action_trade",
       "name": "Trade (meta)",
-      "tags": ["meta"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "WBC3 merchant sound + item icons", "confidence": "medium", "wbc3_name": "Dialoginventory icon sheet (many small item icons)", "wbc3_code": "IDLG", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Dialoginventory icon sheet (many small item icons)/Dialoginventory icon sheet (many small item icons) - idle [IDLG].png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/merchant.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "meta"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "WBC3 merchant sound + item icons",
+        "confidence": "medium",
+        "wbc3_name": "Dialoginventory icon sheet (many small item icons)",
+        "wbc3_code": "IDLG",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Dialoginventory icon sheet (many small item icons)/Dialoginventory icon sheet (many small item icons) - idle [IDLG].png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/merchant.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["rule_14"],
+          "rebalance_links": [
+            "rule_14"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
@@ -362,19 +1868,152 @@
           "logic": {
             "description": "Trade (meta, Rule 14): spend one of the round's actions to swap archives with an allied character in contact who is moving toward the caster this action. Nothing else resolves for that action slot; no edges; never emits.",
             "prerequisites": [
-              {"id": "ally_character_in_contact", "description": "The target is an allied character in contact.", "when": {"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_ally", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}, {"==": [{"var": "target.kind"}, "character"]}]}},
-              {"id": "partner_moves_toward", "description": "The partner's action this turn moves them toward the caster.", "when": {"and": [{"in": [{"var": "target.action"}, ["M", "EM"]]}, {"!!": {"var": "target.moving_toward_caster"}}]}}
+              {
+                "id": "ally_character_in_contact",
+                "description": "The target is an allied character in contact.",
+                "when": {
+                  "and": [
+                    {
+                      "rule": [
+                        "in_contact",
+                        {
+                          "dist": {
+                            "var": "dist"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "rule": [
+                        "is_ally",
+                        {
+                          "a_alliance": {
+                            "var": "caster.alliance"
+                          },
+                          "b_alliance": {
+                            "var": "target.alliance"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "target.kind"
+                        },
+                        "character"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "partner_moves_toward",
+                "description": "The partner's action this turn moves them toward the caster.",
+                "when": {
+                  "and": [
+                    {
+                      "in": [
+                        {
+                          "var": "target.action"
+                        },
+                        [
+                          "M",
+                          "EM"
+                        ]
+                      ]
+                    },
+                    {
+                      "!!": {
+                        "var": "target.moving_toward_caster"
+                      }
+                    }
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "actions_spent", "description": "The trade costs one action of the round.", "target": "caster", "unit": "actions", "value": 1},
-              {"id": "archives_swapped", "description": "Two archives change hands.", "target": "everyone", "unit": "cards", "value": 2}
+              {
+                "id": "actions_spent",
+                "description": "The trade costs one action of the round.",
+                "target": "caster",
+                "unit": "actions",
+                "value": 1
+              },
+              {
+                "id": "archives_swapped",
+                "description": "Two archives change hands.",
+                "target": "everyone",
+                "unit": "cards",
+                "value": 2
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays TRADE.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "outside_the_cycle", "description": "A meta action has no edges of its own.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 0]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 0]}]}},
-              {"id": "no_non_instant_casting", "description": "Trade keeps can_cast_non_instant_effects false.", "assert": {"==": [{"!!": {"var": "proposal.data.can_cast_non_instant_effects"}}, false]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays TRADE.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "outside_the_cycle",
+                "description": "A meta action has no edges of its own.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "no_non_instant_casting",
+                "description": "Trade keeps can_cast_non_instant_effects false.",
+                "assert": {
+                  "==": [
+                    {
+                      "!!": {
+                        "var": "proposal.data.can_cast_non_instant_effects"
+                      }
+                    },
+                    false
+                  ]
+                }
+              }
             ],
-            "references": ["in_contact", "is_ally"]
+            "references": [
+              "in_contact",
+              "is_ally"
+            ]
           }
         }
       ]
@@ -382,18 +2021,48 @@
     {
       "id": "action_enter_dimension",
       "name": "Enter Dimension (meta)",
-      "tags": ["meta", "transition"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "arrival pillar of light on the starting tile", "confidence": "medium", "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)", "wbc3_code": "EZ09", "wbc3_race": "Effects1", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png", "usage": "marker/animation strip shown on the action target hex (cols = frames)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Embark.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/Land.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "meta",
+        "transition"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "arrival pillar of light on the starting tile",
+        "confidence": "medium",
+        "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)",
+        "wbc3_code": "EZ09",
+        "wbc3_race": "Effects1",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+            "usage": "marker/animation strip shown on the action target hex (cols = frames)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Embark.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Land.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["rule_0_setup"],
+          "rebalance_links": [
+            "rule_0_setup"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
@@ -405,21 +2074,151 @@
           "logic": {
             "description": "Enter Dimension (meta, Rule 0 setup): a character not yet on the tileset drops onto a starting tile. The entry counts as a Move action for the resolution maths (M>B, loses to P) and may carry instants, but no non-instant emission. No edges of its own.",
             "prerequisites": [
-              {"id": "not_on_tileset", "description": "The caster has no tile yet (outside the Dimension).", "when": {"==": [{"var": "caster.tile"}, null]}},
-              {"id": "starting_tile", "description": "The target is a starting tile.", "when": {"!!": {"var": "target.is_start_tile"}}}
+              {
+                "id": "not_on_tileset",
+                "description": "The caster has no tile yet (outside the Dimension).",
+                "when": {
+                  "==": [
+                    {
+                      "var": "caster.tile"
+                    },
+                    null
+                  ]
+                }
+              },
+              {
+                "id": "starting_tile",
+                "description": "The target is a starting tile.",
+                "when": {
+                  "!!": {
+                    "var": "target.is_start_tile"
+                  }
+                }
+              }
             ],
             "effects": [
-              {"id": "counts_as_action", "description": "The entry resolves as a Move.", "target": "caster", "unit": "actions", "value": "M"},
-              {"id": "combat_damage", "description": "Matrix damage of the entry (as Move) against a defender met on arrival.", "target": "target", "unit": "damage", "value": {"rule": ["rps_edge", {"actor": "M", "defender": {"var": "defender.action"}}]}},
-              {"id": "instants_allowed", "description": "Instants may be cast during entry; non-instants may not.", "target": "caster", "unit": "cards", "value": {"rule": ["action_can_cast_non_instant", {"action": "M", "is_instant": true}]}},
-              {"id": "non_instants_blocked", "description": "A non-instant cast cannot advance on entry.", "target": "caster", "unit": "tokens", "value": {"rule": ["action_can_cast_non_instant", {"action": "M"}]}}
+              {
+                "id": "counts_as_action",
+                "description": "The entry resolves as a Move.",
+                "target": "caster",
+                "unit": "actions",
+                "value": "M"
+              },
+              {
+                "id": "combat_damage",
+                "description": "Matrix damage of the entry (as Move) against a defender met on arrival.",
+                "target": "target",
+                "unit": "damage",
+                "value": {
+                  "rule": [
+                    "rps_edge",
+                    {
+                      "actor": "M",
+                      "defender": {
+                        "var": "defender.action"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "instants_allowed",
+                "description": "Instants may be cast during entry; non-instants may not.",
+                "target": "caster",
+                "unit": "cards",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": "M",
+                      "is_instant": true
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "non_instants_blocked",
+                "description": "A non-instant cast cannot advance on entry.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "action_can_cast_non_instant",
+                    {
+                      "action": "M"
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays ENTER.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "outside_the_cycle", "description": "A meta action has no edges of its own.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 0]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 0]}]}},
-              {"id": "has_text", "description": "The entry text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays ENTER.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "outside_the_cycle",
+                "description": "A meta action has no edges of its own.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "has_text",
+                "description": "The entry text is kept.",
+                "assert": {
+                  ">": [
+                    {
+                      "len": [
+                        {
+                          "var": "proposal.data.text"
+                        }
+                      ]
+                    },
+                    10
+                  ]
+                }
+              }
             ],
-            "references": ["action_can_cast_non_instant", "rps_edge"]
+            "references": [
+              "action_can_cast_non_instant",
+              "rps_edge"
+            ]
           }
         }
       ]
@@ -427,18 +2226,48 @@
     {
       "id": "action_travel_door",
       "name": "Travel through Dimension Door (meta)",
-      "tags": ["meta", "transition"],
-      "resources": {"source": "warlords3_battlecry", "match_reason": "WBC3 Black Portal as the dimension door", "confidence": "medium", "wbc3_name": "Black Portal", "wbc3_code": "BMBP", "wbc3_race": "Neutral", "sprites": {"static": {"path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png", "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"}}, "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Disembark.wav", "usage": "play when the action resolves (pick randomly if several)"}, {"path": "assets/Sounds/SoundFX/Fade.wav", "usage": "play when the action resolves (pick randomly if several)"}]}},
+      "tags": [
+        "meta",
+        "transition"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "match_reason": "WBC3 Black Portal as the dimension door",
+        "confidence": "medium",
+        "wbc3_name": "Black Portal",
+        "wbc3_code": "BMBP",
+        "wbc3_race": "Neutral",
+        "sprites": {
+          "static": {
+            "path": "assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png",
+            "usage": "single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"
+          }
+        },
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Disembark.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Fade.wav",
+              "usage": "play when the action resolves (pick randomly if several)"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
           "parent_version": null,
-          "rebalance_links": ["item_dimension_door"],
+          "rebalance_links": [
+            "item_dimension_door"
+          ],
           "vote_log": [],
           "notes": "",
           "data": {
@@ -450,18 +2279,153 @@
           "logic": {
             "description": "Travel through a Dimension Door (meta): the caster stands on a door tile. With an ally's agreement on the far side the travel is immediate (0 rounds of channeling); otherwise the caster channels for as many rounds as the door's 'dimension value' before it opens. No edges of its own.",
             "prerequisites": [
-              {"id": "on_door_tile", "description": "The caster stands on the door (distance 0 to a door tile).", "when": {"and": [{"!!": {"var": "target.is_door"}}, {"==": [{"var": "dist"}, 0]}]}}
+              {
+                "id": "on_door_tile",
+                "description": "The caster stands on the door (distance 0 to a door tile).",
+                "when": {
+                  "and": [
+                    {
+                      "!!": {
+                        "var": "target.is_door"
+                      }
+                    },
+                    {
+                      "==": [
+                        {
+                          "var": "dist"
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "rounds_to_open", "description": "0 with ally agreement, else the door's dimension value.", "target": "caster", "unit": "actions", "value": {"if": [{"!!": {"var": "cast.ally_agrees"}}, 0, {"max0": [{"var": "target.dimension_value"}]}]}},
-              {"id": "channel_complete", "description": "The door opens once the channeled rounds reach the need.", "target": "caster", "unit": "tokens", "value": {"rule": ["stat_buy_paid", {"bank": {"var": "cast.bank"}, "need": {"if": [{"!!": {"var": "cast.ally_agrees"}}, 0, {"max0": [{"var": "target.dimension_value"}]}]}}]}}
+              {
+                "id": "rounds_to_open",
+                "description": "0 with ally agreement, else the door's dimension value.",
+                "target": "caster",
+                "unit": "actions",
+                "value": {
+                  "if": [
+                    {
+                      "!!": {
+                        "var": "cast.ally_agrees"
+                      }
+                    },
+                    0,
+                    {
+                      "max0": [
+                        {
+                          "var": "target.dimension_value"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "channel_complete",
+                "description": "The door opens once the channeled rounds reach the need.",
+                "target": "caster",
+                "unit": "tokens",
+                "value": {
+                  "rule": [
+                    "stat_buy_paid",
+                    {
+                      "bank": {
+                        "var": "cast.bank"
+                      },
+                      "need": {
+                        "if": [
+                          {
+                            "!!": {
+                              "var": "cast.ally_agrees"
+                            }
+                          },
+                          0,
+                          {
+                            "max0": [
+                              {
+                                "var": "target.dimension_value"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
             ],
             "validation": [
-              {"id": "code_unchanged", "description": "The code stays DOOR.", "assert": {"==": [{"var": "proposal.data.code"}, {"var": "entry.data.code"}]}},
-              {"id": "outside_the_cycle", "description": "A meta action has no edges of its own.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.rps_wins_against"}]}, 0]}, {"==": [{"count": [{"var": "proposal.data.rps_loses_against"}]}, 0]}]}},
-              {"id": "has_text", "description": "The entry text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+              {
+                "id": "code_unchanged",
+                "description": "The code stays DOOR.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.code"
+                    },
+                    {
+                      "var": "entry.data.code"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "outside_the_cycle",
+                "description": "A meta action has no edges of its own.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_wins_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "==": [
+                        {
+                          "count": [
+                            {
+                              "var": "proposal.data.rps_loses_against"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "has_text",
+                "description": "The entry text is kept.",
+                "assert": {
+                  ">": [
+                    {
+                      "len": [
+                        {
+                          "var": "proposal.data.text"
+                        }
+                      ]
+                    },
+                    10
+                  ]
+                }
+              }
             ],
-            "references": ["stat_buy_paid"]
+            "references": [
+              "stat_buy_paid"
+            ]
           }
         }
       ]

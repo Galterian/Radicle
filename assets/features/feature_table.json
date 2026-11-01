@@ -1,20 +1,20 @@
 {
-  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall; desc_status=placeholder marks purposes not yet backed by rules.",
-  "min_separation": 4,
+  "_comment": "Buildings/permanents placed on walkable biome hexes. Deterministic from (dim_seed, q, r). Expanded via tools/import_wbc3_terrain.py and tools/expand_features.py (walls, towers, descs for the inspect UI). kind is building | wall | bridge; desc_status=placeholder marks purposes not yet backed by rules. min_separation = 1 (winners cannot be direct neighbours — distance ≥ 2); densities below are 2× the previous pass (3.2× the pre-scaled baseline). Simulated avg ≈ 3.4–5.0 buildings per 10×10 patch across biomes.",
+  "min_separation": 1,
   "density": {
-    "grass": 0.088,
-    "high_grass": 0.08,
-    "grass_coast": 0.096,
-    "dirt": 0.08,
-    "high_dirt": 0.08,
-    "desert": 0.064,
-    "snow": 0.072,
-    "snow_coast": 0.088,
-    "rock": 0.104,
-    "rock_coast": 0.088,
-    "jungle": 0.112,
-    "marsh": 0.08,
-    "caverns": 0.128,
+    "grass": 0.176,
+    "high_grass": 0.16,
+    "grass_coast": 0.192,
+    "dirt": 0.16,
+    "high_dirt": 0.16,
+    "desert": 0.128,
+    "snow": 0.144,
+    "snow_coast": 0.176,
+    "rock": 0.208,
+    "rock_coast": 0.176,
+    "jungle": 0.224,
+    "marsh": 0.16,
+    "caverns": 0.256,
     "desert_cliffs": 0,
     "rock_cliffs": 0,
     "mountains": 0,
@@ -1753,5 +1753,10 @@
       }
     ]
   },
-  "_density_scaled": true
+  "_density_scaled": 3.2,
+  "_min_separation_history": [
+    4,
+    2,
+    1
+  ]
 }

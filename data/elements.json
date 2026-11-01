@@ -4,12 +4,56 @@
     {
       "id": "elem_vitality",
       "name": "Vitality",
-      "tags": ["physical"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Particle set red sparks", "wbc3_code": "EPA1", "wbc3_race": "Effects1", "match_reason": "living grass terrain, red life sparks, heartbeat", "confidence": "medium", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Grass/TGB0.bmp", "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass/TGB1.bmp", "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass/TGB2.bmp", "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass/TGB3.bmp", "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Grass"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/HeartBeatSlow.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "physical"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Particle set red sparks",
+        "wbc3_code": "EPA1",
+        "wbc3_race": "Effects1",
+        "match_reason": "living grass terrain, red life sparks, heartbeat",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Grass/TGB0.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB1.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB2.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass/TGB3.bmp",
+            "usage": "Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Grass"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/HeartBeatSlow.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -25,23 +69,219 @@
           "logic": {
             "description": "Vitality element (red-flesh), powered by stat_vitality: emitted with the caster's Vitality and resisted with the defender's Vitality (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(vitality) dice. Used by 16 effects: Super Sense, Super Force, Harm, Sound Wave, Drain, Emotions Bombard, Potion Brew, Nature Embrace, Resurrect / Death Ward, Fossilization, Inner Fire, Phantom, Possess / Phylactery, Poison, Turn Life, Petrify. Force Shield's Vitality die is subtracted from the incoming effect sum (pc).",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Vitality for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_vitality"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Vitality is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_vitality"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Vitality for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_vitality"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Vitality is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_vitality"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Vitality.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_vitality"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Vitality.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_vitality"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_vitality"]}, {"stat_of": [{"var": "defender"}, "elem_vitality"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_vitality"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Vitality.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_vitality"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Vitality.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_vitality"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_vitality"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_vitality"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_vitality"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -49,12 +289,60 @@
     {
       "id": "elem_souls",
       "name": "Souls",
-      "tags": ["world"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Spell effect purplewhite glowing orbs", "wbc3_code": "EZ05", "wbc3_race": "Effects1", "match_reason": "dark caverns, violet soul orbs", "confidence": "medium", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Caverns/TCF0.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Caverns/TCF1.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Caverns/TCF2.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Caverns/TCF3.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Caverns"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/STEZ05.wav", "usage": "play when a token of this element is emitted / placed"}, {"path": "assets/Sounds/SoundFX/Skeleton.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "world"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Spell effect purplewhite glowing orbs",
+        "wbc3_code": "EZ05",
+        "wbc3_race": "Effects1",
+        "match_reason": "dark caverns, violet soul orbs",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF0.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF1.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF2.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF3.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Caverns"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/STEZ05.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            },
+            {
+              "path": "assets/Sounds/SoundFX/Skeleton.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -70,23 +358,219 @@
           "logic": {
             "description": "Souls element (violet), powered by stat_world: emitted with the caster's World and resisted with the defender's World (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(world) dice. Used by 15 effects: Summoning, Aura, Spirit Link, Banish, Oblivion, Sleep, Aging, Space Bending, Golems (earth / water / air), Confusion, Phantom, Disruption, Domination; the stat-buy summons bank World per Souls emission.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Souls for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_souls"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's World is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_souls"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Souls for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_souls"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's World is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_souls"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's World.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_souls"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's World.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_souls"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_souls"]}, {"stat_of": [{"var": "defender"}, "elem_souls"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_souls"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's World.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_souls"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's World.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_souls"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_souls"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_souls"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_souls"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -94,12 +578,56 @@
     {
       "id": "elem_time",
       "name": "Time",
-      "tags": ["world"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Grey arcs", "wbc3_code": "EZ70", "wbc3_race": "Effects1", "match_reason": "sand (hourglass) terrain, sweeping arcs", "confidence": "low", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Desert/TKS0.bmp", "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Desert/TKS1.bmp", "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Desert/TKS2.bmp", "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Desert/TKS3.bmp", "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Desert"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/PageTurn.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "world"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Grey arcs",
+        "wbc3_code": "EZ70",
+        "wbc3_race": "Effects1",
+        "match_reason": "sand (hourglass) terrain, sweeping arcs",
+        "confidence": "low",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Desert/TKS0.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS1.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS2.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Desert/TKS3.bmp",
+            "usage": "Desert terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Desert"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/PageTurn.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -115,23 +643,219 @@
           "logic": {
             "description": "Time element (indigo), powered by stat_world: emitted with the caster's World and resisted with the defender's World (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(world) dice. Used by 7 effects: Blessing / Curse, Oblivion, Aging, Delay Time, Balefire, Vision, Haste (Haste ∀ draws +1 card per turn).",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Time for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_time"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's World is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_time"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Time for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_time"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's World is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_time"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's World.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_time"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's World.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_time"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_time"]}, {"stat_of": [{"var": "defender"}, "elem_time"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_time"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's World.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_time"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's World.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_time"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_time"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_time"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_time"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -139,12 +863,73 @@
     {
       "id": "elem_space",
       "name": "Space",
-      "tags": ["world"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Spell effect small purple ringspiral", "wbc3_code": "EZ02", "wbc3_race": "Effects1", "match_reason": "deep caverns, purple spiral", "confidence": "medium", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Caverns/TCF0.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Caverns/TCF1.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Caverns/TCF2.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Caverns/TCF3.bmp", "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock Cliffs/TKD0.bmp", "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock Cliffs/TKD1.bmp", "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock Cliffs/TKD2.bmp", "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock Cliffs/TKD3.bmp", "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Caverns", "Rock Cliffs"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/STEZ02.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "world"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Spell effect small purple ringspiral",
+        "wbc3_code": "EZ02",
+        "wbc3_race": "Effects1",
+        "match_reason": "deep caverns, purple spiral",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF0.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF1.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF2.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Caverns/TCF3.bmp",
+            "usage": "Caverns terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD0.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD1.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD2.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock Cliffs/TKD3.bmp",
+            "usage": "Rock Cliffs terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Caverns",
+          "Rock Cliffs"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/STEZ02.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -160,23 +945,219 @@
           "logic": {
             "description": "Space element (deep-blue), powered by stat_world: emitted with the caster's World and resisted with the defender's World (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(world) dice. Used by 11 effects: Sound Wave, Banish, Teleportation, Space Bending, Invisibility, Metaphysics, Confusion, Phantom, Meteor Shower, Traps Mastery, Dark Matter. Adept element of Razorfin Abolisher (power 20, Rule 16).",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Space for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_space"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's World is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_space"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Space for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_space"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's World is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_space"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's World.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_space"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's World.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_space"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_space"]}, {"stat_of": [{"var": "defender"}, "elem_space"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_space"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's World.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_space"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's World.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_space"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_space"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_space"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_space"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -184,12 +1165,73 @@
     {
       "id": "elem_air",
       "name": "Air",
-      "tags": ["matter"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Bluewhite arcs", "wbc3_code": "EZ75", "wbc3_race": "Effects1", "match_reason": "high open terrain, blue-white wind arcs", "confidence": "medium", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Snow/TGI0.bmp", "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Snow/TGI1.bmp", "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Snow/TGI2.bmp", "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Snow/TGI3.bmp", "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Grass/TGH0.bmp", "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Grass/TGH1.bmp", "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Grass/TGH2.bmp", "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Grass/TGH3.bmp", "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Snow", "High Grass"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/LongWhoosh.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Bluewhite arcs",
+        "wbc3_code": "EZ75",
+        "wbc3_race": "Effects1",
+        "match_reason": "high open terrain, blue-white wind arcs",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Snow/TGI0.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI1.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI2.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Snow/TGI3.bmp",
+            "usage": "Snow terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH0.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH1.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH2.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Grass/TGH3.bmp",
+            "usage": "High Grass terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Snow",
+          "High Grass"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/LongWhoosh.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -205,23 +1247,219 @@
           "logic": {
             "description": "Air element (sky-blue), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(matter) dice. Used by 6 effects: Sound Wave, Lightning (∀: target loses 2 actions), Throw, Blizzard, Awe, Fear.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Air for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_air"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Matter is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_air"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Air for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_air"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_air"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Matter.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_air"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Matter.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_air"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_air"]}, {"stat_of": [{"var": "defender"}, "elem_air"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_air"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_air"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_air"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_air"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_air"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_air"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -229,12 +1467,73 @@
     {
       "id": "elem_water",
       "name": "Water",
-      "tags": ["matter"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Particle set blue sparks + crystals", "wbc3_code": "EPA3", "wbc3_race": "Effects1", "match_reason": "water tiles, blue droplets", "confidence": "high", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Particle set blue sparks + crystals/Particle set blue sparks + crystals - idle [EPA3].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Water/TWX0.bmp", "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Water/TWX1.bmp", "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Water/TWX2.bmp", "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Water/TWX3.bmp", "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass Coast/TGW0.bmp", "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass Coast/TGW1.bmp", "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass Coast/TGW2.bmp", "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Grass Coast/TGW3.bmp", "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Water", "Grass Coast"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Splash.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Particle set blue sparks + crystals",
+        "wbc3_code": "EPA3",
+        "wbc3_race": "Effects1",
+        "match_reason": "water tiles, blue droplets",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Particle set blue sparks + crystals/Particle set blue sparks + crystals - idle [EPA3].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Water/TWX0.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX1.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX2.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Water/TWX3.bmp",
+            "usage": "Water terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW0.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW1.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW2.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Grass Coast/TGW3.bmp",
+            "usage": "Grass Coast terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Water",
+          "Grass Coast"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Splash.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -250,23 +1549,219 @@
           "logic": {
             "description": "Water element (aqua), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(matter) dice. Used by 6 effects: Mutate, Ice Blast, Blizzard, Poison, Love, Mists.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Water for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_water"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Matter is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_water"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Water for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_water"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_water"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Matter.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_water"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Matter.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_water"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_water"]}, {"stat_of": [{"var": "defender"}, "elem_water"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_water"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_water"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_water"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_water"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_water"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_water"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -274,12 +1769,73 @@
     {
       "id": "elem_earth",
       "name": "Earth",
-      "tags": ["matter"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Greybrown dust puffs", "wbc3_code": "EZ39", "wbc3_race": "Effects1", "match_reason": "rock/mountain tiles, dust", "confidence": "high", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Rock/TKF0.bmp", "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock/TKF1.bmp", "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock/TKF2.bmp", "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Rock/TKF3.bmp", "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Mountains/TAA0.bmp", "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Mountains/TAA1.bmp", "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Mountains/TAA2.bmp", "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Mountains/TAA3.bmp", "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Rock", "Mountains"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Stomp.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Greybrown dust puffs",
+        "wbc3_code": "EZ39",
+        "wbc3_race": "Effects1",
+        "match_reason": "rock/mountain tiles, dust",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Rock/TKF0.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF1.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF2.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Rock/TKF3.bmp",
+            "usage": "Rock terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA0.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA1.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA2.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Mountains/TAA3.bmp",
+            "usage": "Mountains terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Rock",
+          "Mountains"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Stomp.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -295,23 +1851,219 @@
           "logic": {
             "description": "Earth element (brown), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(matter) dice. Used by 6 effects: Artifice, Creation, Fossilization, Metaphysics, Meteor Shower, Earthquake.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Earth for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_earth"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Matter is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_earth"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Earth for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_earth"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_earth"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Matter.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_earth"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Matter.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_earth"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_earth"]}, {"stat_of": [{"var": "defender"}, "elem_earth"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_earth"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_earth"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_earth"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_earth"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_earth"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_earth"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -319,12 +2071,56 @@
     {
       "id": "elem_fire",
       "name": "Fire",
-      "tags": ["matter"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Fire flames (torchburning)", "wbc3_code": "EZ42", "wbc3_race": "Effects1", "match_reason": "lava tiles, flames", "confidence": "high", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Lava/TKL0.bmp", "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Lava/TKL1.bmp", "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Lava/TKL2.bmp", "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Lava/TKL3.bmp", "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Lava"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Fire.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "matter"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Fire flames (torchburning)",
+        "wbc3_code": "EZ42",
+        "wbc3_race": "Effects1",
+        "match_reason": "lava tiles, flames",
+        "confidence": "high",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Lava/TKL0.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL1.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL2.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Lava/TKL3.bmp",
+            "usage": "Lava terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Lava"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Fire.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -340,23 +2136,219 @@
           "logic": {
             "description": "Fire element (orange-red), powered by stat_matter: emitted with the caster's Matter and resisted with the defender's Matter (Rule 18); its delta feeds the Rule 21 damage sum (Fireball = fire, fire -> round_div10(2 x max(matter delta, 0)) plus a fire tile token, pc); its point-buy rolls point_buy_dice_count(matter) dice. Used by 9 effects: Invisibility, Lightning, Fireball, Balefire, Ice Blast, Inner Fire, Light / Darkness, Dark Matter, Anger.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Fire for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_fire"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Matter is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_fire"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Fire for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_fire"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Matter is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_fire"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Matter.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_fire"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Matter.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_fire"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_fire"]}, {"stat_of": [{"var": "defender"}, "elem_fire"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_fire"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Matter.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_fire"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Matter.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_fire"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_fire"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_fire"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_fire"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -364,12 +2356,56 @@
     {
       "id": "elem_concentration",
       "name": "Concentration",
-      "tags": ["will"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Small white rings", "wbc3_code": "EZ57", "wbc3_race": "Effects1", "match_reason": "bare high plateau, silver rings", "confidence": "medium", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Small white rings/Small white rings - idle [EZ57].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/High Dirt/TDE0.bmp", "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Dirt/TDE1.bmp", "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Dirt/TDE2.bmp", "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/High Dirt/TDE3.bmp", "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["High Dirt"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Sparkles.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "will"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Small white rings",
+        "wbc3_code": "EZ57",
+        "wbc3_race": "Effects1",
+        "match_reason": "bare high plateau, silver rings",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Small white rings/Small white rings - idle [EZ57].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE0.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE1.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE2.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/High Dirt/TDE3.bmp",
+            "usage": "High Dirt terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "High Dirt"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Sparkles.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -385,23 +2421,219 @@
           "logic": {
             "description": "Concentration element (silver), powered by stat_will: emitted with the caster's Will and resisted with the defender's Will (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(will) dice. Used by 10 effects: Sleep, Shield (∀: permanent), Empower, Disable (∀: bars everyone), Elementals (air / water / earth), The Void, Meteor Shower, Mind Blast.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Concentration for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_concentration"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Will is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_concentration"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Concentration for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_concentration"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Will is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_concentration"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Will.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_concentration"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Will.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_concentration"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_concentration"]}, {"stat_of": [{"var": "defender"}, "elem_concentration"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_concentration"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Will.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_concentration"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Will.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_concentration"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_concentration"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_concentration"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_concentration"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]
@@ -409,12 +2641,73 @@
     {
       "id": "elem_harmony",
       "name": "Harmony",
-      "tags": ["will"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Yellow sparks", "wbc3_code": "EZ65", "wbc3_race": "Effects1", "match_reason": "lush jungle, golden sparks", "confidence": "medium", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Yellow sparks/Yellow sparks - idle [EZ65].png", "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"}}, "tiles": [{"path": "assets/Images/Terrain/Jungle/TDJ0.bmp", "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Jungle/TDJ1.bmp", "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Jungle/TDJ2.bmp", "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Jungle/TDJ3.bmp", "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Marsh/TGM0.bmp", "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Marsh/TGM1.bmp", "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Marsh/TGM2.bmp", "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}, {"path": "assets/Images/Terrain/Marsh/TGM3.bmp", "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"}], "tilesets": ["Jungle", "Marsh"], "sounds": {"fx": [{"path": "assets/Sounds/SoundFX/Magic.wav", "usage": "play when a token of this element is emitted / placed"}]}},
+      "tags": [
+        "will"
+      ],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Yellow sparks",
+        "wbc3_code": "EZ65",
+        "wbc3_race": "Effects1",
+        "match_reason": "lush jungle, golden sparks",
+        "confidence": "medium",
+        "sprites": {
+          "effect": {
+            "path": "assets/Sprites/Effects/Effects1/Yellow sparks/Yellow sparks - idle [EZ65].png",
+            "usage": "element emission flash: play on the caster hex when this element is emitted; also usable as the element card icon frame 0"
+          }
+        },
+        "tiles": [
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ0.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ1.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ2.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Jungle/TDJ3.bmp",
+            "usage": "Jungle terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM0.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM1.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM2.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          },
+          {
+            "path": "assets/Images/Terrain/Marsh/TGM3.bmp",
+            "usage": "Marsh terrain tile block (8-bit 320x240 tile sheet) - source for hex tiles of this terrain (see assets/terrain/ and tools/make_hex_tiles.py)"
+          }
+        ],
+        "tilesets": [
+          "Jungle",
+          "Marsh"
+        ],
+        "sounds": {
+          "fx": [
+            {
+              "path": "assets/Sounds/SoundFX/Magic.wav",
+              "usage": "play when a token of this element is emitted / placed"
+            }
+          ]
+        }
+      },
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
+          "weight": 1,
           "status": "canonical",
           "origin": "paper_rules",
           "author_peer_id": "",
@@ -430,23 +2723,219 @@
           "logic": {
             "description": "Harmony element (gold), powered by stat_will: emitted with the caster's Will and resisted with the defender's Will (Rule 18); its delta feeds the Rule 21 damage sum; its point-buy rolls point_buy_dice_count(will) dice. The most used element, in 20 effects: Drain, Emotions Bombard, Mutate, Elementals (air / water / earth), Balefire, Golems (earth / water / air), Awake, Combustion, Disruption, Turn Life, Love, Awe, Domination, Anger, Petrify, Fear; the stat-buy summons bank Will per Harmony emission.",
             "prerequisites": [
-              {"id": "not-disabled", "description": "No Disable bars Harmony for the caster.", "when": {"rule": ["elements_not_disabled", {"elements": ["elem_harmony"], "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "caster-has-stat", "description": "The caster's Will is above 0.", "when": {">": [{"stat_of": [{"var": "caster"}, "elem_harmony"]}, 0]}}
+              {
+                "id": "not-disabled",
+                "description": "No Disable bars Harmony for the caster.",
+                "when": {
+                  "rule": [
+                    "elements_not_disabled",
+                    {
+                      "elements": [
+                        "elem_harmony"
+                      ],
+                      "disabled": {
+                        "root": "caster.disabled_elems"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "caster-has-stat",
+                "description": "The caster's Will is above 0.",
+                "when": {
+                  ">": [
+                    {
+                      "stat_of": [
+                        {
+                          "var": "caster"
+                        },
+                        "elem_harmony"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
             ],
             "effects": [
-              {"id": "emit-power", "description": "Emission power: the caster's Will.", "target": "caster", "unit": "stat", "value": {"stat_of": [{"var": "caster"}, "elem_harmony"]}},
-              {"id": "resist-power", "description": "Resistance: the defender's Will.", "target": "target", "unit": "stat", "value": {"stat_of": [{"var": "defender"}, "elem_harmony"]}},
-              {"id": "delta", "description": "Stat points this element adds to the Rule 21 sum.", "target": "target", "unit": "stat", "value": {"max0": [{"-": [{"stat_of": [{"var": "caster"}, "elem_harmony"]}, {"stat_of": [{"var": "defender"}, "elem_harmony"]}]}]}},
-              {"id": "point-buy-dice", "description": "Dice a point-buy of this element rolls.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"stat_of": [{"var": "caster"}, "elem_harmony"]}}]}},
-              {"id": "stat-column", "description": "The stat entry behind the element.", "target": "caster", "value": {"var": "entry.data.stat"}}
+              {
+                "id": "emit-power",
+                "description": "Emission power: the caster's Will.",
+                "target": "caster",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "caster"
+                    },
+                    "elem_harmony"
+                  ]
+                }
+              },
+              {
+                "id": "resist-power",
+                "description": "Resistance: the defender's Will.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "stat_of": [
+                    {
+                      "var": "defender"
+                    },
+                    "elem_harmony"
+                  ]
+                }
+              },
+              {
+                "id": "delta",
+                "description": "Stat points this element adds to the Rule 21 sum.",
+                "target": "target",
+                "unit": "stat",
+                "value": {
+                  "max0": [
+                    {
+                      "-": [
+                        {
+                          "stat_of": [
+                            {
+                              "var": "caster"
+                            },
+                            "elem_harmony"
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "defender"
+                            },
+                            "elem_harmony"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "point-buy-dice",
+                "description": "Dice a point-buy of this element rolls.",
+                "target": "caster",
+                "unit": "die",
+                "value": {
+                  "rule": [
+                    "point_buy_dice_count",
+                    {
+                      "stat": {
+                        "stat_of": [
+                          {
+                            "var": "caster"
+                          },
+                          "elem_harmony"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-column",
+                "description": "The stat entry behind the element.",
+                "target": "caster",
+                "value": {
+                  "var": "entry.data.stat"
+                }
+              }
             ],
             "validation": [
-              {"id": "stat-unchanged", "description": "The element keeps its stat column.", "assert": {"==": [{"var": "proposal.data.stat"}, {"var": "entry.data.stat"}]}},
-              {"id": "stat-lists-element", "description": "The stat entry exists and lists this element.", "assert": {"includes": [{"entry": [{"var": "proposal.data.stat"}, "elements"]}, {"var": "entry.id"}]}},
-              {"id": "id-valid", "description": "The element id is one of the ten.", "assert": {"in": [{"var": "entry.id"}, {"rule": ["valid_element_ids", {}]}]}},
-              {"id": "color-hint-string", "description": "color_hint stays a non-empty string.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.color_hint"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.color_hint"}]}, 0]}]}}
+              {
+                "id": "stat-unchanged",
+                "description": "The element keeps its stat column.",
+                "assert": {
+                  "==": [
+                    {
+                      "var": "proposal.data.stat"
+                    },
+                    {
+                      "var": "entry.data.stat"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "stat-lists-element",
+                "description": "The stat entry exists and lists this element.",
+                "assert": {
+                  "includes": [
+                    {
+                      "entry": [
+                        {
+                          "var": "proposal.data.stat"
+                        },
+                        "elements"
+                      ]
+                    },
+                    {
+                      "var": "entry.id"
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "id-valid",
+                "description": "The element id is one of the ten.",
+                "assert": {
+                  "in": [
+                    {
+                      "var": "entry.id"
+                    },
+                    {
+                      "rule": [
+                        "valid_element_ids",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color-hint-string",
+                "description": "color_hint stays a non-empty string.",
+                "assert": {
+                  "and": [
+                    {
+                      "==": [
+                        {
+                          "typeof": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        "string"
+                      ]
+                    },
+                    {
+                      ">": [
+                        {
+                          "len": [
+                            {
+                              "var": "proposal.data.color_hint"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
             ],
-            "references": ["elements_not_disabled", "point_buy_dice_count", "valid_element_ids"]
+            "references": [
+              "elements_not_disabled",
+              "point_buy_dice_count",
+              "valid_element_ids"
+            ]
           }
         }
       ]

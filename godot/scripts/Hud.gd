@@ -26,6 +26,7 @@ var _slots: Array[Button] = []
 var _slot_code: Array[Label] = []
 var _slot_name: Array[Label] = []
 var _slot_desc: Array[Label] = []
+var _slot_icon: Array[TextureRect] = []    # real skill-card icon when the slot holds a skill_* id
 var _lock_btn: Button
 var _log: RichTextLabel
 var _hint: Label
@@ -40,6 +41,29 @@ var _obj_kind: Label
 var _obj_coords: Label
 var _obj_desc: Label
 var _obj_hex: Variant = null
+
+# Rich unit hover card — mirror of game/js/main.js renderHoverCard: thumb, name,
+# sub (wbc3 name/race), hp, stats V/W/M/Wi, tier, held skills (icon + 1-line
+# desc), permanents (icon + full desc). Lives top-right under the log.
+var _hover_panel: PanelContainer
+var _hover_thumb: TextureRect
+var _hover_name: Label
+var _hover_sub: Label
+var _hover_hp: Label
+var _hover_stats: Label
+var _hover_tier: Label
+var _hover_skills_title: Label
+var _hover_skills_box: VBoxContainer
+var _hover_perms_title: Label
+var _hover_perms_box: VBoxContainer
+var _hover_unit_id: String = ""
+
+# Roster panel — vertical stack of every entity, each row = thumb + name + stats
+# + a mini-card per permanent (icon + name + full description).  Parity with
+# game/js/main.js renderRoster.
+var _roster_panel: PanelContainer
+var _roster_box: VBoxContainer
+var _roster_signature := ""     # cheap "is anything different?" guard
 
 
 func _ready() -> void:
@@ -154,6 +178,16 @@ func _ready() -> void:
 		stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		stack.add_theme_constant_override("separation", 0)
 		b.add_child(stack)
+		# Real skill-card icon (from data/skills.json resources.sprites.icon). Hidden
+		# unless the slot carries a skill_* id and the texture loaded.
+		var si := TextureRect.new()
+		si.custom_minimum_size = Vector2(SLOT_SIZE.x - 20, 24)
+		si.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		si.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		si.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		si.visible = false
+		stack.add_child(si)
+		_slot_icon.append(si)
 		var lc := _label("-", 18, Color(1, 1, 1))
 		lc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lc.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -201,6 +235,66 @@ func _ready() -> void:
 	_log.custom_minimum_size = Vector2(344, 284)
 	_log.add_theme_font_size_override("normal_font_size", 12)
 	lp.add_child(_log)
+
+	# --- right, below log: rich unit hover card (hidden until a hover lands on a unit)
+	_hover_panel = PanelContainer.new()
+	_hover_panel.name = "HoverCard"
+	_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_hover_panel.position = Vector2(-372, 320)
+	_hover_panel.custom_minimum_size = Vector2(360, 0)
+	_hover_panel.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.88)))
+	_hover_panel.visible = false
+	root.add_child(_hover_panel)
+	var hvb := VBoxContainer.new()
+	hvb.add_theme_constant_override("separation", 4)
+	_hover_panel.add_child(hvb)
+	var hhb := HBoxContainer.new()
+	hhb.add_theme_constant_override("separation", 10)
+	hvb.add_child(hhb)
+	_hover_thumb = TextureRect.new()
+	_hover_thumb.custom_minimum_size = Vector2(78, 88)
+	_hover_thumb.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_hover_thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_hover_thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	hhb.add_child(_hover_thumb)
+	var hvcol := VBoxContainer.new()
+	hvcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hvcol.add_theme_constant_override("separation", 2)
+	hhb.add_child(hvcol)
+	_hover_name = _label("", 15, Color(0.98, 0.9, 0.75))
+	hvcol.add_child(_hover_name)
+	_hover_sub = _label("", 11, Color(0.78, 0.72, 0.6))
+	_hover_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hover_sub.custom_minimum_size = Vector2(252, 0)
+	hvcol.add_child(_hover_sub)
+	_hover_hp = _label("", 12, Color(0.65, 0.9, 0.65))
+	hvcol.add_child(_hover_hp)
+	_hover_stats = _label("", 11, Color(0.78, 0.78, 0.9))
+	hvcol.add_child(_hover_stats)
+	_hover_tier = _label("", 10, Color(0.7, 0.6, 0.5))
+	hvcol.add_child(_hover_tier)
+	_hover_skills_title = _label("Skills", 11, Color(0.65, 0.65, 0.72))
+	hvb.add_child(_hover_skills_title)
+	_hover_skills_box = VBoxContainer.new()
+	_hover_skills_box.add_theme_constant_override("separation", 2)
+	hvb.add_child(_hover_skills_box)
+	_hover_perms_title = _label("Permanents", 11, Color(0.65, 0.65, 0.72))
+	hvb.add_child(_hover_perms_title)
+	_hover_perms_box = VBoxContainer.new()
+	_hover_perms_box.add_theme_constant_override("separation", 4)
+	hvb.add_child(_hover_perms_box)
+
+	# --- bottom-right: roster (every entity, stats, permanents as mini cards)
+	_roster_panel = PanelContainer.new()
+	_roster_panel.name = "Roster"
+	_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_roster_panel.position = Vector2(-372, -(SLOT_SIZE.y + 20) - 268)
+	_roster_panel.custom_minimum_size = Vector2(360, 0)
+	_roster_panel.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.82)))
+	root.add_child(_roster_panel)
+	_roster_box = VBoxContainer.new()
+	_roster_box.add_theme_constant_override("separation", 6)
+	_roster_panel.add_child(_roster_box)
 
 
 static func _label(text: String, size: int, col: Color) -> Label:
@@ -275,6 +369,9 @@ func set_hand(hand: Array, chosen: int, locked: bool, targets: Dictionary) -> vo
 			_slot_code[i].text = "-"
 			_slot_name[i].text = ""
 			_slot_desc[i].text = ""
+			_slot_icon[i].texture = null
+			_slot_icon[i].visible = false
+			_slot_code[i].visible = true
 			b.tooltip_text = ""
 			b.disabled = true
 			b.modulate = Color(1, 1, 1, 0.4)
@@ -284,8 +381,23 @@ func set_hand(hand: Array, chosen: int, locked: bool, targets: Dictionary) -> vo
 		var is_skill := code.begins_with("skill_")
 		var full := RulesText.card_help(dl, code)
 		var name: String = RulesText.skill_name(dl, code) if is_skill else str(CODE_NAMES.get(code, code))
-		_slot_code[i].text = "SKILL" if is_skill else code
-		_slot_code[i].add_theme_font_size_override("font_size", 13 if is_skill else 18)
+		# Real sprite icon for skill cards (data/skills.json resources.sprites.icon,
+		# frame 0 of the sheet-sliced sprite). When sibling #1 has not populated the
+		# `icon` field yet we fall back to the effect-strip's frame 0 — and when
+		# even that is missing, show the words-form string in the code label.
+		var icon_tex: Texture2D = RulesText.skill_icon_texture(dl, code) if is_skill else null
+		if is_skill and icon_tex != null:
+			_slot_icon[i].texture = icon_tex
+			_slot_icon[i].visible = true
+			_slot_code[i].visible = false
+		else:
+			_slot_icon[i].texture = null
+			_slot_icon[i].visible = false
+			_slot_code[i].visible = true
+			# No emoji glyph in the bundled font — "SKILL" reads cleanly for skill
+			# slots; action codes already show as A/B/M/P/EM/EP.
+			_slot_code[i].text = "SKILL" if is_skill else code
+			_slot_code[i].add_theme_font_size_override("font_size", 13 if is_skill else 18)
 		_slot_name[i].text = name + ((" → " + t) if t != "" else "")
 		_slot_desc[i].text = RulesText.card_short(dl, code)
 		b.tooltip_text = full
@@ -350,3 +462,265 @@ func object_card_hex() -> Variant:
 
 func log_line(text: String, col := Color(0.85, 0.85, 0.85)) -> void:
 	_log.append_text("[color=#%s]%s[/color]\n" % [col.to_html(false), text])
+
+
+# ------------------------------------------------------------------ unit hover card
+
+## Rich hover card for the unit on the hovered hex — parity with
+## game/js/main.js renderHoverCard: thumb + name + sub (wbc3 name/race) + hp +
+## stats V/W/M/Wi + tier + held skills (icon + 1-line desc) + permanents
+## (icon + full description). Pass null to hide.
+func show_unit_hover(e: Entity) -> void:
+	if e == null:
+		hide_unit_hover()
+		return
+	_hover_unit_id = e.id
+	_hover_name.text = e.display_name
+	var sub_bits: Array[String] = []
+	var wbc_name := str(e.resources.get("wbc3_name", ""))
+	var wbc_race := str(e.resources.get("wbc3_race", ""))
+	if wbc_name != "":
+		sub_bits.append(wbc_name)
+	if wbc_race != "":
+		sub_bits.append("(%s)" % wbc_race)
+	_hover_sub.text = " ".join(sub_bits) if not sub_bits.is_empty() else e.kind
+	_hover_hp.text = "hp %d/%d · %s%s" % [e.life, e.life_max, e.faction, " · dead" if not e.alive else ""]
+	_hover_hp.add_theme_color_override("font_color", Color(0.9, 0.4, 0.4) if not e.alive else Color(0.65, 0.9, 0.65))
+	# V/W/M/Wi stat strip. The browser renders four little pills; the Godot
+	# default font has no coloured icons so the labels do the talking.
+	var stats: Dictionary = e.data.get("stats", {})
+	if typeof(stats) != TYPE_DICTIONARY:
+		stats = {}
+	_hover_stats.text = "V %s · W %s · M %s · Wi %s" % [
+		str(stats.get("vitality", "—")),
+		str(stats.get("world", "—")),
+		str(stats.get("matter", "—")),
+		str(stats.get("will", "—")),
+	]
+	# Tier — characters use `adept_element`, creatures use `innate_effect` as
+	# their signature line. Either (or neither) may be set per entry.
+	var tier_bits: Array[String] = []
+	var adept := str(e.data.get("adept_element", ""))
+	var innate := str(e.data.get("innate_effect", ""))
+	if adept != "":
+		tier_bits.append("adept: %s" % adept.replace("elem_", ""))
+	if innate != "":
+		tier_bits.append("innate: %s" % innate.replace("effect_", "").replace("_", " "))
+	var combo = e.data.get("combo", [])
+	if typeof(combo) == TYPE_ARRAY and not combo.is_empty():
+		tier_bits.append("combo " + " > ".join(combo))
+	_hover_tier.text = " · ".join(tier_bits)
+	_hover_tier.visible = not tier_bits.is_empty()
+	# Portrait: same source as the top-left set_entity() uses.
+	var p := e.portrait_path()
+	var tex: Texture2D = Assets.load_texture(p) if p != "" else null
+	if tex == null:
+		var info := e.info_sheet_path()
+		var it := Assets.load_texture(info)
+		if it != null:
+			var at := AtlasTexture.new()
+			at.atlas = it
+			at.region = Rect2(0, 0, it.get_width(), minf(it.get_height(), it.get_width() * 1.1))
+			tex = at
+	_hover_thumb.texture = tex
+	# Held skills (1-line description each).
+	_fill_skill_list(_hover_skills_box, e.data.get("skills", []), false)
+	_hover_skills_title.visible = _hover_skills_box.get_child_count() > 0
+	_hover_skills_box.visible = _hover_skills_box.get_child_count() > 0
+	# Permanents (full description each).
+	_fill_skill_list(_hover_perms_box, e.data.get("permanents", []), true)
+	_hover_perms_title.visible = _hover_perms_box.get_child_count() > 0
+	_hover_perms_box.visible = _hover_perms_box.get_child_count() > 0
+	_hover_panel.visible = true
+	_hover_panel.reset_size()
+	_fit_hover_card()
+
+
+func _fit_hover_card() -> void:
+	for i in range(2):
+		await get_tree().process_frame
+	if _hover_panel.visible:
+		_hover_panel.reset_size()
+
+
+func hide_unit_hover() -> void:
+	_hover_unit_id = ""
+	_hover_panel.visible = false
+
+
+func hover_unit_visible() -> bool:
+	return _hover_panel.visible
+
+
+## Entity id currently shown in the hover card, or "". Used by hud_check.gd.
+func hover_unit_id() -> String:
+	return _hover_unit_id
+
+
+## Number of permanent mini-cards currently rendered in the hover panel. Used by
+## hud_check.gd for permanent-list parity (matches the browser's renderHoverCard
+## permanent count for the same entity).
+func hover_perm_count() -> int:
+	return _hover_perms_box.get_child_count() if _hover_perms_box != null else 0
+
+
+# ------------------------------------------------------------------ roster
+
+## Rebuild the right-column roster to match `entities`. Parity with
+## game/js/main.js renderRoster: thumb + name + stats pills + a vertical stack
+## of mini permanent cards (icon + name + full description).
+func set_roster(entities: Array) -> void:
+	# Cheap diff: if the (id, life, perm-ids) tuple is unchanged, skip the rebuild.
+	var sig := ""
+	for e in entities:
+		if e == null:
+			continue
+		var perms = e.data.get("permanents", [])
+		var ptxt := ""
+		if typeof(perms) == TYPE_ARRAY:
+			ptxt = ",".join(perms.map(func(x): return str(x)))
+		sig += "%s|%d|%s;" % [e.id, e.life, ptxt]
+	if sig == _roster_signature:
+		# Still refresh life pips in-place when nothing structural changed.
+		_refresh_roster_life(entities)
+		return
+	_roster_signature = sig
+	for c in _roster_box.get_children():
+		c.queue_free()
+	for e in entities:
+		if e == null:
+			continue
+		_roster_box.add_child(_make_roster_row(e))
+	_roster_panel.reset_size()
+
+
+func _refresh_roster_life(entities: Array) -> void:
+	var rows := _roster_box.get_children()
+	for i in range(rows.size()):
+		if i >= entities.size():
+			break
+		var row := rows[i] as Control
+		if row == null:
+			continue
+		var life_lbl := row.find_child("Life", true, false) as Label
+		if life_lbl != null:
+			var e: Entity = entities[i]
+			life_lbl.text = "hp %d/%d · %s" % [e.life, e.life_max, e.faction]
+
+
+func _make_roster_row(e: Entity) -> PanelContainer:
+	var row := PanelContainer.new()
+	row.add_theme_stylebox_override("panel", _box(
+		Color(0.1, 0.14, 0.08, 0.6) if e.faction == "player" else Color(0.18, 0.08, 0.08, 0.6)
+	))
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 3)
+	row.add_child(vb)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 8)
+	vb.add_child(hb)
+	var thumb := TextureRect.new()
+	thumb.custom_minimum_size = Vector2(48, 54)
+	thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	var p := e.portrait_path()
+	var tex: Texture2D = Assets.load_texture(p) if p != "" else null
+	if tex == null:
+		var info := e.info_sheet_path()
+		var it := Assets.load_texture(info)
+		if it != null:
+			var at := AtlasTexture.new()
+			at.atlas = it
+			at.region = Rect2(0, 0, it.get_width(), minf(it.get_height(), it.get_width() * 1.1))
+			tex = at
+	thumb.texture = tex
+	hb.add_child(thumb)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 1)
+	hb.add_child(col)
+	var nm := _label(e.display_name, 13, Color(0.98, 0.9, 0.75) if e.faction == "player" else Color(0.95, 0.75, 0.6))
+	col.add_child(nm)
+	var life := _label("hp %d/%d · %s" % [e.life, e.life_max, e.faction], 11, Color(0.65, 0.9, 0.65) if e.alive else Color(0.9, 0.4, 0.4))
+	life.name = "Life"
+	col.add_child(life)
+	var stats: Dictionary = e.data.get("stats", {})
+	if typeof(stats) != TYPE_DICTIONARY:
+		stats = {}
+	col.add_child(_label("V %s · W %s · M %s · Wi %s" % [
+		str(stats.get("vitality", "—")), str(stats.get("world", "—")),
+		str(stats.get("matter", "—")), str(stats.get("will", "—")),
+	], 10, Color(0.78, 0.78, 0.9)))
+	# Permanent mini cards — one row per permanent, icon + name + full desc.
+	var perms = e.data.get("permanents", [])
+	if typeof(perms) == TYPE_ARRAY and not perms.is_empty():
+		var perm_box := VBoxContainer.new()
+		perm_box.add_theme_constant_override("separation", 3)
+		vb.add_child(perm_box)
+		for sid in perms:
+			perm_box.add_child(_make_perm_card(str(sid), true))
+	return row
+
+
+## Fill `box` with a mini card per skill id. `full_desc` picks between the
+## one-line abbreviated form (held skills) and the full data/skills.json text
+## (permanents).
+func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool) -> void:
+	for c in box.get_children():
+		c.queue_free()
+	if typeof(ids) != TYPE_ARRAY:
+		return
+	for sid in ids:
+		var s := str(sid)
+		if s == "":
+			continue
+		box.add_child(_make_perm_card(s, full_desc))
+
+
+func _make_perm_card(card_id: String, full_desc: bool) -> PanelContainer:
+	# card_id may be either `skill_*` or `effect_*`; the browser's skill_card.js
+	# ingests both pools identically, so we route through RulesText's prefix-aware
+	# helpers to pull icon / name / text regardless of which catalog owns the id.
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _box(Color(0.1, 0.1, 0.14, 0.75)))
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 6)
+	card.add_child(hb)
+	var icon := TextureRect.new()
+	icon.custom_minimum_size = Vector2(28, 28)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.texture = RulesText.card_icon_texture(dl, card_id)
+	icon.visible = icon.texture != null
+	hb.add_child(icon)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 1)
+	hb.add_child(col)
+	var nm := _label(RulesText.card_entry_name(dl, card_id), 11, Color(0.95, 0.85, 0.75))
+	col.add_child(nm)
+	var text := RulesText.card_entry_text(dl, card_id)
+	var desc := text if full_desc else RulesText.abbreviate(text, 80)
+	var ds := _label(desc, 10, Color(0.82, 0.82, 0.9))
+	ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ds.custom_minimum_size = Vector2(260, 0)
+	col.add_child(ds)
+	return card
+
+
+## True when every skill_* / effect_* id in `entities[].data.permanents`
+## resolves to a real sprite icon (not the words-form fallback). hud_check.gd
+## uses this to assert sibling #1's `resources.sprites.icon` schema is wired.
+## Permanents that have no icon field yet still return a texture via the
+## effect-strip fallback.
+func every_permanent_has_texture(entities: Array) -> bool:
+	for e in entities:
+		if e == null:
+			continue
+		var perms = e.data.get("permanents", [])
+		if typeof(perms) != TYPE_ARRAY:
+			continue
+		for sid in perms:
+			if RulesText.card_icon_texture(dl, str(sid)) == null:
+				return false
+	return true

@@ -599,6 +599,25 @@
           "version": "1.0.0",
           "vote_log": [],
           "weight": 1.0
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-10-30",
+          "data": {
+            "ability_kind": "tap",
+            "ability_cadence": "per_turn",
+            "colors": ["elem_time", "elem_space", "elem_souls", "elem_air", "elem_water", "elem_earth", "elem_fire"],
+            "text": "Permanent per-turn ability (tap): attach a non-action card from your hand. A new card carrying that id spawns at a random walkable hex 21..50 away from the Seeker. If no walkable hex is within range, the farthest-reachable walkable candidate is picked instead. The ability refreshes at the resolution phase of the 3rd round of each turn."
+          },
+          "logic": {"description": "User ruling R4 (2026-10-30). At its once-per-turn ability window, the Seeker spawns a new copy of the targeted card at a deterministic random walkable hex 21..50 hexes from itself; if no such hex exists, the farthest-reachable walkable candidate is used. The hex is picked by sha256 over `${salt}:seeker:${turn}` so every peer agrees. Replaces the previous 'locate' semantics which merely published a tile.", "references": ["class_ability_ready"]},
+          "notes": "R4 Seeker rework — spawn a new card copy at distance 21..50 instead of locating.",
+          "origin": "user_ruling_2026-10-30",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_prophet"],
+          "status": "canonical",
+          "version": "1.0.1",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -1328,6 +1347,25 @@
           "version": "1.0.0",
           "vote_log": [],
           "weight": 1.0
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-10-30",
+          "data": {
+            "ability_kind": "tap",
+            "ability_cadence": "per_turn",
+            "colors": ["elem_space", "elem_concentration", "elem_harmony"],
+            "text": "Permanent per-turn ability (tap): once per turn your Move does not trigger any trap; stepping over an unrevealed tile doesn't reveal it and monsters don't wake."
+          },
+          "logic": {"description": "User ruling R1 (2026-10-30). Reworded 'Once per round' -> 'Once per turn' to match the permanent-per-turn ability cadence. Mechanic unchanged: while the ability is untapped, the Rogue's step this action springs no enter-trap and reveals no new hex. Untap by emitting every colour (any successful roll).", "references": ["class_ability_ready"]},
+          "notes": "R1 wording sweep.",
+          "origin": "user_ruling_2026-10-30",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_assassin", "class_cleric"],
+          "status": "canonical",
+          "version": "1.0.1",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -1371,6 +1409,25 @@
           "rebalance_links": ["class_prophet", "class_seeker"],
           "status": "canonical",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 1.0
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-10-30",
+          "data": {
+            "ability_kind": "static",
+            "ability_cadence": "per_turn",
+            "colors": ["elem_vitality", "elem_fire", "elem_concentration", "elem_harmony"],
+            "text": "Permanent per-turn ability: every adjacent enemy character shows two cards of their hand. Fires automatically once per turn and recovers at the resolution phase of the 3rd round of each turn (when hg.turn ticks over)."
+          },
+          "logic": {"description": "User rulings R1 + R3 (2026-10-30). Permanent per-turn ability (not per-action): on the first action of each turn where any enemy character is adjacent, the Avenger looks at two random cards of each adjacent enemy's hand. It then stays silent until the next turn (hg.turn advances at the resolution phase of the 3rd round of the current turn's end). The resolver gates this with `caster.class_used_turn === hg.turn`.", "references": ["class_ability_ready"]},
+          "notes": "R1 wording sweep + R3 Avenger refresh.",
+          "origin": "user_ruling_2026-10-30",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_prophet", "class_seeker"],
+          "status": "canonical",
+          "version": "1.0.1",
           "vote_log": [],
           "weight": 1.0
         }

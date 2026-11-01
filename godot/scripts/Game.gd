@@ -143,6 +143,7 @@ func _ready() -> void:
 		cam.position = p.position
 	hud.log_line("chaosD6 · dimension Ashfall-Micro · seed %s · %d hexes known" % [gen.seed_hex, gen.size()], Color(0.9, 0.75, 0.5))
 	hud.log_line("Data: %d characters, %d creatures, %d effects loaded from data/*.json" % [dl.ids("characters").size(), dl.ids("creatures").size(), dl.ids("effects").size()])
+	hud.set_roster(entities)
 	_begin_planning()
 
 
@@ -194,8 +195,13 @@ func blocked_map(except: Entity = null) -> Dictionary:
 	# Unwalkable biomes (water, lava, mountains, cliffs) are impassable for the
 	# pathfinder. The biome sampler is pure (seed, q, r), so this stays consistent
 	# as the map grows via reveal_around.
+	# Labyrinth walls (Features.gd#_labyrinth_wall_at — parity mirror of
+	# features.js#labyrinthWallAt) are static impassable scenery owned by nobody.
+	# Pure (seed, q, r), so same hexes are blocked on every peer.
 	for h in gen.tiles():
 		if not gen.terrain_at(h.x, h.y).walkable:
+			b[Hex.key_of(h)] = true
+		elif gen.features != null and gen.features.is_labyrinth_wall(h.x, h.y, gen.biome):
 			b[Hex.key_of(h)] = true
 	return b
 
@@ -240,6 +246,8 @@ func _begin_planning() -> void:
 	var p := player_entity()
 	if p != null:
 		hud.update_life(p)
+	# Life totals change between rounds (damage pass); keep roster in sync.
+	hud.set_roster(entities)
 
 
 func _begin_reveal() -> void:
@@ -345,6 +353,12 @@ func _resolve() -> void:
 		for k in claimed.keys():
 			if claimed[k] != e:
 				blocked[k] = true
+		# Labyrinth walls (parity mirror of features.js#labyrinthWallAt via
+		# Features.gd#is_labyrinth_wall) are static impassable scenery.
+		if gen.features != null:
+			for h in gen.tiles():
+				if gen.features.is_labyrinth_wall(h.x, h.y, gen.biome):
+					blocked[Hex.key_of(h)] = true
 		var path := Pathfinding.find_path(e.hex, tgt, blocked, func(h): return gen.has(h))
 		if path.is_empty():
 			hud.log_line("%s cannot reach %s" % [e.display_name, Hex.key_of(tgt)], Color(0.6, 0.6, 0.6))
@@ -507,6 +521,8 @@ func _state() -> Dictionary:
 func _on_died(e: Entity) -> void:
 	if e.faction == "player":
 		hud.update_life(e)
+	# Roster reflects alive/dead state and life totals, so refresh on every death.
+	hud.set_roster(entities)
 
 
 # ------------------------------------------------------------------ player input
@@ -664,6 +680,7 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 func _on_hex_hovered(h: Vector2i) -> void:
 	if not gen.has(h):
 		hud.set_hover("")
+		hud.hide_unit_hover()
 		return
 	var terr := gen.terrain_at(h.x, h.y)
 	var e := entity_at(h)
@@ -674,6 +691,13 @@ func _on_hex_hovered(h: Vector2i) -> void:
 	if not obj.is_empty():
 		s += " · %s" % str(obj.get("label", obj.get("id", "")))
 	hud.set_hover(s)
+	# Rich hover card for units — mirror of game/js/main.js renderHoverCard.
+	# Only fires on a unit; empty / object hexes close any open card so the
+	# right column reverts to log + roster.
+	if e != null:
+		hud.show_unit_hover(e)
+	else:
+		hud.hide_unit_hover()
 
 
 func _unhandled_input(event: InputEvent) -> void:

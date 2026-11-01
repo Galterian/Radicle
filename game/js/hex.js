@@ -93,6 +93,12 @@ export function findPath(from, to, blocked = new Set(), known = ANY) {
   const goalKey = key(to);
   // Hard cap so a huge known map with an unreachable goal can't spin for long.
   const MAX_EXPAND = 20000;
+  // `blocked` can be a Set("q,r") OR a predicate (q, r) => bool. The predicate
+  // form lets callers add deterministic world-scenery blockers (labyrinth
+  // walls) without having to pre-enumerate every known hex into a Set.
+  const isBlocked = typeof blocked === 'function'
+    ? (q, r) => !!blocked(q, r)
+    : (q, r) => blocked.has(`${q},${r}`);
 
   const runAStar = (goalQ, goalR, allowBlockedGoal) => {
     const startKey = key(from);
@@ -122,7 +128,7 @@ export function findPath(from, to, blocked = new Set(), known = ANY) {
         if (!known(n.q, n.r)) continue;
         const nk = key(n);
         if (closed.has(nk)) continue;
-        if (blocked.has(nk) && !(allowBlockedGoal && nk === gk)) continue;
+        if (isBlocked(n.q, n.r) && !(allowBlockedGoal && nk === gk)) continue;
         const g = cur.g + 1;
         if (g < (gScore.get(nk) ?? Infinity)) {
           gScore.set(nk, g);
@@ -136,7 +142,7 @@ export function findPath(from, to, blocked = new Set(), known = ANY) {
 
   // 1) Try the direct path to `to`, assuming `to` must itself be reachable
   //    (unblocked). The pathfinder routes around any intermediate blockers.
-  const direct = blocked.has(goalKey) ? [] : runAStar(to.q, to.r, false);
+  const direct = isBlocked(to.q, to.r) ? [] : runAStar(to.q, to.r, false);
   if (direct.length) return direct;
 
   // 2) Either `to` is blocked or every route to it is cut off. Fall back to
@@ -145,7 +151,7 @@ export function findPath(from, to, blocked = new Set(), known = ANY) {
   const candidates = [];
   for (const n of neighbours(to.q, to.r)) {
     if (!known(n.q, n.r)) continue;
-    if (blocked.has(key(n))) continue;
+    if (isBlocked(n.q, n.r)) continue;
     const p = runAStar(n.q, n.r, false);
     if (p.length) candidates.push(p);
   }
