@@ -31,21 +31,60 @@ body { display: flex; flex-direction: column; }
 .pill.phase { background: #3a2c66; color: #e0d7ff; }
 .pill.timer { background: #2a1a1a; color: #ffb0b0; min-width: 56px; text-align: center; }
 
-/* The single grid row may shrink below its content (minmax(0, 1fr)) so a long
-   roster or log never stretches the page: the side panel scrolls internally
-   and the canvas always fits between the two pinned bars. */
-main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minmax(0, 1fr); gap: 10px; padding: 10px; flex: 1 1 auto; min-height: 0; }
+/* Two columns, two rows. The side panel is a single grid cell that spans
+   both rows — so it reaches the viewport bottom while the deck-bar lives in
+   its own cell under the canvas. Previous layout left a 320×deck-bar-height
+   gap at the bottom-right because the footer sat below <main> with a
+   margin-right offset; moving the footer into main + spanning the panel
+   fixes that without any JS. */
+main {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "stage panel"
+    "deck  panel";
+  gap: 10px;
+  padding: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+#stage { grid-area: stage; }
+#panel { grid-area: panel; }
+#deck-bar { grid-area: deck; }
 #stage { width: 100%; height: 100%; background: #080a10; border: 1px solid #1a1f29; border-radius: 6px; display: block; cursor: crosshair; }
 #stage.panning { cursor: grabbing; }
 
-#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+/* Flex column with no outer scroll — the roster takes its natural size at the
+   top and the event log fills the rest; #log carries overflow-y so it scrolls
+   on its own clock while the roster stays pinned above it. If #panel also
+   scrolled, the whole stack would scroll as one and push the log off-screen
+   below a long roster. */
+#panel { background: #0f131b; border: 1px solid #1a1f29; border-radius: 6px; padding: 10px; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #panel h4 { margin: 10px 0 4px; font-size: 12px; color: #8aa0bf; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; flex: 0 0 auto; }
 #panel small { color: #566379; font-weight: 400; }
-#roster { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
-.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; }
+/* Roster and event log share the panel 50/50. The log always sits pinned at
+   the panel's bottom; the roster scrolls internally when the cast list grows
+   beyond its half. No empty gap: the two halves together fill the panel. */
+#roster { display: flex; flex-direction: column; gap: 6px; flex: 1 1 50%; min-height: 0; max-height: 50%; overflow-y: auto; }
+.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; position: relative; }
 .ros:hover { background: #1a2130; }
 .ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
-.ros .nm { color: #e0e6ef; display: flex; align-items: center; gap: 6px; }
+/* Collapsible roster rows: by default only the head (thumb + name + hp line)
+   shows. A caret in the top-right flips when the row toggles open. Click the
+   .ros row anywhere outside the filter funnel to toggle. Full details (stats
+   pills, class chips, perms, afflictions) only render when expanded, so a
+   long cast list stays scannable. */
+.ros::after { content: "▸"; position: absolute; top: 6px; right: 8px; font-size: 10px; color: #6a7a92; transition: transform .12s ease; }
+.ros.expanded::after { transform: rotate(90deg); color: #c8d4e3; }
+.ros .stats,
+.ros .perm-cards { display: none; }
+.ros.expanded .stats { display: flex; }
+.ros.expanded .perm-cards { display: flex; }
+.ros .ros-filter { position: absolute; top: 4px; right: 24px; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #6a7a92; border: 1px solid #26303f; border-radius: 50%; background: transparent; cursor: pointer; padding: 0; line-height: 1; }
+.ros .ros-filter:hover { color: #a08eff; border-color: #a08eff55; background: #1b1a2e; }
+.ros.filter-active .ros-filter { color: #a08eff; border-color: #a08eff; }
+.ros .nm { color: #e0e6ef; display: flex; align-items: center; gap: 6px; padding-right: 44px; }
 /* "Ally" column (user spec): whose team a unit fights for. */
 .ros-head { display: flex; justify-content: space-between; padding: 0 8px; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #6a7a92; }
 .ros .team { font: 600 9px/1 ui-monospace, Menlo, Consolas, monospace; padding: 2px 5px; border-radius: 3px; background: #0f131b; color: #c8d4e3; border: 1px solid #26303f; text-transform: none; letter-spacing: 0; }
@@ -72,7 +111,11 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 #log-filter-chip button { background: #a08eff22; border: 0; color: #d7cfff; width: 18px; height: 18px; border-radius: 50%; cursor: pointer; font-size: 10px; line-height: 1; padding: 0; }
 #log-filter-chip button:hover { background: #a08eff44; }
 
-#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* The log pins to the bottom of the panel by always being the last flex
+   child and taking its 50% share. Scrolls internally so turn 1 is reachable
+   (prepend direction: new rows on top, scroll DOWN to reach the oldest).
+   History is capped generously (see logUI). */
+#log { list-style: none; margin: 0; padding: 0; font-family: ui-monospace, Consolas, monospace; font-size: 11px; flex: 1 1 50%; min-height: 0; overflow-y: auto; }
 #log li { padding: 2px 4px; border-left: 2px solid #333; margin: 2px 0; color: #9ab0cc; word-break: break-word; }
 #log li[hidden] { display: none; }
 #log li.evt { border-color: #5e7eb5; }
@@ -99,11 +142,10 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 /* Hide filtered rows regardless of their display mode (flex for handshake etc.). */
 #log li[hidden] { display: none !important; }
 
-/* No longer fixed — it's a flex child so main can shrink around it.
-   `margin-right` leaves a column aligned with the event-log panel in <main>
-   (panel is 320px wide with a 10px gap and 10px padding), so the deck bar
-   lives under the canvas only and never visually overlaps the log. */
-#deck-bar { flex: 0 0 auto; position: sticky; bottom: 0; z-index: 10; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; margin-right: calc(320px + 20px); }
+/* Lives in the "deck" grid area under the canvas — no manual margin needed;
+   the grid reserves the column for the panel to the right. Keeps its own
+   background + top border so it reads as a footer against the canvas. */
+#deck-bar { z-index: 10; background: linear-gradient(180deg, #0d1119 0%, #0a0d14 100%); border-top: 1px solid #1a1f29; padding: 8px 12px 6px; }
 #deck-row { display: flex; justify-content: center; align-items: flex-end; gap: 14px; max-width: 1020px; margin: 0 auto; }
 #slots { display: flex; gap: 6px; align-items: flex-end; }
 /* Push the EM/EP slot apart from the dealt hand so it doesn't feel like one of
@@ -115,10 +157,12 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 }
 
 /* Each slot is a portrait card. The top band carries the action code's color
-   and the big code glyph; the body carries the human name and card id. */
+   and the big code glyph; the body carries the human name, the always-visible
+   rule line (.ds — what the card does, ≤70 chars) and the card id. Slots are
+   wide rather than tall so the pinned deck bar grows by ~22px only. */
 .slot {
   position: relative;
-  width: 72px; height: 100px;
+  width: 118px; height: 122px;
   background: linear-gradient(180deg, #1a2230 0%, #10151e 100%);
   border: 1px solid #26303f; border-radius: 7px;
   padding: 0; cursor: pointer; user-select: none;
@@ -152,7 +196,13 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
   color: #e8ecf1; letter-spacing: 0.02em;
   text-shadow: 0 1px 2px #0008;
 }
-.slot .card .nm { font-weight: 600; color: #e8ecf1; font-size: 11px; }
+.slot .card .nm { font-weight: 600; color: #e8ecf1; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Rule line: wraps to at most four lines, then clips. */
+.slot .card .ds {
+  margin-top: 3px; font-size: 9px; line-height: 1.3; color: #b6c3d6;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
+}
 .slot .card .cd { color: #8aa0bf; font-size: 9px; margin-top: auto; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .02em; }
 
 /* Action-code accents — a top band plus a tinted border. */
@@ -176,6 +226,7 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 /* Skill cards: the band colour is the action they ride; the glyph gets a ✦. */
 .slot.skill .card::before { content: '✦' attr(data-code); font-size: 13px; }
 .slot.skill .card .nm { color: #d7cfff; }
+.slot.skill .card .ds { color: #c9bfff; }
 .slot.skill .card .cd { color: #a08eff; font-family: inherit; letter-spacing: 0; }
 .slot.queued-skill {
   border-color: #a08eff99;
@@ -294,10 +345,413 @@ main { display: grid; grid-template-columns: 1fr 320px; grid-template-rows: minm
 .launcher-card #go[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
 .launcher-card #launch-msg { font-size: 12px; color: #8aa0bf; }
 
+/* ---- WBC3 art: roster thumbnails, hero card, hover card ------------------ */
+.ros { justify-content: flex-start; align-items: center; }
+.ros .txt { display: flex; justify-content: space-between; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.ros .thumb { width: 28px; height: 28px; object-fit: cover; object-position: top; border-radius: 3px; border: 1px solid #262e3c; background: #0b0d12; flex: 0 0 auto; image-rendering: pixelated; }
+.ros .thumb.info { object-fit: cover; object-position: 50% 0; }
+#hero-card { display: flex; gap: 10px; align-items: center; background: #141a24; border: 1px solid #262e3c; border-radius: 6px; padding: 8px; margin-bottom: 8px; flex: 0 0 auto; }
+#hero-card[hidden] { display: none; }
+#hero-card img { width: 64px; height: 64px; object-fit: cover; object-position: top; border-radius: 4px; border: 1px solid #ffe66e55; background: #0b0d12; image-rendering: pixelated; }
+#hero-card img.info { object-position: 50% 0; }
+#hero-card .hero-name { color: #ffe66e; font-weight: 600; font-size: 13px; }
+#hero-card .hero-sub { color: #8aa0bf; font-size: 11px; margin-top: 2px; }
+#hero-card .hero-hp { color: #ffb0b0; font-size: 11px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+#hero-card .hero-mute { color: #566379; font-size: 10px; margin-top: 2px; cursor: pointer; }
+/* --- Rich hover card -------------------------------------------------------
+   Unit variant: head (thumb + name/sub/hp/coords) · stat pills · permanents
+   stack · (self only) hand skills stack. The card is rebuilt on every move
+   so the body width adapts; max-width keeps it from eating the viewport. */
+#hover-card {
+  position: fixed; z-index: 30; pointer-events: none;
+  display: flex; flex-direction: column; gap: 6px;
+  background: #0f131bee; border: 1px solid #2a3344; border-radius: 7px;
+  padding: 8px 10px; font-size: 11px; color: #dfe3e8;
+  box-shadow: 0 10px 28px #000a, 0 0 0 1px #a08eff22;
+  width: 300px; max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px); overflow: hidden;
+}
+#hover-card[hidden] { display: none; }
+#hover-card .hc-head { display: flex; gap: 8px; align-items: flex-start; }
+#hover-card .hc-thumb { width: 56px; height: 90px; object-fit: cover; object-position: 50% 0; border-radius: 3px; background: #0b0d12; image-rendering: pixelated; flex: 0 0 auto; }
+#hover-card .hc-thumb-obj { width: 56px; height: 56px; object-fit: contain; }
+#hover-card .hc-meta { flex: 1 1 auto; min-width: 0; }
+#hover-card .hc-name { font-weight: 600; color: #e8ecf1; font-size: 12px; }
+#hover-card .hc-sub { color: #8aa0bf; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; }
+#hover-card .hc-hp { color: #ffb0b0; margin-top: 4px; line-height: 1.4; }
+#hover-card .hc-coords { color: #6a7a92; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 10px; }
+#hover-card .hc-stats { display: flex; flex-wrap: wrap; gap: 3px; }
+#hover-card .hc-stats .pill {
+  font: 600 10px/1 ui-monospace, Menlo, Consolas, monospace;
+  padding: 2px 5px; border-radius: 3px; background: #0f131b;
+  color: #c8d4e3; border-left: 2px solid #4a5368;
+}
+#hover-card .hc-stats .pill.v  { border-color: #6ad99f; }
+#hover-card .hc-stats .pill.w  { border-color: #6a9ce3; }
+#hover-card .hc-stats .pill.m  { border-color: #e36666; }
+#hover-card .hc-stats .pill.wi { border-color: #d08ae0; }
+#hover-card .hc-section-head {
+  font: 600 9px/1 ui-sans-serif, system-ui, sans-serif; color: #8aa0bf;
+  letter-spacing: .1em; text-transform: uppercase; margin-top: 2px;
+}
+#hover-card .hc-perms, #hover-card .hc-skills {
+  display: flex; flex-direction: column; gap: 4px;
+}
+/* Richer post-merge flavor rows — tag chips, combo/adept/innate info,
+   and the one-sentence logic summary. All optional; each disappears when
+   the merged entry doesn't carry that field. */
+#hover-card .hc-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+#hover-card .hc-chip {
+  font: 500 9px/1.4 ui-sans-serif, system-ui, sans-serif;
+  padding: 1px 6px; border-radius: 3px;
+  background: #141a24; color: #c8d4e3;
+  border: 1px solid #26303f;
+  text-transform: capitalize;
+}
+#hover-card .hc-chip.cls { color: #ffe66e; border-color: #ffe66e55; background: #2a2210; }
+#hover-card .hc-chip.tag { color: #a8b4c8; }
+#hover-card .hc-info {
+  color: #cfe3d6; font-size: 10.5px; line-height: 1.4;
+  padding: 3px 6px; background: #141a24; border-left: 2px solid #6ad99f;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+#hover-card .hc-logic {
+  color: #b6c3d6; font-size: 10px; line-height: 1.4;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+/* B2: full class identity block — a portrait + name + description row that
+   sits under the chips when the entity owns a class_* permanent. Matches the
+   other hc-* vocabulary (same gold accent as the .hc-chip.cls summary chip
+   above it). */
+#hover-card .hc-class {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 5px 6px; border-radius: 4px;
+  background: #1a1608; border: 1px solid #ffe66e33;
+}
+#hover-card .hc-class-icon {
+  width: 36px; height: 36px; flex: 0 0 auto;
+  object-fit: cover; object-position: 50% 0;
+  border-radius: 3px; background: #0b0d12;
+  image-rendering: pixelated;
+}
+#hover-card .hc-class-body { flex: 1 1 auto; min-width: 0; }
+#hover-card .hc-class-name {
+  color: #ffe66e; font-weight: 600; font-size: 11px;
+  text-transform: capitalize;
+}
+#hover-card .hc-class-desc {
+  color: #d9d1a8; font-size: 10px; line-height: 1.4; margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+/* Inline effect-reference icon beside a mentioned effect name inside a
+   .skill-card-text. The icon is a tiny .skill-icon with its own glyph
+   fallback — matches the main card's resolution chain. */
+.inline-fx {
+  display: inline-flex; align-items: center; gap: 2px;
+  vertical-align: baseline; white-space: nowrap;
+}
+.inline-fx .skill-icon {
+  width: 14px; height: 14px; vertical-align: -3px;
+  border-radius: 2px;
+}
+.inline-fx .skill-icon-glyph { font-size: 10px; }
+/* Object variant: compact one-liner */
+#hover-card.object { width: auto; max-width: 360px; flex-direction: row; align-items: center; }
+#hover-card.object .hc-head { align-items: center; }
+
+#stage.over-unit { cursor: pointer; }
+#stage.over-object { cursor: help; }
+
+/* --- SkillCard (shared by roster permanents, hover card, reveal overlay,
+       and the deck slots). The icon is a <canvas> with a glyph fallback
+       behind it so the card paints BEFORE the sprite loads. ------------- */
+.skill-card {
+  position: relative;
+  display: flex; gap: 6px; align-items: flex-start;
+  background: #141926; border: 1px solid #262e3c; border-radius: 5px;
+  padding: 5px 6px; color: #c8d4e3; font-size: 10.5px; line-height: 1.3;
+  min-height: 36px;
+}
+/* B1: strip shortcut key (9 / 0 / - / =) painted in the top-right of a
+   SkillCard. The caller passes `keyBadge: '9'` via fillSkillCardStack items;
+   the badge is positioned absolute so it doesn't shift the body text. */
+.skill-card .skill-card-key {
+  position: absolute; top: 3px; right: 4px;
+  min-width: 14px; height: 14px; padding: 0 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #0b0d12cc; color: #ffd68a;
+  border: 1px solid #a08eff55; border-radius: 3px;
+  font: 600 9px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: .04em; pointer-events: none;
+}
+.skill-card-strip   { background: linear-gradient(180deg, #171d2b 0%, #10151e 100%); }
+.skill-card-tooltip { background: #141a24; border-color: #2a3344; }
+.skill-card-reveal {
+  background: linear-gradient(180deg, #1b2238 0%, #0e1322 100%);
+  border-color: #a08eff55;
+  box-shadow: 0 6px 18px #000a, 0 0 0 1px #a08eff33 inset;
+  min-width: 220px;
+}
+.skill-card .skill-card-body { flex: 1 1 auto; min-width: 0; }
+.skill-card .skill-card-name {
+  font-weight: 600; color: #e8ecf1; font-size: 11px;
+  text-transform: capitalize;
+  overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 6px;
+}
+.skill-card .skill-card-badge {
+  background: #a08eff22; color: #d7cfff; border: 1px solid #a08eff44;
+  padding: 0 4px; border-radius: 3px;
+  font: 500 8px/1.5 ui-monospace, Consolas, monospace;
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.skill-card .skill-card-text {
+  color: #b6c3d6; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.skill-card-reveal .skill-card-text { -webkit-line-clamp: 4; }
+
+.skill-icon {
+  position: relative; flex: 0 0 auto; display: inline-block;
+  background: #0b0d12; border: 1px solid #262e3c; border-radius: 3px;
+  overflow: hidden; image-rendering: pixelated;
+  box-shadow: 0 0 0 1px var(--sk-color, #a08eff55) inset;
+}
+.skill-icon-glyph {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  color: var(--sk-color, #c9b8ff); font-family: "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;
+  line-height: 1; pointer-events: none;
+}
+.skill-icon-canvas { position: relative; display: block; width: 100%; height: 100%; }
+/* The canvas sits ABOVE the glyph in DOM paint order; without a sprite the
+   canvas is transparent, so the glyph behind it reads through. Once the
+   sprite paints we add .sprite-loaded on the wrap and hide the glyph. */
+.skill-icon.sprite-loaded .skill-icon-glyph { display: none; }
+
+/* --- Roster permanents stack ------------------------------------------- */
+.ros .perm-cards {
+  flex-basis: 100%;
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: 4px;
+}
+.ros .perm-cards.collapsed .skill-card:nth-child(n+3) { display: none; }
+.ros .perm-cards.collapsed.open .skill-card:nth-child(n+3) { display: flex; }
+.ros .perm-toggle {
+  background: #1a2130; border: 1px solid #262e3c; color: #8aa0bf;
+  border-radius: 3px; padding: 2px 6px; font: 500 10px/1.2 ui-sans-serif, sans-serif;
+  cursor: pointer; align-self: flex-start;
+}
+.ros .perm-toggle:hover { background: #26303f; color: #d7cfff; }
+
+/* --- Reveal overlay (DOM floating over canvas) ------------------------- */
+#skill-reveal-layer {
+  position: fixed; inset: 0; z-index: 29; pointer-events: none;
+}
+.reveal-overlay {
+  position: fixed;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  transition: opacity .12s ease;
+  will-change: transform, opacity;
+}
+.reveal-overlay .reveal-chip {
+  font: 600 11px/1.2 ui-monospace, Consolas, monospace;
+  color: #a08eff; background: #0b0d12cc;
+  border: 1px solid #a08eff55; border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: 0 1px 2px #000;
+}
+.reveal-overlay .reveal-chip.self  { color: #ffe66e; border-color: #ffe66e55; }
+.reveal-overlay .reveal-chip.enemy { color: #ff9c9c; border-color: #e3666655; }
+.reveal-overlay .reveal-skill-stack {
+  display: flex; flex-direction: column; gap: 4px; max-width: 260px;
+}
+
+/* --- Element emission overlay ----------------------------------------- */
+/* Vanishing chip above a unit the moment it emits an element (Posture /
+   Reaver Attack / Monk Move / Rule-24 destroy). Fades on its own clock
+   driven by renderElementEmitOverlay(). */
+#element-emit-layer {
+  position: fixed; inset: 0; z-index: 29; pointer-events: none;
+}
+.element-emit-overlay {
+  --ee-tint: #9bb3d6;
+  position: fixed;
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 8px 3px 4px;
+  background: #0b0d12e6;
+  border: 1px solid var(--ee-tint);
+  border-radius: 14px;
+  box-shadow: 0 4px 14px #000a, 0 0 10px color-mix(in srgb, var(--ee-tint) 45%, transparent);
+  max-width: 220px;
+  transition: opacity .12s ease;
+  will-change: transform, opacity;
+}
+.element-emit-overlay .ee-icon {
+  width: 24px; height: 24px; object-fit: cover; object-position: 0 50%;
+  border-radius: 50%;
+  background: #0b0d12;
+  border: 1px solid var(--ee-tint);
+  image-rendering: pixelated;
+}
+.element-emit-overlay .ee-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #0b0d12; color: var(--ee-tint);
+  border: 1px solid var(--ee-tint);
+  font-size: 14px; line-height: 1;
+}
+.element-emit-overlay .ee-body { min-width: 0; }
+.element-emit-overlay .ee-name {
+  font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: var(--ee-tint);
+  text-shadow: 0 1px 2px #000;
+}
+.element-emit-overlay .ee-sub {
+  font: 400 10px/1.25 ui-sans-serif, system-ui, sans-serif;
+  color: #c8d4e3;
+  margin-top: 1px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* --- Feature-consumed overlay ----------------------------------------- */
+/* A larger card than the element badge: it's a one-shot pickup, so we take
+   the moment to show the building icon, its name/kind, the description, and
+   a "consumed" tag before it fades out and the sprite disappears from the
+   hex. Positioned above the hex by renderFeatureVanishOverlay(). */
+#feature-vanish-layer {
+  position: fixed; inset: 0; z-index: 30; pointer-events: none;
+}
+.feature-vanish-overlay {
+  position: fixed;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 10px 6px 6px;
+  background: #0b0d12ee;
+  border: 1px solid #c9a56a;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px #000b, 0 0 14px #c9a56a55;
+  max-width: 260px;
+  transform-origin: 50% 100%;
+  transition: opacity .12s ease;
+  will-change: transform, opacity;
+}
+.feature-vanish-overlay .fv-icon {
+  width: 48px; height: 48px; object-fit: contain; object-position: 50% 50%;
+  background: #080a10; border: 1px solid #2a3448; border-radius: 4px;
+  image-rendering: pixelated;
+}
+.feature-vanish-overlay .fv-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: 4px;
+  background: #080a10; border: 1px solid #2a3448;
+  color: #c9a56a; font-size: 28px; line-height: 1;
+}
+.feature-vanish-overlay .fv-body { min-width: 0; flex: 1 1 auto; }
+.feature-vanish-overlay .fv-name {
+  font: 700 11px/1.2 ui-sans-serif, system-ui, sans-serif;
+  color: #ffe6b0; text-shadow: 0 1px 2px #000;
+}
+.feature-vanish-overlay .fv-name .fv-kind { color: #8aa0bf; font-weight: 400; }
+.feature-vanish-overlay .fv-desc {
+  font: 400 10px/1.3 ui-sans-serif, system-ui, sans-serif;
+  color: #c8d4e3;
+  margin-top: 3px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.feature-vanish-overlay .fv-done {
+  margin-top: 4px;
+  font: 700 9px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: #78b56a;
+}
+
+/* --- Deck slot: skill icon alongside the always-visible rule line ------ */
+.slot .card .skill-slot-icon {
+  position: absolute; right: 4px; top: 20px;
+  width: 28px; height: 28px;
+  pointer-events: none;
+}
+.slot .card .skill-slot-icon .skill-icon {
+  width: 28px; height: 28px;
+}
+.slot .card .skill-slot-icon .skill-icon-glyph { font-size: 20px; }
+.slot.skill .card { padding-right: 36px; }
+#stage.over-unit { cursor: pointer; }
+#stage.over-object { cursor: help; }
+
+/* --- map-object info card (left-click a hex with a building and no unit) --- */
+#object-card {
+  position: fixed; z-index: 31; display: flex; gap: 10px; align-items: flex-start;
+  width: 300px; max-width: calc(100vw - 16px);
+  background: #0f131bf2; border: 1px solid #3a4a63; border-radius: 8px; padding: 10px 12px 10px 10px;
+  font-size: 11px; color: #dfe3e8; box-shadow: 0 10px 30px #000a, 0 0 0 1px #a08eff22;
+}
+#object-card[hidden] { display: none; }
+#object-card img {
+  flex: 0 0 auto; width: 96px; height: 96px; object-fit: contain; object-position: 50% 50%;
+  border-radius: 4px; background: #0b0d12; border: 1px solid #1a1f29; image-rendering: pixelated;
+}
+#object-card img[hidden] { display: none; }
+#object-card .oc-body { flex: 1 1 auto; min-width: 0; }
+#object-card .oc-name { font-weight: 600; font-size: 13px; color: #e8ecf1; padding-right: 18px; }
+#object-card .oc-kind { color: #8aa0bf; margin-top: 2px; text-transform: lowercase; }
+#object-card .oc-stats { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+#object-card .oc-stats[hidden] { display: none; }
+#object-card .oc-pill {
+  display: inline-flex; align-items: center;
+  padding: 1px 7px; border-radius: 10px;
+  font: 600 10px/1.3 ui-monospace, Consolas, monospace;
+  background: #0b0d12; color: #c8d4e3; border: 1px solid #2a3448;
+}
+#object-card .oc-pill.elem {
+  --pill-tint: #78b56a;
+  color: var(--pill-tint); border-color: var(--pill-tint);
+  background: color-mix(in srgb, var(--pill-tint) 10%, #0b0d12);
+}
+#object-card .oc-pill.hp { color: #ffe6b0; border-color: #4a3a1f; background: #1a1409; }
+#object-card .oc-pill.thresh { color: #e3a04a; border-color: #4a301f; background: #1a0f09; }
+#object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; }
+#object-card .oc-coords { color: #6a7a92; margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
+#object-card .oc-close {
+  position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
+  border: 0; border-radius: 4px; background: transparent; color: #8aa0bf; cursor: pointer; font-size: 12px; line-height: 20px; padding: 0;
+}
+#object-card .oc-close:hover { background: #1a2230; color: #e8ecf1; }
+
 /* Rule 24: my stat pills are buttons — emit that stat against an enemy token. */
 .ros .pill.clickable { cursor: pointer; }
 .ros .pill.clickable:hover { outline: 1px solid #ffe66e; }
 .ros .pill.active { background: #ffe66e; color: #0b0d12; font-weight: 600; }
+
+/* B3: stat-picker consistency with the skill-pick popover. The clickable
+   V/W/M/Wi stat pills on the caster's row (destroy / artifice / spirit-link
+   picker) adopt the same card-face look as a .skill-card — the body still
+   belongs to the pill-render path above, but the surface reads as a card so
+   the player sees the "pick an ability" context the same everywhere. Only
+   the four stat pills get this; `.pill.perm` and `.pill.cls` keep their own
+   silhouettes above. */
+.ros .stats .pill.v.clickable,
+.ros .stats .pill.w.clickable,
+.ros .stats .pill.m.clickable,
+.ros .stats .pill.wi.clickable {
+  padding: 4px 8px; border-radius: 5px;
+  background: linear-gradient(180deg, #171d2b 0%, #10151e 100%);
+  border: 1px solid #2a3344;
+  border-left-width: 2px;
+  box-shadow: 0 1px 0 #0006;
+}
+.ros .stats .pill.v.clickable:hover,
+.ros .stats .pill.w.clickable:hover,
+.ros .stats .pill.m.clickable:hover,
+.ros .stats .pill.wi.clickable:hover {
+  background: linear-gradient(180deg, #1b2238 0%, #0e1322 100%);
+}
 
 /* Permanents strip right of the deck (Rule 12/23/24): small cards with their die. */
 #perms { display: flex; gap: 6px; margin-left: 14px; margin-bottom: 2px; align-items: flex-end; }

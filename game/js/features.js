@@ -19,11 +19,115 @@
 import { hash32 } from './map.js';
 import { biomeFor } from './biome.js';
 
+// ---------------------------------------------------------------------------
+// Labyrinth walls (user ruling 2026-10-30). A sparse second pass stamps
+// "labyrinth seed hexes" on open ground; each seed radiates a 4-hex half-
+// circle of impassable wall scenery. Produces short connected wall runs that
+// pathfinding routes around. The placer is a PURE function of (seed, q, r) —
+// Features.gd mirrors it one-for-one so browser and Godot runtimes agree.
+//
+// Formula (ASCII, hex 6-neighbour order 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE):
+//
+//            NW --- NE                       pivot plus four adjacent neighbours
+//           /    .    \                      around orientation `d`, forming a
+//          W     C     E   <- orientation 0  C-shaped half-circle (5 hexes);
+//           \    .    /                      then drop one of the four shoulder
+//            SW --- SE                       hexes by hash → 4 wall hexes left.
+//
+// A hex is a labyrinth wall if ANY seed within radius 2 would place a wall on
+// it. Overlapping arcs are allowed (produces maze-like fusing).
+const LAB_SEED_RATE = 1 / 300;
+const LAB_BIOMES = new Set(['grass', 'high_grass', 'dirt', 'high_dirt']);
+// Flat-top hex directions, matches hex.js DIRS order.
+const LAB_DIRS = [[+1, 0], [+1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
+// WBC3 wall sprites reused verbatim from feature_table.json (`kind: "wall"`).
+// Picked deterministically per wall hex so the arc isn't a repeating texture.
+const LAB_WALL_PATHS = [
+  'assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png',
+  'assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png',
+  'assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png',
+];
+const LAB_DESC = 'Fallen rampart of a long-abandoned keep. Impassable scenery — units must path around.';
+
+// Returns {path, label, kind:"wall", desc, blocking:true, id, biome} if (q, r)
+// is a labyrinth-wall hex for the given seed, else null. Pure.
+export function labyrinthWallAt(seed, q, r, biomeAt = null) {
+  const bAt = biomeAt || biomeFor(seed).biomeAt;
+  // Scan every potential seed hex within radius 2 of (q, r). The furthest wall
+  // from its pivot is distance 1, so radius 2 is enough to cover any seed that
+  // could put a wall on us (small headroom for formula changes).
+  for (let dq = -2; dq <= 2; dq++) {
+    const lo = Math.max(-2, -dq - 2);
+    const hi = Math.min(2, -dq + 2);
+    for (let dr = lo; dr <= hi; dr++) {
+      const sq = q + dq, sr = r + dr;
+      if (!LAB_BIOMES.has(bAt(sq, sr))) continue;
+      if (roll01(seed, sq, sr, 'lw:seed') >= LAB_SEED_RATE) continue;
+      const d = Math.floor(roll01(seed, sq, sr, 'lw:orient') * 6) % 6;
+      // Four shoulder offsets around orientation d (CW d, CW d+1, CCW d, CCW d-1).
+      const shoulder = [
+        LAB_DIRS[d],
+        LAB_DIRS[(d + 1) % 6],
+        LAB_DIRS[(d + 5) % 6],
+        LAB_DIRS[(d + 4) % 6],
+      ];
+      // Deterministic shoulder to drop (0..3) — one is omitted so the arc is asymmetric.
+      const drop = Math.floor(roll01(seed, sq, sr, 'lw:drop') * 4) % 4;
+      // Pivot always kept.
+      if (sq === q && sr === r) {
+        return _labWallFeature(seed, sq, sr, 0, 0, bAt(q, r));
+      }
+      for (let i = 0; i < 4; i++) {
+        if (i === drop) continue;
+        const [odq, odr] = shoulder[i];
+        const tq = sq + odq, tr = sr + odr;
+        if (tq !== q || tr !== r) continue;
+        // Shoulder lands here. Only keep it on a valid open biome — a wall
+        // on water/cliffs/mountains would both look wrong and already be
+        // blocked by biome walkability anyway.
+        if (!LAB_BIOMES.has(bAt(tq, tr))) return null;
+        return _labWallFeature(seed, sq, sr, odq, odr, bAt(tq, tr));
+      }
+    }
+  }
+  return null;
+}
+
+function _labWallFeature(seed, sq, sr, odq, odr, biomeType) {
+  const idx = hash32(`${seed}:lw:sprite:${sq}:${sr}:${odq}:${odr}`) % LAB_WALL_PATHS.length;
+  return {
+    path: LAB_WALL_PATHS[idx],
+    label: 'Labyrinth Wall',
+    kind: 'wall',
+    desc: LAB_DESC,
+    blocking: true,
+    id: `labyrinth_wall/${sq},${sr}:${odq},${odr}`,
+    biome: biomeType,
+  };
+}
+
+// Boolean predicate variant for pathfinding call sites that only need yes/no.
+export function isLabyrinthWallAt(seed, q, r, biomeAt = null) {
+  return !!labyrinthWallAt(seed, q, r, biomeAt);
+}
+
 let catalog = null;        // { by_biome, density, min_separation }
 let loading = null;
 const listeners = new Set();
 export function onFeaturesChanged(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function notify() { for (const fn of listeners) { try { fn(); } catch { /* ignore */ } } }
+
+// Client-local "stepped on, picked up" bookkeeping. featureAt early-returns
+// null for a hex marked consumed so the renderer stops drawing the sprite and
+// no further object cards surface for it. Deterministic parity with Godot is
+// unaffected — the resolver never sees this set.
+const _consumed = new Set();   // "q,r"
+export function markFeatureConsumed(q, r) {
+  _consumed.add(`${q},${r}`);
+  notify();
+}
+export function isFeatureConsumed(q, r) { return _consumed.has(`${q},${r}`); }
+export function clearConsumedFeatures() { _consumed.clear(); notify(); }
 
 export function loadFeatures() {
   if (!loading) {
@@ -85,8 +189,14 @@ function isCandidate(seed, q, r, biomeAt) {
 // used by biome.js (`state.map.seed`). If a biome function isn't passed, we
 // derive it from biomeFor(seedHex).
 export function featureAt(seedHex, q, r, biomeAt = null) {
-  if (!catalog) return null;
+  if (_consumed.has(`${q},${r}`)) return null;
   const bAt = biomeAt || biomeFor(seedHex).biomeAt;
+  // Labyrinth walls win over vanilla features — they're the user-visible
+  // "unpassable scenery" pass and must stay on the hex even when a Poisson
+  // feature candidate would also fire. Doesn't need the fetched catalog.
+  const lw = labyrinthWallAt(seedHex, q, r, bAt);
+  if (lw) return lw;
+  if (!catalog) return null;
   if (!isCandidate(seedHex, q, r, bAt)) return null;
   const bt = bAt(q, r);
   const choices = catalog.by_biome[bt];

@@ -1,7 +1,11 @@
 {
   "hex": {
-    "tile_w": 320,
-    "tile_h": 240
+    "size": 46,
+    "squash": 0.72,
+    "scale": 2,
+    "tile_w": 159,
+    "tile_h": 132,
+    "orientation": "pointy-top (corners at 60*i-30 deg), matches game/js/hex.js"
   },
   "chaos_terrain": {
     "grass": {
@@ -410,6 +414,1054 @@
         "assets/terrain/wbc3_caverns_18.png",
         "assets/terrain/wbc3_caverns_19.png"
       ]
+    }
+  },
+  "elements": {
+    "elem_vitality": {
+      "tileset": "Grass",
+      "variants": [
+        "assets/terrain/grass_0.png",
+        "assets/terrain/grass_1.png",
+        "assets/terrain/grass_2.png",
+        "assets/terrain/grass_3.png"
+      ]
+    },
+    "elem_souls": {
+      "tileset": "Caverns",
+      "variants": [
+        "assets/terrain/caverns_0.png",
+        "assets/terrain/caverns_1.png",
+        "assets/terrain/caverns_2.png",
+        "assets/terrain/caverns_3.png"
+      ]
+    },
+    "elem_time": {
+      "tileset": "Desert",
+      "variants": [
+        "assets/terrain/desert_0.png",
+        "assets/terrain/desert_1.png",
+        "assets/terrain/desert_2.png",
+        "assets/terrain/desert_3.png"
+      ]
+    },
+    "elem_space": {
+      "tileset": "Water",
+      "variants": [
+        "assets/terrain/water_0.png",
+        "assets/terrain/water_1.png",
+        "assets/terrain/water_2.png",
+        "assets/terrain/water_3.png"
+      ]
+    },
+    "elem_air": {
+      "tileset": "High Grass",
+      "variants": [
+        "assets/terrain/high_grass_0.png",
+        "assets/terrain/high_grass_1.png",
+        "assets/terrain/high_grass_2.png",
+        "assets/terrain/high_grass_3.png"
+      ]
+    },
+    "elem_water": {
+      "tileset": "Water",
+      "variants": [
+        "assets/terrain/water_0.png",
+        "assets/terrain/water_1.png",
+        "assets/terrain/water_2.png",
+        "assets/terrain/water_3.png"
+      ]
+    },
+    "elem_earth": {
+      "tileset": "Mountains",
+      "variants": [
+        "assets/terrain/mountains_0.png",
+        "assets/terrain/mountains_1.png",
+        "assets/terrain/mountains_2.png",
+        "assets/terrain/mountains_3.png"
+      ]
+    },
+    "elem_fire": {
+      "tileset": "Lava",
+      "variants": [
+        "assets/terrain/lava_0.png",
+        "assets/terrain/lava_1.png",
+        "assets/terrain/lava_2.png",
+        "assets/terrain/lava_3.png"
+      ]
+    },
+    "elem_concentration": {
+      "tileset": "High Dirt",
+      "variants": [
+        "assets/terrain/high_dirt_0.png",
+        "assets/terrain/high_dirt_1.png",
+        "assets/terrain/high_dirt_2.png",
+        "assets/terrain/high_dirt_3.png"
+      ]
+    },
+    "elem_harmony": {
+      "tileset": "Jungle",
+      "variants": [
+        "assets/terrain/jungle_0.png",
+        "assets/terrain/jungle_1.png",
+        "assets/terrain/jungle_2.png",
+        "assets/terrain/jungle_3.png"
+      ]
+    }
+  },
+  "tilesets": {
+    "Caverns": {
+      "slug": "caverns",
+      "variants": [
+        {
+          "file": "assets/terrain/caverns_0.png",
+          "source": "Caverns/TKV3.bmp",
+          "crop": [
+            128,
+            42,
+            159,
+            132
+          ],
+          "avg_color": "#3d2f27"
+        },
+        {
+          "file": "assets/terrain/caverns_1.png",
+          "source": "Caverns/TVX0.bmp",
+          "crop": [
+            9,
+            105,
+            159,
+            132
+          ],
+          "avg_color": "#11100f"
+        },
+        {
+          "file": "assets/terrain/caverns_2.png",
+          "source": "Caverns/TCF3.bmp",
+          "crop": [
+            48,
+            56,
+            159,
+            132
+          ],
+          "avg_color": "#392b26"
+        },
+        {
+          "file": "assets/terrain/caverns_3.png",
+          "source": "Caverns/TKVB.bmp",
+          "crop": [
+            105,
+            105,
+            159,
+            132
+          ],
+          "avg_color": "#362722"
+        }
+      ],
+      "avg_color": "#2f241f",
+      "wiki_entity": "Terrain type: Rock",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Caverns"
+    },
+    "Desert": {
+      "slug": "desert",
+      "variants": [
+        {
+          "file": "assets/terrain/desert_0.png",
+          "source": "Desert/TKS3.bmp",
+          "crop": [
+            96,
+            39,
+            159,
+            132
+          ],
+          "avg_color": "#5f553e"
+        },
+        {
+          "file": "assets/terrain/desert_1.png",
+          "source": "Desert/TKSC.bmp",
+          "crop": [
+            86,
+            7,
+            159,
+            132
+          ],
+          "avg_color": "#4b4335"
+        },
+        {
+          "file": "assets/terrain/desert_2.png",
+          "source": "Desert/TKS2.bmp",
+          "crop": [
+            71,
+            46,
+            159,
+            132
+          ],
+          "avg_color": "#61573f"
+        },
+        {
+          "file": "assets/terrain/desert_3.png",
+          "source": "Desert/TKSD.bmp",
+          "crop": [
+            41,
+            7,
+            159,
+            132
+          ],
+          "avg_color": "#453e32"
+        }
+      ],
+      "avg_color": "#544b39",
+      "wiki_entity": "Terrain design: Desert",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Desert"
+    },
+    "Desert Cliffs": {
+      "slug": "desert_cliffs",
+      "variants": [
+        {
+          "file": "assets/terrain/desert_cliffs_0.png",
+          "source": "Desert Cliffs/TSD9.bmp",
+          "crop": [
+            66,
+            76,
+            159,
+            132
+          ],
+          "avg_color": "#382c19"
+        },
+        {
+          "file": "assets/terrain/desert_cliffs_1.png",
+          "source": "Desert Cliffs/TSGF.bmp",
+          "crop": [
+            66,
+            57,
+            159,
+            132
+          ],
+          "avg_color": "#343219"
+        },
+        {
+          "file": "assets/terrain/desert_cliffs_2.png",
+          "source": "Desert Cliffs/TSGG.bmp",
+          "crop": [
+            144,
+            46,
+            159,
+            132
+          ],
+          "avg_color": "#38391a"
+        },
+        {
+          "file": "assets/terrain/desert_cliffs_3.png",
+          "source": "Desert Cliffs/TSD4.bmp",
+          "crop": [
+            136,
+            5,
+            159,
+            132
+          ],
+          "avg_color": "#3f311e"
+        }
+      ],
+      "avg_color": "#38321a",
+      "wiki_entity": "Terrain design: Desert",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Desert Cliffs"
+    },
+    "Dirt": {
+      "slug": "dirt",
+      "variants": [
+        {
+          "file": "assets/terrain/dirt_0.png",
+          "source": "Dirt/TDF5.bmp",
+          "crop": [
+            63,
+            61,
+            159,
+            132
+          ],
+          "avg_color": "#3c2d17"
+        },
+        {
+          "file": "assets/terrain/dirt_1.png",
+          "source": "Dirt/TDR4.bmp",
+          "crop": [
+            17,
+            40,
+            159,
+            132
+          ],
+          "avg_color": "#46331a"
+        },
+        {
+          "file": "assets/terrain/dirt_2.png",
+          "source": "Dirt/TDF7.bmp",
+          "crop": [
+            91,
+            71,
+            159,
+            132
+          ],
+          "avg_color": "#3d2d17"
+        },
+        {
+          "file": "assets/terrain/dirt_3.png",
+          "source": "Dirt/TDB1.bmp",
+          "crop": [
+            145,
+            6,
+            159,
+            132
+          ],
+          "avg_color": "#433018"
+        }
+      ],
+      "avg_color": "#402f18",
+      "wiki_entity": "Terrain design: Dirt",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Dirt"
+    },
+    "Grass": {
+      "slug": "grass",
+      "variants": [
+        {
+          "file": "assets/terrain/grass_0.png",
+          "source": "Grass/TGDA.bmp",
+          "crop": [
+            123,
+            68,
+            159,
+            132
+          ],
+          "avg_color": "#373d17"
+        },
+        {
+          "file": "assets/terrain/grass_1.png",
+          "source": "Grass/TGD0.bmp",
+          "crop": [
+            85,
+            28,
+            159,
+            132
+          ],
+          "avg_color": "#3e3718"
+        },
+        {
+          "file": "assets/terrain/grass_2.png",
+          "source": "Grass/TGR2.bmp",
+          "crop": [
+            28,
+            20,
+            159,
+            132
+          ],
+          "avg_color": "#383717"
+        },
+        {
+          "file": "assets/terrain/grass_3.png",
+          "source": "Grass/TGRC.bmp",
+          "crop": [
+            7,
+            82,
+            159,
+            132
+          ],
+          "avg_color": "#333b16"
+        }
+      ],
+      "avg_color": "#383917",
+      "wiki_entity": "Terrain design: Grass",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Grass"
+    },
+    "Grass Coast": {
+      "slug": "grass_coast",
+      "variants": [
+        {
+          "file": "assets/terrain/grass_coast_0.png",
+          "source": "Grass Coast/TGW4.bmp",
+          "crop": [
+            106,
+            66,
+            159,
+            132
+          ],
+          "avg_color": "#2e3639"
+        },
+        {
+          "file": "assets/terrain/grass_coast_1.png",
+          "source": "Grass Coast/TGW2.bmp",
+          "crop": [
+            137,
+            106,
+            159,
+            132
+          ],
+          "avg_color": "#2f3740"
+        },
+        {
+          "file": "assets/terrain/grass_coast_2.png",
+          "source": "Grass Coast/TGWB.bmp",
+          "crop": [
+            97,
+            81,
+            159,
+            132
+          ],
+          "avg_color": "#323c18"
+        },
+        {
+          "file": "assets/terrain/grass_coast_3.png",
+          "source": "Grass Coast/TGW0.bmp",
+          "crop": [
+            150,
+            32,
+            159,
+            132
+          ],
+          "avg_color": "#31392e"
+        }
+      ],
+      "avg_color": "#30382f",
+      "wiki_entity": "Terrain design: Grass",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Grass Coast"
+    },
+    "High Dirt": {
+      "slug": "high_dirt",
+      "variants": [
+        {
+          "file": "assets/terrain/high_dirt_0.png",
+          "source": "High Dirt/TEF1.bmp",
+          "crop": [
+            50,
+            63,
+            159,
+            132
+          ],
+          "avg_color": "#4a361b"
+        },
+        {
+          "file": "assets/terrain/high_dirt_1.png",
+          "source": "High Dirt/TDE2.bmp",
+          "crop": [
+            107,
+            59,
+            159,
+            132
+          ],
+          "avg_color": "#40301c"
+        },
+        {
+          "file": "assets/terrain/high_dirt_2.png",
+          "source": "High Dirt/TDE4.bmp",
+          "crop": [
+            144,
+            87,
+            159,
+            132
+          ],
+          "avg_color": "#3d2e1e"
+        },
+        {
+          "file": "assets/terrain/high_dirt_3.png",
+          "source": "High Dirt/TDE6.bmp",
+          "crop": [
+            89,
+            92,
+            159,
+            132
+          ],
+          "avg_color": "#2e2313"
+        }
+      ],
+      "avg_color": "#3d2d1a",
+      "wiki_entity": "Terrain design: High Dirt",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/High Dirt"
+    },
+    "High Grass": {
+      "slug": "high_grass",
+      "variants": [
+        {
+          "file": "assets/terrain/high_grass_0.png",
+          "source": "High Grass/THRG.bmp",
+          "crop": [
+            55,
+            33,
+            159,
+            132
+          ],
+          "avg_color": "#403618"
+        },
+        {
+          "file": "assets/terrain/high_grass_1.png",
+          "source": "High Grass/THR9.bmp",
+          "crop": [
+            67,
+            94,
+            159,
+            132
+          ],
+          "avg_color": "#403819"
+        },
+        {
+          "file": "assets/terrain/high_grass_2.png",
+          "source": "High Grass/THR7.bmp",
+          "crop": [
+            111,
+            93,
+            159,
+            132
+          ],
+          "avg_color": "#3d3c16"
+        },
+        {
+          "file": "assets/terrain/high_grass_3.png",
+          "source": "High Grass/THX1.bmp",
+          "crop": [
+            19,
+            25,
+            159,
+            132
+          ],
+          "avg_color": "#3e4215"
+        }
+      ],
+      "avg_color": "#3e3b17",
+      "wiki_entity": "Terrain design: High Grass",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/High Grass"
+    },
+    "Jungle": {
+      "slug": "jungle",
+      "variants": [
+        {
+          "file": "assets/terrain/jungle_0.png",
+          "source": "Jungle/TGJ1.bmp",
+          "crop": [
+            85,
+            103,
+            159,
+            132
+          ],
+          "avg_color": "#2c3718"
+        },
+        {
+          "file": "assets/terrain/jungle_1.png",
+          "source": "Jungle/TDJ2.bmp",
+          "crop": [
+            121,
+            17,
+            159,
+            132
+          ],
+          "avg_color": "#3a3218"
+        },
+        {
+          "file": "assets/terrain/jungle_2.png",
+          "source": "Jungle/TGJB.bmp",
+          "crop": [
+            153,
+            31,
+            159,
+            132
+          ],
+          "avg_color": "#333e17"
+        },
+        {
+          "file": "assets/terrain/jungle_3.png",
+          "source": "Jungle/TGJ6.bmp",
+          "crop": [
+            143,
+            94,
+            159,
+            132
+          ],
+          "avg_color": "#2e3a18"
+        }
+      ],
+      "avg_color": "#313817",
+      "wiki_entity": "Terrain design: Jungle",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Jungle"
+    },
+    "Lava": {
+      "slug": "lava",
+      "variants": [
+        {
+          "file": "assets/terrain/lava_0.png",
+          "source": "Lava/TKL7.bmp",
+          "crop": [
+            55,
+            9,
+            159,
+            132
+          ],
+          "avg_color": "#48261f"
+        },
+        {
+          "file": "assets/terrain/lava_1.png",
+          "source": "Lava/TKLD.bmp",
+          "crop": [
+            16,
+            14,
+            159,
+            132
+          ],
+          "avg_color": "#7a2113"
+        },
+        {
+          "file": "assets/terrain/lava_2.png",
+          "source": "Lava/TKL2.bmp",
+          "crop": [
+            29,
+            7,
+            159,
+            132
+          ],
+          "avg_color": "#442922"
+        },
+        {
+          "file": "assets/terrain/lava_3.png",
+          "source": "Lava/TKL3.bmp",
+          "crop": [
+            36,
+            74,
+            159,
+            132
+          ],
+          "avg_color": "#842413"
+        }
+      ],
+      "avg_color": "#622519",
+      "wiki_entity": "Terrain design: Lava",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Lava"
+    },
+    "Marsh": {
+      "slug": "marsh",
+      "variants": [
+        {
+          "file": "assets/terrain/marsh_0.png",
+          "source": "Marsh/TGMF.bmp",
+          "crop": [
+            138,
+            54,
+            159,
+            132
+          ],
+          "avg_color": "#3f3931"
+        },
+        {
+          "file": "assets/terrain/marsh_1.png",
+          "source": "Marsh/TMX0.bmp",
+          "crop": [
+            94,
+            79,
+            159,
+            132
+          ],
+          "avg_color": "#3b3631"
+        },
+        {
+          "file": "assets/terrain/marsh_2.png",
+          "source": "Marsh/TGMH.bmp",
+          "crop": [
+            70,
+            47,
+            159,
+            132
+          ],
+          "avg_color": "#433a2f"
+        },
+        {
+          "file": "assets/terrain/marsh_3.png",
+          "source": "Marsh/TGM9.bmp",
+          "crop": [
+            51,
+            93,
+            159,
+            132
+          ],
+          "avg_color": "#423a30"
+        }
+      ],
+      "avg_color": "#3f3830",
+      "wiki_entity": "Terrain design: Marsh",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Marsh"
+    },
+    "Mountains": {
+      "slug": "mountains",
+      "variants": [
+        {
+          "file": "assets/terrain/mountains_0.png",
+          "source": "Mountains/TGAJ.bmp",
+          "crop": [
+            108,
+            18,
+            159,
+            132
+          ],
+          "avg_color": "#35401e"
+        },
+        {
+          "file": "assets/terrain/mountains_1.png",
+          "source": "Mountains/TGAG.bmp",
+          "crop": [
+            119,
+            71,
+            159,
+            132
+          ],
+          "avg_color": "#364120"
+        },
+        {
+          "file": "assets/terrain/mountains_2.png",
+          "source": "Mountains/TGAH.bmp",
+          "crop": [
+            118,
+            32,
+            159,
+            132
+          ],
+          "avg_color": "#38431e"
+        },
+        {
+          "file": "assets/terrain/mountains_3.png",
+          "source": "Mountains/TAAA.bmp",
+          "crop": [
+            64,
+            84,
+            159,
+            132
+          ],
+          "avg_color": "#3c4327"
+        }
+      ],
+      "avg_color": "#374120",
+      "wiki_entity": "Terrain design: Mountains",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Mountains"
+    },
+    "Rock": {
+      "slug": "rock",
+      "variants": [
+        {
+          "file": "assets/terrain/rock_0.png",
+          "source": "Rock/TKF3.bmp",
+          "crop": [
+            61,
+            28,
+            159,
+            132
+          ],
+          "avg_color": "#2f2926"
+        },
+        {
+          "file": "assets/terrain/rock_1.png",
+          "source": "Rock/TKF2.bmp",
+          "crop": [
+            135,
+            37,
+            159,
+            132
+          ],
+          "avg_color": "#312825"
+        },
+        {
+          "file": "assets/terrain/rock_2.png",
+          "source": "Rock/TKF0.bmp",
+          "crop": [
+            151,
+            15,
+            159,
+            132
+          ],
+          "avg_color": "#2f2927"
+        },
+        {
+          "file": "assets/terrain/rock_3.png",
+          "source": "Rock/TKF6.bmp",
+          "crop": [
+            107,
+            6,
+            159,
+            132
+          ],
+          "avg_color": "#2d2b26"
+        }
+      ],
+      "avg_color": "#2f2926",
+      "wiki_entity": "Terrain design: Rock",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Rock"
+    },
+    "Rock Cliffs": {
+      "slug": "rock_cliffs",
+      "variants": [
+        {
+          "file": "assets/terrain/rock_cliffs_0.png",
+          "source": "Rock Cliffs/TKDF.bmp",
+          "crop": [
+            136,
+            65,
+            159,
+            132
+          ],
+          "avg_color": "#3a2c17"
+        },
+        {
+          "file": "assets/terrain/rock_cliffs_1.png",
+          "source": "Rock Cliffs/TKG6.bmp",
+          "crop": [
+            121,
+            76,
+            159,
+            132
+          ],
+          "avg_color": "#2b2718"
+        },
+        {
+          "file": "assets/terrain/rock_cliffs_2.png",
+          "source": "Rock Cliffs/TKD2.bmp",
+          "crop": [
+            90,
+            94,
+            159,
+            132
+          ],
+          "avg_color": "#3b2b18"
+        },
+        {
+          "file": "assets/terrain/rock_cliffs_3.png",
+          "source": "Rock Cliffs/TKDE.bmp",
+          "crop": [
+            77,
+            31,
+            159,
+            132
+          ],
+          "avg_color": "#42331e"
+        }
+      ],
+      "avg_color": "#382c19",
+      "wiki_entity": "Terrain design: Rock",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Rock Cliffs"
+    },
+    "Rock Coast": {
+      "slug": "rock_coast",
+      "variants": [
+        {
+          "file": "assets/terrain/rock_coast_0.png",
+          "source": "Rock Coast/TKWY.bmp",
+          "crop": [
+            5,
+            18,
+            159,
+            132
+          ],
+          "avg_color": "#323336"
+        },
+        {
+          "file": "assets/terrain/rock_coast_1.png",
+          "source": "Rock Coast/TKWC.bmp",
+          "crop": [
+            151,
+            103,
+            159,
+            132
+          ],
+          "avg_color": "#343941"
+        },
+        {
+          "file": "assets/terrain/rock_coast_2.png",
+          "source": "Rock Coast/TKWH.bmp",
+          "crop": [
+            61,
+            75,
+            159,
+            132
+          ],
+          "avg_color": "#323842"
+        },
+        {
+          "file": "assets/terrain/rock_coast_3.png",
+          "source": "Rock Coast/TKW0.bmp",
+          "crop": [
+            137,
+            27,
+            159,
+            132
+          ],
+          "avg_color": "#34383e"
+        }
+      ],
+      "avg_color": "#33373d",
+      "wiki_entity": "Terrain design: Rock",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Rock Coast"
+    },
+    "Snow": {
+      "slug": "snow",
+      "variants": [
+        {
+          "file": "assets/terrain/snow_0.png",
+          "source": "Snow/TIR5.bmp",
+          "crop": [
+            154,
+            56,
+            159,
+            132
+          ],
+          "avg_color": "#dee0ec"
+        },
+        {
+          "file": "assets/terrain/snow_1.png",
+          "source": "Snow/TIR6.bmp",
+          "crop": [
+            61,
+            97,
+            159,
+            132
+          ],
+          "avg_color": "#dfe1ed"
+        },
+        {
+          "file": "assets/terrain/snow_2.png",
+          "source": "Snow/TIR7.bmp",
+          "crop": [
+            108,
+            75,
+            159,
+            132
+          ],
+          "avg_color": "#dddfeb"
+        },
+        {
+          "file": "assets/terrain/snow_3.png",
+          "source": "Snow/TIR3.bmp",
+          "crop": [
+            158,
+            2,
+            159,
+            132
+          ],
+          "avg_color": "#e0e2ed"
+        }
+      ],
+      "avg_color": "#dee0ec",
+      "wiki_entity": "Terrain design: Snow",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Snow"
+    },
+    "Snow Coast": {
+      "slug": "snow_coast",
+      "variants": [
+        {
+          "file": "assets/terrain/snow_coast_0.png",
+          "source": "Snow Coast/TIW0.bmp",
+          "crop": [
+            27,
+            94,
+            159,
+            132
+          ],
+          "avg_color": "#d5d8e5"
+        },
+        {
+          "file": "assets/terrain/snow_coast_1.png",
+          "source": "Snow Coast/TIWJ.bmp",
+          "crop": [
+            16,
+            30,
+            159,
+            132
+          ],
+          "avg_color": "#ccced7"
+        },
+        {
+          "file": "assets/terrain/snow_coast_2.png",
+          "source": "Snow Coast/TIW5.bmp",
+          "crop": [
+            74,
+            6,
+            159,
+            132
+          ],
+          "avg_color": "#303946"
+        },
+        {
+          "file": "assets/terrain/snow_coast_3.png",
+          "source": "Snow Coast/TIWL.bmp",
+          "crop": [
+            147,
+            60,
+            159,
+            132
+          ],
+          "avg_color": "#c5c9d7"
+        }
+      ],
+      "avg_color": "#a5aab6",
+      "wiki_entity": "Terrain design: Snow",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Snow Coast"
+    },
+    "Water": {
+      "slug": "water",
+      "variants": [
+        {
+          "file": "assets/terrain/water_0.png",
+          "source": "Water/TWY0.bmp",
+          "crop": [
+            137,
+            46,
+            159,
+            132
+          ],
+          "avg_color": "#263442"
+        },
+        {
+          "file": "assets/terrain/water_1.png",
+          "source": "Water/TWYA.bmp",
+          "crop": [
+            99,
+            61,
+            159,
+            132
+          ],
+          "avg_color": "#2b3542"
+        },
+        {
+          "file": "assets/terrain/water_2.png",
+          "source": "Water/TWY3.bmp",
+          "crop": [
+            143,
+            40,
+            159,
+            132
+          ],
+          "avg_color": "#293441"
+        },
+        {
+          "file": "assets/terrain/water_3.png",
+          "source": "Water/TWY2.bmp",
+          "crop": [
+            9,
+            19,
+            159,
+            132
+          ],
+          "avg_color": "#27333f"
+        }
+      ],
+      "avg_color": "#283441",
+      "wiki_entity": "Terrain design: Shallow Water",
+      "transition_set": true,
+      "source_dir": "assets/Images/Terrain/Water"
     }
   }
 }

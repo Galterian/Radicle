@@ -29,19 +29,18 @@ import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { hexDistance } from './js/hex.js';
 import { createKnownMap, initialBlock, seedForDimension } from './js/map.js';
 import { fancyLabel } from './js/names.js';
+import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
-// Assets live outside the game/ dir (schema + mapping JSON copied here, binary
-// Sprites/Sounds/Images symlinked to ../../warlords_battlecry_resources). The
-// browser renderer resolves resource paths quoted in data/*.json via /assets/.
+// Curated WBC3 art/sound collection (chaosD6/assets) — sprite sheets, hex
+// terrain tiles, portraits and voice lines referenced by data/*.json `resources`.
 const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
 const LAUNCHER_MODE = process.env.LAUNCHER_MODE === '1';
 
 const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript;charset=utf-8', '.css':'text/css;charset=utf-8', '.json':'application/json;charset=utf-8',
-  '.png':'image/png', '.bmp':'image/bmp', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.svg':'image/svg+xml',
-  '.wav':'audio/wav', '.ogg':'audio/ogg', '.mp3':'audio/mpeg' };
+               '.png':'image/png', '.bmp':'image/bmp', '.jpg':'image/jpeg', '.gif':'image/gif', '.wav':'audio/wav', '.ogg':'audio/ogg', '.mp3':'audio/mpeg' };
 const SHA_RE = /^[0-9a-f]{7,40}$/i;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
@@ -446,6 +445,52 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length };
 }
 
+// Restore a dimension from a local TMJ autosave / hard save on this box.
+// The TMJ already carries dim_id / dim_name / seed; we hand them to the peer
+// via env + RESTORE_FROM_TMJ, which hydrates `dimMap`, `entity.obstacles`,
+// `entity.tileTokens` and `entity.traps` before the first round.
+async function restoreDimension({ tmjPath, label }) {
+  if (!tmjPath) throw new Error('restoreDimension: tmjPath required');
+  const absPath = path.resolve(tmjPath);
+  const raw = await fs.readFile(absPath, 'utf8');
+  const map = JSON.parse(raw);
+  const props = Object.fromEntries((map.properties || []).map(p => [p.name, p.value]));
+  if (!String(props.schema_version || '').startsWith('chaosd6-tmj-')) throw new Error(`not a chaosD6 TMJ: ${absPath}`);
+  const DIM_NAME = String(props.dim_name || 'Restored-Dimension');
+  const DIM_ID   = String(props.dim_id   || `dim-${slug(DIM_NAME)}`);
+  const DOOR_ID  = 'door-primary';
+  const MAP_SEED = String(props.seed || '');
+  if (startedDimension) return { ...startedDimension, status: 'already-running' };
+  const ip = defaultPublicIp();
+  const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  const peerLabel = (label || '').trim() || 'player-1';
+  const portLibp2p = await freePort(7420);
+  const portHttp   = await freePort(7430);
+  const portGun    = await freePort(7520);
+  startedDimension = { peerPort: portHttp, dimensionName: DIM_NAME };
+  console.log(`[launcher] restoring ${DIM_NAME} from ${absPath}  (dim_id=${DIM_ID}, seed=${MAP_SEED})`);
+  spawnChild(`peer:${peerLabel}`, [path.join(__dirname, 'peer.mjs')], {
+    PEER_LABEL:        peerLabel,
+    ALLIANCE:          'player',
+    ENTITY_NAME:       peerLabel,
+    CHARACTER_ID:      'char_exuberant_firestroker',
+    CREATURE_ID:       '',
+    START_TILE:        JSON.stringify({ q: 1, r: 2 }),
+    PEER_PORT_LIBP2P:  String(portLibp2p),
+    PEER_PORT_HTTP:    String(portHttp),
+    PEER_PORT_GUN:     String(portGun),
+    DIM_NAME, DIM_ID, DOOR_ID,
+    MAP_SEED,
+    RESTORE_FROM_TMJ:  absPath,
+    JOIN_SYNC_WAIT_MS: '500',
+    ...commonPeerEnv(),
+    ...netEnv,
+  });
+  const ok = await waitForPort(portHttp);
+  if (!ok) throw new Error(`peer did not come up on :${portHttp}`);
+  return { peerPort: portHttp, status: 'restored', dimension: DIM_NAME, tmj: absPath };
+}
+
 async function readBody(req) {
   const chunks = []; let n = 0;
   for await (const c of req) { chunks.push(c); n += c.length; if (n > 65536) throw new Error('body too large'); }
@@ -457,6 +502,14 @@ async function handleApi(req, res, p) {
   const json = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); };
   if (req.method === 'GET' && p === '/api/network') {
     return json(200, { ok: true, candidates: candidateIps(), default: defaultPublicIp(), relays: DEFAULT_RELAYS, radicle: radicleEnv.enabled ? { rid: radicleEnv.rid, nid: radicleEnv.nid } : null });
+  }
+  if (req.method === 'GET' && (p === '/dimensions/local' || p === '/api/dimensions/local')) {
+    // Local TMJ autosaves / hard saves on this box — picked by the launcher's
+    // "restore" mode so the user can keep playing a dimension that went
+    // offline. The route is intentionally shallow; the TMJ file names (dim_id)
+    // are the stable identity.
+    try { const items = await listLocalTmjSaves(DIMENSIONS_DIR); return json(200, { ok: true, baseDir: DIMENSIONS_DIR, items }); }
+    catch (e) { return json(200, { ok: false, error: e.message, baseDir: DIMENSIONS_DIR, items: [] }); }
   }
   if (req.method === 'GET' && p === '/api/dimensions') {
     try {
@@ -479,6 +532,7 @@ async function handleApi(req, res, p) {
       let out;
       if (body.mode === 'host' || body.mode === 'start') out = await startDimension(body);
       else if (body.mode === 'join') out = await joinDimension(body);
+      else if (body.mode === 'restore') out = await restoreDimension(body);
       else throw new Error(`unknown mode "${body.mode}"`);
       return json(200, { ok: true, ...out });
     } catch (e) {
@@ -523,8 +577,8 @@ ${body.trim() ? `<pre>${esc(body)}</pre>` : ''}
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = decodeURIComponent(url.pathname);
-  const serve = async (abs) => {
-    try { const b = await fs.readFile(abs); res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream', 'Cache-Control': 'no-store' }); res.end(b); }
+  const serve = async (abs, cache = 'no-store') => {
+    try { const b = await fs.readFile(abs); res.writeHead(200, { 'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'Cache-Control': cache }); res.end(b); }
     catch { res.writeHead(404); res.end('not found'); }
   };
   if (p.startsWith('/api/')) return handleApi(req, res, p);
@@ -558,7 +612,11 @@ const server = http.createServer(async (req, res) => {
   // Resources quoted in data/*.json (sprites + sounds, mapping files, schema).
   // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
   // readFile follows them, and the path-traversal check happens before.
-  if (p.startsWith('/assets/')) return serve(path.join(ASSETS_DIR, p.slice('/assets/'.length).replace(/\.\./g, '')));
+  if (p.startsWith('/assets/')) {
+    const abs = path.resolve(ASSETS_DIR, '.' + p.slice('/assets'.length).replace(/\.\./g, ''));
+    if (!abs.startsWith(ASSETS_DIR)) { res.writeHead(403); return res.end('forbidden'); }
+    return serve(abs);
+  }
   const rel = p === '/' ? '/index.html' : p;
   const abs = path.join(__dirname, rel.replace(/\.\./g, ''));
   if (!abs.startsWith(__dirname)) { res.writeHead(403); return res.end('forbidden'); }

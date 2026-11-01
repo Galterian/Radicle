@@ -4,8 +4,180 @@
 
 import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
-import { createKnownMap, initialBlock, featureAt } from './map.js';
+import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
+import { featureAt, markFeatureConsumed, isFeatureConsumed, isLabyrinthWallAt } from './features.js';
+import { scatterAt } from './scatter.js';
+import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
+import { makeSkillIcon, fillSkillCardStack } from './skill_card.js';
+
+// Large multi-hex landmarks live in bigfeature.js, which another workstream is
+// still landing. Pull it in defensively: when the module (or its export) is
+// missing the object lookup simply skips that layer.
+let bigFeatureAt = null;
+import('./bigfeature.js').then(m => { if (typeof m?.bigFeatureAt === 'function') bigFeatureAt = m.bigFeatureAt; }).catch(() => { /* not landed yet */ });
+
+// Per-entry purpose text from the feature catalog (`desc` is being added to
+// assets/features/feature_table.json). featureAt() does not pass it through,
+// so read the table once more here and key it by entry id; until the catalog
+// carries descriptions KIND_DESC supplies a generic line per kind.
+const featureDescById = new Map();
+for (const url of ['/assets/features/feature_table.json', '/assets/terrain_bigfeatures/bigfeature_table.json', '/assets/terrain_scatter/scatter_table.json']) {
+  fetch(url).then(r => r.ok ? r.json() : null).then(j => {
+    const lists = [...Object.values(j?.by_biome || {}), j?.items].filter(Array.isArray);
+    for (const list of lists) for (const c of list) {
+      if (c && typeof c.desc === 'string' && c.desc.trim()) featureDescById.set(c.id || c.label, c.desc.trim());
+    }
+  }).catch(() => { /* table missing — generic kind text only */ });
+}
+
+// Skill rule text by skill id, straight from data/skills.json
+// (entries[].versions[0].data.text). Hand cards normally carry `text` already;
+// this is the fallback for peers that predate that field.
+const skillTextById = new Map();
+fetch('/data/skills.json').then(r => r.ok ? r.json() : null).then(j => {
+  for (const e of j?.entries || []) {
+    const t = e?.versions?.[0]?.data?.text;
+    if (e?.id && typeof t === 'string') skillTextById.set(e.id, t);
+  }
+}).catch(() => { /* no skills catalog */ });
+
+// Extra per-entry fields the hover card surfaces beyond the stat/portrait data
+// that sprites.js tracks: combo (action letters), adept_element, actions_per_round,
+// innate_effect (+text), tags, logic.description. Pulled from the merged
+// characters.json / creatures.json schemas — code defensively, any field may
+// be missing on an older entry. Keyed by source_id (char_* / mon_*).
+const entityExtraById = new Map();
+// B2: class catalog, keyed by class id (e.g. "class_weapon_master"). Used by
+// the hover card to paint a portrait + description block when the entity owns
+// a class permanent. Resource lookup prefers an explicit icon → portrait →
+// info-sheet path; description is the long-form logic text from the active
+// version (abbreviated at render time).
+const classById = new Map();
+// Element catalog, keyed by element id (e.g. "elem_fire"). Used by the
+// vanishing emit-badge overlay above each unit the moment it emits an element,
+// and by hover-card chip tints. Short description is clipped from the active
+// version's logic.description before ", powered by …" — the opening clause is
+// the human sentence; the rest is rule machinery.
+const elementById = new Map();
+let _entityExtraReady = false;
+const _entityListeners = new Set();
+function _notifyEntityExtra() { for (const fn of _entityListeners) { try { fn(); } catch { /* ignore */ } } }
+function onEntityExtraReady(fn) { _entityListeners.add(fn); if (_entityExtraReady) fn(); return () => _entityListeners.delete(fn); }
+function activeVersionLocal(entry) {
+  const vs = Array.isArray(entry?.versions) ? entry.versions : [];
+  let best = null;
+  for (const v of vs) {
+    if (v && v.status === 'rejected') continue;
+    if (!best || (v.weight ?? 0) > (best.weight ?? 0)) best = v;
+  }
+  return best;
+}
+Promise.all([
+  fetch('/data/characters.json').then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch('/data/creatures.json').then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch('/data/classes.json').then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch('/data/elements.json').then(r => r.ok ? r.json() : null).catch(() => null),
+]).then(([chars, mons, classes, elements]) => {
+  for (const doc of [chars, mons]) {
+    for (const e of doc?.entries || []) {
+      if (!e || !e.id) continue;
+      const ver = activeVersionLocal(e) || {};
+      const data = ver.data || {};
+      const logic = ver.logic || {};
+      // Just the first sentence of logic.description to keep the hover card tight.
+      const desc = typeof logic.description === 'string' ? logic.description : '';
+      const firstSentence = desc ? desc.split(/\.(?=\s|$)/)[0].trim() : '';
+      entityExtraById.set(e.id, {
+        tags: Array.isArray(e.tags) ? e.tags.slice() : [],
+        combo: Array.isArray(data.combo) ? data.combo.slice() : null,
+        adept_element: data.adept_element || null,
+        actions_per_round: Number.isFinite(data.actions_per_round) ? data.actions_per_round : null,
+        innate_effect: data.innate_effect || null,
+        innate_effect_text: typeof data.innate_effect_text === 'string' ? data.innate_effect_text : '',
+        dice_pattern: data.dice_pattern || null,
+        on_action_rider: data.on_action_rider || null,
+        logicDesc: firstSentence,
+      });
+    }
+  }
+  for (const e of classes?.entries || []) {
+    if (!e || !e.id) continue;
+    const ver = activeVersionLocal(e) || {};
+    const data = ver.data || {};
+    const logic = ver.logic || {};
+    const res = e.resources || data.resources || {};
+    const sprites = res.sprites || {};
+    const description = (typeof logic.description === 'string' && logic.description)
+      || (typeof data.text === 'string' && data.text)
+      || '';
+    classById.set(e.id, {
+      id: e.id,
+      name: e.name || e.id.replace(/^class_/, '').replace(/_/g, ' '),
+      description,
+      // Resource paths in priority order — icon is the single-frame card art,
+      // portrait is the painted bust, info is the UI panel strip (fallback).
+      iconPath: res.icon?.path || null,
+      portraitPath: res.portrait?.path || null,
+      infoPath: sprites.info?.path || null,
+    });
+  }
+  for (const e of elements?.entries || []) {
+    if (!e || !e.id) continue;
+    const ver = activeVersionLocal(e) || {};
+    const data = ver.data || {};
+    const logic = ver.logic || {};
+    const res = e.resources || {};
+    const sprites = res.sprites || {};
+    const descRaw = typeof logic.description === 'string' ? logic.description : '';
+    // The sentence reads "X element (hint), powered by stat_Y: emitted …" —
+    // clip at the first ", powered by" (or first full stop) for a one-line
+    // overlay sub-caption. Falls back to the element name.
+    let short = descRaw.split(/, powered by/)[0];
+    short = short.split(/\.(?=\s|$)/)[0].trim();
+    if (!short) short = e.name || e.id.replace(/^elem_/, '');
+    elementById.set(e.id, {
+      id: e.id,
+      name: e.name || e.id.replace(/^elem_/, ''),
+      colorHint: data.color_hint || '',
+      stat: data.stat || null,
+      tags: Array.isArray(e.tags) ? e.tags.slice() : [],
+      shortDesc: short,
+      // Prefer a UI info sprite (clean single frame) over the full idle sheet.
+      iconPath: res.icon?.path || sprites.info?.path || sprites.effect?.path || null,
+    });
+  }
+  _entityExtraReady = true;
+  _notifyEntityExtra();
+}).catch(() => { /* best-effort */ });
+
+// Color per element color_hint. Falls back to parsing the first word of the
+// hint. Used both by the vanishing emit badge border and by hover chips so a
+// unit's live element reads at a glance.
+function elementTint(colorHint) {
+  const m = {
+    'red-flesh': '#d6565a', 'orange-red': '#ff8847', 'cyan-ice': '#6bd4e3',
+    'yellow-gold': '#f0c861', 'blue-sea': '#5a9cd6', 'green-earth': '#78b56a',
+    'violet-mind': '#a08eff', 'gray-mist': '#aab2bd', 'black-void': '#2c2e38',
+    'white-light': '#eef4ff', 'brown-earth': '#8a6a3a', 'silver-time': '#c7d1dc',
+    'gold-harmony': '#f6d774', 'purple-souls': '#a08eff',
+  };
+  if (m[colorHint]) return m[colorHint];
+  const lower = (colorHint || '').toLowerCase();
+  if (/red|flesh/.test(lower)) return '#d6565a';
+  if (/orange/.test(lower)) return '#ff8847';
+  if (/yellow|gold/.test(lower)) return '#f0c861';
+  if (/green|earth/.test(lower)) return '#78b56a';
+  if (/blue|sea|water/.test(lower)) return '#5a9cd6';
+  if (/cyan|ice/.test(lower)) return '#6bd4e3';
+  if (/violet|purple|mind|soul/.test(lower)) return '#a08eff';
+  if (/white|silver|light/.test(lower)) return '#eef4ff';
+  if (/brown/.test(lower)) return '#8a6a3a';
+  if (/gray|grey|mist/.test(lower)) return '#aab2bd';
+  return '#9bb3d6';
+}
+
+const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Unit voice lines / fx from the curated WBC3 collection. `M` toggles mute.
 const sounds = createSoundBank();
@@ -78,7 +250,7 @@ const state = {
   // list of hexes (step 1 … destination) the auto-walker will follow across
   // rounds. Both survive planning→reveal→resolution so the next round can
   // pick up where this one left off.
-  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0 },
+  ui: { hoverTile: null, selectedTarget: null, destinationTile: null, pathPlan: null, logFilterPeerId: null, floatingDmgs: [], floatingIcons: [], coldSyncUntil: 0, showCoords: false, hoverPeerId: null, objectCard: null },
   // The dimension as this peer knows it: initial block + every revealed disc.
   // Replaced wholesale from the peer's `hello` / `map` messages; `mapVersion`
   // bumps so the renderer can rebuild its tile/frontier caches lazily.
@@ -100,16 +272,19 @@ function applyMap(m) {
   }
 }
 
-// Build the "blocked" set the pathfinder uses: every alive entity other than
-// me stands on an impassable tile.
+// Build the blocked-tile predicate the pathfinder uses: every alive entity
+// other than me stands on an impassable tile, and every labyrinth-wall hex is
+// static scenery nobody can step onto. Labyrinth walls are a pure function of
+// (seed, q, r), so the predicate stays deterministic.
 function blockedTilesExcluding(myPeerId) {
-  const blocked = new Set();
+  const occ = new Set();
   for (const p of state.entities) {
     if (!p || p.life <= 0 || p.peer_id === myPeerId) continue;
     if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
-    blocked.add(`${p.tile_q},${p.tile_r}`);
+    occ.add(`${p.tile_q},${p.tile_r}`);
   }
-  return blocked;
+  const seed = state.map.seed;
+  return (q, r) => occ.has(`${q},${r}`) || isLabyrinthWallAt(seed, q, r);
 }
 
 // Cancel an in-progress multi-round journey. Called from any manual action the
@@ -229,7 +404,10 @@ function logUI(text, kind = 'evt', opts = null) {
   }
   const log = document.getElementById('log');
   log.prepend(li);
-  while (log.children.length > 120) log.lastChild.remove();
+  // Keep enough history that the user can scroll back to turn 1 of the match.
+  // ~2000 lines is still cheap DOM-wise; the roster + log live in a scrolling
+  // panel so the browser only paints the visible slice anyway.
+  while (log.children.length > 2000) log.lastChild.remove();
   applyLogFilterRow(li);
 }
 
@@ -517,8 +695,9 @@ function renderDeck() {
       cardDiv.dataset.code = code;
       const n = state.queued[0] === 'EMPTY' ? state.queuedSkills.length : 0;
       const sanct = code === 'EP' && !emptyIsSecond && inSanctuary();
-      cardDiv.innerHTML = `<div class="nm">Empty</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
-      slot.title = sanct ? 'Sanctuary: you take no damage while you rest in Empty Posture; any other action or skill ends it' : '';
+      const help = ACTION_HELP[emptyIsSecond ? 'EP' : code];
+      cardDiv.innerHTML = `<div class="nm">Empty${code === 'EM' ? ' Move' : ' Posture'}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
+      slot.title = (sanct ? 'Sanctuary: you take no damage while you rest in Empty Posture; any other action or skill ends it\n\n' : '') + (help?.full || '');
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
       slot.classList.toggle('queued-extra', emptyIsSecond);
       slot.classList.toggle('locked', state.locked && (state.queued[0] === 'EMPTY' || emptyIsSecond));
@@ -569,16 +748,30 @@ function renderDeck() {
       slot.dataset.code = band;
       cardDiv.dataset.code = band;
       const needs = isTrance(card) ? 'any action' : ridesOnEmpty(card) ? `${ACTION_SHORT[card.requires]} / Empty` : (ACTION_SHORT[card.requires] || card.requires);
-      cardDiv.innerHTML = `<div class="nm">✦ ${card.name}</div><div class="cd">needs ${needs}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
-      slot.title = card.text || card.name;
+      // Rule text on the card itself (data/skills.json text, ≤70 chars); the
+      // full sentence stays in the tooltip.
+      const text = card.text || skillTextById.get(card.skill_id) || (isTrance(card) ? ACTION_HELP.BT.full : '');
+      // Build the card as DOM so the icon canvas can live inside it — the
+      // skill-card icon shows the real effect sprite (frame 0) when a skill's
+      // resources.sprites.icon or .effect is mapped, otherwise the unicode
+      // glyph. slot .ds carries the short rule; the full line stays in title.
+      cardDiv.innerHTML = `
+        <div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div>
+        <div class="skill-slot-icon"></div>
+        <div class="ds">${escHtml(abbreviate(text, 70))}</div>
+        <div class="cd">needs ${escHtml(needs)}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
+      const iconMount = cardDiv.querySelector('.skill-slot-icon');
+      if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name }));
+      slot.title = text || card.name;
     } else if (card) {
       const code = card.code;
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
       const short = ACTION_SHORT[code] || card.action_name || code;
       const n = state.queued[0] === i ? state.queuedSkills.length : 0;
-      cardDiv.innerHTML = `<div class="nm">${short}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`;
-      slot.title = '';
+      const help = ACTION_HELP[code];
+      cardDiv.innerHTML = `<div class="nm">${escHtml(short)}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`;
+      slot.title = help?.full || '';
     } else {
       delete slot.dataset.code;
       delete cardDiv.dataset.code;
@@ -707,12 +900,47 @@ function worldFeatures() {
   return list;
 }
 // Hex distance from my unit to another roster entry (Infinity when either tile is unknown).
+// Fog of war: a hex is "in sight this frame" when it sits within sight range
+// of my hero or any teammate — allies share their disc into one combined
+// visible region. The resulting Set<"q,r"> is read by the renderer to dim
+// known-but-out-of-sight tiles and to hide enemies the team can't see.
+// Monster sight is handled by resolver AI (not shown on the map). HERO +
+// ALLY share the 10-hex ring; everything else contributes nothing.
+function recomputeSightSet() {
+  const set = new Set();
+  if (!state.entities || !state.entities.length) { state.ui.sightSet = set; return; }
+  const addDisc = (q, r, radius) => {
+    const R = Math.max(0, radius | 0);
+    for (let dq = -R; dq <= R; dq++) {
+      const lo = Math.max(-R, -dq - R);
+      const hi = Math.min(R, -dq + R);
+      for (let dr = lo; dr <= hi; dr++) set.add(`${q + dq},${r + dr}`);
+    }
+  };
+  for (const e of state.entities) {
+    if (e.life <= 0) continue;
+    if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    const mine = e.peer_id === state.myPeerId;
+    const ownedByMe = e.owner_peer_id === state.myPeerId;
+    const alliedChar = e.alliance === 'player' || e.alliance === 'npc_a';
+    if (!(mine || ownedByMe || alliedChar)) continue;   // enemies don't share sight
+    const radius = mine ? HERO_SIGHT_RADIUS : ALLY_SIGHT_RADIUS;
+    addDisc(e.tile_q, e.tile_r, radius);
+  }
+  state.ui.sightSet = set;
+}
+
 function hexDistanceTo(e) {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   const q = e.tile_q ?? e.tile?.q, r = e.tile_r ?? e.tile?.r;
   if (!me || !Number.isInteger(me.tile_q) || !Number.isInteger(q)) return Infinity;
   return hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, { tile_q: q, tile_r: r });
 }
+// Persists across re-renders so the user's open rows stay open when the
+// snapshot ticks (which rebuilds the whole roster DOM). Default: ONLY my own
+// row is expanded — the user sees their stats at a glance and expands others
+// on demand.
+const _expandedRosterIds = new Set();
 function renderRoster() {
   const el = document.getElementById('roster');
   el.innerHTML = '';
@@ -721,12 +949,18 @@ function renderRoster() {
   head.className = 'ros-head';
   head.innerHTML = '<span>Unit</span><span class="team">Ally</span>';
   el.appendChild(head);
+  // On first roster render after connect, auto-expand my own row.
+  if (state.myPeerId && !_expandedRosterIds.size) _expandedRosterIds.add(state.myPeerId);
   for (const e of state.entities) {
     const row = document.createElement('div');
-    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''}`;
+    const expanded = _expandedRosterIds.has(e.peer_id);
+    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
+    const res = resOf(e);
+    const thumb = res?.portrait?.path ? `<img class="thumb" src="${assetUrl(res.portrait.path)}" alt="">`
+      : res?.sprites?.info?.path ? `<img class="thumb info" src="${assetUrl(res.sprites.info.path)}" alt="">` : '';
     let statTokens = [];
     try { statTokens = JSON.parse(e.stat_tokens_json || '[]'); } catch {}
     // Rule 12 dice over / under a stat show as the modifier next to the base value.
@@ -761,6 +995,8 @@ function renderRoster() {
       const title = mine ? `${label} — click to emit ${label} against the closest enemy's ${label} tokens (Rule 24)` : linkPick ? `${label} — click to link this stat to yours (Spirit Link)` : label;
       return `<span class="pill ${cls}${mine || linkPick ? ' clickable' : ''}${on ? ' active' : ''}" data-stat="${key}" title="${title}">${on ? (mine ? '⚒ ' : '🔗 ') : ''}${label[0] === 'W' && label.length > 5 ? 'Wi' : label[0]} ${stat(flat, key)}</span>`;
     };
+    const permIds = (e.permanents_csv || '').split(',').filter(Boolean);
+    const headQR = `(${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})`;
     // Spirit links held, afflictions suffered (Sleep / Confusion), traps laid (count only — face down).
     let links = [], afflictions = [], traps = [];
     try { links = JSON.parse(e.links_json || '[]'); } catch {}
@@ -796,24 +1032,52 @@ function renderRoster() {
       return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="class${state_}${archived ? ' — the owner recasts it by emitting every colour' : ''}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
     })();
     const team = teamLabel(e);
-    const res = resOf(e);
-    const thumb = res?.portrait?.path ? `<img class="thumb" src="${assetUrl(res.portrait.path)}" alt="">`
-      : res?.sprites?.info?.path ? `<img class="thumb info" src="${assetUrl(res.sprites.info.path)}" alt="">` : '';
-    row.innerHTML = `${thumb}<span class="nm">${e.name}<span class="team ${/Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally'}" title="ally">${team}</span></span>
-      <span class="st">${srcTag} · hp ${e.life}/${e.life_max || e.lifeMax} · (${e.tile_q ?? e.tile?.q},${e.tile_r ?? e.tile?.r})${tier}</span>
+    const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
+    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}<span class="team" title="ally"></span></span>
+      <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
         ${pill('w', 'world', 'World', 'stat_world')}
         ${pill('m', 'matter', 'Matter', 'stat_matter')}
         ${pill('wi', 'will', 'Will', 'stat_will')}
         ${classPill}
-        ${perms.length ? `<span class="pill perm" title="permanents">✦ ${perms.join(', ')}</span>` : ''}
         ${lost}${countered.length ? `<span class="pill perm" title="countered this turn">✨ ${countered.join(', ')}</span>` : ''}${extraPills}
+      </span>
+      ${permIds.length ? '<div class="perm-cards" data-count="' + permIds.length + '"></div>' : ''}
       </span>`;
+    const teamBadge = row.querySelector('.team');
+    teamBadge.classList.add(teamClass);
+    teamBadge.textContent = team;
+    // Build the permanents stack as real SkillCard DOM, not innerHTML strings
+    // — the icon canvas has to be a live node so the sprite paints into it.
+    if (permIds.length) {
+      const stack = row.querySelector('.perm-cards');
+      // Over three permanents: default-collapse into a chevron that expands
+      // in place. Keeps the roster scannable while still a click away from
+      // the full stack.
+      const collapsed = permIds.length > 3;
+      if (collapsed) stack.classList.add('collapsed');
+      fillSkillCardStack(stack, permIds, { variant: 'strip', badge: 'perm' });
+      if (collapsed) {
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'perm-toggle';
+        toggle.textContent = `+${permIds.length - 2} more…`;
+        toggle.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const isOpen = stack.classList.toggle('open');
+          toggle.textContent = isOpen ? 'collapse' : `+${permIds.length - 2} more…`;
+        });
+        stack.appendChild(toggle);
+      }
+    }
     // Clicking a roster row toggles the log filter on that peer; clicking one
     // of MY stat pills queues a Rule 24 emission with that stat instead; an
     // ally stat pill links it (Spirit Link); an enemy perm pill names it (Phylactery).
     row.addEventListener('click', (ev) => {
+      // Skill cards inside this row shouldn't toggle the log filter when the
+      // user is reading one — only the empty region / name counts.
+      if (ev.target.closest('.skill-card') || ev.target.closest('.perm-toggle')) return;
       // An enemy class colour chip: first click arms it, the second sends the strike (destroy with class + elem).
       const chipEl = ev.target.closest('.chip.clickable');
       if (chipEl && isEnemyRow && chipEl.dataset.classStat) {
@@ -871,10 +1135,398 @@ function renderRoster() {
         logUI(`💀 Phylactery → ${e.name}'s ${pillEl.dataset.perm.replace(/^(skill|effect)_/, '')} shatters at the end of this action`, 'phase');
         return;
       }
-      setLogFilter(activeFilter === e.peer_id ? null : e.peer_id);
+      // The funnel chip in the row corner is the dedicated filter action; a
+      // bare click on the row toggles the detail view (collapsed → expanded).
+      if (ev.target.closest('.ros-filter')) {
+        ev.stopPropagation();
+        setLogFilter(activeFilter === e.peer_id ? null : e.peer_id);
+        return;
+      }
+      if (_expandedRosterIds.has(e.peer_id)) _expandedRosterIds.delete(e.peer_id);
+      else _expandedRosterIds.add(e.peer_id);
+      row.classList.toggle('expanded');
     });
     el.appendChild(row);
   }
+}
+
+// HUD hero card (own portrait) + hover card for whichever unit the cursor is
+// over. Both read the entity's `resources` block; nothing is shown when the
+// mapping has no art for it.
+let heroCardKey = null;
+function renderHeroCard() {
+  const card = document.getElementById('hero-card');
+  if (!card) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const res = me ? resOf(me) : null;
+  const key = me ? `${me.peer_id}|${res ? 1 : 0}|${me.life}|${sounds.muted ? 1 : 0}` : null;
+  if (key === heroCardKey) return;
+  heroCardKey = key;
+  if (!me || !res) { card.hidden = true; return; }
+  card.hidden = false;
+  const img = card.querySelector('img');
+  const src = res.portrait?.path ? assetUrl(res.portrait.path) : res.sprites?.info?.path ? assetUrl(res.sprites.info.path) : '';
+  if (img.getAttribute('src') !== src) img.src = src;
+  img.classList.toggle('info', !res.portrait?.path);
+  card.querySelector('.hero-name').textContent = me.name;
+  card.querySelector('.hero-sub').textContent = `${res._entryName || ''} · as ${res.wbc3_name || '?'}${res.wbc3_race ? ` (${res.wbc3_race})` : ''}`;
+  card.querySelector('.hero-hp').textContent = `hp ${me.life}/${me.life_max}`;
+  card.querySelector('.hero-mute').textContent = sounds.muted ? '🔇 muted (M)' : '🔊 sound on (M)';
+}
+// Shared stat line builder — same shape as the roster row so the two surfaces
+// render identical pills.
+function statPillsHtml(e) {
+  const stat = (flat, key) => {
+    const v = e[flat] ?? e.stats?.[key];
+    return Number.isFinite(v) ? v : '—';
+  };
+  return `
+    <span class="pill v"  title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
+    <span class="pill w"  title="World">W ${stat('stat_world', 'world')}</span>
+    <span class="pill m"  title="Matter">M ${stat('stat_matter', 'matter')}</span>
+    <span class="pill wi" title="Will">Wi ${stat('stat_will', 'will')}</span>`;
+}
+
+// Floating skill-card overlay above revealing units. Mirrors the canvas-side
+// floating-icon strip but as full DOM cards — same clock, same actors. Pure
+// view: it reads state.ui.revealBadges / state.entities and renders into a
+// fixed overlay layer; it never mutates game state.
+let _revealEls = new Map();   // peerId -> HTMLElement
+function renderRevealOverlay() {
+  const layer = document.getElementById('skill-reveal-layer');
+  const canvas = document.getElementById('stage');
+  if (!layer || !canvas || !rendererRef) return;
+  const now = performance.now();
+  const badges = state.ui.revealBadges || {};
+  const rect = canvas.getBoundingClientRect();
+  const z = rendererRef.zoom();
+  const origin = rendererRef.toWorld(0, 0);
+
+  const liveIds = new Set();
+  for (const [pid, badge] of Object.entries(badges)) {
+    if (!badge) continue;
+    const t = (now - badge.startAt) / badge.duration;
+    if (t >= 1) continue;
+    const e = state.entities.find(x => x.peer_id === pid);
+    if (!e || !Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    liveIds.add(pid);
+
+    // Build only once per reveal; animate opacity + rise via CSS variable.
+    let el = _revealEls.get(pid);
+    if (!el || el.dataset.startAt !== String(badge.startAt)) {
+      if (el) el.remove();
+      el = document.createElement('div');
+      el.className = 'reveal-overlay';
+      el.dataset.peerId = pid;
+      el.dataset.startAt = String(badge.startAt);
+      // Chip row at the top: "[EM + A + ✦BT + ✦Po]" — matches the canvas text.
+      const chip = document.createElement('div');
+      chip.className = 'reveal-chip';
+      chip.classList.toggle('self', pid === state.myPeerId);
+      chip.classList.toggle('enemy', e.alliance === 'npc_b');
+      chip.textContent = `[${badge.text}]`;
+      el.appendChild(chip);
+      if (Array.isArray(badge.skills) && badge.skills.length) {
+        const stack = document.createElement('div');
+        stack.className = 'reveal-skill-stack';
+        fillSkillCardStack(stack, badge.skills, { variant: 'reveal' });
+        el.appendChild(stack);
+      }
+      layer.appendChild(el);
+      _revealEls.set(pid, el);
+    }
+
+    // Fade + rise on the badge's own clock. Only drive opacity + translate —
+    // the DOM contents don't change frame to frame.
+    const alpha = t < 0.75 ? 1 : Math.max(0, 1 - (t - 0.75) / 0.25);
+    const rise = 10 * t;
+    const w = rendererRef.tilePx(e.tile_q, e.tile_r);
+    const cx = (w.x - origin.x) * z + rect.left;
+    const cy = (w.y - origin.y) * z + rect.top;
+    el.style.opacity = String(alpha);
+    el.style.transform = `translate(-50%, calc(-100% - ${rise}px))`;
+    el.style.left = `${cx}px`;
+    el.style.top = `${cy - 72}px`;
+  }
+  // Drop overlays whose badge has expired or whose entity vanished.
+  for (const [pid, el] of _revealEls) {
+    if (!liveIds.has(pid)) { el.remove(); _revealEls.delete(pid); }
+  }
+}
+
+// Element emission overlay — a small chip with the element's icon, name and a
+// one-line description that rises above the unit and fades out. Reads
+// state.ui.emitBadges set by the reveal handler; shares its clock pattern
+// with renderRevealOverlay() so motion is consistent.
+const _emitEls = new Map();
+function renderElementEmitOverlay() {
+  const layer = document.getElementById('element-emit-layer');
+  const canvas = document.getElementById('stage');
+  if (!layer || !canvas || !rendererRef) return;
+  const now = performance.now();
+  const badges = state.ui.emitBadges || {};
+  const rect = canvas.getBoundingClientRect();
+  const z = rendererRef.zoom();
+  const origin = rendererRef.toWorld(0, 0);
+  const liveIds = new Set();
+  for (const [pid, badge] of Object.entries(badges)) {
+    if (!badge) continue;
+    const t = (now - badge.startAt) / badge.duration;
+    if (t <= 0 || t >= 1) continue;
+    const el = elementById.get(badge.element);
+    if (!el) continue;
+    const e = state.entities.find(x => x.peer_id === pid);
+    if (!e || !Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    liveIds.add(pid);
+    let node = _emitEls.get(pid);
+    if (!node || node.dataset.key !== `${badge.element}|${badge.startAt}`) {
+      if (node) node.remove();
+      node = document.createElement('div');
+      node.className = 'element-emit-overlay';
+      node.dataset.peerId = pid;
+      node.dataset.key = `${badge.element}|${badge.startAt}`;
+      const src = el.iconPath ? assetUrl(el.iconPath) : '';
+      node.innerHTML = `
+        ${src ? `<img class="ee-icon" src="${escHtml(src)}" alt="">` : '<span class="ee-glyph">◉</span>'}
+        <div class="ee-body">
+          <div class="ee-name">${escHtml(el.name)}</div>
+          <div class="ee-sub">${escHtml(el.shortDesc)}</div>
+        </div>`;
+      node.style.setProperty('--ee-tint', elementTint(el.colorHint));
+      layer.appendChild(node);
+      _emitEls.set(pid, node);
+    }
+    // Rise + fade on the badge's own clock (steeper fade in the last third).
+    const alpha = t < 0.65 ? 1 : Math.max(0, 1 - (t - 0.65) / 0.35);
+    const rise = 16 * t;
+    const w = rendererRef.tilePx(e.tile_q, e.tile_r);
+    const cx = (w.x - origin.x) * z + rect.left;
+    const cy = (w.y - origin.y) * z + rect.top;
+    node.style.opacity = String(alpha);
+    node.style.transform = `translate(-50%, calc(-100% - ${rise}px))`;
+    node.style.left = `${cx}px`;
+    node.style.top = `${cy - 44}px`;
+  }
+  for (const [pid, node] of _emitEls) {
+    if (!liveIds.has(pid)) { node.remove(); _emitEls.delete(pid); }
+  }
+}
+
+// Rebuilding the hover card innerHTML every mousemove would thrash the DOM;
+// instead, re-render on identity + state changes only, and let the mouse move
+// just reposition. The key is `pid|objKey|life|perms|hand`.
+let _hoverCardKey = null;
+// First-paint: when the entity-extras catalog lands after the user has already
+// hovered a unit, the card is still rendered without the extra chips/info.
+// Invalidate the cached key so the next mousemove rebuilds with the new data.
+onEntityExtraReady(() => { _hoverCardKey = null; });
+function renderHoverCard(clientX, clientY) {
+  const card = document.getElementById('hover-card');
+  if (!card) return;
+  const pid = state.ui.hoverPeerId;
+  const p = pid ? state.entities.find(e => e.peer_id === pid) : null;
+  const res = p ? resOf(p) : null;
+  // No unit under the cursor: fall back to a one-line card for whatever map
+  // object sits on the hovered hex (building / landmark / scatter).
+  const obj = !p && state.ui.hoverTile ? objectAt(state.ui.hoverTile.q, state.ui.hoverTile.r) : null;
+  // The detail card already shows this object — no one-liner on top of it.
+  const detailOpen = obj && state.ui.objectCard && state.ui.objectCard.q === obj.q && state.ui.objectCard.r === obj.r;
+  if ((!p && !obj) || detailOpen) { card.hidden = true; _hoverCardKey = null; return; }
+  card.hidden = false;
+  card.classList.toggle('object', !!obj);
+  card.classList.toggle('unit', !!p);
+  // Rebuild innerHTML on identity change so the detail section fits whatever
+  // caller is active (unit vs. object). The hover card re-mounts on every
+  // mousemove; keeping it DOM-light avoids layout churn — plus the key below
+  // skips the rebuild when nothing material has changed.
+  const key = p
+    ? `U:${p.peer_id}|${p.life}/${p.life_max}|${p.permanents_csv || ''}|${p.peer_id === state.myPeerId ? state.hand.filter(c=>isSkill(c)).map(c=>c.card_id).join(',') : ''}`
+    : `O:${obj.q},${obj.r}|${obj.id || obj.label || obj.kind}`;
+  const dirty = key !== _hoverCardKey;
+  _hoverCardKey = key;
+  if (dirty && p) {
+    const sub = res ? `${res._entryName || ''}${res.wbc3_name ? ' · ' + res.wbc3_name : ''}${res.wbc3_race ? ' (' + res.wbc3_race + ')' : ''}` : (p.source_id || '');
+    const srcPath = res?.sprites?.info?.path || res?.portrait?.path || '';
+    const src = srcPath ? assetUrl(srcPath) : '';
+    const tier = p.tier && p.tier !== 'self' ? (p.tier === 'strong' ? 'in contact' : p.tier) : '';
+    const permIds = String(p.permanents_csv || '').split(',').filter(Boolean);
+    // Only our own hand is public; show held skills for the self card only.
+    const isSelf = p.peer_id === state.myPeerId;
+    const heldSkillIds = isSelf ? state.hand.filter(c => isSkill(c)).map(c => c.skill_id) : [];
+    // Richer post-merge detail: tags, combo, adept element, actions/round,
+    // innate effect (creatures), one-sentence logic summary. Each piece is
+    // optional so an older entry still produces a sensible card.
+    const extra = entityExtraById.get(sourceIdOf(p)) || null;
+    const chips = [];
+    const classId = (p.permanents_csv || '').split(',').find(s => s.startsWith('class_'));
+    if (classId) chips.push({ cls: 'cls', text: '⚜ ' + classId.replace(/^class_/, '').replace(/_/g, ' ') });
+    for (const t of extra?.tags || []) chips.push({ cls: 'tag', text: t });
+    const info = [];
+    if (extra?.combo) info.push('combo ' + extra.combo.join(' · '));
+    if (extra?.adept_element) info.push(extra.adept_element.replace(/^elem_/, '') + ' adept');
+    if (Number.isFinite(extra?.actions_per_round)) info.push(extra.actions_per_round + '/round');
+    if (extra?.innate_effect_text) info.push(extra.innate_effect_text);
+    const logic = extra?.logicDesc || '';
+    // B2: full class block (portrait + name + description). Rendered under
+    // the chips when the entity owns a class_* permanent and the catalog
+    // has resolved. The chip row above still shows the ⚜ slug summary.
+    const classEntry = classId ? classById.get(classId) : null;
+    const classIconPath = classEntry && (classEntry.iconPath || classEntry.portraitPath || classEntry.infoPath);
+    const classIconSrc = classIconPath ? assetUrl(classIconPath) : '';
+    const classDescAbbrev = classEntry?.description ? abbreviate(classEntry.description, 220) : '';
+    const classBlockHtml = classEntry ? `
+      <div class="hc-class">
+        ${classIconSrc ? `<img class="hc-class-icon" src="${escHtml(classIconSrc)}" alt="">` : ''}
+        <div class="hc-class-body">
+          <div class="hc-class-name">⚜ ${escHtml(classEntry.name)}</div>
+          ${classDescAbbrev ? `<div class="hc-class-desc">${escHtml(classDescAbbrev)}</div>` : ''}
+        </div>
+      </div>` : '';
+    card.innerHTML = `
+      <div class="hc-head">
+        ${src ? `<img class="hc-thumb" src="${escHtml(src)}" alt="">` : ''}
+        <div class="hc-meta">
+          <div class="hc-name">${escHtml(p.name)}</div>
+          <div class="hc-sub">${escHtml(sub)}</div>
+          <div class="hc-hp">hp ${p.life}/${p.life_max} · ${escHtml(p.alliance || '')}${p.life <= 0 ? ' · dead' : ''}${tier ? ' · ' + escHtml(tier) : ''}</div>
+          <div class="hc-coords">(${p.tile_q ?? '—'}, ${p.tile_r ?? '—'})</div>
+        </div>
+      </div>
+      <div class="hc-stats">${statPillsHtml(p)}</div>
+      ${chips.length ? `<div class="hc-chips">${chips.map(c => `<span class="hc-chip ${c.cls}">${escHtml(c.text)}</span>`).join('')}</div>` : ''}
+      ${classBlockHtml}
+      ${info.length ? `<div class="hc-info">${info.map(escHtml).join(' · ')}</div>` : ''}
+      ${logic ? `<div class="hc-logic">${escHtml(abbreviate(logic, 200))}</div>` : ''}
+      ${permIds.length ? `<div class="hc-section-head">permanents</div><div class="hc-perms"></div>` : ''}
+      ${heldSkillIds.length ? `<div class="hc-section-head">skills in hand</div><div class="hc-skills"></div>` : ''}
+    `;
+    const permWrap = card.querySelector('.hc-perms');
+    if (permWrap) {
+      // B1: paint the strip's shortcut (9 / 0 / - / =) in each perm card's
+      // corner, so the hover-card perms show the same binding as the strip.
+      const items = permShortcutsForIds(permIds, p);
+      fillSkillCardStack(permWrap, items, { variant: 'tooltip', badge: 'perm' });
+    }
+    const skillWrap = card.querySelector('.hc-skills');
+    if (skillWrap) fillSkillCardStack(skillWrap, heldSkillIds, { variant: 'tooltip' });
+  } else if (dirty && obj) {
+    const src = obj ? assetUrl(obj.path) : '';
+    card.innerHTML = `
+      <div class="hc-head">
+        ${src ? `<img class="hc-thumb hc-thumb-obj" src="${escHtml(src)}" alt="">` : ''}
+        <div class="hc-meta">
+          <div class="hc-name">${escHtml(obj.label || obj.kind)}</div>
+          <div class="hc-sub">${escHtml(obj.kind)}${obj.biome ? ' · ' + escHtml(obj.biome) : ''} · (${obj.q},${obj.r})</div>
+          <div class="hc-hp">${escHtml(abbreviate(obj.desc, 160))}</div>
+          <div class="hc-coords">click for details</div>
+        </div>
+      </div>`;
+  }
+  if (Number.isFinite(clientX)) {
+    // Fit the card alongside the cursor, flipping to the other side if the
+    // natural placement would clip the viewport.
+    const w = card.offsetWidth || 240, h = card.offsetHeight || 140;
+    const preferRight = clientX + 24 + w <= window.innerWidth - 8;
+    const left = preferRight ? clientX + 16 : clientX - 16 - w;
+    const top = Math.max(8, Math.min(window.innerHeight - h - 8, clientY - h / 2));
+    card.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, left))}px`;
+    card.style.top = `${top}px`;
+  }
+}
+
+// --- map objects: what is on a hex and what it is for ---------------------
+// Layers in priority order: big landmark → building/permanent → scatter. Each
+// placer is a pure function of (dim seed, q, r); the catalogs load lazily, so
+// a hex can briefly report "nothing" right after connect. Returns
+// {label, kind, path, id, biome, desc, q, r} or null.
+function objectAt(q, r) {
+  if (!Number.isInteger(q) || !Number.isInteger(r) || !state.map.has(q, r)) return null;
+  // Player-created obstacles (Creation walls) take priority over map scenery:
+  // if a wall is standing on this hex, that's what you're asking about. Return
+  // a synthetic object with the Earth element and remaining hp so the detail
+  // card can surface "how much Earth is left to destroy it".
+  for (const ob of (state.obstacles || [])) {
+    if (ob.q === q && ob.r === r) {
+      const owner = state.entities.find(e => e.peer_id === ob.owner);
+      const mine = ob.owner === state.myPeerId;
+      const elem = ob.elem || 'elem_earth';
+      const el = elementById.get(elem) || null;
+      const threshold = Math.max(1, Math.ceil((Number(ob.hp) || 0) / 2));
+      return {
+        id: ob.id || 'creation_wall', label: ob.label || 'Brick Wall',
+        kind: 'wall', path: null, q, r,
+        obstacle: true, mine,
+        owner_name: owner ? owner.name : '',
+        owner_short: owner ? peerShort(owner.peer_id) : '',
+        hp: Number(ob.hp) || 0,
+        element: elem, element_name: el?.name || elem.replace(/^elem_/, ''),
+        element_tint: el ? elementTint(el.colorHint) : '#78b56a',
+        threshold,
+        desc: `${el ? el.name : 'Earth'} wall token placed by Creation. Impassable for low-Matter creatures; destroyed when an enemy emits ${el ? el.name : 'Earth'} and clears every point of its remaining hp (either outright above half, or whittled by Matter-chip damage each action). Allies walk through.`,
+      };
+    }
+  }
+  const seed = state.map.seed;
+  let o = null;
+  if (bigFeatureAt) { try { o = bigFeatureAt(seed, q, r); } catch { o = null; } if (o && !o.kind) o = { ...o, kind: 'bigfeature' }; }
+  if (!o) o = featureAt(seed, q, r);
+  if (!o) o = scatterAt(seed, q, r);
+  if (!o) return null;
+  const kind = o.kind || 'building';
+  const desc = (typeof o.desc === 'string' && o.desc.trim()) || featureDescById.get(o.id) || featureDescById.get(o.label)
+    || KIND_DESC[kind] || KIND_DESC.building;
+  return { ...o, kind, desc, q, r };
+}
+
+function showObjectCard(obj, clientX, clientY) {
+  const card = document.getElementById('object-card');
+  if (!card || !obj) return;
+  const img = card.querySelector('img');
+  // Walls don't have an atlas path — paint the element icon instead so the
+  // card is never empty on the left.
+  const src = obj.obstacle && !obj.path
+    ? (elementById.get(obj.element)?.iconPath ? assetUrl(elementById.get(obj.element).iconPath) : '')
+    : (assetUrl(obj.path) || '');
+  if (img.getAttribute('src') !== src) img.src = src;
+  img.hidden = !src;
+  img.alt = obj.label || obj.kind;
+  card.querySelector('.oc-name').textContent = obj.label || obj.kind;
+  card.querySelector('.oc-kind').textContent = obj.obstacle
+    ? `${obj.kind}${obj.owner_short ? ` · ${obj.mine ? 'yours' : obj.owner_name || obj.owner_short}` : ''}`
+    : `${obj.kind}${obj.family ? ` · ${obj.family}` : ''}${obj.biome ? ` · ${obj.biome}` : ''}`;
+  // Stat pills: for an obstacle, show the element it answers to and the hp
+  // threshold needed to destroy it outright. For anything else, hide the row.
+  const statsEl = card.querySelector('.oc-stats');
+  if (statsEl) {
+    if (obj.obstacle) {
+      statsEl.hidden = false;
+      statsEl.innerHTML = `
+        <span class="oc-pill elem" style="--pill-tint: ${obj.element_tint}">${escHtml(obj.element_name)}</span>
+        <span class="oc-pill hp" title="remaining hit points — at 0 the wall crumbles">${obj.hp} hp</span>
+        <span class="oc-pill thresh" title="an enemy emitting ${escHtml(obj.element_name)} this high destroys it outright; otherwise Matter chips it">destroy &gt; ${obj.threshold}</span>`;
+    } else {
+      statsEl.hidden = true;
+      statsEl.innerHTML = '';
+    }
+  }
+  card.querySelector('.oc-desc').textContent = obj.desc;
+  card.querySelector('.oc-coords').textContent = `hex (${obj.q}, ${obj.r})${obj.id && obj.id !== obj.label ? ` · ${obj.id}` : ''}`;
+  card.hidden = false;
+  state.ui.objectCard = { q: obj.q, r: obj.r };
+  // Place beside the click, clamped to the viewport.
+  const w = card.offsetWidth || 300, h = card.offsetHeight || 140;
+  const x = Number.isFinite(clientX) ? clientX + 18 : window.innerWidth / 2 - w / 2;
+  const y = Number.isFinite(clientY) ? clientY - 24 : window.innerHeight / 2 - h / 2;
+  card.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, x))}px`;
+  card.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, y))}px`;
+  // The hover one-liner would sit on top of the detail card — drop it.
+  const hc = document.getElementById('hover-card');
+  if (hc) hc.hidden = true;
+}
+function hideObjectCard() {
+  const card = document.getElementById('object-card');
+  if (card && !card.hidden) card.hidden = true;
+  state.ui.objectCard = null;
 }
 
 // My permanents (Sanctuary, Barricade, …) as the peer broadcasts them.
@@ -895,6 +1547,29 @@ function myPermCards() {
       : id === 'effect_blessing_curse' ? 'bless' : id === 'effect_possess_phylactery' ? 'phylactery' : null,
   }));
 }
+// Which permanents actually bind to a strip shortcut (key 9 / 0 / - / =).
+// `every_csv` from the owner's snapshot is what flips Aura on; a non-owner
+// view (hover card over an ally) still produces the key only for perms whose
+// trigger is unconditional. Keep this in lockstep with myPermCards() / the
+// renderPerms() KEYS loop so the hover card and the strip never disagree.
+const PERM_SHORTCUT_KEYS = ['9', '0', '-', '='];
+function permShortcutsForIds(permIds, entity) {
+  const every = new Set(String(entity?.every_csv || '').split(',').filter(Boolean));
+  const out = [];
+  let ki = 0;
+  for (const id of permIds || []) {
+    if (!id || id.startsWith('class_')) { out.push({ id, key: null }); continue; }
+    const action = id === 'effect_aura' && every.has(id) ? 'aura'
+      : (id === 'effect_haste' || id === 'effect_balefire') ? 'bonus'
+      : id === 'effect_blessing_curse' ? 'bless'
+      : id === 'effect_possess_phylactery' ? 'phylactery'
+      : null;
+    const key = action && ki < PERM_SHORTCUT_KEYS.length ? PERM_SHORTCUT_KEYS[ki++] : null;
+    out.push({ id, key });
+  }
+  return out;
+}
+
 // What the permanents of the 2026-10-29 batch do, for the strip's tooltips.
 const PERM_HELP = {
   effect_balefire: 'Balefire (6) — until the end of your next turn every card in hand is an instant: queue up to 9 bonus plans per action (one element emission per action still); falls to a Fire/Harmony/Time die of 6',
@@ -1271,6 +1946,12 @@ function connect() {
             // Floating "-N❤️" over the map, lerping dealer→victim.
             const atk = d.attacker ? state.entities.find(e => e.peer_id === d.attacker) : null;
             const tgt = state.entities.find(e => e.peer_id === d.target);
+            // Voice: the attacker gloats when the hit is lethal. Victims'
+            // life may already be updated by the `peers` broadcast, so treat
+            // "≤0 now" or "this hit covers what was left" as a kill.
+            if (atk && tgt && ((tgt.life ?? 1) <= 0 || (d.lethal === true) || (Number.isFinite(d.life_after) && d.life_after <= 0))) {
+              sounds.play(resOf(atk), 'deathblow', { volume: 0.7 });
+            }
             if (tgt && Number.isInteger(tgt.tile_q) && Number.isInteger(tgt.tile_r)) {
               state.ui.floatingDmgs.push({
                 fromQ: atk?.tile_q ?? tgt.tile_q,
@@ -1335,10 +2016,33 @@ function connect() {
             // Every revealer (heroes and monsters) gets the composed chip over
             // its head — `[EM + A + ✦BT + ✦Po]` — fading on the icon's clock.
             // A bonus round shows as `⚡ A ▸ P` once the normal action follows it.
+            // The payload also carries the raw skill ids so the DOM reveal
+            // overlay can pop a SkillCard per skill (icon + full description).
             const prevBadge = state.ui.revealBadges[a.actor];
             const chained = !a.bonus && prevBadge?.bonusKey === `${env.turn}:${env.round}`;
             const chainedBonus = a.bonus && prevBadge?.bonusKey === `${env.turn}:${env.round}`;
-            state.ui.revealBadges[a.actor] = { text: chained || chainedBonus ? `${prevBadge.text} ▸ ${composeLabel(a)}` : `${a.bonus ? '⚡ ' : ''}${composeLabel(a)}`, startAt: performance.now(), duration: 2200 + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay), bonusKey: a.bonus ? `${env.turn}:${env.round}` : null };
+            state.ui.revealBadges[a.actor] = {
+              text: chained || chainedBonus ? `${prevBadge.text} ▸ ${composeLabel(a)}` : `${a.bonus ? '⚡ ' : ''}${composeLabel(a)}`,
+              skills: (a.skills || []).filter(id => id && id !== 'skill_battle_trance'),
+              trance: Array.isArray(a.trance) ? a.trance.slice() : null,
+              action: a.action,
+              startAt: performance.now(),
+              duration: 2200 + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay),
+              bonusKey: a.bonus ? `${env.turn}:${env.round}` : null,
+            };
+            // Element emission vanishing icon: resolver stamped `emitted_element`
+            // on the action if a Posture / Reaver Attack / Monk Move / Rule-24
+            // destroy pushed an element this tick. Separate overlay from the
+            // skill-reveal chip so a cast with no net emission (e.g. an
+            // interrupted channel) still gets its action chip.
+            if (a.emitted_element) {
+              state.ui.emitBadges ||= {};
+              state.ui.emitBadges[a.actor] = {
+                element: a.emitted_element,
+                startAt: performance.now() + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay),
+                duration: 2600,
+              };
+            }
             if (a.bonus) logUI(`  ⚡ ${peerShort(a.actor)} ${a.pre ? 'balefire first' : `bonus round ${(a.bonus_k || 0) + 1}`}: ${composeLabel(a)}`, 'phase', { peerId: a.actor });
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
@@ -1352,9 +2056,10 @@ function connect() {
               a.trance.forEach((c, i) => { if (!Array.isArray(a.played) || a.played.includes(i)) icons.push({ action: c }); });
               icons.push({ action: 'BT' });
             } else icons.push({ action: a.action });
-            // Each revealed skill plays its mapped WBC3 fx sound (data/skills.json resources.sounds.fx) — the bank throttles repeats.
-            for (const id of a.skills || []) sounds.play(resourcesFor(id), 'fx', { volume: 0.55 });
             for (const id of a.skills || []) if (id !== 'skill_battle_trance') icons.push({ skill: id });
+            // Each revealed skill plays its mapped WBC3 fx sound (data/skills.json
+            // resources.sounds.fx) — one shot per skill, the bank throttles repeats.
+            for (const id of a.skills || []) sounds.play(resourcesFor(id), 'fx', { volume: 0.55 });
             for (const e of a.effects || []) icons.push({ effect: e.effect_id, glyph: `✺${elemGlyphs(e.elements)}` });
             const startAt = at0;
             icons.forEach((ic, i) => state.ui.floatingIcons.push({
@@ -1430,11 +2135,107 @@ function connect() {
 
 function mergeEntities(incoming) {
   const byId = new Map(state.entities.map(e => [e.peer_id, e]));
+  // Remember who was on which tile before the merge so we can detect every
+  // unit that just stepped onto a new hex and consume any building there.
+  const prev = new Map();
+  for (const e of state.entities) prev.set(e.peer_id, { q: e.tile_q, r: e.tile_r });
   for (const p of incoming) {
     if (!p || !p.peer_id) continue;
     byId.set(p.peer_id, { ...(byId.get(p.peer_id) || {}), ...p });
   }
   state.entities = [...byId.values()];
+  for (const e of state.entities) {
+    const was = prev.get(e.peer_id);
+    if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
+    if (was && was.q === e.tile_q && was.r === e.tile_r) continue;
+    maybeConsumeFeature(e);
+  }
+}
+
+// A unit just stepped onto (tile_q, tile_r). If a feature sits here, trigger
+// its effect: log the description to the event log, mark the hex consumed so
+// the renderer stops drawing it, and schedule a vanishing overlay above the
+// hex that shows the icon + description one last time. Big landmarks and
+// player-created walls are left alone — only feature-table buildings and
+// scatter decorations are "pick-ups".
+const _featureVanish = new Map();  // "q,r" -> { startAt, duration, label, kind, src, desc }
+function maybeConsumeFeature(entity) {
+  if (!entity || !Number.isInteger(entity.tile_q) || !Number.isInteger(entity.tile_r)) return;
+  const q = entity.tile_q, r = entity.tile_r;
+  if (isFeatureConsumed(q, r)) return;
+  // objectAt priority order: obstacle (wall) first, then bigfeature, feature,
+  // scatter. We only want to consume `feature` entries here — bigfeatures are
+  // landmarks (keeps, forests, lakes) that stay put, and player walls are
+  // their own thing. Call featureAt directly to skip the other layers.
+  const seed = state.map?.seed;
+  if (!seed) return;
+  const f = featureAt(seed, q, r);
+  if (!f) return;
+  markFeatureConsumed(q, r);
+  const src = f.path ? assetUrl(f.path) : '';
+  const desc = (typeof f.desc === 'string' && f.desc.trim())
+    || featureDescById.get(f.id) || featureDescById.get(f.label)
+    || KIND_DESC[f.kind] || KIND_DESC.building || '';
+  _featureVanish.set(`${q},${r}`, {
+    q, r, startAt: performance.now(), duration: 2800,
+    label: f.label || f.id || f.kind, kind: f.kind || 'building',
+    src, desc,
+  });
+  // Log to the event panel so the record is scrollable with the rest of the
+  // match. Prefix with 🏛 so a scan picks it out.
+  const who = entity.peer_id === state.myPeerId ? 'you' : (entity.name || peerShort(entity.peer_id));
+  logUI(`🏛 ${who} stepped onto ${f.label || f.kind} at (${q},${r}) — ${abbreviate(desc, 180)}`, 'phase');
+  // Nudge the renderer so the sprite disappears at the same frame the badge
+  // starts rising.
+  try { rendererRef?.repaint?.(); } catch { /* best-effort */ }
+}
+
+function renderFeatureVanishOverlay() {
+  const layer = document.getElementById('feature-vanish-layer');
+  const canvas = document.getElementById('stage');
+  if (!layer || !canvas || !rendererRef) return;
+  const now = performance.now();
+  const rect = canvas.getBoundingClientRect();
+  const z = rendererRef.zoom();
+  const origin = rendererRef.toWorld(0, 0);
+  const live = new Set();
+  for (const [key, v] of _featureVanish) {
+    const t = (now - v.startAt) / v.duration;
+    if (t >= 1) continue;
+    live.add(key);
+    let node = layer.querySelector(`[data-k="${CSS.escape(key)}"]`);
+    if (!node) {
+      node = document.createElement('div');
+      node.className = 'feature-vanish-overlay';
+      node.dataset.k = key;
+      node.innerHTML = `
+        ${v.src ? `<img class="fv-icon" src="${escHtml(v.src)}" alt="">` : '<span class="fv-glyph">🏛</span>'}
+        <div class="fv-body">
+          <div class="fv-name">${escHtml(v.label)} <span class="fv-kind">· ${escHtml(v.kind)}</span></div>
+          <div class="fv-desc">${escHtml(abbreviate(v.desc, 200))}</div>
+          <div class="fv-done">consumed</div>
+        </div>`;
+      layer.appendChild(node);
+    }
+    const alpha = t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+    const rise = 28 * t;
+    const scale = 1 - 0.08 * t;
+    const w = rendererRef.tilePx(v.q, v.r);
+    const cx = (w.x - origin.x) * z + rect.left;
+    const cy = (w.y - origin.y) * z + rect.top;
+    node.style.opacity = String(alpha);
+    node.style.transform = `translate(-50%, calc(-100% - ${rise}px)) scale(${scale})`;
+    node.style.left = `${cx}px`;
+    node.style.top = `${cy - 40}px`;
+  }
+  // Drop expired overlays and their DOM.
+  for (const key of [..._featureVanish.keys()]) {
+    if (!live.has(key)) {
+      _featureVanish.delete(key);
+      const node = layer.querySelector(`[data-k="${CSS.escape(key)}"]`);
+      if (node) node.remove();
+    }
+  }
 }
 
 connect();
@@ -1600,14 +2401,25 @@ function wireInput() {
       slotEl.addEventListener('contextmenu', (e) => { e.preventDefault(); toggleDiscard(slotKey); });
     }
   });
+  // Object info card: ✕ button, Esc, or any click outside it (the canvas
+  // click handler below decides for itself — it re-opens on another object).
+  const objectCardEl = document.getElementById('object-card');
+  objectCardEl?.querySelector('.oc-close')?.addEventListener('click', hideObjectCard);
+  document.addEventListener('click', (ev) => {
+    if (!objectCardEl || objectCardEl.hidden) return;
+    if (objectCardEl.contains(ev.target) || ev.target === canvas) return;
+    hideObjectCard();
+  });
   wireArchive();
   window.addEventListener('keydown', (ev) => {
     uilog('keydown', { key: ev.key || ev.code });
     if (ev.key === 'Escape') {
+      hideObjectCard();
       const peek = document.getElementById('peek-popup');
       if (peek && !peek.hidden) { peek.hidden = true; return; }
       if (state.blessMode || state.phylacteryMode) { state.blessMode = false; state.phylacteryMode = false; renderPerms(); renderRoster(); return; }
-      if (!document.getElementById('archive-popup')?.hidden) openArchive(false); else if (state.archiveMode) { state.archiveMode = false; renderDeck(); }
+      if (!document.getElementById('archive-popup')?.hidden) openArchive(false);
+      else if (state.archiveMode) { state.archiveMode = false; renderDeck(); }
       return;
     }
     if (ev.key >= '1' && ev.key <= '7') queueSlot(Number(ev.key) - 1);
@@ -1616,6 +2428,12 @@ function wireInput() {
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
     else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
     else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
+    else if (ev.key === 'm' || ev.key === 'M') {
+      const muted = sounds.toggle();
+      try { localStorage.setItem('chaosd6.muted', muted ? '1' : '0'); } catch { /* no storage */ }
+      logUI(muted ? 'sound muted' : 'sound on', 'phase');
+    }
+    else if (ev.key === 'g' || ev.key === 'G') state.ui.showCoords = !state.ui.showCoords;
     else if (ev.key === 'q' || ev.key === 'Q') clickClassCard();   // my class ability (user ruling 2026-10-30)
     else if (ev.key === 'm' || ev.key === 'M') {
       const muted = sounds.toggle();
@@ -1637,6 +2455,7 @@ function wireInput() {
           peerId: p.peer_id, alliance: p.alliance, name: p.name,
           tile: { q: p.tile_q, r: p.tile_r }, life: p.life, lifeMax: p.life_max,
           isSelf: isMe,
+          sourceId: sourceIdOf(p),
           queuedCode: isMe ? queuedLabel() : null,
           locked: isMe ? state.locked : false,
           revealBadge: state.ui.revealBadges?.[p.peer_id] || null,
@@ -1669,24 +2488,52 @@ function wireInput() {
     get mapVersion() { return state.mapVersion; },
     get myPeerId() { return state.myPeerId; },
   });
+  rendererRef = renderer;
+  // Test hook (tools/ui-check.mjs): every known hex that carries a map object,
+  // with its current canvas-pixel position so a script can click it.
+  window.__chaosObjects = () => {
+    const o0 = renderer.toWorld(0, 0), z = renderer.zoom();
+    const out = [];
+    for (const t of state.map.tiles()) {
+      const obj = objectAt(t.q, t.r);
+      if (!obj) continue;
+      const w = renderer.tilePx(t.q, t.r);
+      const unit = state.entities.some(p => p.tile_q === t.q && p.tile_r === t.r && (p.life ?? 0) > 0);
+      out.push({ q: t.q, r: t.r, label: obj.label, kind: obj.kind, biome: obj.biome, unit, x: (w.x - o0.x) * z, y: (w.y - o0.y) * z });
+    }
+    return out;
+  };
+  // "Ready" line once, when our own hero first shows up with art.
+  let readyPlayed = false;
+  onAssetsChanged(() => { heroCardKey = null; });
   canvas.addEventListener('mousemove', (ev) => {
     const rect = canvas.getBoundingClientRect();
-    state.ui.hoverTile = renderer.pickHex(ev.clientX - rect.left, ev.clientY - rect.top, knownHex);
+    const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    state.ui.hoverTile = renderer.pickHex(px, py, knownHex);
+    const over = entityAtPixel(px, py, true);
+    state.ui.hoverPeerId = over ? over.peer_id : null;
+    canvas.classList.toggle('over-unit', !!over);
+    canvas.classList.toggle('over-object', !over && !!state.ui.hoverTile && !!objectAt(state.ui.hoverTile.q, state.ui.hoverTile.r));
+    renderHoverCard(ev.clientX, ev.clientY);
   });
+  canvas.addEventListener('mouseleave', () => { state.ui.hoverPeerId = null; state.ui.hoverTile = null; canvas.classList.remove('over-object'); renderHoverCard(); });
   // Pick the entity closest to the click if it's within one hex radius. The
   // comparison runs in world pixels (camera-independent). Using pixel distance
   // (not tile-equality) is more forgiving than requiring a bull's-eye on the
   // tile center, and handles the case where the entity sprite overlaps the edge.
-  function entityAtPixel(px, py) {
+  function entityAtPixel(px, py, includeDead = false) {
     const w = renderer.toWorld(px, py);
     let best = null, bestD2 = HEX_SIZE_SQ_HIT;
     for (const p of state.entities) {
-      if (!p || p.life <= 0) continue;
+      if (!p || (!includeDead && p.life <= 0)) continue;
       if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
       const pos = renderer.tilePx(p.tile_q, p.tile_r);
       const dx = w.x - pos.x;
-      const dy = w.y - (pos.y - 6);  // renderer draws the body offset -6
-      const d2 = dx * dx + dy * dy;
+      // The sprite stands ~74 px tall above the tile centre; measure the
+      // distance to the nearest point of that body column so a click on the
+      // head counts as well as one on the feet.
+      const dyBody = w.y < pos.y - 68 ? w.y - (pos.y - 68) : w.y > pos.y + 6 ? w.y - (pos.y + 6) : 0;
+      const d2 = dx * dx + dyBody * dyBody;
       if (d2 < bestD2) { bestD2 = d2; best = p; }
     }
     return best;
@@ -1698,8 +2545,12 @@ function wireInput() {
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = renderer.pickHex(px, py, knownHex);
     uilog('click', { tile: t, detail: `button=${ev.button}` });
-    if (!t) return;
+    if (!t) { hideObjectCard(); return; }
     const occupant = entityAtPixel(px, py);
+    // A hex holding a map object and no unit opens the object info card
+    // (units keep their hover/hero cards). Any other click closes it.
+    const obj = occupant ? null : objectAt(t.q, t.r);
+    if (obj) showObjectCard(obj, ev.clientX, ev.clientY); else hideObjectCard();
     // Left-click never stages a movement or journey — that's exclusively a
     // right-click gesture now. All left-click does is:
     //   - narrow the event log to the clicked entity (or clear the filter)
@@ -1841,6 +2692,7 @@ function wireInput() {
         ? `${eff ? eff.name : 'Counter spell'} → ${occupant.name} (on ${queuedCode || 'EP'})`
         : `target → ${occupant.name} (keeping ${queuedCode || 'EP'})`;
       send({ kind: 'target', target: state.target });
+      sounds.play(resOf(me), 'order');
       const now = Date.now();
       const isDouble = now - lastRightClickAt < 500;
       lastRightClickAt = isDouble ? 0 : now;
@@ -1931,6 +2783,7 @@ function wireInput() {
       }
     }
     send({ kind: 'target', target: state.target });
+    sounds.play(resOf(me), 'order');
 
     const now = Date.now();
     const isDouble = now - lastRightClickAt < 500;
@@ -1969,7 +2822,20 @@ function wireInput() {
     renderRoster();
     renderPerms();
     renderDeck();
+    renderHeroCard();
+    if (!readyPlayed && state.myPeerId) {
+      const me = state.entities.find(p => p.peer_id === state.myPeerId);
+      const res = me ? resOf(me) : null;
+      if (res) { readyPlayed = true; sounds.play(res, 'ready', { volume: 0.7 }); }
+    }
+    recomputeSightSet();
     renderer.render();
+    // Floating SkillCard DOM over revealing units — pinned to the canvas each
+    // frame so it tracks the camera / zoom (positions read renderer.toWorld
+    // and renderer.tilePx, same bridge used by __chaosObjects).
+    renderRevealOverlay();
+    renderElementEmitOverlay();
+    renderFeatureVanishOverlay();
     requestAnimationFrame(raf);
   }
   raf();
