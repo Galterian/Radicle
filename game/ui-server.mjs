@@ -463,32 +463,55 @@ async function restoreDimension({ tmjPath, label }) {
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   const ip = defaultPublicIp();
   const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
-  const peerLabel = (label || '').trim() || 'player-1';
-  const portLibp2p = await freePort(7420);
-  const portHttp   = await freePort(7430);
-  const portGun    = await freePort(7520);
-  startedDimension = { peerPort: portHttp, dimensionName: DIM_NAME };
-  console.log(`[launcher] restoring ${DIM_NAME} from ${absPath}  (dim_id=${DIM_ID}, seed=${MAP_SEED})`);
-  spawnChild(`peer:${peerLabel}`, [path.join(__dirname, 'peer.mjs')], {
-    PEER_LABEL:        peerLabel,
-    ALLIANCE:          'player',
-    ENTITY_NAME:       peerLabel,
-    CHARACTER_ID:      'char_exuberant_firestroker',
-    CREATURE_ID:       '',
-    START_TILE:        JSON.stringify({ q: 1, r: 2 }),
-    PEER_PORT_LIBP2P:  String(portLibp2p),
-    PEER_PORT_HTTP:    String(portHttp),
-    PEER_PORT_GUN:     String(portGun),
-    DIM_NAME, DIM_ID, DOOR_ID,
-    MAP_SEED,
-    RESTORE_FROM_TMJ:  absPath,
-    JOIN_SYNC_WAIT_MS: '500',
-    ...commonPeerEnv(),
-    ...netEnv,
-  });
-  const ok = await waitForPort(portHttp);
-  if (!ok) throw new Error(`peer did not come up on :${portHttp}`);
-  return { peerPort: portHttp, status: 'restored', dimension: DIM_NAME, tmj: absPath };
+  // Restore the SAME roster shape startDimension uses, so the ally and foes
+  // are present (otherwise the launcher's "my ally died before my dimension
+  // loaded" happens — there is simply no ally spawned). Only player-1 reads
+  // the TMJ (hydrating map / obstacles / tokens / traps); the others catch
+  // up via the hashgraph's evt_map_sync.
+  const roster = [
+    { label: (label || '').trim() || 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 }, restore: true },
+    { label: 'ally-1',                            alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 }, restore: false },
+    { label: 'foe-1',                             alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, restore: false },
+    { label: 'foe-2',                             alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, restore: false },
+  ];
+  const [httpBase, gunBase] = await Promise.all([
+    freePortRun(7401, roster.length),
+    freePortRun(7501, roster.length),
+  ]);
+  const libp2pBase = await freePortRun(Math.max(7410, httpBase + roster.length), roster.length);
+  const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
+  startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME };
+  console.log(`[launcher] restoring ${DIM_NAME} from ${absPath}  (dim_id=${DIM_ID}, seed=${MAP_SEED}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+)`);
+  const allGunUrls = peers.map(p => `http://${ip}:${p.gun}/gun`);
+  const bootstrap = [];
+  for (const p of peers) {
+    const others = allGunUrls.filter(u => !u.includes(`:${p.gun}/`));
+    spawnChild(`peer:${p.label}`, [path.join(__dirname, 'peer.mjs')], {
+      BOOTSTRAP:         bootstrap.join(','),
+      PEER_LABEL:        p.label,
+      ALLIANCE:          p.alliance,
+      ENTITY_NAME:       p.name,
+      CHARACTER_ID:      p.character,
+      CREATURE_ID:       p.creature,
+      START_TILE:        JSON.stringify(p.tile),
+      PEER_PORT_LIBP2P:  String(p.libp2p),
+      PEER_PORT_HTTP:    String(p.http),
+      PEER_PORT_GUN:     String(p.gun),
+      DIM_NAME, DIM_ID, DOOR_ID,
+      MAP_SEED,
+      ...(p.restore ? { RESTORE_FROM_TMJ: absPath } : {}),
+      PEER_GUN_URLS:     others.join(','),
+      JOIN_SYNC_WAIT_MS: p === peers[0] ? '500' : '8000',
+      ...commonPeerEnv(),
+      ...netEnv,
+    });
+    if (!(await waitForPort(p.http))) throw new Error(`peer-${p.label} did not come up on :${p.http}`);
+    try {
+      const st = await fetch(`http://127.0.0.1:${p.http}/status`, { signal: AbortSignal.timeout(2000) }).then(r => r.json());
+      for (const a of (st.multiaddrs || [])) bootstrap.push(a);
+    } catch (e) { console.warn(`[launcher] could not read ${p.label} addresses: ${e.message}`); }
+  }
+  return { peerPort: peers[0].http, status: 'restored', dimension: DIM_NAME, tmj: absPath };
 }
 
 async function readBody(req) {
@@ -512,11 +535,17 @@ async function handleApi(req, res, p) {
     catch (e) { return json(200, { ok: false, error: e.message, baseDir: DIMENSIONS_DIR, items: [] }); }
   }
   if (req.method === 'GET' && p === '/api/dimensions') {
+    // ?sync=0 skips the seed fetch entirely. The launcher page load uses that
+    // so hosting a new dimension (or picking "restore") never waits for a
+    // seed that may be slow or down. The join-mode radios fire a follow-up
+    // call with ?sync=1 when the user actually needs fresh door info.
+    const want = new URL(req.url, 'http://x').searchParams.get('sync');
+    const doSync = want === null ? true : want !== '0' && want !== 'false';
     try {
-      const items = radicleEnv.enabled ? (await listPublishedDimensions()).map(describeDimension) : [];
-      return json(200, { ok: true, enabled: radicleEnv.enabled, reason: radicleEnv.enabled ? null : radicleEnv.reason, door_live_ms: DOOR_LIVE_MS, items });
+      const items = radicleEnv.enabled ? (await listPublishedDimensions({ sync: doSync })).map(describeDimension) : [];
+      return json(200, { ok: true, enabled: radicleEnv.enabled, reason: radicleEnv.enabled ? null : radicleEnv.reason, door_live_ms: DOOR_LIVE_MS, synced: doSync, items });
     } catch (e) {
-      return json(200, { ok: false, enabled: radicleEnv.enabled, reason: e.message, items: [] });
+      return json(200, { ok: false, enabled: radicleEnv.enabled, reason: e.message, synced: doSync, items: [] });
     }
   }
   const liveMatch = p.match(/^\/api\/live\/([A-Za-z0-9_.-]+)$/);
