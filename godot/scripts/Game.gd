@@ -128,6 +128,19 @@ func _ready() -> void:
 	net = NetBridge.new()
 	net.name = "Net"
 	add_child(net)
+	# When a peer URL is set the bridge connects to game/peer.mjs' WebSocket:
+	# the Node peer is the deterministic sim and we observe its state so the
+	# roster, perm power badges and destroy intents all stay in sync with the
+	# browser client's view (Task 13 parity).
+	net.hello_received.connect(_on_net_hello)
+	net.hand_received.connect(_on_net_hand)
+	net.peers_received.connect(_on_net_peers)
+	net.phase_received.connect(_on_net_phase)
+	net.evt_received.connect(_on_net_evt)
+	net.peek_received.connect(_on_net_peek)
+	net.radicle_received.connect(_on_net_radicle)
+	net.connected.connect(func(): hud.log_line("peer: connected", Color(0.6, 0.9, 0.6)))
+	net.disconnected.connect(func(): hud.log_line("peer: disconnected", Color(0.9, 0.6, 0.6)))
 
 	# Spawn: snap each default spawn to the nearest walkable hex (otherwise a
 	# player spawning on a lava or water biome can't move).
@@ -716,3 +729,55 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 	elif event.is_action_pressed("lock_commit"):
 		_lock()
+
+
+# ---------------------------------------------------------- Net signal relay
+# These handlers accept the Node peer's broadcasts and forward the pieces the
+# HUD cares about. Everything is idempotent: a reconnect simply re-fires
+# hello_received + an immediate hand/peers burst, and the HUD rebuilds from
+# the fresh snapshot. Game.gd's local sim keeps running for solo play; the
+# server view sits on top of it until Task 8 refactors Game.gd to be purely
+# server-authoritative.
+
+func _on_net_hello(payload: Dictionary) -> void:
+	hud.log_line("peer %s · dim %s" % [String(payload.get("peer_id", "?")).substr(0, 10), String(payload.get("dimension", "?"))])
+	if hud.has_method("set_server_hand"):
+		hud.set_server_hand(payload)
+	if hud.has_method("set_server_peers"):
+		hud.set_server_peers(payload.get("peers", []))
+
+func _on_net_hand(payload: Dictionary) -> void:
+	if hud.has_method("set_server_hand"):
+		hud.set_server_hand(payload)
+
+func _on_net_peers(payload: Dictionary) -> void:
+	if hud.has_method("set_server_peers"):
+		hud.set_server_peers(payload.get("peers", []))
+
+func _on_net_phase(payload: Dictionary) -> void:
+	var label := "%s · T%d.R%d · %.1fs" % [
+		String(payload.get("name", "")), int(payload.get("turn", 0)),
+		int(payload.get("round", 0)) + 1, float(payload.get("seconds", 0.0))
+	]
+	hud.log_line(label, Color(0.7, 0.7, 0.9))
+
+func _on_net_evt(env: Dictionary, from_peer: bool) -> void:
+	# Hashgraph envelopes — only surfaced in debug for now; the HUD rebuilds
+	# off hand / peers / phase instead so the player never sees raw envelope
+	# payloads.
+	if from_peer:
+		return
+	var t := String(env.get("type", ""))
+	if t == "evt_action_reveal" or t == "evt_state_hash":
+		return
+	hud.log_line("evt %s" % t, Color(0.6, 0.7, 0.75))
+
+func _on_net_peek(payload: Dictionary) -> void:
+	hud.log_line("👁 %s" % String(payload.get("text", "")), Color(0.9, 0.85, 0.6))
+
+func _on_net_radicle(payload: Dictionary) -> void:
+	var pub = payload.get("published", false)
+	hud.log_line("Door %s%s" % [
+		"published" if pub else "pushed locally",
+		(" → " + String(payload.get("url", ""))) if String(payload.get("url", "")) != "" else ""
+	], Color(0.6, 0.9, 0.6) if pub else Color(0.75, 0.75, 0.6))
