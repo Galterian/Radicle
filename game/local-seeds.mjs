@@ -159,23 +159,52 @@ export async function publishDimensionPush({
 
 // A new peer calls this at boot. maxAgeMs defaults to 1h — anything older is
 // probably offline. Returns {nid, radicleAddr} tuples the caller can feed to
-// `rad sync --seed <addr> --from <nid>` and to libp2p bootstrap.
-export async function fetchSeeds({ rid = '', maxAgeMs = 3600_000, max = 20 } = {}) {
+// `rad sync --seed <addr> --from <nid>` and to libp2p bootstrap. Max defaults
+// to 3 — the "priority seeds" a fresh peer dials before falling back to the
+// Radicle public gossip.
+//
+// requireAddr=true (default) filters out peers that haven't published a
+// reachable radicleAddr yet, since those are not useful as a sync target.
+// Set requireAddr=false if the caller just wants a presence list (e.g. the
+// explorer UI, which does both reachable and unreachable).
+export async function fetchSeeds({ rid = '', maxAgeMs = 3600_000, max = 3, requireAddr = true } = {}) {
   if (!SEEDS_ENABLED) return [];
   const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
   // Firestore REST where+orderBy need matching index; keep the query simple
-  // and filter rid in-process so no composite index is required.
+  // and filter rid / addr in-process so no composite index is required.
   const q = {
     from: [{ collectionId: 'peers' }],
     where: { fieldFilter: { field: { fieldPath: 'lastSeen' }, op: 'GREATER_THAN', value: { timestampValue: cutoff } } },
     orderBy: [{ field: { fieldPath: 'lastSeen' }, direction: 'DESCENDING' }],
-    limit: Math.max(1, Math.min(100, max * 4)),
+    // over-fetch so in-process rid/addr filtering still has candidates
+    limit: Math.max(10, Math.min(100, max * 10)),
   };
   try {
     const rows = await restRunQuery('', q);
-    const out = rows.filter(r => r.nid && (!rid || !r.rid || r.rid === rid)).slice(0, max);
+    const out = rows
+      .filter(r => r.nid)
+      .filter(r => !rid || !r.rid || r.rid === rid)
+      .filter(r => !requireAddr || (r.radicleAddr && r.radicleAddr.trim()))
+      .slice(0, max);
     return out.map(r => ({ nid: r.nid, radicleAddr: r.radicleAddr || '', alias: r.alias || '', rid: r.rid || '', lastSeen: r.lastSeen }));
   } catch (e) { console.warn(`[local-seeds] fetchSeeds failed: ${e.message}`); return []; }
+}
+
+// Boot-time helper: dedup, format the three artifacts a joining peer actually
+// wants.
+//   rad     — ['rad sync --seed <addr> --from <nid> rad:<rid>', ...] shell lines
+//   nodeIds — [<nid>, ...] for Radicle preferred-seeds config
+//   addrs   — [<addr>, ...] for libp2p bootstrap merging
+// A single Firestore call feeds all three.
+export async function priorityBootstrap({ rid = '', max = 3, maxAgeMs = 3600_000 } = {}) {
+  const seeds = await fetchSeeds({ rid, max, maxAgeMs, requireAddr: true });
+  const effectiveRid = rid || seeds.find(s => s.rid)?.rid || '';
+  return {
+    seeds,
+    nodeIds: seeds.map(s => s.nid),
+    addrs:   seeds.map(s => s.radicleAddr),
+    rad:     seeds.map(s => `rad sync --seed ${s.radicleAddr} --from ${s.nid}${effectiveRid ? ` ${effectiveRid}` : ''}`),
+  };
 }
 
 // Convenience for peer boot: dedup/merge the seed addresses into an existing
@@ -206,8 +235,20 @@ if (process.argv[1] && process.argv[1].endsWith('local-seeds.mjs')) {
     process.exit(2);
   }
   if (cmd === 'peers') {
-    const seeds = await fetchSeeds({ maxAgeMs: 24 * 3600_000, max: 50 });
+    const seeds = await fetchSeeds({ maxAgeMs: 24 * 3600_000, max: 50, requireAddr: false });
     for (const s of seeds) console.log(`${s.nid}  ${s.radicleAddr || '(no addr)'}  alias=${s.alias || '-'}  last=${s.lastSeen}`);
+  } else if (cmd === 'seeds') {
+    // Top-N reachable priority seeds for a new peer to dial. N defaults to 3;
+    // override with `node local-seeds.mjs seeds 5` or env PRIORITY_SEED_MAX=5.
+    const n = Number(process.argv[3] || process.env.PRIORITY_SEED_MAX || 3);
+    const rid = process.env.RADICLE_RID || '';
+    const boot = await priorityBootstrap({ rid, max: n });
+    console.log(`# ${boot.seeds.length} priority seed(s) for${rid ? ' rid=' + rid : ''}:`);
+    for (const s of boot.seeds) console.log(`${s.nid}  ${s.radicleAddr}  alias=${s.alias || '-'}  last=${s.lastSeen}`);
+    console.log(`\n# shell commands a joining peer can run:`);
+    for (const line of boot.rad) console.log(line);
+    console.log(`\n# libp2p bootstrap addrs:`);
+    console.log(boot.addrs.join(','));
   } else if (cmd === 'peer' && process.argv[3]) {
     const r = await restGet(`peers/${safeNid(process.argv[3])}`);
     console.log(JSON.stringify(docToObject(r), null, 2));
@@ -221,6 +262,6 @@ if (process.argv[1] && process.argv[1].endsWith('local-seeds.mjs')) {
     const rows = await restRunQuery(`dimensions/${name}`, q);
     for (const c of rows) console.log(`${String(c.sha).slice(0, 10)}  ${c.when}  ${c.pushedBy}  ${c.subject}`);
   } else {
-    console.log('usage: node local-seeds.mjs peers | peer <nid> | dims | commits <dimensionName>');
+    console.log('usage: node local-seeds.mjs peers | seeds [N] | peer <nid> | dims | commits <dimensionName>');
   }
 }
