@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1084963762264",
+    "project_id": "dimensions-4e9ae",
+    "storage_bucket": "dimensions-4e9ae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1084963762264:android:e5e0fc22aa6eddfa0cda2d",
+        "android_client_info": {
+          "package_name": "net.dimensions.radicle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGQQQVwHAFSa_UuzLjzoyvMkoqKK-4wMM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
