@@ -5,6 +5,9 @@ extends CanvasLayer
 
 signal slot_pressed(index: int)
 signal lock_pressed
+## Fired when the player double-taps an enemy's permanent card in the roster.
+## Carries the stat the destroy intent should emit at the perm (Rule 24).
+signal destroy_perm_requested(peer_id: String, perm_id: String, stat: String)
 
 const CODE_COLORS := {
 	"A": Color("#d9772a"), "B": Color("#4f8fd6"), "M": Color("#7cc77a"), "P": Color("#c9b35a"),
@@ -64,6 +67,15 @@ var _hover_unit_id: String = ""
 var _roster_panel: PanelContainer
 var _roster_box: VBoxContainer
 var _roster_signature := ""     # cheap "is anything different?" guard
+
+# Server-view overlay — populated by NetBridge signals when the Node peer is
+# reachable. The local sim keeps drawing its own entity list; these dicts add
+# server-only facts (perm power dice, class state, hand) that the local sim
+# doesn't track. Both merge inside _make_roster_row.
+var _server_hand: Dictionary = {}            # last `hand` message payload
+var _server_peers: Array = []                # last `peers` message payload (array of per-peer dicts)
+var _server_perm_power: Dictionary = {}      # peer_id -> {perm_id: die}
+var _my_peer_id: String = ""
 
 
 func _ready() -> void:
@@ -569,6 +581,44 @@ func hover_perm_count() -> int:
 ## Rebuild the right-column roster to match `entities`. Parity with
 ## game/js/main.js renderRoster: thumb + name + stats pills + a vertical stack
 ## of mini permanent cards (icon + name + full description).
+## Called from Game.gd when NetBridge gets a `hand` message. Right now we
+## only cache it so queued state and casting progress can land in the HUD
+## later; the server's `peers` message carries the perm_power the destroy UI
+## needs below.
+func set_server_hand(payload: Dictionary) -> void:
+	_server_hand = payload
+	if payload.has("peer_id"):
+		_my_peer_id = String(payload.get("peer_id", ""))
+	# A roster rebuild re-reads _server_perm_power on the next peers message;
+	# force a sig flush so the badge appears as soon as we have the data.
+	_roster_signature = ""
+
+## Called from Game.gd when NetBridge gets a `peers` message. Normalises the
+## perm_power dict per peer so the roster rows can show the power badge
+## (Rule 12/24) and route destroy intents at it.
+func set_server_peers(peers: Array) -> void:
+	_server_peers = peers
+	_server_perm_power.clear()
+	for raw in peers:
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var p: Dictionary = raw
+		var pid := String(p.get("peer_id", ""))
+		if pid == "":
+			continue
+		var pp_raw: Variant = p.get("perm_power_json", "{}")
+		var pp: Dictionary = {}
+		if typeof(pp_raw) == TYPE_STRING:
+			var parsed: Variant = JSON.parse_string(String(pp_raw))
+			if typeof(parsed) == TYPE_DICTIONARY:
+				pp = parsed
+		elif typeof(pp_raw) == TYPE_DICTIONARY:
+			pp = pp_raw
+		_server_perm_power[pid] = pp
+	# Signature already includes perm-id lists; wipe it so the perm-cards
+	# re-render with the fresh dice numbers.
+	_roster_signature = ""
+
 func set_roster(entities: Array) -> void:
 	# Cheap diff: if the (id, life, perm-ids) tuple is unchanged, skip the rebuild.
 	var sig := ""
