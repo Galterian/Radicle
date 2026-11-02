@@ -334,7 +334,7 @@ main {
 #hint b { color: #c8d4e3; font-weight: 600; }
 
 /* --- launcher --- */
-#launcher { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+#launcher { min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; }
 /* The id rule above outranks the UA's [hidden] { display:none }, so re-assert it. */
 #launcher[hidden] { display: none; }
 .launcher-card { background: #0f131b; border: 1px solid #1a1f29; border-radius: 8px; padding: 20px 24px; width: 100%; max-width: 640px; }
@@ -353,6 +353,51 @@ main {
 .launcher-card #go { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
 .launcher-card #go[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
 .launcher-card #launch-msg { font-size: 12px; color: #8aa0bf; }
+
+/* ---- Dimensions explorer -------------------------------------------------- */
+.dim-explorer { border: 1px solid #1a2130; border-radius: 6px; padding: 10px 12px; margin: 14px 0 0; background: #0c1017; }
+.dim-explorer .dx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.dim-explorer .dx-title { color: #8aa0bf; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.dim-explorer .dx-legend { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: #6a7a92; }
+.dim-explorer .dx-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 3px; }
+.dim-explorer .dx-side-player { background: #6ad99f; }
+.dim-explorer .dx-side-npc_a  { background: #4ea3ff; }
+.dim-explorer .dx-side-npc_b  { background: #e26b6b; }
+.dim-explorer .dx-stale       { background: #4a5566; }
+.dim-explorer .dx-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); max-height: 50vh; overflow-y: auto; padding-right: 4px; }
+.dim-explorer .dx-empty { margin-top: 4px; }
+
+.dx-tile { background: #141a24; border: 1px solid #1f2838; border-radius: 6px; padding: 8px 10px; cursor: pointer; transition: border-color .1s, background .1s; }
+.dx-tile:hover { border-color: #2a6ddf; background: #171e2b; }
+.dx-tile.is-selected { border-color: #6ad99f; }
+.dx-tile.is-legacy { opacity: .55; cursor: not-allowed; }
+.dx-tile .dx-name { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 13px; font-weight: 600; color: #e8ecf1; }
+.dx-tile .dx-badge { font-size: 10px; padding: 1px 5px; border-radius: 10px; background: #1b2a44; color: #8bb7ff; font-weight: 500; }
+.dx-tile .dx-badge.is-live { background: #1e3a26; color: #8ddc9f; }
+.dx-tile .dx-meta { font-size: 11px; color: #8aa0bf; margin: 2px 0 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+.dx-tile .dx-meta b { color: #d2dae7; font-weight: 500; }
+.dx-tile .dx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Door chip — one per peer. Kept legible when the tile shrinks (zoom-out):
+   fixed max-content with monospace peer_id, elements shrink but never below
+   the readable floor. */
+.door-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #0f131b; border: 1px solid #223049; border-radius: 10px;
+  padding: 1px 6px 1px 4px; font-size: clamp(10px, 0.78vw, 12px); line-height: 1.4;
+  color: #d2dae7; max-width: 100%;
+}
+.door-chip.is-stale { opacity: .55; border-style: dashed; }
+.door-chip:hover { border-color: #2a6ddf; }
+.door-chip .dc-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.door-chip.side-player .dc-dot { background: #6ad99f; }
+.door-chip.side-npc_a  .dc-dot { background: #4ea3ff; }
+.door-chip.side-npc_b  .dc-dot { background: #e26b6b; }
+.door-chip .dc-id { font-family: ui-monospace, Menlo, Consolas, monospace; max-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.door-chip .dc-coord { color: #8aa0bf; font-variant-numeric: tabular-nums; }
+.door-chip .dc-hp { color: #e8c272; font-variant-numeric: tabular-nums; }
+.door-chip.is-dead .dc-hp { color: #e26b6b; text-decoration: line-through; }
+.dx-chips .dc-more { font-size: 11px; color: #8aa0bf; align-self: center; padding-left: 2px; }
 
 /* ---- WBC3 art: roster thumbnails, hero card, hover card ------------------ */
 .ros { justify-content: flex-start; align-items: center; }
