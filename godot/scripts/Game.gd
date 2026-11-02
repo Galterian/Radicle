@@ -124,6 +124,17 @@ func _ready() -> void:
 	add_child(hud)
 	hud.slot_pressed.connect(_pick_slot)
 	hud.lock_pressed.connect(_lock)
+	hud.destroy_perm_requested.connect(_on_destroy_perm_requested)
+
+	# Touch gesture router. Attached as a child of Main so it sits alongside the
+	# camera and hex map in the input chain. On desktop its handlers never fire
+	# (no touch events arrive), so there's no cost to keeping it instantiated.
+	var mobile_input := MobileInput.new()
+	mobile_input.name = "MobileInput"
+	add_child(mobile_input)
+	cam.attach_mobile_input(mobile_input)
+	map.attach_mobile_input(mobile_input)
+	hud.attach_mobile_input(mobile_input)
 
 	net = NetBridge.new()
 	net.name = "Net"
@@ -749,6 +760,28 @@ func _on_net_hello(payload: Dictionary) -> void:
 func _on_net_hand(payload: Dictionary) -> void:
 	if hud.has_method("set_server_hand"):
 		hud.set_server_hand(payload)
+	# Mirror the browser's myEmissionPreview — union of the queued action, any
+	# extra, and all queued effects' elements. The HUD fades the chip out
+	# shortly after, so leaving an action queued keeps re-triggering it (which
+	# matches "this is what you'll emit on reveal").
+	var emit_set := {}
+	var q := String(payload.get("queued", ""))
+	if q != "": emit_set[q] = true
+	var qe := String(payload.get("queued_extra", ""))
+	if qe != "": emit_set[qe] = true
+	for key in ["queued_effect", "queued_effect2"]:
+		var fx: Variant = payload.get(key, null)
+		if typeof(fx) == TYPE_DICTIONARY:
+			var els: Variant = (fx as Dictionary).get("elements", [])
+			if typeof(els) == TYPE_ARRAY:
+				for el in (els as Array):
+					var s := String(el)
+					if s != "": emit_set[s] = true
+	if hud.has_method("show_emit"):
+		if emit_set.is_empty():
+			hud.show_emit("")
+		else:
+			hud.show_emit(" ".join(PackedStringArray(emit_set.keys())))
 
 func _on_net_peers(payload: Dictionary) -> void:
 	if hud.has_method("set_server_peers"):
@@ -765,12 +798,51 @@ func _on_net_evt(env: Dictionary, from_peer: bool) -> void:
 	# Hashgraph envelopes — only surfaced in debug for now; the HUD rebuilds
 	# off hand / peers / phase instead so the player never sees raw envelope
 	# payloads.
+	var t := String(env.get("type", ""))
+	# Destroy intents from any peer land here on reveal — the player should
+	# see "foe-1 tries to destroy a perm (will)" even for NPCs, matching the
+	# browser's reveal-log line. We still filter the generic reveal spam.
+	if t == "evt_action_reveal":
+		var payload: Variant = env.get("payload", {})
+		if typeof(payload) == TYPE_DICTIONARY:
+			var d: Variant = (payload as Dictionary).get("destroy", null)
+			if typeof(d) == TYPE_DICTIONARY and String((d as Dictionary).get("stat", "")) != "":
+				var actor := String(env.get("peer_id", "?"))
+				var stat := String((d as Dictionary).get("stat", ""))
+				hud.log_line("%s emits %s at a permanent (destroy intent)" % [actor.substr(0, 10), stat], Color(0.95, 0.6, 0.5))
+		return
 	if from_peer:
 		return
-	var t := String(env.get("type", ""))
-	if t == "evt_action_reveal" or t == "evt_state_hash":
+	if t == "evt_state_hash":
 		return
 	hud.log_line("evt %s" % t, Color(0.6, 0.7, 0.75))
+
+
+## Fired when Hud detects a double-click / double-tap on an enemy perm card.
+## Pick the player's highest live stat as the emission source (matching
+## peer.mjs L1788's fallback) and send the intent down the wire; sending the
+## same stat twice toggles it off, which is the browser's cancel path too.
+func _on_destroy_perm_requested(_target_peer_id: String, _perm_id: String, suggested_stat: String) -> void:
+	if net == null or not net.is_online():
+		hud.log_line("destroy ignored — not connected to a peer", Color(0.9, 0.6, 0.4))
+		return
+	var stat := suggested_stat
+	if stat == "":
+		var me := player_entity()
+		if me != null:
+			var stats: Dictionary = me.data.get("stats", {})
+			var best := ""
+			var best_v := -1
+			for key in ["vitality", "world", "matter", "will"]:
+				var v := int(stats.get(key, 0))
+				if v > best_v:
+					best_v = v
+					best = key
+			stat = best
+	if stat == "":
+		return
+	net.toggle_destroy(stat)
+	hud.log_line("destroy queued: emits %s (double-tap again to cancel)" % stat, Color(0.95, 0.75, 0.4))
 
 func _on_net_peek(payload: Dictionary) -> void:
 	hud.log_line("👁 %s" % String(payload.get("text", "")), Color(0.9, 0.85, 0.6))
