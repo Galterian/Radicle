@@ -77,6 +77,28 @@ var _server_peers: Array = []                # last `peers` message payload (arr
 var _server_perm_power: Dictionary = {}      # peer_id -> {perm_id: die}
 var _my_peer_id: String = ""
 
+# Top-level panels — tracked so _apply_layout() can reposition them when the
+# viewport aspect flips (desktop resize or phone orientation change).
+var _panel_portrait: PanelContainer      # top-left: portrait + hp + quote
+var _panel_phase: VBoxContainer          # top-centre: phase + timer + hover line
+var _bar: HBoxContainer                  # bottom-centre: 5 slots + lock
+var _log_panel: PanelContainer           # right column: log
+# Element-emission chip. Fades out ~1.4s after the player's intent emits a
+# non-empty element set — parity with the browser's hero-emit line.
+var _emit_lbl: Label = null
+var _emit_tween: Tween = null
+# Destroy-queued chip. Visible while queuedDestroy is non-null in the local
+# peer's handMsg — the user double-tapped an enemy perm and the server is
+# holding the intent until a P / EP / A / M emission resolves at that perm.
+var _destroy_chip: Label = null
+# Overlay (world-space) for enemy-reveal emit chips. We draw these as a
+# RichTextLabel per entity position so the player can see "emitting A P"
+# floating over the actor during resolution.
+var _world_emits: Dictionary = {}        # peer_id -> Label
+
+var _last_viewport_size := Vector2i.ZERO
+var _is_portrait := false
+
 
 func _ready() -> void:
 	layer = 10
@@ -92,6 +114,17 @@ func _ready() -> void:
 	panel.custom_minimum_size = Vector2(300, 112)
 	panel.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.85)))
 	root.add_child(panel)
+	_panel_portrait = panel
+	# Element-emit chip. Floats under the portrait's name label; _apply_layout
+	# repositions as the portrait moves. Hidden until show_emit() fires.
+	_emit_lbl = _label("", 11, Color(0.95, 0.75, 0.4))
+	_emit_lbl.visible = false
+	_emit_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# Destroy-queued chip sits under the emit chip. Hidden by default; the
+	# `hand` message's `destroy` field drives it (see set_server_hand).
+	_destroy_chip = _label("", 11, Color(0.95, 0.55, 0.55))
+	_destroy_chip.visible = false
+	_destroy_chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 10)
 	panel.add_child(hb)
@@ -110,6 +143,9 @@ func _ready() -> void:
 	_quote_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_quote_lbl.custom_minimum_size = Vector2(190, 0)
 	vb.add_child(_quote_lbl)
+	# emit chip sits last so it appears under hp/quote
+	vb.add_child(_emit_lbl)
+	vb.add_child(_destroy_chip)
 
 	# --- top-left, below the portrait: object info card (hidden until a click)
 	_obj_panel = PanelContainer.new()
@@ -152,6 +188,7 @@ func _ready() -> void:
 	pc.position = Vector2(-160, 12)
 	pc.custom_minimum_size = Vector2(320, 0)
 	root.add_child(pc)
+	_panel_phase = pc
 	_phase_lbl = _label("planning", 18, Color(0.95, 0.85, 0.6))
 	_phase_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	pc.add_child(_phase_lbl)
@@ -176,6 +213,7 @@ func _ready() -> void:
 	bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20))
 	bar.add_theme_constant_override("separation", SLOT_GAP)
 	root.add_child(bar)
+	_bar = bar
 	for i in range(5):
 		var b := Button.new()
 		b.custom_minimum_size = SLOT_SIZE
@@ -241,6 +279,7 @@ func _ready() -> void:
 	lp.custom_minimum_size = Vector2(360, 300)
 	lp.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.75)))
 	root.add_child(lp)
+	_log_panel = lp
 	_log = RichTextLabel.new()
 	_log.bbcode_enabled = true
 	_log.scroll_following = true
@@ -307,6 +346,126 @@ func _ready() -> void:
 	_roster_box = VBoxContainer.new()
 	_roster_box.add_theme_constant_override("separation", 6)
 	_roster_panel.add_child(_roster_box)
+
+	# Reflow when the window resizes OR the device rotates. Called once here
+	# to apply the initial layout for whatever orientation we start in.
+	get_viewport().size_changed.connect(_on_viewport_resized)
+	_apply_layout()
+
+
+func _on_viewport_resized() -> void:
+	var sz := get_viewport().get_visible_rect().size
+	if Vector2i(sz) == _last_viewport_size:
+		return
+	_last_viewport_size = Vector2i(sz)
+	_apply_layout()
+
+
+func _apply_layout() -> void:
+	# Two layouts: landscape (desktop, phone sideways) keeps the dense
+	# right-column stack; portrait (phone upright) compresses panels to half
+	# width so they don't crash into the hand bar, and tightens vertical
+	# spacing. The slot bar always sits at the bottom.
+	var vp := get_viewport().get_visible_rect().size
+	var portrait := vp.y > vp.x
+	_is_portrait = portrait
+
+	if _panel_portrait != null:
+		_panel_portrait.position = Vector2(8, 8)
+		_panel_portrait.custom_minimum_size = Vector2(220 if portrait else 300, 112)
+	if _panel_phase != null:
+		# In portrait, the phase/timer slides against the right edge so it
+		# doesn't collide with the portrait panel on narrow screens.
+		if portrait:
+			_panel_phase.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_panel_phase.position = Vector2(-180, 8)
+			_panel_phase.custom_minimum_size = Vector2(172, 0)
+		else:
+			_panel_phase.set_anchors_preset(Control.PRESET_CENTER_TOP)
+			_panel_phase.position = Vector2(-160, 12)
+			_panel_phase.custom_minimum_size = Vector2(320, 0)
+	if _log_panel != null:
+		if portrait:
+			# Below the top row, half-width — the roster will stack under it.
+			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_log_panel.position = Vector2(-(vp.x * 0.5 + 4), 128)
+			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 180)
+		else:
+			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_log_panel.position = Vector2(-372, 12)
+			_log_panel.custom_minimum_size = Vector2(360, 300)
+	if _hover_panel != null:
+		if portrait:
+			_hover_panel.position = Vector2(-(vp.x * 0.5 + 4), 316)
+			_hover_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
+		else:
+			_hover_panel.position = Vector2(-372, 320)
+			_hover_panel.custom_minimum_size = Vector2(360, 0)
+	if _obj_panel != null:
+		if portrait:
+			_obj_panel.position = Vector2(8, 132)
+			_obj_panel.custom_minimum_size = Vector2(220, 0)
+		else:
+			_obj_panel.position = Vector2(12, 136)
+			_obj_panel.custom_minimum_size = Vector2(300, 0)
+	if _roster_panel != null:
+		if portrait:
+			# Narrow strip above the hand bar on the right half.
+			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			_roster_panel.position = Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 180)
+			_roster_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
+		else:
+			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			_roster_panel.position = Vector2(-372, -(SLOT_SIZE.y + 20) - 268)
+			_roster_panel.custom_minimum_size = Vector2(360, 0)
+	if _bar != null:
+		# Keep the slots centred no matter what; just offset off the bottom.
+		var bar_w := SLOT_SIZE.x * 5 + 92 + SLOT_GAP * 5
+		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20))
+	if _hint != null:
+		_hint.visible = not portrait
+		if portrait:
+			_hint.text = ""
+		else:
+			_hint.text = "1-5 pick card · click hex = target/path · click building = info (Esc closes) · right-click = discard · Space = lock · wheel zoom · MMB pan · C recenter"
+
+
+func attach_mobile_input(mi: MobileInput) -> void:
+	# No direct HUD gestures today — the slots are regular Buttons so the
+	# emulated-mouse layer already drives them from taps. We keep this hook
+	# so later touch-only UI (long-press, swipe-dismiss, etc) can plug in
+	# without a Game.gd change.
+	if mi == null:
+		return
+
+
+# ------------------------------------------------------------------ element emission
+
+## Show the player's own emitted elements (string like "A P"). Mirrors the
+## browser's `renderHeroCard` emit line in game/js/main.js. Pass "" to hide.
+func show_emit(text: String) -> void:
+	if _emit_lbl == null:
+		return
+	if text == null or text == "":
+		_emit_lbl.visible = false
+		_emit_lbl.text = ""
+		return
+	_emit_lbl.text = "emitting %s" % text
+	_emit_lbl.visible = true
+	_emit_lbl.modulate = Color(1, 1, 1, 1)
+	if _emit_tween != null and _emit_tween.is_running():
+		_emit_tween.kill()
+	# Stays solid for 900ms, then fades out over 500ms — same cadence as the
+	# browser overlay so a reveal animation reads the same on both runtimes.
+	_emit_tween = create_tween()
+	_emit_tween.tween_interval(0.9)
+	_emit_tween.tween_property(_emit_lbl, "modulate:a", 0.0, 0.5)
+	_emit_tween.tween_callback(_hide_emit_lbl)
+
+
+func _hide_emit_lbl() -> void:
+	if _emit_lbl != null:
+		_emit_lbl.visible = false
 
 
 static func _label(text: String, size: int, col: Color) -> Label:
@@ -539,8 +698,10 @@ func show_unit_hover(e: Entity) -> void:
 	_fill_skill_list(_hover_skills_box, e.data.get("skills", []), false)
 	_hover_skills_title.visible = _hover_skills_box.get_child_count() > 0
 	_hover_skills_box.visible = _hover_skills_box.get_child_count() > 0
-	# Permanents (full description each).
-	_fill_skill_list(_hover_perms_box, e.data.get("permanents", []), true)
+	# Permanents (full description each). The hover card is read-only so we
+	# surface the badge but keep clicks disabled — the roster row is the
+	# gesture target for destroy intents.
+	_fill_skill_list(_hover_perms_box, e.data.get("permanents", []), true, _peer_id_for_entity(e), false)
 	_hover_perms_title.visible = _hover_perms_box.get_child_count() > 0
 	_hover_perms_box.visible = _hover_perms_box.get_child_count() > 0
 	_hover_panel.visible = true
@@ -592,6 +753,26 @@ func set_server_hand(payload: Dictionary) -> void:
 	# A roster rebuild re-reads _server_perm_power on the next peers message;
 	# force a sig flush so the badge appears as soon as we have the data.
 	_roster_signature = ""
+	# Destroy-queued chip. The server's handMsg sets `destroy = { stat }` while
+	# queuedDestroy is live; a null means it has cleared (resolved or cancelled).
+	if _destroy_chip != null:
+		var d: Variant = payload.get("destroy", null)
+		if typeof(d) == TYPE_DICTIONARY and String((d as Dictionary).get("stat", "")) != "":
+			_destroy_chip.text = "destroy queued: %s" % String((d as Dictionary).get("stat", ""))
+			_destroy_chip.visible = true
+		else:
+			_destroy_chip.visible = false
+			_destroy_chip.text = ""
+
+
+## Return the stat string of a currently-queued destroy intent, or "" when none
+## is active. Game.gd uses this to toggle the intent off (sending the same stat
+## again clears it, server-side at peer.mjs L4489).
+func destroy_queued_stat() -> String:
+	var d: Variant = _server_hand.get("destroy", null)
+	if typeof(d) != TYPE_DICTIONARY:
+		return ""
+	return String((d as Dictionary).get("stat", ""))
 
 ## Called from Game.gd when NetBridge gets a `peers` message. Normalises the
 ## perm_power dict per peer so the roster rows can show the power badge
@@ -702,20 +883,25 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 		str(stats.get("matter", "—")), str(stats.get("will", "—")),
 	], 10, Color(0.78, 0.78, 0.9)))
 	# Permanent mini cards — one row per permanent, icon + name + full desc.
+	# Thread the owning peer_id in so each card can look up its live power die
+	# (Rule 24) and wire the destroy intent for enemies.
 	var perms = e.data.get("permanents", [])
 	if typeof(perms) == TYPE_ARRAY and not perms.is_empty():
 		var perm_box := VBoxContainer.new()
 		perm_box.add_theme_constant_override("separation", 3)
 		vb.add_child(perm_box)
+		var owner := _peer_id_for_entity(e)
+		var enemy := e.faction != "player"
 		for sid in perms:
-			perm_box.add_child(_make_perm_card(str(sid), true))
+			perm_box.add_child(_make_perm_card(str(sid), true, owner, enemy))
 	return row
 
 
 ## Fill `box` with a mini card per skill id. `full_desc` picks between the
 ## one-line abbreviated form (held skills) and the full data/skills.json text
-## (permanents).
-func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool) -> void:
+## (permanents). `owner_peer_id` + `is_enemy` thread through to each perm card
+## so enemy-side perms show a power badge and accept a double-click destroy.
+func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool, owner_peer_id: String = "", is_enemy: bool = false) -> void:
 	for c in box.get_children():
 		c.queue_free()
 	if typeof(ids) != TYPE_ARRAY:
@@ -724,25 +910,65 @@ func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool) -> void
 		var s := str(sid)
 		if s == "":
 			continue
-		box.add_child(_make_perm_card(s, full_desc))
+		box.add_child(_make_perm_card(s, full_desc, owner_peer_id, is_enemy))
 
 
-func _make_perm_card(card_id: String, full_desc: bool) -> PanelContainer:
+func _make_perm_card(card_id: String, full_desc: bool, owner_peer_id: String = "", is_enemy: bool = false) -> PanelContainer:
 	# card_id may be either `skill_*` or `effect_*`; the browser's skill_card.js
 	# ingests both pools identically, so we route through RulesText's prefix-aware
 	# helpers to pull icon / name / text regardless of which catalog owns the id.
+	#
+	# owner_peer_id (optional): used to look up the current perm-power die in
+	# _server_perm_power — the die an attacker's emission has to beat under
+	# Rule 24. When present, we paint a small orange badge over the icon.
+	#
+	# is_enemy: when true, the card is a destroy target — a double-click or
+	# emulated-touch double-tap emits destroy_perm_requested so Game.gd can
+	# send a toggle_destroy intent to the peer.
 	var card := PanelContainer.new()
 	card.add_theme_stylebox_override("panel", _box(Color(0.1, 0.1, 0.14, 0.75)))
+	# Enemy perm cards receive gui_input so they can detect double-clicks /
+	# double-taps even in the middle of the busy roster panel.
+	if is_enemy and owner_peer_id != "":
+		card.mouse_filter = Control.MOUSE_FILTER_STOP
+		card.set_meta("perm_card_id", card_id)
+		card.set_meta("perm_owner_peer_id", owner_peer_id)
+		card.gui_input.connect(_on_perm_card_gui_input.bind(card))
+		card.tooltip_text = "double-click to attempt destroy (Rule 24)"
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 6)
 	card.add_child(hb)
+	# Icon + badge are stacked so the die floats over the icon's corner.
+	var icon_wrap := Control.new()
+	icon_wrap.custom_minimum_size = Vector2(32, 32)
+	icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hb.add_child(icon_wrap)
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(28, 28)
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture = RulesText.card_icon_texture(dl, card_id)
 	icon.visible = icon.texture != null
-	hb.add_child(icon)
+	icon_wrap.add_child(icon)
+	var die_text := _power_badge_for(owner_peer_id, card_id)
+	if die_text != "":
+		# Orange badge, top-left corner, same visual as the browser's
+		# .skill-card-power span painted by skill_card.js. Label defaults to
+		# MOUSE_FILTER_STOP which would eat the card's gui_input, so force
+		# IGNORE and let the parent PanelContainer catch double-clicks.
+		var badge := Label.new()
+		badge.text = die_text
+		badge.add_theme_font_size_override("font_size", 10)
+		badge.add_theme_color_override("font_color", Color(1, 0.95, 0.55))
+		var pbg := StyleBoxFlat.new()
+		pbg.bg_color = Color(0.85, 0.47, 0.17, 0.95)
+		pbg.set_corner_radius_all(4)
+		pbg.set_content_margin_all(1)
+		badge.add_theme_stylebox_override("normal", pbg)
+		badge.position = Vector2(-2, -2)
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge.tooltip_text = "power %s — the die an enemy's emission has to beat (Rule 24)" % die_text
+		icon_wrap.add_child(badge)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
@@ -756,6 +982,54 @@ func _make_perm_card(card_id: String, full_desc: bool) -> PanelContainer:
 	ds.custom_minimum_size = Vector2(260, 0)
 	col.add_child(ds)
 	return card
+
+
+func _on_perm_card_gui_input(event: InputEvent, card: Control) -> void:
+	# Any pointer source that reports double_click (desktop LMB, emulated-mouse
+	# from a double-tap) triggers a destroy intent. Right-click is a no-op; the
+	# browser only wires double-click to destroy, so we match that.
+	if not (event is InputEventMouseButton):
+		return
+	var mb: InputEventMouseButton = event
+	if not mb.pressed or not mb.double_click:
+		return
+	if mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var card_id := String(card.get_meta("perm_card_id", ""))
+	var owner := String(card.get_meta("perm_owner_peer_id", ""))
+	if card_id == "" or owner == "":
+		return
+	destroy_perm_requested.emit(owner, card_id, "")
+
+
+func _power_badge_for(peer_id: String, card_id: String) -> String:
+	if peer_id == "" or card_id == "":
+		return ""
+	var per_peer: Variant = _server_perm_power.get(peer_id, null)
+	if typeof(per_peer) != TYPE_DICTIONARY:
+		return ""
+	var die: Variant = (per_peer as Dictionary).get(card_id, null)
+	if die == null:
+		return ""
+	return String(die)
+
+
+## Return the peer_id associated with the entity `e`, or "" if no server
+## snapshot matches. Entities on the local sim carry a character_id or
+## creature_id in e.id; the server's peersPublic snapshot uses the same ids.
+func _peer_id_for_entity(e: Entity) -> String:
+	if e == null:
+		return ""
+	var want := String(e.id)
+	for raw in _server_peers:
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var p: Dictionary = raw
+		var cid := String(p.get("character_id", ""))
+		var creid := String(p.get("creature_id", ""))
+		if cid == want or creid == want:
+			return String(p.get("peer_id", ""))
+	return ""
 
 
 ## True when every skill_* / effect_* id in `entities[].data.permanents`
