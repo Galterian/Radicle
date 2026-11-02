@@ -14,6 +14,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Pick up JAVA_HOME / ANDROID_HOME / keystore paths and put the SDK's
+# platform-tools (adb) on PATH, so the Linux adb is preferred over Windows.
+if [[ -f /home/galt/godot-android/env.sh ]]; then
+  # shellcheck disable=SC1091
+  source /home/galt/godot-android/env.sh
+fi
+
 MODE="debug"
 DO_BUILD=1
 DO_INSTALL=1
@@ -102,6 +109,9 @@ resolve_adb() {
   fi
   if command -v adb >/dev/null 2>&1; then
     command -v adb; return
+  fi
+  if [[ -x "/home/galt/godot-android/android-sdk/platform-tools/adb" ]]; then
+    echo "/home/galt/godot-android/android-sdk/platform-tools/adb"; return
   fi
   if [[ -x "/mnt/c/platform-tools/adb.exe" ]]; then
     echo "/mnt/c/platform-tools/adb.exe"; return
