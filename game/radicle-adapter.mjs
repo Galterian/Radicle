@@ -18,6 +18,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { publishDimensionPush, publishSeedPresence, seedsEnabled } from './local-seeds.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -302,8 +303,23 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath, remov
   // SHA (rather than the branch name) keeps the URL stable even if we later
   // rewrite the branch, and sidesteps slash-encoding in the branch path.
   const treeUrl = published ? radicleEnv.treeUrl(head, `ActiveDimensions/${dimensionName}`) : null;
+  // Firebase registry (firebase/ + game/local-seeds.mjs). Fire-and-forget — a
+  // failure here is logged but never fails the push, because the local bare
+  // and rad remote are already updated. The adapter in local-seeds.mjs is a
+  // no-op when FIREBASE_PROJECT_ID / FIREBASE_API_KEY are unset.
+  if (seedsEnabled && radicleEnv.enabled) {
+    const doorPath = Object.keys(filesByRelPath).find(k => /\/doors\/[^/]+\.json$/.test(k));
+    const doorDoc  = doorPath ? (typeof filesByRelPath[doorPath] === 'string' ? safeParse(filesByRelPath[doorPath]) : filesByRelPath[doorPath]) : null;
+    const subject  = `[${peerId}] push ${dimensionName}`;
+    Promise.all([
+      publishSeedPresence({ nid: radicleEnv.nid, rid: radicleEnv.rid, alias: peerId }),
+      publishDimensionPush({ dimensionName, nid: radicleEnv.nid, rid: radicleEnv.rid, alias: peerId, doorDoc, commit: head, subject, branch }),
+    ]).catch(e => console.warn(`[radicle] firebase registry publish failed: ${e.message}`));
+  }
   return { pushed: true, commit: head, branch, remote, explorerUrl, treeUrl };
 }
+
+function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 
 export async function fetchDimension(peerId, dimensionName) {
   const dir = await ensureWorkTree(peerId);
