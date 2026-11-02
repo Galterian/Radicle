@@ -15,6 +15,25 @@ func _ready() -> void:
 	_target_zoom = zoom.x
 
 
+func attach_mobile_input(mi: MobileInput) -> void:
+	# Game.gd calls this after both nodes exist. One-finger drag pans, pinch
+	# zooms — same semantics as middle-mouse + wheel on desktop, so the camera
+	# behaves identically on both runtimes.
+	if mi == null:
+		return
+	mi.pan.connect(_on_touch_pan)
+	mi.pinch.connect(_on_touch_pinch)
+
+
+func _on_touch_pan(relative: Vector2) -> void:
+	follow = null
+	position -= relative / zoom.x
+
+
+func _on_touch_pinch(factor: float) -> void:
+	_target_zoom = clampf(_target_zoom * factor, ZOOM_MIN, ZOOM_MAX)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_MIDDLE:

@@ -279,6 +279,44 @@ func _unhandled_input(event: InputEvent) -> void:
 			hex_hovered.emit(h)
 			queue_redraw()
 	elif event is InputEventMouseButton and event.pressed:
+		# On mobile the mouse-emulation layer still fires LMB on every tap AND
+		# fires LMB-held during pans. We rely on MobileInput's tap signal to
+		# drive hex clicks instead, so swallow the emulated LMB here. Desktop
+		# platforms keep the fast mouse path.
+		if OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios"):
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT or event.button_index == MOUSE_BUTTON_RIGHT:
 			var h := world_to_hex(get_global_mouse_position())
 			hex_clicked.emit(h, event.button_index)
+
+
+func attach_mobile_input(mi: MobileInput) -> void:
+	# Tap → LMB-equivalent, double-tap → RMB-equivalent (matches the browser
+	# client's "double-click to destroy" perm interaction on mobile).
+	if mi == null:
+		return
+	mi.tap_at.connect(_on_touch_tap)
+	mi.double_tap_at.connect(_on_touch_double_tap)
+
+
+func _on_touch_tap(viewport_pos: Vector2) -> void:
+	var world := _viewport_to_world(viewport_pos)
+	var h := world_to_hex(world)
+	hover = h
+	hex_hovered.emit(h)
+	queue_redraw()
+	hex_clicked.emit(h, MOUSE_BUTTON_LEFT)
+
+
+func _on_touch_double_tap(viewport_pos: Vector2) -> void:
+	var world := _viewport_to_world(viewport_pos)
+	var h := world_to_hex(world)
+	hex_clicked.emit(h, MOUSE_BUTTON_RIGHT)
+
+
+func _viewport_to_world(vp: Vector2) -> Vector2:
+	# Map the viewport-space tap into world coordinates by going through the
+	# current camera's canvas transform. Equivalent to what
+	# get_global_mouse_position() would compute for a mouse at `vp`.
+	var ct := get_canvas_transform()
+	return ct.affine_inverse() * vp
