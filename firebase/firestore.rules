@@ -12,7 +12,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function isNid(s)  { return s is string && s.matches('^z[1-9A-HJ-NP-Za-km-z]{20,80}$'); }
-    function fresh(ts) { return ts is timestamp && ts.toMillis() > request.time.toMillis() - duration.value(1, 'h').value(); }
+    function fresh(ts) { return ts is timestamp && ts > request.time - duration.value(1, 'h'); }
 
     match /peers/{nid} {
       allow read: if true;
