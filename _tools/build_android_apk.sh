@@ -26,6 +26,16 @@ if [[ "${1-}" == "--release" ]]; then
   MODE="release"
 fi
 
+# Dev convenience: if no release keystore is configured, reuse the debug one
+# so --release builds don't fail with "Could not find keystore". Replace with
+# a real release keystore before shipping to users.
+if [[ "$MODE" == "release" && -z "${GODOT_ANDROID_KEYSTORE_RELEASE_PATH-}" ]]; then
+  export GODOT_ANDROID_KEYSTORE_RELEASE_PATH="$GODOT_ANDROID_KEYSTORE_DEBUG_PATH"
+  export GODOT_ANDROID_KEYSTORE_RELEASE_USER="$GODOT_ANDROID_KEYSTORE_DEBUG_USER"
+  export GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD="$GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD"
+  echo "[build] NOTE: using debug keystore for release signing (dev build)."
+fi
+
 OUT_DIR="$(pwd)/_tools"
 mkdir -p "$OUT_DIR"
 APK_PATH="$OUT_DIR/chaosd6-$MODE.apk"
@@ -59,6 +69,7 @@ fi
 export GODOT_EDITOR_HEADLESS=1
 
 echo "[build] preset=$PRESET  mode=$MODE  out=$APK_PATH"
+rm -f "$APK_PATH"
 
 cd godot
 if [[ "$MODE" == "debug" ]]; then
