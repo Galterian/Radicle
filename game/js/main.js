@@ -9,7 +9,7 @@ import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged
 import { featureAt, markFeatureConsumed, isFeatureConsumed, isLabyrinthWallAt } from './features.js';
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
-import { makeSkillIcon, fillSkillCardStack } from './skill_card.js';
+import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf } from './skill_card.js';
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
 // still landing. Pull it in defensively: when the module (or its export) is
@@ -733,7 +733,23 @@ function renderDeck() {
         card.takes_elem ? (state.queuedElem ? ` · ${elemGlyphs([state.queuedElem])} token` : ' · ◇ random element') : '',
         card.tile_target ? (state.target && typeof state.target === 'object' ? ` · ⌖ (${state.target.q},${state.target.r})` : ' · ⌖ click a tile') : '',
       ].join('') : '';
-      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div><div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`;
+      // Important static flags surfaced as mini-chips so the card tells the
+      // player at a glance what the cast does (permanent? damage? needs a
+      // target tile? takes an attached card?). The dynamic `tag` keeps the
+      // queued-state note (chain index, double, attached rider).
+      const flagParts = [];
+      if (card.is_permanent) flagParts.push('perm');
+      if (card.is_damage) flagParts.push('dmg');
+      if (card.is_point_buy) flagParts.push('buy');
+      if (card.effect_types?.includes('channel')) flagParts.push('channel');
+      if (card.is_instant && !flagParts.includes('perm')) flagParts.push('instant');
+      if (card.takes_attach) flagParts.push('📎');
+      if (card.takes_link) flagParts.push('🔗');
+      if (card.takes_elem) flagParts.push('◇');
+      if (card.tile_target) flagParts.push('⌖');
+      const flags = flagParts.length ? `<div class="fx-flags">${flagParts.map(t => `<span class="fx-flag">${escHtml(t)}</span>`).join('')}</div>` : '';
+      const desc = card.text || '';
+      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div>${flags}${desc ? `<div class="ds">${escHtml(abbreviate(desc, 110))}</div>` : ''}<div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`;
       const hints = [
         card.tile_target ? 'Left-click a tile for its target (general_ux_range_cast_target).' : '',
         card.takes_attach ? 'Click a second effect card in hand — it rides on this cast.' : '',
@@ -1057,7 +1073,37 @@ function renderRoster() {
       // the full stack.
       const collapsed = permIds.length > 3;
       if (collapsed) stack.classList.add('collapsed');
-      fillSkillCardStack(stack, permIds, { variant: 'strip', badge: 'perm' });
+      // Pass the point-buy die per card so a corner badge shows next to the
+      // icon (Rule 12/24). Class cards keep their chip-based colour UI.
+      const stackItems = permIds.map(pid => ({
+        id: pid,
+        powerBadge: pid.startsWith('class_') ? null : (permPower[pid] || null),
+      }));
+      fillSkillCardStack(stack, stackItems, { variant: 'strip', badge: 'perm' });
+      // Enemy permanents: double-click emits my best point-buy stat (Rule 24)
+      // at that perm. The server rolls the die; if it beats the perm's power
+      // the perm shatters at the end of this action.
+      if (isEnemyRow && !state.locked) {
+        for (const node of stack.querySelectorAll('.skill-card')) {
+          const pid = node.dataset.id;
+          if (!pid || pid.startsWith('class_')) continue;
+          node.classList.add('enemy-perm');
+          const stats = permStats(pid);
+          const queued = stats.length && state.destroy?.stat && stats.includes(state.destroy.stat);
+          if (queued) node.classList.add('destroy-queued');
+          node.addEventListener('dblclick', (ev) => {
+            ev.stopPropagation();
+            if (state.locked || !stats.length) return;
+            const me = state.entities.find(p => p.peer_id === state.myPeerId);
+            const myStat = (k) => Number(me?.[`stat_${k}`] ?? me?.stats?.[k]) || 0;
+            const best = stats.slice().sort((a, b) => myStat(b) - myStat(a))[0];
+            uilog('destroy-perm', { detail: `${e.peer_id} ${pid} via ${best}` });
+            send({ kind: 'destroy', stat: best });
+            cancelPathJourney('manual pick');
+            logUI(`⚒ emit ${best} at ${e.name}'s ${pid.replace(/^(skill|effect)_/, '')}`, 'phase');
+          });
+        }
+      }
       if (collapsed) {
         const toggle = document.createElement('button');
         toggle.type = 'button';
@@ -1154,12 +1200,43 @@ function renderRoster() {
 // over. Both read the entity's `resources` block; nothing is shown when the
 // mapping has no art for it.
 let heroCardKey = null;
+// Shortest honest label for the elements my next action will put out this
+// round, so the status line answers "what am I emitting?" at a glance.
+// Picks are summed across:
+//  - queued effect / effect2 / chain: their element_cost (glyphs);
+//  - a declared Posture / Empty Posture (both emit one element);
+//  - class riders that turn an Attack / Move into an emission (Reaver A, Monk M);
+//  - a queued Rule 24 destroy intent: the stat whose element is pointed at an enemy.
+// Returns '' when nothing emits this action, so the row stays hidden.
+function myEmissionPreview() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me) return '';
+  const parts = [];
+  const idxs = [state.queuedEffect, state.queuedEffect2, ...state.queuedChain].filter(i => i != null);
+  for (const i of idxs) {
+    const c = state.hand[i];
+    const g = elemGlyphsOf(c?.element_cost);
+    if (g) parts.push(g);
+  }
+  const q0 = state.queued[0];
+  const classId = (me.permanents_csv || '').split(',').find(s => s.startsWith('class_')) || me.class_id || '';
+  const pickCode = q0 === 'EMPTY'
+    ? ((state.target && typeof state.target === 'object' && 'q' in state.target) ? 'EM' : 'EP')
+    : (typeof q0 === 'number' ? state.hand[q0]?.code : null);
+  const pickEmits = pickCode === 'P' || pickCode === 'EP'
+    || (pickCode === 'A' && classId === 'class_reaver')
+    || (pickCode === 'M' && classId === 'class_monk');
+  if (pickEmits && !idxs.length) parts.push('✺');
+  if (state.destroy?.stat) parts.push(`⚒ ${state.destroy.stat}`);
+  return parts.join(' · ');
+}
 function renderHeroCard() {
   const card = document.getElementById('hero-card');
   if (!card) return;
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   const res = me ? resOf(me) : null;
-  const key = me ? `${me.peer_id}|${res ? 1 : 0}|${me.life}|${sounds.muted ? 1 : 0}` : null;
+  const emit = myEmissionPreview();
+  const key = me ? `${me.peer_id}|${res ? 1 : 0}|${me.life}|${sounds.muted ? 1 : 0}|${emit}` : null;
   if (key === heroCardKey) return;
   heroCardKey = key;
   if (!me || !res) { card.hidden = true; return; }
@@ -1171,6 +1248,8 @@ function renderHeroCard() {
   card.querySelector('.hero-name').textContent = me.name;
   card.querySelector('.hero-sub').textContent = `${res._entryName || ''} · as ${res.wbc3_name || '?'}${res.wbc3_race ? ` (${res.wbc3_race})` : ''}`;
   card.querySelector('.hero-hp').textContent = `hp ${me.life}/${me.life_max}`;
+  const emitEl = card.querySelector('.hero-emit');
+  if (emitEl) { emitEl.textContent = emit ? `emitting ${emit}` : ''; emitEl.hidden = !emit; }
   card.querySelector('.hero-mute').textContent = sounds.muted ? '🔇 muted (M)' : '🔊 sound on (M)';
 }
 // Shared stat line builder — same shape as the roster row so the two surfaces
@@ -1404,7 +1483,14 @@ function renderHoverCard(clientX, clientY) {
     if (permWrap) {
       // B1: paint the strip's shortcut (9 / 0 / - / =) in each perm card's
       // corner, so the hover-card perms show the same binding as the strip.
-      const items = permShortcutsForIds(permIds, p);
+      // Power badge (Rule 12/24) rides on the same card: the die an enemy's
+      // emission has to beat to destroy the perm.
+      let hovPower = {};
+      try { hovPower = JSON.parse(p.perm_power_json || '{}') || {}; } catch {}
+      const items = permShortcutsForIds(permIds, p).map(it => ({
+        ...it,
+        powerBadge: it.id?.startsWith('class_') ? null : (hovPower[it.id] || null),
+      }));
       fillSkillCardStack(permWrap, items, { variant: 'tooltip', badge: 'perm' });
     }
     const skillWrap = card.querySelector('.hc-skills');
@@ -1628,7 +1714,8 @@ function renderPerms() {
       : p.action === 'bless' ? (state.blessMode ? '📎 pick a card' : blessed ? `📎 ${blessed.name}` : 'empty')
       : p.action === 'phylactery' ? (state.queuedPhylactery ? `💀 ${state.queuedPhylactery.perm.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}` : state.phylacteryMode ? '💀 pick a perm' : `⚄${p.die || 6}`)
       : p.die ? `⚄${p.die}` : 'perm';
-    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
+    const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
+    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;

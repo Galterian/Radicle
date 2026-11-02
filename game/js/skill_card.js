@@ -89,6 +89,8 @@ function _ingest(entry, isPermanentDefault) {
     iconFrame: Number.isFinite(icon?.frame) ? icon.frame : 0,
     effectPath: effect?.path || null,      // fallback — effect strip
     requires: data.action_type || data.requires || null,
+    elementCost: Array.isArray(data.element_cost) ? data.element_cost.slice() : [],
+    pointBuyStat: typeof data.point_buy_stat === 'string' ? data.point_buy_stat : null,
     isTrance: entry.id === 'skill_battle_trance',
   };
   _entries.set(entry.id, info);
@@ -155,6 +157,31 @@ export function skillInfo(id) {
 // of this map; we duplicate so the DOM side can stand alone.
 export function skillGlyph(id) {
   return SKILL_GLYPHS[id] || SKILL_GLYPHS.default;
+}
+
+const ELEM_TO_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
+const ELEM_GLYPH = {
+  elem_vitality: '♥', elem_souls: '☽', elem_time: '⌛', elem_space: '✧',
+  elem_air: '≋', elem_water: '~', elem_earth: '▲', elem_fire: '🔥',
+  elem_concentration: '◎', elem_harmony: '♪',
+};
+export const elemGlyphsOf = (els) => (els || []).map(e => ELEM_GLYPH[e] || '?').join('');
+
+// Mirror of permStats() in game/peer.mjs doResolution: the stat set a
+// permanent can be destroyed by. Effects derive from element_cost →
+// ELEM_TO_STAT. Skills take point_buy_stat (strip 'stat_'; 'any' means all
+// four). An unknown id falls back to vitality so a click still has a target.
+export function permStats(id) {
+  if (!id) return [];
+  const info = _entries.get(id);
+  if (String(id).startsWith('skill_')) {
+    const pb = info?.pointBuyStat || '';
+    if (pb === 'any') return ['vitality', 'world', 'matter', 'will'];
+    return pb ? [pb.replace(/^stat_/, '')] : ['vitality'];
+  }
+  const stats = new Set();
+  for (const el of info?.elementCost || []) if (ELEM_TO_STAT[el]) stats.add(ELEM_TO_STAT[el]);
+  return [...stats];
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +324,7 @@ export function makeSkillIcon(id, { size = 32, title = null } = {}) {
 //   variant: 'strip'     — nutrition-label row (default — roster permanent)
 //            'reveal'    — larger pop above the unit on reveal
 //            'tooltip'   — narrow format in the hover card
-export function makeSkillCard(id, { variant = 'strip', nameOverride = null, textOverride = null, badge = null, keyBadge = null, iconSize = null } = {}) {
+export function makeSkillCard(id, { variant = 'strip', nameOverride = null, textOverride = null, badge = null, keyBadge = null, powerBadge = null, iconSize = null } = {}) {
   const el = document.createElement('div');
   el.className = `skill-card skill-card-${variant}`;
   el.dataset.id = id || '';
@@ -309,6 +336,15 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
     kb.className = 'skill-card-key';
     kb.textContent = keyBadge;
     el.appendChild(kb);
+  }
+  // Power badge (Rule 12/24): the point-buy die the perm was placed with —
+  // an enemy's emission has to beat it to destroy the perm. Pinned top-left.
+  if (powerBadge != null && powerBadge !== '') {
+    const pb = document.createElement('span');
+    pb.className = 'skill-card-power';
+    pb.textContent = String(powerBadge);
+    pb.title = `power ${powerBadge} — the die an enemy's emission has to beat (Rule 24)`;
+    el.appendChild(pb);
   }
   const info = skillInfo(id);
   const title = nameOverride || info?.name || (id ? String(id).replace(/^skill_/, '').replace(/_/g, ' ') : '—');
@@ -330,6 +366,18 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
     nm.appendChild(b);
   }
   body.appendChild(nm);
+
+  // Effect cards: one line listing the elements this card emits (its
+  // element_cost). Lets a reader see at a glance what colours a cast puts out
+  // and therefore which stat an enemy would use to destroy the resulting
+  // permanent (Rule 24, see permStats()).
+  if (info?.elementCost?.length && String(id).startsWith('effect_')) {
+    const em = document.createElement('div');
+    em.className = 'skill-card-emit';
+    em.textContent = `emits ${elemGlyphsOf(info.elementCost)}`;
+    em.title = `emission: ${info.elementCost.map(e => e.replace(/^elem_/, '')).join(', ')}`;
+    body.appendChild(em);
+  }
 
   if (text) {
     const ds = document.createElement('div');
@@ -361,6 +409,15 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
         delete ds.dataset.fxDecorated;
         decorateEffectRefs(ds, { selfId: id, iconSize: 14 });
       }
+      // Elements emitted (Task 14): add once the catalog is here, if we didn't
+      // already render it on first paint.
+      if (i2.elementCost?.length && String(id).startsWith('effect_') && !body.querySelector('.skill-card-emit')) {
+        const em = document.createElement('div');
+        em.className = 'skill-card-emit';
+        em.textContent = `emits ${elemGlyphsOf(i2.elementCost)}`;
+        em.title = `emission: ${i2.elementCost.map(e => e.replace(/^elem_/, '')).join(', ')}`;
+        body.insertBefore(em, body.querySelector('.skill-card-text'));
+      }
       off();
     });
   }
@@ -384,7 +441,7 @@ export function fillSkillCardStack(container, items, opts = {}) {
     if (!id) continue;
     const perItem = typeof item === 'string'
       ? null
-      : { keyBadge: item.key || item.keyBadge || null };
+      : { keyBadge: item.key || item.keyBadge || null, powerBadge: item.powerBadge ?? null };
     container.appendChild(makeSkillCard(id, perItem ? { ...opts, ...perItem } : opts));
   }
 }
