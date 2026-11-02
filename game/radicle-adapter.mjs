@@ -116,6 +116,20 @@ if (!radicleEnv.enabled) {
   console.warn(`[radicle] remote push disabled (${radicleEnv.reason}); pushes stay on local bare only`);
 } else {
   console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad; explorer base ${radicleEnv.explorerBase}`);
+  // One-shot presence publish so this peer appears in the Firebase registry
+  // immediately, even before the first dimension push. RADICLE_PUBLIC_ADDR
+  // ("ip.ip.ip.ip:8776" — your box's reachable rad node listen) is what makes
+  // this peer qualify as a priority seed; without it the row still shows up
+  // in the explorer but fetchSeeds({requireAddr:true}) skips it.
+  const bootAddr = process.env.RADICLE_PUBLIC_ADDR || '';
+  publishSeedPresence({
+    nid: radicleEnv.nid, rid: `rad:${radicleEnv.rid}`,
+    alias: process.env.PEER_LABEL || process.env.USER || radicleEnv.nid.slice(0, 10),
+    radicleAddr: bootAddr,
+  }).then(r => {
+    if (r?.ok)      console.log(`[radicle] presence registered${bootAddr ? ` as ${bootAddr}` : ' (no public addr — set RADICLE_PUBLIC_ADDR to become a priority seed)'}`);
+    else if (r?.reason) console.warn(`[radicle] presence publish: ${r.reason.split('\n')[0].slice(0, 200)}`);
+  }).catch(() => {});
 }
 
 // Every git call made for a per-peer worktree is fenced with
@@ -311,9 +325,10 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath, remov
     const doorPath = Object.keys(filesByRelPath).find(k => /\/doors\/[^/]+\.json$/.test(k));
     const doorDoc  = doorPath ? (typeof filesByRelPath[doorPath] === 'string' ? safeParse(filesByRelPath[doorPath]) : filesByRelPath[doorPath]) : null;
     const subject  = `[${peerId}] push ${dimensionName}`;
+    const addr = process.env.RADICLE_PUBLIC_ADDR || '';
     Promise.all([
-      publishSeedPresence({ nid: radicleEnv.nid, rid: radicleEnv.rid, alias: peerId }),
-      publishDimensionPush({ dimensionName, nid: radicleEnv.nid, rid: radicleEnv.rid, alias: peerId, doorDoc, commit: head, subject, branch }),
+      publishSeedPresence({ nid: radicleEnv.nid, rid: `rad:${radicleEnv.rid}`, alias: peerId, radicleAddr: addr }),
+      publishDimensionPush({ dimensionName, nid: radicleEnv.nid, rid: `rad:${radicleEnv.rid}`, alias: peerId, doorDoc, commit: head, subject, branch }),
     ]).catch(e => console.warn(`[radicle] firebase registry publish failed: ${e.message}`));
   }
   return { pushed: true, commit: head, branch, remote, explorerUrl, treeUrl };
@@ -358,6 +373,24 @@ export async function syncFromSeeds(timeoutSec = 10) {
   const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
   const radBin = path.join(RAD_BIN_DIR, 'rad');
   const outerMs = Math.max(45_000, (timeoutSec * 4 + 10) * 1000);
+  // Try the Firebase registry's priority seeds first: `rad node connect` adds
+  // the peer to the live connection set so the subsequent `rad sync --fetch`
+  // has somebody to talk to. Each connect call is budgeted tightly (3s) so a
+  // stale registry row can't make boot hang. Failures are silent — if nobody
+  // is registered yet, we fall straight through to the default gossip walk
+  // and the error message still points the user at the obvious cause.
+  try {
+    const { priorityBootstrap } = await import('./local-seeds.mjs');
+    const { seeds } = await priorityBootstrap({ rid: `rad:${radicleEnv.rid}`, max: 3 });
+    for (const s of seeds) {
+      const target = s.radicleAddr.includes('@') ? s.radicleAddr : `${s.nid}@${s.radicleAddr}`;
+      try {
+        await pexec(radBin, ['node', 'connect', target], { windowsHide: true, env: radEnv, timeout: 3000 });
+        console.log(`[radicle] connected to priority seed ${s.alias || s.nid.slice(0, 10)} @ ${s.radicleAddr}`);
+      } catch { /* seed unreachable; move on */ }
+    }
+    if (!seeds.length) console.log(`[radicle] no priority seeds registered yet in dimensions-4e9ae — publish from any live peer to populate`);
+  } catch { /* local-seeds disabled or offline */ }
   try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: outerMs }); return true; }
   catch (e) {
     const msg = (e.stderr || e.message || '').toString().split('\n')[0].slice(0, 160);
