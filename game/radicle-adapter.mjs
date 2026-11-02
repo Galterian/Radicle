@@ -331,14 +331,61 @@ async function radStorageDir() {
 }
 
 // Pull the latest refs for every namespace from the seeds (best effort, bounded).
+// `rad sync --timeout <N>sec` is a PER-SEED budget, not a total: rad walks
+// seeds sequentially until it hits its default replication target (3 seeds),
+// so a realistic 8-sec timeout often totals 20–30s wall-clock. The outer
+// pexec kill budget here is sized for that walk so a successful fetch does
+// not look like a failure. The caller never blocks on this — the cache in
+// `syncFromSeedsCached` serves whatever storage already has.
 export async function syncFromSeeds(timeoutSec = 10) {
   if (!radicleEnv.enabled) return false;
   const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
   const radBin = path.join(RAD_BIN_DIR, 'rad');
-  // rad 1.x wants a unit on --timeout ("8sec"), a bare number is rejected.
-  try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: (timeoutSec + 5) * 1000 }); return true; }
-  catch (e) { console.warn(`[radicle] sync from seeds: ${(e.stderr || e.message).toString().split('\n')[0].slice(0, 160)}`); return false; }
+  const outerMs = Math.max(45_000, (timeoutSec * 4 + 10) * 1000);
+  try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: outerMs }); return true; }
+  catch (e) {
+    const msg = (e.stderr || e.message || '').toString().split('\n')[0].slice(0, 160);
+    const killed = /ETIMEDOUT|SIGTERM|SIGKILL|killed/i.test(String(e.signal || e.code || msg));
+    console.warn(`[radicle] sync from seeds ${killed ? 'took too long; the fetch is still running in the background' : 'failed'}: ${msg}`);
+    return false;
+  }
 }
+
+// Rate-limit syncFromSeeds: /api/dimensions is called on every launcher open,
+// and if the seeds are unreachable the fetch burns its full timeout each time.
+// Keep the FIRST sync per TTL inline so a cold open still refreshes, then let
+// subsequent calls return immediately and refresh in the background. Both the
+// launcher's "list dimensions" and the "start a new dimension" flows feel this.
+const _SYNC_TTL_MS = 30_000;
+let _lastSyncAt = 0;
+let _syncInFlight = null;
+let _syncEverCompleted = false;
+async function syncFromSeedsCached(timeoutSec = 8) {
+  const age = Date.now() - _lastSyncAt;
+  if (_syncEverCompleted && age < _SYNC_TTL_MS) {
+    // Fresh enough — don't block the caller. A background refresh still fires
+    // when the window is older than half the TTL so idle launchers stay warm.
+    if (age > _SYNC_TTL_MS / 2 && !_syncInFlight) {
+      _syncInFlight = syncFromSeeds(timeoutSec).finally(() => { _lastSyncAt = Date.now(); _syncEverCompleted = true; _syncInFlight = null; });
+    }
+    return true;
+  }
+  if (!_syncInFlight) {
+    _syncInFlight = syncFromSeeds(timeoutSec).finally(() => { _lastSyncAt = Date.now(); _syncEverCompleted = true; _syncInFlight = null; });
+  }
+  // Give the first-ever sync a short budget (2s). If the seeds are responsive
+  // the sync finishes well inside that; if they're down, the launcher reads
+  // the storage snapshot that is already on disk and the fetch keeps running
+  // in the background to warm the cache for the next call.
+  const BUDGET_MS = 2000;
+  await Promise.race([_syncInFlight, new Promise(r => setTimeout(r, BUDGET_MS))]).catch(() => {});
+  return true;
+}
+// Pre-warm the sync cache at module load so the first launcher open does not
+// pay the 8-second seed timeout. Fire-and-forget; the cached ref snapshot
+// (populated by the previous session's pushes) stays usable while the fetch
+// runs in the background.
+if (radicleEnv.enabled) { syncFromSeedsCached(8).catch(() => {}); }
 
 // Read every ActiveDimensions/* branch in every namespace of the repo — not
 // just the delegates'. Each player publishes their own *Door* into a dimension
@@ -349,7 +396,7 @@ export async function syncFromSeeds(timeoutSec = 10) {
 // door-primary docs so old branches still show up (as history, never as live).
 export async function listPublishedDimensions({ sync = true } = {}) {
   if (!radicleEnv.enabled) throw new Error(radicleEnv.reason);
-  if (sync) await syncFromSeeds(8);
+  if (sync) await syncFromSeedsCached(8);
   const storage = await radStorageDir();
   let refs = '';
   try { refs = (await pexec('git', ['-C', storage, 'for-each-ref', '--format=%(refname) %(objectname)', 'refs/namespaces/*/refs/heads/ActiveDimensions/*'], { windowsHide: true })).stdout; }

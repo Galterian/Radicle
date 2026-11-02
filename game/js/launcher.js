@@ -82,8 +82,12 @@ async function renderLauncher() {
   // dimension-entry flow uses — different label, same spinner.
   showEntering('fetching dimensions, characters and relay candidates', 'ChaosD6 — getting ready to pick a dimension');
 
+  // Page load uses sync=0: list whatever Radicle storage already knows about
+  // without blocking on a seed fetch. Starting a new dimension and loading a
+  // local TMJ don't need other peers' doors; only the two "join" modes do, and
+  // for those we fire a background refresh when the user actually picks them.
   const [dimsRes, charsRes, creasRes, netRes, localRes] = await Promise.all([
-    fetch('/api/dimensions').then(r => r.json()).catch(e => ({ ok: false, items: [], reason: String(e) })),
+    fetch('/api/dimensions?sync=0').then(r => r.json()).catch(e => ({ ok: false, items: [], reason: String(e) })),
     fetch('/data/characters.json').then(r => r.json()),
     fetch('/data/creatures.json').then(r => r.json()),
     fetch('/api/network').then(r => r.json()).catch(() => ({ candidates: [{ address: '127.0.0.1', kind: 'loopback', iface: 'lo' }], default: '127.0.0.1' })),
@@ -184,10 +188,27 @@ async function renderLauncher() {
   if (liveDoors.length) joinDoorRadio.checked = true;
   const restoreRadio = document.querySelector('input[name="mode"][value="restore"]');
   restoreRadio.disabled = localItems.length === 0;
+  // Lazy seed sync: only hit the Radicle seeds the first time the user picks
+  // a join mode. Host and restore never trigger it, so starting a new
+  // dimension or loading a local TMJ waits on nothing network-side.
+  let _joinSyncTriggered = false;
+  async function refreshJoinListings() {
+    if (_joinSyncTriggered) return;
+    _joinSyncTriggered = true;
+    const st = document.getElementById('launcher-status');
+    const prev = st.textContent;
+    st.textContent = 'checking the seeds for fresh doors…';
+    try {
+      const fresh = await fetch('/api/dimensions?sync=1').then(r => r.json()).catch(() => null);
+      if (fresh?.items?.length) st.textContent = `refreshed ${fresh.items.length} dimension${fresh.items.length === 1 ? '' : 's'} from the seeds — reload the page to see them in the pickers`;
+      else st.textContent = prev;
+    } catch { st.textContent = prev; }
+  }
   function syncPanels() {
     const mode = document.querySelector('input[name="mode"]:checked').value;
     for (const el of document.querySelectorAll('.mode-panel')) el.hidden = el.dataset.for !== mode;
     document.querySelector('.join-opts').hidden = (mode === 'host' || mode === 'restore');
+    if (mode === 'join-door' || mode === 'join-random') refreshJoinListings();
   }
   for (const m of modes) m.addEventListener('change', syncPanels); syncPanels();
   document.getElementById('go').disabled = false;

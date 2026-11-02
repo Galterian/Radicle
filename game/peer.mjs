@@ -2315,7 +2315,14 @@ async function doResolution() {
   // Attack sees EP as Posture, a Posture sees EP and EM as Move, a Block sees
   // EM as Move. So A→P 2, A→B 0, P→M/EM/EP 1, M→B 1, B→A 1, everything else 0.
   const mapDef = (atk, def) => def === 'EP' ? ({ A: 'P', P: 'M', M: 'EP', B: 'EP' }[atk] || def) : def === 'EM' ? ({ A: 'EM', P: 'M', M: 'EM', B: 'M' }[atk] || def) : def;
-  const edgeDmg = (atk, def) => Math.max(0, (atk === 'A' ? 1 : 0) + (edgeMap[atk]?.[mapDef(atk, def)] ?? 0));
+  // Attack vs an Empty action deals its base 1 only — the Empty's "takes 1"
+  // ruling (data edge note at battle_system_core.resolution_matrix.edges[A,EP]
+  // and the empty_resolution_rule text). Without this clamp the mapDef remap
+  // of 'EP' → 'P' would feed edgeMap['A']['P']=1 back in and double it to 2.
+  const edgeDmg = (atk, def) => {
+    if (atk === 'A' && (def === 'EP' || def === 'EM')) return 1;
+    return Math.max(0, (atk === 'A' ? 1 : 0) + (edgeMap[atk]?.[mapDef(atk, def)] ?? 0));
+  };
   const hitDmg = (def) => edgeDmg('A', def);
 
   // Rule 9 / class static abilities: EP combat-type reassignment. Applied
@@ -3871,7 +3878,11 @@ async function endRound() {
   hg.round += 1; hg.action += 1;
   if (hg.round >= ROUNDS_PER_TURN) await endTurn();
   else {
-    broadcastUI(handMsg());
+    // Carry the fresh action's queued state through to the UI so an auto-
+    // requeued cast (Rule 19 continuation of a multi-element effect) shows
+    // the same effect card re-queued with a Posture, instead of leaving the
+    // player a blank hand to re-pick manually.
+    broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, queued_effect2: queuedEffect2 }));
     // Push the new action to the mesh immediately — otherwise other peers
     // only hear about our advance at turn boundaries (every 3 rounds) or on
     // the 15s heartbeat, and the catch-up logic can't fire until it sees
@@ -3921,10 +3932,50 @@ async function endTurn() {
       draws: [{ peer_id: PEER_ID_STRING, cards_drawn: hand.length - before }],
     },
   });
-  broadcastUI(handMsg({ turn_end: true }));
+  broadcastUI(handMsg({ turn_end: true, queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, queued_effect2: queuedEffect2 }));
+}
+
+// NPC-side mirror of permStats() inside doResolution: the stat set a
+// permanent can be destroyed by. Effects derive from element_cost →
+// ELEM_TO_STAT; skills take point_buy_stat (strip 'stat_'; 'any' means all
+// four). Used only for the opportunistic Rule-24 pick below.
+const _ELEM_TO_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
+function _npcPermStats(permId) {
+  if (!permId) return [];
+  if (permId.startsWith('skill_')) {
+    const pb = data.skills[permId]?.data?.point_buy_stat || '';
+    if (pb === 'any') return ['vitality', 'world', 'matter', 'will'];
+    return pb ? [pb.replace(/^stat_/, '')] : ['vitality'];
+  }
+  const out = new Set();
+  for (const el of data.effects[permId]?.data?.element_cost || []) if (_ELEM_TO_STAT[el]) out.add(_ELEM_TO_STAT[el]);
+  return [...out];
+}
+// Among the enemies that will see my emission this action, pick the best
+// (stat, permanent) pair — my stat ≥ perm.power so a successful roll can beat
+// it, and the biggest gain over the power. Returns null if nothing matches.
+function _npcPickDestroy(enemies) {
+  let best = null;
+  for (const e of enemies) {
+    let pp = {};
+    try { pp = JSON.parse(e.perm_power_json || '{}') || {}; } catch {}
+    const ids = String(e.permanents_csv || '').split(',').filter(Boolean);
+    for (const pid of ids) {
+      if (pid.startsWith('class_')) continue;
+      for (const st of _npcPermStats(pid)) {
+        const myS = entity.stats[st] || 0;
+        const pow = pp[pid] || 1;
+        if (myS < pow) continue;
+        const gain = myS - pow;
+        if (!best || gain > best.gain) best = { stat: st, gain, pid };
+      }
+    }
+  }
+  return best;
 }
 
 async function npcPlan() {
+  queuedDestroy = null;
   const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
   // Summoned / bound: follow the owner — close the gap first, fight only what is in reach.
   const owner = ownerPeerId ? peersPublic.get(ownerPeerId) : null;
@@ -3969,6 +4020,15 @@ async function npcPlan() {
     queuedExtra = diff ?? null;
   }
   target = emptyMove ? { q: nearest.tile_q, r: nearest.tile_r } : nearest.peer_id;
+  // Rule 24: if this action puts an element out — Posture, Empty Posture,
+  // Reaver Attack, Monk Move — and an in-reach enemy has a permanent my best
+  // stat can roll against, point the emission at it instead of a bonus token.
+  const emitsNow = pick === 'P' || slot < 0 || (pick === 'A' && isReaver()) || (pick === 'M' && isMonk());
+  if (emitsNow) {
+    const reach = enemies.filter(p => hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) <= STRONG_RADIUS);
+    const opp = _npcPickDestroy(reach);
+    if (opp) queuedDestroy = { stat: opp.stat };
+  }
 }
 
 // Our own state hash per action, kept briefly so an incoming evt_state_hash
