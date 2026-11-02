@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>chaosD6 — Radicle seeds</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="site">
+    <a class="brand" href="/explore">
+      <span class="logo">⌬</span>
+      <span class="name">chaosD6 / seeds</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/explore">Explore</a>
+      <a href="https://radicle.xyz" target="_blank" rel="noreferrer">Radicle ↗</a>
+    </nav>
+    <div class="search">
+      <input id="q" type="search" placeholder="search peers, dimensions, commits" autocomplete="off">
+    </div>
+  </header>
+
+  <main id="view" class="container">
+    <section id="loading" class="empty">loading…</section>
+  </main>
+
+  <!-- Views are templates we clone + fill in app.js; no bundler, no framework. -->
+  <template id="tpl-explore">
+    <h1 class="page-title">Explore seeds</h1>
+    <p class="page-sub">Peers that have published to the shared Radicle project. Each row is a reachable seed address a new peer can dial with <code>rad sync</code> or add to its libp2p bootstrap list.</p>
+    <ul id="peer-list" class="repo-list"></ul>
+    <h2 class="page-title lvl2">Active dimensions</h2>
+    <ul id="dim-list" class="repo-list"></ul>
+  </template>
+
+  <template id="tpl-peer">
+    <nav class="crumbs"><a href="/explore">explore</a> / <b class="crumb-peer"></b></nav>
+    <header class="profile">
+      <div class="profile-avatar"></div>
+      <div class="profile-meta">
+        <div class="profile-name"><span class="alias"></span> <span class="nid mono"></span></div>
+        <div class="profile-sub"></div>
+        <div class="profile-sync">
+          <code class="clone-box"></code>
+          <button class="btn copy" data-copy>copy</button>
+        </div>
+      </div>
+    </header>
+    <h2 class="section">Dimensions this peer has pushed</h2>
+    <ul class="repo-list dim-list"></ul>
+  </template>
+
+  <template id="tpl-dim">
+    <nav class="crumbs"><a href="/explore">explore</a> / <b class="crumb-dim"></b></nav>
+    <header class="repo-head">
+      <div class="repo-name">
+        <span class="icon">⎇</span> <span class="dim-name"></span>
+        <span class="badge live" hidden>LIVE</span>
+      </div>
+      <div class="repo-sub">
+        branch <code>ActiveDimensions/<span class="dim-name-inline"></span></code>
+        · <span class="peer-count"></span> peers · updated <span class="updated"></span>
+      </div>
+      <div class="repo-actions">
+        <code class="clone-box"></code>
+        <button class="btn copy" data-copy>copy</button>
+      </div>
+    </header>
+
+    <div class="repo-grid">
+      <section class="col-main">
+        <h2 class="section">Commits</h2>
+        <ol class="commit-list"></ol>
+      </section>
+      <aside class="col-side">
+        <h2 class="section">Doors (live roster)</h2>
+        <ul class="door-list"></ul>
+      </aside>
+    </div>
+  </template>
+
+  <template id="tpl-404">
+    <h1 class="page-title">Not found</h1>
+    <p>No peer or dimension matches that path.</p>
+    <p><a href="/explore">← back to explore</a></p>
+  </template>
+
+  <template id="tpl-config">
+    <h1 class="page-title">Firebase not configured</h1>
+    <p>Edit <code>firebase/public/app.js</code> and fill in your project's <code>FIREBASE_CONFIG</code> (<a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer">console.firebase.google.com</a> → Project settings → Your apps → Web app).</p>
+    <pre class="pre">const FIREBASE_CONFIG = {
+  apiKey:            "...",
+  authDomain:        "YOUR-PROJECT.firebaseapp.com",
+  projectId:         "YOUR-PROJECT",
+  storageBucket:     "YOUR-PROJECT.appspot.com",
+  messagingSenderId: "...",
+  appId:             "..."
+};</pre>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
