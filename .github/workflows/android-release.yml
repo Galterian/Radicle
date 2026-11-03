@@ -1,0 +1,85 @@
+name: android-release
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Play track to upload to'
+        required: true
+        default: 'internal'
+        type: choice
+        options: [internal, alpha, beta, production]
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    env:
+      GODOT_VERSION: ${{ secrets.GODOT_VERSION || '4.3-stable' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot
+        run: |
+          curl -sSfL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          godot --version
+
+      - name: Install Godot export templates
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}"
+          curl -sSfL -o tpl.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          unzip -q tpl.tpz -d /tmp/tpl
+          mv /tmp/tpl/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}/"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Decode Play service-account key
+        run: |
+          mkdir -p fastlane
+          echo "${{ secrets.PLAY_JSON_KEY_B64 }}" | base64 -d > fastlane/play-service-account.json
+
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > godot/release.keystore
+
+      - name: Configure keystore in editor settings
+        run: |
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-4.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+          [resource]
+          export/android/debug_keystore = ""
+          export/android/release_keystore = "${{ github.workspace }}/godot/release.keystore"
+          export/android/release_keystore_user = "${{ secrets.ANDROID_KEYSTORE_USER }}"
+          export/android/release_keystore_pass = "${{ secrets.ANDROID_KEYSTORE_PASS }}"
+          EOF
+
+      - name: Build AAB
+        run: |
+          mkdir -p _tools
+          godot --headless --path godot --export-release "Android Play Store (AAB)" ../_tools/chaosd6-release.aab
+
+      - name: Install fastlane
+        run: gem install fastlane -NV
+
+      - name: Upload to Play Store
+        env:
+          PLAY_JSON_KEY: ${{ github.workspace }}/fastlane/play-service-account.json
+        run: fastlane ${{ github.event.inputs.track || 'internal' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chaosd6-release-aab
+          path: _tools/chaosd6-release.aab

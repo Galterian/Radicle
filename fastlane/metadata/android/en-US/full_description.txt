@@ -1,0 +1,18 @@
+chaosD6 Dimensions is a deterministic peer-to-peer hex strategy game. Every player runs their own node — there is no central server, no account to create, no advertising, no telemetry. Dimensions are shared through the Radicle peer-to-peer network as Git branches, so once a dimension is created, every participant has an independent copy of the full rulebook, map and action history.
+
+Features
+
+• Hex-tile strategy with a stat-buy / point-buy damage model and layered element magic.
+• Fully deterministic resolver — any two peers running the same action list see the same world.
+• Peer-to-peer only — no server to go down, no account to log in to.
+• Shared rulebook that lives as versioned data, not code; new effects and classes can be proposed by anyone.
+• Companion AI you can bring into a dimension even when you're the only human player.
+• Decentralised publishing through the Radicle network — your dimension is a Git branch, visible to anyone with the ID.
+
+What this is not
+
+• Not an MMO. Each dimension has 2–6 live players and runs for an evening to a few weeks.
+• Not pay-to-win — there are no in-app purchases.
+• Not an online lobby — you share your dimension's name/ID with people you want to play with.
+
+Open source and open-rulebook. See the project page for the source and the data layer.

@@ -1,0 +1,38 @@
+// Builds the RadicleNode plugin AAR that Godot's gradle merge consumes.
+// Build with:
+//   cd godot/android/plugins/radicle_node && ./gradlew assembleRelease
+// then copy build/outputs/aar/radicle_node-release.aar beside radicle_node.gdap.
+//
+// NOT TESTED. The versions below match Godot 4.3 plugin templates; if the
+// local export template uses a different AGP/Kotlin pair, bump these.
+plugins {
+    id 'com.android.library' version '8.2.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.22'
+}
+
+android {
+    namespace 'io.chaosd6.radicle'
+    compileSdk 35
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { aidl false; renderScript false; shaders false; buildConfig false }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+dependencies {
+    // Supply the Godot plugin dependency JAR at build time via -PgodotLibsDir=
+    // or drop the Godot engine's `godot-lib.release.aar` into libs/.
+    compileOnly fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    implementation 'androidx.core:core-ktx:1.13.1'
+}
