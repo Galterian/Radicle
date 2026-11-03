@@ -13,6 +13,11 @@
   "deploymentId": "dimensions-4e9ae",
   "preferredSeeds": [
     {
+      "hostname": "92-5-138-121.sslip.io",
+      "port": 443,
+      "scheme": "https"
+    },
+    {
       "hostname": "localhost",
       "port": 8080,
       "scheme": "http"
