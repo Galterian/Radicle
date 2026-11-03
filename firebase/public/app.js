@@ -277,12 +277,18 @@ async function route() {
   }
 }
 
-// Intercept same-origin link clicks so we stay a SPA without a full reload.
+// Intercept same-origin link clicks only for paths THIS SPA handles. Anything
+// else (e.g. the top-nav link into /nodes/<seed>/rad:<rid>/..., which belongs
+// to the Radicle Explorer SPA served from /radicle/ via Firebase's catchall
+// rewrite) must fall through to a real navigation — otherwise pushState keeps
+// us on this page and the router shows viewNotFound.
+const SPA_ROUTE = /^\/(?:$|explore(?:$|\/)|index\.html$|peers\/|dimensions\/)/;
 document.addEventListener("click", (ev) => {
   const a = ev.target.closest("a");
   if (!a) return;
   const href = a.getAttribute("href");
   if (!href || href.startsWith("http") || href.startsWith("mailto:") || a.target === "_blank") return;
+  if (!SPA_ROUTE.test(href)) return;
   ev.preventDefault();
   history.pushState({}, "", href);
   route();
