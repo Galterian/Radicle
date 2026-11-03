@@ -38,8 +38,13 @@ export const PROJECT_ROOT = path.resolve(__dirname, '..');
 // third-party viewer. The local-bare /commit/<sha> view in ui-server.mjs is
 // unaffected either way.
 const RADICLE_PUSH_REMOTE   = (process.env.RADICLE_PUSH_REMOTE ?? '1') !== '0';
-const RADICLE_SEED          = process.env.RADICLE_SEED          || '';
-const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || '';
+// Defaults point at the project's Firebase-hosted Radicle Explorer deployment
+// (static Svelte SPA at firebase/public/radicle, served from Hosting). The SPA
+// talks to the user's OWN rad-httpd on localhost:8080 — no public mesh seed is
+// introduced. Override to '' to suppress emitted explorer URLs, or point at a
+// different deployment.
+const RADICLE_SEED          = process.env.RADICLE_SEED          || 'localhost';
+const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://dimensions-4e9ae.web.app';
 // Default: emit raw explorer URLs (shareable, work from any browser). Setting
 // RADICLE_ALIAS=chaosD6 instead routes the broadcast link through the local
 // UI server as http://127.0.0.1:<UI_PORT>/r/<alias>/commits/<sha>, which 302s
@@ -95,8 +100,10 @@ export const radicleEnv = await (async () => {
     return { enabled: false, reason: `git-remote-rad not found at ${RAD_BIN_DIR}` };
   }
   const explorerBase = RADICLE_EXPLORER_BASE.replace(/\/+$/, '');
-  // Explorer expects an URL-encoded colon between "rad" and the RID body.
-  const ridInUrl = `rad%3A${rid}`;
+  // Firebase-hosted explorer accepts the raw colon in the URL path and that is
+  // what its own navigation generates (/nodes/<seed>/rad:<rid>/...); keep the
+  // emitted link in that exact shape so it round-trips through the SPA router.
+  const ridInUrl = `rad:${rid}`;
   // When no explorer base + seed are configured the adapter is on a private
   // mesh (your deployment) and we return null — callers already treat that as
   // "no public explorer link".

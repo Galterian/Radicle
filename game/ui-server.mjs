@@ -348,7 +348,7 @@ function mergeMembers(doorMembers, live) {
 // Pick a start tile from what the Doors know. 'nearby' = adjacent to a friend
 // (or to the chosen player's Door); 'random' = a known hex outside everyone's
 // strong radius. Only hexes somebody has revealed are candidates.
-function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2 }) {
+function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2, preferredTile = null }) {
   const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : a;
   const alive = members
     .map(m => ({ peer_id: m.peer_id, q: m.tile?.q, r: m.tile?.r, alliance: m.alliance ?? m.clan, life: m.life ?? 1 }))
@@ -359,6 +359,18 @@ function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, stro
   if (!free.length) throw new Error('the grid is full');
   const minDist = (t, set) => set.length ? Math.min(...set.map(m => hexDistance(t, m))) : Infinity;
   const rand = arr => arr[Math.floor(Math.random() * arr.length)];
+  // Rejoin-at-saved-tile path: prefer the exact tile; if occupied, pick the
+  // closest free hex (ties → random). Falls back silently to the regular
+  // placement rules only if the preferred tile isn't on the known map at all.
+  if (preferredTile && Number.isInteger(preferredTile.q) && Number.isInteger(preferredTile.r)
+      && knownMap.has(preferredTile.q, preferredTile.r)) {
+    const key = `${preferredTile.q},${preferredTile.r}`;
+    if (!occupied.has(key)) return { q: preferredTile.q, r: preferredTile.r };
+    const scored = free.map(t => ({ t, d: hexDistance(t, preferredTile) }));
+    scored.sort((a, b) => a.d - b.d);
+    const best = scored[0].d;
+    return rand(scored.filter(s => s.d === best).map(s => s.t));
+  }
   if (placement === 'random') {
     const hidden = free.filter(t => minDist(t, alive) > strongRadius);
     if (hidden.length) return rand(hidden);
@@ -374,7 +386,7 @@ function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, stro
   return free[0];
 }
 
-async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName }) {
+async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null }) {
   if (!radicleEnv.enabled) throw new Error(`radicle disabled: ${radicleEnv.reason}`);
   const items = await listPublishedDimensions();
   const dim = items.find(d => d.dimension_name === dimensionName);
@@ -387,7 +399,7 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   if (!liveDoors.length) console.log(`[launcher] ${dimensionName}: no Door newer than ${DOOR_LIVE_MS / 60000} min — joining an empty dimension; you will be alone until someone else arrives`);
 
   const knownMap = mapFromDoors(dim);
-  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap });
+  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile });
   if (!knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
   console.log(`[launcher] ${dimensionName}: map from ${dim.doors.length} Doors = ${knownMap.size()} hexes in ${knownMap.blockCount()} blocks (seed ${knownMap.seed})`);
   // Hundreds of blocks don't fit comfortably in an environment variable; hand
@@ -460,6 +472,46 @@ async function restoreDimension({ tmjPath, label }) {
   const DIM_ID   = String(props.dim_id   || `dim-${slug(DIM_NAME)}`);
   const DOOR_ID  = 'door-primary';
   const MAP_SEED = String(props.seed || '');
+  // Rejoin path: if the dim named here is still live on Radicle (a recent Door
+  // exists), bring the dead player back as a fresh peer at their saved tile
+  // (or the nearest free hex if someone else now stands on it) instead of
+  // doing a cold respawn of the whole 4-peer mesh. The entities layer of the
+  // TMJ carries each entity's tile; the player tile is the one with
+  // alliance='player'. If no player entity is in the TMJ (shouldn't happen,
+  // but legacy saves exist) we fall through to the cold-respawn code below.
+  // IMPORTANT: this runs BEFORE the `startedDimension` guard so a launcher
+  // that already hosts the (still-live) dim can still spawn one more peer to
+  // bring the dead player back — rejoin only adds one peer, it never touches
+  // the roster already in flight.
+  const entitiesLayer = (map.layers || []).find(l => l.name === 'entities') || { objects: [] };
+  const entProps = o => Object.fromEntries((o.properties || []).map(p => [p.name, p.value]));
+  const playerEnt = (entitiesLayer.objects || [])
+    .map(o => ({ p: entProps(o), name: o.name }))
+    .find(e => String(e.p.alliance || '') === 'player');
+  const savedTile = playerEnt && Number.isInteger(playerEnt.p.tile_q) && Number.isInteger(playerEnt.p.tile_r)
+    ? { q: playerEnt.p.tile_q, r: playerEnt.p.tile_r } : null;
+  if (radicleEnv.enabled && savedTile) {
+    try {
+      const items = await listPublishedDimensions();
+      const dim = items.find(d => d.dimension_name === DIM_NAME);
+      const liveDoors = dim ? dim.doors.filter(p => Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS) : [];
+      if (liveDoors.length) {
+        console.log(`[launcher] ${DIM_NAME} is still live (${liveDoors.length} recent Door${liveDoors.length === 1 ? '' : 's'}) — rejoining at saved tile (${savedTile.q},${savedTile.r})`);
+        const out = await joinDimension({
+          dimensionName: DIM_NAME, doorId: null, placement: 'nearby', side: 'player',
+          characterId: String(playerEnt.p.source_id || '') || 'char_exuberant_firestroker',
+          creatureId: '', label: (label || '').trim() || null,
+          entityName: playerEnt.name || 'You',
+          preferredTile: savedTile,
+        });
+        return { ...out, status: 'rejoined', tmj: absPath, savedTile };
+      }
+      console.log(`[launcher] ${DIM_NAME} has no recent Doors — cold-respawning the whole mesh from TMJ`);
+    } catch (e) {
+      console.warn(`[launcher] rejoin check failed (${e.message}); falling back to cold respawn`);
+    }
+  }
+
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   const ip = defaultPublicIp();
   const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
