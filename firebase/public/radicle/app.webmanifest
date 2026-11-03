@@ -1,0 +1,15 @@
+{
+  "id": "radicle-explorer",
+  "name": "Radicle Explorer",
+  "short_name": "Radicle",
+  "description": "Explore the Radicle network",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/images/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    }
+  ],
+  "display": "standalone"
+}
