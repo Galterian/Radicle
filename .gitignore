@@ -1,6 +1,17 @@
 # Dependencies
 node_modules/
 
+# Shipped binaries go into firebase/public/downloads/ for hosting, not git
+firebase/public/downloads/*.apk
+firebase/public/downloads/*.aab
+
+# Play Store release — never commit the service-account JSON or the keystore
+fastlane/play-service-account.json
+fastlane/report.xml
+fastlane/Preview.html
+godot/release.keystore
+godot/*.jks
+
 # OCI deploy — keep private keys and local terraform state out of git
 infra/oci/keys/
 !infra/oci/keys/.gitkeep

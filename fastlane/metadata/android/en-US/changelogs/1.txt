@@ -1,0 +1,4 @@
+First internal build.
+- Peer-to-peer hex strategy over Radicle
+- Companion AI, Door-based dimension sharing
+- Known: Android acts as a thin client; a 24/7 peer needs to be reachable.
