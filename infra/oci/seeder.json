@@ -1,0 +1,18 @@
+{
+  "comment": "Live state of the OCI seeder. Written by hand after apply; keep in sync.",
+  "deployed_at": "2026-11-03T10:18:30Z",
+  "region": "eu-frankfurt-1",
+  "shape": "VM.Standard.A1.Flex",
+  "public_ip": "92.5.138.121",
+  "hostname": "92-5-138-121.sslip.io",
+  "nid": "z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT",
+  "alias": "chaos-oci-seed",
+  "gossip_port": 8776,
+  "http_port": 8080,
+  "api_base": "https://92-5-138-121.sslip.io/",
+  "radicle_version": "1.10.3",
+  "preferred_seed_entry": "chaos-oci-seed@92-5-138-121.sslip.io:8776",
+  "connect_entry": "z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT@92-5-138-121.sslip.io:8776",
+  "seeding_rid": "rad:zqZmP6itceBMqYwi1K1n8phQqCaj",
+  "ssh": "ssh -i infra/oci/keys/oci_seeder ubuntu@92.5.138.121"
+}

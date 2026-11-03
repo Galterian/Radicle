@@ -1,0 +1,173 @@
+#cloud-config
+# Bootstraps a chaosD6 Radicle seeder VM:
+#  - a dedicated `radicle` user (never runs as root)
+#  - radicle-node + radicle-httpd binaries from the project's upstream release
+#  - config.json pinned to the project RID with seedingPolicy.default = allow
+#  - two systemd units with Restart=always (survive reboots)
+#  - caddy terminates TLS on <ip>.sslip.io and reverse-proxies to radicle-httpd
+#
+# After `terraform apply`, SSH in and run `sudo -u radicle rad self --nid` to
+# read the NID. That + the public IP is what you add to Firebase's seed
+# registry and to your workstation's preferredSeeds.
+
+package_update: true
+package_upgrade: false
+packages:
+  - curl
+  - ca-certificates
+  - jq
+  - debian-keyring
+  - debian-archive-keyring
+  - apt-transport-https
+  - git
+  - openssh-client
+
+users:
+  - default
+  - name: radicle
+    shell: /bin/bash
+    sudo: false
+    groups: users
+
+write_files:
+  - path: /etc/systemd/system/radicle-node.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=chaosD6 Radicle node (gossip)
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      User=radicle
+      Group=radicle
+      Environment=RAD_HOME=/home/radicle/.radicle
+      Environment=PATH=/home/radicle/.radicle/bin:/usr/local/bin:/usr/bin:/bin
+      ExecStart=/home/radicle/.radicle/bin/radicle-node --listen 0.0.0.0:${gossip_port}
+      Restart=always
+      RestartSec=5
+      LimitNOFILE=65536
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/radicle-httpd.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=chaosD6 Radicle HTTP API
+      After=network-online.target radicle-node.service
+      Wants=network-online.target
+
+      [Service]
+      User=radicle
+      Group=radicle
+      Environment=RAD_HOME=/home/radicle/.radicle
+      Environment=PATH=/home/radicle/.radicle/bin:/usr/local/bin:/usr/bin:/bin
+      ExecStart=/home/radicle/.radicle/bin/radicle-httpd --listen 127.0.0.1:${http_port}
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /home/radicle/bootstrap.sh
+    permissions: '0755'
+    owner: radicle:radicle
+    content: |
+      #!/usr/bin/env bash
+      # Idempotent first-boot setup for the `radicle` user.
+      set -euo pipefail
+      export HOME=/home/radicle
+      export RAD_HOME=$HOME/.radicle
+      export PATH=$RAD_HOME/bin:$PATH
+
+      # 1. Fetch rad / radicle-node / radicle-httpd / git-remote-rad (ARM64).
+      if [ ! -x "$RAD_HOME/bin/rad" ]; then
+        curl -sSf https://radicle.xyz/install | sh
+      fi
+
+      # 2. Create an unencrypted identity if we don't have one.
+      if [ ! -f "$RAD_HOME/keys/radicle" ]; then
+        RAD_PASSPHRASE="" rad auth --alias "${alias}"
+      fi
+
+      # 3. Write a seed-grade node config: listen everywhere, seed every repo
+      #    we're told about, keep the node discoverable at its public hostname.
+      mkdir -p "$RAD_HOME"
+      PUBLIC_IP="$(curl -sSf https://api.ipify.org || true)"
+      case "${hostname_template}" in
+        sslip) EXT_HOST="$(echo "$PUBLIC_IP" | tr '.' '-').sslip.io" ;;
+        *)     EXT_HOST="${hostname_template}" ;;
+      esac
+      cat > "$RAD_HOME/config.json" <<JSON
+      {
+        "publicExplorer": "https://$EXT_HOST/nodes/\$host/\$rid\$path",
+        "preferredSeeds": [],
+        "cli": { "hints": true },
+        "node": {
+          "alias": "${alias}",
+          "listen": ["0.0.0.0:${gossip_port}"],
+          "externalAddresses": ["$EXT_HOST:${gossip_port}"],
+          "peers": { "type": "dynamic" },
+          "connect": [],
+          "network": "main",
+          "log": "INFO",
+          "relay": "auto",
+          "workers": 8,
+          "seedingPolicy": { "default": "allow" }
+        }
+      }
+      JSON
+
+      # 4. Seed the project RID (idempotent).
+      rad seed "${project_rid}" --scope all || true
+
+      # 5. Record the computed hostname for later terraform / Firebase use.
+      echo "$EXT_HOST" > "$HOME/public-hostname.txt"
+      rad self --nid > "$HOME/node-nid.txt" || true
+
+  - path: /etc/caddy/Caddyfile
+    permissions: '0644'
+    content: |
+      {
+        email admin@${hostname_template}.local
+      }
+      # Resolved at bootstrap-time to <ip-dashed>.sslip.io (or your own hostname).
+      # The include directive below gets replaced in-place by bootstrap.sh.
+      import /etc/caddy/sites/*.caddy
+
+  - path: /etc/caddy/sites/.gitkeep
+    content: ""
+
+runcmd:
+  # Open the host firewall for the ports we actually serve. OCI's Ubuntu
+  # images ship with iptables rules that REJECT everything except :22, so
+  # the security list alone is not enough.
+  - [ sh, -c, "iptables -I INPUT 1 -p tcp --dport 80   -j ACCEPT" ]
+  - [ sh, -c, "iptables -I INPUT 1 -p tcp --dport 443  -j ACCEPT" ]
+  - [ sh, -c, "iptables -I INPUT 1 -p tcp --dport ${http_port} -j ACCEPT" ]
+  - [ sh, -c, "iptables -I INPUT 1 -p tcp --dport ${gossip_port} -j ACCEPT" ]
+  - [ sh, -c, "command -v netfilter-persistent >/dev/null && netfilter-persistent save || iptables-save > /etc/iptables/rules.v4" ]
+
+  # Install caddy (official repo).
+  - [ sh, -c, "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg" ]
+  - [ sh, -c, "curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list" ]
+  - [ apt-get, update, -y ]
+  - [ apt-get, install, -y, caddy ]
+
+  # Bootstrap radicle under the dedicated user (installs rad, creates identity,
+  # writes config.json, pins the RID, writes public-hostname.txt + node-nid.txt).
+  - [ sudo, -u, radicle, -H, bash, /home/radicle/bootstrap.sh ]
+
+  # Build the caddy site config from the hostname that bootstrap just computed.
+  - [ sh, -c, "HOST=\"$(cat /home/radicle/public-hostname.txt)\"; cat > /etc/caddy/sites/seed.caddy <<EOF\n$HOST {\n  reverse_proxy 127.0.0.1:${http_port}\n  header Access-Control-Allow-Origin https://dimensions-4e9ae.web.app\n  header Access-Control-Allow-Methods \"GET, POST, OPTIONS\"\n  header Access-Control-Allow-Headers \"content-type\"\n}\nEOF" ]
+
+  # Services up and sticky.
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, radicle-node.service ]
+  - [ systemctl, enable, --now, radicle-httpd.service ]
+  - [ systemctl, reload, caddy ]
+
+  # One-liner summary into cloud-init logs so `oci instance console-history` is useful.
+  - [ sh, -c, "sleep 3; echo '===== chaosd6 seeder ready ====='; cat /home/radicle/public-hostname.txt; cat /home/radicle/node-nid.txt; systemctl --no-pager status radicle-node.service | head -3; systemctl --no-pager status radicle-httpd.service | head -3" ]

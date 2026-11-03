@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Root-compartment deploy =
+# compartment_ocid is the tenancy OCID from ~/.oci/config. ssh_public_key is
+# the one-line content of infra/oci/keys/oci_seeder.pub.
+compartment_ocid = "ocid1.tenancy.oc1..aaaaaaaazsfoswi24hqt5cbx2ykyklvjin46a4xx77izk3vwlkr7e7i57c3a"
+ssh_public_key   = "ssh-ed25519 AAAA... chaos-oci-seeder"
+# Optional overrides:
+# region           = "eu-frankfurt-1"
+# ocpus            = 2
+# memory_gb        = 12
