@@ -1,9 +1,9 @@
 {
   "nodes": {
     "fallbackPublicExplorer": "",
-    "defaultHttpdPort": 8080,
+    "defaultHttpdPort": 443,
     "defaultLocalHttpdPort": 8080,
-    "defaultHttpdScheme": "http",
+    "defaultHttpdScheme": "https",
     "homepage": "node"
   },
   "source": {

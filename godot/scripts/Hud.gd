@@ -15,8 +15,11 @@ const CODE_COLORS := {
 }
 const CODE_NAMES := {"A": "Attack", "B": "Block", "M": "Move", "P": "Posture", "EP": "Empty (hold)", "EM": "Empty (run)"}
 
-const SLOT_SIZE := Vector2(150, 96)   # was 92x76: wider for the rule line, +20px tall
+const SLOT_SIZE_DESKTOP := Vector2(150, 96)
+const SLOT_SIZE_MOBILE  := Vector2(96, 76)
 const SLOT_GAP := 8
+# Runtime: mutated by _apply_layout() based on viewport width.
+var SLOT_SIZE: Vector2 = SLOT_SIZE_DESKTOP
 
 var dl: DataLoader = null             # set by Game so skill cards can show their rule text
 
@@ -66,6 +69,7 @@ var _hover_unit_id: String = ""
 # game/js/main.js renderRoster.
 var _roster_panel: PanelContainer
 var _roster_box: VBoxContainer
+var _roster_toggle: Button    # mobile only — floating button to show/hide the roster
 var _roster_signature := ""     # cheap "is anything different?" guard
 
 # Server-view overlay — populated by NetBridge signals when the Node peer is
@@ -347,10 +351,32 @@ func _ready() -> void:
 	_roster_box.add_theme_constant_override("separation", 6)
 	_roster_panel.add_child(_roster_box)
 
+	# Mobile roster toggle — a small circular button bottom-right of the slot
+	# bar that flips the roster panel visibility. Hidden on desktop (that
+	# layout has room for the roster at all times).
+	_roster_toggle = Button.new()
+	_roster_toggle.name = "RosterToggle"
+	_roster_toggle.text = "☰"
+	_roster_toggle.custom_minimum_size = Vector2(44, 44)
+	_roster_toggle.add_theme_font_size_override("font_size", 20)
+	_roster_toggle.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_roster_toggle.add_theme_stylebox_override("normal",  _box(Color(0.08, 0.08, 0.1, 0.9)))
+	_roster_toggle.add_theme_stylebox_override("hover",   _box(Color(0.14, 0.14, 0.18, 0.95)))
+	_roster_toggle.add_theme_stylebox_override("pressed", _box(Color(0.22, 0.22, 0.26, 0.95)))
+	_roster_toggle.visible = false
+	_roster_toggle.pressed.connect(_toggle_roster)
+	root.add_child(_roster_toggle)
+
 	# Reflow when the window resizes OR the device rotates. Called once here
 	# to apply the initial layout for whatever orientation we start in.
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_apply_layout()
+
+
+func _toggle_roster() -> void:
+	if _roster_panel == null:
+		return
+	_roster_panel.visible = not _roster_panel.visible
 
 
 func _on_viewport_resized() -> void:
@@ -362,34 +388,60 @@ func _on_viewport_resized() -> void:
 
 
 func _apply_layout() -> void:
-	# Two layouts: landscape (desktop, phone sideways) keeps the dense
-	# right-column stack; portrait (phone upright) compresses panels to half
-	# width so they don't crash into the hand bar, and tightens vertical
-	# spacing. The slot bar always sits at the bottom.
+	# Three layouts, picked from viewport size:
+	#   desktop    (wide, roomy): dense stacks, 150-px slots, full right column.
+	#   landscape-phone (wide but short): smaller slots fit the width, log/roster
+	#                                     collapsed behind a toggle to leave the
+	#                                     hex grid breathing room.
+	#   portrait   (phone upright): compact half-width panels; slots scale down
+	#                               so the whole hand + LOCK fits one row.
 	var vp := get_viewport().get_visible_rect().size
 	var portrait := vp.y > vp.x
+	var mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios") or vp.x < 1100
 	_is_portrait = portrait
+
+	# Pick a slot size that lets 5 slots + LOCK button fit in the available
+	# width with gaps. The LOCK button is ~ one slot wide; keep ~24px side
+	# padding so slots don't hug the screen edges.
+	var avail := maxf(vp.x - 24, 320.0)
+	var ideal_slot_w := (avail - (SLOT_GAP * 6)) / 6.0   # 5 slots + 1 lock
+	if not mobile and not portrait:
+		SLOT_SIZE = SLOT_SIZE_DESKTOP
+	else:
+		var w := clampf(ideal_slot_w, 68.0, SLOT_SIZE_DESKTOP.x)
+		var h := clampf(w * 0.64, 60.0, SLOT_SIZE_DESKTOP.y)
+		SLOT_SIZE = Vector2(w, h)
+
+	# Dump once per layout change so you can grep adb logcat for the viewport
+	# Godot actually sees on-device vs what we design for (1440x900).
+	print("[Hud] viewport=", vp, " portrait=", portrait, " mobile=", mobile,
+		  " slot=", SLOT_SIZE)
 
 	if _panel_portrait != null:
 		_panel_portrait.position = Vector2(8, 8)
-		_panel_portrait.custom_minimum_size = Vector2(220 if portrait else 300, 112)
+		if portrait or mobile:
+			_panel_portrait.custom_minimum_size = Vector2(minf(vp.x * 0.44, 240), 100)
+		else:
+			_panel_portrait.custom_minimum_size = Vector2(300, 112)
 	if _panel_phase != null:
-		# In portrait, the phase/timer slides against the right edge so it
-		# doesn't collide with the portrait panel on narrow screens.
-		if portrait:
+		if portrait or mobile:
 			_panel_phase.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_panel_phase.position = Vector2(-180, 8)
-			_panel_phase.custom_minimum_size = Vector2(172, 0)
+			_panel_phase.position = Vector2(-minf(vp.x * 0.44 + 4, 200), 8)
+			_panel_phase.custom_minimum_size = Vector2(minf(vp.x * 0.44, 192), 0)
 		else:
 			_panel_phase.set_anchors_preset(Control.PRESET_CENTER_TOP)
 			_panel_phase.position = Vector2(-160, 12)
 			_panel_phase.custom_minimum_size = Vector2(320, 0)
 	if _log_panel != null:
 		if portrait:
-			# Below the top row, half-width — the roster will stack under it.
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_log_panel.position = Vector2(-(vp.x * 0.5 + 4), 128)
-			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 180)
+			_log_panel.position = Vector2(-(vp.x * 0.5 + 4), 120)
+			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, minf(vp.y * 0.28, 180))
+		elif mobile:
+			# Landscape phone: a narrower log so there's room for the hex board.
+			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_log_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, 8)
+			_log_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), minf(vp.y * 0.4, 220))
 		else:
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 			_log_panel.position = Vector2(-372, 12)
@@ -398,36 +450,69 @@ func _apply_layout() -> void:
 		if portrait:
 			_hover_panel.position = Vector2(-(vp.x * 0.5 + 4), 316)
 			_hover_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
+		elif mobile:
+			# Below the log panel.
+			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_hover_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, minf(vp.y * 0.4, 220) + 16)
+			_hover_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), 0)
 		else:
+			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 			_hover_panel.position = Vector2(-372, 320)
 			_hover_panel.custom_minimum_size = Vector2(360, 0)
 	if _obj_panel != null:
-		if portrait:
-			_obj_panel.position = Vector2(8, 132)
-			_obj_panel.custom_minimum_size = Vector2(220, 0)
+		if portrait or mobile:
+			_obj_panel.position = Vector2(8, _panel_portrait.custom_minimum_size.y + 16)
+			_obj_panel.custom_minimum_size = Vector2(minf(vp.x * 0.44, 240), 0)
 		else:
 			_obj_panel.position = Vector2(12, 136)
 			_obj_panel.custom_minimum_size = Vector2(300, 0)
 	if _roster_panel != null:
 		if portrait:
-			# Narrow strip above the hand bar on the right half.
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			_roster_panel.position = Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 180)
+			_roster_panel.position = Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 160)
 			_roster_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
+		elif mobile:
+			# Hidden by default; the floating ☰ toggle below reveals it. The
+			# roster is still full-width when shown so the player can read
+			# names/HP/perms without squinting.
+			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			_roster_panel.position = Vector2(-minf(vp.x * 0.5, 340), -(SLOT_SIZE.y + 20) - 240)
+			_roster_panel.custom_minimum_size = Vector2(minf(vp.x * 0.5 - 12, 340), 0)
+			if _roster_panel.visible == true and _last_viewport_size == Vector2i.ZERO:
+				_roster_panel.visible = false
 		else:
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 			_roster_panel.position = Vector2(-372, -(SLOT_SIZE.y + 20) - 268)
 			_roster_panel.custom_minimum_size = Vector2(360, 0)
+	# Re-apply slot sizes to the (already-built) buttons so the shrink/grow
+	# propagates. SLOT_SIZE changed above; the Button nodes keep whichever
+	# min size they were given on build.
+	for b in _slots:
+		b.custom_minimum_size = SLOT_SIZE
+	if _lock_btn != null:
+		_lock_btn.custom_minimum_size = Vector2(SLOT_SIZE.x * 0.65, SLOT_SIZE.y)
+	# Keep slot text proportions readable on the small size.
+	var small := SLOT_SIZE.x < 110
+	for lc in _slot_code:
+		lc.add_theme_font_size_override("font_size", 14 if small else 18)
+	for ln in _slot_name:
+		ln.add_theme_font_size_override("font_size", 9 if small else 11)
+	for ld in _slot_desc:
+		ld.add_theme_font_size_override("font_size", 8 if small else 10)
 	if _bar != null:
-		# Keep the slots centred no matter what; just offset off the bottom.
-		var bar_w := SLOT_SIZE.x * 5 + 92 + SLOT_GAP * 5
+		var bar_w := SLOT_SIZE.x * 5 + (SLOT_SIZE.x * 0.65) + SLOT_GAP * 5
 		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20))
 	if _hint != null:
-		_hint.visible = not portrait
-		if portrait:
-			_hint.text = ""
-		else:
+		_hint.visible = not portrait and not mobile
+		if _hint.visible:
 			_hint.text = "1-5 pick card · click hex = target/path · click building = info (Esc closes) · right-click = discard · Space = lock · wheel zoom · MMB pan · C recenter"
+		else:
+			_hint.text = ""
+	# Position the roster toggle just above the right end of the slot bar,
+	# visible only on mobile.
+	if _roster_toggle != null:
+		_roster_toggle.visible = portrait or mobile
+		_roster_toggle.position = Vector2(-56, -(SLOT_SIZE.y + 20) - 56)
 
 
 func attach_mobile_input(mi: MobileInput) -> void:
