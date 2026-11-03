@@ -165,10 +165,59 @@ function renderDimListItem(d) {
   return li;
 }
 
+// Hard-coded always-on seeders. Static source of truth lives in
+// infra/oci/seeder.json; keep this list in lockstep when the IP changes.
+const KNOWN_SEEDS = [
+  {
+    label: "OCI Frankfurt (chaos-oci-seed)",
+    hostname: "92-5-138-121.sslip.io",
+    gossipPort: 8776,
+    apiBase: "https://92-5-138-121.sslip.io",
+    nidHint: "z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT",
+  },
+];
+
+async function probeKnownSeed(s) {
+  try {
+    const r = await fetch(`${s.apiBase}/api/v1/node`, { cache: "no-store" });
+    if (!r.ok) throw new Error(`http ${r.status}`);
+    const info = await r.json();
+    return { ...s, info, ok: true };
+  } catch (e) {
+    return { ...s, ok: false, error: String(e && e.message || e) };
+  }
+}
+
+function renderKnownSeedItem(s) {
+  const li = document.createElement("li");
+  const nid = (s.info && s.info.id) || s.nidHint || "";
+  const alias = (s.info && s.info.config && s.info.config.alias) || "";
+  const addr = `${nid}@${s.hostname}:${s.gossipPort}`;
+  li.innerHTML = `
+    <a class="ri-name" href="${esc(s.apiBase)}/api/v1/node" target="_blank" rel="noreferrer">${esc(s.label)}</a>
+    <span class="ri-meta">
+      <span class="badge ${s.ok ? "live" : "stale"}">${s.ok ? "LIVE" : "unreachable"}</span>
+      ${s.info && s.info.agent ? `<span>${esc(s.info.agent)}</span>` : ""}
+    </span>
+    <div class="ri-sub">
+      ${alias ? `<span>${esc(alias)}</span> · ` : ""}
+      <span class="mono">${esc(nid)}</span>
+      · dial <code>${esc(addr)}</code>
+      ${s.ok ? "" : ` · <span class="muted">${esc(s.error || "")}</span>`}
+    </div>`;
+  return li;
+}
+
 async function viewExplore() {
   mount("tpl-explore");
-  const [peers, dims] = await Promise.all([fetchPeers().catch(() => []), fetchDimensions().catch(() => [])]);
-  const pl = $("#peer-list"), dl = $("#dim-list");
+  const [known, peers, dims] = await Promise.all([
+    Promise.all(KNOWN_SEEDS.map(probeKnownSeed)),
+    fetchPeers().catch(() => []),
+    fetchDimensions().catch(() => []),
+  ]);
+  const kl = $("#known-list"), pl = $("#peer-list"), dl = $("#dim-list");
+  if (!known.length) kl.innerHTML = `<li class="empty">No known seeders configured.</li>`;
+  else known.forEach(s => kl.appendChild(renderKnownSeedItem(s)));
   if (!peers.length) pl.innerHTML = `<li class="empty">No peers have published yet. Run <code>game/local-seeds.mjs</code> on a peer to register one.</li>`;
   else peers.forEach(p => pl.appendChild(renderPeerListItem(p)));
   if (!dims.length) dl.innerHTML = `<li class="empty">No dimensions pushed yet.</li>`;
