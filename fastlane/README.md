@@ -5,7 +5,7 @@ Automates uploading a signed .aab to Google Play's internal/alpha/beta/productio
 ## One-time setup (you do this, I can't)
 
 1. **Google Play Console developer account** — https://play.google.com/console, €25 one-off, verified identity.
-2. **Create the app** inside the Console with package name `io.chaosd6.dimensions` (matches `godot/export_presets.cfg`'s preset 1). Fill in the mandatory bits (title, data safety, content rating, privacy policy URL) before you can push to the Internal track.
+2. **Create the app** inside the Console with package name `net.dimensions.radicle` (matches `godot/export_presets.cfg`'s preset 1 and the Firebase project `dimensions-4e9ae`). Fill in the mandatory bits (title, data safety, content rating, privacy policy URL) before you can push to the Internal track.
 3. **Signing** — enrol in **Play App Signing**. Upload a release keystore once; Google re-signs each upload with its own key.
 4. **Google Play Developer API** — in Google Cloud Console (the same org):
    - Enable **Google Play Android Developer API**.

@@ -4,9 +4,13 @@
 #
 # Usage:
 #   bash _tools/build_and_deploy.sh                  # debug build + install
-#   bash _tools/build_and_deploy.sh --release        # release build + install
+#   bash _tools/build_and_deploy.sh --release        # release build + install (bumps minor)
 #   bash _tools/build_and_deploy.sh --no-install     # build only
 #   bash _tools/build_and_deploy.sh --no-build       # skip build, just install the existing apk
+#
+# --release also bumps version/code (+1) and version/name (minor +1, patch -> 0)
+# in godot/export_presets.cfg before building, so each release is strictly
+# newer. Dev builds don't bump.
 #
 # adb resolution order:
 #   $ADB env var -> adb on PATH -> /mnt/c/platform-tools/adb.exe (Windows host install)
@@ -79,6 +83,26 @@ if [[ -n "$PRESET_PKG" && "$PRESET_PKG" != "$GSJ_PKG" ]]; then
   echo "[deploy] WARN: export_presets.cfg package '$PRESET_PKG' != google-services.json package '$GSJ_PKG'"
   echo "[deploy]       Firebase will not initialize at runtime until these match"
   echo "[deploy]       (or an app with the preset package is added to the Firebase project)."
+fi
+
+# -- 1b. On release: bump version/code (+1) and version/name (minor +1, patch -> 0)
+# across both export presets, so Play Store and side-loaded installs always get
+# a strictly newer artifact. Dev/debug builds don't bump — they'd churn git.
+if [[ "$MODE" == "release" && $DO_BUILD -eq 1 ]]; then
+  PRESETS=godot/export_presets.cfg
+  CUR_CODE="$(grep -E '^version/code=' "$PRESETS" | head -1 | sed -E 's/.*=([0-9]+).*/\1/')"
+  CUR_NAME="$(grep -E '^version/name=' "$PRESETS" | head -1 | sed -E 's/.*="([^"]+)".*/\1/')"
+  if [[ -z "$CUR_CODE" || -z "$CUR_NAME" ]]; then
+    echo "[deploy] could not read version/code or version/name from $PRESETS" >&2
+    exit 1
+  fi
+  NEW_CODE=$(( CUR_CODE + 1 ))
+  IFS=. read -r MAJ MIN PAT <<< "$CUR_NAME"
+  NEW_NAME="${MAJ}.$((MIN + 1)).0"
+  # Replace *every* occurrence in the file so preset.0 (APK) and preset.1 (AAB) stay in lockstep.
+  sed -i -E "s|^version/code=.*|version/code=${NEW_CODE}|g" "$PRESETS"
+  sed -i -E "s|^version/name=.*|version/name=\"${NEW_NAME}\"|g" "$PRESETS"
+  echo "[deploy] bumped version: ${CUR_NAME} (code ${CUR_CODE}) -> ${NEW_NAME} (code ${NEW_CODE})"
 fi
 
 # -- 2. Build -----------------------------------------------------------------

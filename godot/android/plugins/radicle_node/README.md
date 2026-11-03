@@ -82,8 +82,8 @@ The export preset's `Android Play Store (AAB)` already enables gradle_build +
 ```sh
 adb logcat -s radicle-node                 # the node's own stdout/stderr
 adb logcat -s RadicleNode:*                # the plugin
-adb shell "run-as io.chaosd6.dimensions ls files/.radicle"
-adb shell "run-as io.chaosd6.dimensions cat files/.radicle/config.json"
+adb shell "run-as net.dimensions.radicle ls files/.radicle"
+adb shell "run-as net.dimensions.radicle cat files/.radicle/config.json"
 ```
 
 ## When to tear this out
