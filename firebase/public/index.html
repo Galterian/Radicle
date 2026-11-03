@@ -58,6 +58,10 @@
   <template id="tpl-explore">
     <h1 class="page-title">Explore seeds</h1>
     <p class="page-sub">Peers that have published to the shared Radicle project. Each row is a reachable seed address a new peer can dial with <code>rad sync</code> or add to its libp2p bootstrap list.</p>
+    <h2 class="page-title lvl2">Known seeds</h2>
+    <p class="page-sub">Always-on Radicle seeders you can add to <code>preferredSeeds</code>. Status is probed live from each node's <code>/api/v1/node</code>.</p>
+    <ul id="known-list" class="repo-list"></ul>
+    <h2 class="page-title lvl2">Peers (Firestore)</h2>
     <ul id="peer-list" class="repo-list"></ul>
     <h2 class="page-title lvl2">Active dimensions</h2>
     <ul id="dim-list" class="repo-list"></ul>
