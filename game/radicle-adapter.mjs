@@ -1,11 +1,14 @@
 // Radicle adapter. The local bare at game/radicle.git/ is still used as a fast,
 // deterministic rendezvous between peers in the same machine (no node round-trip
 // per push). When RADICLE_PUSH_REMOTE is set (default on), each successful bare
-// push is also mirrored to the project's real Radicle repo via git-remote-rad,
-// so remote clients can browse the pushed branch at
+// push is also mirrored to the project's real Radicle repo via git-remote-rad.
+// By default the adapter does NOT emit any public-mesh explorer URL — the
+// Radicle network stays private to whichever peers hold the RID. Opt in by
+// setting RADICLE_EXPLORER_BASE + RADICLE_SEED to a web explorer that
+// replicates your project, and pushDimension() will then return
 //   <RADICLE_EXPLORER_BASE>/nodes/<RADICLE_SEED>/<rid>/commits/<sha>
-// Both legs happen from the peer's work tree, so an auth/network hiccup on the
-// rad leg does not corrupt the local bare.
+// as a clickable link. Both legs happen from the peer's work tree, so an
+// auth/network hiccup on the rad leg does not corrupt the local bare.
 //
 //   game/radicle.git/                               (bare, local-only)
 //     refs/heads/ActiveDimensions/<DimensionName>
@@ -29,9 +32,14 @@ export const PROJECT_ROOT = path.resolve(__dirname, '..');
 // Resolve the real Radicle repo once at module load. If the project root isn't
 // a Radicle repo (or `rad` isn't installed), we fall back to local-bare-only
 // mode and no explorer URL is emitted — the local /commit/:sha view still works.
+// RADICLE_SEED + RADICLE_EXPLORER_BASE default to empty so the adapter never
+// advertises a public mesh host in its logs. Set them explicitly if (and only
+// if) you want pushDimension() to return a clickable "explorer" link for a
+// third-party viewer. The local-bare /commit/<sha> view in ui-server.mjs is
+// unaffected either way.
 const RADICLE_PUSH_REMOTE   = (process.env.RADICLE_PUSH_REMOTE ?? '1') !== '0';
-const RADICLE_SEED          = process.env.RADICLE_SEED          || 'rosa.radicle.network';
-const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://radicle.network';
+const RADICLE_SEED          = process.env.RADICLE_SEED          || '';
+const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || '';
 // Default: emit raw explorer URLs (shareable, work from any browser). Setting
 // RADICLE_ALIAS=chaosD6 instead routes the broadcast link through the local
 // UI server as http://127.0.0.1:<UI_PORT>/r/<alias>/commits/<sha>, which 302s
@@ -89,8 +97,12 @@ export const radicleEnv = await (async () => {
   const explorerBase = RADICLE_EXPLORER_BASE.replace(/\/+$/, '');
   // Explorer expects an URL-encoded colon between "rad" and the RID body.
   const ridInUrl = `rad%3A${rid}`;
-  const rawCommitUrl = sha => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/commits/${sha}`;
-  const rawTreeUrl   = (sha, pathIn = '') => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}`;
+  // When no explorer base + seed are configured the adapter is on a private
+  // mesh (your deployment) and we return null — callers already treat that as
+  // "no public explorer link".
+  const hasPublicExplorer = !!(explorerBase && RADICLE_SEED);
+  const rawCommitUrl = sha => hasPublicExplorer ? `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/commits/${sha}` : null;
+  const rawTreeUrl   = (sha, pathIn = '') => hasPublicExplorer ? `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}` : null;
   const alias = (RADICLE_ALIAS || '').trim();
   const makePretty = (kind, sha, pathIn = '') => {
     if (!alias) return kind === 'tree' ? rawTreeUrl(sha, pathIn) : rawCommitUrl(sha);
@@ -115,7 +127,8 @@ export const radicleEnv = await (async () => {
 if (!radicleEnv.enabled) {
   console.warn(`[radicle] remote push disabled (${radicleEnv.reason}); pushes stay on local bare only`);
 } else {
-  console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad; explorer base ${radicleEnv.explorerBase}`);
+  const explorerTail = radicleEnv.explorerBase ? `; explorer base ${radicleEnv.explorerBase}` : ` (private mesh — no public explorer base)`;
+  console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad${explorerTail}`);
   // One-shot presence publish so this peer appears in the Firebase registry
   // immediately, even before the first dimension push. RADICLE_PUBLIC_ADDR
   // ("ip.ip.ip.ip:8776" — your box's reachable rad node listen) is what makes

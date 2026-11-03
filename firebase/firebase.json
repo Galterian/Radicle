@@ -5,12 +5,18 @@
     "cleanUrls": true,
     "trailingSlash": false,
     "rewrites": [
-      { "source": "/peers/**",     "destination": "/index.html" },
-      { "source": "/dimensions/**","destination": "/index.html" },
-      { "source": "/explore",      "destination": "/index.html" }
+      { "source": "/radicle",       "destination": "/radicle/index.html" },
+      { "source": "/radicle/**",    "destination": "/radicle/index.html" },
+      { "source": "/peers/**",      "destination": "/index.html" },
+      { "source": "/dimensions/**", "destination": "/index.html" },
+      { "source": "/explore",       "destination": "/index.html" },
+      { "source": "**",             "destination": "/radicle/index.html" }
     ],
     "headers": [
-      { "source": "**/*.@(js|css)", "headers": [ { "key": "Cache-Control", "value": "no-store" } ] }
+      { "source": "**/*.@(js|css|json)",     "headers": [ { "key": "Cache-Control", "value": "no-store" } ] },
+      { "source": "**/*.@(html)",            "headers": [ { "key": "Cache-Control", "value": "no-store" } ] },
+      { "source": "/radicle",                "headers": [ { "key": "Cache-Control", "value": "no-store" } ] },
+      { "source": "/radicle/**",             "headers": [ { "key": "Cache-Control", "value": "no-store" } ] }
     ]
   },
   "firestore": {

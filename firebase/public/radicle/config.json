@@ -1,0 +1,21 @@
+{
+  "nodes": {
+    "fallbackPublicExplorer": "",
+    "defaultHttpdPort": 8080,
+    "defaultLocalHttpdPort": 8080,
+    "defaultHttpdScheme": "http",
+    "homepage": "node"
+  },
+  "source": {
+    "commitsPerPage": 30
+  },
+  "supportWebsite": "",
+  "deploymentId": "dimensions-4e9ae",
+  "preferredSeeds": [
+    {
+      "hostname": "localhost",
+      "port": 8080,
+      "scheme": "http"
+    }
+  ]
+}
