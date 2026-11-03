@@ -50,7 +50,9 @@ const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://dime
 // the OCI seed so this peer's pushes gossip uphill (and incoming branches
 // gossip back down) over one outbound TCP from the dev PC. No inbound port
 // on the home network is required. Leave either unset to skip.
-const OCI_SEED_NID  = process.env.OCI_SEED_NID  || '';
+// NID below is the chaosD6 OCI seed deployed at 92-5-138-121.sslip.io; override
+// via env for a different deployment.
+const OCI_SEED_NID  = process.env.OCI_SEED_NID  || 'z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT';
 const OCI_SEED_ADDR = process.env.OCI_SEED_ADDR || (RADICLE_SEED && RADICLE_SEED !== 'localhost' ? `${RADICLE_SEED}:8776` : '');
 // Default: emit raw explorer URLs (shareable, work from any browser). Setting
 // RADICLE_ALIAS=chaosD6 instead routes the broadcast link through the local

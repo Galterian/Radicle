@@ -30,6 +30,15 @@ const MANIFEST_RES_PATH := "res://assets_manifest.json"
 const MAX_PARALLEL := 4
 const MAX_RETRIES := 3
 
+# Two delivery modes:
+#   "static" (default): plain HTTPS GETs to <SEED_BASE>/pack/<path>, served by
+#     caddy from /var/www/pack on OCI. Skips SHA resolution. Chosen because
+#     radicle-httpd + gitoxide can't stream the ~800 MB asset pack reliably.
+#   "radicle": GET <SEED_BASE>/api/v1/repos/<RID>/blob/<SHA>/<path>. Keeps
+#     content-addressed verification but needs the repo to actually land on
+#     the seeder — currently fails to consume the pack mid-fetch.
+const DELIVERY_MODE := "static"
+
 var _is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
 var _blob_base := ""          # e.g. ".../repos/<RID>/blob/<SHA>/"
 var _manifest: Array = []     # [{path, size, missing?}, ...]
@@ -67,10 +76,13 @@ func _start() -> void:
 		_bytes_total += int(e.get("size", 0))
 	_bar.max_value = max(1.0, float(_bytes_total))
 
-	_set_status("Resolving seed head…")
-	var ok: bool = await _resolve_blob_base()
-	if not ok:
-		return
+	if DELIVERY_MODE == "static":
+		_blob_base = "%s/pack/" % SEED_BASE
+	else:
+		_set_status("Resolving seed head…")
+		var ok: bool = await _resolve_blob_base()
+		if not ok:
+			return
 
 	# Build the fetch queue — skip files already fully downloaded.
 	for i in _manifest.size():
