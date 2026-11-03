@@ -6,14 +6,15 @@ class_name Assets
 ##   * Desktop/dev: resolves `assets/...` from the repo root on the host
 ##     filesystem (one dir up from res://). PNGs/WAVs are loose files — no
 ##     Godot .import step needed. Fast iteration.
-##   * Mobile (Android/iOS): resolves to `res://assets/...` via ResourceLoader.
-##     Requires the loose assets to have been copied under `godot/assets/`
-##     before the export (run `godot/tools/sync-assets.sh` from the repo
-##     root; it's idempotent). The export preset then packs them into the APK.
+##   * Mobile (Android/iOS): resolves to `user://assets/...`. Those files are
+##     NOT shipped in the APK; AssetBootstrap (autoload) downloads them from
+##     the OCI Radicle seed on first launch, following
+##     `godot/assets_manifest.json`. Afterwards everything is a plain
+##     Image.load_from_file / FileAccess read, same as desktop.
 ##
-## If a mobile build misses the sync step, sprites silently fall back to
-## nothing and units render as colored ovals. We log a one-line warning the
-## first time a texture misses so this is grep-able in adb logcat.
+## If a file is missing on-device (manifest hole, aborted bootstrap), we log
+## a grep-able warning the first time and the caller falls back to its stub
+## (colored oval for units, empty terrain, etc.).
 
 static var _root := ""
 static var _tex_cache: Dictionary = {}
@@ -27,12 +28,18 @@ static var _missing_logged: Dictionary = {}
 
 static func repo_root() -> String:
 	if _root == "":
-		var proj := ProjectSettings.globalize_path("res://").trim_suffix("/").trim_suffix("\\")
-		_root = proj.get_base_dir()
+		if _mobile:
+			# AssetBootstrap writes everything under user://. "root" acts as
+			# the virtual parent so callers that do root.path_join("data/...")
+			# or root.path_join("assets/...") stay source-compatible.
+			_root = "user://"
+		else:
+			var proj := ProjectSettings.globalize_path("res://").trim_suffix("/").trim_suffix("\\")
+			_root = proj.get_base_dir()
 	return _root
 
 
-## "assets/Sprites/..." -> absolute path (desktop) or res:// path (mobile).
+## "assets/Sprites/..." -> absolute path (desktop) or user:// path (mobile).
 ## Falls back to chaos_mapper/extracted/... on desktop when the curated copy
 ## has not been collected yet.
 static func resolve(rel: String) -> String:
@@ -42,12 +49,14 @@ static func resolve(rel: String) -> String:
 	if rel.is_absolute_path():
 		return rel
 	if _mobile:
-		# res://-based path. We don't check existence here — ResourceLoader
-		# will deal with "not found" at load time.
-		var r := rel
-		if not r.begins_with("res://"):
-			r = "res://" + r
-		return r
+		var mp := repo_root().path_join(rel)
+		# .bmp portraits ship as their .png twin (half the bytes).
+		# Transparently fall back when the bmp is missing.
+		if rel.ends_with(".bmp") and not FileAccess.file_exists(mp):
+			var png_twin := repo_root().path_join(rel.trim_suffix(".bmp") + ".png")
+			if FileAccess.file_exists(png_twin):
+				return png_twin
+		return mp
 	var p := repo_root().path_join(rel)
 	if FileAccess.file_exists(p):
 		return p
@@ -61,8 +70,6 @@ static func resolve(rel: String) -> String:
 static func exists(rel: String) -> bool:
 	if rel == "":
 		return false
-	if _mobile:
-		return ResourceLoader.exists(resolve(rel)) or FileAccess.file_exists(resolve(rel))
 	return FileAccess.file_exists(resolve(rel))
 
 
@@ -70,7 +77,7 @@ static func _log_missing(rel: String) -> void:
 	if _missing_logged.has(rel):
 		return
 	_missing_logged[rel] = true
-	push_warning("[Assets] missing on-device: %s — run godot/tools/sync-assets.sh before building the APK" % rel)
+	push_warning("[Assets] missing on-device: %s — not in assets_manifest.json or bootstrap incomplete" % rel)
 
 
 static func load_image(rel: String) -> Image:
@@ -78,21 +85,8 @@ static func load_image(rel: String) -> Image:
 		return _img_cache[rel]
 	var abs := resolve(rel)
 	var img: Image = null
-	if _mobile:
-		# On mobile try ResourceLoader first (imported PNG → ImageTexture),
-		# then raw FileAccess as a last-chance fallback for assets dropped
-		# into user:// at runtime (future: downloadable asset pack).
-		if ResourceLoader.exists(abs):
-			var res: Resource = ResourceLoader.load(abs)
-			if res is Texture2D:
-				img = (res as Texture2D).get_image()
-			elif res is Image:
-				img = res as Image
-		if img == null and FileAccess.file_exists(abs):
-			img = Image.load_from_file(abs)
-	else:
-		if FileAccess.file_exists(abs):
-			img = Image.load_from_file(abs)
+	if FileAccess.file_exists(abs):
+		img = Image.load_from_file(abs)
 	if img != null and not img.is_empty():
 		if img.get_format() != Image.FORMAT_RGBA8:
 			img.convert(Image.FORMAT_RGBA8)
@@ -127,7 +121,7 @@ static func load_wav(rel: String) -> AudioStreamWAV:
 static func frames() -> Dictionary:
 	if not _frames_loaded:
 		_frames_loaded = true
-		var p := repo_root().path_join("assets/frames.json")
+		var p := resolve("assets/frames.json")
 		if FileAccess.file_exists(p):
 			var txt := FileAccess.get_file_as_string(p)
 			var parsed = JSON.parse_string(txt)
@@ -154,3 +148,14 @@ static func read_json(rel_or_abs: String) -> Variant:
 	if not FileAccess.file_exists(p):
 		return null
 	return JSON.parse_string(FileAccess.get_file_as_string(p))
+
+
+## Called by AssetBootstrap after a successful mobile download so lookups
+## that previously missed (and cached null) re-check the filesystem.
+static func clear_caches() -> void:
+	_tex_cache.clear()
+	_img_cache.clear()
+	_wav_cache.clear()
+	_frames.clear()
+	_frames_loaded = false
+	_missing_logged.clear()
