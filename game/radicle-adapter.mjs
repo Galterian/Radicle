@@ -40,11 +40,18 @@ export const PROJECT_ROOT = path.resolve(__dirname, '..');
 const RADICLE_PUSH_REMOTE   = (process.env.RADICLE_PUSH_REMOTE ?? '1') !== '0';
 // Defaults point at the project's Firebase-hosted Radicle Explorer deployment
 // (static Svelte SPA at firebase/public/radicle, served from Hosting). The SPA
-// talks to the user's OWN rad-httpd on localhost:8080 — no public mesh seed is
-// introduced. Override to '' to suppress emitted explorer URLs, or point at a
-// different deployment.
-const RADICLE_SEED          = process.env.RADICLE_SEED          || 'localhost';
+// talks to the OCI seed below for data — a public read-only radicle-httpd that
+// anyone (phone, laptop, etc.) can reach without exposing the dev-PC. Local
+// dev with no OCI is still fine: set RADICLE_SEED=localhost to generate
+// loopback explorer URLs again.
+const RADICLE_SEED          = process.env.RADICLE_SEED          || '92-5-138-121.sslip.io';
 const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://dimensions-4e9ae.web.app';
+// Dev-PC → OCI gossip link. If both are set at boot we `rad node connect` to
+// the OCI seed so this peer's pushes gossip uphill (and incoming branches
+// gossip back down) over one outbound TCP from the dev PC. No inbound port
+// on the home network is required. Leave either unset to skip.
+const OCI_SEED_NID  = process.env.OCI_SEED_NID  || '';
+const OCI_SEED_ADDR = process.env.OCI_SEED_ADDR || (RADICLE_SEED && RADICLE_SEED !== 'localhost' ? `${RADICLE_SEED}:8776` : '');
 // Default: emit raw explorer URLs (shareable, work from any browser). Setting
 // RADICLE_ALIAS=chaosD6 instead routes the broadcast link through the local
 // UI server as http://127.0.0.1:<UI_PORT>/r/<alias>/commits/<sha>, which 302s
@@ -136,6 +143,22 @@ if (!radicleEnv.enabled) {
 } else {
   const explorerTail = radicleEnv.explorerBase ? `; explorer base ${radicleEnv.explorerBase}` : ` (private mesh — no public explorer base)`;
   console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad${explorerTail}`);
+  // One-shot `rad node connect` to the OCI seed when both env vars are set.
+  // The connection is kept alive by rad node, so a single dial is enough —
+  // pushes gossip to OCI over this socket. Failures are logged and swallowed:
+  // the dev-PC still works offline, just without the OCI mirror.
+  if (OCI_SEED_NID && OCI_SEED_ADDR) {
+    (async () => {
+      try {
+        const radBin = path.join(RAD_BIN_DIR, 'rad');
+        const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
+        await pexec(radBin, ['node', 'connect', `${OCI_SEED_NID}@${OCI_SEED_ADDR}`], { windowsHide: true, env: radEnv, timeout: 5000 });
+        console.log(`[radicle] connected to OCI seed ${OCI_SEED_NID.slice(0, 10)}… @ ${OCI_SEED_ADDR}`);
+      } catch (e) {
+        console.warn(`[radicle] OCI seed connect failed (${OCI_SEED_ADDR}): ${(e.stderr || e.message || '').toString().split('\n')[0].slice(0, 160)}`);
+      }
+    })();
+  }
   // One-shot presence publish so this peer appears in the Firebase registry
   // immediately, even before the first dimension push. RADICLE_PUBLIC_ADDR
   // ("ip.ip.ip.ip:8776" — your box's reachable rad node listen) is what makes

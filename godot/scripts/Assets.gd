@@ -1,6 +1,19 @@
 class_name Assets
 ## Locates the chaosD6 repo root (parent of godot/) and loads PNG/BMP/WAV files from
-## `assets/...` relative paths at runtime (no res:// imports needed), with caching.
+## `assets/...` relative paths at runtime, with caching.
+##
+## Two modes based on `OS.has_feature("mobile")`:
+##   * Desktop/dev: resolves `assets/...` from the repo root on the host
+##     filesystem (one dir up from res://). PNGs/WAVs are loose files — no
+##     Godot .import step needed. Fast iteration.
+##   * Mobile (Android/iOS): resolves to `res://assets/...` via ResourceLoader.
+##     Requires the loose assets to have been copied under `godot/assets/`
+##     before the export (run `godot/tools/sync-assets.sh` from the repo
+##     root; it's idempotent). The export preset then packs them into the APK.
+##
+## If a mobile build misses the sync step, sprites silently fall back to
+## nothing and units render as colored ovals. We log a one-line warning the
+## first time a texture misses so this is grep-able in adb logcat.
 
 static var _root := ""
 static var _tex_cache: Dictionary = {}
@@ -8,6 +21,8 @@ static var _img_cache: Dictionary = {}
 static var _wav_cache: Dictionary = {}
 static var _frames: Dictionary = {}
 static var _frames_loaded := false
+static var _mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+static var _missing_logged: Dictionary = {}
 
 
 static func repo_root() -> String:
@@ -17,14 +32,22 @@ static func repo_root() -> String:
 	return _root
 
 
-## "assets/Sprites/..." -> absolute path. Falls back to chaos_mapper/extracted/... when the
-## curated copy has not been collected yet (collect_assets.py), so the project runs either way.
+## "assets/Sprites/..." -> absolute path (desktop) or res:// path (mobile).
+## Falls back to chaos_mapper/extracted/... on desktop when the curated copy
+## has not been collected yet.
 static func resolve(rel: String) -> String:
 	if rel == "":
 		return ""
 	rel = rel.replace("\\", "/")
 	if rel.is_absolute_path():
 		return rel
+	if _mobile:
+		# res://-based path. We don't check existence here — ResourceLoader
+		# will deal with "not found" at load time.
+		var r := rel
+		if not r.begins_with("res://"):
+			r = "res://" + r
+		return r
 	var p := repo_root().path_join(rel)
 	if FileAccess.file_exists(p):
 		return p
@@ -36,7 +59,18 @@ static func resolve(rel: String) -> String:
 
 
 static func exists(rel: String) -> bool:
-	return rel != "" and FileAccess.file_exists(resolve(rel))
+	if rel == "":
+		return false
+	if _mobile:
+		return ResourceLoader.exists(resolve(rel)) or FileAccess.file_exists(resolve(rel))
+	return FileAccess.file_exists(resolve(rel))
+
+
+static func _log_missing(rel: String) -> void:
+	if _missing_logged.has(rel):
+		return
+	_missing_logged[rel] = true
+	push_warning("[Assets] missing on-device: %s — run godot/tools/sync-assets.sh before building the APK" % rel)
 
 
 static func load_image(rel: String) -> Image:
@@ -44,13 +78,28 @@ static func load_image(rel: String) -> Image:
 		return _img_cache[rel]
 	var abs := resolve(rel)
 	var img: Image = null
-	if FileAccess.file_exists(abs):
-		img = Image.load_from_file(abs)
-		if img != null and not img.is_empty():
-			if img.get_format() != Image.FORMAT_RGBA8:
-				img.convert(Image.FORMAT_RGBA8)
-		else:
-			img = null
+	if _mobile:
+		# On mobile try ResourceLoader first (imported PNG → ImageTexture),
+		# then raw FileAccess as a last-chance fallback for assets dropped
+		# into user:// at runtime (future: downloadable asset pack).
+		if ResourceLoader.exists(abs):
+			var res: Resource = ResourceLoader.load(abs)
+			if res is Texture2D:
+				img = (res as Texture2D).get_image()
+			elif res is Image:
+				img = res as Image
+		if img == null and FileAccess.file_exists(abs):
+			img = Image.load_from_file(abs)
+	else:
+		if FileAccess.file_exists(abs):
+			img = Image.load_from_file(abs)
+	if img != null and not img.is_empty():
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
+	else:
+		img = null
+		if _mobile:
+			_log_missing(rel)
 	_img_cache[rel] = img
 	return img
 
