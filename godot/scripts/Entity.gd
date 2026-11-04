@@ -206,7 +206,7 @@ func play(new_state: String, dir := "") -> void:
 	# the already-current (sheet,state,facing,anim) resets frame to 0 every call, which
 	# on Android GL compat reads as rapid flicker. We re-run the setup only when the
 	# tuple actually changed, or the sprite isn't currently playing (e.g. after pause).
-	var key := _sheets[st] + "|" + st + "|" + facing + "|" + anim
+	var key: String = "%s|%s|%s|%s" % [_sheets[st], st, facing, anim]
 	if key == _last_play_key and _sprites.sprite_frames == sf and _sprites.is_playing():
 		return
 	_last_play_key = key

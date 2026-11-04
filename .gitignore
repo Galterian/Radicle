@@ -48,3 +48,7 @@ game/tools/out/
 *.tmj
 photo_2026-11-03_15-37-46_phone_alive.jpg
 photo_2026-11-03_15-38-28_phone_dead.jpg
+
+# Built APK — 44 MB, auto-uploaded to OCI by _tools/build_and_deploy.sh --release
+_tools/chaosd6-release.apk
+_tools/chaosd6-release.apk.idsig
