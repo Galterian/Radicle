@@ -36,6 +36,17 @@ var _slot_icon: Array[TextureRect] = []    # real skill-card icon when the slot 
 var _lock_btn: Button
 var _log: RichTextLabel
 var _hint: Label
+# Always-on top-centre status strip. On mobile this replaces the keyboard
+# shortcut hint so the player can confirm the game is still running even
+# when another panel clips off-screen.
+var _status_strip: PanelContainer
+var _status_lbl: Label
+# Secondary strip label — shows "<effect> ch." in orange while the local
+# player is channeling. Game.gd drives it via set_channel_label(). Empty
+# text hides it.
+var _channel_lbl: Label
+# Mobile-only inline hint shown while planning with no card picked.
+var _mobile_hint: Label
 var _hover_lbl: Label
 var _quote_lbl: Label
 
@@ -61,7 +72,9 @@ var _hover_tier: Label
 var _hover_skills_title: Label
 var _hover_skills_box: VBoxContainer
 var _hover_perms_title: Label
-var _hover_perms_box: VBoxContainer
+# GridContainer so >3 permanents wrap into 2 columns instead of overflowing
+# vertically into the log/roster above. columns is toggled per-render.
+var _hover_perms_box: GridContainer
 var _hover_unit_id: String = ""
 
 # Roster panel — vertical stack of every entity, each row = thumb + name + stats
@@ -86,6 +99,9 @@ var _my_peer_id: String = ""
 var _panel_portrait: PanelContainer      # top-left: portrait + hp + quote
 var _panel_phase: VBoxContainer          # top-centre: phase + timer + hover line
 var _bar: HBoxContainer                  # bottom-centre: 5 slots + lock
+# Opaque backdrop behind the slot bar. On Android some slot modulates can
+# render transparent; the backdrop keeps the hand visible as a block.
+var _bar_bg: PanelContainer
 var _log_panel: PanelContainer           # right column: log
 # Element-emission chip. Fades out ~1.4s after the player's intent emits a
 # non-empty element set — parity with the browser's hero-emit line.
@@ -211,6 +227,13 @@ func _ready() -> void:
 	# --- bottom-centre: hand bar
 	# Slots are 5 cards + LOCK; each card button carries a code / name / rule-text
 	# label stack so the rule is always visible (full text in the tooltip).
+	# Backdrop first — must be added BEFORE _bar so it renders beneath.
+	_bar_bg = PanelContainer.new()
+	_bar_bg.name = "BarBackdrop"
+	_bar_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_bar_bg.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.75)))
+	_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_bar_bg)
 	var bar := HBoxContainer.new()
 	var bar_w := SLOT_SIZE.x * 5 + 92 + SLOT_GAP * 5
 	bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -223,6 +246,13 @@ func _ready() -> void:
 		b.custom_minimum_size = SLOT_SIZE
 		b.text = ""
 		b.clip_text = true
+		# Explicit styleboxes — Android's default Button theme can render
+		# near-invisible on dark backgrounds, so pin the look here.
+		b.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.14, 0.18, 0.95)))
+		b.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.22, 0.28, 0.98)))
+		b.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.32, 0.40, 1.00)))
+		b.add_theme_stylebox_override("disabled", _box(Color(0.08, 0.08, 0.10, 0.80)))
+		b.add_theme_stylebox_override("focus",    _box(Color(0.55, 0.75, 0.95, 0.20)))
 		b.pressed.connect(func(): slot_pressed.emit(i))
 		bar.add_child(b)
 		_slots.append(b)
@@ -266,6 +296,13 @@ func _ready() -> void:
 	_lock_btn = Button.new()
 	_lock_btn.custom_minimum_size = Vector2(92, SLOT_SIZE.y)
 	_lock_btn.text = "LOCK\n[Space]"
+	# Same explicit styleboxes as the slot buttons — Android's default theme
+	# can render buttons near-invisible on the dark backdrop.
+	_lock_btn.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.14, 0.18, 0.95)))
+	_lock_btn.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.22, 0.28, 0.98)))
+	_lock_btn.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.32, 0.40, 1.00)))
+	_lock_btn.add_theme_stylebox_override("disabled", _box(Color(0.08, 0.08, 0.10, 0.80)))
+	_lock_btn.add_theme_stylebox_override("focus",    _box(Color(0.55, 0.75, 0.95, 0.20)))
 	_lock_btn.pressed.connect(func(): lock_pressed.emit())
 	bar.add_child(_lock_btn)
 
@@ -275,6 +312,39 @@ func _ready() -> void:
 	_hint.custom_minimum_size = Vector2(880, 14)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_hint)
+
+	# --- top-centre: always-on status strip (R / DIM / HAND / HEX)
+	_status_strip = PanelContainer.new()
+	_status_strip.name = "StatusStrip"
+	_status_strip.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_status_strip.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.80)))
+	_status_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_status_strip)
+	# HBox wrapper lets the channel chip sit beside the status line without
+	# fighting PanelContainer's single-child layout.
+	var strip_hb := HBoxContainer.new()
+	strip_hb.add_theme_constant_override("separation", 10)
+	strip_hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	strip_hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_strip.add_child(strip_hb)
+	_status_lbl = _label("R:- · DIM:- · HAND:- · HEX:-", 12, Color(0.9, 0.9, 0.95))
+	_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip_hb.add_child(_status_lbl)
+	_channel_lbl = _label("", 12, Color(0.95, 0.75, 0.4))
+	_channel_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_channel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_channel_lbl.visible = false
+	strip_hb.add_child(_channel_lbl)
+
+	# --- bottom-centre: mobile planning hint (hidden until Game sets text)
+	_mobile_hint = _label("", 11, Color(0.95, 0.85, 0.6))
+	_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_mobile_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mobile_hint.custom_minimum_size = Vector2(360, 14)
+	_mobile_hint.visible = false
+	_mobile_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_mobile_hint)
 
 	# --- right: log
 	var lp := PanelContainer.new()
@@ -335,8 +405,10 @@ func _ready() -> void:
 	hvb.add_child(_hover_skills_box)
 	_hover_perms_title = _label("Permanents", 11, Color(0.65, 0.65, 0.72))
 	hvb.add_child(_hover_perms_title)
-	_hover_perms_box = VBoxContainer.new()
-	_hover_perms_box.add_theme_constant_override("separation", 4)
+	_hover_perms_box = GridContainer.new()
+	_hover_perms_box.columns = 1
+	_hover_perms_box.add_theme_constant_override("h_separation", 4)
+	_hover_perms_box.add_theme_constant_override("v_separation", 4)
 	hvb.add_child(_hover_perms_box)
 
 	# --- bottom-right: roster (every entity, stats, permanents as mini cards)
@@ -502,17 +574,63 @@ func _apply_layout() -> void:
 	if _bar != null:
 		var bar_w := SLOT_SIZE.x * 5 + (SLOT_SIZE.x * 0.65) + SLOT_GAP * 5
 		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20))
+		# Backdrop follows the bar with ~8px padding so a transparent slot can
+		# never hide the hand entirely.
+		if _bar_bg != null:
+			var pad := 8.0
+			_bar_bg.position = Vector2(-bar_w * 0.5 - pad, -(SLOT_SIZE.y + 20) - pad)
+			_bar_bg.custom_minimum_size = Vector2(bar_w + pad * 2, SLOT_SIZE.y + pad * 2)
+			_bar_bg.size = _bar_bg.custom_minimum_size
 	if _hint != null:
 		_hint.visible = not portrait and not mobile
 		if _hint.visible:
 			_hint.text = "1-5 pick card · click hex = target/path · click building = info (Esc closes) · right-click = discard · Space = lock · wheel zoom · MMB pan · C recenter"
 		else:
 			_hint.text = ""
+	# Top-centre status strip. On mobile _panel_phase has moved to the right
+	# corner so the top-centre is free; on desktop it's also top-centre, so
+	# push the status strip a bit lower to avoid overlap.
+	if _status_strip != null:
+		_status_strip.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		var strip_w := minf(vp.x * 0.6, 460.0)
+		_status_strip.custom_minimum_size = Vector2(strip_w, 0)
+		var strip_y := 8.0 if (portrait or mobile) else 56.0
+		_status_strip.position = Vector2(-strip_w * 0.5, strip_y)
+	if _mobile_hint != null:
+		_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_mobile_hint.position = Vector2(-180, -(SLOT_SIZE.y + 20) - 24)
+		var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+		if not on_mobile:
+			_mobile_hint.visible = false
 	# Position the roster toggle just above the right end of the slot bar,
 	# visible only on mobile.
 	if _roster_toggle != null:
 		_roster_toggle.visible = portrait or mobile
 		_roster_toggle.position = Vector2(-56, -(SLOT_SIZE.y + 20) - 56)
+	# Defensive clamps — on narrow viewports the panels' negative x offsets
+	# can leave their final rect under 0 on the left edge. Enforce x >= 0
+	# (phase panel >= 8) so no panel spills off-screen.
+	if _log_panel != null:
+		var lp_rect := _log_panel.get_global_rect()
+		if lp_rect.position.x < 0.0:
+			_log_panel.position.x += (0.0 - lp_rect.position.x)
+	if _hover_panel != null:
+		var hv_rect := _hover_panel.get_global_rect()
+		if hv_rect.position.x < 0.0:
+			_hover_panel.position.x += (0.0 - hv_rect.position.x)
+	if _roster_panel != null:
+		var rp_rect := _roster_panel.get_global_rect()
+		if rp_rect.position.x < 0.0:
+			_roster_panel.position.x += (0.0 - rp_rect.position.x)
+	if _panel_phase != null:
+		var pp_rect := _panel_phase.get_global_rect()
+		if pp_rect.position.x < 8.0:
+			_panel_phase.position.x += (8.0 - pp_rect.position.x)
+	# Boot-time diagnostic: every major panel's absolute rect so adb logcat
+	# makes mis-positioning obvious.
+	print("[Hud] bar=", _bar.get_global_rect() if _bar else "nil",
+		  " log=", _log_panel.get_global_rect() if _log_panel else "nil",
+		  " status=", _status_strip.get_global_rect() if _status_strip else "nil")
 
 
 func attach_mobile_input(mi: MobileInput) -> void:
@@ -609,6 +727,41 @@ func set_quote(text: String) -> void:
 	_quote_lbl.text = ("“%s”" % text) if text != "" else ""
 
 
+## Update the always-visible top-centre status strip. Called from Game.gd
+## with the current round / dim / hand / hex-count values.
+func set_status(round_no: int, dim_name: String, hand_size: int, hex_count: int) -> void:
+	if _status_lbl == null:
+		return
+	_status_lbl.text = "R:%d · DIM:%s · HAND:%d · HEX:%d" % [round_no, dim_name, hand_size, hex_count]
+
+
+## Channel chip beside the status line. Game.gd calls with e.g. "Blizzard ch."
+## while a channel is active, "" when it ends. Hidden when empty.
+func set_channel_label(text: String) -> void:
+	if _channel_lbl == null:
+		return
+	if text == null or text == "":
+		_channel_lbl.visible = false
+		_channel_lbl.text = ""
+		return
+	_channel_lbl.text = text
+	_channel_lbl.visible = true
+
+
+## Mobile planning hint ("Tap a card, then tap a hex to move"). Empty text
+## hides the label. Only drawn on mobile and only while unpicked.
+func set_mobile_hint(text: String) -> void:
+	if _mobile_hint == null:
+		return
+	var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not on_mobile or text == "":
+		_mobile_hint.visible = false
+		_mobile_hint.text = ""
+		return
+	_mobile_hint.text = text
+	_mobile_hint.visible = true
+
+
 func set_phase(text: String, frac: float) -> void:
 	_phase_lbl.text = text
 	_timer_bar.value = clampf(frac, 0.0, 1.0)
@@ -636,7 +789,14 @@ func set_hand(hand: Array, chosen: int, locked: bool, targets: Dictionary) -> vo
 		var t: String = str(targets.get(i, ""))
 		var is_skill := code.begins_with("skill_")
 		var full := RulesText.card_help(dl, code)
+		# Defensive fallback — RulesText returns "" for unknown codes; a raw
+		# code is still more useful than an empty tooltip.
+		if full == null or full == "":
+			full = code
 		var name: String = RulesText.skill_name(dl, code) if is_skill else str(CODE_NAMES.get(code, code))
+		if name == null or name == "":
+			name = code
+		var is_channel := _card_has_channeling_tag(code)
 		# Real sprite icon for skill cards (data/skills.json resources.sprites.icon,
 		# frame 0 of the sheet-sliced sprite). When sibling #1 has not populated the
 		# `icon` field yet we fall back to the effect-strip's frame 0 — and when
@@ -654,8 +814,19 @@ func set_hand(hand: Array, chosen: int, locked: bool, targets: Dictionary) -> vo
 			# slots; action codes already show as A/B/M/P/EM/EP.
 			_slot_code[i].text = "SKILL" if is_skill else code
 			_slot_code[i].add_theme_font_size_override("font_size", 13 if is_skill else 18)
-		_slot_name[i].text = name + ((" → " + t) if t != "" else "")
-		_slot_desc[i].text = RulesText.card_short(dl, code)
+		# Channel chip appended to the slot name — bundled font lacks the
+		# ⟳ glyph so " [CHAN]" + a cold-blue tint flag it.
+		var disp_name := name + ((" → " + t) if t != "" else "")
+		if is_channel:
+			disp_name += " [CHAN]"
+			_slot_name[i].add_theme_color_override("font_color", Color(0.65, 0.95, 1.0))
+		else:
+			_slot_name[i].add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
+		_slot_name[i].text = disp_name
+		var short := RulesText.card_short(dl, code)
+		if short == null or short == "":
+			short = code
+		_slot_desc[i].text = short
 		b.tooltip_text = full
 		b.disabled = locked
 		var col: Color = CODE_COLORS.get(code, Color("#b58ad6") if is_skill else Color.WHITE)
@@ -972,8 +1143,18 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 	# (Rule 24) and wire the destroy intent for enemies.
 	var perms = e.data.get("permanents", [])
 	if typeof(perms) == TYPE_ARRAY and not perms.is_empty():
-		var perm_box := VBoxContainer.new()
-		perm_box.add_theme_constant_override("separation", 3)
+		# >3 perms wrap into 2 columns so the row never overflows into the
+		# log panel above. Up to 3 → single column (keeps the familiar look).
+		var perm_box: Container
+		if perms.size() <= 3:
+			perm_box = VBoxContainer.new()
+			perm_box.add_theme_constant_override("separation", 3)
+		else:
+			var g := GridContainer.new()
+			g.columns = 2
+			g.add_theme_constant_override("h_separation", 4)
+			g.add_theme_constant_override("v_separation", 3)
+			perm_box = g
 		vb.add_child(perm_box)
 		var owner := _peer_id_for_entity(e)
 		var enemy := e.faction != "player"
@@ -986,11 +1167,17 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 ## one-line abbreviated form (held skills) and the full data/skills.json text
 ## (permanents). `owner_peer_id` + `is_enemy` thread through to each perm card
 ## so enemy-side perms show a power badge and accept a double-click destroy.
-func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool, owner_peer_id: String = "", is_enemy: bool = false) -> void:
+func _fill_skill_list(box: Container, ids: Variant, full_desc: bool, owner_peer_id: String = "", is_enemy: bool = false) -> void:
 	for c in box.get_children():
 		c.queue_free()
 	if typeof(ids) != TYPE_ARRAY:
 		return
+	# Keep a single column for ≤3 entries; wrap into 2 columns beyond that so
+	# the perm list never grows taller than the log/roster above (parity for
+	# the browser's grid-template-columns rule on crowded cards).
+	if box is GridContainer:
+		var g := box as GridContainer
+		g.columns = 1 if (ids as Array).size() <= 3 else 2
 	for sid in ids:
 		var s := str(sid)
 		if s == "":
@@ -1058,7 +1245,14 @@ func _make_perm_card(card_id: String, full_desc: bool, owner_peer_id: String = "
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
 	hb.add_child(col)
-	var nm := _label(RulesText.card_entry_name(dl, card_id), 11, Color(0.95, 0.85, 0.75))
+	var entry_name := RulesText.card_entry_name(dl, card_id)
+	if entry_name == null or entry_name == "":
+		entry_name = card_id
+	# Flag channeled permanents so the player can see which card is "live"
+	# (parity with the browser's ⟳ chip in skill_card.js).
+	if _card_has_channeling_tag(card_id):
+		entry_name = "ch: " + entry_name
+	var nm := _label(entry_name, 11, Color(0.95, 0.85, 0.75))
 	col.add_child(nm)
 	var text := RulesText.card_entry_text(dl, card_id)
 	var desc := text if full_desc else RulesText.abbreviate(text, 80)
@@ -1085,6 +1279,26 @@ func _on_perm_card_gui_input(event: InputEvent, card: Control) -> void:
 	if card_id == "" or owner == "":
 		return
 	destroy_perm_requested.emit(owner, card_id, "")
+
+
+## True when the catalog entry for `code` carries the "channeling" tag. Looks
+## in effects/* first (effect_blizzard etc.), then skills/* (skill_* ids).
+## Unknown codes / missing dl just return false.
+func _card_has_channeling_tag(code: String) -> bool:
+	if dl == null or code == "":
+		return false
+	var kind := ""
+	if code.begins_with("effect_"):
+		kind = "effects"
+	elif code.begins_with("skill_"):
+		kind = "skills"
+	else:
+		return false
+	var entry := dl.get_entry(kind, code)
+	var tags: Variant = entry.get("tags", [])
+	if typeof(tags) != TYPE_ARRAY:
+		return false
+	return (tags as Array).has("channeling")
 
 
 func _power_badge_for(peer_id: String, card_id: String) -> String:

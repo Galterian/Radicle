@@ -37,6 +37,7 @@ var _tween: Tween
 var _path: Array[Vector2i] = []
 var _rng := RandomNumberGenerator.new()
 var _scale_fix := 1.0
+var _last_play_key: String = ""   # (sheet|state|facing|anim) of the most recent mutation; guards against per-tick re-plays that reset frame to 0 (observed as flicker on mobile GL compat).
 
 
 func setup(ent_id: String, ent_kind: String, dl: DataLoader, start: Vector2i, fac: String, fallback_sheets: Dictionary = {}) -> void:
@@ -198,16 +199,25 @@ func play(new_state: String, dir := "") -> void:
 	var sf := SheetAnimator.frames_for(_sheets[st], st, 1 if loop else 0)
 	if sf == null:
 		return
-	_sprites.sprite_frames = sf
 	var anim := st + "_" + facing if SheetAnimator.has_directions(sf, st) else st
 	if not sf.has_animation(anim):
 		anim = sf.get_animation_names()[0]
+	# Skip no-op reassignments: setting sprite_frames or calling play(anim) again on
+	# the already-current (sheet,state,facing,anim) resets frame to 0 every call, which
+	# on Android GL compat reads as rapid flicker. We re-run the setup only when the
+	# tuple actually changed, or the sprite isn't currently playing (e.g. after pause).
+	var key := _sheets[st] + "|" + st + "|" + facing + "|" + anim
+	if key == _last_play_key and _sprites.sprite_frames == sf and _sprites.is_playing():
+		return
+	_last_play_key = key
+	_sprites.sprite_frames = sf
 	# WBC3 sheets anchor the unit's feet at the bottom-centre of each cell.
 	var tex := sf.get_frame_texture(anim, 0)
 	if tex != null:
 		_sprites.offset = Vector2(0, -tex.get_height() / 2.0 + 4.0)
 	_sprites.play(anim)
 	_layout_overlays()
+	print("[sprite] %s state=%s facing=%s anim=%s frames=%d" % [display_name, state, facing, anim, sf.get_frame_count(anim)])
 
 
 func _on_anim_finished() -> void:

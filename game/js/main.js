@@ -825,7 +825,12 @@ function renderDeck() {
     ac.textContent = String(n);
     ac.parentElement.classList.toggle('empty', n === 0);
     ac.parentElement.classList.toggle('armed', state.archiveMode);
-    ac.parentElement.title = `Archive: ${n} card${n === 1 ? '' : 's'} · deck ${state.circulating}/${state.deckMin} min — click, then a hand card: it is archived at this resolution instead of discarded · double-click opens the archive`;
+    // Deck floor marker: the sim refuses to archive more hand cards once the
+    // circulating deck equals state.deckMin, so flag the pile visually.
+    const atFloor = state.circulating <= state.deckMin;
+    ac.parentElement.classList.toggle('at-min', atFloor);
+    const limitNote = atFloor ? ` · ⚠ deck ${state.deckMin}-card floor reached, cannot archive more` : '';
+    ac.parentElement.title = `Archive: ${n} card${n === 1 ? '' : 's'} · deck ${state.circulating}/${state.deckMin} min${limitNote} — click, then a hand card: it is archived at this resolution instead of discarded · double-click opens the archive`;
   }
   if (!document.getElementById('archive-popup')?.hidden) renderArchivePopup();
 }
@@ -843,7 +848,10 @@ function renderArchivePopup() {
     const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? 'class · destroyed — emit every colour (any successful roll) to recast it' : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
     return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div><div class="cd">${cd}</div></div>`;
   }).join('');
-  list.querySelectorAll('.ac:not(.creature)').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
+  // Any archived card may go back to the discard pile — including creatures
+  // and class cards (user override of the "creatures stay for Summoning"
+  // default). The peer accepts the id regardless of kind now.
+  list.querySelectorAll('.ac').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
 }
 function openArchive(open) {
   const el = document.getElementById('archive-popup');
@@ -888,6 +896,14 @@ function wireArchive() {
   pile.addEventListener('dblclick', () => { if (archiveClickTimer) { clearTimeout(archiveClickTimer); archiveClickTimer = null; } openArchive(true); });
   document.getElementById('ap-close')?.addEventListener('click', () => openArchive(false));
   document.getElementById('archive-popup')?.addEventListener('click', (e) => { if (e.target.id === 'archive-popup') openArchive(false); });
+  // Bulk unarchive — click once, loop locally. Peer processes each one on its
+  // own; no server-side batch needed.
+  document.getElementById('ap-all')?.addEventListener('click', () => {
+    if (!state.archive || !state.archive.length) return;
+    for (const c of state.archive.slice()) send({ kind: 'unarchive', card_id: c.card_id });
+    uilog('unarchive-all', { detail: `${state.archive.length} cards` });
+    logUI(`archive: ${state.archive.length} card(s) → discard`, 'phase');
+  });
 }
 
 // World-generated features (user spec general_ux_token_generated, 2026-10-30): terrain regions, Shrines, Schools,
