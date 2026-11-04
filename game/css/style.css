@@ -308,6 +308,8 @@ main {
 #archive-pile .pile:hover { outline: 1px solid #ffe66e; }
 #archive-pile .pile.armed { background: #ffe66e; color: #0b0d12; }
 #archive-pile .pile.armed .pile-label { color: #3a3a1a; }
+#archive-pile .pile.at-min { outline: 1px solid #e05d5d; }
+#archive-pile .pile.at-min .pile-label::after { content: " · min"; color: #e05d5d; }
 #archive-pile .pile-count { font: 600 20px/1 ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 #archive-pile .pile.empty .pile-count { color: #4a5368; }
 #archive-pile .pile-label { margin-top: 4px; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #8aa0bf; }

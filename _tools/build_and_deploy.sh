@@ -10,7 +10,9 @@
 #
 # --release also bumps version/code (+1) and version/name (minor +1, patch -> 0)
 # in godot/export_presets.cfg before building, so each release is strictly
-# newer. Dev builds don't bump.
+# newer. Dev builds don't bump. --release also scp's the built APK to
+# OCI's /var/www/downloads/chaosd6-release.apk (unless the SSH key is
+# missing), so the Firebase site's "Download APK" link stays current.
 #
 # adb resolution order:
 #   $ADB env var -> adb on PATH -> /mnt/c/platform-tools/adb.exe (Windows host install)
@@ -120,6 +122,26 @@ if [[ ! -f "$APK_PATH" ]]; then
   exit 1
 fi
 echo "[deploy] apk: $APK_PATH"
+
+# -- 2b. Release only: upload the APK to OCI so the Firebase site's
+# "Download APK" button serves the just-built artifact. Skipped on debug
+# builds (dev churn) and skipped if the SSH key isn't present (CI, etc).
+if [[ "$MODE" == "release" ]]; then
+  OCI_KEY="infra/oci/keys/oci_seeder"
+  OCI_HOST="ubuntu@92.5.138.121"
+  OCI_PATH="/var/www/downloads/chaosd6-release.apk"
+  if [[ -f "$OCI_KEY" ]]; then
+    echo "[deploy] uploading APK to $OCI_HOST:$OCI_PATH ..."
+    if scp -i "$OCI_KEY" -o StrictHostKeyChecking=accept-new "$APK_PATH" "$OCI_HOST:/tmp/chaosd6-release.apk"; then
+      ssh -i "$OCI_KEY" "$OCI_HOST" "sudo mv /tmp/chaosd6-release.apk $OCI_PATH && sudo chown ubuntu:ubuntu $OCI_PATH"
+      echo "[deploy] uploaded. Browser download URL: https://92-5-138-121.sslip.io/downloads/chaosd6-release.apk"
+    else
+      echo "[deploy] WARN: scp failed; OCI download URL will keep serving the previous APK."
+    fi
+  else
+    echo "[deploy] skip OCI upload (missing $OCI_KEY)"
+  fi
+fi
 
 # -- 3. Install ---------------------------------------------------------------
 if (( ! DO_INSTALL )); then

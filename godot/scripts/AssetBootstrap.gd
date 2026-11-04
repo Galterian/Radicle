@@ -30,6 +30,13 @@ const MANIFEST_RES_PATH := "res://assets_manifest.json"
 const MAX_PARALLEL := 4
 const MAX_RETRIES := 3
 
+# Fast-path sentinels: skip the 2433-entry stat loop on launches where the
+# shipped manifest hasn't changed since the last clean drain of the queue.
+# Both live under user:// so uninstall-reinstall correctly re-triggers the
+# full download (user:// is wiped with the app).
+const SENTINEL_HASH_PATH := "user://assets_manifest_hash.txt"
+const SENTINEL_OK_PATH := "user://assets_bootstrap_ok"
+
 # Two delivery modes:
 #   "static" (default): plain HTTPS GETs to <SEED_BASE>/pack/<path>, served by
 #     caddy from /var/www/pack on OCI. Skips SHA resolution. Chosen because
@@ -54,6 +61,13 @@ var _label: Label = null
 var _bar: ProgressBar = null
 var _retry_btn: Button = null
 
+# SHA256 of the shipped manifest, computed once in _start().
+var _manifest_hash := ""
+# Rolling-window speed samples for the ETA readout.
+var _last_bytes_done := 0
+var _last_bytes_time := 0   # Time.get_ticks_msec(); 0 means unsampled
+var _eta_text := "?"
+
 
 func _ready() -> void:
 	if not _is_mobile:
@@ -66,7 +80,26 @@ func _ready() -> void:
 func _start() -> void:
 	_build_overlay()
 	_set_status("Reading manifest…")
-	var mf := _load_manifest()
+	# Read raw bytes once so we can both hash and parse without a second read.
+	if not FileAccess.file_exists(MANIFEST_RES_PATH):
+		_fail("manifest missing or empty — rebuild APK with tools/build-asset-manifest.mjs")
+		return
+	var _manifest_bytes := FileAccess.get_file_as_bytes(MANIFEST_RES_PATH)
+	if _manifest_bytes.is_empty():
+		_fail("manifest missing or empty — rebuild APK with tools/build-asset-manifest.mjs")
+		return
+	_manifest_hash = _sha256_hex(_manifest_bytes)
+	# Fast path: identical manifest + clean sentinel ⇒ assets are already in
+	# place from a previous drain. Skip the per-entry stat loop entirely; on
+	# low-end Android that saves multiple seconds per launch.
+	if _bootstrap_sentinel_matches(_manifest_hash):
+		_completed = true
+		bootstrap_complete.emit(true, "")
+		if _overlay:
+			_overlay.queue_free()
+			_overlay = null
+		return
+	var mf := _parse_manifest(_manifest_bytes)
 	if mf.is_empty():
 		_fail("manifest missing or empty — rebuild APK with tools/build-asset-manifest.mjs")
 		return
@@ -175,14 +208,66 @@ func _resolve_blob_base() -> bool:
 	return true
 
 
-func _load_manifest() -> Array:
-	if not FileAccess.file_exists(MANIFEST_RES_PATH):
-		return []
-	var txt := FileAccess.get_file_as_string(MANIFEST_RES_PATH)
-	var parsed: Variant = JSON.parse_string(txt)
+func _parse_manifest(bytes: PackedByteArray) -> Array:
+	var parsed: Variant = JSON.parse_string(bytes.get_string_from_utf8())
 	if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("entries"):
 		return []
 	return parsed["entries"]
+
+
+func _sha256_hex(bytes: PackedByteArray) -> String:
+	var hc := HashingContext.new()
+	hc.start(HashingContext.HASH_SHA256)
+	hc.update(bytes)
+	var digest: PackedByteArray = hc.finish()
+	return digest.hex_encode()
+
+
+func _bootstrap_sentinel_matches(current_hash: String) -> bool:
+	# Both files must be present. The sentinel being missing while the hash
+	# file is present means a previous run crashed between the two writes;
+	# treat that as "re-verify" rather than trusting the hash.
+	if not FileAccess.file_exists(SENTINEL_HASH_PATH):
+		return false
+	if not FileAccess.file_exists(SENTINEL_OK_PATH):
+		return false
+	var stored := FileAccess.get_file_as_string(SENTINEL_HASH_PATH).strip_edges()
+	return stored != "" and stored == current_hash
+
+
+func _write_bootstrap_sentinel() -> void:
+	# Order matters: write hash first, then the "ok" marker — a crash
+	# between the two leaves us conservative on the next launch.
+	var fh := FileAccess.open(SENTINEL_HASH_PATH, FileAccess.WRITE)
+	if fh != null:
+		fh.store_string(_manifest_hash)
+		fh.close()
+	var fok := FileAccess.open(SENTINEL_OK_PATH, FileAccess.WRITE)
+	if fok != null:
+		fok.store_string("ok")
+		fok.close()
+
+
+func force_rebootstrap() -> void:
+	# Escape hatch for a future "re-check assets" button. Clears both
+	# sentinels so the next _start() falls through to the full-check path,
+	# then runs it immediately.
+	if FileAccess.file_exists(SENTINEL_HASH_PATH):
+		DirAccess.remove_absolute(SENTINEL_HASH_PATH)
+	if FileAccess.file_exists(SENTINEL_OK_PATH):
+		DirAccess.remove_absolute(SENTINEL_OK_PATH)
+	_completed = false
+	_done_count = 0
+	_bytes_done = 0
+	_bytes_total = 0
+	_total = 0
+	_manifest.clear()
+	_queue.clear()
+	_in_flight = 0
+	_last_bytes_done = 0
+	_last_bytes_time = 0
+	_eta_text = "?"
+	_start()
 
 
 func _is_satisfied(entry: Dictionary) -> bool:
@@ -275,8 +360,26 @@ func _emit_progress(current: String) -> void:
 	if _bar:
 		_bar.max_value = max(1.0, float(_bytes_total))
 		_bar.value = float(_bytes_done)
+	# Rolling ETA: resample baseline every ~500 ms and keep the last window's
+	# speed as the shown estimate so the label stays stable between resamples.
+	var now := Time.get_ticks_msec()
+	if _last_bytes_time == 0:
+		_last_bytes_time = now
+		_last_bytes_done = _bytes_done
+	elif now - _last_bytes_time >= 500:
+		var dt := float(now - _last_bytes_time) / 1000.0
+		var speed := float(_bytes_done - _last_bytes_done) / dt
+		if speed > 1.0:
+			var remaining := float(_bytes_total - _bytes_done)
+			_eta_text = "%.1f" % (remaining / speed / 60.0)
+		_last_bytes_time = now
+		_last_bytes_done = _bytes_done
 	if _label and current != "":
-		_label.text = "%d / %d  —  %s  —  %s" % [_done_count, _total, _fmt_bytes(_bytes_done), current.get_file()]
+		_label.text = "%d / %d  —  %s / %s  —  %s min  —  %s" % [
+			_done_count, _total,
+			_fmt_bytes(_bytes_done), _fmt_bytes(_bytes_total),
+			_eta_text, current.get_file()
+		]
 	progress.emit(_done_count, _total, _bytes_done, _bytes_total, current)
 
 
@@ -293,6 +396,12 @@ func _emit_complete(ok: bool, error: String) -> void:
 	bootstrap_complete.emit(ok, error)
 	if not ok:
 		return
+	# Persist the fast-path sentinel BEFORE the scene reload. If the queue
+	# drained (even with some per-file failures that we skipped past), the
+	# next launch should still fast-path; missing files will be re-attempted
+	# only when the manifest hash itself changes.
+	if _is_mobile and _manifest_hash != "":
+		_write_bootstrap_sentinel()
 	# Mobile first launch: the main scene has already started with empty
 	# user://, so Assets.gd cached a lot of null textures and DataLoader
 	# saw no data/index.json. Drop those caches and reload so everything

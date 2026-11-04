@@ -4560,10 +4560,13 @@ wss.on('connection', (ws) => {
         broadcastUI(handMsg(notice ? { notice } : {}));
       }
       if (m.kind === 'unarchive') {
-        // An archived card goes back onto the discard pile (creature cards stay: they are summoned, not drawn).
+        // An archived card goes back onto the discard pile. User override
+        // (2026-11-04): creature + class cards may unarchive too so a player
+        // can bulk-recycle the archive via the popup's "All → discard" button
+        // (and manual single-card clicks on any kind).
         const i = archive.findIndex(c => c.card_id === m.card_id);
         let notice = null;
-        if (i >= 0 && archive[i].kind !== 'creature') { const [c] = archive.splice(i, 1); discard.push(c); notice = `${c.name || c.action_name || c.code} returns from the archive to the discard pile`; console.log(`[${PEER_LABEL}] unarchived ${c.card_id}`); }
+        if (i >= 0) { const [c] = archive.splice(i, 1); discard.push(c); notice = `${c.name || c.action_name || c.code} returns from the archive to the discard pile`; console.log(`[${PEER_LABEL}] unarchived ${c.card_id} (kind=${c.kind})`); }
         broadcastUI(handMsg(notice ? { notice } : {}));
       }
       if (m.kind === 'uilog') {
