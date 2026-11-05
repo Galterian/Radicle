@@ -6,7 +6,9 @@
 #
 # Usage:
 #   bash _tools/emu.sh up                 # start emulator + adb + proxy + ws-scrcpy
-#   bash _tools/emu.sh install [APK]      # adb install (default: _tools/chaosd6-release.apk)
+#   bash _tools/emu.sh install [--release|--debug|APK]
+#                                         # default: --release (_tools/chaosd6-release.apk)
+#                                         # --debug installs _tools/chaosd6-debug.apk
 #   bash _tools/emu.sh run                # launch the game
 #   bash _tools/emu.sh deploy [APK]       # up + install + run (one-shot)
 #   bash _tools/emu.sh logs               # live logcat filtered to the game
@@ -23,7 +25,21 @@ cd "$(dirname "$0")/.."
 REPO="$(pwd)"
 
 # --- config ---------------------------------------------------------------
-PKG="${CHAOSD6_PKG:-net.dimensions.radicle}"
+# Known package IDs per build variant.
+PKG_RELEASE="net.dimensions.radicle"
+PKG_DEBUG="io.chaosd6.dimensions"
+
+# `install` writes the active package to this file so run/logs/shot can pick it up.
+PKG_STATE_FILE="$(dirname "$0")/.emu-logs/current.pkg"
+
+# Resolve the package for a non-install command: explicit env var > state file > release.
+pick_pkg() {
+  if [[ -n "${CHAOSD6_PKG:-}" ]]; then echo "$CHAOSD6_PKG"; return; fi
+  if [[ -s "$PKG_STATE_FILE" ]]; then cat "$PKG_STATE_FILE"; return; fi
+  echo "$PKG_RELEASE"
+}
+PKG="$(pick_pkg)"
+
 AVD="${CHAOSD6_AVD:-Pixel_7_API_34}"
 GPU="${CHAOSD6_GPU:-host}"      # host | swiftshader_indirect | auto
 MEM="${CHAOSD6_MEM:-1792}"      # MB of guest RAM (floor is ~1536)
@@ -148,10 +164,29 @@ cmd_up() {
 }
 
 cmd_install() {
-  local apk="${1:-$REPO/_tools/chaosd6-release.apk}"
+  # Pick APK + package based on first arg: --release / --debug / explicit path / nothing (= release).
+  local apk pkg
+  case "${1:-}" in
+    --release|"")
+      apk="$REPO/_tools/chaosd6-release.apk"; pkg="$PKG_RELEASE" ;;
+    --debug)
+      apk="$REPO/_tools/chaosd6-debug.apk";   pkg="$PKG_DEBUG" ;;
+    *)
+      apk="$1"
+      # Explicit APK path: try to extract its real package from the badging dump
+      # if aapt is available; otherwise fall back to the current state.
+      if command -v aapt >/dev/null; then
+        pkg="$(aapt dump badging "$apk" 2>/dev/null | awk -F"'" '/package: name=/ {print $2; exit}')"
+      fi
+      pkg="${pkg:-$(pick_pkg)}"
+      ;;
+  esac
   [[ -f "$apk" ]] || { echo "[emu] APK not found: $apk" >&2; exit 2; }
-  echo "[emu] installing $apk"
+  echo "[emu] installing $apk  (package: $pkg)"
   "$ADB" install -r "$apk"
+  mkdir -p "$(dirname "$PKG_STATE_FILE")"
+  echo "$pkg" > "$PKG_STATE_FILE"
+  PKG="$pkg"
 }
 
 cmd_run() {
@@ -164,9 +199,10 @@ cmd_run() {
 
 cmd_deploy() {
   cmd_up
-  cmd_install "${1:-}"
+  cmd_install "$@"   # --release (default) / --debug / explicit path all pass through
   cmd_run
-  echo "[emu] deploy done. Logs: bash $0 logs    Screenshot: bash $0 shot"
+  echo "[emu] deploy done. Package: $PKG"
+  echo "[emu] Logs: bash $0 logs    Screenshot: bash $0 shot"
 }
 
 cmd_logs() {
@@ -188,6 +224,7 @@ cmd_shot() {
 
 cmd_status() {
   echo "ADB binary:   $ADB"
+  echo "Package:      $PKG  (change via --debug/--release on install, or \$CHAOSD6_PKG)"
   echo "Windows adb:  $("$WIN_ADB" devices 2>&1 | tr '\n' ' ')"
   echo "WSL proxy:    $(ss -tlnp 2>/dev/null | awk '/127.0.0.1:5037/ {print $NF; exit}' || echo none)"
   echo "ws-scrcpy:    $(is_up && echo 'up (localhost:8000)' || echo down)"

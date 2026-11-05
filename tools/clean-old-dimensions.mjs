@@ -51,22 +51,21 @@ const ROOTS = [
 
 function parseArgs(argv) {
   const o = {
-    apply: false, days: 3, keep: new Set(), ociSync: false,
-    ociHost: process.env.OCI_HOST || '92-5-138-121.sslip.io',
+    apply: false, days: 3, keep: new Set(), pruneRadicle: false,
+    radHome: process.env.RAD_HOME || `${process.env.HOME || ''}/.radicle`,
     ridDir: process.env.RID_DIR || 'zqZmP6itceBMqYwi1K1n8phQqCaj',
-    sshKey: process.env.SSH_KEY || `${process.env.HOME || ''}/.ssh/id_rsa`,
   }
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--apply') o.apply = true
     else if (a === '--days') o.days = Number(argv[++i])
-    else if (a === '--oci-sync') o.ociSync = true
+    else if (a === '--prune-radicle') o.pruneRadicle = true
     else if (a === '--keep') {
       for (const k of String(argv[++i] || '').split(',')) {
         if (k) o.keep.add(k.trim().toLowerCase().replace(/^dim-/, ''))
       }
     } else if (a === '--help' || a === '-h') {
-      console.log(`Usage: node tools/clean-old-dimensions.mjs [--apply] [--days N] [--keep slug1,slug2] [--oci-sync]`)
+      console.log(`Usage: node tools/clean-old-dimensions.mjs [--apply] [--days N] [--keep slug1,slug2] [--prune-radicle]`)
       process.exit(0)
     } else {
       console.error(`Unknown arg: ${a}`)
@@ -230,4 +229,76 @@ if (kept.length > 0) {
   for (const r of kept) {
     console.log(`  [${r.label.padEnd(8)}] ${r.name.padEnd(28)} ${r.reason}`)
   }
+}
+
+// ---------------------------------------------------------------------------
+// --prune-radicle: delete the matching `ActiveDimensions/<DimName>` refs in
+// LOCAL Radicle storage (~/.radicle/storage/<RID>/). We never touch OCI — the
+// user's existing `game/tools/oci/push-to-oci.sh --rsync-only` already runs
+// rsync with --delete, so the next push mirrors the deletions over there.
+//
+// Dim name comes from `game/sessions/<DimName>/` only — the autosave and logs
+// roots have slugified names that don't match the published branch casing.
+// Operations are purely local (git-cli on a path under $HOME), no SSH.
+// ---------------------------------------------------------------------------
+if (opts.pruneRadicle && removed.length > 0) {
+  const dimNames = [...new Set(removed.filter(r => r.label === 'session').map(r => r.name))]
+  if (dimNames.length === 0) {
+    console.log(`\n(--prune-radicle: no session dirs in the removal set, nothing to prune)`)
+  } else {
+    const store = `${opts.radHome}/storage/${opts.ridDir}`
+    console.log(`\n=== Radicle ref prune (local only) ===`)
+    console.log(`  storage: ${store}`)
+    // Early-exit with a useful hint when the storage dir isn't where we
+    // guessed. Common case: running from Windows node, where $HOME is
+    // C:\Users\<user> but the real storage lives under WSL.
+    try { statSync(store) } catch {
+      console.log(`  ! that path doesn't exist. Override with the RAD_HOME env var, e.g.`)
+      console.log(`      RAD_HOME=/home/galt/.radicle node tools/clean-old-dimensions.mjs --apply --prune-radicle`)
+      console.log(`    or run the script from inside WSL so $HOME resolves to the Linux home.`)
+      process.exit(3)
+    }
+    let totalRefs = 0
+    const refsToDelete = []
+    for (const name of dimNames) {
+      // for-each-ref prints the full ref path for every match across every
+      // namespace. We collect across all names first so the dry-run report is
+      // honest about scope before any ref is actually touched.
+      const r = spawnSync('git', [
+        '-C', store, 'for-each-ref', '--format=%(refname)',
+        `refs/namespaces/*/refs/heads/ActiveDimensions/${name}`,
+      ], { encoding: 'utf8' })
+      if (r.status !== 0) {
+        console.log(`  ! git for-each-ref failed for ${name}: ${(r.stderr || '').trim()}`)
+        continue
+      }
+      const refs = String(r.stdout || '').split('\n').map(s => s.trim()).filter(Boolean)
+      for (const ref of refs) refsToDelete.push({ dim: name, ref })
+      totalRefs += refs.length
+      if (refs.length === 0) {
+        console.log(`  [${name}] (no refs found — maybe published only on another peer)`)
+      } else {
+        console.log(`  [${name}] ${refs.length} ref(s)`)
+      }
+    }
+    if (!opts.apply) {
+      console.log(`  (dry run — rerun with --apply --prune-radicle to delete)`)
+    } else if (totalRefs === 0) {
+      console.log(`  nothing to prune.`)
+    } else {
+      let deleted = 0
+      for (const { ref } of refsToDelete) {
+        const r = spawnSync('git', ['-C', store, 'update-ref', '-d', ref], { encoding: 'utf8' })
+        if (r.status === 0) deleted++
+        else console.log(`  ! update-ref -d ${ref} failed: ${(r.stderr || '').trim()}`)
+      }
+      console.log(`  pruned ${deleted}/${totalRefs} local Radicle ref(s)`)
+      console.log(`\n  next step — propagate to OCI (reuses push-to-oci.sh):`)
+      console.log(`    bash game/tools/oci/push-to-oci.sh --rsync-only`)
+      console.log(`  (its rsync --delete step mirrors the ref removals; its`)
+      console.log(`   post-rsync fsck + repack cleans up any dangling objects)`)
+    }
+  }
+} else if (opts.pruneRadicle) {
+  console.log(`\n(--prune-radicle: nothing was removed, so nothing to prune)`)
 }
