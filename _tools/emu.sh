@@ -13,6 +13,11 @@
 #   bash _tools/emu.sh deploy [APK]       # up + install + run (one-shot)
 #   bash _tools/emu.sh logs               # live logcat filtered to the game
 #   bash _tools/emu.sh shot [FILE]        # screencap to FILE (default: _tools/screen.png)
+#   bash _tools/emu.sh view [--restart|--new]
+#                                         # open native scrcpy window; default
+#                                         # just mirrors the running game.
+#                                         # --restart force-stops + relaunches
+#                                         # --new    also wipes app data first
 #   bash _tools/emu.sh status             # what's running
 #   bash _tools/emu.sh down               # stop WSL side (emulator stays running on Windows)
 #   bash _tools/emu.sh kill-emu           # stop Windows emulator too
@@ -190,11 +195,70 @@ cmd_install() {
 }
 
 cmd_run() {
-  "$ADB" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
-  sleep 2
+  # --new|--fresh|--wipe clears app data before launch (destroys saves) so the
+  # app starts from true cold boot. Without it, Godot resumes its save file.
+  local wipe=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --new|--fresh|--wipe) wipe=1 ;;
+      *) echo "[emu] run: unknown option $1" >&2; return 2 ;;
+    esac
+    shift
+  done
+  if [[ $wipe -eq 1 ]]; then
+    echo "[emu] wiping $PKG app data (NEW GAME — saves lost)"
+    "$ADB" shell pm clear "$PKG" >/dev/null || true
+  fi
+
+  # Return the currently top-resumed component (e.g. "io.chaosd6.dimensions/com.godot.game.GodotApp").
+  top_component() {
+    "$ADB" shell dumpsys activity activities 2>/dev/null \
+      | awk '/topResumedActivity=/ {for (i=1;i<=NF;i++) if ($i ~ /\//) {print $i; exit}}'
+  }
+  # Known foreground-stealers to swat if they resume.
+  local INTRUDERS=(
+    com.google.android.gm                       # Gmail
+    com.google.android.googlequicksearchbox     # Google Search / Assistant
+    com.google.android.apps.messaging           # Messages
+    com.android.vending                         # Play Store
+  )
+
+  # Prep: unlock, kill intruders + stale PKG, swipe up to dismiss any lockscreen.
+  "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+  "$ADB" shell input keyevent 224 >/dev/null 2>&1 || true   # WAKEUP
+  for app in "${INTRUDERS[@]}"; do
+    "$ADB" shell am force-stop "$app" >/dev/null 2>&1 || true
+  done
+  "$ADB" shell am force-stop "$PKG" >/dev/null 2>&1 || true
+  "$ADB" shell input keyevent 3 >/dev/null 2>&1 || true     # HOME
+
+  # Launch and verify PKG actually ends up on top. Retry a few times if something grabs focus.
+  local tries=0 top
+  while : ; do
+    "$ADB" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+    for _ in $(seq 1 10); do
+      sleep 1
+      top="$(top_component || true)"
+      [[ "$top" == "$PKG/"* ]] && break
+    done
+    [[ "$top" == "$PKG/"* ]] && break
+    tries=$((tries+1))
+    if [[ $tries -ge 3 ]]; then
+      echo "[emu] gave up: top activity is $top (expected $PKG). You may need to tap/dismiss manually." >&2
+      break
+    fi
+    # Something else grabbed focus — kill it and retry.
+    local intruder_pkg="${top%%/*}"
+    if [[ -n "$intruder_pkg" && "$intruder_pkg" != "$PKG" ]]; then
+      echo "[emu] intruder $intruder_pkg stole focus — force-stopping and retrying ($tries/3)"
+      "$ADB" shell am force-stop "$intruder_pkg" >/dev/null 2>&1 || true
+      "$ADB" shell input keyevent 3 >/dev/null 2>&1 || true   # HOME
+    fi
+  done
+
   local pid
   pid="$("$ADB" shell pidof "$PKG" | tr -d '\r\n')"
-  echo "[emu] launched $PKG pid=$pid"
+  echo "[emu] launched $PKG pid=$pid (top=$top)"
 }
 
 cmd_deploy() {
@@ -220,6 +284,54 @@ cmd_shot() {
   local out="${1:-$REPO/_tools/screen.png}"
   "$ADB" exec-out screencap -p >"$out"
   echo "[emu] wrote $out"
+}
+
+cmd_view() {
+  # Launch Genymobile scrcpy on Windows (reliable live mirror). ws-scrcpy's
+  # bundled server can't capture Android 14 headless; use this instead.
+  #
+  # Default behaviour: JUST MIRROR. Don't touch the running game — otherwise
+  # a `deploy` followed by `view` would force-stop the APK while AssetBootstrap
+  # is still fetching assets, aborting the sentinel write and triggering a
+  # full re-download on the next launch.
+  #   view               # mirror only (default — safe for `deploy && view`)
+  #   view --restart     # force-stop + relaunch (good for dead-hero reset)
+  #   view --new         # pm clear + launch (NEW GAME, saves + assets lost)
+  local restart=0 wipe=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --restart|--relaunch) restart=1 ;;
+      --new|--fresh|--wipe) restart=1; wipe=1 ;;
+      --no-restart|--keep|--continue) restart=0 ;;   # kept for back-compat; now a no-op (default)
+      *) echo "[emu] view: unknown option $1" >&2; return 2 ;;
+    esac
+    shift
+  done
+  if [[ $restart -eq 1 ]]; then
+    if "$ADB" shell true >/dev/null 2>&1; then
+      if [[ $wipe -eq 1 ]]; then
+        echo "[emu] wiping $PKG app data (NEW GAME — saves + downloaded assets lost)"
+        "$ADB" shell pm clear "$PKG" >/dev/null || true
+      fi
+      echo "[emu] (re)launching $PKG"
+      cmd_run
+    else
+      echo "[emu] skipping restart — adb not reachable (run \`bash $0 up\` first)" >&2
+    fi
+  fi
+  local SCRCPY="${SCRCPY:-/mnt/c/Users/grozdevg/scrcpy/scrcpy-win64-v5.0.1/scrcpy.exe}"
+  [[ -x "$SCRCPY" ]] || { echo "[emu] scrcpy not found at $SCRCPY" >&2; exit 2; }
+  echo "[emu] launching scrcpy window (chaosD6 — emulator-5554)"
+  # --mouse-bind=++++:++++  : stop right-click from sending Android BACK (which
+  #                           Godot treats as "quit app"). All mouse buttons now
+  #                           forward as normal clicks instead of system keys.
+  nohup "$SCRCPY" -s emulator-5554 \
+    --window-title="chaosD6 (emulator-5554)" --no-audio \
+    --mouse-bind=++++:++++ \
+    >"$LOG_DIR/scrcpy.log" 2>&1 &
+  disown || true
+  sleep 1
+  echo "[emu] see $LOG_DIR/scrcpy.log if nothing appears"
 }
 
 cmd_status() {
@@ -283,6 +395,7 @@ case "$cmd" in
   deploy)    cmd_deploy "$@" ;;
   logs)      cmd_logs "$@" ;;
   shot)      cmd_shot "$@" ;;
+  view)      cmd_view "$@" ;;
   status)    cmd_status "$@" ;;
   down)      cmd_down "$@" ;;
   kill-emu)  cmd_kill_emu "$@" ;;
