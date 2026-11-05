@@ -11583,7 +11583,7 @@
   "method": "assumed",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 0/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 0 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir0/AcidBreath dir0 - idle.png": {
   "width": 1860,
   "height": 85,
   "cols": 12,
@@ -11599,7 +11599,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 1 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir1/AcidBreath dir1 - idle.png": {
   "width": 1524,
   "height": 97,
   "cols": 12,
@@ -11615,7 +11615,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 2/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 2 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir2/AcidBreath dir2 - idle.png": {
   "width": 1356,
   "height": 122,
   "cols": 12,
@@ -11631,7 +11631,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 3/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 3 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir3/AcidBreath dir3 - idle.png": {
   "width": 1524,
   "height": 138,
   "cols": 12,
@@ -11647,7 +11647,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 4/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 4 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir4/AcidBreath dir4 - idle.png": {
   "width": 1776,
   "height": 132,
   "cols": 6,
@@ -11663,7 +11663,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 5/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 5 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir5/AcidBreath dir5 - idle.png": {
   "width": 1416,
   "height": 150,
   "cols": 12,
@@ -11679,7 +11679,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 6/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 6 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir6/AcidBreath dir6 - idle.png": {
   "width": 1380,
   "height": 128,
   "cols": 12,
@@ -11695,7 +11695,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 7/Acidpoison dragon breath (yellow-green) - Swamp dragon - direction 7 -….png": {
+ "assets/Sprites/Effects/Effects1/AcidBreath dir7/AcidBreath dir7 - idle.png": {
   "width": 1524,
   "height": 90,
   "cols": 12,
@@ -12111,7 +12111,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Elliptical area overlay size 1 (32x24; decodes as gradient wedge - lik…/Elliptical area overlay size 1 (32x24; decodes as gradient wedge - lik….png": {
+ "assets/Sprites/Effects/Effects1/AreaOverlay1/AreaOverlay1 - idle.png": {
   "width": 32,
   "height": 24,
   "cols": 1,
@@ -12607,7 +12607,7 @@
   "method": "correlation",
   "confidence": "medium"
  },
- "assets/Sprites/Effects/Effects1/Greencyan-green dragon breath - possibly Dragonlichenecrotic or Celest…/Greencyan-green dragon breath - possibly Dragonlichenecrotic or Celest….png": {
+ "assets/Sprites/Effects/Effects1/LichBreath/LichBreath - idle.png": {
   "width": 1524,
   "height": 90,
   "cols": 12,
@@ -12799,7 +12799,7 @@
   "method": "assumed",
   "confidence": "medium"
  },
- "assets/Sprites/Effects/Effects1/Hero victory banner picture (warrior with raised sword)/Hero victory banner picture (warrior with raised sword) - idle [Ezdv].png": {
+ "assets/Sprites/Effects/Effects1/HeroVictory [Ezdv]/HeroVictory - idle [Ezdv].png": {
   "width": 360,
   "height": 450,
   "cols": 1,
@@ -12815,7 +12815,7 @@
   "method": "assumed",
   "confidence": "medium"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 0/Ice dragon breath (cyan) - Frost dragon - direction 0 - idle [EIB0].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir0 [EIB0]/IceBreath dir0 - idle [EIB0].png": {
   "width": 1860,
   "height": 85,
   "cols": 12,
@@ -12831,7 +12831,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 1/Ice dragon breath (cyan) - Frost dragon - direction 1 - idle [EIB1].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir1 [EIB1]/IceBreath dir1 - idle [EIB1].png": {
   "width": 1524,
   "height": 97,
   "cols": 12,
@@ -12847,7 +12847,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 2/Ice dragon breath (cyan) - Frost dragon - direction 2 - idle [EIB2].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir2 [EIB2]/IceBreath dir2 - idle [EIB2].png": {
   "width": 1356,
   "height": 122,
   "cols": 12,
@@ -12863,7 +12863,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 3/Ice dragon breath (cyan) - Frost dragon - direction 3 - idle [EIB3].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir3 [EIB3]/IceBreath dir3 - idle [EIB3].png": {
   "width": 1524,
   "height": 138,
   "cols": 12,
@@ -12879,7 +12879,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 4/Ice dragon breath (cyan) - Frost dragon - direction 4 - idle [EIB4].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir4 [EIB4]/IceBreath dir4 - idle [EIB4].png": {
   "width": 1776,
   "height": 132,
   "cols": 6,
@@ -12895,7 +12895,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 5/Ice dragon breath (cyan) - Frost dragon - direction 5 - idle [EIB5].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir5 [EIB5]/IceBreath dir5 - idle [EIB5].png": {
   "width": 1416,
   "height": 150,
   "cols": 12,
@@ -12911,7 +12911,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 6/Ice dragon breath (cyan) - Frost dragon - direction 6 - idle [EIB6].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir6 [EIB6]/IceBreath dir6 - idle [EIB6].png": {
   "width": 1380,
   "height": 128,
   "cols": 12,
@@ -12927,7 +12927,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Ice dragon breath (cyan) - Frost dragon - direction 7/Ice dragon breath (cyan) - Frost dragon - direction 7 - idle [EIB7].png": {
+ "assets/Sprites/Effects/Effects1/IceBreath dir7 [EIB7]/IceBreath dir7 - idle [EIB7].png": {
   "width": 1524,
   "height": 90,
   "cols": 12,
@@ -12959,7 +12959,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 0/Lightning dragon breath (blue-purple) - Storm dragon - direction 0 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir0/LightningBreath dir0 - idle.png": {
   "width": 1860,
   "height": 85,
   "cols": 12,
@@ -12975,7 +12975,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 1/Lightning dragon breath (blue-purple) - Storm dragon - direction 1 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir1/LightningBreath dir1 - idle.png": {
   "width": 1524,
   "height": 97,
   "cols": 12,
@@ -12991,7 +12991,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 2/Lightning dragon breath (blue-purple) - Storm dragon - direction 2 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir2/LightningBreath dir2 - idle.png": {
   "width": 1356,
   "height": 122,
   "cols": 2,
@@ -13007,7 +13007,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 3/Lightning dragon breath (blue-purple) - Storm dragon - direction 3 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir3/LightningBreath dir3 - idle.png": {
   "width": 1524,
   "height": 138,
   "cols": 2,
@@ -13023,7 +13023,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 4/Lightning dragon breath (blue-purple) - Storm dragon - direction 4 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir4/LightningBreath dir4 - idle.png": {
   "width": 1776,
   "height": 132,
   "cols": 12,
@@ -13039,7 +13039,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 5/Lightning dragon breath (blue-purple) - Storm dragon - direction 5 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir5/LightningBreath dir5 - idle.png": {
   "width": 1416,
   "height": 150,
   "cols": 4,
@@ -13055,7 +13055,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 6/Lightning dragon breath (blue-purple) - Storm dragon - direction 6 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir6/LightningBreath dir6 - idle.png": {
   "width": 1380,
   "height": 128,
   "cols": 3,
@@ -13071,7 +13071,7 @@
   "method": "correlation",
   "confidence": "medium"
  },
- "assets/Sprites/Effects/Effects1/Lightning dragon breath (blue-purple) - Storm dragon - direction 7/Lightning dragon breath (blue-purple) - Storm dragon - direction 7 - i….png": {
+ "assets/Sprites/Effects/Effects1/LightningBreath dir7/LightningBreath dir7 - idle.png": {
   "width": 1524,
   "height": 90,
   "cols": 12,
@@ -13087,7 +13087,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Minimapresource icons mine carts (gold, metal, stone, crystal) with va…/Minimapresource icons mine carts (gold, metal, stone, crystal) with va….png": {
+ "assets/Sprites/Effects/Effects1/MineIcons/MineIcons - idle.png": {
   "width": 150,
   "height": 300,
   "cols": 2,
@@ -14095,7 +14095,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png": {
+ "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png": {
   "width": 2000,
   "height": 520,
   "cols": 8,
@@ -14367,7 +14367,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 0/Violetblue dragon breath - possibly Celestial dragon - direction 0 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir0/CelestBreath dir0 - idle.png": {
   "width": 1860,
   "height": 85,
   "cols": 12,
@@ -14383,7 +14383,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 1/Violetblue dragon breath - possibly Celestial dragon - direction 1 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir1/CelestBreath dir1 - idle.png": {
   "width": 1524,
   "height": 97,
   "cols": 12,
@@ -14399,7 +14399,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 2/Violetblue dragon breath - possibly Celestial dragon - direction 2 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir2/CelestBreath dir2 - idle.png": {
   "width": 1356,
   "height": 122,
   "cols": 12,
@@ -14415,7 +14415,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 3/Violetblue dragon breath - possibly Celestial dragon - direction 3 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir3/CelestBreath dir3 - idle.png": {
   "width": 1524,
   "height": 138,
   "cols": 12,
@@ -14431,7 +14431,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 4/Violetblue dragon breath - possibly Celestial dragon - direction 4 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir4/CelestBreath dir4 - idle.png": {
   "width": 1776,
   "height": 132,
   "cols": 6,
@@ -14447,7 +14447,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 5/Violetblue dragon breath - possibly Celestial dragon - direction 5 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir5/CelestBreath dir5 - idle.png": {
   "width": 1416,
   "height": 150,
   "cols": 12,
@@ -14463,7 +14463,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 6/Violetblue dragon breath - possibly Celestial dragon - direction 6 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir6/CelestBreath dir6 - idle.png": {
   "width": 1380,
   "height": 128,
   "cols": 12,
@@ -14479,7 +14479,7 @@
   "method": "boundary",
   "confidence": "high"
  },
- "assets/Sprites/Effects/Effects1/Violetblue dragon breath - possibly Celestial dragon - direction 7/Violetblue dragon breath - possibly Celestial dragon - direction 7 - i….png": {
+ "assets/Sprites/Effects/Effects1/CelestBreath dir7/CelestBreath dir7 - idle.png": {
   "width": 1524,
   "height": 90,
   "cols": 12,
@@ -14687,7 +14687,7 @@
   "method": "assumed",
   "confidence": "medium"
  },
- "assets/Sprites/Misc/Effects1/UI horizontal bars with skullclaw end caps (healthmana bars)/UI horizontal bars with skullclaw end caps (healthmana bars) - idle [E….png": {
+ "assets/Sprites/Misc/Effects1/UIBars/UIBars - idle.png": {
   "width": 180,
   "height": 144,
   "cols": 1,
@@ -14735,7 +14735,7 @@
   "method": "correlation",
   "confidence": "medium"
  },
- "assets/Sprites/Misc/Effects1/UI item slot grid panel (potions, armour, weapon slots)/UI item slot grid panel (potions, armour, weapon slots) - idle [EMDD].png": {
+ "assets/Sprites/Misc/Effects1/UISlots [EMDD]/UISlots - idle [EMDD].png": {
   "width": 708,
   "height": 345,
   "cols": 2,

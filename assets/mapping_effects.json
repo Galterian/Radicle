@@ -72,7 +72,7 @@
     },
     "effect_summoning": {
       "collection": "effects",
-      "asset": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+      "asset": "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png",
       "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)",
       "reason": "WBC3 summon pillar effect",
       "confidence": "high"
@@ -660,7 +660,7 @@
     },
     "action_enter_dimension": {
       "collection": "actions",
-      "asset": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+      "asset": "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png",
       "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)",
       "reason": "arrival pillar of light on the starting tile",
       "confidence": "medium"

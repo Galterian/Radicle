@@ -2034,7 +2034,7 @@
         "wbc3_race": "Effects1",
         "sprites": {
           "effect": {
-            "path": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png",
+            "path": "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png",
             "usage": "marker/animation strip shown on the action target hex (cols = frames)"
           }
         },
