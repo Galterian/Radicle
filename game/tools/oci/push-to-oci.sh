@@ -171,6 +171,27 @@ if [ "$DO_RSYNC" = 1 ]; then
     echo "  ! source dir does not exist: $SRC" >&2
     exit 1
   fi
+  # Pause dev-PC's rad-node to prevent it from repacking storage mid-rsync —
+  # that race deletes pack files out from under rsync, leaving OCI with refs
+  # pointing at objects that never arrived (sigrefs corruption).
+  DEV_NODE_WAS_UP=0
+  if rad node status >/dev/null 2>&1; then
+    DEV_NODE_WAS_UP=1
+    echo "  pausing dev-PC rad-node (prevents repack-during-rsync corruption)"
+    rad node stop 2>&1 | sed "s/^/    /" || true
+    sleep 2
+  fi
+
+  echo "  pre-flight fsck on dev-PC storage"
+  if ! git -C "$SRC" fsck --no-dangling 2>&1 | grep -q "error:"; then
+    echo "    clean"
+  else
+    echo "    ! dev-PC storage has broken refs — aborting rsync to avoid propagating corruption" >&2
+    git -C "$SRC" fsck --no-dangling 2>&1 | sed "s/^/      /" >&2
+    [ "$DEV_NODE_WAS_UP" = 1 ] && rad node start 2>&1 | sed "s/^/    /"
+    exit 4
+  fi
+
   echo "  stopping OCI radicle services + clearing partial .tmp"
   $SSH "ubuntu@$OCI_HOST" bash <<EOF
 sudo systemctl stop radicle-node radicle-httpd
@@ -191,8 +212,37 @@ EOF
   case "$rc" in
     0)     echo "  rsync: clean" ;;
     23|24) echo "  rsync: partial (code $rc) — some files vanished mid-transfer; a re-run reconciles" ;;
-    *)     echo "  rsync FAILED (code $rc)" >&2; exit "$rc" ;;
+    *)     echo "  rsync FAILED (code $rc)" >&2
+           [ "${DEV_NODE_WAS_UP:-0}" = 1 ] && rad node start 2>&1 | sed "s/^/    /"
+           exit "$rc" ;;
   esac
+
+  # Post-rsync fsck on OCI; if any ref dangles (e.g. rsync code 24 killed a
+  # pack file mid-copy), delete the broken ref so a future p2p sync can heal.
+  echo "  post-rsync fsck on OCI"
+  $SSH "ubuntu@$OCI_HOST" bash <<EOF 2>&1 | sed "s/^/    /"
+set +e
+sudo chown -R radicle:radicle /home/radicle/.radicle/storage/$RID_DIR
+broken=\$(sudo -u radicle git -C /home/radicle/.radicle/storage/$RID_DIR fsck --no-dangling 2>&1 | grep -oE "error: [^:]+:" | awk '{print \$2}' | tr -d ':')
+if [ -n "\$broken" ]; then
+  echo "broken refs after rsync:"
+  echo "\$broken" | sed 's/^/  /'
+  echo "deleting them..."
+  echo "\$broken" | while read r; do
+    sudo -u radicle git -C /home/radicle/.radicle/storage/$RID_DIR update-ref -d "\$r"
+  done
+  echo "repack..."
+  sudo -u radicle git -C /home/radicle/.radicle/storage/$RID_DIR repack -adfb --window=50 --depth=50 --window-memory=256m 2>&1 | tail -5
+else
+  echo "clean"
+fi
+EOF
+
+  # Resume dev-PC rad-node
+  if [ "${DEV_NODE_WAS_UP:-0}" = 1 ]; then
+    echo "  resuming dev-PC rad-node"
+    rad node start 2>&1 | sed "s/^/    /" || true
+  fi
   echo
 fi
 

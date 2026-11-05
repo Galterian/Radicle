@@ -155,6 +155,7 @@ func _ready() -> void:
 	hud.slot_pressed.connect(_pick_slot)
 	hud.lock_pressed.connect(_lock)
 	hud.destroy_perm_requested.connect(_on_destroy_perm_requested)
+	hud.entity_activated.connect(_on_hud_entity_activated)
 
 	# Touch gesture router. Attached as a child of Main so it sits alongside the
 	# camera and hex map in the input chain. On desktop its handlers never fire
@@ -295,6 +296,12 @@ func _begin_planning() -> void:
 	target_hex = null
 	intents.clear()
 	map.path_preview = []
+	# Journey preview is drawn from map.selected; after a resolution move the
+	# hero stands on a new hex, so re-anchor selected before anything redraws
+	# or the dashed journey line origins stay on the previous tile.
+	var _pb := player_entity()
+	if _pb != null:
+		map.selected = _pb.hex
 	_deal_hand()
 	_update_reach()
 	_refresh_hand()
@@ -323,6 +330,7 @@ func _begin_planning() -> void:
 	# so the hint reflects the auto-picked state rather than the fresh deal.
 	_journey_resume()
 	_push_mobile_hint()
+	_push_mobile_piles()
 
 
 func _begin_reveal() -> void:
@@ -670,6 +678,53 @@ func _push_status() -> void:
 	hud.set_status(round_no, dim, hand.size(), hex_count)
 
 
+## Mobile only. Pushes the compact pile row (arch / deck / disc) and the perms
+## row above the hand bar. Solo play has no real deck/discard so we fall back
+## to hand size + a dash; a connected peer's `hand` message overrides via
+## _on_net_hand. Perms come from the local player's entity data.
+func _push_mobile_piles() -> void:
+	if hud == null:
+		return
+	var is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not is_mobile:
+		return
+	var archive_n := 0
+	var deck_n := hand.size()
+	var discard_n := 0
+	var at_min := false
+	if hud.has_method("server_hand"):
+		var sh: Dictionary = hud.server_hand()
+		if not sh.is_empty():
+			archive_n = int(sh.get("archiveLeft", sh.get("archive", 0)))
+			deck_n = int(sh.get("deckLeft", sh.get("deck", deck_n)))
+			discard_n = int(sh.get("discardLeft", sh.get("discard", 0)))
+			at_min = bool(sh.get("circulatingAtMin", false))
+	if hud.has_method("set_mobile_piles"):
+		hud.set_mobile_piles(archive_n, deck_n, discard_n, at_min)
+	var p := player_entity()
+	var codes: Array = []
+	if p != null:
+		var perms: Variant = p.data.get("permanents", [])
+		if typeof(perms) == TYPE_ARRAY:
+			for pm in perms:
+				codes.append(str(pm))
+	if hud.has_method("set_mobile_perms"):
+		hud.set_mobile_perms(codes)
+
+
+## Mobile roster tap handler. Finds the entity by id and makes it the HUD's
+## active one (portrait + quote) plus centres the camera on it. The player's
+## faction stays whatever it is — this is a view switch, not a possession.
+func _on_hud_entity_activated(entity_id: String) -> void:
+	for e in entities:
+		if e.id == entity_id and e.alive:
+			hud.set_entity(e)
+			if cam != null:
+				cam.follow = e
+			e.play_sound("select")
+			return
+
+
 func _push_mobile_hint() -> void:
 	if hud == null or not hud.has_method("set_mobile_hint"):
 		return
@@ -812,7 +867,9 @@ func _on_hex_double_tapped(h: Vector2i) -> void:
 	_journey_path = path
 	_journey_dest = h
 	_journey_attack = want_attack
+	map.selected = p.hex
 	map.path_preview = path
+	map.queue_redraw()
 	var m_slot := _find_card_slot(["M", "EM"])
 	if m_slot < 0:
 		# Journey is queued; _journey_resume will auto-pick when a mover appears.
@@ -856,7 +913,9 @@ func _journey_resume() -> void:
 		hud.log_line("journey paused: no mover in hand", Color(0.8, 0.7, 0.5))
 		return
 	_auto_pick(m_slot, _journey_path[0])
+	map.selected = p.hex
 	map.path_preview = _journey_path
+	map.queue_redraw()
 
 
 func _lock() -> void:
@@ -1082,6 +1141,7 @@ func _on_net_hello(payload: Dictionary) -> void:
 func _on_net_hand(payload: Dictionary) -> void:
 	if hud.has_method("set_server_hand"):
 		hud.set_server_hand(payload)
+	_push_mobile_piles()
 	# Mirror the browser's myEmissionPreview — union of the queued action, any
 	# extra, and all queued effects' elements. The HUD fades the chip out
 	# shortly after, so leaving an action queued keeps re-triggering it (which
