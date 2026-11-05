@@ -56,3 +56,5 @@ _tools/.emu-logs/adb-proxy.log
 _tools/.emu-logs/adb-server.log
 _tools/.emu-logs/emulator.log
 _tools/.emu-logs/ws-scrcpy.log
+_tools/.emu-logs/scrcpy.log
+.claude/
