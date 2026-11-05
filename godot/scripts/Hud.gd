@@ -8,6 +8,9 @@ signal lock_pressed
 ## Fired when the player double-taps an enemy's permanent card in the roster.
 ## Carries the stat the destroy intent should emit at the perm (Rule 24).
 signal destroy_perm_requested(peer_id: String, perm_id: String, stat: String)
+## Fired when the player taps a roster row — Game.gd makes that entity the
+## HUD's active one (portrait + camera focus). Mobile-only wire.
+signal entity_activated(entity_id: String)
 
 const CODE_COLORS := {
 	"A": Color("#d9772a"), "B": Color("#4f8fd6"), "M": Color("#7cc77a"), "P": Color("#c9b35a"),
@@ -118,6 +121,17 @@ var _world_emits: Dictionary = {}        # peer_id -> Label
 
 var _last_viewport_size := Vector2i.ZERO
 var _is_portrait := false
+
+# Mobile-only compact strips above the hand bar — the Godot HUD never built
+# the browser's #archive-pile / #deck-pile / #perms widgets, so phones ran
+# without any pile counts or permanents readout. These two labels fill that
+# gap: one line of pile counts, one line of permanent codes.
+var _mobile_piles_lbl: Label = null
+var _mobile_perms_lbl: Label = null
+# How many pixels of extra bottom padding to add on Android so the hand bar
+# clears the system gesture/nav area. Measured on a Pixel-class phone — the
+# bar's lower edge was ~40 px below the usable rect without this lift.
+const MOBILE_SAFE_BOTTOM := 56.0
 
 
 func _ready() -> void:
@@ -337,6 +351,28 @@ func _ready() -> void:
 	_channel_lbl.visible = false
 	strip_hb.add_child(_channel_lbl)
 
+	# --- bottom-centre: compact pile + permanent strips (mobile only)
+	# These sit above the hand bar on phones. On desktop the roster + hover
+	# card already surface the same info, so we keep them hidden there.
+	_mobile_piles_lbl = _label("", 11, Color(0.85, 0.9, 0.95))
+	_mobile_piles_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_mobile_piles_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mobile_piles_lbl.custom_minimum_size = Vector2(560, 14)
+	_mobile_piles_lbl.visible = false
+	_mobile_piles_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mobile_piles_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_mobile_piles_lbl.add_theme_constant_override("outline_size", 3)
+	root.add_child(_mobile_piles_lbl)
+	_mobile_perms_lbl = _label("", 11, Color(0.95, 0.85, 0.5))
+	_mobile_perms_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_mobile_perms_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mobile_perms_lbl.custom_minimum_size = Vector2(560, 14)
+	_mobile_perms_lbl.visible = false
+	_mobile_perms_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mobile_perms_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_mobile_perms_lbl.add_theme_constant_override("outline_size", 3)
+	root.add_child(_mobile_perms_lbl)
+
 	# --- bottom-centre: mobile planning hint (hidden until Game sets text)
 	_mobile_hint = _label("", 11, Color(0.95, 0.85, 0.6))
 	_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -511,9 +547,11 @@ func _apply_layout() -> void:
 			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, minf(vp.y * 0.28, 180))
 		elif mobile:
 			# Landscape phone: a narrower log so there's room for the hex board.
+			# Cap at 30% height so the bigger mobile font doesn't push the log
+			# into the roster below it.
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 			_log_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, 8)
-			_log_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), minf(vp.y * 0.4, 220))
+			_log_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), minf(vp.y * 0.3, 180))
 		else:
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 			_log_panel.position = Vector2(-372, 12)
@@ -523,9 +561,9 @@ func _apply_layout() -> void:
 			_hover_panel.position = Vector2(-(vp.x * 0.5 + 4), 316)
 			_hover_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
 		elif mobile:
-			# Below the log panel.
+			# Below the log panel (new mobile log height 0.3*vp.y / 180).
 			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_hover_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, minf(vp.y * 0.4, 220) + 16)
+			_hover_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, minf(vp.y * 0.3, 180) + 16)
 			_hover_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), 0)
 		else:
 			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -571,16 +609,29 @@ func _apply_layout() -> void:
 		ln.add_theme_font_size_override("font_size", 9 if small else 11)
 	for ld in _slot_desc:
 		ld.add_theme_font_size_override("font_size", 8 if small else 10)
+	# On mobile the Android nav/gesture area at the bottom pushes the hand bar
+	# off-screen; add a safe-area lift so the whole bar + its indicators stay
+	# in the usable rect. 0 on desktop so nothing changes there.
+	var safe_bottom: float = MOBILE_SAFE_BOTTOM if (OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")) else 0.0
 	if _bar != null:
 		var bar_w := SLOT_SIZE.x * 5 + (SLOT_SIZE.x * 0.65) + SLOT_GAP * 5
-		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20))
+		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20) - safe_bottom)
 		# Backdrop follows the bar with ~8px padding so a transparent slot can
 		# never hide the hand entirely.
 		if _bar_bg != null:
 			var pad := 8.0
-			_bar_bg.position = Vector2(-bar_w * 0.5 - pad, -(SLOT_SIZE.y + 20) - pad)
+			_bar_bg.position = Vector2(-bar_w * 0.5 - pad, -(SLOT_SIZE.y + 20) - pad - safe_bottom)
 			_bar_bg.custom_minimum_size = Vector2(bar_w + pad * 2, SLOT_SIZE.y + pad * 2)
 			_bar_bg.size = _bar_bg.custom_minimum_size
+	# Mobile piles + perms strips stack right above the hand bar. Hidden on
+	# desktop (the roster/hover already carry the same info).
+	var _is_mobile_now := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if _mobile_piles_lbl != null:
+		_mobile_piles_lbl.visible = _is_mobile_now
+		_mobile_piles_lbl.position = Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 16)
+	if _mobile_perms_lbl != null:
+		_mobile_perms_lbl.visible = _is_mobile_now and _mobile_perms_lbl.text != ""
+		_mobile_perms_lbl.position = Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 30)
 	if _hint != null:
 		_hint.visible = not portrait and not mobile
 		if _hint.visible:
@@ -598,15 +649,22 @@ func _apply_layout() -> void:
 		_status_strip.position = Vector2(-strip_w * 0.5, strip_y)
 	if _mobile_hint != null:
 		_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		_mobile_hint.position = Vector2(-180, -(SLOT_SIZE.y + 20) - 24)
+		_mobile_hint.position = Vector2(-180, -(SLOT_SIZE.y + 20) - safe_bottom - 44)
 		var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
 		if not on_mobile:
 			_mobile_hint.visible = false
-	# Position the roster toggle just above the right end of the slot bar,
-	# visible only on mobile.
+	# Position the roster toggle above the slot bar. On mobile we also force
+	# the roster panel visible so the player always sees the unit list and
+	# can tap an entry to activate it (the toggle still lets them hide it).
 	if _roster_toggle != null:
 		_roster_toggle.visible = portrait or mobile
-		_roster_toggle.position = Vector2(-56, -(SLOT_SIZE.y + 20) - 56)
+		_roster_toggle.position = Vector2(-56, -(SLOT_SIZE.y + 20) - safe_bottom - 56)
+	if mobile and _roster_panel != null:
+		_roster_panel.visible = true
+	# Mobile log font bump — the 12-pt default is unreadable on a phone and
+	# collides visually with the roster. Keep desktop at 12.
+	if _log != null:
+		_log.add_theme_font_size_override("normal_font_size", 16 if (portrait or mobile) else 12)
 	# Defensive clamps — on narrow viewports the panels' negative x offsets
 	# can leave their final rect under 0 on the left edge. Enforce x >= 0
 	# (phase panel >= 8) so no panel spills off-screen.
@@ -746,6 +804,35 @@ func set_channel_label(text: String) -> void:
 		return
 	_channel_lbl.text = text
 	_channel_lbl.visible = true
+
+
+## Mobile piles indicator: compact "arch:A · deck:D (at-min) · disc:X" line.
+## Called from Game.gd whenever any pile count changes. Hidden on desktop
+## (handled by _apply_layout, so no feature check here).
+func set_mobile_piles(archive_n: int, deck_n: int, discard_n: int, at_min: bool) -> void:
+	if _mobile_piles_lbl == null:
+		return
+	var deck_frag := "deck:%d" % deck_n
+	if at_min:
+		deck_frag += " ⚠min"
+	_mobile_piles_lbl.text = "arch:%d · %s · disc:%d" % [archive_n, deck_frag, discard_n]
+
+
+## Mobile permanents indicator: compact "perms: codeA · codeB · ..." line.
+## Empty list hides the row. Codes come from the local player's permanents.
+func set_mobile_perms(codes: Array) -> void:
+	if _mobile_perms_lbl == null:
+		return
+	if codes == null or codes.is_empty():
+		_mobile_perms_lbl.text = ""
+		_mobile_perms_lbl.visible = false
+		return
+	var frags: Array = []
+	for c in codes:
+		frags.append(str(c))
+	_mobile_perms_lbl.text = "perms: " + " · ".join(frags)
+	var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	_mobile_perms_lbl.visible = on_mobile
 
 
 ## Mobile planning hint ("Tap a card, then tap a hex to move"). Empty text
@@ -1021,6 +1108,13 @@ func set_server_hand(payload: Dictionary) -> void:
 			_destroy_chip.text = ""
 
 
+## Read-only view of the last `hand` message. Game.gd reads this to push the
+## mobile piles indicator from the authoritative server state. Returns {} when
+## nothing has arrived yet (solo play without a connected peer).
+func server_hand() -> Dictionary:
+	return _server_hand
+
+
 ## Return the stat string of a currently-queued destroy intent, or "" when none
 ## is active. Game.gd uses this to toggle the intent off (sending the same stat
 ## again clears it, server-side at peer.mjs L4489).
@@ -1100,6 +1194,18 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 	row.add_theme_stylebox_override("panel", _box(
 		Color(0.1, 0.14, 0.08, 0.6) if e.faction == "player" else Color(0.18, 0.08, 0.08, 0.6)
 	))
+	# Tap-to-activate: a tap anywhere on the row fires entity_activated so
+	# Game.gd can swap the HUD portrait + camera focus to this unit. The
+	# nested perm cards' own gui_input (double-click → destroy intent) is
+	# still above us in the input stack so this never swallows those.
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	var _ent_id := e.id
+	row.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			entity_activated.emit(_ent_id)
+		elif ev is InputEventScreenTouch and (ev as InputEventScreenTouch).pressed:
+			entity_activated.emit(_ent_id)
+	)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 3)
 	row.add_child(vb)

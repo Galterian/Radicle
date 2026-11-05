@@ -153,6 +153,11 @@ fi
 if [ "${BEHIND_AFTER_N:-0}" -gt 0 ]; then
   echo
   echo "⚠ p2p didn't close the gap — $BEHIND_AFTER_N ref(s) still missing on OCI."
-  echo "  Common cause: fetch exceeds OCI's peer-timeout window on big packs."
-  echo "  Fallback:  bash game/tools/oci/push-to-oci.sh --rsync-only"
+  echo
+  echo "  Likely causes:"
+  echo "   (a) OCI has dangling refs that break pack delta resolution"
+  echo "       (gix 'Failed to consume the pack sent by the remote' in OCI's journal)."
+  echo "       Repair:  bash game/tools/out/_oci_repair_broken_refs.sh | ssh ubuntu@$OCI_HOST bash"
+  echo "   (b) The pack is too big to fit OCI's peer-timeout window."
+  echo "       Fallback: bash game/tools/oci/push-to-oci.sh --rsync-only"
 fi
