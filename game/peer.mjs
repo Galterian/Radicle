@@ -194,12 +194,10 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills'
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
-// Combos (user ruling 2026-11-05): a flat entries[] with sequence inline — no
-// versions{} wrapper, so pickActive() wouldn't apply.
-{
-  const f = await loadJson('combos.json').catch(() => ({ entries: [] }));
-  data.combos = Object.fromEntries((f.entries || []).map(e => [e.id, { id: e.id, name: e.name, sequence: e.sequence || [], desc: e.desc || '' }]));
-}
+// Combos (user ruling 2026-11-05): each character carries its own 3-slot
+// `combo` array directly in data/characters.json versions[].data.combo (see
+// char_oran_rief [M,B,P], char_pride_guardian [A,P,M], etc). `entity.combo`
+// is set from that in the character entity init below; no separate catalog.
 // elem_* → character stat key the element maps to (per elements.json data.stat).
 // Used by the effect-damage math to look up the right stat for Σ(me - enemy).
 // Golems and elementals (user spec): fixed stat blocks, summoned by their own
@@ -491,11 +489,12 @@ entity.lifeMaxBase = entity.lifeMax;   // before token / tile bonuses (general_u
 // summons never sleep. Characters are never monsters.
 entity.monsterState = (entity.kind === 'creature' && !IS_COMPANION && ALLIANCE !== 'player') ? 'sleeping' : null;
 // Combo tracker (user ruling 2026-11-05): a character can declare an active
-// combo via UI hotkey C; the resolver walks it one slot per revealed action
-// (M-slot: M/EM/EP/P all match). Wrong card resets. Three correct slots fires
-// a 1 dmg hit on an adjacent enemy (Rule 15) and resets. `combo_id` points to
-// data/combos.json; `slot` is the next-to-match index. Starts inert.
-entity.comboState = { active: false, combo_id: null, slot: 0 };
+// combo via UI hotkey C; the resolver walks `entity.combo` one slot per
+// revealed action (M-slot: M/EM/EP/P all match). Wrong card resets. Three
+// correct slots fires a 1 dmg hit on an adjacent enemy (Rule 15) and resets.
+// `slot` is the next-to-match index. Starts inert. Characters without a combo
+// published in their data entry can't arm.
+entity.comboState = { active: false, slot: 0 };
 const parseJsonArr = (s) => { try { const v = JSON.parse(s || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
 const permanentsCsv = () => [...entity.permanents].sort().join(',');
 // Effect-system state I am authoritative for (Rule 12 tokens, locks, round-
@@ -1217,8 +1216,8 @@ function currentStateSnapshot(slim = false) {
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     monster_state: entity.monsterState || null,
     combo_active: entity.comboState?.active ? 1 : 0,
-    combo_id: entity.comboState?.combo_id || '',
     combo_slot: entity.comboState?.slot || 0,
+    combo_seq_csv: Array.isArray(entity.combo) ? entity.combo.join(',') : '',
   };
   if (slim) return s;
   // Live clock + network hints so a joining peer can align its turn counter
@@ -3344,6 +3343,42 @@ async function doResolution() {
   const real = runRound(revealsThisTurn, false);
   const viewReal = viewSnap(), bonusDmgReal = bonusDmgToMe;
   const { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, bonusRuns, wardFired, trapsSpent, afflictionsOut, obstacleHits, channelsBroken, relocations, blessFired, classOutcomes, classAbilityOut } = real;
+  // Combo damage emission (user ruling 2026-11-05): for every actor whose
+  // pre-reveal snapshot shows an active combo on its FINAL slot AND whose
+  // revealed action matches the required slot code (M-slot accepts M/EM/EP/P),
+  // credit 1 dmg to one adjacent live enemy (Rule 15 — lowest peer_id among
+  // the nearest at hex-distance 1). The decision + victim pick are pure
+  // functions of (view snapshots, this round's reveals, data/combos.json),
+  // so every peer computes the same addition. Adds to the shared `damage`
+  // map before the state hash is computed below, so a divergent combo call
+  // would show up as a state_hash mismatch like any other damage.
+  for (const r of revealsThisTurn) {
+    const actor = view.get(r.actor);
+    if (!actor || !actor.combo_active) continue;
+    const seq = String(actor.combo_seq_csv || '').split(',').filter(Boolean);
+    if (!seq.length) continue;
+    const slot = actor.combo_slot | 0;
+    if (slot + 1 < seq.length) continue;   // not the completion action
+    const need = String(seq[slot] || '').toUpperCase();
+    const played = String(r.action || '').toUpperCase();
+    // User ruling 2026-11-05: EM/EP are the two faces of the Empty slot and
+    // substitute for either M or P. M and P never substitute for each other.
+    // A- and B-slots are strict (only their own card).
+    const matches = (need === played)
+      || (need === 'M' && (played === 'M' || played === 'EM' || played === 'EP'))
+      || (need === 'P' && (played === 'P' || played === 'EM' || played === 'EP'));
+    if (!matches) continue;
+    const here = { tile_q: actor.tile_q, tile_r: actor.tile_r };
+    const actorSide = sideOf(actor.alliance);
+    const victim = [...view.values()]
+      .filter(v => v && v.peer_id && v.peer_id !== r.actor && (v.life ?? 0) > 0 && Number.isInteger(v.tile_q) && sideOf(v.alliance) !== actorSide && hexDistance(here, v) === 1)
+      .sort((a, b) => a.peer_id.localeCompare(b.peer_id))[0];
+    if (!victim) continue;
+    const list = damage.get(victim.peer_id) || [];
+    list.push({ amount: 1, attacker: r.actor, source: `combo:${seq.join('')}` });
+    damage.set(victim.peer_id, list);
+    console.log(`[${PEER_LABEL}] combo ${seq.join('')} by ${r.actor.slice(0, 8)} — 1 dmg → ${victim.peer_id.slice(0, 8)}`);
+  }
   // Map surgery moved something of mine: the token / trap / obstacle takes its new tile.
   for (const rl of relocations) {
     // A world-generated feature: the mover records where it went (world_edits_json).
@@ -3855,36 +3890,31 @@ async function endRound() {
   _autosave?.markDirty();
   // Combo tracker (user ruling 2026-11-05): if I activated a combo and this
   // round's reveal was mine, advance / reset / fire. M-slot accepts M/EM/EP/P.
-  // Completion delivers 1 dmg to one adjacent live enemy (Rule 15 picks: lowest
-  // peer_id among the nearest). Reset in every terminal case.
+  // The 1 dmg to adjacent enemy on completion is applied inside doResolution()
+  // so it feeds the shared damage map + state hash; here we just advance the
+  // local counter so the next snapshot shows the right slot.
   if (entity.comboState?.active && myLastReveal) {
-    const combo = data.combos?.[entity.comboState.combo_id];
-    const seq = combo?.sequence || [];
-    if (!seq.length) { entity.comboState = { active: false, combo_id: null, slot: 0 }; }
+    const seq = Array.isArray(entity.combo) ? entity.combo : [];
+    if (!seq.length) { entity.comboState = { active: false, slot: 0 }; }
     else {
       const played = String(myLastReveal.action || '').toUpperCase();
       const slot = entity.comboState.slot | 0;
       const need = String(seq[slot] || '').toUpperCase();
-      const isMoveSlot = need === 'M';
-      const matches = (need === played) || (isMoveSlot && (played === 'M' || played === 'EM' || played === 'EP' || played === 'P'));
+      // User ruling 2026-11-05: EM/EP are the Empty slot's two faces and
+      // substitute for either M or P. M and P never substitute for each
+      // other. A- and B-slots are strict.
+      const matches = (need === played)
+        || (need === 'M' && (played === 'M' || played === 'EM' || played === 'EP'))
+        || (need === 'P' && (played === 'P' || played === 'EM' || played === 'EP'));
       if (!matches) {
-        console.log(`[${PEER_LABEL}] combo ${combo.name}: slot ${slot + 1} needed ${need}, got ${played} — reset`);
-        entity.comboState = { active: false, combo_id: null, slot: 0 };
+        console.log(`[${PEER_LABEL}] combo ${seq.join('')}: slot ${slot + 1} needed ${need}, got ${played} — reset`);
+        entity.comboState = { active: false, slot: 0 };
       } else if (slot + 1 >= seq.length) {
-        // TODO (combo-damage-emission): on completion we should apply 1 dmg to
-        // one adjacent live enemy picked by Rule 15. The right spot is inside
-        // doResolution (not endRound) so the hit lands in the same action's
-        // `damage` map and feeds the state hash — otherwise peers that don't
-        // know I had a combo would diverge. Scaffolding only for now: pick a
-        // victim deterministically and log; actual damage wiring in a next pass.
-        const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
-        const adj = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(here, p) === 1).sort((a, b) => a.peer_id.localeCompare(b.peer_id));
-        const victim = adj[0];
-        console.log(`[${PEER_LABEL}] combo ${combo.name} COMPLETE — would hit ${victim ? victim.peer_id : '(no adjacent enemy)'} for 1 dmg (emission TODO)`);
-        entity.comboState = { active: false, combo_id: null, slot: 0 };
+        console.log(`[${PEER_LABEL}] combo ${seq.join('')} COMPLETE`);
+        entity.comboState = { active: false, slot: 0 };
       } else {
-        console.log(`[${PEER_LABEL}] combo ${combo.name}: slot ${slot + 1}/${seq.length} ✓ (${played})`);
-        entity.comboState = { ...entity.comboState, slot: slot + 1 };
+        console.log(`[${PEER_LABEL}] combo ${seq.join('')}: slot ${slot + 1}/${seq.length} ✓ (${played})`);
+        entity.comboState = { active: true, slot: slot + 1 };
       }
     }
   }
@@ -4683,15 +4713,17 @@ wss.on('connection', (ws) => {
         broadcastUI(handMsg(notice ? { notice } : {}));
       }
       if (m.kind === 'combo') {
-        // UI hotkey C: toggles entity.comboState.active. If a combo_id is
-        // provided and we have the data entry, start a fresh slot=0 cycle;
-        // otherwise deactivate. endRound() does the per-reveal advance.
-        const id = String(m.combo_id || '');
-        if (id && data.combos?.[id]) {
-          entity.comboState = { active: true, combo_id: id, slot: 0 };
-          console.log(`[${PEER_LABEL}] combo armed: ${data.combos[id].name} — ${data.combos[id].sequence.join(' → ')}`);
+        // UI hotkey C: toggles entity.comboState.active. Only arms if this
+        // character has a combo published in data (characters.json carries a
+        // 3-element `combo` array per entry). endRound() does the per-reveal
+        // advance; doResolution() applies the completion damage so the hit
+        // participates in the shared state hash.
+        const seq = Array.isArray(entity.combo) ? entity.combo : [];
+        if (m.active && seq.length) {
+          entity.comboState = { active: true, slot: 0 };
+          console.log(`[${PEER_LABEL}] combo armed: ${seq.join(' → ')}`);
         } else {
-          entity.comboState = { active: false, combo_id: null, slot: 0 };
+          entity.comboState = { active: false, slot: 0 };
           console.log(`[${PEER_LABEL}] combo disarmed`);
         }
       }

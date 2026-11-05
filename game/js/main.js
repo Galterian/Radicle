@@ -853,6 +853,69 @@ function renderArchivePopup() {
   // default). The peer accepts the id regardless of kind now.
   list.querySelectorAll('.ac').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
 }
+// Combo marker (user ruling 2026-11-05): renders the 3 slot pips in the
+// deck-bar aside#combo-marker. Shows my character's `combo` sequence and
+// highlights slots done (combo_slot) when `combo_active`. Hidden when the
+// character has no combo published. Called from hand/peers WS handlers and
+// after a C-key arm/disarm.
+function renderComboMarker() {
+  const el = document.getElementById('combo-marker');
+  if (!el) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const seq = String(me?.combo_seq_csv || '').split(',').filter(Boolean);
+  if (!seq.length) { el.hidden = true; return; }
+  el.hidden = false;
+  const active = !!me?.combo_active;
+  const slot = Math.max(0, Math.min(seq.length, me?.combo_slot | 0));
+  el.classList.toggle('armed', active);
+  const label = el.querySelector('#cm-label');
+  if (label) label.textContent = seq.join('');
+  el.querySelectorAll('.cm-slot').forEach((pip, i) => {
+    pip.classList.toggle('done', active && i < slot);
+    pip.classList.toggle('pending', active && i === slot);
+    const span = pip.querySelector('.cm-code');
+    if (span) span.textContent = seq[i] || '';
+  });
+}
+
+// Auto-select the next hand card matching the current combo slot. Returns
+// true if it queued a card. M-slot accepts M/EM/EP/P (so the Empty slot is a
+// legal fallback when no M is in hand). Only fires in planning phase with
+// nothing already queued (so a human's intentional pick isn't clobbered).
+function comboAutoSelect() {
+  if (state.phase !== 'planning' || state.locked) return false;
+  if (state.queued.length) return false;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me?.combo_active) return false;
+  const seq = String(me.combo_seq_csv || '').split(',').filter(Boolean);
+  const slot = me.combo_slot | 0;
+  const need = String(seq[slot] || '').toUpperCase();
+  if (!need) return false;
+  // Soft slots can be filled by the Empty slot (user ruling 2026-11-05):
+  // EM/EP are the two faces of Empty and substitute for either M or P. M and
+  // P never substitute for each other. A- and B-slots are STRICT: only their
+  // own card counts.
+  const soft = need === 'M' ? ['M', 'EM', 'EP']
+             : need === 'P' ? ['P', 'EM', 'EP']
+             : null;
+  const codes = soft || [need];
+  for (const code of codes) {
+    const i = state.hand.findIndex(c => c?.code === code && c.kind === 'action');
+    if (i >= 0) { queueSlot(i); return true; }
+  }
+  // Soft slot: fall through to the Empty slot (plays as EP; the resolver
+  // reads it as EP, which both the M- and P-slot matcher accept).
+  if (soft) { queueSlot('EMPTY'); return true; }
+  // Strict slot (A/B) with no card in hand — combo fails and disarms, so the
+  // marker goes dark instead of wasting the player's next action chasing a
+  // reset. User ruling 2026-11-05: A/B must be in hand when they come up.
+  send({ kind: 'combo', active: false });
+  me.combo_active = 0; me.combo_slot = 0;
+  logUI(`combo failed: no ${need} in hand for slot ${slot + 1}`, 'phase');
+  renderComboMarker();
+  return false;
+}
+
 function openArchive(open) {
   const el = document.getElementById('archive-popup');
   if (!el) return;
@@ -1964,6 +2027,7 @@ function connect() {
         if (state.phase === 'planning' || state.phase === 'connecting…' || state.phase === 'linked to peer') {
           autoselectFirstHandCard();
         }
+        renderComboMarker();
       }
       if (m.kind === 'map') applyMap(m.map);
       if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat, m);
@@ -2012,6 +2076,11 @@ function connect() {
         }
         if (state.queuedEffect === null) { state.blessMode = false; }
         renderPerms(); renderRoster();
+        // Combo marker + auto-pick (user ruling 2026-11-05): after the hand
+        // settles, redraw the slot pips and, if the combo is armed with no
+        // card queued, auto-queue a matching card for the current slot.
+        renderComboMarker();
+        comboAutoSelect();
       }
       // Vision / Super Sense: a popup with what was seen (a tile, an enemy's hand).
       if (m.kind === 'peek') showPeek(m.text || (m.what === 'hand' ? `${m.of_name}: ${(m.cards || []).map(c => c.name).join(', ')}` : `tile (${m.q},${m.r})`), m.cards || null);
@@ -2023,6 +2092,7 @@ function connect() {
         // The peer prunes stale members and flags the broadcast; mirror the
         // removal so ghosts from dead processes leave the roster and map.
         if (m.dropped) { const keep = new Set((m.peers || []).map(p => p.peer_id)); state.entities = state.entities.filter(e => keep.has(e.peer_id)); }
+        renderComboMarker();
       }
       if (m.kind === 'evt') {
         const env = m.env;
@@ -2543,13 +2613,35 @@ function wireInput() {
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
     else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
     else if (ev.key === 'c' || ev.key === 'C') {
-      // Combo hotkey (user ruling 2026-11-05): toggle this hero's active combo.
-      // Falls back to recentre when no combo is published for the character —
-      // the resolver only advances a slot if a combo is actually armed.
+      // Combo hotkey (user ruling 2026-11-05): toggle my combo. Requires a
+      // sequence published on my character entry (characters.json `combo`);
+      // without one, falls through to recentre so the key stays useful.
+      // Once armed, the combo stays active across rounds — each new hand
+      // triggers comboAutoSelect() to pick the next slot's card. The marker
+      // only disarms on explicit toggle, mismatch, completion, or a strict
+      // slot (A/B) with no card in hand.
       const me = state.entities.find(p => p.peer_id === state.myPeerId);
-      const comboId = me?.combo_id || (Array.isArray(me?.combo) && me.combo.length ? 'combo_map' : null) || 'combo_map';
-      if (state.comboActive) { send({ kind: 'combo', combo_id: '' }); state.comboActive = false; logUI('combo disarmed', 'phase'); }
-      else                   { send({ kind: 'combo', combo_id: comboId }); state.comboActive = true; logUI(`combo armed: ${comboId}`, 'phase'); }
+      const seq = String(me?.combo_seq_csv || '').split(',').filter(Boolean);
+      if (!seq.length) { renderer.recentre(); return; }
+      const want = !me?.combo_active;
+      if (want) {
+        // Pre-flight: every strict slot (A/B) in the sequence must have a
+        // matching card in hand right now. Soft slots (M/P) are always
+        // fillable because the Empty slot plays as EP, which both accept.
+        // User ruling 2026-11-05: if the hand can't finish the combo, don't
+        // start it — e.g. PAB with only B in hand is a non-starter.
+        const missing = new Set();
+        for (const code of seq) {
+          if ((code === 'A' || code === 'B') && !state.hand.some(c => c?.code === code && c.kind === 'action')) missing.add(code);
+        }
+        if (missing.size) { logUI(`combo blocked: hand lacks ${[...missing].join(', ')} for ${seq.join(' → ')}`, 'phase'); return; }
+      }
+      send({ kind: 'combo', active: want });
+      if (me) me.combo_active = want ? 1 : 0;   // optimistic — the next snapshot confirms
+      if (me) me.combo_slot = 0;
+      logUI(want ? `combo armed: ${seq.join(' → ')}` : 'combo disarmed', 'phase');
+      renderComboMarker();
+      if (want) comboAutoSelect();
     }
     else if (ev.key === 'r' || ev.key === 'R') renderer.recentre();
     else if (ev.key === 'm' || ev.key === 'M') {

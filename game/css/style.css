@@ -293,6 +293,18 @@ main {
   color: #8aa0bf;
 }
 
+/* Combo marker: sits between the Empty slot and the deck/discard piles. Shows
+   the active combo's name and three slot pips that fill as it advances. */
+#combo-marker { display: flex; flex-direction: column; gap: 2px; margin: 0 6px 2px 0; padding: 4px 6px; border: 1px solid #2f3f55; border-radius: 6px; background: linear-gradient(180deg, #1b2431 0%, #0f1520 100%); color: #c8d4e3; min-width: 72px; }
+#combo-marker.armed { outline: 1px solid #ffe66e; }
+#combo-marker .cm-name { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8aa0bf; display: flex; gap: 4px; align-items: baseline; }
+#combo-marker .cm-name #cm-key { font: 700 10px/1 ui-monospace, Menlo, Consolas, monospace; color: #ffe66e; padding: 1px 3px; border: 1px solid #4a5c7a; border-radius: 3px; }
+#combo-marker .cm-name #cm-label { color: #c8d4e3; }
+#combo-marker .cm-slots { display: flex; gap: 4px; justify-content: center; }
+#combo-marker .cm-slot { width: 18px; height: 22px; border: 1px solid #2f3f55; border-radius: 3px; display: flex; align-items: center; justify-content: center; font: 600 11px/1 ui-monospace, Menlo, Consolas, monospace; color: #4a5368; }
+#combo-marker .cm-slot.pending { color: #c8d4e3; }
+#combo-marker .cm-slot.done { background: #35553a; border-color: #58b25c; color: #c7f1cb; }
+
 /* The archive: my side deck, far left of the hand. */
 #archive-pile { display: flex; margin-right: 10px; margin-bottom: 2px; }
 #archive-pile .pile {
