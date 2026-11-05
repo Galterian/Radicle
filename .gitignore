@@ -52,3 +52,7 @@ photo_2026-11-03_15-38-28_phone_dead.jpg
 # Built APK — 44 MB, auto-uploaded to OCI by _tools/build_and_deploy.sh --release
 _tools/chaosd6-release.apk
 _tools/chaosd6-release.apk.idsig
+_tools/.emu-logs/adb-proxy.log
+_tools/.emu-logs/adb-server.log
+_tools/.emu-logs/emulator.log
+_tools/.emu-logs/ws-scrcpy.log

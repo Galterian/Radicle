@@ -34,7 +34,7 @@ export const ACTION_HELP = {
     name: 'Attack',
     icon: '⚔',
     card: '⚔ 1 dmg to adjacent target · vs 🤺/EP: 2 · vs 🛡: 0 & take 1 back',
-    full: 'Attack — hits your adjacent target for 1 damage. vs Posture or Empty Posture: 2 damage. vs Block: 0 damage and the blocker deals 1 back to you. vs Attack / Move / Empty Move: 1 damage. Aimed at an empty hex instead: step 1 hex (no damage; wins a contested hex over Move and Empty Move). Cycle: A > P > M > B > A.',
+    full: 'Attack — hits your adjacent target for 1 damage. vs Posture or Empty Posture: 1 damage. vs Block: 0 damage and the blocker deals 1 back to you. vs Attack / Move / Empty Move: 1 damage. Aimed at an empty hex instead: step 1 hex (no damage; wins a contested hex over Move and Empty Move). Cycle: A > P > M > B > A.',
   },
   B: {
     name: 'Block',
@@ -64,7 +64,7 @@ export const ACTION_HELP = {
     name: 'Empty Posture',
     icon: '🤺',
     card: '🤺 Do nothing · ⚔ reads it as Posture: take 2 · keeps Sanctuary',
-    full: 'Empty Posture — play no action. An attacker reads it as Posture (Rule 6): vs Attack you take 2. Posture and Move skills may still ride on it. Resting in Sanctuary keeps you invincible only while you stay in Empty Posture.',
+    full: 'Empty Posture — play no action. An attacker reads it as Posture (Rule 6): vs Attack you take 1. Posture and Move skills may still ride on it. Resting in Sanctuary keeps you invincible only while you stay in Empty Posture.',
   },
   BT: {
     name: 'Battle Trance',

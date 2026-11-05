@@ -28,8 +28,28 @@ done
 
 SRC="$RAD_HOME/storage/$RID_DIR"
 
-# ---- collect dev-PC refs (nid sha name) ---------------------------------
+# ---- collect dev-PC refs (nid sha name) via local Radicle HTTP API -------
+# IMPORTANT: compares SIGNED refs (what Radicle will actually announce), not
+# raw packed-refs. Raw refs can drift from signed state (e.g. a swarm tool
+# wrote with git update-ref directly) and show as false-positive diffs.
+# Falls back to packed-refs scan if the local httpd isn't running.
 local_refs() {
+  # Try local radicle-httpd first (same signed view OCI will see)
+  local resp
+  resp=$(curl -sS -m 4 "http://localhost:8080/api/v1/repos/$RID/remotes" 2>/dev/null)
+  if [ -n "$resp" ] && printf '%s' "$resp" | python3 -c 'import json,sys;sys.exit(0 if isinstance(json.load(sys.stdin),list) else 1)' 2>/dev/null; then
+    printf '%s' "$resp" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+for r in d:
+    nid=r.get("id","")
+    heads=r.get("heads") or {}
+    for name,sha in heads.items():
+        print(nid+" "+sha+" heads/"+name)
+'
+    return
+  fi
+  # Fallback: raw packed-refs (shows drift as diff; may false-positive)
   if [ -f "$SRC/packed-refs" ]; then
     grep -oE "^[0-9a-f]{40} refs/namespaces/[^/]+/refs/heads/[^ ]+" "$SRC/packed-refs" \
       | awk '{
@@ -38,14 +58,6 @@ local_refs() {
           sub(/^refs\/namespaces\/[^\/]+\/refs\/heads\//,"",$2);
           print nid" "$1" heads/"$2
         }'
-  fi
-  if [ -d "$SRC/refs/namespaces" ]; then
-    find "$SRC/refs/namespaces" -type f -path '*/refs/heads/*' 2>/dev/null | while read f; do
-      nid=$(echo "$f" | sed -E 's|.*/namespaces/([^/]+)/refs/heads/.*|\1|')
-      br=$(echo "$f" | sed -E 's|.*/refs/heads/||')
-      sha=$(cat "$f" 2>/dev/null)
-      [ -n "$sha" ] && echo "$nid $sha heads/$br"
-    done
   fi
 }
 
