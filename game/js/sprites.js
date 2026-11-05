@@ -59,7 +59,7 @@ export function loadResources() {
     const one = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
     // Skills and effects carry `resources` too (effect strip + fx sounds), so a
     // revealed skill id resolves through the same resourcesFor() lookup.
-    resourcesLoading = Promise.all([one('/data/characters.json'), one('/data/creatures.json'), one('/data/skills.json'), one('/data/effects.json')]).then(docs => {
+    resourcesLoading = Promise.all([one('/data/characters.json'), one('/data/creatures.json'), one('/data/creatures_builtin.json'), one('/data/skills.json'), one('/data/effects.json')]).then(docs => {
       for (const doc of docs) {
         const entries = Array.isArray(doc) ? doc : (doc?.entries || []);
         for (const e of entries) {

@@ -2240,15 +2240,27 @@ function mergeEntities(incoming) {
   const byId = new Map(state.entities.map(e => [e.peer_id, e]));
   // Remember who was on which tile before the merge so we can detect every
   // unit that just stepped onto a new hex and consume any building there.
+  // Also remember prior life so a spawn (first appearance) and a death
+  // (life crossing to 0) can play their resource sounds.
   const prev = new Map();
-  for (const e of state.entities) prev.set(e.peer_id, { q: e.tile_q, r: e.tile_r });
+  for (const e of state.entities) prev.set(e.peer_id, { q: e.tile_q, r: e.tile_r, life: e.life, present: true });
   for (const p of incoming) {
     if (!p || !p.peer_id) continue;
     byId.set(p.peer_id, { ...(byId.get(p.peer_id) || {}), ...p });
   }
   state.entities = [...byId.values()];
+  // Suppress spawn sounds during the first cold-sync window of a (re)connect —
+  // otherwise every pre-existing unit would ring on reload.
+  const coldSync = (state.ui.coldSyncUntil || 0) > performance.now();
   for (const e of state.entities) {
     const was = prev.get(e.peer_id);
+    if (!was && !coldSync) {
+      const r = resOf(e);
+      if (r?.sounds?.spawn) sounds.play(r, 'spawn', { volume: 0.5 });
+    } else if (was && was.life > 0 && (e.life ?? 0) <= 0) {
+      const r = resOf(e);
+      if (r?.sounds?.death) sounds.play(r, 'death', { volume: 0.55 });
+    }
     if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
     if (was && was.q === e.tile_q && was.r === e.tile_r) continue;
     maybeConsumeFeature(e);

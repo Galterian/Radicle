@@ -100,12 +100,23 @@ func _build_nodes() -> void:
 	_sprites.centered = true
 	_sprites.animation_finished.connect(_on_anim_finished)
 	# WBC3 player-colour ramp (pure green in the extracted sheets) -> faction tint via shader.
-	var shader: Shader = load("res://shaders/team_recolor.gdshader")
-	if shader != null:
-		var mat := ShaderMaterial.new()
-		mat.shader = shader
-		mat.set_shader_parameter("team_color", team_color())
-		_sprites.material = mat
+	# Mobile GL compat sometimes mis-handles the `varying vec4 modulate` in this
+	# shader, which renders as per-frame flicker on every unit. Skip the material
+	# on mobile — sprites fall back to the WBC3 default green but stay stable.
+	var is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not is_mobile:
+		var shader: Shader = load("res://shaders/team_recolor.gdshader")
+		if shader != null:
+			var mat := ShaderMaterial.new()
+			mat.shader = shader
+			mat.set_shader_parameter("team_color", team_color())
+			_sprites.material = mat
+	# On mobile, tint via modulate instead so player/NPC are still distinguishable.
+	# modulate multiplies the texture; dark team colours would dim everything so
+	# we blend toward white (0.6 team + 0.4 white) to keep sprites readable.
+	elif faction != "":
+		var tc := team_color()
+		_sprites.modulate = Color(tc.r * 0.6 + 0.4, tc.g * 0.6 + 0.4, tc.b * 0.6 + 0.4, 1.0)
 	add_child(_sprites)
 	# Target on-screen height ≈ 1.6 hex so big WBC3 sheets (giants, dragons) don't swamp the map.
 	var g := SheetAnimator.grid_for(_sheets.get("idle", _sheets.get("walk", "")))
@@ -304,9 +315,12 @@ func take_damage(n: int) -> void:
 
 
 func _flash() -> void:
+	# On mobile the sprite modulate carries the faction tint (shader disabled),
+	# so tween back to that colour, not pure WHITE, or every hit removes the tint.
+	var base: Color = _sprites.modulate if _sprites.modulate != Color(1.6, 0.7, 0.7) else Color.WHITE
 	var t := create_tween()
 	_sprites.modulate = Color(1.6, 0.7, 0.7)
-	t.tween_property(_sprites, "modulate", Color.WHITE, 0.35)
+	t.tween_property(_sprites, "modulate", base, 0.35)
 
 
 # ------------------------------------------------------------------ sound

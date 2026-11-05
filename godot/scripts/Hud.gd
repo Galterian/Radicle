@@ -477,8 +477,38 @@ func _ready() -> void:
 
 	# Reflow when the window resizes OR the device rotates. Called once here
 	# to apply the initial layout for whatever orientation we start in.
+	# Android caveat: get_viewport().size_changed fires on surface recreate
+	# (alt-tab, orientation flip) but NOT at first-boot — the viewport is
+	# still (1,1) or stale when _ready runs, so the initial _apply_layout
+	# positions every panel off-screen. We poll in _process until the viewport
+	# stabilises; after that `size_changed` handles subsequent flips.
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_apply_layout()
+	set_process(true)
+
+
+var _layout_poll_t := 0.0
+var _layout_poll_done := false
+
+## Android: `size_changed` doesn't fire at first-boot. Poll the viewport for
+## the first ~4 seconds and re-apply the layout whenever the size differs
+## from the one we last laid out against. Once we hit a stable non-stub
+## viewport we stop polling (set_process(false)).
+func _process(dt: float) -> void:
+	if _layout_poll_done:
+		return
+	_layout_poll_t += dt
+	var sz := get_viewport().get_visible_rect().size
+	var sz_i := Vector2i(sz)
+	if sz_i != _last_viewport_size and sz.x > 32 and sz.y > 32:
+		_last_viewport_size = sz_i
+		_apply_layout()
+	# Stop polling once we have a sensible viewport AND four seconds have
+	# elapsed — covers slow Android surface warm-up without burning CPU
+	# forever. If a rotation happens later, size_changed catches it.
+	if _layout_poll_t > 4.0 and sz.x > 32 and sz.y > 32:
+		_layout_poll_done = true
+		set_process(false)
 
 
 func _toggle_roster() -> void:

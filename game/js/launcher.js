@@ -196,7 +196,7 @@ async function renderLauncher() {
     fetch('/data/characters.json').then(r => r.json()),
     fetch('/data/creatures.json').then(r => r.json()),
     fetch('/api/network').then(r => r.json()).catch(() => ({ candidates: [{ address: '127.0.0.1', kind: 'loopback', iface: 'lo' }], default: '127.0.0.1' })),
-    fetch('/dimensions/local').then(r => r.json()).catch(() => ({ ok: false, items: [] })),
+    fetch('/api/dimensions/local').then(r => r.json()).catch(() => ({ ok: false, items: [] })),
   ]);
 
   const hostIp = document.getElementById('host-ip');

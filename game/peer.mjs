@@ -199,17 +199,62 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills'
 // Golems and elementals (user spec): fixed stat blocks, summoned by their own
 // effects. They live in the creature table like any monster (so a companion
 // process can be one), but Summoning's random library skips them.
+// Each creature carries a WBC3-asset sprite/sound block so the renderer can
+// draw real art for golems/elementals instead of a glyph. Golems: Dark Dwarves
+// (Iron / Bronze / Stone). Elementals: Temples (Air / Water / Earth). The
+// mapping is thematic, not strict — Bronze doubles up because there are 4
+// built-in golems but only 3 Golem sprite units. Sprite paths are relative
+// to assets/ (served under /assets/* by ui-server). Sounds are WAV filenames
+// under assets/Sounds/.
+const CREATURE_ASSETS = {
+  Stone:  { sprite: { idle: 'Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - idle [AAIX].png',
+                      walk: 'Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - walk [AAIXw].png',
+                      attack: 'Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - attack [AAIXa].png',
+                      death: 'Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - death [AAIXd].png',
+                      info:  'Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - info [AAIXi].png' },
+            sound: { spawn: 'Sounds/SoundFX/Build.wav', attack: 'Sounds/SoundFX/Attack10.wav', death: 'Sounds/SoundFX/Assassination.wav' } },
+  Bronze: { sprite: { idle: 'Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - idle [AAGX].png',
+                      walk: 'Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - walk [AAGXw].png',
+                      attack: 'Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - attack [AAGXa].png',
+                      death: 'Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - death [AAGXd].png',
+                      info:  'Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - info [AAGXi].png' },
+            sound: { spawn: 'Sounds/SoundFX/Splash.wav', attack: 'Sounds/SoundFX/Attack10.wav', death: 'Sounds/SoundFX/Assassination.wav' } },
+  Iron:   { sprite: { idle: 'Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - idle [AAJX].png',
+                      walk: 'Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - walk [AAJXw].png',
+                      attack: 'Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - attack [AAJXa].png',
+                      death: 'Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - death [AAJXd].png',
+                      info:  'Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - info [AAJXi].png' },
+            sound: { spawn: 'Sounds/SoundFX/LongWhoosh.wav', attack: 'Sounds/SoundFX/Attack10.wav', death: 'Sounds/SoundFX/Assassination.wav' } },
+  Air:    { sprite: { idle: 'Sprites/Units/Temples/Air Elemental/Air Elemental - idle [AAEA].png',
+                      walk: 'Sprites/Units/Temples/Air Elemental/Air Elemental - walk [AAEAw].png',
+                      attack: 'Sprites/Units/Temples/Air Elemental/Air Elemental - attack [AAEAa].png',
+                      death: 'Sprites/Units/Temples/Air Elemental/Air Elemental - death [AAEAd].png',
+                      info:  'Sprites/Units/Temples/Air Elemental/Air Elemental - info [AAEAi].png' },
+            sound: { spawn: 'Sounds/SoundFX/LongWhoosh.wav', attack: 'Sounds/SoundFX/Attack10.wav', death: 'Sounds/SoundFX/Assassination.wav' } },
+  Water:  { sprite: { idle: 'Sprites/Units/Temples/Water Elemental/Water Elemental - idle [AAEW].png',
+                      walk: 'Sprites/Units/Temples/Water Elemental/Water Elemental - walk [AAEWw].png',
+                      death: 'Sprites/Units/Temples/Water Elemental/Water Elemental - death [AAEWd].png',
+                      info:  'Sprites/Units/Temples/Water Elemental/Water Elemental - info [AAEWi].png' },
+            sound: { spawn: 'Sounds/SoundFX/Splash.wav', attack: 'Sounds/SoundFX/Attack10.wav', death: 'Sounds/SoundFX/Assassination.wav' } },
+  Earth:  { sprite: { idle: 'Sprites/Units/Temples/Earth Elemental/Earth Elemental - idle [AAEE].png',
+                      walk: 'Sprites/Units/Temples/Earth Elemental/Earth Elemental - walk [AAEEw].png',
+                      attack: 'Sprites/Units/Temples/Earth Elemental/Earth Elemental - attack [AAEEa].png',
+                      death: 'Sprites/Units/Temples/Earth Elemental/Earth Elemental - death [AAEEd].png',
+                      info:  'Sprites/Units/Temples/Earth Elemental/Earth Elemental - info [AAEEi].png' },
+            sound: { spawn: 'Sounds/SoundFX/Build.wav', attack: 'Sounds/SoundFX/Attack10.wav', death: 'Sounds/SoundFX/Assassination.wav' } },
+};
 const BUILT_IN_CREATURES = {
-  mon_golem_worldlives:   { name: 'WorldLives Golem',   stats: { vitality: 10, world: 9,  matter: 5,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
-  mon_golem_lifematters:  { name: 'LifeMatters Golem',  stats: { vitality: 10, world: 5,  matter: 9,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
-  mon_golem_worldmatters: { name: 'WorldMatters Golem', stats: { vitality: 5,  world: 10, matter: 9,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
-  mon_golem_living:       { name: 'Living Golem',       stats: { vitality: 20, world: 2,  matter: 2,  will: 0 }, life: 2, actions: 2, kind: 'golem' },
-  mon_elemental_world:    { name: 'World Elemental',    stats: { vitality: 5,  world: 20, matter: 5,  will: 0 }, life: 3, actions: 1, kind: 'elemental' },
-  mon_elemental_vital:    { name: 'Vital Elemental',    stats: { vitality: 20, world: 5,  matter: 5,  will: 0 }, life: 3, actions: 1, kind: 'elemental' },
-  mon_elemental_matter:   { name: 'Matter Elemental',   stats: { vitality: 5,  world: 5,  matter: 20, will: 0 }, life: 3, actions: 1, kind: 'elemental' },
+  mon_golem_worldlives:   { name: 'WorldLives Golem',   stats: { vitality: 10, world: 9,  matter: 5,  will: 0 }, life: 2, actions: 2, kind: 'golem',     assetKey: 'Bronze' },
+  mon_golem_lifematters:  { name: 'LifeMatters Golem',  stats: { vitality: 10, world: 5,  matter: 9,  will: 0 }, life: 2, actions: 2, kind: 'golem',     assetKey: 'Bronze' },
+  mon_golem_worldmatters: { name: 'WorldMatters Golem', stats: { vitality: 5,  world: 10, matter: 9,  will: 0 }, life: 2, actions: 2, kind: 'golem',     assetKey: 'Iron'   },
+  mon_golem_living:       { name: 'Living Golem',       stats: { vitality: 20, world: 2,  matter: 2,  will: 0 }, life: 2, actions: 2, kind: 'golem',     assetKey: 'Stone'  },
+  mon_elemental_world:    { name: 'World Elemental',    stats: { vitality: 5,  world: 20, matter: 5,  will: 0 }, life: 3, actions: 1, kind: 'elemental', assetKey: 'Air'    },
+  mon_elemental_vital:    { name: 'Vital Elemental',    stats: { vitality: 20, world: 5,  matter: 5,  will: 0 }, life: 3, actions: 1, kind: 'elemental', assetKey: 'Water'  },
+  mon_elemental_matter:   { name: 'Matter Elemental',   stats: { vitality: 5,  world: 5,  matter: 20, will: 0 }, life: 3, actions: 1, kind: 'elemental', assetKey: 'Earth'  },
 };
 for (const [id, b] of Object.entries(BUILT_IN_CREATURES)) {
-  data.creatures[id] = { id, name: b.name, tags: ['summon_only', b.kind], data: { stats: { ...b.stats }, life: b.life, actions_per_round: b.actions, dice_pattern: null, innate_effect: null, innate_effect_text: '', on_action_rider: null, built_in: b.kind } };
+  const resources = CREATURE_ASSETS[b.assetKey] ? { sprites: CREATURE_ASSETS[b.assetKey].sprite, sounds: CREATURE_ASSETS[b.assetKey].sound } : null;
+  data.creatures[id] = { id, name: b.name, tags: ['summon_only', b.kind], data: { stats: { ...b.stats }, life: b.life, actions_per_round: b.actions, dice_pattern: null, innate_effect: null, innate_effect_text: '', on_action_rider: null, built_in: b.kind, resources } };
 }
 const ELEM_TO_STAT = {};
 for (const [id, e] of Object.entries(data.elements)) ELEM_TO_STAT[id] = (e.data?.stat || '').replace(/^stat_/, '');
@@ -2315,12 +2360,13 @@ async function doResolution() {
   // Attack sees EP as Posture, a Posture sees EP and EM as Move, a Block sees
   // EM as Move. So A→P 2, A→B 0, P→M/EM/EP 1, M→B 1, B→A 1, everything else 0.
   const mapDef = (atk, def) => def === 'EP' ? ({ A: 'P', P: 'M', M: 'EP', B: 'EP' }[atk] || def) : def === 'EM' ? ({ A: 'EM', P: 'M', M: 'EM', B: 'M' }[atk] || def) : def;
-  // Attack vs an Empty action deals its base 1 only — the Empty's "takes 1"
-  // ruling (data edge note at battle_system_core.resolution_matrix.edges[A,EP]
-  // and the empty_resolution_rule text). Without this clamp the mapDef remap
-  // of 'EP' → 'P' would feed edgeMap['A']['P']=1 back in and double it to 2.
+  // User ruling 2026-11-05: Attack deals base 1 against every non-Block action
+  // — Posture, Empty Posture, Empty Move, Move, Attack all take 1. (Was 2 vs
+  // P/EP under paper rules.) Block remains 0 + 1 back. The cycle A>P>M>B>A
+  // still holds for every edge *except* the Attack→Posture one which now
+  // flattens; Posture still outputs its own emission damage.
   const edgeDmg = (atk, def) => {
-    if (atk === 'A' && (def === 'EP' || def === 'EM')) return 1;
+    if (atk === 'A' && (def === 'EP' || def === 'EM' || def === 'P')) return 1;
     return Math.max(0, (atk === 'A' ? 1 : 0) + (edgeMap[atk]?.[mapDef(atk, def)] ?? 0));
   };
   const hitDmg = (def) => edgeDmg('A', def);
