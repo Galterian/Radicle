@@ -6520,7 +6520,7 @@
     "effects:effect_turn_life:sprites.effect"
    ]
   },
-  "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png": {
+  "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png": {
    "bytes": 150535,
    "used_by": [
     "actions:action_enter_dimension:sprites.effect",

@@ -194,6 +194,12 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills'
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
+// Combos (user ruling 2026-11-05): a flat entries[] with sequence inline — no
+// versions{} wrapper, so pickActive() wouldn't apply.
+{
+  const f = await loadJson('combos.json').catch(() => ({ entries: [] }));
+  data.combos = Object.fromEntries((f.entries || []).map(e => [e.id, { id: e.id, name: e.name, sequence: e.sequence || [], desc: e.desc || '' }]));
+}
 // elem_* → character stat key the element maps to (per elements.json data.stat).
 // Used by the effect-damage math to look up the right stat for Σ(me - enemy).
 // Golems and elementals (user spec): fixed stat blocks, summoned by their own
@@ -479,6 +485,17 @@ if (CHARACTER_ID) {
   };
 }
 entity.lifeMaxBase = entity.lifeMax;   // before token / tile bonuses (general_ux_hitpoints_calculations)
+// Wild monster: a creature that isn't a companion and plays on the enemy side
+// of the player. Spawns `sleeping` (does nothing) and flips to `awake` once any
+// player sits within 2 hexes of us (user ruling 2026-11-05). Companions and
+// summons never sleep. Characters are never monsters.
+entity.monsterState = (entity.kind === 'creature' && !IS_COMPANION && ALLIANCE !== 'player') ? 'sleeping' : null;
+// Combo tracker (user ruling 2026-11-05): a character can declare an active
+// combo via UI hotkey C; the resolver walks it one slot per revealed action
+// (M-slot: M/EM/EP/P all match). Wrong card resets. Three correct slots fires
+// a 1 dmg hit on an adjacent enemy (Rule 15) and resets. `combo_id` points to
+// data/combos.json; `slot` is the next-to-match index. Starts inert.
+entity.comboState = { active: false, combo_id: null, slot: 0 };
 const parseJsonArr = (s) => { try { const v = JSON.parse(s || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
 const permanentsCsv = () => [...entity.permanents].sort().join(',');
 // Effect-system state I am authoritative for (Rule 12 tokens, locks, round-
@@ -1198,6 +1215,10 @@ function currentStateSnapshot(slim = false) {
     class_id: entity.classId || null, class_down_csv: (entity.classDown || []).join(','), class_archived: entity.classArchived ? 1 : 0, class_tapped: entity.classTapped ? 1 : 0,
     class_progress_json: classProgressJson(), class_used_turn: entity.classUsedTurn ?? -1, armor: entity.armor || 0,
     world_edits_json: JSON.stringify(entity.worldEdits || []),
+    monster_state: entity.monsterState || null,
+    combo_active: entity.comboState?.active ? 1 : 0,
+    combo_id: entity.comboState?.combo_id || '',
+    combo_slot: entity.comboState?.slot || 0,
   };
   if (slim) return s;
   // Live clock + network hints so a joining peer can align its turn counter
@@ -3832,6 +3853,41 @@ async function endRound() {
   // rolls to disk. The resolver's push / filter sites above also mark dirty
   // for the specific mutation, so this call is a safety net.
   _autosave?.markDirty();
+  // Combo tracker (user ruling 2026-11-05): if I activated a combo and this
+  // round's reveal was mine, advance / reset / fire. M-slot accepts M/EM/EP/P.
+  // Completion delivers 1 dmg to one adjacent live enemy (Rule 15 picks: lowest
+  // peer_id among the nearest). Reset in every terminal case.
+  if (entity.comboState?.active && myLastReveal) {
+    const combo = data.combos?.[entity.comboState.combo_id];
+    const seq = combo?.sequence || [];
+    if (!seq.length) { entity.comboState = { active: false, combo_id: null, slot: 0 }; }
+    else {
+      const played = String(myLastReveal.action || '').toUpperCase();
+      const slot = entity.comboState.slot | 0;
+      const need = String(seq[slot] || '').toUpperCase();
+      const isMoveSlot = need === 'M';
+      const matches = (need === played) || (isMoveSlot && (played === 'M' || played === 'EM' || played === 'EP' || played === 'P'));
+      if (!matches) {
+        console.log(`[${PEER_LABEL}] combo ${combo.name}: slot ${slot + 1} needed ${need}, got ${played} — reset`);
+        entity.comboState = { active: false, combo_id: null, slot: 0 };
+      } else if (slot + 1 >= seq.length) {
+        // TODO (combo-damage-emission): on completion we should apply 1 dmg to
+        // one adjacent live enemy picked by Rule 15. The right spot is inside
+        // doResolution (not endRound) so the hit lands in the same action's
+        // `damage` map and feeds the state hash — otherwise peers that don't
+        // know I had a combo would diverge. Scaffolding only for now: pick a
+        // victim deterministically and log; actual damage wiring in a next pass.
+        const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+        const adj = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(here, p) === 1).sort((a, b) => a.peer_id.localeCompare(b.peer_id));
+        const victim = adj[0];
+        console.log(`[${PEER_LABEL}] combo ${combo.name} COMPLETE — would hit ${victim ? victim.peer_id : '(no adjacent enemy)'} for 1 dmg (emission TODO)`);
+        entity.comboState = { active: false, combo_id: null, slot: 0 };
+      } else {
+        console.log(`[${PEER_LABEL}] combo ${combo.name}: slot ${slot + 1}/${seq.length} ✓ (${played})`);
+        entity.comboState = { ...entity.comboState, slot: slot + 1 };
+      }
+    }
+  }
   const returned = new Set(myLastReveal?.returnedCardIds || []);
   const playedIds = new Set((myLastReveal?.skillCardIds || []).filter(id => !returned.has(id)));
   // Haste bonus round: its action card, skills and instant are spent too.
@@ -4022,6 +4078,17 @@ function _npcPickDestroy(enemies) {
 
 async function npcPlan() {
   queuedDestroy = null;
+  // Monster awakening (user ruling 2026-11-05): a wild monster — a non-companion
+  // non-player creature — enters as `sleeping` and does nothing. The first time
+  // any live player sits within 2 hexes of us we flip to `awake` and stay there.
+  // Deterministic from the shared peer snapshot of positions, so every observer
+  // sees the same transition on the following broadcast.
+  if (entity.monsterState === 'sleeping') {
+    const hereH = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+    const trigger = livePeers().some(p => p && p.alliance === 'player' && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(hereH, p) <= 2);
+    if (trigger) entity.monsterState = 'awake';
+    else { queued = ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null; return; }
+  }
   const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
   // Summoned / bound: follow the owner — close the gap first, fight only what is in reach.
   const owner = ownerPeerId ? peersPublic.get(ownerPeerId) : null;
@@ -4614,6 +4681,19 @@ wss.on('connection', (ws) => {
         let notice = null;
         if (i >= 0) { const [c] = archive.splice(i, 1); discard.push(c); notice = `${c.name || c.action_name || c.code} returns from the archive to the discard pile`; console.log(`[${PEER_LABEL}] unarchived ${c.card_id} (kind=${c.kind})`); }
         broadcastUI(handMsg(notice ? { notice } : {}));
+      }
+      if (m.kind === 'combo') {
+        // UI hotkey C: toggles entity.comboState.active. If a combo_id is
+        // provided and we have the data entry, start a fresh slot=0 cycle;
+        // otherwise deactivate. endRound() does the per-reveal advance.
+        const id = String(m.combo_id || '');
+        if (id && data.combos?.[id]) {
+          entity.comboState = { active: true, combo_id: id, slot: 0 };
+          console.log(`[${PEER_LABEL}] combo armed: ${data.combos[id].name} — ${data.combos[id].sequence.join(' → ')}`);
+        } else {
+          entity.comboState = { active: false, combo_id: null, slot: 0 };
+          console.log(`[${PEER_LABEL}] combo disarmed`);
+        }
       }
       if (m.kind === 'uilog') {
         // Browser-side user input echo. Goes ONLY to the per-peer UI log

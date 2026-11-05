@@ -1,0 +1,23 @@
+{
+  "comment": "Combo definitions (user ruling 2026-11-05). Each combo is a 3-slot sequence of action codes a character can call: slot 1 must match the first code, slot 2 the second, slot 3 the third. Move-slot substitutions (M, EM, EP, P all count as 'M') apply when the slot code is 'M'. A wrong card at any slot resets the combo. Completing all 3 slots deals 1 damage to one adjacent enemy (Rule 15 picks) and resets the combo. Characters pick up a combo via characters.json entry-level `combo_id`; the resolver carries entity.comboState during a round.",
+  "entries": [
+    {
+      "id": "combo_map",
+      "name": "MAP",
+      "sequence": ["M", "A", "P"],
+      "desc": "Move → Attack → Posture. Any Move-slot card (M/EM/EP/P) completes the opening step, then a straight Attack, then a Posture."
+    },
+    {
+      "id": "combo_apm",
+      "name": "APM",
+      "sequence": ["A", "P", "M"],
+      "desc": "Attack → Posture → Move. Lead with the hit, hold the ground, then step away."
+    },
+    {
+      "id": "combo_bam",
+      "name": "BAM",
+      "sequence": ["B", "A", "M"],
+      "desc": "Block → Attack → Move. Soak and counter, then slip out."
+    }
+  ]
+}

@@ -10,17 +10,35 @@
 // Usage:
 //   node tools/clean-old-dimensions.mjs                  # dry run, 3-day threshold
 //   node tools/clean-old-dimensions.mjs --days 7         # 7-day threshold
-//   node tools/clean-old-dimensions.mjs --apply          # delete
-//   node tools/clean-old-dimensions.mjs --apply --days 1 # aggressive
+//   node tools/clean-old-dimensions.mjs --apply          # delete locally
+//   node tools/clean-old-dimensions.mjs --apply --prune-radicle
+//                                                        # also drop the
+//                                                        # ActiveDimensions/<Name>
+//                                                        # refs in LOCAL Radicle
+//                                                        # storage so the next
+//                                                        # push-to-oci.sh mirrors
+//                                                        # the deletions to OCI
+//                                                        # (that script already
+//                                                        # runs rsync --delete)
 //   node tools/clean-old-dimensions.mjs --keep ashfall-micro,oci-rulz1
 //                                                       # protect specific dims
-//                                                       # (matched case-insensitive
-//                                                       # against the dir name,
-//                                                       # with/without "dim-" prefix)
+//
+// OCI sync notes:
+//   The three local artifact dirs (game/sessions, data/dimensions, game/logs)
+//   are gitignored, so they never leave this machine. BUT every peer publishes
+//   its door into a dim as a Radicle branch `ActiveDimensions/<DimName>`, and
+//   those replicate across peers (including OCI) into
+//   `refs/namespaces/<NID>/refs/heads/ActiveDimensions/<DimName>`.
+//   --prune-radicle removes them from the dev-PC's own Radicle storage; the
+//   existing `game/tools/oci/push-to-oci.sh --rsync-only` then does the OCI
+//   side via its rsync --delete step (no new remote scripting here, we reuse
+//   what you already have). Dim name = the CamelCase `game/sessions/<Dim>`
+//   dir name (that's what peer.mjs publishes under).
 
 import { readdirSync, statSync, rmSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 
 const SELF = fileURLToPath(import.meta.url)
 const REPO = resolve(dirname(SELF), '..')
@@ -32,17 +50,23 @@ const ROOTS = [
 ]
 
 function parseArgs(argv) {
-  const o = { apply: false, days: 3, keep: new Set() }
+  const o = {
+    apply: false, days: 3, keep: new Set(), ociSync: false,
+    ociHost: process.env.OCI_HOST || '92-5-138-121.sslip.io',
+    ridDir: process.env.RID_DIR || 'zqZmP6itceBMqYwi1K1n8phQqCaj',
+    sshKey: process.env.SSH_KEY || `${process.env.HOME || ''}/.ssh/id_rsa`,
+  }
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--apply') o.apply = true
     else if (a === '--days') o.days = Number(argv[++i])
+    else if (a === '--oci-sync') o.ociSync = true
     else if (a === '--keep') {
       for (const k of String(argv[++i] || '').split(',')) {
         if (k) o.keep.add(k.trim().toLowerCase().replace(/^dim-/, ''))
       }
     } else if (a === '--help' || a === '-h') {
-      console.log(`Usage: node tools/clean-old-dimensions.mjs [--apply] [--days N] [--keep slug1,slug2]`)
+      console.log(`Usage: node tools/clean-old-dimensions.mjs [--apply] [--days N] [--keep slug1,slug2] [--oci-sync]`)
       process.exit(0)
     } else {
       console.error(`Unknown arg: ${a}`)

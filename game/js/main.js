@@ -2542,7 +2542,16 @@ function wireInput() {
     else if (ev.key === '9' || ev.key === '0') clickPermanentKey(ev.key === '9' ? 0 : 1);
     else if (ev.code === 'Space') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
     else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
-    else if (ev.key === 'c' || ev.key === 'C') renderer.recentre();
+    else if (ev.key === 'c' || ev.key === 'C') {
+      // Combo hotkey (user ruling 2026-11-05): toggle this hero's active combo.
+      // Falls back to recentre when no combo is published for the character —
+      // the resolver only advances a slot if a combo is actually armed.
+      const me = state.entities.find(p => p.peer_id === state.myPeerId);
+      const comboId = me?.combo_id || (Array.isArray(me?.combo) && me.combo.length ? 'combo_map' : null) || 'combo_map';
+      if (state.comboActive) { send({ kind: 'combo', combo_id: '' }); state.comboActive = false; logUI('combo disarmed', 'phase'); }
+      else                   { send({ kind: 'combo', combo_id: comboId }); state.comboActive = true; logUI(`combo armed: ${comboId}`, 'phase'); }
+    }
+    else if (ev.key === 'r' || ev.key === 'R') renderer.recentre();
     else if (ev.key === 'm' || ev.key === 'M') {
       const muted = sounds.toggle();
       try { localStorage.setItem('chaosd6.muted', muted ? '1' : '0'); } catch { /* no storage */ }
