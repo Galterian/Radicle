@@ -58,3 +58,5 @@ _tools/.emu-logs/emulator.log
 _tools/.emu-logs/ws-scrcpy.log
 _tools/.emu-logs/scrcpy.log
 .claude/
+_tools/chaosd6-release.apk
+_tools/chaosd6-release.apk.idsig

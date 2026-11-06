@@ -128,6 +128,19 @@ var _is_portrait := false
 # gap: one line of pile counts, one line of permanent codes.
 var _mobile_piles_lbl: Label = null
 var _mobile_perms_lbl: Label = null
+# Mobile-only big floating commit button. The regular _lock_btn sits inside
+# the HBoxContainer `_bar`; if `_bar`'s position ends up off-screen (narrow
+# viewport, orientation glitch, container measurement race) the player can't
+# commit a turn at all. This independent BOTTOM_RIGHT-anchored button
+# guarantees a commit affordance on phones regardless of _bar's state.
+var _mobile_commit_btn: Button = null
+# Root Control that owns every HUD child. We hold a reference so _apply_layout
+# can force it to the current viewport size — Controls that are direct children
+# of a CanvasLayer don't automatically inherit the viewport rect on Android,
+# so without this every anchor-based child computes from a (0,0,0,0) parent
+# rect and lands off-screen top-left (visible symptom: only the top-left
+# portrait panel renders; hand bar, log, END TURN, roster all missing).
+var _root: Control = null
 # How many pixels of extra bottom padding to add on Android so the hand bar
 # clears the system gesture/nav area. Measured on a Pixel-class phone — the
 # bar's lower edge was ~40 px below the usable rect without this lift.
@@ -141,6 +154,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	_root = root
 
 	# --- top-left: portrait panel
 	var panel := PanelContainer.new()
@@ -459,6 +473,24 @@ func _ready() -> void:
 	_roster_box.add_theme_constant_override("separation", 6)
 	_roster_panel.add_child(_roster_box)
 
+	# Mobile commit (lock) fallback — big, anchored BOTTOM_RIGHT, independent
+	# of the _bar HBoxContainer so a container-sizing glitch can't hide it.
+	# Hidden on desktop; _apply_layout flips it on when OS reports mobile.
+	_mobile_commit_btn = Button.new()
+	_mobile_commit_btn.name = "MobileCommit"
+	_mobile_commit_btn.text = "END\nTURN"
+	_mobile_commit_btn.custom_minimum_size = Vector2(96, 72)
+	_mobile_commit_btn.add_theme_font_size_override("font_size", 16)
+	_mobile_commit_btn.add_theme_stylebox_override("normal",   _box(Color(0.22, 0.14, 0.08, 0.95)))
+	_mobile_commit_btn.add_theme_stylebox_override("hover",    _box(Color(0.32, 0.20, 0.10, 0.98)))
+	_mobile_commit_btn.add_theme_stylebox_override("pressed",  _box(Color(0.45, 0.28, 0.14, 1.00)))
+	_mobile_commit_btn.add_theme_stylebox_override("disabled", _box(Color(0.14, 0.10, 0.08, 0.80)))
+	_mobile_commit_btn.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
+	_mobile_commit_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_mobile_commit_btn.visible = false
+	_mobile_commit_btn.pressed.connect(func(): lock_pressed.emit())
+	root.add_child(_mobile_commit_btn)
+
 	# Mobile roster toggle — a small circular button bottom-right of the slot
 	# bar that flips the roster panel visibility. Hidden on desktop (that
 	# layout has room for the roster at all times).
@@ -484,6 +516,13 @@ func _ready() -> void:
 	# stabilises; after that `size_changed` handles subsequent flips.
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_apply_layout()
+	# Belt-and-braces: on Android the viewport is often still a stub when
+	# _ready fires, so _apply_layout runs with a bad vp and leaves the HUD
+	# off-screen (and the defensive left-clamp drags TOP_RIGHT panels to the
+	# left edge). Schedule two more applies — one on the next frame and one
+	# ~0.6 s later — so even a slow surface warm-up resolves correctly.
+	call_deferred("_apply_layout")
+	get_tree().create_timer(0.6).timeout.connect(_apply_layout)
 	set_process(true)
 
 
@@ -534,6 +573,30 @@ func _apply_layout() -> void:
 	#   portrait   (phone upright): compact half-width panels; slots scale down
 	#                               so the whole hand + LOCK fits one row.
 	var vp := get_viewport().get_visible_rect().size
+	# Bail out on a garbage viewport (Android first-boot reports (0,0) / (1,1)
+	# before the surface is laid out). Running _apply_layout with vp.x < 32
+	# would collapse SLOT_SIZE to its clamp min, position the bar at
+	# (-212, -136) → off-screen, and trip the x-clamp below which would drag
+	# every TOP_RIGHT-anchored panel to global x=0 (visible symptom: the log
+	# panel appears at the TOP-LEFT corner instead of top-right, and the hand
+	# bar / commit button / portrait never appear). _process polling will
+	# call us again once the real viewport arrives; the deferred calls in
+	# _ready also retry on the next frame + at 0.6 s.
+	if vp.x < 32 or vp.y < 32:
+		return
+	# Pin _root to the actual viewport rect. CanvasLayer isn't a Control, so a
+	# Control that's a direct child doesn't get resized to the viewport
+	# automatically on Android — its rect stays (0,0,0,0) and every
+	# anchor-based child lands off-screen top-left. PRESET_FULL_RECT would
+	# re-derive the size from the (0,0,0,0) parent rect, so clear the
+	# right/bottom anchors first and set the size explicitly.
+	if _root != null:
+		_root.anchor_left = 0.0
+		_root.anchor_top = 0.0
+		_root.anchor_right = 0.0
+		_root.anchor_bottom = 0.0
+		_root.position = Vector2.ZERO
+		_root.size = vp
 	var portrait := vp.y > vp.x
 	var mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios") or vp.x < 1100
 	_is_portrait = portrait
@@ -564,40 +627,40 @@ func _apply_layout() -> void:
 	if _panel_phase != null:
 		if portrait or mobile:
 			_panel_phase.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_panel_phase.position = Vector2(-minf(vp.x * 0.44 + 4, 200), 8)
+			_anchored(_panel_phase, Vector2(-minf(vp.x * 0.44 + 4, 200), 8))
 			_panel_phase.custom_minimum_size = Vector2(minf(vp.x * 0.44, 192), 0)
 		else:
 			_panel_phase.set_anchors_preset(Control.PRESET_CENTER_TOP)
-			_panel_phase.position = Vector2(-160, 12)
+			_anchored(_panel_phase, Vector2(-160, 12))
 			_panel_phase.custom_minimum_size = Vector2(320, 0)
 	if _log_panel != null:
 		if portrait:
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_log_panel.position = Vector2(-(vp.x * 0.5 + 4), 120)
+			_anchored(_log_panel, Vector2(-(vp.x * 0.5 + 4), 120))
 			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, minf(vp.y * 0.28, 180))
 		elif mobile:
 			# Landscape phone: a narrower log so there's room for the hex board.
 			# Cap at 30% height so the bigger mobile font doesn't push the log
 			# into the roster below it.
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_log_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, 8)
+			_anchored(_log_panel, Vector2(-minf(vp.x * 0.33, 320) - 4, 8))
 			_log_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), minf(vp.y * 0.3, 180))
 		else:
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_log_panel.position = Vector2(-372, 12)
+			_anchored(_log_panel, Vector2(-372, 12))
 			_log_panel.custom_minimum_size = Vector2(360, 300)
 	if _hover_panel != null:
 		if portrait:
-			_hover_panel.position = Vector2(-(vp.x * 0.5 + 4), 316)
+			_anchored(_hover_panel, Vector2(-(vp.x * 0.5 + 4), 316))
 			_hover_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
 		elif mobile:
 			# Below the log panel (new mobile log height 0.3*vp.y / 180).
 			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_hover_panel.position = Vector2(-minf(vp.x * 0.33, 320) - 4, minf(vp.y * 0.3, 180) + 16)
+			_anchored(_hover_panel, Vector2(-minf(vp.x * 0.33, 320) - 4, minf(vp.y * 0.3, 180) + 16))
 			_hover_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), 0)
 		else:
 			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_hover_panel.position = Vector2(-372, 320)
+			_anchored(_hover_panel, Vector2(-372, 320))
 			_hover_panel.custom_minimum_size = Vector2(360, 0)
 	if _obj_panel != null:
 		if portrait or mobile:
@@ -609,20 +672,20 @@ func _apply_layout() -> void:
 	if _roster_panel != null:
 		if portrait:
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			_roster_panel.position = Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 160)
+			_anchored(_roster_panel, Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 160))
 			_roster_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
 		elif mobile:
 			# Hidden by default; the floating ☰ toggle below reveals it. The
 			# roster is still full-width when shown so the player can read
 			# names/HP/perms without squinting.
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			_roster_panel.position = Vector2(-minf(vp.x * 0.5, 340), -(SLOT_SIZE.y + 20) - 240)
+			_anchored(_roster_panel, Vector2(-minf(vp.x * 0.5, 340), -(SLOT_SIZE.y + 20) - 240))
 			_roster_panel.custom_minimum_size = Vector2(minf(vp.x * 0.5 - 12, 340), 0)
 			if _roster_panel.visible == true and _last_viewport_size == Vector2i.ZERO:
 				_roster_panel.visible = false
 		else:
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			_roster_panel.position = Vector2(-372, -(SLOT_SIZE.y + 20) - 268)
+			_anchored(_roster_panel, Vector2(-372, -(SLOT_SIZE.y + 20) - 268))
 			_roster_panel.custom_minimum_size = Vector2(360, 0)
 	# Re-apply slot sizes to the (already-built) buttons so the shrink/grow
 	# propagates. SLOT_SIZE changed above; the Button nodes keep whichever
@@ -645,12 +708,12 @@ func _apply_layout() -> void:
 	var safe_bottom: float = MOBILE_SAFE_BOTTOM if (OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")) else 0.0
 	if _bar != null:
 		var bar_w := SLOT_SIZE.x * 5 + (SLOT_SIZE.x * 0.65) + SLOT_GAP * 5
-		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20) - safe_bottom)
+		_anchored(_bar, Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20) - safe_bottom))
 		# Backdrop follows the bar with ~8px padding so a transparent slot can
 		# never hide the hand entirely.
 		if _bar_bg != null:
 			var pad := 8.0
-			_bar_bg.position = Vector2(-bar_w * 0.5 - pad, -(SLOT_SIZE.y + 20) - pad - safe_bottom)
+			_anchored(_bar_bg, Vector2(-bar_w * 0.5 - pad, -(SLOT_SIZE.y + 20) - pad - safe_bottom))
 			_bar_bg.custom_minimum_size = Vector2(bar_w + pad * 2, SLOT_SIZE.y + pad * 2)
 			_bar_bg.size = _bar_bg.custom_minimum_size
 	# Mobile piles + perms strips stack right above the hand bar. Hidden on
@@ -658,10 +721,10 @@ func _apply_layout() -> void:
 	var _is_mobile_now := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
 	if _mobile_piles_lbl != null:
 		_mobile_piles_lbl.visible = _is_mobile_now
-		_mobile_piles_lbl.position = Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 16)
+		_anchored(_mobile_piles_lbl, Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 16))
 	if _mobile_perms_lbl != null:
 		_mobile_perms_lbl.visible = _is_mobile_now and _mobile_perms_lbl.text != ""
-		_mobile_perms_lbl.position = Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 30)
+		_anchored(_mobile_perms_lbl, Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 30))
 	if _hint != null:
 		_hint.visible = not portrait and not mobile
 		if _hint.visible:
@@ -676,10 +739,10 @@ func _apply_layout() -> void:
 		var strip_w := minf(vp.x * 0.6, 460.0)
 		_status_strip.custom_minimum_size = Vector2(strip_w, 0)
 		var strip_y := 8.0 if (portrait or mobile) else 56.0
-		_status_strip.position = Vector2(-strip_w * 0.5, strip_y)
+		_anchored(_status_strip, Vector2(-strip_w * 0.5, strip_y))
 	if _mobile_hint != null:
 		_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-		_mobile_hint.position = Vector2(-180, -(SLOT_SIZE.y + 20) - safe_bottom - 44)
+		_anchored(_mobile_hint, Vector2(-180, -(SLOT_SIZE.y + 20) - safe_bottom - 44))
 		var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
 		if not on_mobile:
 			_mobile_hint.visible = false
@@ -688,32 +751,44 @@ func _apply_layout() -> void:
 	# can tap an entry to activate it (the toggle still lets them hide it).
 	if _roster_toggle != null:
 		_roster_toggle.visible = portrait or mobile
-		_roster_toggle.position = Vector2(-56, -(SLOT_SIZE.y + 20) - safe_bottom - 56)
+		_anchored(_roster_toggle, Vector2(-56, -(SLOT_SIZE.y + 20) - safe_bottom - 56))
 	if mobile and _roster_panel != null:
 		_roster_panel.visible = true
+	# Mobile commit (lock) fallback: anchored BOTTOM_RIGHT, placed to the LEFT
+	# of the roster toggle so neither covers the other and both clear the hand
+	# bar. Hidden on desktop (the in-bar _lock_btn handles that path).
+	if _mobile_commit_btn != null:
+		_mobile_commit_btn.visible = portrait or mobile
+		_anchored(_mobile_commit_btn, Vector2(-(96 + 56 + 12), -(SLOT_SIZE.y + 20) - safe_bottom - 76))
 	# Mobile log font bump — the 12-pt default is unreadable on a phone and
 	# collides visually with the roster. Keep desktop at 12.
 	if _log != null:
 		_log.add_theme_font_size_override("normal_font_size", 16 if (portrait or mobile) else 12)
-	# Defensive clamps — on narrow viewports the panels' negative x offsets
-	# can leave their final rect under 0 on the left edge. Enforce x >= 0
-	# (phase panel >= 8) so no panel spills off-screen.
+	# Defensive clamps — only pull a panel back on-screen when its RIGHT edge
+	# is still off the left side of the viewport. The previous version
+	# clamped on `position.x < 0`, which on Android fired every time
+	# _apply_layout ran before the viewport settled: a TOP_RIGHT-anchored
+	# panel with offset_left=-324 and parent.right≈0 had position.x = -324,
+	# so the clamp bumped position.x += 324, forcing the control to global
+	# x=0 (TOP-LEFT) permanently. The vp.x < 32 early-return above now
+	# prevents that case; this clamp only catches the rare "panel wider than
+	# viewport" overflow.
 	if _log_panel != null:
 		var lp_rect := _log_panel.get_global_rect()
-		if lp_rect.position.x < 0.0:
-			_log_panel.position.x += (0.0 - lp_rect.position.x)
+		if lp_rect.position.x + lp_rect.size.x < 32.0:
+			_log_panel.position.x += (32.0 - (lp_rect.position.x + lp_rect.size.x))
 	if _hover_panel != null:
 		var hv_rect := _hover_panel.get_global_rect()
-		if hv_rect.position.x < 0.0:
-			_hover_panel.position.x += (0.0 - hv_rect.position.x)
+		if hv_rect.position.x + hv_rect.size.x < 32.0:
+			_hover_panel.position.x += (32.0 - (hv_rect.position.x + hv_rect.size.x))
 	if _roster_panel != null:
 		var rp_rect := _roster_panel.get_global_rect()
-		if rp_rect.position.x < 0.0:
-			_roster_panel.position.x += (0.0 - rp_rect.position.x)
+		if rp_rect.position.x + rp_rect.size.x < 32.0:
+			_roster_panel.position.x += (32.0 - (rp_rect.position.x + rp_rect.size.x))
 	if _panel_phase != null:
 		var pp_rect := _panel_phase.get_global_rect()
-		if pp_rect.position.x < 8.0:
-			_panel_phase.position.x += (8.0 - pp_rect.position.x)
+		if pp_rect.position.x + pp_rect.size.x < 32.0:
+			_panel_phase.position.x += (32.0 - (pp_rect.position.x + pp_rect.size.x))
 	# Boot-time diagnostic: every major panel's absolute rect so adb logcat
 	# makes mis-positioning obvious.
 	print("[Hud] bar=", _bar.get_global_rect() if _bar else "nil",
@@ -729,6 +804,19 @@ func attach_mobile_input(mi: MobileInput) -> void:
 	if mi == null:
 		return
 
+
+# ------------------------------------------------------------------ anchored position
+
+# Set a Control's position in anchor-relative terms (i.e. offset from the
+# anchor origin, which is Godot 3's `.position` semantics). In Godot 4 the
+# plain `.position` setter writes to the final rendered top-left (not the
+# anchor-relative offset), so a `.position = Vector2(-bar_w*0.5, -SLOT_H)`
+# that was correct in the original codebase lands the control at absolute
+# (-bar_w*0.5, -SLOT_H) → off-screen top-left on Android. Writing offset_left
+# / offset_top restores the anchor-relative behavior the code expects.
+static func _anchored(c: Control, p: Vector2) -> void:
+	c.offset_left = p.x
+	c.offset_top = p.y
 
 # ------------------------------------------------------------------ element emission
 
