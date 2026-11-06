@@ -60,11 +60,15 @@ func _resolve_url() -> String:
 	var proj: Variant = ProjectSettings.get_setting("chaosd6/peer_ws_url", "")
 	if typeof(proj) == TYPE_STRING and String(proj) != "":
 		return String(proj)
-	# On Android we don't have a local Node launcher — fall back to the
-	# always-on OCI chaosD6 peer. (Follow-up: run start-all.mjs on OCI so
-	# this URL actually serves. Until then, Android connects to the local
-	# dev host set in CHAOSD6_PEER_WS.)
+	# On Android we don't have a local Node launcher. Prefer an explicit
+	# Android override from ProjectSettings (chaosd6/peer_ws_url_android);
+	# dev builds point it at ws://10.0.2.2:7401/ so the emulator reaches the
+	# WSL host peer. If unset, fall back to the OCI URL (which currently
+	# 404s until start-all.mjs runs there).
 	if OS.get_name() == "Android":
+		var android_url: Variant = ProjectSettings.get_setting("chaosd6/peer_ws_url_android", "")
+		if typeof(android_url) == TYPE_STRING and String(android_url) != "":
+			return String(android_url)
 		return "wss://92-5-138-121.sslip.io/peer"
 	# Default: first local peer the launcher spawns.
 	return "ws://127.0.0.1:7401/"
