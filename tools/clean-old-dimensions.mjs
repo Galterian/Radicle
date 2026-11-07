@@ -22,6 +22,31 @@
 //                                                        # runs rsync --delete)
 //   node tools/clean-old-dimensions.mjs --keep ashfall-micro,oci-rulz1
 //                                                       # protect specific dims
+//   node tools/clean-old-dimensions.mjs --apply --purge-radicle-dims
+//                                                       # the "wipe everything
+//                                                       # the age sweep didn't
+//                                                       # keep" mode: scans
+//                                                       # EVERY namespace in
+//                                                       # local Radicle storage
+//                                                       # and deletes each
+//                                                       # ActiveDimensions/<N>
+//                                                       # ref whose dim isn't
+//                                                       # in the live set. The
+//                                                       # subsequent push-to-oci
+//                                                       # --rsync-only mirrors
+//                                                       # the mass deletion to
+//                                                       # the OCI seeder.
+//
+// What "sync with other peers" actually means:
+//   Radicle is signed per-namespace — you can only directly delete the refs
+//   in YOUR namespace. Refs that other peers (e.g. the swarm-tester NID,
+//   z6MkebNt…) wrote into their own namespaces are their own signed data;
+//   if that peer re-connects to the seed and gossips, those refs come back.
+//   What --purge-radicle-dims does: deletes those namespaces' local copies
+//   from your Radicle storage, then rsync --delete propagates to OCI. If no
+//   stale peer is still gossiping, the deletion sticks for everyone fetching
+//   from OCI. If a stale peer re-syncs later, only its own namespace rows
+//   reappear — never other peers'.
 //
 // OCI sync notes:
 //   The three local artifact dirs (game/sessions, data/dimensions, game/logs)
@@ -51,7 +76,8 @@ const ROOTS = [
 
 function parseArgs(argv) {
   const o = {
-    apply: false, days: 3, keep: new Set(), pruneRadicle: false,
+    apply: false, days: 3, keep: new Set(),
+    pruneRadicle: false, purgeRadicleDims: false,
     radHome: process.env.RAD_HOME || `${process.env.HOME || ''}/.radicle`,
     ridDir: process.env.RID_DIR || 'zqZmP6itceBMqYwi1K1n8phQqCaj',
   }
@@ -60,20 +86,22 @@ function parseArgs(argv) {
     if (a === '--apply') o.apply = true
     else if (a === '--days') o.days = Number(argv[++i])
     else if (a === '--prune-radicle') o.pruneRadicle = true
+    else if (a === '--purge-radicle-dims') o.purgeRadicleDims = true
     else if (a === '--keep') {
       for (const k of String(argv[++i] || '').split(',')) {
         if (k) o.keep.add(k.trim().toLowerCase().replace(/^dim-/, ''))
       }
     } else if (a === '--help' || a === '-h') {
-      console.log(`Usage: node tools/clean-old-dimensions.mjs [--apply] [--days N] [--keep slug1,slug2] [--prune-radicle]`)
+      console.log(`Usage: node tools/clean-old-dimensions.mjs [--apply] [--days N] [--keep slug1,slug2] [--prune-radicle] [--purge-radicle-dims]`)
+      console.log(`  --days 0 sweeps everything regardless of age (combine with --keep to protect specific dims)`)
       process.exit(0)
     } else {
       console.error(`Unknown arg: ${a}`)
       process.exit(2)
     }
   }
-  if (!Number.isFinite(o.days) || o.days <= 0) {
-    console.error(`--days must be a positive number`)
+  if (!Number.isFinite(o.days) || o.days < 0) {
+    console.error(`--days must be >= 0 (0 = sweep everything regardless of age)`)
     process.exit(2)
   }
   return o
@@ -301,4 +329,62 @@ if (opts.pruneRadicle && removed.length > 0) {
   }
 } else if (opts.pruneRadicle) {
   console.log(`\n(--prune-radicle: nothing was removed, so nothing to prune)`)
+}
+
+// ---------------------------------------------------------------------------
+// --purge-radicle-dims: nuclear wipe of EVERY `ActiveDimensions/<Name>` ref
+// across ALL namespaces in local Radicle storage, regardless of whether the
+// age sweep touched a matching session dir. Use this to reset the dims corpus
+// before the chaosD6-Dimensions repo split so neither dev-PC nor OCI carries
+// stale branches into the new RID. --keep still protects named dims (handy if
+// you want to retain one in-progress session). Local-only; propagation to OCI
+// goes through the usual push-to-oci.sh --rsync-only call afterwards.
+// ---------------------------------------------------------------------------
+if (opts.purgeRadicleDims) {
+  const store = `${opts.radHome}/storage/${opts.ridDir}`
+  console.log(`\n=== Radicle dims purge (all namespaces, local only) ===`)
+  console.log(`  storage: ${store}`)
+  try { statSync(store) } catch {
+    console.log(`  ! that path doesn't exist. Override with RAD_HOME, e.g.`)
+    console.log(`      RAD_HOME=/home/galt/.radicle node tools/clean-old-dimensions.mjs --apply --purge-radicle-dims`)
+    process.exit(3)
+  }
+  const r = spawnSync('git', [
+    '-C', store, 'for-each-ref', '--format=%(refname)',
+    'refs/namespaces/*/refs/heads/ActiveDimensions/*',
+  ], { encoding: 'utf8' })
+  if (r.status !== 0) {
+    console.log(`  ! for-each-ref failed: ${(r.stderr || '').trim()}`)
+  } else {
+    const allRefs = String(r.stdout || '').split('\n').map(s => s.trim()).filter(Boolean)
+    const byName = new Map()
+    const victims = []
+    for (const ref of allRefs) {
+      const m = ref.match(/\/ActiveDimensions\/(.+)$/)
+      if (!m) continue
+      const name = m[1]
+      if (opts.keep.has(name.toLowerCase())) continue
+      victims.push(ref)
+      byName.set(name, (byName.get(name) || 0) + 1)
+    }
+    console.log(`  ${allRefs.length} total ActiveDimensions refs across namespaces`)
+    console.log(`  ${allRefs.length - victims.length} kept (--keep)   ·   ${victims.length} queued for delete across ${byName.size} dims`)
+    const preview = [...byName.entries()].slice(0, 20)
+    for (const [name, n] of preview) console.log(`    - ${name.padEnd(28)} ${n} ref(s)`)
+    if (byName.size > preview.length) console.log(`    … (+${byName.size - preview.length} more dims)`)
+    if (!opts.apply) {
+      console.log(`  (dry run — rerun with --apply --purge-radicle-dims to delete)`)
+    } else if (victims.length === 0) {
+      console.log(`  nothing to purge.`)
+    } else {
+      let deleted = 0
+      for (const ref of victims) {
+        const d = spawnSync('git', ['-C', store, 'update-ref', '-d', ref])
+        if (d.status === 0) deleted++
+      }
+      console.log(`  purged ${deleted}/${victims.length} refs across all namespaces`)
+      console.log(`\n  next step — mirror the wipe to OCI:`)
+      console.log(`    bash game/tools/oci/push-to-oci.sh --rsync-only`)
+    }
+  }
 }
