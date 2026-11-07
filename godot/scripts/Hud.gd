@@ -5,12 +5,23 @@ extends CanvasLayer
 
 signal slot_pressed(index: int)
 signal lock_pressed
+## Fired when the mobile Q button is tapped (class-ability trigger, parity
+## with the browser's Q keypress). Game.gd routes to NetBridge.class_ability().
+signal class_ability_pressed
 ## Fired when the player double-taps an enemy's permanent card in the roster.
 ## Carries the stat the destroy intent should emit at the perm (Rule 24).
 signal destroy_perm_requested(peer_id: String, perm_id: String, stat: String)
 ## Fired when the player taps a roster row — Game.gd makes that entity the
 ## HUD's active one (portrait + camera focus). Mobile-only wire.
 signal entity_activated(entity_id: String)
+## Fired when the player taps a V/W/M/Wi stat chip in a roster row.
+## Game.gd routes:
+##   - own row  → send `destroy` intent with just `stat` (emit this element
+##                against the closest enemy's matching perm, Rule 24)
+##   - enemy row → emit `destroy_perm_requested(peer_id, "", stat)` so the
+##                player can arm a destroy against a specific perm without
+##                having to pick one from a submenu first.
+signal stat_tapped(entity_id: String, stat_key: String, is_own: bool)
 
 const CODE_COLORS := {
 	"A": Color("#d9772a"), "B": Color("#4f8fd6"), "M": Color("#7cc77a"), "P": Color("#c9b35a"),
@@ -37,6 +48,7 @@ var _slot_name: Array[Label] = []
 var _slot_desc: Array[Label] = []
 var _slot_icon: Array[TextureRect] = []    # real skill-card icon when the slot holds a skill_* id
 var _lock_btn: Button
+var _class_ability_btn: Button = null
 var _log: RichTextLabel
 var _hint: Label
 # Always-on top-centre status strip. On mobile this replaces the keyboard
@@ -44,6 +56,21 @@ var _hint: Label
 # when another panel clips off-screen.
 var _status_strip: PanelContainer
 var _status_lbl: Label
+# Rich chip pills mirroring the browser header (index.html header#hud):
+# dim · turn·round · phase · timer · tier · door·peer. Each chip is a
+# PanelContainer with its own styling so we can colour-code phase and timer.
+var _chip_dim: PanelContainer = null
+var _chip_dim_lbl: Label = null
+var _chip_turn: PanelContainer = null
+var _chip_turn_lbl: Label = null
+var _chip_phase: PanelContainer = null
+var _chip_phase_lbl: Label = null
+var _chip_timer: PanelContainer = null
+var _chip_timer_lbl: Label = null
+var _chip_tier: PanelContainer = null
+var _chip_tier_lbl: Label = null
+var _chip_door: PanelContainer = null
+var _chip_door_lbl: Label = null
 # Secondary strip label — shows "<effect> ch." in orange while the local
 # player is channeling. Game.gd drives it via set_channel_label(). Empty
 # text hides it.
@@ -110,6 +137,9 @@ var _log_panel: PanelContainer           # right column: log
 # non-empty element set — parity with the browser's hero-emit line.
 var _emit_lbl: Label = null
 var _emit_tween: Tween = null
+# Shared emission text — the roster's own-row "emitting …" line mirrors
+# this. show_emit() keeps it in sync.
+var _emit_text: String = ""
 # Destroy-queued chip. Visible while queuedDestroy is non-null in the local
 # peer's handMsg — the user double-tapped an enemy perm and the server is
 # holding the intent until a P / EP / A / M emission resolves at that perm.
@@ -256,10 +286,14 @@ func _ready() -> void:
 	# Slots are 5 cards + LOCK; each card button carries a code / name / rule-text
 	# label stack so the rule is always visible (full text in the tooltip).
 	# Backdrop first — must be added BEFORE _bar so it renders beneath.
+	# Backdrop retained as a very subtle semi-transparent layer rather than
+	# the earlier opaque panel ("No background" annotation on the ref image).
+	# Keeping a wisp of darkening so slot buttons stay legible over bright
+	# map tiles, but it no longer reads as a solid bar.
 	_bar_bg = PanelContainer.new()
 	_bar_bg.name = "BarBackdrop"
 	_bar_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_bar_bg.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.75)))
+	_bar_bg.add_theme_stylebox_override("panel", _box(Color(0.0, 0.0, 0.0, 0.0)))
 	_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_bar_bg)
 	var bar := HBoxContainer.new()
@@ -333,6 +367,23 @@ func _ready() -> void:
 	_lock_btn.add_theme_stylebox_override("focus",    _box(Color(0.55, 0.75, 0.95, 0.20)))
 	_lock_btn.pressed.connect(func(): lock_pressed.emit())
 	bar.add_child(_lock_btn)
+	# Q — class ability button next to LOCK. Browser emits `class_ability`
+	# on Q keypress; on mobile we need a tappable fallback since there's no
+	# keyboard. Hidden until the player has a class card in their permanents
+	# (set_class_ability_available toggles).
+	_class_ability_btn = Button.new()
+	_class_ability_btn.name = "ClassAbility"
+	_class_ability_btn.custom_minimum_size = Vector2(76, SLOT_SIZE.y)
+	_class_ability_btn.text = "Q\nclass"
+	_class_ability_btn.add_theme_font_size_override("font_size", 13)
+	_class_ability_btn.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.10, 0.26, 0.95)))
+	_class_ability_btn.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.16, 0.36, 0.98)))
+	_class_ability_btn.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.22, 0.48, 1.00)))
+	_class_ability_btn.add_theme_stylebox_override("disabled", _box(Color(0.08, 0.06, 0.14, 0.80)))
+	_class_ability_btn.add_theme_color_override("font_color", Color(0.92, 0.82, 1.0))
+	_class_ability_btn.visible = false
+	_class_ability_btn.pressed.connect(func(): class_ability_pressed.emit())
+	bar.add_child(_class_ability_btn)
 
 	_hint = _label("1-5 pick card · click hex = target/path · click building = info (Esc closes) · right-click = discard · Space = lock · wheel zoom · MMB pan · C recenter", 11, Color(0.6, 0.6, 0.65))
 	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -355,10 +406,21 @@ func _ready() -> void:
 	strip_hb.alignment = BoxContainer.ALIGNMENT_CENTER
 	strip_hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_status_strip.add_child(strip_hb)
-	_status_lbl = _label("R:- · DIM:- · HAND:- · HEX:-", 12, Color(0.9, 0.9, 0.95))
+	# Fallback label kept for solo play / early boot before the chip row fills.
+	# Hidden once the first server phase/hello arrives (set_status_bar hides it).
+	_status_lbl = _label("", 12, Color(0.9, 0.9, 0.95))
 	_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	strip_hb.add_child(_status_lbl)
+	# Rich chip pills — one per header field in game/index.html's header#hud.
+	# Each chip is a PanelContainer carrying one centred label; colour
+	# differs per role so planning / reveal / resolution read at a glance.
+	_chip_dim      = _make_chip("dimension: —", Color(0.18, 0.42, 0.26, 0.9), Color(0.78, 0.95, 0.82)); strip_hb.add_child(_chip_dim); _chip_dim_lbl = _chip_dim.get_child(0)
+	_chip_turn     = _make_chip("turn 0 · round 0/0", Color(0.12, 0.14, 0.22, 0.85), Color(0.92, 0.92, 0.98)); strip_hb.add_child(_chip_turn); _chip_turn_lbl = _chip_turn.get_child(0)
+	_chip_phase    = _make_chip("booting…", Color(0.28, 0.14, 0.42, 0.9), Color(0.95, 0.85, 1.0)); strip_hb.add_child(_chip_phase); _chip_phase_lbl = _chip_phase.get_child(0)
+	_chip_timer    = _make_chip("—", Color(0.42, 0.22, 0.08, 0.9), Color(1.0, 0.86, 0.62)); strip_hb.add_child(_chip_timer); _chip_timer_lbl = _chip_timer.get_child(0)
+	_chip_tier     = _make_chip("tier: far", Color(0.12, 0.14, 0.22, 0.85), Color(0.9, 0.9, 0.95)); strip_hb.add_child(_chip_tier); _chip_tier_lbl = _chip_tier.get_child(0)
+	_chip_door     = _make_chip("door: —", Color(0.12, 0.14, 0.22, 0.85), Color(0.85, 0.85, 0.9)); strip_hb.add_child(_chip_door); _chip_door_lbl = _chip_door.get_child(0)
 	_channel_lbl = _label("", 12, Color(0.95, 0.75, 0.4))
 	_channel_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_channel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -823,6 +885,10 @@ static func _anchored(c: Control, p: Vector2) -> void:
 ## Show the player's own emitted elements (string like "A P"). Mirrors the
 ## browser's `renderHeroCard` emit line in game/js/main.js. Pass "" to hide.
 func show_emit(text: String) -> void:
+	# Keep the shared text in sync so _make_roster_row can read it when it
+	# rebuilds, and so any in-place row-emit label can refresh immediately.
+	_emit_text = text if text != null else ""
+	_refresh_own_row_emit_label()
 	if _emit_lbl == null:
 		return
 	if text == null or text == "":
@@ -845,6 +911,59 @@ func show_emit(text: String) -> void:
 func _hide_emit_lbl() -> void:
 	if _emit_lbl != null:
 		_emit_lbl.visible = false
+
+# ------------------------------------------------------------------ roster helpers
+
+# Peer-id vs entity-id matching: Entity.id is the data id ("char_oran_rief");
+# the local player's row owns the live peer_id. For now, treat the player-
+# faction entity as "mine" — the roster today surfaces at most one player
+# row (companions get npc_a / npc_b factions).
+func _is_my_entity(e: Entity) -> bool:
+	return e != null and e.faction == "player"
+
+func _emit_text_for_hud() -> String:
+	return "emitting %s" % _emit_text if _emit_text != "" else ""
+
+# Keep the in-place "Emit" label on the local player's roster row in sync
+# with _emit_text without rebuilding the whole roster. Called from
+# show_emit() so the chip updates as fast as the server pushes `hand`.
+func _refresh_own_row_emit_label() -> void:
+	if _roster_box == null:
+		return
+	for row in _roster_box.get_children():
+		if row == null:
+			continue
+		var lbl := (row as Control).find_child("Emit", true, false) as Label
+		if lbl == null:
+			continue
+		var txt := _emit_text_for_hud()
+		lbl.text = txt
+		lbl.visible = txt != ""
+
+# Browser roster stat pill: one chip per stat key. Tapping it fires
+# stat_tapped(entity_id, stat_key, is_own) so Game.gd can route the intent
+# (own stat → emit via destroy, enemy stat → arm destroy_perm_requested).
+# Button-based so the parent row's entity_activated gui_input doesn't eat
+# the click: Godot stops click propagation at the Button.
+func _make_stat_chip(entity_id: String, key: String, stat_key: String, value: String, is_own: bool) -> Button:
+	var btn := Button.new()
+	btn.text = "%s %s" % [key, value]
+	btn.flat = true
+	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_color_override("font_color", Color(0.86, 0.86, 0.96))
+	btn.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.16, 0.22, 0.9)))
+	btn.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.26, 0.34, 0.98)))
+	btn.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.38, 0.48, 1.0)))
+	btn.set_meta("stat_key", stat_key)
+	btn.set_meta("entity_id", entity_id)
+	btn.set_meta("is_own", is_own)
+	# Capture entity_id + stat_key by value so this lambda stays correct even
+	# after the row rebuilds for the next peers tick.
+	var eid := entity_id
+	var sk := stat_key
+	var own := is_own
+	btn.pressed.connect(func(): stat_tapped.emit(eid, sk, own))
+	return btn
 
 
 static func _label(text: String, size: int, col: Color) -> Label:
@@ -904,11 +1023,74 @@ func set_quote(text: String) -> void:
 
 
 ## Update the always-visible top-centre status strip. Called from Game.gd
-## with the current round / dim / hand / hex-count values.
+## for solo play fallback. Server-driven updates arrive via set_status_bar()
+## (hello / phase messages). While the server is talking we hide this label
+## so it doesn't overlap the chip row.
 func set_status(round_no: int, dim_name: String, hand_size: int, hex_count: int) -> void:
 	if _status_lbl == null:
 		return
+	# Solo play: no server messages yet, so keep the compact line visible as
+	# a liveness indicator next to the (still-empty) chip row.
+	if _chip_dim != null and _chip_dim_lbl != null and _chip_dim_lbl.text != "dimension: —":
+		_status_lbl.visible = false
+		return
+	_status_lbl.visible = true
 	_status_lbl.text = "R:%d · DIM:%s · HAND:%d · HEX:%d" % [round_no, dim_name, hand_size, hex_count]
+
+## Push server-authoritative header fields into the chip row. Mirrors the
+## browser's phase/hello DOM updates in game/js/main.js. Any key missing
+## in `fields` keeps its current value — Game.gd merges hello + phase here.
+func set_status_bar(fields: Dictionary) -> void:
+	if fields.has("dimension") and _chip_dim_lbl != null:
+		var d := String(fields["dimension"])
+		if d != "": _chip_dim_lbl.text = "dimension: %s" % d
+	if _chip_turn_lbl != null and fields.has("turn"):
+		var t := int(fields.get("turn", 0))
+		var r := int(fields.get("round", 0)) + 1
+		var rt := int(fields.get("rounds_per_turn", 3))
+		_chip_turn_lbl.text = "turn %d · round %d/%d" % [t, r, rt]
+	if fields.has("phase") and _chip_phase_lbl != null:
+		var ph := String(fields["phase"])
+		if ph != "":
+			_chip_phase_lbl.text = ph
+			_chip_phase.add_theme_stylebox_override("panel", _box(_phase_color(ph)))
+	if fields.has("seconds") and _chip_timer_lbl != null:
+		var s := float(fields["seconds"])
+		_chip_timer_lbl.text = "%ds" % int(round(s))
+	if fields.has("heartbeat") and _chip_tier_lbl != null:
+		var hb := bool(fields["heartbeat"])
+		_chip_tier_lbl.text = "tier: %s" % ("strong (contact)" if hb else "reachable")
+	if _chip_door_lbl != null and (fields.has("door") or fields.has("peer_id")):
+		var door := String(fields.get("door", ""))
+		var pid  := String(fields.get("peer_id", ""))
+		var short_pid := pid.substr(0, 10) if pid != "" else ""
+		var parts: Array[String] = []
+		if door != "": parts.append("door: %s" % door)
+		if short_pid != "": parts.append("peer: %s" % short_pid)
+		_chip_door_lbl.text = " · ".join(parts) if not parts.is_empty() else "door: —"
+	# Any server update makes the solo-fallback label redundant.
+	if _status_lbl != null:
+		_status_lbl.visible = false
+
+static func _phase_color(name: String) -> Color:
+	match name:
+		"planning":   return Color(0.28, 0.14, 0.42, 0.9)   # purple
+		"reveal":     return Color(0.14, 0.32, 0.42, 0.9)   # teal
+		"resolution": return Color(0.42, 0.14, 0.14, 0.9)   # red
+		"bonus":      return Color(0.42, 0.26, 0.08, 0.9)   # amber
+	return Color(0.12, 0.14, 0.22, 0.85)                    # neutral
+
+static func _make_chip(initial_text: String, bg: Color, fg: Color) -> PanelContainer:
+	var pc := PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", _box(bg))
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lbl := Label.new()
+	lbl.text = initial_text
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", fg)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.add_child(lbl)
+	return pc
 
 
 ## Channel chip beside the status line. Game.gd calls with e.g. "Blizzard ch."
@@ -927,13 +1109,23 @@ func set_channel_label(text: String) -> void:
 ## Mobile piles indicator: compact "arch:A · deck:D (at-min) · disc:X" line.
 ## Called from Game.gd whenever any pile count changes. Hidden on desktop
 ## (handled by _apply_layout, so no feature check here).
+## Rendered as uppercase chip-style labels (ARCH / DECK / DISC) to match the
+## browser's bottom-bar pile widgets.
 func set_mobile_piles(archive_n: int, deck_n: int, discard_n: int, at_min: bool) -> void:
 	if _mobile_piles_lbl == null:
 		return
-	var deck_frag := "deck:%d" % deck_n
+	var deck_frag := "DECK %d" % deck_n
 	if at_min:
 		deck_frag += " ⚠min"
-	_mobile_piles_lbl.text = "arch:%d · %s · disc:%d" % [archive_n, deck_frag, discard_n]
+	_mobile_piles_lbl.text = "ARCH %d  ·  %s  ·  DISC %d" % [archive_n, deck_frag, discard_n]
+
+## Show/hide the Q class-ability button. Game.gd calls this whenever the
+## player's permanents change (presence of a `class_*` card = ability
+## available). Hidden by default.
+func set_class_ability_available(available: bool) -> void:
+	if _class_ability_btn == null:
+		return
+	_class_ability_btn.visible = available
 
 
 ## Mobile permanents indicator: compact "perms: codeA · codeB · ..." line.
@@ -1350,18 +1542,55 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
 	hb.add_child(col)
-	var nm := _label(e.display_name, 13, Color(0.98, 0.9, 0.75) if e.faction == "player" else Color(0.95, 0.75, 0.6))
+	var nm := _label(e.display_name, 14, Color(0.98, 0.9, 0.75) if e.faction == "player" else Color(0.95, 0.75, 0.6))
 	col.add_child(nm)
+	# "as <wbc3_name> (<wbc3_race>)" — browser hero-sub line pulled into
+	# every row. Pulled from the entry.resources block (data/characters.json),
+	# which Entity.resources mirrors verbatim.
+	var wname := String(e.resources.get("wbc3_name", ""))
+	var wrace := String(e.resources.get("wbc3_race", ""))
+	if wname != "" or wrace != "":
+		var sub := "as " + wname + ((" (" + wrace + ")") if wrace != "" else "")
+		col.add_child(_label(sub, 11, Color(0.82, 0.78, 0.72)))
 	var life := _label("hp %d/%d · %s" % [e.life, e.life_max, e.faction], 11, Color(0.65, 0.9, 0.65) if e.alive else Color(0.9, 0.4, 0.4))
 	life.name = "Life"
 	col.add_child(life)
+	# "emitting X · Y" chip — only for the local player's row for now. Driven
+	# by show_emit(); set_server_hand feeds the queued/queued_effect union.
+	# Other peers' emission previews need a peers-level payload that peer.mjs
+	# doesn't broadcast yet.
+	if e.id != "" and _is_my_entity(e):
+		var emit_lbl := _label(_emit_text_for_hud(), 11, Color(0.95, 0.75, 0.4))
+		emit_lbl.name = "Emit"
+		emit_lbl.visible = _emit_text_for_hud() != ""
+		col.add_child(emit_lbl)
 	var stats: Dictionary = e.data.get("stats", {})
 	if typeof(stats) != TYPE_DICTIONARY:
 		stats = {}
-	col.add_child(_label("V %s · W %s · M %s · Wi %s" % [
-		str(stats.get("vitality", "—")), str(stats.get("world", "—")),
-		str(stats.get("matter", "—")), str(stats.get("will", "—")),
-	], 10, Color(0.78, 0.78, 0.9)))
+	# Stat row — bigger font + chip-styled background. Task C turns these
+	# into Buttons; for Task B they stay labels but inside a row container
+	# so the layout is already shaped for the clickable upgrade.
+	var stat_row := HBoxContainer.new()
+	stat_row.add_theme_constant_override("separation", 4)
+	stat_row.name = "StatRow"
+	col.add_child(stat_row)
+	var is_own_row := _is_my_entity(e)
+	stat_row.add_child(_make_stat_chip(e.id, "V",  "vitality", str(stats.get("vitality", "—")), is_own_row))
+	stat_row.add_child(_make_stat_chip(e.id, "W",  "world",    str(stats.get("world", "—")),    is_own_row))
+	stat_row.add_child(_make_stat_chip(e.id, "M",  "matter",   str(stats.get("matter", "—")),   is_own_row))
+	stat_row.add_child(_make_stat_chip(e.id, "Wi", "will",     str(stats.get("will", "—")),     is_own_row))
+	# Class pill — browser's `⚜ illusionist` chip. The class card lives
+	# inside e.data.permanents as `class_<name>` (user ruling 2026-10-30);
+	# pull the first match and show its tail as the pill text.
+	var perms_pre: Variant = e.data.get("permanents", [])
+	if typeof(perms_pre) == TYPE_ARRAY:
+		for pm in perms_pre:
+			var ps := str(pm)
+			if ps.begins_with("class_"):
+				var class_lbl := _label("⚜ " + ps.substr(6).replace("_", " "), 10, Color(0.95, 0.85, 0.5))
+				class_lbl.name = "ClassPill"
+				col.add_child(class_lbl)
+				break
 	# Permanent mini cards — one row per permanent, icon + name + full desc.
 	# Thread the owning peer_id in so each card can look up its live power die
 	# (Rule 24) and wire the destroy intent for enemies.

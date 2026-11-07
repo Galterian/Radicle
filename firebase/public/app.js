@@ -29,10 +29,17 @@ const FIREBASE_CONFIG = {
   measurementId:     "G-DV935M3SZV"
 };
 
-// Soft default for the "clone" boxes — overridden per-peer when a peer
-// publishes its own rid/addr. Keep in sync with game/radicle-adapter.mjs
-// (RADICLE_RID is the project-root rad remote).
-const DEFAULT_RID = "rad:zqZmP6itceBMqYwi1K1n8phQqCaj";
+// Soft defaults for the "clone" boxes — overridden per-peer when a peer
+// publishes its own rid/addr. Keep in sync with game/radicle-adapter.mjs:
+//   DEFAULT_RID       → the game CODE repo (RADICLE_RID; chaosD6 source).
+//   DEFAULT_DIMS_RID  → the ActiveDimensions-only repo (RADICLE_DIMS_RID;
+//                       what peer.mjs:publishDoor() writes to). On a legacy
+//                       single-RID deployment this is the same string.
+// When a dim doc in Firestore carries its own `rid`, that always wins over
+// these defaults — the constants are only the fallback for cards that
+// predate the split.
+const DEFAULT_RID       = "rad:zqZmP6itceBMqYwi1K1n8phQqCaj";
+const DEFAULT_DIMS_RID  = "rad:zqZmP6itceBMqYwi1K1n8phQqCaj"; // ← set to the new dims RID once `rad init` completes
 
 // --- liveness window used for the LIVE badge + stale greys. 3 minutes mirrors
 // game/ui-server.mjs's DOOR_LIVE_MS default.
@@ -266,7 +273,11 @@ async function viewDimension(name) {
   if (isLive(latest)) $(".badge.live").hidden = false;
   $(".peer-count").textContent = String(d.peerCount ?? doors.length);
   $(".updated").textContent = ago(latest);
-  $(".clone-box").textContent = `${cloneCmd(d.rid || DEFAULT_RID, null, d.creatorNid)} && cd $(basename ${d.rid || DEFAULT_RID}) && git checkout ActiveDimensions/${name}`;
+  // Dim cards clone from the dims repo (not the code repo) — that's where the
+  // ActiveDimensions/<Name> branch lives after Phase 2 of the RID split. Any
+  // dim doc with its own `rid` keeps winning so legacy rows still work.
+  const dimRid = d.rid || DEFAULT_DIMS_RID;
+  $(".clone-box").textContent = `git clone --branch ActiveDimensions/${name} --single-branch --depth 1 ${dimRid}  # (Radicle-aware git required; rad clone also fine)`;
   wireCopy($("#view"));
 
   const cl = $(".commit-list");
