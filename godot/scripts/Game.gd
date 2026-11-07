@@ -156,6 +156,10 @@ func _ready() -> void:
 	hud.lock_pressed.connect(_lock)
 	hud.destroy_perm_requested.connect(_on_destroy_perm_requested)
 	hud.entity_activated.connect(_on_hud_entity_activated)
+	if hud.has_signal("stat_tapped"):
+		hud.stat_tapped.connect(_on_hud_stat_tapped)
+	if hud.has_signal("class_ability_pressed"):
+		hud.class_ability_pressed.connect(_on_hud_class_ability_pressed)
 
 	# Touch gesture router. Attached as a child of Main so it sits alongside the
 	# camera and hex map in the input chain. On desktop its handlers never fire
@@ -184,11 +188,36 @@ func _ready() -> void:
 	net.connected.connect(func(): hud.log_line("peer: connected", Color(0.6, 0.9, 0.6)))
 	net.disconnected.connect(func(): hud.log_line("peer: disconnected", Color(0.9, 0.6, 0.6)))
 
-	# Spawn: snap each default spawn to the nearest walkable hex (otherwise a
+	# Spawn: default roster first, snapped to nearest walkable hex (otherwise a
 	# player spawning on a lava or water biome can't move).
 	for s in DEFAULT_SPAWN:
 		var at: Vector2i = gen.nearest_walkable(s.at, 5)
 		spawn(s.id, s.kind, s.faction, at)
+	# When DimensionLauncher has resolved a join request before Main.tscn
+	# loaded (the mobile picker UI stashes it on the autoload), we move the
+	# player entity to the resolved spawn hex and switch its faction to the
+	# chosen door's alliance so we land as an ally of that peer right next
+	# to their unit — matches the user's "join nearby chosen unit" ask.
+	if typeof(DimensionLauncher) == TYPE_OBJECT and "pending_join" in DimensionLauncher:
+		var pj: Variant = DimensionLauncher.pending_join
+		if typeof(pj) == TYPE_DICTIONARY and pj.has("spawn_hex"):
+			var player := player_entity()
+			if player != null:
+				var hex: Vector2i = pj.spawn_hex
+				var landing: Vector2i = gen.nearest_walkable(hex, 5)
+				player.teleport(landing)
+				var alliance_raw: Variant = pj.get("alliance", "player")
+				var alliance: String = String(alliance_raw)
+				if alliance != "" and alliance != "player":
+					# Mirror peer.mjs: "ally of this peer" = same alliance string
+					# so the resolver's friend/foe check treats us as their side.
+					player.faction = alliance
+				hud.log_line("joined dimension %s as %s near %s" % [
+					String(pj.get("dim_name", "?")), alliance, Hex.key_of(landing)
+				], Color(0.65, 0.95, 0.75))
+			# One-shot — clear the pending join so a subsequent scene reload
+			# doesn't re-teleport.
+			DimensionLauncher.pending_join = {}
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
@@ -710,6 +739,15 @@ func _push_mobile_piles() -> void:
 				codes.append(str(pm))
 	if hud.has_method("set_mobile_perms"):
 		hud.set_mobile_perms(codes)
+	# Q class-ability button is live iff the player's permanents include a
+	# `class_*` card (parity with the browser's Q keypress gate).
+	if hud.has_method("set_class_ability_available"):
+		var has_class := false
+		for c in codes:
+			if str(c).begins_with("class_"):
+				has_class = true
+				break
+		hud.set_class_ability_available(has_class)
 
 
 ## Mobile roster tap handler. Finds the entity by id and makes it the HUD's
@@ -1137,6 +1175,11 @@ func _on_net_hello(payload: Dictionary) -> void:
 		hud.set_server_hand(payload)
 	if hud.has_method("set_server_peers"):
 		hud.set_server_peers(payload.get("peers", []))
+	# Fill the top chip row from the hello dump — dimension / door / peer_id
+	# + the first turn/round/phase values. phase_received keeps the timer +
+	# phase pills live afterwards.
+	if hud.has_method("set_status_bar"):
+		hud.set_status_bar(payload)
 
 func _on_net_hand(payload: Dictionary) -> void:
 	if hud.has_method("set_server_hand"):
@@ -1175,6 +1218,16 @@ func _on_net_phase(payload: Dictionary) -> void:
 		int(payload.get("round", 0)) + 1, float(payload.get("seconds", 0.0))
 	]
 	hud.log_line(label, Color(0.7, 0.7, 0.9))
+	# Phase ticks also drive the top chip row. peer.mjs re-sends every phase
+	# transition and every second during planning, so the timer chip ticks
+	# down live and tier flips strong↔reachable as neighbours change.
+	if hud.has_method("set_status_bar"):
+		# Translate "name" → "phase" to match set_status_bar's field schema
+		# (hello uses "phase", phase uses "name").
+		var merged := payload.duplicate()
+		if payload.has("name"):
+			merged["phase"] = payload["name"]
+		hud.set_status_bar(merged)
 
 func _on_net_evt(env: Dictionary, from_peer: bool) -> void:
 	# Hashgraph envelopes — only surfaced in debug for now; the HUD rebuilds
@@ -1225,6 +1278,36 @@ func _on_destroy_perm_requested(_target_peer_id: String, _perm_id: String, sugge
 		return
 	net.toggle_destroy(stat)
 	hud.log_line("destroy queued: emits %s (double-tap again to cancel)" % stat, Color(0.95, 0.75, 0.4))
+
+## Roster stat chip tapped. Browser parity:
+##   - own row stat tap → arm destroy with that stat (emit this element
+##     against the closest enemy's matching perm, Rule 24; tapping again
+##     cancels — toggle_destroy toggles when the same stat re-fires).
+##   - enemy row stat tap → route through the existing destroy-perm hook so
+##     the player can arm a destroy against this unit without first picking
+##     a perm from a submenu.
+func _on_hud_stat_tapped(entity_id: String, stat_key: String, is_own: bool) -> void:
+	if net == null or not net.is_online():
+		hud.log_line("stat tap ignored — not connected to a peer", Color(0.9, 0.6, 0.4))
+		return
+	if is_own:
+		net.toggle_destroy(stat_key)
+		hud.log_line("emit via %s armed (tap again to cancel)" % stat_key, Color(0.95, 0.75, 0.4))
+		return
+	# Enemy row: route through the existing destroy hook. It picks the
+	# player's best emission stat if `suggested_stat` is empty; here we
+	# pass the enemy's tapped stat so the destroy intent targets that
+	# colour-group explicitly (Rule 24). _on_destroy_perm_requested
+	# ignores the first two args, so we can leave them empty.
+	_on_destroy_perm_requested("", "", stat_key)
+
+## Q class-ability button pressed on mobile — browser's Q keypress parity.
+func _on_hud_class_ability_pressed() -> void:
+	if net == null or not net.is_online():
+		hud.log_line("class ability ignored — not connected", Color(0.9, 0.6, 0.4))
+		return
+	net.class_ability()
+	hud.log_line("class ability triggered", Color(0.85, 0.75, 1.0))
 
 func _on_net_peek(payload: Dictionary) -> void:
 	hud.log_line("👁 %s" % String(payload.get("text", "")), Color(0.9, 0.85, 0.6))

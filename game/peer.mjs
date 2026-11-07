@@ -47,7 +47,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 
-import { pushDimension, radicleEnv } from './radicle-adapter.mjs';
+import { pushDimension, radicleEnv, dimsEnv } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
@@ -4415,7 +4415,11 @@ function catchUpClock() {
 const DOOR_FILE = PEER_LABEL.replace(/[^A-Za-z0-9_.-]/g, '-');
 let doorCount = 0;
 function buildDoor(now) {
-  const radRepo = radicleEnv.enabled ? `rad:${radicleEnv.rid}` : 'rad:local-bare';
+  // The dim branch (ActiveDimensions/<Name>) is pushed to the dims repo, so
+  // that's the RID we advertise to joiners. On a legacy single-RID setup
+  // dimsEnv transparently inherits codeEnv, so this still prints the main
+  // chaosD6 RID — no behaviour change for callers that haven't opted in.
+  const radRepo = dimsEnv.enabled ? `rad:${dimsEnv.rid}` : 'rad:local-bare';
   const members = livePeers().filter(p => p && p.peer_id);
   const bootstrap = new Set(); const gunRelays = new Set(); const relays = new Set(DEFAULT_RELAYS);
   for (const p of members) {
@@ -4457,7 +4461,7 @@ function buildDoor(now) {
       libp2p: { multiaddrs: myMaddrs, topic: TOPIC_STRONG, bootstrap: [...bootstrap] },
       gun: { url: myGunUrl, relays: [...gunRelays] },
     },
-    radicle: { repo: radRepo, namespace: radicleEnv.enabled ? radicleEnv.nid : null, branch: `ActiveDimensions/${DIM_NAME}` },
+    radicle: { repo: radRepo, namespace: dimsEnv.enabled ? dimsEnv.nid : null, branch: `ActiveDimensions/${DIM_NAME}` },
     pushed_at: now,
   };
   return { dimensionDoc, door };
