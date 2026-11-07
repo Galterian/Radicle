@@ -140,7 +140,8 @@ let dimMap = null;   // created once Gun is up (see "the dimension map" below)
 let _autosave = null;   // local TMJ autosave controller (see game/tools/autosave.mjs); _autosave?.markDirty() is a safe no-op before start()
 const PEER_GUN_URLS     = (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
 const BOOTSTRAP_MADDRS  = (process.env.BOOTSTRAP || '').split(',').filter(Boolean);        // libp2p peers
-const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 60);            // demo: 60s instead of 3600s
+const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 600);           // first push at t=60s (end of turn 2 round 3 at 6s/round), then every 10 min
+const RADICLE_PUSH_FIRST_SEC = Number(process.env.RADICLE_PUSH_FIRST_SEC || 60); // initial delay before the first door push — paper rule: 2nd turn, 3rd round = 60s
 // Round/turn clock. A round is one simultaneous action (declare → commit →
 // reveal → resolve); ROUNDS_PER_TURN rounds make a turn, and only at turn end
 // do characters discard leftovers and draw back to 5 (rule 7 / rule 10;
@@ -4493,9 +4494,14 @@ async function publishDoor() {
     }
   } catch (e) { console.warn(`[${PEER_LABEL}] door push failed: ${e.message.split('\n')[0]}`); }
 }
-// Stagger so several peers in one clone don't all hit the bare repo at once
-// (pushDimension retries on a lost race anyway).
-setTimeout(() => { publishDoor().catch(() => {}); setInterval(() => publishDoor().catch(() => {}), RADICLE_PUSH_SEC * 1000); }, 5_000 + Math.floor(Math.random() * 10_000));
+// First push happens at t = RADICLE_PUSH_FIRST_SEC (default 60s — paper's "2nd
+// turn, 3rd round" at 6s/round), then every RADICLE_PUSH_SEC seconds (default
+// 600s = 10 min). A 10s random jitter on top avoids a thundering herd when
+// several peers share one clone; pushDimension retries on lost races anyway.
+setTimeout(() => {
+  publishDoor().catch(() => {});
+  setInterval(() => publishDoor().catch(() => {}), RADICLE_PUSH_SEC * 1000);
+}, RADICLE_PUSH_FIRST_SEC * 1000 + Math.floor(Math.random() * 10_000));
 
 // -------- browser UI socket --------
 const uiHttp = http.createServer(async (req, res) => {

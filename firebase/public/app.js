@@ -39,7 +39,7 @@ const FIREBASE_CONFIG = {
 // these defaults — the constants are only the fallback for cards that
 // predate the split.
 const DEFAULT_RID       = "rad:zqZmP6itceBMqYwi1K1n8phQqCaj";
-const DEFAULT_DIMS_RID  = "rad:zqZmP6itceBMqYwi1K1n8phQqCaj"; // ← set to the new dims RID once `rad init` completes
+const DEFAULT_DIMS_RID  = "rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"; // chaosD6-Dimensions — dims-only repo for ActiveDimensions/<Name> branches
 
 // --- liveness window used for the LIVE badge + stale greys. 3 minutes mirrors
 // game/ui-server.mjs's DOOR_LIVE_MS default.

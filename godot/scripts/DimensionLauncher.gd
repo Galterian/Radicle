@@ -41,8 +41,7 @@ signal fetch_failed(stage: String, reason: String)
 ## RID of the dims-only Radicle repo. Overridden at runtime via Godot
 ## `OS.get_environment("RADICLE_DIMS_RID")` on desktop; on Android we fall
 ## back to this const (Android has no shell env, so the APK bakes this in).
-## TODO: update this const to the new RID after `rad init` completes.
-const DEFAULT_DIMS_RID := "rad:zqZmP6itceBMqYwi1K1n8phQqCaj"
+const DEFAULT_DIMS_RID := "rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"
 
 ## Explorer / radicle-httpd base. 92-5-138-121.sslip.io is the OCI seed
 ## backing dimensions-4e9ae.web.app, so this is the same endpoint the browser
