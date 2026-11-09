@@ -37,6 +37,8 @@ signal dim_list_received(dims: Array)        # Array[Dictionary] {name, namespac
 signal doors_received(dim: String, doors: Array)  # Array[Dictionary] (parsed door docs)
 signal dimension_doc_received(dim: String, doc: Dictionary)
 signal fetch_failed(stage: String, reason: String)
+## Emitted when a deep-link join finishes resolving (after Main.tscn's _ready).
+signal join_resolved(join: Dictionary)
 
 ## RID of the dims-only Radicle repo. Overridden at runtime via Godot
 ## `OS.get_environment("RADICLE_DIMS_RID")` on desktop; on Android we fall
@@ -74,6 +76,100 @@ func _ready() -> void:
 	var h := OS.get_environment("RADICLE_SEED")
 	if h != "":
 		_seed_host = h
+	# Handle a chaosd6://join?dim=…&nid=…&rid=…&commit=… deep link if the app
+	# was launched from one. Godot forwards the intent's URI as a cmdline arg
+	# on Android (via its native launcher glue); on desktop it comes in via
+	# --<url> too when registered as a scheme handler. If no join URL is
+	# present, this is a no-op — regular launch proceeds via the usual flow.
+	_handle_launch_intent()
+
+
+## Parse a chaosd6://join?... URL from the launch intent (if any) and populate
+## `pending_join` so Game.gd._ready() spawns at the chosen unit's neighbour.
+##
+## Supported shape: chaosd6://join?dim=<name>&nid=<publisher>&rid=<bare RID,
+## without the "rad:" prefix>&commit=<sha>. All params optional except `dim`;
+## when `nid` is present we fetch doors to find the right unit, otherwise we
+## pick the first live door in the dim as the join target.
+func _handle_launch_intent() -> void:
+	var uri := ""
+	for a in OS.get_cmdline_args():
+		if a.begins_with("chaosd6://"):
+			uri = a
+			break
+	if uri == "":
+		return
+	print("[DimensionLauncher] deep link: ", uri)
+	var parsed := _parse_join_uri(uri)
+	if parsed.is_empty() or String(parsed.get("dim", "")) == "":
+		push_warning("[DimensionLauncher] malformed join URI: %s" % uri)
+		return
+	# If the deep link carries its own RID (dim-split world), prefer it over
+	# whatever the APK was baked with — one app build should be able to join
+	# dims published to any dims-RID.
+	var rid_in: String = String(parsed.get("rid", ""))
+	if rid_in != "":
+		_dims_rid = "rad:" + rid_in if not rid_in.begins_with("rad:") else rid_in
+	_resolve_join_from_uri(parsed)
+
+
+func _parse_join_uri(uri: String) -> Dictionary:
+	# chaosd6://join?dim=X&nid=Y → split on '?' then '&' then '='.
+	var q_idx := uri.find("?")
+	if q_idx < 0:
+		return {}
+	var qs := uri.substr(q_idx + 1)
+	var out: Dictionary = {}
+	for pair in qs.split("&"):
+		var eq := String(pair).find("=")
+		if eq < 0:
+			continue
+		var k: String = String(pair).substr(0, eq)
+		var v: String = String(pair).substr(eq + 1).uri_decode()
+		out[k] = v
+	return out
+
+
+## Chase down the dim via radicle-httpd and set `pending_join` so Game.gd
+## honours it on scene load. Runs async — the actual spawn happens after
+## fetch_dim_list and fetch_doors complete. If the chosen unit's neighbour
+## tiles are all blocked, resolve_join falls back to the unit's own hex.
+func _resolve_join_from_uri(parsed: Dictionary) -> void:
+	var dim_name: String = String(parsed.get("dim", ""))
+	var want_peer: String = String(parsed.get("peer", ""))
+	var want_nid: String = String(parsed.get("nid", ""))
+	# Kick off the list fetch; the index populates _dim_index.
+	dim_list_received.connect(func(_dims):
+		# Several peers can share one Radicle NID (a desktop mesh), so match the
+		# clicked unit by peer_id first; NID is only a fallback.
+		doors_received.connect(func(dn: String, doors: Array):
+			if dn != dim_name:
+				return
+			var chosen: Dictionary = {}
+			for d in doors:
+				if typeof(d) == TYPE_DICTIONARY and want_peer != "" and String((d as Dictionary).get("peer_id", "")) == want_peer:
+					chosen = d
+					break
+			if chosen.is_empty() and want_nid != "":
+				for d in doors:
+					var ns: Variant = (d as Dictionary).get("radicle", {}) if typeof(d) == TYPE_DICTIONARY else {}
+					if typeof(ns) == TYPE_DICTIONARY and String((ns as Dictionary).get("namespace", "")) == want_nid:
+						chosen = d
+						break
+			if chosen.is_empty() and doors.size() > 0:
+				chosen = doors[0]
+			if chosen.is_empty():
+				push_warning("[DimensionLauncher] no doors for dim %s" % dim_name)
+				return
+			# Blocked hexes come from the dim's known blocks (minimal here; the
+			# resolver nudges on arrival if neighbour tiles turn out occupied).
+			pending_join = resolve_join(dim_name, chosen, {})
+			print("[DimensionLauncher] join resolved: ", pending_join)
+			join_resolved.emit(pending_join)
+		, CONNECT_ONE_SHOT)
+		fetch_doors(dim_name)
+	, CONNECT_ONE_SHOT)
+	fetch_dim_list()
 
 
 func _repo_url(path_tail: String) -> String:
@@ -123,12 +219,12 @@ func fetch_dimension_doc(dim_name: String) -> void:
 		fetch_failed.emit("dimension", "unknown dim %s (call fetch_dim_list first)" % dim_name)
 		return
 	var sha: String = String((entry as Dictionary).commit)
-	var path_tail := "tree/%s/ActiveDimensions/%s/dimension.json" % [sha, dim_name]
+	var path_tail := "blob/%s/ActiveDimensions/%s/dimension.json" % [sha, dim_name]
 	_request("dimension/" + dim_name, _repo_url(path_tail), func(code: int, body: PackedByteArray):
 		if code != 200:
 			fetch_failed.emit("dimension", "HTTP %d" % code)
 			return
-		var doc: Variant = JSON.parse_string(body.get_string_from_utf8())
+		var doc: Variant = _blob_json(code, body)
 		if typeof(doc) != TYPE_DICTIONARY:
 			fetch_failed.emit("dimension", "doc is not an object")
 			return
@@ -165,19 +261,24 @@ func fetch_doors(dim_name: String) -> void:
 			doors_received.emit(dim_name, out)
 			return
 		for name in filenames:
-			var file_tail := "tree/%s/ActiveDimensions/%s/doors/%s" % [sha, dim_name, name]
-			# Serialize via nested requests — HTTPRequest allows only one in-flight
-			# per node; the free HTTPClient alternative is heavier. For N<10 doors
-			# per dim, serial fetches finish in a few hundred ms.
-			await _one_shot(_repo_url(file_tail), func(c: int, b: PackedByteArray):
-				if c == 200:
-					var doc: Variant = JSON.parse_string(b.get_string_from_utf8())
-					if typeof(doc) == TYPE_DICTIONARY:
-						out.append(doc)
-				pending -= 1
-			)
+			# Serial fetches: N<10 doors per dim finish in a few hundred ms.
+			var file_tail := "blob/%s/ActiveDimensions/%s/doors/%s" % [sha, dim_name, name]
+			var res: Array = await _one_shot(_repo_url(file_tail))
+			var doc: Variant = _blob_json(int(res[0]), res[1])
+			if typeof(doc) == TYPE_DICTIONARY:
+				out.append(doc)
 		doors_received.emit(dim_name, out)
 	)
+
+
+## radicle-httpd's /blob/<sha>/<path> wraps file contents as {"content": "<text>"}.
+func _blob_json(code: int, body: PackedByteArray) -> Variant:
+	if code != 200:
+		return null
+	var wrapper: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(wrapper) != TYPE_DICTIONARY:
+		return null
+	return JSON.parse_string(String((wrapper as Dictionary).get("content", "")))
 
 
 ## Resolve the Join action: given a chosen dim + a door the user picked, return
@@ -226,17 +327,15 @@ func _request(_tag: String, url: String, on_done: Callable) -> void:
 		fetch_failed.emit("http", "HTTPRequest.request() returned error %d for %s" % [err, url])
 
 
-## One-shot variant used from within an already-active _request handler so we
-## can `await` it in sequence. Uses a throwaway HTTPRequest to avoid stepping
-## on the parent request's in-flight state.
-func _one_shot(url: String, on_done: Callable) -> void:
+## Awaitable GET on a throwaway HTTPRequest (the shared one may be in flight).
+## Returns [code, body].
+func _one_shot(url: String) -> Array:
 	var h := HTTPRequest.new()
 	add_child(h)
-	h.request_completed.connect(func(_result: int, code: int, _headers: PackedStringArray, body: PackedByteArray):
-		on_done.call(code, body)
-		h.queue_free()
-	)
 	var err := h.request(url, PackedStringArray(["Accept: application/json"]))
 	if err != OK:
-		on_done.call(-1, PackedByteArray())
 		h.queue_free()
+		return [-1, PackedByteArray()]
+	var r: Array = await h.request_completed
+	h.queue_free()
+	return [int(r[1]), r[3]]

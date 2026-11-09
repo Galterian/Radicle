@@ -58,6 +58,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // -------- config via env --------
 const PEER_LABEL        = process.env.PEER_LABEL        || 'player-1';          // human-readable
+// When this peer is hosted inside the Android APK (nodejs-mobile), the Kotlin
+// side sets CHAOSD6_MOBILE=1. That flag disables operations that require a
+// POSIX subprocess fork (companion summons via spawn()) or a desktop toolchain
+// (git / rad / ssh-agent via radicle-adapter). A desktop peer in the swarm
+// absorbs the dropped responsibilities (companion spawn, dim push). Keep this
+// list tight — the goal is "mobile is a full libp2p writer peer", not a
+// stripped-down observer.
+const IS_MOBILE         = process.env.CHAOSD6_MOBILE === '1';
 
 // Loud crash handlers so a peer death leaves a trail in the file log rather
 // than vanishing silently from the console. Especially important for monster
@@ -630,6 +638,10 @@ async function spawnPhantom(permId) {
 }
 // A companion process on the free tile next to me (nearest free one within two hexes if all six are taken).
 async function spawnCompanion(permId, { creature_id, name, env: extraEnv }) {
+  // Mobile peers can't spawn sibling node processes (nodejs-mobile hosts a
+  // single Node runtime per app process; Android sandbox blocks fork+exec
+  // of PATH binaries). The desktop peer in the swarm handles companions.
+  if (IS_MOBILE) { console.log(`[${PEER_LABEL}] ${name}: mobile peer — companion spawn skipped (desktop peer should pick this up)`); return null; }
   const occ = new Set(livePeers().filter(p => p && p.life > 0).map(p => `${p.tile_q},${p.tile_r}`)); occ.add(`${entity.tile.q},${entity.tile.r}`);
   const ring1 = hexNeighbours(entity.tile.q, entity.tile.r);
   const ring2 = [...new Set(ring1.flatMap(t => hexNeighbours(t.q, t.r)).map(t => `${t.q},${t.r}`))].map(k => k.split(',').map(Number)).map(([q, r]) => ({ q, r }));
@@ -4519,6 +4531,55 @@ const uiHttp = http.createServer(async (req, res) => {
       multiaddrs: myMaddrs, gun_url: myGunUrl, nostr_pubkey: bus?.pubkey || null, bus: bus ? bus.stats() : null,
     }));
     return;
+  }
+  // Mobile only: serve the browser UI (same files the desktop UI serves from
+  // ui-server.mjs) so an Android WebView can render it at
+  // http://127.0.0.1:<PEER_PORT_HTTP>/.
+  //   • / and /css/* and /js/*           → the staged peer bundle (next to peer.mjs)
+  //   • /assets/*                        → user://assets/ (CHAOSD6_ASSETS_DIR),
+  //                                        the WBC3 sprite tree AssetBootstrap
+  //                                        downloads on first launch
+  //   • /user-data/*                     → user://data/ for future overrides
+  // Desktop goes through ui-server.mjs on :7357 instead; this block is gated
+  // on IS_MOBILE so no desktop code path changes.
+  if (IS_MOBILE) {
+    const MIME = {
+      '.html': 'text/html; charset=utf-8',
+      '.css':  'text/css; charset=utf-8',
+      '.js':   'application/javascript; charset=utf-8',
+      '.mjs':  'application/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.svg':  'image/svg+xml',
+      '.png':  'image/png',
+      '.jpg':  'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+      '.ico':  'image/x-icon',
+      '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
+      '.wav':  'audio/wav', '.ogg':  'audio/ogg', '.mp3': 'audio/mpeg',
+    };
+    const serve = async (root, rel) => {
+      if (!root || rel.includes('..')) return false;
+      const abs = path.resolve(root, '.' + rel);
+      if (!abs.startsWith(root + path.sep) && abs !== root) return false;
+      const mime = MIME[path.extname(abs).toLowerCase()];
+      if (!mime) return false;
+      try {
+        const data = await fs.readFile(abs);
+        res.writeHead(200, { 'content-type': mime, 'cache-control': 'no-cache' });
+        res.end(data);
+        return true;
+      } catch { return false; }
+    };
+    const u = (req.url || '/').split('?')[0];
+    const ASSETS_DIR = process.env.CHAOSD6_ASSETS_DIR || '';
+    const USER_DATA_DIR = process.env.CHAOSD6_USER_DATA_DIR || '';
+    if (u.startsWith('/assets/') && ASSETS_DIR) {
+      if (await serve(ASSETS_DIR, u.slice('/assets'.length))) return;
+    } else if (u.startsWith('/user-data/') && USER_DATA_DIR) {
+      if (await serve(USER_DATA_DIR, u.slice('/user-data'.length))) return;
+    } else {
+      const rel = (u === '/' || u === '') ? '/index.html' : u;
+      if (await serve(__dirname, rel)) return;
+    }
   }
   res.writeHead(404); res.end();
 });

@@ -93,6 +93,17 @@ var _channel_target: Variant = null  # last target_hex when the channel started
 
 
 func _ready() -> void:
+	# On Android, the mobile client is a thin shell around the embedded Node
+	# peer + an Android WebView loading the SAME browser UI the desktop uses
+	# (game/index.html + /css + /js served by peer.mjs on 127.0.0.1:7401).
+	# None of the native Godot scene — map/HUD/entities/resolver — is used;
+	# the WebView renders everything and the embedded peer owns the game
+	# state. Short-circuit here so we don't waste CPU/GPU rebuilding a scene
+	# the player never sees. (Autoloads EmbeddedPeer and MobileHudWebView
+	# still run and bring up the peer + WebView independently.)
+	if OS.get_name() == "Android":
+		print("[Game] mobile — scene build skipped (WebView renders the UI)")
+		return
 	rng.randomize()
 	dl.load_all()
 	edges = dl.resolution_edges()
@@ -199,25 +210,9 @@ func _ready() -> void:
 	# chosen door's alliance so we land as an ally of that peer right next
 	# to their unit — matches the user's "join nearby chosen unit" ask.
 	if typeof(DimensionLauncher) == TYPE_OBJECT and "pending_join" in DimensionLauncher:
-		var pj: Variant = DimensionLauncher.pending_join
-		if typeof(pj) == TYPE_DICTIONARY and pj.has("spawn_hex"):
-			var player := player_entity()
-			if player != null:
-				var hex: Vector2i = pj.spawn_hex
-				var landing: Vector2i = gen.nearest_walkable(hex, 5)
-				player.teleport(landing)
-				var alliance_raw: Variant = pj.get("alliance", "player")
-				var alliance: String = String(alliance_raw)
-				if alliance != "" and alliance != "player":
-					# Mirror peer.mjs: "ally of this peer" = same alliance string
-					# so the resolver's friend/foe check treats us as their side.
-					player.faction = alliance
-				hud.log_line("joined dimension %s as %s near %s" % [
-					String(pj.get("dim_name", "?")), alliance, Hex.key_of(landing)
-				], Color(0.65, 0.95, 0.75))
-			# One-shot — clear the pending join so a subsequent scene reload
-			# doesn't re-teleport.
-			DimensionLauncher.pending_join = {}
+		_apply_pending_join(DimensionLauncher.pending_join)
+		# Deep-link joins resolve after the radicle-httpd fetches, i.e. after _ready.
+		DimensionLauncher.join_resolved.connect(_apply_pending_join)
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
@@ -230,6 +225,30 @@ func _ready() -> void:
 	hud.set_roster(entities)
 	_begin_planning()
 	_push_status()
+
+
+## Teleport the player next to the chosen unit and adopt its alliance.
+## One-shot: clears DimensionLauncher.pending_join so a scene reload doesn't re-apply.
+func _apply_pending_join(pj: Variant) -> void:
+	if typeof(pj) != TYPE_DICTIONARY or not (pj as Dictionary).has("spawn_hex"):
+		return
+	var player := player_entity()
+	if player == null:
+		return
+	var hex: Vector2i = pj.spawn_hex
+	var landing: Vector2i = gen.nearest_walkable(hex, 5)
+	player.teleport(landing)
+	map.selected = landing
+	var alliance: String = String(pj.get("alliance", "player"))
+	if alliance != "" and alliance != "player":
+		# Same alliance string as the chosen peer = resolver treats us as their side.
+		player.faction = alliance
+	gen.reveal_around(landing, REVEAL_RADIUS, "join")
+	map.queue_redraw()
+	hud.log_line("joined dimension %s as %s near %s" % [
+		String(pj.get("dim_name", "?")), alliance, Hex.key_of(landing)
+	], Color(0.65, 0.95, 0.75))
+	DimensionLauncher.pending_join = {}
 
 
 # ------------------------------------------------------------------ entities
@@ -300,6 +319,9 @@ func is_enemy(a: Entity, b: Entity) -> bool:
 # ------------------------------------------------------------------ round loop
 
 func _process(dt: float) -> void:
+	# Scene was never built on mobile (see _ready). Nothing to tick.
+	if hud == null:
+		return
 	phase_t += dt
 	match phase:
 		"planning":
@@ -1144,6 +1166,10 @@ func _on_hex_hovered(h: Vector2i) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Mobile: input is captured by the WebView overlay. The Godot scene is
+	# empty so hud/hand are null — bail before dereferencing.
+	if hud == null:
+		return
 	if event.is_action_pressed("ui_cancel"):
 		if hud.object_card_visible():
 			hud.hide_object_card()

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Running node locally needs no network perms by itself, but peer.mjs
+         opens TCP sockets for libp2p and ws, so INTERNET is required at the
+         app level. Declared again here so a plain `gradle assembleRelease`
+         produces a self-consistent AAR; the host app's manifest merge keeps
+         any strictness the main app already added. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Cleartext loopback — the Godot client talks to the embedded peer over
+         ws://127.0.0.1:<port>/. This does NOT weaken security for real hosts;
+         the network-security-config in resources/xml scopes cleartext to the
+         loopback IP only. -->
+    <application
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <service
+            android:name="io.chaosd6.nodejs.NodejsMobileService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+    </application>
+
+</manifest>

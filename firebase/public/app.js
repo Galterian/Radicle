@@ -40,6 +40,11 @@ const FIREBASE_CONFIG = {
 // predate the split.
 const DEFAULT_RID       = "rad:zqZmP6itceBMqYwi1K1n8phQqCaj";
 const DEFAULT_DIMS_RID  = "rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"; // chaosD6-Dimensions — dims-only repo for ActiveDimensions/<Name> branches
+// OCI radicle-httpd host for the HTTPS-based clone box. Keep in sync with
+// infra/oci/seeder.json and KNOWN_SEEDS[0].hostname below. The dim-view clone
+// box uses this to build a vanilla-git command that works without the Radicle
+// toolchain (so mobile users and anyone without `rad` installed can clone).
+const DEFAULT_SEED_HOST = "92-5-138-121.sslip.io";
 
 // --- liveness window used for the LIVE badge + stale greys. 3 minutes mirrors
 // game/ui-server.mjs's DOOR_LIVE_MS default.
@@ -273,17 +278,55 @@ async function viewDimension(name) {
   if (isLive(latest)) $(".badge.live").hidden = false;
   $(".peer-count").textContent = String(d.peerCount ?? doors.length);
   $(".updated").textContent = ago(latest);
-  // Dim cards clone from the dims repo (not the code repo) — that's where the
-  // ActiveDimensions/<Name> branch lives after Phase 2 of the RID split. Any
-  // dim doc with its own `rid` keeps winning so legacy rows still work.
-  const dimRid = d.rid || DEFAULT_DIMS_RID;
-  $(".clone-box").textContent = `git clone --branch ActiveDimensions/${name} --single-branch --depth 1 ${dimRid}  # (Radicle-aware git required; rad clone also fine)`;
+  // Shallow single-branch clone via the Radicle toolchain. Requires `rad` and
+  // `git-remote-rad` on PATH — both ship as part of a Radicle install, which
+  // every joining peer is expected to have. Three details that must be exactly
+  // right for `git clone` to resolve the dim branch:
+  //   1. URL scheme is `rad://` (two slashes). `rad:<RID>` with a single colon
+  //      is parsed by git as scp-style `user@host:path`, which bypasses the
+  //      remote helper entirely and fails with "ssh: Could not resolve rad".
+  //   2. The URL carries the publisher NID as a path suffix:
+  //        rad://<RID>/<NID>
+  //      Without it, `git-remote-rad` only serves refs from the clone-user's
+  //      OWN namespace, which won't contain the branch unless they're the
+  //      publisher. Suffixing the NID targets that peer's namespace directly.
+  //   3. `--branch`/`--single-branch`/`--depth 1` are standard git flags that
+  //      git-remote-rad honours, giving us minimum-size dim fetches (no code
+  //      history, just the one branch — tested at ~350 KB per dim).
+  const dimRid    = d.rid || DEFAULT_DIMS_RID;
+  const ridBare   = dimRid.replace(/^rad:/, "");
+  // Prefer `creatorNid` from the dim doc (set by publishDimensionPush); fall
+  // back to the first door's nid if the doc predates creator tracking.
+  const publisher = d.creatorNid || doors[0]?.nid || "";
+  // Trailing `${name}` is the clone target dir — without it, `git clone`
+  // defaults to the last URL segment (the NID), so your working tree lands
+  // in a folder named z6Mkrh3g…ag6yy/ instead of the dim name.
+  const safeDirName = String(name).replace(/[^A-Za-z0-9._-]/g, "_");
+  $(".clone-box").textContent = publisher
+    ? `git clone --branch ActiveDimensions/${name} --single-branch --depth 1 rad://${ridBare}/${publisher} ${safeDirName}`
+    : `git clone --branch ActiveDimensions/${name} --single-branch --depth 1 rad://${ridBare} ${safeDirName}  # (publisher NID unknown — may need rad://<RID>/<NID>)`;
   wireCopy($("#view"));
+
+  // Build a chaosd6:// deeplink that the Android app's intent-filter picks up.
+  // The Godot DimensionLauncher parses this URL at launch, fetches the dim via
+  // radicle-httpd, and spawns the player next to the chosen unit as its ally.
+  // Shape:
+  //   chaosd6://join?dim=<name>&rid=<RID bare>&peer=<peer_id>&nid=<publisher>&commit=<sha>
+  // `peer` picks the unit: several peers in one desktop mesh share a single NID.
+  const joinUri = (peer, nid, sha) => {
+    const parts = [`dim=${encodeURIComponent(name)}`, `rid=${encodeURIComponent(ridBare)}`];
+    if (peer) parts.push(`peer=${encodeURIComponent(peer)}`);
+    if (nid) parts.push(`nid=${encodeURIComponent(nid)}`);
+    if (sha) parts.push(`commit=${encodeURIComponent(sha)}`);
+    return `chaosd6://join?${parts.join("&")}`;
+  };
+  const peerFromSubject = s => (String(s || "").match(/^\[([^\]]+)\]/) || [])[1] || "";
 
   const cl = $(".commit-list");
   if (!commits.length) cl.innerHTML = `<li class="empty">No commits recorded. Peers register commits by calling <code>publishCommit()</code> in <code>game/local-seeds.mjs</code>.</li>`;
   else commits.forEach(c => {
     const li = document.createElement("li");
+    const joinHref = joinUri(peerFromSubject(c.subject), c.pushedBy, c.sha);
     li.innerHTML = `
       <div>
         <div class="co-subject">${esc(c.subject || "(no subject)")}</div>
@@ -291,6 +334,7 @@ async function viewDimension(name) {
           <span class="mono">${esc(short(c.pushedBy || ""))}</span>
           · ${esc(ago(toMs(c.when)))}
           · <code>${esc(c.branch || "")}</code>
+          · <a class="join-link" href="${esc(joinHref)}">Join as ally</a>
         </div>
       </div>
       <a class="co-sha mono" href="${esc(c.href || `#${c.sha}`)}" ${c.href ? 'target="_blank" rel="noreferrer"' : ""}>${esc(String(c.sha || "").slice(0, 10))}</a>`;
@@ -305,6 +349,7 @@ async function viewDimension(name) {
     const li = document.createElement("li");
     if (!live) li.classList.add("stale");
     const side = sideOf(door.alliance);
+    const joinHref = joinUri(door.peer_id, door.nid, door.commit);
     li.innerHTML = `
       <span class="dot side-${side}"></span>
       <span class="door-id" title="${esc(door.peer_id || "")}">${esc(door.name || short(door.peer_id || ""))}</span>
@@ -313,7 +358,8 @@ async function viewDimension(name) {
         ${door.tile ? `(${door.tile.q},${door.tile.r}) · ` : ""}
         ${door.life != null ? `hp ${esc(door.life)}/${esc(door.life_max)} · ` : ""}
         nid <span class="mono">${esc(short(door.nid || ""))}</span>
-      </span>`;
+      </span>
+      <a class="join-link" href="${esc(joinHref)}">Join as ally →</a>`;
     dl.appendChild(li);
   });
 }
