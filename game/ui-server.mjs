@@ -26,10 +26,9 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { RADICLE_BARE, radicleEnv, listPublishedDimensions } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
-import { hexDistance } from './js/hex.js';
-import { createKnownMap, initialBlock, seedForDimension } from './js/map.js';
 import { fancyLabel } from './js/names.js';
 import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
+import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors } from './join-plan.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -148,7 +147,6 @@ async function waitForPort(port, timeoutMs = 25000) {
 }
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-const dimIdOf = d => d.dimension_id || d.dimension?.dimension_id || `dim-${slug(d.dimension_name)}`;
 
 // Addresses peers on the same network could dial this box at, for the optional
 // direct libp2p link. Tailscale (100.64/10) first, then LAN, loopback last.
@@ -171,28 +169,9 @@ function defaultPublicIp() {
 }
 const isLoopback = ip => !ip || ip === '127.0.0.1' || ip === 'localhost';
 
-// Every live peer re-publishes its Door once a minute, so a dimension whose
-// newest Door is older than this has nobody in it right now.
-const DOOR_LIVE_MS = Number(process.env.DOOR_LIVE_MS || 3 * 60 * 1000);
+// DOOR_LIVE_MS, unionMembers, mapFromDoors, placeFromDoors live in join-plan.mjs
+// (shared with the Android entry).
 const ageSec = iso => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 1000));
-
-// Union the members every Door knows about into one roster: newest sighting
-// of each peer wins, stale ones (nobody has seen them in a while) drop out.
-function unionMembers(doors, maxAgeMs = DOOR_LIVE_MS) {
-  const byId = new Map();
-  const consider = (m, at) => {
-    if (!m?.peer_id) return;
-    const seen = Date.parse(m.last_seen || at || 0);
-    const prev = byId.get(m.peer_id);
-    if (!prev || seen > prev._seen) byId.set(m.peer_id, { ...m, _seen: seen });
-  };
-  for (const p of doors) {
-    consider({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: p.tile, life: p.life, life_max: p.life_max, last_seen: p.pushed_at }, p.pushed_at);
-    for (const m of p.known_members || []) consider(m, p.pushed_at);
-  }
-  const cutoff = Date.now() - maxAgeMs;
-  return [...byId.values()].filter(m => m._seen > cutoff).map(({ _seen, ...m }) => m);
-}
 
 // Shape a dimension for the launcher page.
 function describeDimension(d) {
@@ -319,16 +298,6 @@ async function startDimension({ dimensionName, publicIp }) {
   return { peerPort: peers[0].http, status: 'started', dimension: DIM_NAME, publicIp: ip };
 }
 
-// The dimension's known map as the union of every Door's blocks. Each Door
-// carries the map as its holder saw it; blocks are idempotent so the union is
-// exactly what a peer that had heard everyone would hold.
-function mapFromDoors(dim) {
-  const seed = dim.doors.find(p => p.map?.seed)?.map.seed || seedForDimension(dimIdOf(dim));
-  const km = createKnownMap(seed, [initialBlock()]);
-  for (const p of dim.doors) km.addBlocks(p.map?.blocks || []);
-  return km;
-}
-
 // Doors lag reality by up to a Door push: a hero who joined seconds ago is not
 // in any Door yet, so two quick joiners could be placed on the same hex. Every
 // peer this launcher runs in the dimension knows the live roster — ask them and
@@ -349,47 +318,6 @@ function mergeMembers(doorMembers, live) {
   const byId = new Map(doorMembers.map(m => [m.peer_id, m]));
   for (const m of live) byId.set(m.peer_id, { ...(byId.get(m.peer_id) || {}), ...m });   // live view wins
   return [...byId.values()];
-}
-
-// Pick a start tile from what the Doors know. 'nearby' = adjacent to a friend
-// (or to the chosen player's Door); 'random' = a known hex outside everyone's
-// strong radius. Only hexes somebody has revealed are candidates.
-function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2, preferredTile = null }) {
-  const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : a;
-  const alive = members
-    .map(m => ({ peer_id: m.peer_id, q: m.tile?.q, r: m.tile?.r, alliance: m.alliance ?? m.clan, life: m.life ?? 1 }))
-    .filter(m => Number.isInteger(m.q) && Number.isInteger(m.r) && (m.life ?? 1) > 0);
-  const occupied = new Set(alive.map(m => `${m.q},${m.r}`));
-  const all = [...knownMap.tiles()].map(t => ({ q: t.q, r: t.r }));
-  const free = all.filter(t => !occupied.has(`${t.q},${t.r}`));
-  if (!free.length) throw new Error('the grid is full');
-  const minDist = (t, set) => set.length ? Math.min(...set.map(m => hexDistance(t, m))) : Infinity;
-  const rand = arr => arr[Math.floor(Math.random() * arr.length)];
-  // Rejoin-at-saved-tile path: prefer the exact tile; if occupied, pick the
-  // closest free hex (ties → random). Falls back silently to the regular
-  // placement rules only if the preferred tile isn't on the known map at all.
-  if (preferredTile && Number.isInteger(preferredTile.q) && Number.isInteger(preferredTile.r)
-      && knownMap.has(preferredTile.q, preferredTile.r)) {
-    const key = `${preferredTile.q},${preferredTile.r}`;
-    if (!occupied.has(key)) return { q: preferredTile.q, r: preferredTile.r };
-    const scored = free.map(t => ({ t, d: hexDistance(t, preferredTile) }));
-    scored.sort((a, b) => a.d - b.d);
-    const best = scored[0].d;
-    return rand(scored.filter(s => s.d === best).map(s => s.t));
-  }
-  if (placement === 'random') {
-    const hidden = free.filter(t => minDist(t, alive) > strongRadius);
-    if (hidden.length) return rand(hidden);
-    const far = Math.max(...free.map(t => minDist(t, alive)));
-    return rand(free.filter(t => minDist(t, alive) === far));
-  }
-  const anchor = anchorPeerId ? alive.filter(m => m.peer_id === anchorPeerId) : [];
-  const friends = alive.filter(m => sideOf(m.alliance) === sideOf(side));
-  const anchors = anchor.length ? anchor : friends.length ? friends : alive.length ? alive : [{ q: 2, r: 2 }];
-  const adjacent = free.filter(t => anchors.some(a => hexDistance(t, a) === 1));
-  if (adjacent.length) return rand(adjacent);
-  free.sort((a, b) => minDist(a, anchors) - minDist(b, anchors));
-  return free[0];
 }
 
 async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null }) {

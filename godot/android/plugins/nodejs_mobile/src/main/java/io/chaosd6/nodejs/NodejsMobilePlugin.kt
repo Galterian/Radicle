@@ -8,7 +8,7 @@ package io.chaosd6.nodejs
 //     Returns 0 on success, non-zero on error. Starts peer.mjs; stdout/stderr
 //     are relayed via `node_stdout(line)` / `node_stderr(line)` signals.
 //     Fires `node_ready(port)` when the first line matching
-//     "peer listening on 127.0.0.1:(\\d+)" is observed. (This is how we hand
+//     "UI socket on ws://127.0.0.1:(\\d+)" is observed. (This is how we hand
 //     the WebSocket port back to NetBridge.gd without hard-coding 7401.)
 //
 //   NodejsMobile.stopNode() -> Boolean
@@ -43,7 +43,8 @@ import java.io.File
 class NodejsMobilePlugin(godot: Godot) : GodotPlugin(godot) {
     companion object {
         private const val TAG = "NodejsMobile"
-        private const val READY_RE = """peer listening on 127\.0\.0\.1:(\d+)"""
+        // peer.mjs prints "UI socket on ws://127.0.0.1:N/"; the older wording is kept too.
+        private const val READY_RE = """(?:peer listening on|UI socket on ws://)127\.0\.0\.1:(\d+)"""
     }
 
     override fun getPluginName() = "NodejsMobile"

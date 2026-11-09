@@ -138,6 +138,8 @@ func _resolve_join_from_uri(parsed: Dictionary) -> void:
 	var dim_name: String = String(parsed.get("dim", ""))
 	var want_peer: String = String(parsed.get("peer", ""))
 	var want_nid: String = String(parsed.get("nid", ""))
+	fetch_failed.connect(func(stage: String, reason: String):
+		push_warning("[DimensionLauncher] join fetch failed at %s: %s" % [stage, reason]))
 	# Kick off the list fetch; the index populates _dim_index.
 	dim_list_received.connect(func(_dims):
 		# Several peers can share one Radicle NID (a desktop mesh), so match the
