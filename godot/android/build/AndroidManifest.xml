@@ -34,6 +34,16 @@
             android:name="org.godotengine.editor.version"
             android:value="${godotEditorVersion}" />
 
+        <!-- Godot v2 plugin registration. Normally injected from each .gdap at
+             export, but the headless CLI export skips that, so without these the
+             AARs are packaged yet Engine.has_singleton() stays false. -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.NodejsMobile"
+            android:value="io.chaosd6.nodejs.NodejsMobilePlugin" />
+        <meta-data
+            android:name="org.godotengine.plugin.v2.WebViewHud"
+            android:value="io.chaosd6.webview.WebViewHudPlugin" />
+
         <activity
             android:name=".GodotApp"
             android:label="@string/godot_project_name_string"

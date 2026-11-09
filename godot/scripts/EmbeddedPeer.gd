@@ -43,7 +43,8 @@ func _ready() -> void:
     # The peer bundle ships inside the APK (plugin assets/nodejs-project/).
     # NodejsMobile.startNode extracts it into filesDir on first launch keyed on
     # PackageInfo.lastUpdateTime, so new APK installs replace it automatically.
-    _start_with_path("peer.mjs")
+    # mobile-entry.mjs shims TextDecoder (no ICU in nodejs-mobile) then imports peer.mjs.
+    _start_with_path("mobile-entry.mjs")
 
 
 func _start_with_path(script_path: String) -> void:
@@ -65,6 +66,12 @@ func _start_with_path(script_path: String) -> void:
         "CHAOSD6_ASSETS_DIR": assets_dir,
         "CHAOSD6_USER_DATA_DIR": data_dir,
     }
+    # chaosd6://join?... deep link (GodotApp.java puts it in the cmdline args):
+    # mobile-entry.mjs reads the dim's Doors and spawns next to the clicked unit.
+    for a in OS.get_cmdline_args():
+        if a.begins_with("chaosd6://"):
+            env["JOIN_URI"] = a
+            break
     print("[EmbeddedPeer] startNode script=%s" % script_path)
     var rc: int = _plugin.startNode(script_path, env)
     if rc == 0:

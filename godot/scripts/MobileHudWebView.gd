@@ -47,6 +47,11 @@ func _show_for_ws(ws_url: String) -> void:
         http_url = "http://" + http_url.substr(5)
     elif http_url.begins_with("wss://"):
         http_url = "https://" + http_url.substr(6)
+    # The embedded peer already IS the session: ?peer=<port> makes launcher.js
+    # skip the dimension picker (which needs the desktop ui-server's /api/*).
+    var m := RegEx.create_from_string("^http://127\\.0\\.0\\.1:(\\d+)/?$").search(http_url)
+    if m:
+        http_url = "http://127.0.0.1:%s/?peer=%s" % [m.get_string(1), m.get_string(1)]
     print("[MobileHudWebView] loading ", http_url)
     _plugin.showFullScreen(http_url)
 
