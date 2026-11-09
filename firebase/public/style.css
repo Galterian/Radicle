@@ -66,7 +66,13 @@ pre.pre { background: var(--bg-elev); border: 1px solid var(--border); border-ra
 .profile-sync { display: flex; align-items: center; gap: 4px; }
 
 /* --- clone box --- */
-.clone-box { display: inline-block; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; color: var(--text); user-select: all; }
+.clone-box { display: inline-block; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; color: var(--text); user-select: all; white-space: pre; overflow-x: auto; max-width: 100%; line-height: 1.4; }
+
+/* chaosd6:// deeplinks on dim doors/commits — opens the Godot app via the
+   AndroidManifest intent-filter. On desktop browsers the link is inert unless
+   the OS has a scheme handler, but copy-paste works everywhere. */
+.join-link { display: inline-block; padding: 2px 8px; margin-left: 6px; border: 1px solid #2ea043; border-radius: 999px; color: #2ea043; text-decoration: none; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.join-link:hover { background: #2ea04322; }
 
 /* --- repo (dimension) head --- */
 .repo-head { padding: 10px 0 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }

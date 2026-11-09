@@ -141,6 +141,9 @@ if [[ "$MODE" == "release" ]]; then
   else
     echo "[deploy] skip OCI upload (missing $OCI_KEY)"
   fi
+
+  # Peer bundle is now shipped inside the APK (plugin assets/nodejs-project/).
+  # No separate OCI upload needed — the mobile APK is self-contained.
 fi
 
 # -- 3. Install ---------------------------------------------------------------

@@ -53,6 +53,23 @@
             </intent-filter>
         </activity>
 
+        <!-- chaosd6://join?... deep link. An alias, not a filter on GodotApp:
+             Godot's generated src/<variant>/AndroidManifest.xml declares GodotApp
+             with tools:node="mergeOnlyAttributes", which drops child elements
+             from this manifest during the merge. GodotApp.java forwards the URI
+             to OS.get_cmdline_args() for DimensionLauncher.gd. -->
+        <activity-alias
+            android:name="com.godot.game.JoinLink"
+            android:targetActivity="com.godot.game.GodotApp"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="chaosd6" android:host="join" />
+            </intent-filter>
+        </activity-alias>
+
     </application>
 
 </manifest>

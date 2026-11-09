@@ -1,0 +1,17 @@
+// Standalone gradle project for the nodejs_mobile plugin. Only needs the
+// Google + MavenCentral repositories to resolve AGP + Kotlin + androidx.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'nodejs_mobile'

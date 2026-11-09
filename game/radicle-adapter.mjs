@@ -29,6 +29,15 @@ export const RADICLE_BARE = path.join(__dirname, 'radicle.git');
 export const RADICLE_WORK = path.join(__dirname, 'radicle-work');
 export const PROJECT_ROOT = path.resolve(__dirname, '..');
 
+// Mobile peers (nodejs-mobile inside the Android APK) have no git / rad /
+// ssh-agent / radicle-node available: all of this module's exec paths would
+// crash with ENOENT or do pointless work. Short-circuit to a disabled env so
+// pushDimension / listPublishedDimensions / syncFromSeeds behave as no-ops and
+// the module-load-time side effects (OCI connect, presence publish, startup
+// sync) all skip. The desktop peer in the swarm is responsible for radicle
+// writes. Set CHAOSD6_MOBILE=1 to activate.
+const IS_MOBILE = process.env.CHAOSD6_MOBILE === '1';
+
 // Resolve the real Radicle repo once at module load. If the project root isn't
 // a Radicle repo (or `rad` isn't installed), we fall back to local-bare-only
 // mode and no explorer URL is emitted — the local /commit/:sha view still works.
@@ -89,6 +98,7 @@ const SSH_AUTH_SOCK = await detectSshAuthSock();
 // the second argument is a shared fallback so the dims env, if unconfigured,
 // transparently falls back to the code env (= current single-RID behaviour).
 async function buildEnv(prefix, fallback = null) {
+  if (IS_MOBILE) return { enabled: false, reason: 'mobile peer — radicle disabled' };
   if (!RADICLE_PUSH_REMOTE) return { enabled: false, reason: 'disabled via RADICLE_PUSH_REMOTE=0' };
   let rid = process.env[`${prefix}RID`] || '';
   let pushUrl = process.env[`${prefix}PUSH_URL`] || '';
@@ -354,6 +364,9 @@ async function resetBranchToBare(dir, branch) {
 }
 
 export async function pushDimension(peerId, dimensionName, filesByRelPath, removeRelPaths = []) {
+  // Mobile peers never push — desktop peer in the swarm owns radicle writes.
+  // Returning the same shape as "no-changes" keeps the caller's branch tidy.
+  if (IS_MOBILE) return { pushed: false, reason: 'mobile-peer-no-radicle' };
   const dir = await ensureWorkTree(peerId);
   const branch = `ActiveDimensions/${dimensionName}`;
   // Races can happen on BOTH legs: the local bare (sibling peer in this clone)
@@ -365,6 +378,19 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath, remov
   let head = null, remote = { published: false, reason: 'not attempted' };
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     await resetBranchToBare(dir, branch);
+    // Scrub any `ActiveDimensions/<Other>/` left over from a previous dim push
+    // that reused this same work-tree. Without this, the first commit on a
+    // new dim branch sucks in all prior dims' folders via `git add -A` below,
+    // which is why shallow clones of REL2-Ashfall-Micro surfaced Ashfall-Micro
+    // and REL-Ashfall-Micro trees too.
+    const activeDir = path.join(dir, 'ActiveDimensions');
+    try {
+      for (const name of await fs.readdir(activeDir)) {
+        if (name !== dimensionName) {
+          await fs.rm(path.join(activeDir, name), { recursive: true, force: true });
+        }
+      }
+    } catch { /* ActiveDimensions/ doesn't exist yet — fine */ }
     for (const [rel, content] of Object.entries(filesByRelPath)) {
       const abs = path.join(dir, rel);
       await fs.mkdir(path.dirname(abs), { recursive: true });

@@ -1,0 +1,69 @@
+// Builds the NodejsMobile plugin AAR that Godot's gradle merge consumes.
+// Produces an AAR containing:
+//   * Kotlin plugin + ForegroundService
+//   * JNI bridge (native-lib.cpp) compiled against the nodejs-mobile headers
+//   * libnode.so for each shipped ABI, dropped into jniLibs by
+//     _tools/fetch_nodejs_mobile.sh BEFORE this gradle build runs
+//   * assets/nodejs-project/ staged by _tools/stage_peer_js.sh
+//
+// Build with:
+//   cd godot/android/plugins/nodejs_mobile && ./gradlew assembleRelease
+// then copy build/outputs/aar/nodejs_mobile-release.aar beside nodejs_mobile.gdap.
+plugins {
+    id 'com.android.library' version '8.2.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.22'
+}
+
+android {
+    namespace 'io.chaosd6.nodejs'
+    compileSdk 35
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+        ndk {
+            // arm64-v8a only. Real devices are arm64 and the project no longer
+            // supports x86_64 emulators (which required dragging another 54 MB
+            // libnode.so plus 70 MB libgodot_android.so into every APK).
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c++17 -fexceptions -frtti'
+            }
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { aidl false; renderScript false; shaders false; buildConfig false }
+
+    // libnode.so is dropped into src/main/jniLibs/<abi>/ by the fetch script.
+    // Marking as "pickFirst" so the gradle merge is forgiving if, for some
+    // ABI, the file is missing (we still want the build to produce an AAR for
+    // the ABIs we do have).
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging false
+            pickFirsts += ['**/libnode.so']
+        }
+    }
+}
+
+// Repositories are declared globally in settings.gradle under
+// dependencyResolutionManagement (FAIL_ON_PROJECT_REPOS mode); re-declaring
+// them here would break the configuration.
+
+dependencies {
+    // Supply the Godot engine's godot-lib.release.aar in libs/ (same file
+    // radicle_node uses — ships with the Godot editor's android template).
+    compileOnly fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    implementation 'androidx.core:core-ktx:1.13.1'
+}

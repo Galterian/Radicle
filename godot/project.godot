@@ -21,6 +21,8 @@ config/icon="res://icon.svg"
 RadicleBoot="*res://scripts/RadicleBoot.gd"
 AssetBootstrap="*res://scripts/AssetBootstrap.gd"
 DimensionLauncher="*res://scripts/DimensionLauncher.gd"
+EmbeddedPeer="*res://scripts/EmbeddedPeer.gd"
+MobileHudWebView="*res://scripts/MobileHudWebView.gd"
 
 [display]
 

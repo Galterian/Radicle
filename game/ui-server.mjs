@@ -244,7 +244,13 @@ async function freePortRun(start, count) {
 // through if start-all was told to run the optional LAN mirror.
 function commonPeerEnv() {
   return {
-    RADICLE_PUSH_SEC: process.env.RADICLE_PUSH_SEC || '60',
+    // Only forward the two push-cadence env vars if they're set — otherwise
+    // let peer.mjs use its own defaults (600s interval, 60s initial delay).
+    // Hard-coding '60' here used to pin every spawned peer to 1-minute pushes
+    // regardless of the peer-side default; dropping that so the new 10-min
+    // cadence actually takes effect for ui-launched meshes.
+    ...(process.env.RADICLE_PUSH_SEC       ? { RADICLE_PUSH_SEC:       process.env.RADICLE_PUSH_SEC       } : {}),
+    ...(process.env.RADICLE_PUSH_FIRST_SEC ? { RADICLE_PUSH_FIRST_SEC: process.env.RADICLE_PUSH_FIRST_SEC } : {}),
     UI_PORT: String(process.env.UI_PORT || 7357),
     ...(process.env.DISCOVERY_URL ? { DISCOVERY_URL: process.env.DISCOVERY_URL } : {}),
     ...(process.env.NOSTR_RELAYS ? { NOSTR_RELAYS: process.env.NOSTR_RELAYS } : {}),

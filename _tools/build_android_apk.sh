@@ -20,10 +20,17 @@ cd "$(dirname "$0")/.."
 
 source /home/galt/godot-android/env.sh
 
-PRESET="Android"
 MODE="debug"
+PRESET="Android"
 if [[ "${1-}" == "--release" ]]; then
   MODE="release"
+  # Preset "Android Release" (preset.2) is APK-format and arm64-only. Dropping
+  # x86_64 cuts ~132 MB of native libs from the release APK (libgodot_android
+  # x86_64 70 MB + libnode x86_64 54 MB + libc++_shared x86_64 7 MB). The
+  # exclude_filter also strips plugin gradle intermediates that Godot's
+  # "all_resources" would otherwise duplicate into assets/. Debug builds keep
+  # both ABIs on preset "Android" so the x86_64 emulator still works.
+  PRESET="Android Release"
 fi
 
 # Dev convenience: if no release keystore is configured, reuse the debug one
@@ -72,11 +79,50 @@ echo "[build] preset=$PRESET  mode=$MODE  out=$APK_PATH"
 rm -f "$APK_PATH"
 
 cd godot
+
+# Godot 4.3 --headless --export-* hangs ~275s AFTER the export completes before
+# the process actually exits — it idles probing the adb server (even for
+# runnable=false release presets, and even when export failed). The APK is
+# fully written long before this hang. We wrap the invocation so once we see
+# "export: end" AND the APK is on disk, we SIGTERM the Godot process. If the
+# APK never appears within WATCH_TIMEOUT seconds, we let Godot run to its own
+# natural end and surface whatever error it prints.
+LOG="$(mktemp -t godot-export.XXXXXX.log)"
+WATCH_TIMEOUT=600   # 10 min upper bound on real build time; cold gradle+dex is ~2-3 min.
 if [[ "$MODE" == "debug" ]]; then
-  godot4 --headless --export-debug "$PRESET" "$APK_PATH" || true
+  godot4 --headless --export-debug "$PRESET" "$APK_PATH" >"$LOG" 2>&1 &
 else
-  godot4 --headless --export-release "$PRESET" "$APK_PATH" || true
+  godot4 --headless --export-release "$PRESET" "$APK_PATH" >"$LOG" 2>&1 &
 fi
+GPID=$!
+START=$(date +%s)
+EXPORT_END_SEEN=0
+# set -e makes `(( EXPORT_END_SEEN ))` fatal when the value is 0 (that's a
+# non-zero `((...))` exit), so use [[ ]] throughout this watcher loop.
+while kill -0 "$GPID" 2>/dev/null; do
+  if [[ $EXPORT_END_SEEN -eq 0 ]] && grep -q "^export: end$" "$LOG" 2>/dev/null; then
+    EXPORT_END_SEEN=1
+  fi
+  if [[ $EXPORT_END_SEEN -eq 1 && -s "$APK_PATH" ]]; then
+    # Give APK writer a beat to flush, then shut Godot down cleanly.
+    sleep 1
+    kill -TERM "$GPID" 2>/dev/null || true
+    sleep 2
+    kill -KILL "$GPID" 2>/dev/null || true
+    echo "[build] cut Godot's post-export idle (saved ~4-5 min)"
+    break
+  fi
+  NOW=$(date +%s)
+  if [[ $((NOW - START)) -gt $WATCH_TIMEOUT ]]; then
+    echo "[build] WARN: ${WATCH_TIMEOUT}s elapsed without APK — letting Godot continue"
+    break
+  fi
+  sleep 2
+done
+wait "$GPID" 2>/dev/null || true
+# Surface godot output for diagnostics; strip the harmless tail noise.
+grep -v -E "^(error: failed to read response from server)$" "$LOG" || true
+rm -f "$LOG"
 
 if [[ -f "$APK_PATH" ]]; then
   ls -lh "$APK_PATH"
