@@ -3396,6 +3396,7 @@ async function doResolution() {
   // so every peer computes the same addition. Adds to the shared `damage`
   // map before the state hash is computed below, so a divergent combo call
   // would show up as a state_hash mismatch like any other damage.
+  const comboDone = new Map();   // actor → combo sequence completed this action (UI icon only)
   for (const r of revealsThisTurn) {
     const actor = view.get(r.actor);
     if (!actor || !actor.combo_active) continue;
@@ -3412,6 +3413,7 @@ async function doResolution() {
       || (need === 'M' && (played === 'M' || played === 'EM' || played === 'EP'))
       || (need === 'P' && (played === 'P' || played === 'EM' || played === 'EP'));
     if (!matches) continue;
+    comboDone.set(r.actor, seq.join(''));
     const here = { tile_q: actor.tile_q, tile_r: actor.tile_r };
     const actorSide = sideOf(actor.alliance);
     const victim = [...view.values()]
@@ -3897,6 +3899,16 @@ async function doResolution() {
       from_q: actor.tile_q, from_r: actor.tile_r, target_q: aim?.q, target_r: aim?.r,
     });
   }
+  // What this action did to the actor's cast, for the over-unit icons everyone
+  // sees: 'retry' (point-buy failed — the element re-emits next action, the
+  // count stands), 'casting' (element out, more to come), 'done', 'blocked';
+  // a channel whose stat no longer holds reports 'channel_broken'.
+  const castOutcome = (actorId, eff) => {
+    if (!eff) return null;
+    const o = effectOutcomes.find(x => x.actor === actorId && !x.bonus && !x.channel && x.eff?.effect_id === eff.effect_id);
+    return { effect_id: eff.effect_id, name: eff.name, step: eff.step ?? 1, of: eff.of ?? 1, status: o?.oc?.status || 'casting' };
+  };
+  const brokenChannels = (actorId) => channelsBroken.filter(cb => cb.owner === actorId && !cb.why).map(cb => cb.effect_id);
   for (const r of revealsThisTurn) {
     const actor = view.get(r.actor);
     if (!actor) continue;
@@ -3908,6 +3920,7 @@ async function doResolution() {
       actor: r.actor, action: r.action, declared: r.declared ?? r.action, skills: r.skills || [],
       effects: r.effect ? [{ effect_id: r.effect.effect_id, name: r.effect.name, elements: r.effect.elements || [] }] : [],
       emitted_element: emittedElementFor(r.actor, r),
+      cast: castOutcome(r.actor, r.effect), channel_broken: brokenChannels(r.actor), combo: comboDone.get(r.actor) || null,
       trance: r.trance || null, played: r.trance ? [...r.played].sort() : null,
       from_q: actor.tile_q, from_r: actor.tile_r,
       target_q: aim?.q, target_r: aim?.r,
@@ -4730,7 +4743,8 @@ wss.on('connection', (ws) => {
         }
         // A cast in progress keeps its active card as the queued effect; a pick
         // of another effect only counts as a joiner (same element going out).
-        if (casting) {
+        // An action that cannot carry it (Rule 19: the cast is let go) pins nothing.
+        if (casting && (emitting || tranceOn)) {
           const at = chainAt(casting.entries, casting.emitted + 1);
           const activeIdx = at ? hand.findIndex(c => c.card_id === at.entry.cardId) : -1;
           if (activeIdx >= 0 && queuedEffect !== activeIdx) {
