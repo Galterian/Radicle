@@ -300,6 +300,16 @@ main {
 #deck-stack #deck-pile { margin-left: 0; margin-bottom: 0; }
 #combo-marker { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 3px 6px; border: 1px solid #2f3f55; border-radius: 6px; background: linear-gradient(180deg, #1b2431 0%, #0f1520 100%); color: #c8d4e3; }
 #combo-marker.armed { outline: 1px solid #ffe66e; }
+/* Clickable toggle (main.js toggleCombo): lit when the combo can start, gold
+   while armed (the slot due now glows), tilts when an action is refused. */
+#combo-marker { cursor: pointer; transform-origin: 50% 100%; }
+#combo-marker.possible { border-color: #6ad99f; box-shadow: 0 0 0 1px #6ad99f88, 0 0 12px #6ad99f66; animation: cm-pulse 1.6s ease-in-out infinite; }
+#combo-marker.possible .cm-slot { color: #c8f0da; border-color: #4f8f70; }
+#combo-marker.armed { border-color: #ffe66e; box-shadow: 0 0 0 1px #ffe66e99, 0 0 14px #ffe66e55; }
+#combo-marker.armed .cm-slot.pending { border-color: #ffe66e; background: #3a3418; color: #ffe66e; box-shadow: 0 0 6px #ffe66e88; }
+#combo-marker.tilt { animation: cm-tilt .45s ease-in-out; }
+@keyframes cm-pulse { 0%, 100% { box-shadow: 0 0 0 1px #6ad99f88, 0 0 6px #6ad99f44; } 50% { box-shadow: 0 0 0 1px #6ad99fcc, 0 0 16px #6ad99f99; } }
+@keyframes cm-tilt { 0% { transform: rotate(0); } 20% { transform: rotate(-9deg); } 40% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 80% { transform: rotate(3deg); } 100% { transform: rotate(0); } }
 #combo-marker .cm-name { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8aa0bf; display: flex; gap: 4px; align-items: baseline; }
 #combo-marker .cm-name #cm-key { font: 700 10px/1 ui-monospace, Menlo, Consolas, monospace; color: #ffe66e; padding: 1px 3px; border: 1px solid #4a5c7a; border-radius: 3px; }
 #combo-marker .cm-name #cm-label { color: #c8d4e3; }
@@ -669,6 +679,10 @@ main {
 /* Vanishing chip above a unit the moment it emits an element (Posture /
    Reaver Attack / Monk Move / Rule-24 destroy). Fades on its own clock
    driven by renderElementEmitOverlay(). */
+/* A unit whose peer went silent (main.js isGone): faded, never removed. */
+.ros.gone { opacity: 0.45; }
+.ros .pill.gone { color: #c8b98a; border-color: #6a5f3a; }
+
 #element-emit-layer {
   position: fixed; inset: 0; z-index: 29; pointer-events: none;
 }
@@ -817,6 +831,124 @@ main {
   border: 0; border-radius: 4px; background: transparent; color: #8aa0bf; cursor: pointer; font-size: 12px; line-height: 20px; padding: 0;
 }
 #object-card .oc-close:hover { background: #1a2230; color: #e8ecf1; }
+
+/* ======================================================================
+   Phone layout — html.mobile, set by main.js only when the Android WebView
+   loads the page with &mobile=1. Nothing below touches the desktop page.
+   The map fills the screen; the status chips (top), the hand (bottom) and
+   the unit panel (right) float over it. Sized for a ~900×400 CSS viewport.
+   ====================================================================== */
+html.mobile { --m-panel-w: 176px; }
+html.mobile, html.mobile body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+html.mobile main { display: block; padding: 0; }
+html.mobile #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; border-radius: 0; touch-action: none; }
+
+/* Status chips: text only, readable over the terrain via a shadow. */
+html.mobile #hud { position: fixed; top: 0; left: 0; right: var(--m-panel-w); padding: 3px 6px; background: transparent; border: 0; pointer-events: none; z-index: 20; }
+html.mobile #hud .row { gap: 2px 8px; }
+html.mobile #hud .pill { background: transparent; padding: 1px 2px; font-size: 10px; min-width: 0; text-shadow: 0 1px 2px #000, 0 0 6px #000c; }
+html.mobile #hud .pill.dim { color: #b8f0d0; }
+html.mobile #hud .pill.phase { color: #d7cfff; font-weight: 600; }
+html.mobile #hud .pill.timer { color: #ffb0b0; font-weight: 600; }
+
+/* Unit panel: a glass column on the right — compact rows, HP bars, ☠ for the dead. */
+html.mobile #panel { position: fixed; top: 4px; right: 4px; bottom: 4px; width: calc(var(--m-panel-w) - 8px); padding: 5px; gap: 4px; background: rgba(10, 13, 20, 0.58); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid #ffffff14; border-radius: 10px; z-index: 20; }
+html.mobile #hero-card, html.mobile .ros-head, html.mobile #panel h4, html.mobile #log-filter-chip, html.mobile #log { display: none; }
+html.mobile #roster { flex: 1 1 auto; max-height: none; gap: 4px; }
+html.mobile .ros { padding: 4px 5px; gap: 3px 5px; flex-wrap: nowrap; align-items: center; background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; border-radius: 7px; font-size: 11px; }
+html.mobile .ros.ally { border-left: 2px solid #6ad99f88; }
+html.mobile .ros.enemy { border-left: 2px solid #e3666688; }
+html.mobile .ros::after, html.mobile .ros .ros-filter, html.mobile .ros .st, html.mobile .ros .nm::before { display: none; }
+html.mobile .ros .thumb { width: 26px; height: 26px; border-radius: 50%; border-color: #ffffff22; }
+html.mobile .ros .txt { flex-wrap: wrap; gap: 2px 4px; align-items: center; }
+html.mobile .ros .nm { padding-right: 0; gap: 4px; font-weight: 600; min-width: 0; flex: 1 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+html.mobile .ros .nm .team { margin-left: 4px; font-size: 8px; padding: 1px 4px; vertical-align: 1px; }
+html.mobile .ros:not(.expanded) .stats, html.mobile .ros:not(.expanded) .perm-cards { display: none; }
+html.mobile .ros.expanded .stats { order: 3; gap: 3px; }
+html.mobile .ros.expanded .perm-cards { order: 4; flex: 1 0 100%; }
+html.mobile .ros .hpbar { order: 2; flex: 1 0 100%; position: relative; height: 11px; border-radius: 6px; background: #2a1a1a; overflow: hidden; }
+html.mobile .ros .hpbar i { display: block; height: 100%; background: linear-gradient(180deg, #ff8a8a, #d94b4b); transition: width .35s ease; }
+html.mobile .ros.ally .hpbar i { background: linear-gradient(180deg, #7ee2a8, #3fae6e); }
+html.mobile .ros .hpbar.low i { background: linear-gradient(180deg, #ffc46b, #e0892f); }
+html.mobile .ros .hpbar b { position: absolute; inset: 0; font: 600 9px/11px ui-monospace, Menlo, Consolas, monospace; text-align: center; color: #fff; text-shadow: 0 1px 1px #000; }
+html.mobile .ros.dead { opacity: 0.6; text-decoration: none; filter: grayscale(0.7); }
+html.mobile .ros.dead .nm { text-decoration: line-through; color: #9aa0a8; }
+html.mobile .ros .hpbar.dead b { color: #ffb0b0; }
+/* ☰ opens the event log in the lower half of the panel. */
+html.mobile.m-log-open #log { display: block; flex: 1 1 45%; font-size: 9px; border-top: 1px solid #ffffff14; padding-top: 3px; }
+html.mobile.m-log-open #roster { flex: 1 1 55%; }
+
+/* The hand: no bar background — the map shows through; smaller cards, no key hints. */
+html.mobile #deck-bar { position: fixed; left: 0; right: var(--m-panel-w); bottom: 0; padding: 0 4px 3px; background: transparent; border: 0; z-index: 20; pointer-events: none; }
+html.mobile #deck-row { gap: 6px; max-width: none; pointer-events: none; }
+html.mobile #deck-row > * { pointer-events: auto; }
+/* The archive popup lives inside #deck-bar: take taps again (✕, cards → discard,
+   "all → discard", tap outside to close) and sit above the toolbar and roster. */
+html.mobile #archive-popup { pointer-events: auto; }
+html.mobile #deck-bar:has(#archive-popup:not([hidden])) { z-index: 70; }
+html.mobile #archive-popup .ap-card { width: min(560px, 86vw); max-height: 88vh; }
+html.mobile #archive-popup header button { min-width: 32px; min-height: 28px; font-size: 14px; }
+html.mobile #archive-popup #ap-list .ac { width: 80px; min-height: 56px; font-size: 10px; }
+/* Emission badge: icon + element name only on the small screen. */
+html.mobile .element-emit-overlay { padding: 2px 7px 2px 3px; gap: 4px; max-width: 120px; }
+html.mobile .element-emit-overlay .ee-icon, html.mobile .element-emit-overlay .ee-glyph { width: 18px; height: 18px; font-size: 11px; }
+html.mobile .element-emit-overlay .ee-sub { display: none; }
+html.mobile #hint, html.mobile #hover-card, html.mobile .slot .k, html.mobile #perms .perm .k, html.mobile #combo-marker #cm-key { display: none !important; }
+html.mobile #slots { gap: 4px; }
+html.mobile .slot { width: 68px; height: 82px; border-radius: 6px; background: rgba(16, 21, 30, 0.82); box-shadow: 0 2px 8px -2px #000c; }
+html.mobile .slot .card { padding: 16px 4px 3px; font-size: 9px; }
+html.mobile .slot .card::before { font-size: 11px; top: 2px; left: 4px; }
+html.mobile .slot.skill .card::before { font-size: 10px; }
+html.mobile .slot .card .nm { font-size: 9.5px; }
+html.mobile .slot .card .ds { font-size: 7.5px; -webkit-line-clamp: 4; margin-top: 2px; }
+html.mobile .slot .card .cd { display: none; }
+/* Element cost as icons on effect cards (main.js mCost), cast progress on the right. */
+.m-cost { display: none; }
+html.mobile .slot .card .m-cost { display: flex; align-items: center; gap: 2px; margin-top: 2px; }
+html.mobile .m-cost .mc { --mc-tint: #9bb3d6; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; overflow: hidden; background: #0b0d12; border: 1px solid var(--mc-tint); color: var(--mc-tint); font-size: 9px; line-height: 1; position: relative; }
+html.mobile .m-cost .mc img { width: 100%; height: 100%; object-fit: cover; object-position: 0 50%; image-rendering: pixelated; }
+html.mobile .m-cost .mc.done { opacity: 0.45; }
+html.mobile .m-cost .mc.done::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 9px; font-weight: 700; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+html.mobile .m-cost .mc.next { box-shadow: 0 0 0 1.5px #ffe66e; }
+html.mobile .m-cost b { margin-left: auto; font-size: 8.5px; color: #ffe66e; }
+html.mobile .slot .card .m-cost ~ .ds { -webkit-line-clamp: 3; }
+html.mobile .slot .card .fx-flags { margin-top: 2px; }
+html.mobile .slot .card .fx-flag { font-size: 7px; padding: 0 2px; }
+html.mobile #slots .slot.empty { margin-left: 8px; background: rgba(13, 17, 26, 0.7); }
+html.mobile #slots .slot.empty::before { left: -5px; }
+html.mobile .slot:hover { transform: none; }
+html.mobile .slot.queued, html.mobile .slot.queued:hover { transform: translateY(-5px); }
+html.mobile .slot.queued-skill, html.mobile .slot.queued-extra { transform: translateY(-3px); }
+/* Archive / deck / discard / combo / permanents: dark glass, a bit lighter than the cards. */
+html.mobile #archive-pile { margin-right: 2px; }
+html.mobile #archive-pile .pile, html.mobile #deck-pile .pile { width: 40px; height: 56px; background: rgba(16, 21, 30, 0.72); border-color: #ffffff38; box-shadow: 0 2px 6px -2px #000a; text-shadow: 0 1px 2px #000; }
+html.mobile #archive-pile .pile.armed { background: #ffe66e; }
+html.mobile #archive-pile .pile-count, html.mobile #deck-pile .pile-count { font-size: 15px; }
+html.mobile #archive-pile .pile-label, html.mobile #deck-pile .pile-label { font-size: 7px; margin-top: 2px; }
+html.mobile #deck-pile { gap: 4px; }
+html.mobile #deck-stack { gap: 3px; }
+html.mobile #combo-marker { background: rgba(16, 21, 30, 0.72); border-color: #ffffff38; padding: 2px 4px; text-shadow: 0 1px 2px #000; }
+html.mobile #combo-marker .cm-name { font-size: 8px; }
+html.mobile #combo-marker.possible { border-color: #6ad99f; }
+html.mobile #combo-marker.armed { border-color: #ffe66e; background: rgba(40, 34, 14, 0.82); }
+html.mobile #combo-marker .cm-slot { width: 13px; height: 15px; font-size: 9px; }
+html.mobile #perms { margin-left: 4px; gap: 4px; }
+html.mobile #perms .perm { width: 50px; min-height: 48px; padding: 4px 3px 3px; font-size: 8px; background: rgba(16, 21, 30, 0.72); border-color: #6ad99f66; text-shadow: 0 1px 2px #000; }
+html.mobile #perms .perm.class-card { background: rgba(38, 32, 18, 0.78); border-color: #8f7a2a; }
+
+/* Toolbar (commit / recentre / mute / log) and the HP / death notices. */
+html.mobile #m-tools { position: fixed; left: 6px; top: 24px; display: flex; flex-direction: column; gap: 6px; z-index: 25; }
+html.mobile #m-tools button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #ffffff2a; background: rgba(10, 13, 20, 0.55); color: #e8ecf1; font-size: 15px; line-height: 1; padding: 0; }
+html.mobile #m-tools button[data-t="commit"] { background: rgba(160, 142, 255, 0.35); border-color: #a08eff; }
+html.mobile #m-tools button:active { transform: scale(0.94); }
+#m-toasts { display: none; }
+html.mobile #m-toasts { display: flex; flex-direction: column; align-items: center; gap: 3px; position: fixed; top: 22px; left: calc((100vw - var(--m-panel-w)) / 2); transform: translateX(-50%); z-index: 30; pointer-events: none; }
+html.mobile .m-toast { padding: 2px 10px; border-radius: 999px; background: rgba(10, 13, 20, 0.72); color: #e8ecf1; font-size: 11px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 1px #000; transition: opacity .5s ease, transform .5s ease; }
+html.mobile .m-toast.hurt { color: #ffc9a0; }
+html.mobile .m-toast.heal { color: #a8f0c6; }
+html.mobile .m-toast.death { color: #ffb0b0; border: 1px solid #e3666688; font-size: 13px; }
+html.mobile .m-toast.out { opacity: 0; transform: translateY(-6px); }
+html.mobile #object-card { max-width: 56vw; }
 
 /* Rule 24: my stat pills are buttons — emit that stat against an enemy token. */
 .ros .pill.clickable { cursor: pointer; }

@@ -638,10 +638,6 @@ async function spawnPhantom(permId) {
 }
 // A companion process on the free tile next to me (nearest free one within two hexes if all six are taken).
 async function spawnCompanion(permId, { creature_id, name, env: extraEnv }) {
-  // Mobile peers can't spawn sibling node processes (nodejs-mobile hosts a
-  // single Node runtime per app process; Android sandbox blocks fork+exec
-  // of PATH binaries). The desktop peer in the swarm handles companions.
-  if (IS_MOBILE) { console.log(`[${PEER_LABEL}] ${name}: mobile peer — companion spawn skipped (desktop peer should pick this up)`); return null; }
   const occ = new Set(livePeers().filter(p => p && p.life > 0).map(p => `${p.tile_q},${p.tile_r}`)); occ.add(`${entity.tile.q},${entity.tile.r}`);
   const ring1 = hexNeighbours(entity.tile.q, entity.tile.r);
   const ring2 = [...new Set(ring1.flatMap(t => hexNeighbours(t.q, t.r)).map(t => `${t.q},${t.r}`))].map(k => k.split(',').map(Number)).map(([q, r]) => ({ q, r }));
@@ -660,7 +656,7 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv }) {
     ...extraEnv,
   };
   delete env.MAP_BLOCKS;
-  const proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  const proc = IS_MOBILE ? await spawnCompanionWorker(env) : spawn(process.execPath, [fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   proc.stdout.on('data', b => process.stdout.write(b));
   proc.stderr.on('data', b => process.stderr.write(b));
   proc.on('exit', (c) => { console.log(`[${PEER_LABEL}] summoned ${tag} left (${c ?? 'signal'})`); const i = companions.findIndex(x => x.proc === proc); if (i >= 0) companions.splice(i, 1); });
@@ -668,6 +664,21 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv }) {
   entity.summons.push({ peer_id: `peer:${tag}`, creature_id, name, bound: false, perm: permId, mode: 'spawn' });
   console.log(`[${PEER_LABEL}] ${name} enters at (${tile.q},${tile.r}) as ${tag}`);
   return tag;
+}
+// Android: nodejs-mobile runs one Node per app and the sandbox won't exec a
+// second `node`, so the companion is a worker thread instead — its own module
+// instance of peer.mjs (via mobile-entry.mjs for the Node 18 polyfills), own
+// ports, same env contract. Returned with the child-process surface the
+// callers use (stdout/stderr/on('exit')/kill). Its "UI socket on ws://…" line
+// is relabelled so the plugin's node_ready match never repoints the HUD at it.
+async function spawnCompanionWorker(env) {
+  const { Worker } = await import('node:worker_threads');
+  const { Transform } = await import('node:stream');
+  delete env.JOIN_URI;
+  const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
+  const relabel = () => new Transform({ transform(chunk, _enc, cb) { cb(null, String(chunk).replace(/UI socket on ws:/g, 'companion UI socket on ws:').replace(/peer listening on/g, 'companion listening on')); } });
+  const stdout = w.stdout.pipe(relabel()), stderr = w.stderr.pipe(relabel());
+  return { stdout, stderr, on: (ev, fn) => w.on(ev, fn), kill: () => { w.terminate().catch(() => {}); } };
 }
 // A creature-holding permanent is gone: its creature vanishes (companion: told
 // directly; bound: it watches my snapshot); its card goes to my archive.
@@ -3835,9 +3846,17 @@ async function doResolution() {
       const list = statEntry?.data?.elements || statEntry?.elements;
       if (Array.isArray(list) && list.length) return list[0];
     }
+    // No cast and no destroy: only a Reaver's Attack or a Monk's Move pushes
+    // the adept element (same test as the resolver's emitsNow). A bare
+    // Posture / Attack / Move by anyone else emits nothing — before, every
+    // action badged the adept element (Oran Rief's Vitality on every unit).
     const act = source?.action;
     const trance = Array.isArray(source?.trance) ? source.trance : null;
-    const anyEmit = (trance ? trance : [act]).some(c => c === 'P' || c === 'EP' || c === 'A' || c === 'M');
+    // (classOf() lives in the per-action closure, not here — read the class off
+    // the same permanents it does: mine from the entity, others' from the view.)
+    const perms = actorId === PEER_ID_STRING ? [...entity.permanents] : String(view.get(actorId)?.permanents_csv || '').split(',');
+    const cls = perms.find(p => p.startsWith('class_') && CLASSES_IMPLEMENTED.has(p)) || null;
+    const anyEmit = (trance ? trance : [act]).some(c => (c === 'A' && cls === 'class_reaver') || (c === 'M' && cls === 'class_monk'));
     if (!anyEmit) return null;
     const a = view.get(actorId);
     const srcId = a?.source_id || a?.character_id || a?.creature_id;
@@ -3910,7 +3929,9 @@ async function endRound() {
     const seq = Array.isArray(entity.combo) ? entity.combo : [];
     if (!seq.length) { entity.comboState = { active: false, slot: 0 }; }
     else {
-      const played = String(myLastReveal.action || '').toUpperCase();
+      // myLastReveal keeps the played code as `code` (doReveal); `.action` never
+      // existed there, so every combo used to reset after its first action.
+      const played = String(myLastReveal.code || myLastReveal.action || '').toUpperCase();
       const slot = entity.comboState.slot | 0;
       const need = String(seq[slot] || '').toUpperCase();
       // User ruling 2026-11-05: EM/EP are the Empty slot's two faces and
@@ -4552,7 +4573,7 @@ const uiHttp = http.createServer(async (req, res) => {
       '.svg':  'image/svg+xml',
       '.png':  'image/png',
       '.jpg':  'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-      '.ico':  'image/x-icon',
+      '.ico':  'image/x-icon', '.bmp': 'image/bmp',   // hero portraits are .bmp
       '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
       '.wav':  'audio/wav', '.ogg':  'audio/ogg', '.mp3': 'audio/mpeg',
     };
@@ -4569,13 +4590,30 @@ const uiHttp = http.createServer(async (req, res) => {
         return true;
       } catch { return false; }
     };
-    const u = (req.url || '/').split('?')[0];
+    // Decode before touching disk: sprite / sound / portrait names carry spaces
+    // and [CODES], which arrive as %20 / %5B and never matched the files.
+    let u;
+    try { u = decodeURIComponent((req.url || '/').split('?')[0]); } catch { res.writeHead(400); res.end(); return; }
     const ASSETS_DIR = process.env.CHAOSD6_ASSETS_DIR || '';
     const USER_DATA_DIR = process.env.CHAOSD6_USER_DATA_DIR || '';
     if (u.startsWith('/assets/') && ASSETS_DIR) {
-      if (await serve(ASSETS_DIR, u.slice('/assets'.length))) return;
+      const rel = u.slice('/assets'.length);
+      if (await serve(ASSETS_DIR, rel)) return;
+      // Not downloaded (yet): pull it from the OCI asset pack, keep it, serve it.
+      if (await fetchPackAsset(ASSETS_DIR, rel) && await serve(ASSETS_DIR, rel)) return;
+      // data/*.json names portraits as .bmp; the pack ships them as .png.
+      if (/\.bmp$/i.test(rel)) {
+        const png = rel.replace(/\.bmp$/i, '.png');
+        if (await serve(ASSETS_DIR, png)) return;
+        if (await fetchPackAsset(ASSETS_DIR, png) && await serve(ASSETS_DIR, png)) return;
+      }
     } else if (u.startsWith('/user-data/') && USER_DATA_DIR) {
       if (await serve(USER_DATA_DIR, u.slice('/user-data'.length))) return;
+    } else if (u.startsWith('/data/')) {
+      // The UI's rulebook + sprite/sound/portrait `resources` — the same files
+      // the resolver loaded (DATA_DIR), falling back to a bundled copy.
+      if (await serve(DATA_DIR, u.slice('/data'.length))) return;
+      if (await serve(__dirname, u)) return;
     } else {
       const rel = (u === '/' || u === '') ? '/index.html' : u;
       if (await serve(__dirname, rel)) return;
@@ -4583,6 +4621,33 @@ const uiHttp = http.createServer(async (req, res) => {
   }
   res.writeHead(404); res.end();
 });
+// Mobile only: lazy fill of user://assets from the same static pack
+// AssetBootstrap.gd downloads from. One fetch per file (concurrent requests
+// share it); misses are remembered so a file the pack lacks isn't re-asked.
+const PACK_BASE = process.env.CHAOSD6_PACK_BASE || 'https://92-5-138-121.sslip.io/pack';
+const packInFlight = new Map();
+const packMisses = new Set();
+function fetchPackAsset(root, rel) {
+  if (!IS_MOBILE || packMisses.has(rel) || rel.includes('..')) return Promise.resolve(false);
+  if (packInFlight.has(rel)) return packInFlight.get(rel);
+  const p = (async () => {
+    const abs = path.resolve(root, '.' + rel);
+    if (!abs.startsWith(root + path.sep)) return false;
+    try {
+      const url = `${PACK_BASE}/assets${rel.split('/').map(encodeURIComponent).join('/')}`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      if (!r.ok) { packMisses.add(rel); return false; }
+      const buf = Buffer.from(await r.arrayBuffer());
+      await fs.mkdir(path.dirname(abs), { recursive: true });
+      await fs.writeFile(`${abs}.part`, buf);
+      await fs.rename(`${abs}.part`, abs);
+      return true;
+    } catch { return false; }
+    finally { packInFlight.delete(rel); }
+  })();
+  packInFlight.set(rel, p);
+  return p;
+}
 const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);

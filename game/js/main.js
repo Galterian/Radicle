@@ -202,6 +202,10 @@ const ENTITY_HIT_PX = 24;
 const HEX_SIZE_SQ_HIT = ENTITY_HIT_PX * ENTITY_HIT_PX;
 
 const PEER_URL = `ws://127.0.0.1:${new URL(location.href).searchParams.get('peer') || '7401'}/`;
+// Android WebView (MobileHudWebView.gd appends &mobile=1): phone layout
+// (html.mobile in style.css) + touch input. Desktop never sets it.
+const IS_MOBILE_UI = new URL(location.href).searchParams.get('mobile') === '1';
+if (IS_MOBILE_UI) document.documentElement.classList.add('mobile');
 
 const state = {
   dimension: 'Ashfall-Micro',
@@ -677,6 +681,7 @@ function queuedLabel() {
 }
 
 function renderDeck() {
+  renderComboMarker();   // lit / armed state follows phase, commit and casts
   document.getElementById('slots')?.classList.toggle('haste-mode', state.bonusMode);
   document.getElementById('slots')?.classList.toggle('archive-mode', state.archiveMode);
   const slots = document.querySelectorAll('#slots .slot');
@@ -749,7 +754,21 @@ function renderDeck() {
       if (card.tile_target) flagParts.push('⌖');
       const flags = flagParts.length ? `<div class="fx-flags">${flagParts.map(t => `<span class="fx-flag">${escHtml(t)}</span>`).join('')}</div>` : '';
       const desc = card.text || '';
-      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div>${flags}${desc ? `<div class="ds">${escHtml(abbreviate(desc, 110))}</div>` : ''}<div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`;
+      // Phone: the element cost as icons (the text .cd row is hidden there) —
+      // emitted ones dimmed + ✓, the next one ringed, and step/of while casting.
+      // Per-icon marks only when the cast is just this card (no ∀ / chain).
+      let mCost = '';
+      if (IS_MOBILE_UI) {
+        const cost = card.element_cost || [];
+        const own = inCast && state.casting.of === cost.length;
+        mCost = `<div class="m-cost">${cost.map((e, k) => {
+          const el = elementById.get(e);
+          const src = el?.iconPath ? assetUrl(el.iconPath) : '';
+          const cls = own && k < state.casting.step ? ' done' : own && k === state.casting.step ? ' next' : '';
+          return `<span class="mc${cls}" title="${escHtml(el?.name || e)}" style="--mc-tint:${el ? elementTint(el.colorHint) : '#9bb3d6'}">${src ? `<img src="${escHtml(src)}" alt="">` : escHtml(ELEM_GLYPH[e] || '?')}</span>`;
+        }).join('')}${inCast ? `<b>${state.casting.step}/${state.casting.of}</b>` : ''}</div>`;
+      }
+      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div>${mCost}${flags}${desc ? `<div class="ds">${escHtml(abbreviate(desc, 110))}</div>` : ''}<div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`;
       const hints = [
         card.tile_target ? 'Left-click a tile for its target (general_ux_range_cast_target).' : '',
         card.takes_attach ? 'Click a second effect card in hand — it rides on this cast.' : '',
@@ -858,6 +877,80 @@ function renderArchivePopup() {
 // highlights slots done (combo_slot) when `combo_active`. Hidden when the
 // character has no combo published. Called from hand/peers WS handlers and
 // after a C-key arm/disarm.
+// Combo helpers (user ruling 2026-11-10). While armed, the current slot's
+// action is the only action that can be queued: A/B are strict, an M/P slot
+// also takes the Empty card (EM/EP). Skills, instants and effects stay free as
+// long as they ride on that action. Anything else tilts the marker; the way
+// out is to toggle the combo off.
+function comboSeq() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  return { me, seq: String(me?.combo_seq_csv || '').split(',').filter(Boolean) };
+}
+function comboNeed() {
+  const { me, seq } = comboSeq();
+  if (!me?.combo_active || !seq.length) return null;
+  const need = String(seq[me.combo_slot | 0] || '').toUpperCase();
+  if (!need) return null;
+  const soft = need === 'M' || need === 'P';
+  return { need, codes: need === 'M' ? ['M', 'EM', 'EP'] : need === 'P' ? ['P', 'EM', 'EP'] : [need], soft };
+}
+// Would queuing `key` (hand index or 'EMPTY') satisfy the armed combo's slot?
+function comboAccepts(key) {
+  const c = comboNeed();
+  if (!c) return true;
+  if (key === 'EMPTY') return c.soft;
+  const card = typeof key === 'number' ? state.hand[key] : null;
+  return !!card && isAction(card) && c.codes.includes(card.code);
+}
+function comboTilt(why) {
+  const el = document.getElementById('combo-marker');
+  if (el) { el.classList.remove('tilt'); void el.offsetWidth; el.classList.add('tilt'); setTimeout(() => el.classList.remove('tilt'), 500); }
+  if (why) logUI(why, 'phase');
+}
+// True (and tilts) when the armed combo forbids queuing `key` as the action.
+function comboBlocks(key) {
+  if (state.phase !== 'planning' || comboAccepts(key)) return false;
+  comboTilt(`combo ${comboSeq().seq.join('')}: this action must be ${comboNeed().need} — tap the combo to turn it off first`);
+  return true;
+}
+// Can the combo be started right now? Every strict slot (A/B) needs its card
+// in hand (user ruling 2026-11-05: PAB with only B in hand is a non-starter),
+// and it starts on a fresh action: planning, not committed, no cast running.
+function comboStartBlocker() {
+  const { me, seq } = comboSeq();
+  if (!seq.length) return 'no combo';
+  if (me?.combo_active) return null;
+  if (state.phase !== 'planning' || state.locked) return 'a combo starts in the planning phase, before you commit';
+  if (state.casting) return `finish casting ${state.casting.name || 'the effect'} first`;
+  if (state.lostActions > 0) return 'you are sitting this action out';
+  const missing = [...new Set(seq.filter(code => (code === 'A' || code === 'B') && !state.hand.some(c => c?.code === code && c.kind === 'action')))];
+  return missing.length ? `hand lacks ${missing.join(', ')} for ${seq.join(' → ')}` : null;
+}
+function toggleCombo() {
+  const { me, seq } = comboSeq();
+  if (!seq.length) return false;
+  const want = !me?.combo_active;
+  if (want) {
+    const why = comboStartBlocker();
+    if (why) { comboTilt(`combo blocked: ${why}`); return true; }
+  }
+  send({ kind: 'combo', active: want });
+  if (me) me.combo_active = want ? 1 : 0;   // optimistic — the next snapshot confirms
+  if (me) me.combo_slot = 0;
+  logUI(want ? `combo armed: ${seq.join(' → ')}` : 'combo disarmed', 'phase');
+  if (want) {
+    // The combo's first action replaces whatever was picked; skills / effects
+    // that don't ride on it drop out (sendQueue prunes). No auto-walk while armed.
+    state.queued = []; state.queuedExtra = null;
+    state.queuedSkills = state.queuedSkills.filter(i => !isTrance(state.hand[i]));
+    state.ui.pathPlan = null; state.ui.destinationTile = null;
+    comboAutoSelect();
+  }
+  renderComboMarker();
+  renderDeck();
+  return true;
+}
+
 function renderComboMarker() {
   const el = document.getElementById('combo-marker');
   if (!el) return;
@@ -868,6 +961,8 @@ function renderComboMarker() {
   const active = !!me?.combo_active;
   const slot = Math.max(0, Math.min(seq.length, me?.combo_slot | 0));
   el.classList.toggle('armed', active);
+  // Lit and clickable when it could start right now.
+  el.classList.toggle('possible', !active && !comboStartBlocker());
   const label = el.querySelector('#cm-label');
   if (label) label.textContent = seq.join('');
   el.querySelectorAll('.cm-slot').forEach((pip, i) => {
@@ -878,40 +973,43 @@ function renderComboMarker() {
   });
 }
 
-// Auto-select the next hand card matching the current combo slot. Returns
-// true if it queued a card. M-slot accepts M/EM/EP/P (so the Empty slot is a
-// legal fallback when no M is in hand). Only fires in planning phase with
-// nothing already queued (so a human's intentional pick isn't clobbered).
+// Auto-select the hand card for the current combo slot. Returns true if it
+// queued a card. Soft slots (user ruling 2026-11-05): EM/EP are the two faces
+// of Empty and substitute for M or P; M and P never substitute for each
+// other; A and B are strict. Idempotent: a queued action that already fits
+// the slot stays (with its skills). Anything else is replaced — the planning
+// auto-pick, or last action's combo card when the snapshot advancing
+// combo_slot lands after planning began. A manual misfit can't exist
+// (comboBlocks refuses it).
 function comboAutoSelect() {
   if (state.phase !== 'planning' || state.locked) return false;
-  if (state.queued.length) return false;
+  const c = comboNeed();
+  if (!c) return false;
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
-  if (!me?.combo_active) return false;
-  const seq = String(me.combo_seq_csv || '').split(',').filter(Boolean);
-  const slot = me.combo_slot | 0;
-  const need = String(seq[slot] || '').toUpperCase();
-  if (!need) return false;
-  // Soft slots can be filled by the Empty slot (user ruling 2026-11-05):
-  // EM/EP are the two faces of Empty and substitute for either M or P. M and
-  // P never substitute for each other. A- and B-slots are STRICT: only their
-  // own card counts.
-  const soft = need === 'M' ? ['M', 'EM', 'EP']
-             : need === 'P' ? ['P', 'EM', 'EP']
-             : null;
-  const codes = soft || [need];
-  for (const code of codes) {
-    const i = state.hand.findIndex(c => c?.code === code && c.kind === 'action');
-    if (i >= 0) { queueSlot(i); return true; }
+  const slot = me.combo_slot | 0, need = c.need;
+  if (state.queued.length && comboAccepts(state.queued[0])) return false;
+  const pick = (key) => {
+    state.queued = [key]; state.queuedExtra = null;
+    state.queuedIsAuto = false;   // a real pick: an M slot's tap-to-walk routes through it
+    sendQueue(); renderDeck();
+    return true;
+  };
+  let castHeld = false;
+  for (const code of c.codes) {
+    const i = state.hand.findIndex(x => x?.code === code && x.kind === 'action' && !state.willDiscard.has(x.card_id));
+    if (i < 0) continue;
+    if (castLocksOut(state.hand[i])) { castHeld = true; continue; }   // a running cast holds me on Posture
+    return pick(i);
   }
   // Soft slot: fall through to the Empty slot (plays as EP; the resolver
   // reads it as EP, which both the M- and P-slot matcher accept).
-  if (soft) { queueSlot('EMPTY'); return true; }
+  if (c.soft) return pick('EMPTY');
   // Strict slot (A/B) with no card in hand — combo fails and disarms, so the
   // marker goes dark instead of wasting the player's next action chasing a
   // reset. User ruling 2026-11-05: A/B must be in hand when they come up.
   send({ kind: 'combo', active: false });
   me.combo_active = 0; me.combo_slot = 0;
-  logUI(`combo failed: no ${need} in hand for slot ${slot + 1}`, 'phase');
+  logUI(castHeld ? `combo failed: the cast in progress allows only Posture, not ${need} (slot ${slot + 1})` : `combo failed: no ${need} in hand for slot ${slot + 1}`, 'phase');
   renderComboMarker();
   return false;
 }
@@ -1036,6 +1134,16 @@ function hexDistanceTo(e) {
 // row is expanded — the user sees their stats at a glance and expands others
 // on demand.
 const _expandedRosterIds = new Set();
+// A living unit whose peer hasn't sent a snapshot for 90 s (peer.mjs
+// PEER_STALE_MS) — its process is most likely gone. The peer keeps the last
+// snapshot for an hour on purpose; here it only fades and is labelled.
+const GONE_MS = 90_000;
+function isGone(e) {
+  if (!e || e.peer_id === state.myPeerId || (e.life ?? 0) <= 0) return false;
+  const ls = Date.parse(e.last_seen || 0);
+  return Number.isFinite(ls) && Date.now() - ls > GONE_MS;
+}
+
 function renderRoster() {
   const el = document.getElementById('roster');
   el.innerHTML = '';
@@ -1045,11 +1153,14 @@ function renderRoster() {
   head.innerHTML = '<span>Unit</span><span class="team">Ally</span>';
   el.appendChild(head);
   // On first roster render after connect, auto-expand my own row.
-  if (state.myPeerId && !_expandedRosterIds.size) _expandedRosterIds.add(state.myPeerId);
-  for (const e of state.entities) {
+  if (state.myPeerId && !_expandedRosterIds.size && !IS_MOBILE_UI) _expandedRosterIds.add(state.myPeerId);
+  // Phone: me first, then the living, the dead last.
+  const isMe = e => e.peer_id === state.myPeerId, isDead = e => (e.life ?? 0) <= 0 || isGone(e);
+  const rosterList = IS_MOBILE_UI ? [...state.entities].sort((a, b) => (isMe(b) - isMe(a)) || (isDead(a) - isDead(b))) : state.entities;
+  for (const e of rosterList) {
     const row = document.createElement('div');
     const expanded = _expandedRosterIds.has(e.peer_id);
-    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
+    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${isGone(e) ? 'gone' : ''} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
@@ -1143,6 +1254,19 @@ function renderRoster() {
     const teamBadge = row.querySelector('.team');
     teamBadge.classList.add(teamClass);
     teamBadge.textContent = team;
+    if (IS_MOBILE_UI) {
+      const max = Math.max(1, e.life_max || e.lifeMax || 1), life = Math.max(0, e.life ?? 0);
+      const bar = document.createElement('span');
+      bar.className = `hpbar${life <= 0 ? ' dead' : life / max <= 0.34 ? ' low' : ''}`;
+      bar.innerHTML = `<i style="width:${Math.round(100 * Math.min(1, life / max))}%"></i><b>${life <= 0 ? '☠ dead' : isGone(e) ? '⌛ gone' : `${life}/${max}`}</b>`;
+      row.querySelector('.txt').appendChild(bar);
+    } else if (isGone(e)) {
+      const pill = document.createElement('span');
+      pill.className = 'pill gone';
+      pill.title = 'no word from this peer for over 90 s — its process has most likely stopped';
+      pill.textContent = '⌛ gone';
+      row.querySelector('.txt').appendChild(pill);
+    }
     // Build the permanents stack as real SkillCard DOM, not innerHTML strings
     // — the icon canvas has to be a live node so the sprite paints into it.
     if (permIds.length) {
@@ -1949,6 +2073,7 @@ function autoselectFirstHandCard() {
 
 function setPhase(name, seconds, heartbeat, m = {}) {
   state.phase = name; state.seconds = seconds; state.heartbeat = heartbeat;
+  renderComboMarker();   // only lit during planning
   if (typeof m.turn === 'number') state.turn = m.turn;
   if (typeof m.round === 'number') state.round = m.round;
   if (typeof m.rounds_per_turn === 'number') state.roundsPerTurn = m.rounds_per_turn;
@@ -1975,7 +2100,15 @@ function setPhase(name, seconds, heartbeat, m = {}) {
     // Keep destinationTile across rounds — a right-click sets up a multi-round
     // journey, so each new planning phase should pick up along the path rather
     // than forget it. The auto-stage below replaces the usual first-card pick.
-    if (!resumeJourney()) {
+    // Armed combo: its slot's action is the pick — no first-card autoselect
+    // and no auto-walk (comboAutoSelect re-runs when the snapshot advancing
+    // combo_slot arrives, and again when the hand lands).
+    if (comboNeed()) {
+      state.ui.destinationTile = null;
+      state.ui.pathPlan = null;
+      state.queued = [];
+      comboAutoSelect();
+    } else if (!resumeJourney()) {
       state.ui.destinationTile = null;
       state.ui.pathPlan = null;
       autoselectFirstHandCard();
@@ -2093,6 +2226,7 @@ function connect() {
         // removal so ghosts from dead processes leave the roster and map.
         if (m.dropped) { const keep = new Set((m.peers || []).map(p => p.peer_id)); state.entities = state.entities.filter(e => keep.has(e.peer_id)); }
         renderComboMarker();
+        comboAutoSelect();   // combo_slot may have just advanced: pick that slot's action
       }
       if (m.kind === 'evt') {
         const env = m.env;
@@ -2103,6 +2237,7 @@ function connect() {
           // Anything we don't fold still shows up as its own line (debug clarity).
           logUI(`${env.type} by ${peerShort(env.actor_peer_id)}${m.from_peer ? ' (mesh)' : ''}`, 'evt', { peerId: env.actor_peer_id });
         }
+        if (env.type === 'evt_state_hash' && IS_MOBILE_UI) applyResolvedRegion(env);
         if (env.type === 'evt_state_hash') {
           // Every peer independently emits an evt_state_hash for the turn, so
           // we'd log the same DMG line N× without a dedupe. Key by (turn,
@@ -2216,6 +2351,15 @@ function connect() {
                 duration: 2600,
               };
             }
+            // Persistent trail of what this unit has emitted in its current
+            // cast (dots under its name): grows while the same effect keeps
+            // emitting, restarts on a new effect, clears on a non-emitting action.
+            state.ui.emitTrails ||= {};
+            const trailEff = a.effects?.[0]?.effect_id || null;
+            const trail = state.ui.emitTrails[a.actor];
+            if (!a.emitted_element) delete state.ui.emitTrails[a.actor];
+            else if (trail && trailEff && trail.effect === trailEff) trail.elems = [...trail.elems, a.emitted_element].slice(-6);
+            else state.ui.emitTrails[a.actor] = { effect: trailEff, elems: [a.emitted_element] };
             if (a.bonus) logUI(`  ⚡ ${peerShort(a.actor)} ${a.pre ? 'balefire first' : `bonus round ${(a.bonus_k || 0) + 1}`}: ${composeLabel(a)}`, 'phase', { peerId: a.actor });
             const fromQ = Number.isInteger(a.from_q) ? a.from_q : null;
             const fromR = Number.isInteger(a.from_r) ? a.from_r : null;
@@ -2306,6 +2450,36 @@ function connect() {
   };
 }
 
+// Phone: short-lived notices over the map (HP changes, deaths) — the event log
+// is too small to follow there. At most four, newest on top.
+function mobileToast(text, kind = '') {
+  let box = document.getElementById('m-toasts');
+  if (!box) { box = document.createElement('div'); box.id = 'm-toasts'; document.body.appendChild(box); }
+  const t = document.createElement('div');
+  t.className = `m-toast ${kind}`;
+  t.textContent = text;
+  box.prepend(t);
+  while (box.children.length > 4) box.lastChild.remove();
+  setTimeout(() => t.classList.add('out'), kind === 'death' ? 4000 : 2200);
+  setTimeout(() => t.remove(), kind === 'death' ? 4600 : 2800);
+}
+
+// Phone: another unit's HP / tile otherwise only moves when ITS next snapshot
+// crosses the public relays — an idle desktop player's can lag for rounds, so
+// a kill showed up all at once. Our own resolver's post-action view (`region`,
+// the state that gets hashed) is authoritative: show it now, and don't let a
+// snapshot from before that action undo it (guard in mergeEntities).
+const turnKey = (turn, round) => (turn ?? 0) * 10 + (round ?? 0);
+function applyResolvedRegion(env) {
+  const at = turnKey(env.turn, env.round);
+  const upd = [];
+  for (const r of env.payload?.region || []) {
+    if (!r?.id || r.id === state.myPeerId || !state.entities.some(e => e.peer_id === r.id)) continue;
+    upd.push({ peer_id: r.id, life: r.life, ...(Array.isArray(r.tile) ? { tile_q: r.tile[0], tile_r: r.tile[1] } : {}), _resolvedAt: at });
+  }
+  if (upd.length) mergeEntities(upd);
+}
+
 function mergeEntities(incoming) {
   const byId = new Map(state.entities.map(e => [e.peer_id, e]));
   // Remember who was on which tile before the merge so we can detect every
@@ -2316,7 +2490,15 @@ function mergeEntities(incoming) {
   for (const e of state.entities) prev.set(e.peer_id, { q: e.tile_q, r: e.tile_r, life: e.life, present: true });
   for (const p of incoming) {
     if (!p || !p.peer_id) continue;
-    byId.set(p.peer_id, { ...(byId.get(p.peer_id) || {}), ...p });
+    const cur = byId.get(p.peer_id);
+    let upd = p;
+    // Phone: a snapshot taken at or before the action we already resolved
+    // keeps everything but its (stale) life / tile — see applyResolvedRegion.
+    if (IS_MOBILE_UI && cur?._resolvedAt != null && p._resolvedAt == null && turnKey(p.turn, p.round) <= cur._resolvedAt) {
+      const { life, tile_q, tile_r, ...rest } = p;
+      upd = rest;
+    }
+    byId.set(p.peer_id, { ...(cur || {}), ...upd });
   }
   state.entities = [...byId.values()];
   // Suppress spawn sounds during the first cold-sync window of a (re)connect —
@@ -2330,6 +2512,10 @@ function mergeEntities(incoming) {
     } else if (was && was.life > 0 && (e.life ?? 0) <= 0) {
       const r = resOf(e);
       if (r?.sounds?.death) sounds.play(r, 'death', { volume: 0.55 });
+      if (IS_MOBILE_UI) mobileToast(`☠ ${e.name} died`, 'death');
+    } else if (IS_MOBILE_UI && was && !coldSync && Number.isFinite(was.life) && Number.isFinite(e.life) && e.life !== was.life && e.life > 0) {
+      const d = e.life - was.life;
+      mobileToast(`${e.name} ${d > 0 ? '+' : '−'}${Math.abs(d)} hp (${e.life}/${e.life_max || e.lifeMax || '?'})`, d > 0 ? 'heal' : 'hurt');
     }
     if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
     if (was && was.q === e.tile_q && was.r === e.tile_r) continue;
@@ -2483,10 +2669,17 @@ function queueSlot(key) {
       // Rule 22: an effect whose first element is the tail's last one chains on.
       const doubling = !!first && first.effect_id === card.effect_id && state.queuedChain.length === 0 && !state.casting;
       const linking = !doubling && chainable(card);
-      if (tranceActive()) { state.queuedSkills = state.queuedSkills.filter(i => !isTrance(state.hand[i])); state.queuedExtra = null; }
+      // Armed combo: the Posture the cast needs must also be the combo's action
+      // (a P slot takes P or Empty, an M slot only Empty); else it can't ride.
+      let carrier = null;
       if (!effectMatchesQueue(card, doubling, linking)) {
         const idx = firstActionIdx('P');
-        state.queued = [idx >= 0 ? idx : 'EMPTY'];
+        carrier = idx >= 0 && comboAccepts(idx) ? idx : 'EMPTY';
+        if (comboBlocks(carrier)) return;
+      }
+      if (tranceActive()) { state.queuedSkills = state.queuedSkills.filter(i => !isTrance(state.hand[i])); state.queuedExtra = null; }
+      if (carrier !== null) {
+        state.queued = [carrier];
         state.queuedSkills = [];
         state.queuedExtra = null;
       }
@@ -2511,11 +2704,14 @@ function queueSlot(key) {
       state.queuedSkills = state.queuedSkills.filter(i => i !== key);
       if (isTrance(card)) state.queuedExtra = null;
     } else if (isTrance(card)) {
+      // Battle Trance plays two actions at once — not while a combo dictates one.
+      if (comboNeed() && state.phase === 'planning') { comboTilt('Battle Trance can\'t ride an armed combo — tap the combo to turn it off first'); return; }
       if (queuedActionCode() === null) { state.queued = [firstActionIdx('*')]; state.queuedSkills = []; }
       state.queuedSkills.push(key);
     } else {
       if (!skillMatchesQueue(card)) {
         const idx = firstActionIdx(card.requires);
+        if (comboBlocks(idx >= 0 ? idx : 'EMPTY')) return;   // the skill's action must be the combo's
         state.queued = [idx >= 0 ? idx : 'EMPTY'];
         state.queuedSkills = [];
         state.queuedExtra = null;
@@ -2548,6 +2744,9 @@ function queueSlot(key) {
     logUI(state.lostActions > 0 ? `you sit this action out (${state.lostActions} left)` : `${(eff || state.casting)?.name || 'the effect'} is being cast — only Posture${isReaver() ? ', Attack' : ''}${isMonk() ? ', Move' : ''} or Empty Posture until it lands (moving interrupts it)`, 'phase');
     return;
   }
+  // Armed combo: only the slot's action (unqueuing it would leave EP — also
+  // refused on a strict A/B slot).
+  if (comboBlocks(state.queued[0] === key ? 'EMPTY' : key)) return;
   // Single-action-per-turn (Rule 1 + Rule 7). Clicking the already-queued slot
   // unqueues it (so you can commit nothing → defaults to EP server-side);
   // clicking a different slot replaces the pick.
@@ -2578,6 +2777,8 @@ function toggleDiscard(i) {
 function wireInput() {
   const chipBtn = document.querySelector('#log-filter-chip button');
   if (chipBtn) chipBtn.addEventListener('click', () => setLogFilter(null));
+  // Combo marker: click / tap toggles the combo (lit when it can start).
+  document.getElementById('combo-marker')?.addEventListener('click', (e) => { e.stopPropagation(); toggleCombo(); });
   document.querySelectorAll('#slots .slot').forEach(slotEl => {
     const key = slotEl.dataset.slot;
     const slotKey = key === 'EMPTY' ? 'EMPTY' : Number(key);
@@ -2620,28 +2821,9 @@ function wireInput() {
       // triggers comboAutoSelect() to pick the next slot's card. The marker
       // only disarms on explicit toggle, mismatch, completion, or a strict
       // slot (A/B) with no card in hand.
-      const me = state.entities.find(p => p.peer_id === state.myPeerId);
-      const seq = String(me?.combo_seq_csv || '').split(',').filter(Boolean);
-      if (!seq.length) { renderer.recentre(); return; }
-      const want = !me?.combo_active;
-      if (want) {
-        // Pre-flight: every strict slot (A/B) in the sequence must have a
-        // matching card in hand right now. Soft slots (M/P) are always
-        // fillable because the Empty slot plays as EP, which both accept.
-        // User ruling 2026-11-05: if the hand can't finish the combo, don't
-        // start it — e.g. PAB with only B in hand is a non-starter.
-        const missing = new Set();
-        for (const code of seq) {
-          if ((code === 'A' || code === 'B') && !state.hand.some(c => c?.code === code && c.kind === 'action')) missing.add(code);
-        }
-        if (missing.size) { logUI(`combo blocked: hand lacks ${[...missing].join(', ')} for ${seq.join(' → ')}`, 'phase'); return; }
-      }
-      send({ kind: 'combo', active: want });
-      if (me) me.combo_active = want ? 1 : 0;   // optimistic — the next snapshot confirms
-      if (me) me.combo_slot = 0;
-      logUI(want ? `combo armed: ${seq.join(' → ')}` : 'combo disarmed', 'phase');
-      renderComboMarker();
-      if (want) comboAutoSelect();
+      // Same toggle as clicking / tapping the marker (toggleCombo: pre-flight,
+      // first action replaces the pick, lock-in while armed).
+      if (!toggleCombo()) renderer.recentre();
     }
     else if (ev.key === 'r' || ev.key === 'R') renderer.recentre();
     else if (ev.key === 'm' || ev.key === 'M') {
@@ -2676,6 +2858,8 @@ function wireInput() {
           locked: isMe ? state.locked : false,
           revealBadge: state.ui.revealBadges?.[p.peer_id] || null,
           lostActions: p.lost_actions || 0,
+          emitTrail: state.ui.emitTrails?.[p.peer_id]?.elems || null,
+          gone: isGone(p),
         };
       });
     },
@@ -2705,6 +2889,29 @@ function wireInput() {
     get myPeerId() { return state.myPeerId; },
   });
   rendererRef = renderer;
+  // Phone: no keyboard, so the shortcuts that matter get buttons —
+  // commit (Space), recentre (C/R), mute (M), and the event log on demand.
+  if (IS_MOBILE_UI) {
+    const bar = document.createElement('div');
+    bar.id = 'm-tools';
+    bar.innerHTML = `<button type="button" data-t="commit" title="commit">✔</button><button type="button" data-t="centre" title="recentre on my hero">⌖</button><button type="button" data-t="mute" title="sound"></button><button type="button" data-t="log" title="event log">☰</button>`;
+    document.body.appendChild(bar);
+    const muteBtn = bar.querySelector('[data-t="mute"]');
+    const paintMute = () => { muteBtn.textContent = sounds.muted ? '🔇' : '🔊'; };
+    paintMute();
+    bar.addEventListener('click', (ev) => {
+      const t = ev.target.closest('button')?.dataset.t;
+      if (t === 'commit') {
+        if (state.bonusMode) commitBonus();
+        else if (state.phase === 'planning' && !state.locked && state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); }
+      } else if (t === 'centre') renderer.recentre();
+      else if (t === 'mute') {
+        const muted = sounds.toggle();
+        try { localStorage.setItem('chaosd6.muted', muted ? '1' : '0'); } catch { /* no storage */ }
+        paintMute();
+      } else if (t === 'log') document.documentElement.classList.toggle('m-log-open');
+    });
+  }
   // Test hook (tools/ui-check.mjs): every known hex that carries a map object,
   // with its current canvas-pixel position so a script can click it.
   window.__chaosObjects = () => {
@@ -2757,6 +2964,17 @@ function wireInput() {
 
   canvas.addEventListener('click', (ev) => {
     if (renderer.wasDrag()) return;   // the button-up that ended a map pan is not a click
+    // Touch has no right button, so on the phone a tap IS the right-click
+    // gesture (Move / EM along a route, Attack-step, attack a foe; a second
+    // tap within 500ms commits). A tile-target effect waiting for its tile
+    // keeps the left-click meaning.
+    if (IS_MOBILE_UI) {
+      const qeTap = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+      if (!qeTap?.tile_target) {
+        canvas.dispatchEvent(new MouseEvent('contextmenu', { clientX: ev.clientX, clientY: ev.clientY, bubbles: true, cancelable: true }));
+        return;
+      }
+    }
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
     const t = renderer.pickHex(px, py, knownHex);
@@ -2877,6 +3095,16 @@ function wireInput() {
     const isEnemy = occupant && occupant.peer_id !== state.myPeerId
       && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
     const atTile = me.tile_q === t.q && me.tile_r === t.r;
+    // Armed combo (user ruling 2026-11-10): a walk/step gesture is a Move, so
+    // it only goes through on the combo's M slot. On A an enemy (or yourself:
+    // nearest enemy) can still be attacked; B/P keep their action and only
+    // bind a target. To move anyway, toggle the combo off.
+    const combo = comboNeed();
+    const comboMove = !!combo && combo.need === 'M';
+    if (combo && !isEnemy && !comboMove && !(combo.need === 'A' && atTile)) {
+      comboTilt(`combo ${comboSeq().seq.join('')}: this action is ${combo.need}, not a move — tap the combo to turn it off first`);
+      return;
+    }
 
     // Pick the action for this gesture. User rule: a right-click on an enemy
     // only triggers an action against them when A or M is actually in the
@@ -2892,7 +3120,7 @@ function wireInput() {
     // Only auto-stage Attack when A is already queued OR the click is on an
     // empty hex (user is gesturing somewhere to walk/attack-step). Clicking
     // an enemy with a non-A, non-M queue respects the queued action.
-    const useAttack = !moveExplicit && attackIdx >= 0 && (queuedCode === 'A' || !isEnemy);
+    const useAttack = !comboMove && !moveExplicit && attackIdx >= 0 && (queuedCode === 'A' || !isEnemy);
     let label;
     // Enemy right-clicked AND the queue is something that isn't A or M:
     // bind the target for the next-round attack-pick but keep the current
@@ -2917,7 +3145,7 @@ function wireInput() {
         send({ kind: 'lock' });
         logUI(`committed: ${label}`, 'phase', { peerId: occupant.peer_id });
       } else {
-        logUI(`staged: ${label} — right-click again to commit`, 'phase', { peerId: occupant.peer_id });
+        logUI(`staged: ${label} — ${IS_MOBILE_UI ? 'tap' : 'right-click'} again to commit`, 'phase', { peerId: occupant.peer_id });
       }
       renderDeck();
       return;
@@ -3009,7 +3237,7 @@ function wireInput() {
       send({ kind: 'lock' });
       logUI(`committed: ${label}`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
     } else {
-      logUI(`staged: ${label} — right-click again to commit`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
+      logUI(`staged: ${label} — ${IS_MOBILE_UI ? 'tap' : 'right-click'} again to commit`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
     }
     renderDeck();
   });
