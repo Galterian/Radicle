@@ -23,6 +23,8 @@ const DIM = process.argv[4] || `Swarm-${String(now.getHours()).padStart(2, '0')}
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Teams as peer.mjs sideOf(): A = player/npc_a, B = npc_b, C = player_c/npc_c.
+const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
 // Class colours (user ruling 2026-10-30): the agents strike an adjacent enemy's class colour by colour and use
 // their own class ability, so the swarm exercises both resolver paths. Canonical data only.
 const readData = (f) => JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'data', f), 'utf8'));
@@ -60,7 +62,7 @@ function startAgent(peerId, port, attempt = 0) {
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
     if (!me || (me.life ?? 1) <= 0) return;
-    const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && p.alliance === 'npc_b' && p.life > 0 && Number.isInteger(p.tile_q));
+    const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q));
     const dist = p => hexDistance({ q: me.tile_q, r: me.tile_r }, { q: p.tile_q, r: p.tile_r });
     enemies.sort((x, y) => dist(x) - dist(y));
     const near = enemies[0];
@@ -138,7 +140,7 @@ function startAgent(peerId, port, attempt = 0) {
     // Stat buys (Summoning, Golems, Elementals): start whenever an enemy is in sight.
     // Resurrect only with a fallen unit or an ally next to me (else it has nothing to aim at).
     const nextToMe = [...a.peers.values()].filter(p => p.peer_id !== peerId && Number.isInteger(p.tile_q) && dist(p) <= 1);
-    const canRaise = nextToMe.some(p => (p.life ?? 1) <= 0 || (p.alliance !== 'npc_b' && p.life > 0));
+    const canRaise = nextToMe.some(p => (p.life ?? 1) <= 0 || (sideOf(p.alliance) === sideOf(me.alliance) && p.life > 0));
     const sumIdx = a.hand.findIndex(c => isEffect(c) && (c.effect_types || []).includes('stat_buy') && (c.effect_id !== 'effect_resurrect_death_ward' || canRaise));
     if (sumIdx >= 0 && near && Math.random() < 0.5) {
       const p = slotOf('P');
@@ -237,6 +239,8 @@ const joins = [
   { label: 'M-Foe3',   side: 'npc_b',  creatureId: 'mon_hellkite_hatchling' },
   { label: 'M-Foe4',   side: 'npc_b',  creatureId: 'mon_tangle_spider_2b' },
 ];
+// TEAM_C=1: one human-driven bot on the third team (hostile to A and B).
+if (process.env.TEAM_C === '1') joins.push({ label: 'C-Agent6', side: 'player_c', characterId: 'char_akki_coalfinger' });
 for (const j of joins) {
   let base = launcher;
   if (launcherC && j.label === 'P-Agent5') {
@@ -248,12 +252,12 @@ for (const j of joins) {
     }
     log(base === launcherC ? `launcher C sees ${DIM} — joining ${j.label} through it` : `launcher C never saw ${DIM}; joining ${j.label} through A`);
   }
-  const out = await api('/api/launch', { mode: 'join', dimensionName: DIM, doorId: null, placement: j.side === 'npc_b' ? 'random' : 'nearby', ...j, entityName: j.label }, base);
+  const out = await api('/api/launch', { mode: 'join', dimensionName: DIM, doorId: null, placement: j.side === 'player' ? 'nearby' : 'random', ...j, entityName: j.label }, base);
   if (!out.ok) { console.error('join failed', j.label, out.error); continue; }
   ports.set(`peer:${j.label}`, out.peerPort);
   log(`joined ${j.label} (${j.side}) at (${out.startTile.q},${out.startTile.r}) on :${out.peerPort}${base === launcherC ? ' via launcher C' : ''}`);
   await sleep(1500);
-  if (j.side === 'player') startAgent(`peer:${j.label}`, out.peerPort);
+  if (j.side === 'player' || j.side === 'player_c') startAgent(`peer:${j.label}`, out.peerPort);
 }
 log(`agents driving: ${agents.map(a => a.peerId).join(', ')}`);
 

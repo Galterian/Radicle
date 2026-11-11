@@ -1115,7 +1115,7 @@ function recomputeSightSet() {
     if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
     const mine = e.peer_id === state.myPeerId;
     const ownedByMe = e.owner_peer_id === state.myPeerId;
-    const alliedChar = e.alliance === 'player' || e.alliance === 'npc_a';
+    const alliedChar = sameSide(e);
     if (!(mine || ownedByMe || alliedChar)) continue;   // enemies don't share sight
     const radius = mine ? HERO_SIGHT_RADIUS : ALLY_SIGHT_RADIUS;
     addDisc(e.tile_q, e.tile_r, radius);
@@ -1160,7 +1160,7 @@ function renderRoster() {
   for (const e of rosterList) {
     const row = document.createElement('div');
     const expanded = _expandedRosterIds.has(e.peer_id);
-    row.className = `ros ${e.alliance === 'player' || e.alliance === 'npc_a' ? 'ally' : 'enemy'} ${e.life > 0 ? '' : 'dead'} ${isGone(e) ? 'gone' : ''} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
+    row.className = `ros ${sameSide(e) ? 'ally' : 'enemy'} ${sideOfAlliance(e.alliance) === 'C' ? 'team-c' : ''} ${e.life > 0 ? '' : 'dead'} ${isGone(e) ? 'gone' : ''} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
@@ -1186,8 +1186,8 @@ function renderRoster() {
     try { permPower = JSON.parse(e.perm_power_json || '{}') || {}; } catch {}
     // Every permanent shows the die it was placed with — what an enemy's emission has to beat (Rule 24).
     const mine = e.peer_id === state.myPeerId;
-    const isAllyRow = !mine && (e.alliance === 'player' || e.alliance === 'npc_a') && e.life > 0;
-    const isEnemyRow = !mine && !(e.alliance === 'player' || e.alliance === 'npc_a') && e.life > 0;
+    const isAllyRow = !mine && sameSide(e) && e.life > 0;
+    const isEnemyRow = !mine && !sameSide(e) && e.life > 0;
     // Phylactery pick: an enemy's permanents become clickable (class cards excepted).
     const permPills = isEnemyRow && state.phylacteryMode;
     const permLabel = s => `${s.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}${permPower[s] ? ` ⚄${permPower[s]}` : ''}`;
@@ -1505,7 +1505,7 @@ function renderRevealOverlay() {
       const chip = document.createElement('div');
       chip.className = 'reveal-chip';
       chip.classList.toggle('self', pid === state.myPeerId);
-      chip.classList.toggle('enemy', e.alliance === 'npc_b');
+      chip.classList.toggle('enemy', !sameSide(e));
       chip.textContent = `[${badge.text}]`;
       el.appendChild(chip);
       if (Array.isArray(badge.skills) && badge.skills.length) {
@@ -1961,15 +1961,23 @@ function mySummoned() {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   return String(me?.summoned_csv || '').split(',').filter(Boolean).map(id => state.entities.find(p => p.peer_id === id) || { name: id });
 }
+// Teams, as peer.mjs sideOf(): A = player + npc_a (and their summons), B = npc_b,
+// C = the third team (player_c + npc_c). Ally / enemy is always relative to me.
+function sideOfAlliance(a) { return (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a; }
+function sameSide(e) {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  return sideOfAlliance(e?.alliance) === sideOfAlliance(me?.alliance || 'player');
+}
 // Team label (user spec): a creature belongs to "<Owner> Team" when summoned, bound or
 // raised, else it is a "Monster"; characters read You / <name> Team / Ally / Enemy.
 function teamLabel(e) {
+  const isFoe = !sameSide(e);
   const owner = e.owner_peer_id ? state.entities.find(p => p.peer_id === e.owner_peer_id) : null;
   if (e.owner_peer_id) return `${owner?.peer_id === state.myPeerId ? 'Your' : (owner?.name || peerShort(e.owner_peer_id))} Team`;
-  if (e.creature_id || e.source_id?.startsWith('mon_')) return e.alliance === 'npc_b' ? 'Monster' : 'Ally';
+  if (e.creature_id || e.source_id?.startsWith('mon_')) return isFoe ? (sideOfAlliance(e.alliance) === 'C' ? 'Team C' : 'Monster') : 'Ally';
   if (e.peer_id === state.myPeerId) return 'You';
-  if (e.alliance === 'player') return `${e.name} Team`;
-  return e.alliance === 'npc_a' ? 'Ally' : 'Enemy';
+  if (e.alliance === 'player' || e.alliance === 'player_c') return `${e.name} Team`;
+  return isFoe ? 'Enemy' : 'Ally';
 }
 // Keys 9 0 - = address the n-th permanent WITH an ability.
 function clickPermanentKey(n) {
@@ -3002,7 +3010,7 @@ function wireInput() {
     // Artifice, Metaphysics, Disruption, Mind Blast) the left-clicked tile is the cast's target.
     const qe = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
-    const enemyClicked = !!occupant && occupant.peer_id !== state.myPeerId && !!me && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
+    const enemyClicked = !!occupant && occupant.peer_id !== state.myPeerId && !!me && !sameSide(occupant);
     if (qe?.tile_target && !(enemyClicked && qe.scope === 'target')) {
       state.target = { q: t.q, r: t.r };
       logUI(`${qe.name} → tile (${t.q},${t.r})`, 'phase');
@@ -3093,7 +3101,7 @@ function wireInput() {
 
     const occupant = entityAtPixel(px, py);
     const isEnemy = occupant && occupant.peer_id !== state.myPeerId
-      && (occupant.alliance === 'npc_b') !== (me.alliance === 'npc_b');
+      && !sameSide(occupant);
     const atTile = me.tile_q === t.q && me.tile_r === t.r;
     // Armed combo (user ruling 2026-11-10): a walk/step gesture is a Move, so
     // it only goes through on the combo's M slot. On A an enemy (or yourself:

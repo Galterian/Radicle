@@ -83,7 +83,7 @@ async function launch() {
 // readable when the launcher panel is narrow.
 const MAX_CHIPS = 10;
 const shortId = id => String(id || '').replace(/^peer:/, '');
-const sideOf = a => (a === 'player' || a === 'npc_a' || a === 'npc_b') ? a : 'npc_b';
+const sideOf = a => (a === 'player' || a === 'npc_a' || a === 'npc_b') ? a : (a === 'player_c' || a === 'npc_c') ? 'team-c' : 'npc_b';
 
 function pickMode(value) {
   const radio = document.querySelector(`input[name="mode"][value="${value}"]`);
@@ -221,7 +221,7 @@ async function renderLauncher() {
   let liveMonsterDoors = 0;
   const monsterDims = new Set();
   for (const d of items) for (const p of d.doors) {
-    if (p.alliance !== 'player') {
+    if (p.alliance !== 'player' && p.alliance !== 'player_c') {
       if (isAlive(p)) { liveMonsterDoors++; monsterDims.add(d.dimension_name); }
       continue;
     }

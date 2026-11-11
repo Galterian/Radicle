@@ -108,7 +108,11 @@ const NOSTR_ENABLED     = (process.env.NOSTR_ENABLED || '1') !== '0';
 const CHARACTER_ID      = process.env.CHARACTER_ID     || '';
 const CREATURE_ID       = process.env.CREATURE_ID      || '';
 const ENTITY_NAME       = process.env.ENTITY_NAME      || PEER_LABEL;
-const ALLIANCE          = process.env.ALLIANCE         || 'player';              // player | npc_a | npc_b
+const ALLIANCE          = process.env.ALLIANCE         || 'player';              // player | npc_a | npc_b | player_c | npc_c
+// Human hands: the player of side A and the player of the third team (C).
+// Everything else is played by npcPlan().
+const isHumanAlliance = (a) => a === 'player' || a === 'player_c';
+const IS_HUMAN = isHumanAlliance(ALLIANCE);
 // Summoning: a companion process is spawned by its summoner with OWNER_PEER_ID
 // set; it follows that peer and vanishes when their Summoning permanent falls.
 // A ∀ Summoning binds an existing creature instead — it learns its owner at
@@ -492,11 +496,14 @@ if (CHARACTER_ID) {
   };
 }
 entity.lifeMaxBase = entity.lifeMax;   // before token / tile bonuses (general_ux_hitpoints_calculations)
+// Rejoin from a save / replacing a running copy of me: keep the life I had
+// (the launcher passes it), never more than my max, never a free corpse.
+if (Number(process.env.START_LIFE) > 0) entity.life = Math.min(entity.lifeMax, Math.round(Number(process.env.START_LIFE)));
 // Wild monster: a creature that isn't a companion and plays on the enemy side
 // of the player. Spawns `sleeping` (does nothing) and flips to `awake` once any
 // player sits within 2 hexes of us (user ruling 2026-11-05). Companions and
 // summons never sleep. Characters are never monsters.
-entity.monsterState = (entity.kind === 'creature' && !IS_COMPANION && ALLIANCE !== 'player') ? 'sleeping' : null;
+entity.monsterState = (entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN) ? 'sleeping' : null;
 // Combo tracker (user ruling 2026-11-05): a character can declare an active
 // combo via UI hotkey C; the resolver walks `entity.combo` one slot per
 // revealed action (M-slot: M/EM/EP/P all match). Wrong card resets. Three
@@ -649,7 +656,7 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv }) {
   fsSync.writeFileSync(blocksFile, JSON.stringify(dimMap.blocks()));
   const env = {
     ...process.env,
-    PEER_LABEL: tag, ALLIANCE: MY_SIDE === 'A' ? 'npc_a' : 'npc_b', START_TILE: JSON.stringify(tile),
+    PEER_LABEL: tag, ALLIANCE: npcAllianceOf(MY_SIDE), START_TILE: JSON.stringify(tile),
     PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
     MAP_SEED, MAP_BLOCKS_FILE: blocksFile, BOOTSTRAP: [...myMaddrs, ...BOOTSTRAP_MADDRS].join(','), PEER_GUN_URLS: [myGunUrl, ...PEER_GUN_URLS].join(','),
     JOIN_SYNC_WAIT_MS: '4000', OWNER_PEER_ID: PEER_ID_STRING, FORCE_EFFECTS: '', FORCE_SKILLS: '', FORCE_OPENING: '', FORCE_CLASS: '',
@@ -670,13 +677,23 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv }) {
 // instance of peer.mjs (via mobile-entry.mjs for the Node 18 polyfills), own
 // ports, same env contract. Returned with the child-process surface the
 // callers use (stdout/stderr/on('exit')/kill). Its "UI socket on ws://…" line
-// is relabelled so the plugin's node_ready match never repoints the HUD at it.
+// is reworded so the plugin's node_ready match (an unanchored
+// `(?:peer listening on|UI socket on ws://)127.0.0.1:N`) never repoints the
+// HUD at it — a prefix alone still matched, and summoning a Golem turned the
+// phone into the Golem. Line-buffered so the phrase can't straddle chunks.
 async function spawnCompanionWorker(env) {
   const { Worker } = await import('node:worker_threads');
   const { Transform } = await import('node:stream');
   delete env.JOIN_URI;
   const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
-  const relabel = () => new Transform({ transform(chunk, _enc, cb) { cb(null, String(chunk).replace(/UI socket on ws:/g, 'companion UI socket on ws:').replace(/peer listening on/g, 'companion listening on')); } });
+  const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'companion UI socket at ').replace(/peer listening on/g, 'companion listening at');
+  const relabel = () => {
+    let tail = '';
+    return new Transform({
+      transform(chunk, _enc, cb) { const lines = (tail + chunk).split('\n'); tail = lines.pop(); cb(null, lines.length ? reword(lines.join('\n') + '\n') : ''); },
+      flush(cb) { cb(null, tail ? reword(tail) : ''); },
+    });
+  };
   const stdout = w.stdout.pipe(relabel()), stderr = w.stderr.pipe(relabel());
   return { stdout, stderr, on: (ev, fn) => w.on(ev, fn), kill: () => { w.terminate().catch(() => {}); } };
 }
@@ -715,7 +732,7 @@ function becomeBound(owner, permId, mode) {
   const o = peersPublic.get(owner);
   const side = o ? sideOf(o.alliance) : 'A';
   if (boundOriginalAlliance === null) boundOriginalAlliance = entity.alliance;
-  entity.alliance = side === 'A' ? 'npc_a' : 'npc_b'; MY_SIDE = side;
+  entity.alliance = npcAllianceOf(side); MY_SIDE = side;
   ownerPeerId = owner; ownerSeenHolding = true; boundMode = mode; boundPerm = permId;
   console.log(`[${PEER_LABEL}] ${mode === 'revive' ? 'raised' : 'bound'} by ${owner.slice(0, 12)}'s ${SUMMON_PERMS[permId] || permId} — I fight for side ${side} now`);
   publishPublicState().catch(() => {});
@@ -1379,7 +1396,7 @@ function offerMapSync(peerId, theirBlocks) {
     .finally(() => { mapSyncInFlight = false; });
 }
 async function revealAround(q, r) {
-  if (ALLIANCE !== 'player') return;
+  if (!IS_HUMAN) return;
   if (!dimMap.needsReveal(q, r, REVEAL_RADIUS)) return;
   const b = discBlock(q, r, REVEAL_RADIUS, PEER_ID_STRING);
   if (!addMapBlock(b, 'self')) return;
@@ -1472,8 +1489,11 @@ let lastAttackTarget = null;  // peer_id of the enemy we last swung at — the n
 function sideOf(alliance) {
   if (alliance === 'player' || alliance === 'npc_a') return 'A';
   if (alliance === 'npc_b') return 'B';
+  if (alliance === 'player_c' || alliance === 'npc_c') return 'C';   // third team: hostile to A and B
   return alliance;
 }
+// The alliance a summon / bound creature takes on a side.
+function npcAllianceOf(side) { return side === 'A' ? 'npc_a' : side === 'C' ? 'npc_c' : 'npc_b'; }
 let MY_SIDE = sideOf(ALLIANCE);
 
 function anyAdjacentOpponents() {
@@ -1658,7 +1678,7 @@ async function doPlanningEnd() {
   freezeRoundMembers();
   if (entity.life <= 0) { myLastReveal = null; return; }
   // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
-  if (ALLIANCE !== 'player') await npcPlan();
+  if (!IS_HUMAN) await npcPlan();
 
   // Decode the single queued pick. The queue can hold either a hand slot index
   // or one of the Empty-type markers. 'EMPTY' is the combined slot — rule 6
@@ -4149,7 +4169,7 @@ async function npcPlan() {
   // sees the same transition on the following broadcast.
   if (entity.monsterState === 'sleeping') {
     const hereH = { tile_q: entity.tile.q, tile_r: entity.tile.r };
-    const trigger = livePeers().some(p => p && p.alliance === 'player' && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(hereH, p) <= 2);
+    const trigger = livePeers().some(p => p && isHumanAlliance(p.alliance) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(hereH, p) <= 2);
     if (trigger) entity.monsterState = 'awake';
     else { queued = ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null; return; }
   }
@@ -4894,7 +4914,7 @@ await emitEnvelope({
 await emitEnvelope({
   type: 'evt_join',
   payload: {
-    door_id: DOOR_ID, flow: ALLIANCE === 'player' ? 'open_dimension' : 'join_near_friend',
+    door_id: DOOR_ID, flow: IS_HUMAN ? 'open_dimension' : 'join_near_friend',
     character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null, class_id: null,
     deck_commitment: digestObj(deck.map(c => c.card_id)),
     entry_tile: entity.tile, adopted_head: null,
@@ -4937,11 +4957,14 @@ const getSnapshot = () => ({
     hp_max: p.life_max ?? 0,
     tile_q: p.tile_q ?? 0,
     tile_r: p.tile_r ?? 0,
-    class_id: p.class_id || entity.classId || '',
+    class_id: p.class_id || (p.peer_id === PEER_ID_STRING ? entity.classId : '') || '',
   })),
   meta: { dim_id: DIM_ID, dim_name: DIM_NAME, peer_id: PEER_ID_STRING, peer_label: PEER_LABEL, turn: hg.turn, round: hg.round },
 });
-try {
+// Only a human hero writes it: every peer on this box shares the one file, and
+// the launcher's "Load a saved dimension" rejoins as the save's author — a
+// summon or a monster writing last made "me" a creature.
+if (IS_HUMAN && !IS_COMPANION) try {
   _autosave = autosaveStart({ dimensionId: DIM_ID, dimensionName: DIM_NAME, mapSeed: MAP_SEED, intervalMs: AUTOSAVE_INTERVAL_MS, getSnapshot });
   console.log(`[${PEER_LABEL}] autosave: every ${AUTOSAVE_INTERVAL_MS}ms → ${_autosave.path}`);
 } catch (e) { console.warn(`[${PEER_LABEL}] autosave disabled: ${e.message}`); }

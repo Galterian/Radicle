@@ -7,10 +7,17 @@ import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './feat
 import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
 const ALLIANCE_COLOR = {
-  'player':  '#6ad9ff',
-  'npc_a':   '#6ad99f',
-  'npc_b':   '#e36666',
+  'player':   '#6ad9ff',
+  'npc_a':    '#6ad99f',
+  'npc_b':    '#e36666',
+  'player_c': '#c79bff',
+  'npc_c':    '#b07cff',
 };
+// Teams (same mapping as peer.mjs sideOf): A = the player, npc_a allies and
+// their summons; B = npc_b; C = the third team (player_c / npc_c).
+const sideOf = (a) => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
+// HP pip colour per team — filled / spent.
+const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b07cff', '#261a3a'] };
 // Rule 12 tile tokens: a small die in the element's colour on the hex. Shield
 // tokens are drawn hollow (they absorb an effect hit), bonus tokens filled.
 const ELEM_COLOR = {
@@ -567,6 +574,7 @@ export function createRenderer(canvas, state) {
     // leaves a marker on the map (otherwise it looks like the piece vanished).
     // Y-sort so a unit lower on the screen is painted over one behind it.
     const drawOrder = [...state.entities].sort((a, b) => positions.get(a.peerId).y - positions.get(b.peerId).y);
+    const mySide = sideOf(state.entities.find(x => x.isSelf)?.alliance || 'player');
     for (const e of drawOrder) {
       const dead = e.life <= 0;
       // Fog of war: enemies the team can't currently see simply don't paint.
@@ -574,7 +582,7 @@ export function createRenderer(canvas, state) {
       // always paint — the sightSet check only culls opponents.
       const mine = e.isSelf;
       const ownedByMe = e.owner_peer_id && state.myPeerId && e.owner_peer_id === state.myPeerId;
-      const alliedChar = e.alliance === 'player' || e.alliance === 'npc_a';
+      const alliedChar = sideOf(e.alliance) === mySide;
       if (sightSet && !mine && !ownedByMe && !alliedChar
           && Number.isInteger(e.tile_q) && Number.isInteger(e.tile_r)
           && !inSight(e.tile_q, e.tile_r)) continue;
@@ -634,22 +642,16 @@ export function createRenderer(canvas, state) {
       }
       const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
 
-      // Health: pips on desktop; on the phone a thin bar (green → amber → red)
-      // so it can't be mistaken for the square element dice (Vitality is red).
+      // Health: one tiny square per life point (desktop and phone), in the
+      // unit's team colour — A green, B red, C purple; spent points dark.
       const lifeMax = Math.max(1, e.lifeMax || 1);
-      if (isMobileUI) {
-        const bw = 34, bh = 4, bx = x - bw / 2, by = y + 16;
-        const frac = Math.max(0, Math.min(1, (e.life || 0) / lifeMax));
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
-        ctx.fillStyle = frac > 0.5 ? '#7ee2a8' : frac > 0.25 ? '#ffc46b' : '#ff8a8a';
-        ctx.fillRect(bx, by, Math.round(bw * frac), bh);
-      } else {
-        const lifePx = x - (lifeMax * 4 - 2);
-        for (let i = 0; i < lifeMax; i++) {
-          ctx.fillStyle = i < e.life ? '#ffb0b0' : '#2a1a1a';
-          ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
-        }
+      const [hpOn, hpOff] = TEAM_HP[sideOf(e.alliance)] || ['#dddddd', '#2a2a2a'];
+      const lifePx = x - (lifeMax * 4 - 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(lifePx - 1, y + 15, lifeMax * 8 - 1, 6);
+      for (let i = 0; i < lifeMax; i++) {
+        ctx.fillStyle = i < e.life ? hpOn : hpOff;
+        ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
       }
 
       // Elements this unit has emitted in its current cast, oldest → newest
@@ -701,7 +703,7 @@ export function createRenderer(canvas, state) {
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(11,13,18,0.9)';
-        ctx.fillStyle = e.isSelf ? '#ffe66e' : (e.alliance === 'npc_b' ? '#ff9c9c' : '#9fd8ff');
+        ctx.fillStyle = e.isSelf ? '#ffe66e' : (sideOf(e.alliance) !== mySide ? '#ff9c9c' : '#9fd8ff');
         const text = `[${badge.text}]`;
         ctx.strokeText(text, x, y - 40 - 6 * bt);
         ctx.fillText(text, x, y - 40 - 6 * bt);

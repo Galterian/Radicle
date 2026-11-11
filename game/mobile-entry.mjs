@@ -107,13 +107,24 @@ if (isMainThread && process.env.JOIN_URI) {
       });
       if (!dim) throw new Error(`${dimName} is not published on the seed`);
       process.env.DIM_ID = dimIdOf(dim);
-      // Anchor: the clicked unit's Door, else any Door under the clicked NID.
-      const anchor = dim.doors.find(d => d.peer_id === q.get('peer') || d.peer_id === `peer:${q.get('peer')}`)
-        || dim.doors.find(d => d.nid === q.get('nid')) || dim.doors[0];
-      // "Join as ally": side A for a player/npc_a unit (we stay a human
-      // 'player'), npc_b for an npc_b unit.
-      const side = anchor?.alliance === 'npc_b' ? 'npc_b' : 'player';
-      const plan = planJoin(dim, { doorId: anchor?.peer_id, side });
+      // The phone is always a human hand: any other alliance makes peer.mjs
+      // run npcPlan() every action, which overwrites the player's picks (the
+      // REL7 "can't move after joining" bug — doors[0] was a monster, so the
+      // join came up npc_b and the bot AI played EP + a random skill).
+      // `team=c` joins the third team (player_c, hostile to both sides).
+      const teamC = String(q.get('team') || '').toLowerCase() === 'c';
+      const side = teamC ? 'player_c' : 'player';
+      const mySide = teamC ? ['player_c', 'npc_c'] : ['player', 'npc_a'];
+      // Anchor: the clicked unit's Door, else any Door under the clicked NID,
+      // else a Door of my own side (a bare dim link must not land us beside
+      // whichever monster happens to be listed first). Team C with no
+      // teammate around enters away from everyone instead.
+      const want = q.get('peer');
+      const anchor = (want && dim.doors.find(d => d.peer_id === want || d.peer_id === `peer:${want}`))
+        || (q.get('nid') && dim.doors.find(d => d.nid === q.get('nid')))
+        || dim.doors.find(d => mySide.includes(d.alliance))
+        || (teamC ? null : dim.doors.find(d => d.alliance !== 'npc_b') || dim.doors[0]);
+      const plan = planJoin(dim, { doorId: anchor?.peer_id || null, side, placement: anchor ? 'nearby' : 'random' });
       const fs = await import('node:fs');
       const blocksFile = `${process.env.TMPDIR || '/tmp'}/map-blocks.${Date.now()}.json`;
       fs.writeFileSync(blocksFile, JSON.stringify(plan.knownMap.blocks()));

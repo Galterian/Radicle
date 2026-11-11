@@ -65,7 +65,7 @@ const ago = ms => {
   return `${Math.round(s / 86400)}d ago`;
 };
 const isLive = ms => ms && (Date.now() - ms < LIVE_MS);
-const sideOf = a => (a === "player" || a === "npc_a" || a === "npc_b") ? a : "npc_b";
+const sideOf = a => (a === "player" || a === "npc_a" || a === "npc_b") ? a : (a === "player_c" || a === "npc_c") ? "team-c" : "npc_b";
 const cloneCmd = (rid, addr, nid) => {
   const seedPart = addr && nid ? ` --seed ${addr} --from ${nid}` : "";
   return `rad clone ${rid}${seedPart}`;
@@ -311,13 +311,16 @@ async function viewDimension(name) {
   // The Godot DimensionLauncher parses this URL at launch, fetches the dim via
   // radicle-httpd, and spawns the player next to the chosen unit as its ally.
   // Shape:
-  //   chaosd6://join?dim=<name>&rid=<RID bare>&peer=<peer_id>&nid=<publisher>&commit=<sha>
+  //   chaosd6://join?dim=<name>&rid=<RID bare>&peer=<peer_id>&nid=<publisher>&commit=<sha>[&team=c]
   // `peer` picks the unit: several peers in one desktop mesh share a single NID.
-  const joinUri = (peer, nid, sha) => {
+  // `team=c` ("Join as my team") enters as a third team, hostile to both sides;
+  // without it the app joins as an ally of the player's side.
+  const joinUri = (peer, nid, sha, team) => {
     const parts = [`dim=${encodeURIComponent(name)}`, `rid=${encodeURIComponent(ridBare)}`];
     if (peer) parts.push(`peer=${encodeURIComponent(peer)}`);
     if (nid) parts.push(`nid=${encodeURIComponent(nid)}`);
     if (sha) parts.push(`commit=${encodeURIComponent(sha)}`);
+    if (team) parts.push(`team=${encodeURIComponent(team)}`);
     return `chaosd6://join?${parts.join("&")}`;
   };
   const peerFromSubject = s => (String(s || "").match(/^\[([^\]]+)\]/) || [])[1] || "";
@@ -327,6 +330,7 @@ async function viewDimension(name) {
   else commits.forEach(c => {
     const li = document.createElement("li");
     const joinHref = joinUri(peerFromSubject(c.subject), c.pushedBy, c.sha);
+    const teamHref = joinUri(peerFromSubject(c.subject), c.pushedBy, c.sha, "c");
     li.innerHTML = `
       <div>
         <div class="co-subject">${esc(c.subject || "(no subject)")}</div>
@@ -335,6 +339,7 @@ async function viewDimension(name) {
           · ${esc(ago(toMs(c.when)))}
           · <code>${esc(c.branch || "")}</code>
           · <a class="join-link" href="${esc(joinHref)}">Join as ally</a>
+            <a class="join-link team-c" href="${esc(teamHref)}">Join as my team</a>
         </div>
       </div>
       <a class="co-sha mono" href="${esc(c.href || `#${c.sha}`)}" ${c.href ? 'target="_blank" rel="noreferrer"' : ""}>${esc(String(c.sha || "").slice(0, 10))}</a>`;
@@ -350,6 +355,7 @@ async function viewDimension(name) {
     if (!live) li.classList.add("stale");
     const side = sideOf(door.alliance);
     const joinHref = joinUri(door.peer_id, door.nid, door.commit);
+    const teamHref = joinUri(door.peer_id, door.nid, door.commit, "c");
     li.innerHTML = `
       <span class="dot side-${side}"></span>
       <span class="door-id" title="${esc(door.peer_id || "")}">${esc(door.name || short(door.peer_id || ""))}</span>
@@ -359,7 +365,8 @@ async function viewDimension(name) {
         ${door.life != null ? `hp ${esc(door.life)}/${esc(door.life_max)} · ` : ""}
         nid <span class="mono">${esc(short(door.nid || ""))}</span>
       </span>
-      <a class="join-link" href="${esc(joinHref)}">Join as ally →</a>`;
+      <a class="join-link" href="${esc(joinHref)}">Join as ally →</a>
+      <a class="join-link team-c" href="${esc(teamHref)}">Join as my team →</a>`;
     dl.appendChild(li);
   });
 }
