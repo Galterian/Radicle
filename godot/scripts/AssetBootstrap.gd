@@ -56,6 +56,7 @@ var _bytes_done := 0
 var _bytes_total := 0
 var _total := 0
 var _completed := false
+var _failed := 0              # files skipped after MAX_RETRIES this run
 var _overlay: CanvasLayer = null
 var _label: Label = null
 var _bar: ProgressBar = null
@@ -78,6 +79,7 @@ func _ready() -> void:
 
 
 func _start() -> void:
+	_failed = 0
 	_build_overlay()
 	_set_status("Reading manifest…")
 	# Read raw bytes once so we can both hash and parse without a second read.
@@ -157,10 +159,12 @@ func _fetch(idx: int, attempt: int) -> void:
 				_fetch(idx, attempt + 1)
 				return
 			push_warning("[AssetBootstrap] failed %s (code=%d result=%d after %d tries) — skipping" % [rel, code, result, MAX_RETRIES])
+			_failed += 1
 		else:
 			var ok := _write_file(rel, body)
 			if not ok:
 				push_warning("[AssetBootstrap] failed to write %s" % rel)
+				_failed += 1
 		_done_count += 1
 		_bytes_done += int(entry.get("size", body.size()))
 		_emit_progress(rel)
@@ -179,6 +183,7 @@ func _fetch(idx: int, attempt: int) -> void:
 			_fetch(idx, attempt + 1)
 		else:
 			push_warning("[AssetBootstrap] request() failed for %s err=%d" % [rel, err])
+			_failed += 1
 			_done_count += 1
 			_emit_progress(rel)
 			if _queue.is_empty() and _in_flight == 0:
@@ -396,12 +401,13 @@ func _emit_complete(ok: bool, error: String) -> void:
 	bootstrap_complete.emit(ok, error)
 	if not ok:
 		return
-	# Persist the fast-path sentinel BEFORE the scene reload. If the queue
-	# drained (even with some per-file failures that we skipped past), the
-	# next launch should still fast-path; missing files will be re-attempted
-	# only when the manifest hash itself changes.
-	if _is_mobile and _manifest_hash != "":
+	# Persist the fast-path sentinel BEFORE the scene reload — but only after a
+	# clean drain. With skipped failures the next launch re-checks and fetches
+	# just the missing files (the embedded peer also back-fills on demand).
+	if _is_mobile and _manifest_hash != "" and _failed == 0:
 		_write_bootstrap_sentinel()
+	elif _failed > 0:
+		push_warning("[AssetBootstrap] %d files failed — will retry next launch" % _failed)
 	# Mobile first launch: the main scene has already started with empty
 	# user://, so Assets.gd cached a lot of null textures and DataLoader
 	# saw no data/index.json. Drop those caches and reload so everything

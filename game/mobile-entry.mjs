@@ -57,13 +57,31 @@ if (!globalThis.crypto?.getRandomValues) {
   const { webcrypto } = await import('node:crypto');
   Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true, writable: true });
 }
-// Android has no /tmp, and os.tmpdir() falls back to it (peer.mjs puts GUN's
-// store there). Use <app filesDir>/tmp, next to nodejs-project/.
+// Android has no usable /tmp (absent on the emulator, present-but-unwritable on
+// HyperOS), and os.tmpdir() falls back to it (peer.mjs puts GUN's store there).
+// Always use <app filesDir>/tmp, next to nodejs-project/; cleared each launch.
+// Setting TMPDIR alone is not enough: os.tmpdir() reads it via safeGetenv,
+// which ignores the environment in AT_SECURE processes (Android app processes
+// on HyperOS), so override os.tmpdir too (peer.mjs uses the default os object).
+// A summoned companion runs this same entry in a worker thread (peer.mjs
+// spawnCompanionWorker): it must not wipe the tmp dir the host is using
+// (its own map-blocks file is in there).
+const { isMainThread } = await import('node:worker_threads');
 {
   const fs = await import('node:fs');
-  const tmp = fs.existsSync(process.env.TMPDIR || '/tmp') ? null
-    : new URL('../tmp/', import.meta.url).pathname;
-  if (tmp) { fs.mkdirSync(tmp, { recursive: true }); process.env.TMPDIR = tmp; }
+  const { default: os } = await import('node:os');
+  const tmp = new URL('../tmp', import.meta.url).pathname;
+  if (isMainThread) fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  process.env.TMPDIR = tmp;
+  os.tmpdir = () => tmp;
+}
+// Node 22's global WebSocket (nostr-bus.mjs dials relays with it; without it
+// the bus silently retries forever: "bus: 0/3 relays"). `ws` is the same
+// package peer.mjs already uses for its UI socket.
+if (typeof globalThis.WebSocket !== 'function') {
+  const { default: WebSocket } = await import('ws');
+  globalThis.WebSocket = WebSocket;
 }
 Symbol.dispose ??= Symbol.for('nodejs.dispose');
 Symbol.asyncDispose ??= Symbol.for('nodejs.asyncDispose');
@@ -74,7 +92,7 @@ Symbol.asyncDispose ??= Symbol.for('nodejs.asyncDispose');
 // joinDimension() does on desktop. peer.mjs reads its env at load, so all of
 // this must happen before the import. On any failure we still join the named
 // dimension (Nostr bus finds the others), just without the Door placement.
-if (process.env.JOIN_URI) {
+if (isMainThread && process.env.JOIN_URI) {
   const q = new URLSearchParams(process.env.JOIN_URI.split('?')[1] || '');
   const dimName = q.get('dim');
   if (dimName) {

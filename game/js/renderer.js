@@ -180,6 +180,52 @@ export function createRenderer(canvas, state) {
     render();
   }, { passive: false });
 
+  // Phone (html.mobile): one finger drags the map, two fingers pinch-zoom
+  // around their midpoint. A finger that moved past the slop marks the gesture
+  // as a drag, so the tap that follows is ignored like a mouse pan's.
+  const isMobileUI = document.documentElement.classList.contains('mobile');
+  if (isMobileUI) {
+    const pts = new Map();
+    const pinch = { dist: 0, zoom: 1 };
+    const TOUCH_SLOP_PX = 10;
+    canvas.addEventListener('touchstart', (ev) => {
+      for (const t of ev.changedTouches) pts.set(t.identifier, { x: t.clientX, y: t.clientY });
+      const list = [...pts.values()];
+      if (list.length === 1) { drag.active = true; drag.moved = false; drag.lastX = list[0].x; drag.lastY = list[0].y; }
+      if (list.length >= 2) { pinch.dist = Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y) || 1; pinch.zoom = zoom; drag.moved = true; }
+    }, { passive: true });
+    canvas.addEventListener('touchmove', (ev) => {
+      ev.preventDefault();
+      for (const t of ev.changedTouches) if (pts.has(t.identifier)) pts.set(t.identifier, { x: t.clientX, y: t.clientY });
+      const list = [...pts.values()];
+      if (list.length >= 2) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (list[0].x + list[1].x) / 2 - rect.left, my = (list[0].y + list[1].y) / 2 - rect.top;
+        const before = toWorld(mx, my);
+        const d = Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y);
+        zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinch.zoom * d / pinch.dist));
+        const after = toWorld(mx, my);
+        cam.x += before.x - after.x; cam.y += before.y - after.y; cam.manual = true;
+        render();
+        return;
+      }
+      if (!list.length || !drag.active) return;
+      const dx = list[0].x - drag.lastX, dy = list[0].y - drag.lastY;
+      if (!drag.moved && Math.hypot(dx, dy) < TOUCH_SLOP_PX) return;
+      drag.moved = true; drag.lastX = list[0].x; drag.lastY = list[0].y;
+      cam.x -= dx / zoom; cam.y -= dy / zoom; cam.manual = true;
+      render();
+    }, { passive: false });
+    const touchEnd = (ev) => {
+      for (const t of ev.changedTouches) pts.delete(t.identifier);
+      const list = [...pts.values()];
+      if (!list.length) drag.active = false;
+      else { drag.lastX = list[0].x; drag.lastY = list[0].y; }   // pinch → pan without a jump
+    };
+    canvas.addEventListener('touchend', touchEnd);
+    canvas.addEventListener('touchcancel', touchEnd);
+  }
+
   function interpAt(mv, now) {
     const t = Math.min(1, (now - mv.startAt) / MOVE_DURATION_MS);
     const k = ease(t);
@@ -565,10 +611,10 @@ export function createRenderer(canvas, state) {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, dead ? 0.75 : 1) : false;
+      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, e.gone ? 0.35 : dead ? 0.75 : 1) : false;
       if (!drewSprite) {
         // Fallback disc marker while the sheet is loading / no resources.
-        if (dead) ctx.globalAlpha = 0.35;
+        if (dead || e.gone) ctx.globalAlpha = 0.35;
         ctx.beginPath();
         ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -588,21 +634,49 @@ export function createRenderer(canvas, state) {
       }
       const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
 
-      // Health pips.
+      // Health: pips on desktop; on the phone a thin bar (green → amber → red)
+      // so it can't be mistaken for the square element dice (Vitality is red).
       const lifeMax = Math.max(1, e.lifeMax || 1);
-      const lifePx = x - (lifeMax * 4 - 2);
-      for (let i = 0; i < lifeMax; i++) {
-        ctx.fillStyle = i < e.life ? '#ffb0b0' : '#2a1a1a';
-        ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
+      if (isMobileUI) {
+        const bw = 34, bh = 4, bx = x - bw / 2, by = y + 16;
+        const frac = Math.max(0, Math.min(1, (e.life || 0) / lifeMax));
+        ctx.fillStyle = 'rgba(0,0,0,0.65)';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+        ctx.fillStyle = frac > 0.5 ? '#7ee2a8' : frac > 0.25 ? '#ffc46b' : '#ff8a8a';
+        ctx.fillRect(bx, by, Math.round(bw * frac), bh);
+      } else {
+        const lifePx = x - (lifeMax * 4 - 2);
+        for (let i = 0; i < lifeMax; i++) {
+          ctx.fillStyle = i < e.life ? '#ffb0b0' : '#2a1a1a';
+          ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
+        }
+      }
+
+      // Elements this unit has emitted in its current cast, oldest → newest
+      // (the newest is ringed). Cleared by the UI once it acts without emitting.
+      const trail = !dead && !e.gone && Array.isArray(e.emitTrail) ? e.emitTrail : null;
+      if (trail && trail.length) {
+        const r = isMobileUI ? 4.5 : 4, step = r * 2 + 3;
+        const tx = x - ((trail.length - 1) * step) / 2, ty = y + 28;
+        trail.forEach((el, i) => {
+          ctx.beginPath();
+          ctx.arc(tx + i * step, ty, r, 0, Math.PI * 2);
+          ctx.fillStyle = ELEM_COLOR[el] || '#ccc';
+          ctx.fill();
+          ctx.lineWidth = i === trail.length - 1 ? 2 : 1;
+          ctx.strokeStyle = i === trail.length - 1 ? '#ffffff' : 'rgba(0,0,0,0.8)';
+          ctx.stroke();
+        });
       }
 
       // Label (outlined so it reads over textured tiles).
+      const label = isMobileUI && dead ? `☠ ${e.name}` : e.gone ? `⌛ ${e.name}` : e.name;
       ctx.font = '11px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineJoin = 'round';
-      ctx.strokeText(e.name, x, top - 6);
-      ctx.fillStyle = dead ? '#9aa0a8' : '#e8ecf1';
-      ctx.fillText(e.name, x, top - 6);
+      ctx.strokeText(label, x, top - 6);
+      ctx.fillStyle = dead || e.gone ? '#9aa0a8' : '#e8ecf1';
+      ctx.fillText(label, x, top - 6);
 
       // Queued-action chip over the player's head during planning. Once
       // committed, keep the letter as-is until the next round — only the
