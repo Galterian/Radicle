@@ -24,7 +24,7 @@
         <label><input type="radio" name="mode" value="join-door" disabled> Join a Dimension through a <b>player's Door</b> (you arrive next to them)</label>
         <label><input type="radio" name="mode" value="join-random" disabled> Join a Dimension at a <b>random unknown place</b></label>
         <label><input type="radio" name="mode" value="host" checked> Start a <b>NEW Dimension</b> (you open its first Doors)</label>
-        <label><input type="radio" name="mode" value="restore" disabled> <b>Load a saved dimension</b> from this computer (local TMJ autosave) — rejoins at your saved tile if the dim is still live, otherwise cold-respawns the whole mesh</label>
+        <label><input type="radio" name="mode" value="restore" disabled> <b>Load a saved dimension</b> from this computer (local TMJ autosave) — if the dim is still on Radicle you rejoin it as yourself (replacing a copy of you that is still running), otherwise the whole mesh is respawned from the save</label>
       </fieldset>
 
       <div class="mode-panel" data-for="join-door">
@@ -54,6 +54,7 @@
             <option value="player">player (fights with npc_a)</option>
             <option value="npc_a">npc_a (allies of player)</option>
             <option value="npc_b">npc_b (opposition)</option>
+            <option value="player_c">3rd team (purple — fights everyone)</option>
           </select>
         </label>
         <label>Play as

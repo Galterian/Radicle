@@ -320,7 +320,7 @@ function mergeMembers(doorMembers, live) {
   return [...byId.values()];
 }
 
-async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null }) {
+async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null, extraEnv = {} }) {
   if (!radicleEnv.enabled) throw new Error(`radicle disabled: ${radicleEnv.reason}`);
   const items = await listPublishedDimensions();
   const dim = items.find(d => d.dimension_name === dimensionName);
@@ -385,10 +385,42 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
     JOIN_SYNC_WAIT_MS: liveDoors.length ? '8000' : '500',
     ...commonPeerEnv(),
     NOSTR_RELAYS:      [...relays].join(','),
+    ...extraEnv,
   });
   const ok = await waitForPort(portHttp);
   if (!ok) throw new Error(`peer did not come up on :${portHttp}`);
   return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length };
+}
+
+// Running copies of one peer of a dimension on this box: this launcher's own
+// children, plus (Linux) any other node peer.mjs whose env says the same
+// DIM_NAME + PEER_LABEL - e.g. one started by an earlier launcher run.
+function localPeerProcs(dimName, label) {
+  const out = children.filter(c => c._dim === dimName && c._name === `peer:${label}` && c.exitCode === null && !c.killed)
+    .map(c => ({ pid: c.pid, http: c._http }));
+  if (process.platform === 'linux') {
+    let pids = [];
+    try { pids = fsSync.readdirSync('/proc').filter(d => /^\d+$/.test(d)); } catch {}
+    for (const pid of pids) {
+      if (out.some(o => String(o.pid) === pid)) continue;
+      try {
+        if (!fsSync.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('peer.mjs')) continue;
+        const env = Object.fromEntries(fsSync.readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').filter(Boolean)
+          .map(kv => [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)]));
+        if (env.DIM_NAME === dimName && env.PEER_LABEL === label) out.push({ pid: Number(pid), http: Number(env.PEER_PORT_HTTP) || null });
+      } catch {}
+    }
+  }
+  return out;
+}
+// Stop them (SIGTERM, then SIGKILL after 5 s) and wait until they are gone, so
+// the replacement can take the same peer id without two of "me" in the mesh.
+async function stopPeerProcs(procs) {
+  const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  for (const p of procs) { try { process.kill(p.pid, 'SIGTERM'); } catch {} }
+  for (let i = 0; i < 50 && procs.some(p => alive(p.pid)); i++) await new Promise(r => setTimeout(r, 100));
+  for (const p of procs) if (alive(p.pid)) { try { process.kill(p.pid, 'SIGKILL'); } catch {} }
+  for (let i = 0; i < 20 && procs.some(p => alive(p.pid)); i++) await new Promise(r => setTimeout(r, 100));
 }
 
 // Restore a dimension from a local TMJ autosave / hard save on this box.
@@ -419,30 +451,66 @@ async function restoreDimension({ tmjPath, label }) {
   // the roster already in flight.
   const entitiesLayer = (map.layers || []).find(l => l.name === 'entities') || { objects: [] };
   const entProps = o => Object.fromEntries((o.properties || []).map(p => [p.name, p.value]));
-  const playerEnt = (entitiesLayer.objects || [])
-    .map(o => ({ p: entProps(o), name: o.name }))
-    .find(e => String(e.p.alliance || '') === 'player');
+  const ents = (entitiesLayer.objects || []).map(o => ({ p: entProps(o), name: o.name }));
+  // "Me" is the hero that wrote the save (props.peer_id); saves written by a
+  // summon or monster (before only heroes saved) and older saves without the
+  // field fall back to the first human hero in the roster.
+  const isHero = e => ['player', 'player_c'].includes(String(e.p.alliance || '')) && String(e.p.source_id || '').startsWith('char_');
+  const myId = String(props.peer_id || (props.peer_label ? `peer:${props.peer_label}` : ''));
+  const playerEnt = (myId && ents.find(e => e.p.peer_id === myId && isHero(e))) || ents.find(isHero);
+  const myLabel = String(playerEnt?.p.peer_id || '').replace(/^peer:/, '');
   const savedTile = playerEnt && Number.isInteger(playerEnt.p.tile_q) && Number.isInteger(playerEnt.p.tile_r)
     ? { q: playerEnt.p.tile_q, r: playerEnt.p.tile_r } : null;
-  if (radicleEnv.enabled && savedTile) {
+  // Still published on Radicle (any Door / commit, live or not)? Then join that
+  // dimension as me rather than cold-respawning a private copy of it:
+  //   - a copy of me still running on this box -> read its tile / life / class,
+  //     stop it, and take its place under the same peer id;
+  //   - else my own Door (same peer id) -> its tile if it is newer than the save;
+  //   - else the saved tile. Only a dimension Radicle doesn't know is respawned.
+  if (radicleEnv.enabled && playerEnt) {
+    let dim = null;
     try {
-      const items = await listPublishedDimensions();
-      const dim = items.find(d => d.dimension_name === DIM_NAME);
-      const liveDoors = dim ? dim.doors.filter(p => Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS) : [];
-      if (liveDoors.length) {
-        console.log(`[launcher] ${DIM_NAME} is still live (${liveDoors.length} recent Door${liveDoors.length === 1 ? '' : 's'}) — rejoining at saved tile (${savedTile.q},${savedTile.r})`);
-        const out = await joinDimension({
-          dimensionName: DIM_NAME, doorId: null, placement: 'nearby', side: 'player',
-          characterId: String(playerEnt.p.source_id || '') || 'char_exuberant_firestroker',
-          creatureId: '', label: (label || '').trim() || null,
-          entityName: playerEnt.name || 'You',
-          preferredTile: savedTile,
-        });
-        return { ...out, status: 'rejoined', tmj: absPath, savedTile };
-      }
-      console.log(`[launcher] ${DIM_NAME} has no recent Doors — cold-respawning the whole mesh from TMJ`);
+      dim = (await listPublishedDimensions()).find(d => d.dimension_name === DIM_NAME);
     } catch (e) {
-      console.warn(`[launcher] rejoin check failed (${e.message}); falling back to cold respawn`);
+      console.warn(`[launcher] Radicle lookup failed (${e.message}); falling back to cold respawn`);
+    }
+    {
+      // Published: join it or fail — a cold respawn here would put a second,
+      // private copy of the whole mesh into a dimension others are still in.
+      if (dim?.doors?.length && !dim.legacy) {
+        const wantLabel = (label || '').trim() || myLabel || null;
+        const myDoor = wantLabel ? dim.doors.find(d => d.peer_id === `peer:${wantLabel}`) : null;
+        let tile = savedTile, life = Number(playerEnt.p.hp) || 0, classId = playerEnt.p.class_id || '', how = 'saved tile';
+        if (myDoor?.tile && Date.parse(myDoor.pushed_at || 0) > Date.parse(props.saved_at || 0) && (myDoor.life ?? 1) > 0) {
+          tile = { q: myDoor.tile.q, r: myDoor.tile.r }; life = Number(myDoor.life) || life; how = 'my newest Door';
+        }
+        const running = wantLabel ? localPeerProcs(DIM_NAME, wantLabel) : [];
+        let replaced = false;
+        if (running.length) {
+          const st = running[0].http ? await fetch(`http://127.0.0.1:${running[0].http}/status`, { signal: AbortSignal.timeout(2000) }).then(r => r.json()).catch(() => null) : null;
+          if (st?.entity?.tile && (st.entity.life ?? 0) > 0) {
+            tile = { q: st.entity.tile.q, r: st.entity.tile.r }; life = st.entity.life; classId = st.entity.classId || classId; how = 'my running peer';
+          }
+          console.log(`[launcher] ${DIM_NAME}: ${wantLabel} is already in the dimension (pid ${running.map(r => r.pid).join(',')}) — replacing it`);
+          await stopPeerProcs(running);
+          replaced = true;
+        } else if (myDoor && Date.now() - Date.parse(myDoor.pushed_at || 0) < DOOR_LIVE_MS && (myDoor.life ?? 0) > 0) {
+          console.warn(`[launcher] ${DIM_NAME}: ${wantLabel}'s Door is live but no copy runs on this box — it may be playing elsewhere; taking the id over anyway`);
+        }
+        console.log(`[launcher] ${DIM_NAME} is on Radicle (${dim.doors.length} Door${dim.doors.length === 1 ? '' : 's'}) — joining as ${wantLabel || 'a new peer'} at ${how} (${tile?.q},${tile?.r})`);
+        const out = await joinDimension({
+          dimensionName: DIM_NAME, doorId: myDoor ? myDoor.peer_id : null, placement: 'nearby',
+          side: ['player', 'player_c'].includes(playerEnt.p.alliance) ? playerEnt.p.alliance : 'player',
+          characterId: String(playerEnt.p.source_id || '') || 'char_exuberant_firestroker',
+          creatureId: '', label: wantLabel,
+          entityName: playerEnt.name || 'You',
+          preferredTile: tile,
+          extraEnv: { ...(life > 0 ? { START_LIFE: String(life) } : {}), ...(classId ? { FORCE_CLASS: classId } : {}) },
+        });
+        return { ...out, status: replaced ? 'replaced' : 'rejoined', tmj: absPath, savedTile, tile, from: how };
+      }
+      if (dim) console.log(`[launcher] ${DIM_NAME} has no joinable Doors on Radicle — cold-respawning the whole mesh from TMJ`);
+      else console.log(`[launcher] ${DIM_NAME} is not on Radicle — cold-respawning the whole mesh from TMJ`);
     }
   }
 

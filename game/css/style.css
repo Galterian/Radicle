@@ -103,6 +103,7 @@ main {
 .ros.dead { opacity: 0.4; text-decoration: line-through; }
 .ros.ally .nm::before { content: '◆ '; color: #6ad99f; }
 .ros.enemy .nm::before { content: '◆ '; color: #e36666; }
+.ros.team-c .nm::before { content: '◆ '; color: #b07cff; }   /* third team */
 
 #log-filter-chip { display: inline-flex; align-items: center; gap: 6px; background: #1b1a2e; border: 1px solid #a08eff44; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 10px; color: #d7cfff; margin: 0 0 6px; width: fit-content; }
 /* The #id rule above outranks the UA's [hidden] { display:none }, so re-assert. */
@@ -420,6 +421,8 @@ main {
 .door-chip.side-player .dc-dot { background: #6ad99f; }
 .door-chip.side-npc_a  .dc-dot { background: #4ea3ff; }
 .door-chip.side-npc_b  .dc-dot { background: #e26b6b; }
+.dim-explorer .dx-side-team-c { background: #b07cff; }
+.door-chip.side-team-c .dc-dot { background: #b07cff; }
 .door-chip .dc-id { font-family: ui-monospace, Menlo, Consolas, monospace; max-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .door-chip .dc-coord { color: #8aa0bf; font-variant-numeric: tabular-nums; }
 .door-chip .dc-hp { color: #e8c272; font-variant-numeric: tabular-nums; }
@@ -858,6 +861,7 @@ html.mobile #roster { flex: 1 1 auto; max-height: none; gap: 4px; }
 html.mobile .ros { padding: 4px 5px; gap: 3px 5px; flex-wrap: nowrap; align-items: center; background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; border-radius: 7px; font-size: 11px; }
 html.mobile .ros.ally { border-left: 2px solid #6ad99f88; }
 html.mobile .ros.enemy { border-left: 2px solid #e3666688; }
+html.mobile .ros.team-c { border-left: 2px solid #b07cff88; }
 html.mobile .ros::after, html.mobile .ros .ros-filter, html.mobile .ros .st, html.mobile .ros .nm::before { display: none; }
 html.mobile .ros .thumb { width: 26px; height: 26px; border-radius: 50%; border-color: #ffffff22; }
 html.mobile .ros .txt { flex-wrap: wrap; gap: 2px 4px; align-items: center; }
