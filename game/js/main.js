@@ -561,6 +561,7 @@ const isMonk = () => myPermanents().includes('class_monk');
 function castLocksOut(card) {
   if (!isAction(card)) return false;
   if (state.lostActions > 0) return true;
+  if (state.castBroken) return false;   // the player double-clicked another action: the cast is let go
   const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
   if (!(eff && (planIsLong() || !castInstant(eff, false))) && !state.casting) return false;
   return !(card.code === 'P' || (isReaver() && card.code === 'A') || (isMonk() && card.code === 'M'));
@@ -820,6 +821,9 @@ function renderDeck() {
     slot.classList.toggle('queued', !skill && !effect && state.queued[0] === i);
     slot.classList.toggle('queued-extra', isExtra);
     slot.classList.toggle('queued-skill', skillQueued || effectQueued);
+    // The effect being cast glows (and keeps glowing on the next action, when it is re-picked).
+    slot.classList.toggle('casting', effect && (effectQueued || (!state.castBroken && !!state.casting?.card_ids?.includes(card.card_id))));
+    slot.classList.toggle('break-armed', !!card && state.ui.castBreak?.key === i && performance.now() - state.ui.castBreak.at < 1500);
     slot.classList.toggle('discard', !!card && state.willDiscard.has(card.card_id));
     slot.classList.toggle('archive', !!card && state.willArchive.has(card.card_id));
     slot.classList.toggle('locked', state.locked && (state.queued[0] === i || skillQueued || effectQueued || isExtra));
@@ -1555,8 +1559,8 @@ function renderElementEmitOverlay() {
     if (!badge) continue;
     const t = (now - badge.startAt) / badge.duration;
     if (t <= 0 || t >= 1) continue;
-    const el = elementById.get(badge.element);
-    if (!el) continue;
+    const el = badge.element ? elementById.get(badge.element) : null;
+    if (!el && !badge.pills?.length) continue;
     const e = state.entities.find(x => x.peer_id === pid);
     if (!e || !Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
     liveIds.add(pid);
@@ -1567,14 +1571,18 @@ function renderElementEmitOverlay() {
       node.className = 'element-emit-overlay';
       node.dataset.peerId = pid;
       node.dataset.key = `${badge.element}|${badge.startAt}`;
-      const src = el.iconPath ? assetUrl(el.iconPath) : '';
+      const src = el?.iconPath ? assetUrl(el.iconPath) : '';
+      const pills = (badge.pills || []).map(p => `<span class="ee-pill ${p.cls}">${escHtml(p.text)}</span>`).join('');
       node.innerHTML = `
-        ${src ? `<img class="ee-icon" src="${escHtml(src)}" alt="">` : '<span class="ee-glyph">◉</span>'}
+        ${pills ? `<div class="ee-pills">${pills}</div>` : ''}
+        ${el ? `${src ? `<img class="ee-icon" src="${escHtml(src)}" alt="">` : '<span class="ee-glyph">◉</span>'}
         <div class="ee-body">
           <div class="ee-name">${escHtml(el.name)}</div>
           <div class="ee-sub">${escHtml(el.shortDesc)}</div>
-        </div>`;
-      node.style.setProperty('--ee-tint', elementTint(el.colorHint));
+        </div>` : ''}`;
+      node.classList.toggle('pills-only', !el);
+      node.classList.toggle('failed', (badge.pills || []).some(p => p.cls === 'fail'));
+      node.style.setProperty('--ee-tint', el ? elementTint(el.colorHint) : '#ffe66e');
       layer.appendChild(node);
       _emitEls.set(pid, node);
     }
@@ -1924,7 +1932,7 @@ function renderPerms() {
   lastPermsHtml = html;
   el.innerHTML = html;
   el.hidden = perms.length === 0 && !classHtml;
-  el.querySelectorAll('.perm.clickable:not(.class-card)').forEach(d => d.addEventListener('click', () => clickPermanent(Number(d.dataset.k))));
+  el.querySelectorAll('.perm.clickable:not(.class-card)').forEach(d => d.addEventListener('click', () => { clickPermanent(Number(d.dataset.k)); if (tapCount(`perm:${d.dataset.k}`) >= 3) commitNow('triple-click'); }));
   const cc = el.querySelector('.perm.class-card');
   if (cc) cc.addEventListener('click', (ev) => {
     const chip = ev.target.closest('.chip');
@@ -2079,6 +2087,29 @@ function autoselectFirstHandCard() {
   sendQueue();
 }
 
+// A cast still emitting (or re-emitting a failed point-buy — the count stands):
+// pick its card(s) again on a Posture so the next action carries on with it.
+function castContinue() {
+  const ids = state.casting?.card_ids || [];
+  if (!ids.length || state.lostActions > 0) return false;
+  const k = state.hand.findIndex(c => c && c.card_id === ids[0]);
+  if (k < 0) return false;
+  const pi = firstActionIdx('P');
+  const keepCarrier = typeof state.queued[0] === 'number' && !castLocksOut(state.hand[state.queued[0]]) && isAction(state.hand[state.queued[0]]);
+  state.queued = [keepCarrier ? state.queued[0] : pi >= 0 ? pi : 'EMPTY'];
+  state.queuedSkills = []; state.queuedExtra = null;
+  state.queuedEffect = k;
+  const k2 = state.casting.every ? state.hand.findIndex((c, j) => j !== k && c && ids.includes(c.card_id)) : -1;
+  state.queuedEffect2 = k2 >= 0 ? k2 : null;
+  state.queuedChain = [];
+  state.withAura = !!state.casting.aura;
+  state.queuedIsAuto = true;
+  sendQueue();
+  renderDeck();
+  logUI(`✺ ${state.casting.name} goes on — element ${state.casting.step + 1}/${state.casting.of} (click another action twice to break it off)`, 'phase');
+  return true;
+}
+
 function setPhase(name, seconds, heartbeat, m = {}) {
   state.phase = name; state.seconds = seconds; state.heartbeat = heartbeat;
   renderComboMarker();   // only lit during planning
@@ -2111,11 +2142,16 @@ function setPhase(name, seconds, heartbeat, m = {}) {
     // Armed combo: its slot's action is the pick — no first-card autoselect
     // and no auto-walk (comboAutoSelect re-runs when the snapshot advancing
     // combo_slot arrives, and again when the hand lands).
+    state.castBroken = false;
+    state.ui.castBreak = null;
     if (comboNeed()) {
       state.ui.destinationTile = null;
       state.ui.pathPlan = null;
       state.queued = [];
       comboAutoSelect();
+    } else if (castContinue()) {
+      state.ui.destinationTile = null;
+      state.ui.pathPlan = null;
     } else if (!resumeJourney()) {
       state.ui.destinationTile = null;
       state.ui.pathPlan = null;
@@ -2222,6 +2258,8 @@ function connect() {
         // card queued, auto-queue a matching card for the current slot.
         renderComboMarker();
         comboAutoSelect();
+        // The cast state can land after the planning phase message: re-pick it then.
+        if (state.phase === 'planning' && !state.locked && !state.castBroken && state.queuedIsAuto && state.queuedEffect === null && state.casting?.card_ids?.length && !comboNeed()) castContinue();
       }
       // Vision / Super Sense: a popup with what was seen (a tile, an enemy's hand).
       if (m.kind === 'peek') showPeek(m.text || (m.what === 'hand' ? `${m.of_name}: ${(m.cards || []).map(c => c.name).join(', ')}` : `tile (${m.q},${m.r})`), m.cards || null);
@@ -2351,12 +2389,25 @@ function connect() {
             // destroy pushed an element this tick. Separate overlay from the
             // skill-reveal chip so a cast with no net emission (e.g. an
             // interrupted channel) still gets its action chip.
-            if (a.emitted_element) {
+            // Cast status pills on the same chip (everyone sees them): a failed
+            // point-buy → ✖ (the element re-emits next action, the count stands),
+            // an element out with more to come → step/of ⌛, the last one → ✓;
+            // a channel whose stat gave out → ✖ channel; a finished combo → ✦.
+            const pills = [];
+            const cs = a.cast;
+            if (cs?.status === 'retry') pills.push({ cls: 'fail', text: `✖ failed ${cs.step}/${cs.of}` });
+            else if (cs?.status === 'blocked') pills.push({ cls: 'fail', text: '✖ blocked' });
+            else if (cs && cs.step < cs.of) pills.push({ cls: 'step', text: `${cs.step}/${cs.of} ⌛` });
+            else if (cs) pills.push({ cls: 'done', text: '✓ cast' });
+            for (const id of a.channel_broken || []) pills.push({ cls: 'fail', text: `✖ ${String(id).replace(/^effect_/, '').replace(/_/g, ' ')} channel` });
+            if (a.combo) pills.push({ cls: 'combo', text: `✦ combo ${a.combo}` });
+            if (a.emitted_element || pills.length) {
               state.ui.emitBadges ||= {};
               state.ui.emitBadges[a.actor] = {
-                element: a.emitted_element,
+                element: a.emitted_element || null,
+                pills,
                 startAt: performance.now() + (a.bonus ? (a.bonus_k || 0) * 1400 : seqDelay),
-                duration: 2600,
+                duration: pills.some(p => p.cls === 'fail') ? 3200 : 2600,
               };
             }
             // Persistent trail of what this unit has emitted in its current
@@ -2749,6 +2800,26 @@ function queueSlot(key) {
   }
   if (castLocksOut(card)) {
     const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+    // Click the same action twice (within 1.5 s) to let the cast go and play it instead.
+    if (!(state.lostActions > 0) && state.phase === 'planning' && !state.locked) {
+      const arm = state.ui.castBreak;
+      if (arm && arm.key === key && performance.now() - arm.at < 1500) {
+        state.ui.castBreak = null;
+        state.castBroken = true;
+        state.queuedEffect = null; state.queuedEffect2 = null; state.queuedChain = []; state.withAura = false;
+        state.queued = [key];
+        state.queuedIsAuto = false;
+        cancelPathJourney('manual pick');
+        logUI(`${(eff || state.casting)?.name || 'the cast'} let go — ${ACTION_SHORT[card.code] || card.code} instead (the cast is discarded, Rule 19)`, 'phase');
+        sendQueue(); renderDeck();
+        return;
+      }
+      state.ui.castBreak = { key, at: performance.now() };
+      logUI(`${(eff || state.casting)?.name || 'the effect'} is being cast — click ${ACTION_SHORT[card.code] || card.code} again to break it off`, 'phase');
+      renderDeck();
+      setTimeout(renderDeck, 1600);
+      return;
+    }
     logUI(state.lostActions > 0 ? `you sit this action out (${state.lostActions} left)` : `${(eff || state.casting)?.name || 'the effect'} is being cast — only Posture${isReaver() ? ', Attack' : ''}${isMonk() ? ', Move' : ''} or Empty Posture until it lands (moving interrupts it)`, 'phase');
     return;
   }
@@ -2773,6 +2844,34 @@ function queueSlot(key) {
   renderDeck();
 }
 
+// Consecutive clicks / taps on the same control (≤ 450 ms apart) — our own count,
+// so a phone's WebView behaves like a desktop mouse (UIEvent.detail is unreliable on taps).
+function tapCount(id) {
+  const now = performance.now();
+  const t = state.ui.taps;
+  state.ui.taps = t && t.id === id && now - t.at < 450 ? { id, n: t.n + 1, at: now } : { id, n: 1, at: now };
+  return state.ui.taps.n;
+}
+function commitNow(how) {
+  if (state.phase !== 'planning' || state.locked) return;
+  if (state.bonusMode) { commitBonus(); return; }
+  if (!state.queued.length) return;
+  state.locked = true;
+  send({ kind: 'lock' });
+  logUI(`commit locked (${how})`, 'phase');
+  renderDeck();
+}
+// The third click: make sure the card is the pick (the 2nd click toggled it off), then commit.
+function tripleCommit(key) {
+  const card = key === 'EMPTY' ? null : state.hand[key];
+  const picked = key === 'EMPTY' ? state.queued[0] === 'EMPTY'
+    : isEffect(card) ? (state.queuedEffect === key || state.queuedEffect2 === key || state.queuedChain.includes(key))
+    : isSkill(card) ? state.queuedSkills.includes(key)
+    : state.queued[0] === key;
+  if (!picked) queueSlot(key);
+  commitNow('triple-click');
+}
+
 function toggleDiscard(i) {
   const card = state.hand[i];
   if (!card) return;
@@ -2790,7 +2889,7 @@ function wireInput() {
   document.querySelectorAll('#slots .slot').forEach(slotEl => {
     const key = slotEl.dataset.slot;
     const slotKey = key === 'EMPTY' ? 'EMPTY' : Number(key);
-    slotEl.addEventListener('click', () => queueSlot(slotKey));
+    slotEl.addEventListener('click', () => { if (tapCount(`slot:${key}`) >= 3) tripleCommit(slotKey); else queueSlot(slotKey); });
     if (key !== 'EMPTY') {
       slotEl.addEventListener('contextmenu', (e) => { e.preventDefault(); toggleDiscard(slotKey); });
     }
@@ -2819,7 +2918,7 @@ function wireInput() {
     if (ev.key >= '1' && ev.key <= '7') queueSlot(Number(ev.key) - 1);
     else if (ev.key === '8') queueSlot('EMPTY');
     else if (ev.key === '9' || ev.key === '0') clickPermanentKey(ev.key === '9' ? 0 : 1);
-    else if (ev.code === 'Space') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
+    else if (ev.code === 'Space' || ev.key === 'Enter') { ev.preventDefault(); if (state.bonusMode) commitBonus(); else if (state.queued.length) { state.locked = true; send({ kind: 'lock' }); logUI('commit locked (early)', 'phase'); renderDeck(); } }
     else if (ev.key === '-' || ev.key === '=') clickPermanentKey(ev.key === '-' ? 2 : 3);
     else if (ev.key === 'c' || ev.key === 'C') {
       // Combo hotkey (user ruling 2026-11-05): toggle my combo. Requires a

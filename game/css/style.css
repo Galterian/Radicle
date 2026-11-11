@@ -1076,3 +1076,43 @@ html.mobile #object-card { max-width: 56vw; }
   border: 0; border-radius: 4px; background: transparent; color: #8aa0bf; cursor: pointer; font-size: 12px; line-height: 20px; padding: 0;
 }
 #object-card .oc-close:hover { background: #1a2230; color: #e8ecf1; }
+
+/* UI batch 2026-11-11: the effect being cast glows (and again when the next
+   action re-picks it); the action that would break it, armed by a first click,
+   shakes red; a picked ability (skill card / permanent) pops up, grows, glows. */
+@keyframes cast-glow {
+  0%, 100% { box-shadow: 0 0 0 1px #ffd76e66 inset, 0 0 10px 1px #ffd76e55, 0 8px 14px -8px #000c; }
+  50%      { box-shadow: 0 0 0 1px #ffd76eaa inset, 0 0 22px 5px #ffd76e99, 0 8px 14px -8px #000c; }
+}
+.slot.effect.casting { border-color: #ffd76e; animation: cast-glow 1.4s ease-in-out infinite; transform: translateY(-6px); z-index: 2; }
+.slot.effect.casting .card .nm { color: #ffe9a8; }
+@keyframes break-armed { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.slot.break-armed { opacity: 1; filter: none; border-color: #ff5a5a; box-shadow: 0 0 14px 2px #ff5a5a88; animation: break-armed .25s ease-in-out 2; }
+.slot.skill.queued-skill {
+  transform: translateY(-8px) scale(1.08); z-index: 3;
+  border-color: #c9b8ff;
+  box-shadow: 0 0 0 1px #c9b8ff88 inset, 0 0 20px 4px #a08eff88, 0 10px 18px -8px #000c;
+}
+.slot.skill.queued-skill:hover { transform: translateY(-9px) scale(1.08); }
+#perms .perm { transition: transform .12s ease, box-shadow .12s ease; }
+#perms .perm.active { transform: translateY(-6px) scale(1.12); z-index: 3; box-shadow: 0 0 18px 4px #ffe66e99, 0 8px 14px -8px #000c; }
+html.mobile .slot.effect.casting { transform: translateY(-5px); }
+html.mobile .slot.skill.queued-skill { transform: translateY(-6px) scale(1.08); }
+html.mobile #perms .perm.active { transform: translateY(-5px) scale(1.1); }
+/* Cast status pills over the emission chip (✖ failed, 1/2 ⌛, ✓ cast, ✦ combo). */
+.element-emit-overlay .ee-pills {
+  position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 3px; white-space: nowrap;
+}
+.element-emit-overlay.pills-only { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.element-emit-overlay.pills-only .ee-pills { position: static; transform: none; }
+.element-emit-overlay .ee-pill {
+  font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; padding: 3px 7px; border-radius: 10px;
+  background: #0b0d12ee; color: #e8ecf1; border: 1px solid #8aa0bf; text-shadow: 0 1px 2px #000;
+}
+.element-emit-overlay .ee-pill.fail  { color: #ff9c9c; border-color: #ff5a5a; box-shadow: 0 0 8px #ff5a5a88; }
+.element-emit-overlay .ee-pill.step  { color: #ffe9a8; border-color: #ffd76e; }
+.element-emit-overlay .ee-pill.done  { color: #9cf0b8; border-color: #5fe08a; }
+.element-emit-overlay .ee-pill.combo { color: #0b0d12; background: #ffe66e; border-color: #fff3b0; box-shadow: 0 0 12px #ffe66eaa; }
+.element-emit-overlay.failed { --ee-tint: #ff5a5a; filter: saturate(.6); }
+html.mobile .element-emit-overlay .ee-pill { font-size: 9px; padding: 2px 5px; }

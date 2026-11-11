@@ -1,5 +1,5 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
-import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
+import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward, hexDistance } from './hex.js';
 import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame } from './sprites.js';
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
@@ -18,6 +18,24 @@ const ALLIANCE_COLOR = {
 const sideOf = (a) => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
 // HP pip colour per team — filled / spent.
 const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b07cff', '#261a3a'] };
+// Threat area: an enemy goes for whoever steps within this many hexes of it.
+const THREAT_RADIUS = 2;
+// Enemies my planned journey (pathPlan, else the destination) walks into the
+// threat area of, where no one else hostile to them stands closer — they would
+// come for me. Ties count as a threat (the chaser may still pick me).
+function threatenedBy(entities, me, mySide, plan) {
+  const out = new Set();
+  if (!me || me.life <= 0 || !plan.length) return out;
+  const alive = entities.filter(e => e.life > 0 && !e.gone && e.tile && Number.isInteger(e.tile.q));
+  for (const foe of alive) {
+    if (foe.isSelf || sideOf(foe.alliance) === mySide) continue;
+    const dPath = Math.min(...plan.map(h => hexDistance(h, foe.tile)));
+    if (dPath > THREAT_RADIUS) continue;
+    const rival = alive.some(o => !o.isSelf && o !== foe && sideOf(o.alliance) !== sideOf(foe.alliance) && hexDistance(o.tile, foe.tile) < dPath);
+    if (!rival) out.add(foe.peerId);
+  }
+  return out;
+}
 // Rule 12 tile tokens: a small die in the element's colour on the hex. Shield
 // tokens are drawn hollow (they absorb an effect hit), bonus tokens filled.
 const ELEM_COLOR = {
@@ -575,6 +593,11 @@ export function createRenderer(canvas, state) {
     // Y-sort so a unit lower on the screen is painted over one behind it.
     const drawOrder = [...state.entities].sort((a, b) => positions.get(a.peerId).y - positions.get(b.peerId).y);
     const mySide = sideOf(state.entities.find(x => x.isSelf)?.alliance || 'player');
+    const selfEnt = state.entities.find(x => x.isSelf);
+    const journey = state.ui.destinationTile && selfEnt
+      ? (Array.isArray(state.ui.pathPlan) && state.ui.pathPlan.length ? state.ui.pathPlan : [state.ui.destinationTile]) : [];
+    const threats = threatenedBy(state.entities, selfEnt, mySide, journey);
+    if (typeof window !== "undefined") window.__chaosThreats = { journey, threats: [...threats] };   // test hook
     for (const e of drawOrder) {
       const dead = e.life <= 0;
       // Fog of war: enemies the team can't currently see simply don't paint.
@@ -641,6 +664,26 @@ export function createRenderer(canvas, state) {
         ctx.globalAlpha = 1;
       }
       const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
+      // Threat warning: six tiny red arrows around the enemy, pointing out, pulsing.
+      if (threats.has(e.peerId) && !dead) {
+        const pulse = 0.55 + 0.45 * Math.sin(now / 180);
+        ctx.save();
+        ctx.fillStyle = '#ff3b3b';
+        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = pulse;
+        const rad = 44 + 4 * pulse, ah = isMobileUI ? 11 : 10;
+        for (let k = 0; k < 6; k++) {
+          const ang = k * Math.PI / 3;
+          const tx = x + Math.cos(ang) * rad, ty = y - 10 + Math.sin(ang) * rad * 0.7;
+          ctx.beginPath();
+          ctx.moveTo(tx + Math.cos(ang) * ah, ty + Math.sin(ang) * ah);
+          ctx.lineTo(tx + Math.cos(ang + 2.4) * ah * 0.7, ty + Math.sin(ang + 2.4) * ah * 0.7);
+          ctx.lineTo(tx + Math.cos(ang - 2.4) * ah * 0.7, ty + Math.sin(ang - 2.4) * ah * 0.7);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       // Health: one tiny square per life point (desktop and phone), in the
       // unit's team colour — A green, B red, C purple; spent points dark.
