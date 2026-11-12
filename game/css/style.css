@@ -1116,3 +1116,48 @@ html.mobile #perms .perm.active { transform: translateY(-5px) scale(1.1); }
 .element-emit-overlay .ee-pill.combo { color: #0b0d12; background: #ffe66e; border-color: #fff3b0; box-shadow: 0 0 12px #ffe66eaa; }
 .element-emit-overlay.failed { --ee-tint: #ff5a5a; filter: saturate(.6); }
 html.mobile .element-emit-overlay .ee-pill { font-size: 9px; padding: 2px 5px; }
+
+/* UI batch 2026-11-12: spent Haste, combo progress pill, the cast column of the
+   event log, and the full-text panel for cards / permanents / abilities. */
+#perms .perm.spent { filter: grayscale(1); opacity: .45; cursor: not-allowed; }
+#perms .perm.spent .cd { color: #8a8f99; }
+.element-emit-overlay .ee-pill.combo-step { color: #ffe66e; border-color: #c9a93a; }
+#log .hs-cast { margin-left: 6px; white-space: nowrap; color: #9cf0b8; }
+#log .hs-cast.fail { color: #ff9c9c; }
+#log .hs-cast .hs-elem { width: 14px; height: 14px; vertical-align: -3px; border-radius: 50%; object-fit: cover; object-position: 0 50%; image-rendering: pixelated; }
+#log .hs-cast .hs-elem-g { font-weight: 400; }
+#log .hs-cast .hs-mark { margin-left: 2px; }
+#log .hs-cast .hs-dice { color: #ffe9a8; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+#card-info {
+  position: fixed; z-index: 60; pointer-events: auto;
+  padding: 8px 10px; border-radius: 8px;
+  background: #0b0d12f2; border: 1px solid #a08eff88; box-shadow: 0 8px 24px #000c;
+  color: #dbe4f0; font: 400 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+#card-info[hidden] { display: none; }
+#card-info .ci-nm { font-weight: 700; color: #ffe9a8; margin-bottom: 4px; }
+#card-info .ci-tx { white-space: normal; }
+html.mobile #card-info { font-size: 11px; padding: 6px 8px; }
+
+/* 2026-11-12 batch 2: class card states — passive (Elementalist, Rogue), used this turn, Necromancer tilted */
+#perms .perm.class-card.passive .cd { color: #9fd8ff; }
+#perms .perm.class-card.spent { filter: grayscale(0.7); opacity: 0.8; }
+#perms .perm.class-card.blocked { transform: rotate(-10deg); filter: grayscale(0.85); opacity: 0.75; cursor: not-allowed; }
+
+/* 2026-11-12 batch 2: on the phone a single tap on a unit shows its card until the next tap elsewhere */
+html.mobile #hover-card.tap:not([hidden]) { display: flex !important; max-width: calc(100vw - 16px); }
+#card-info .ci-tx { white-space: normal; }
+
+/* 2026-11-12 batch 2: Rule 24 "break" pill next to the emission icon */
+.ee-pill.break { background: #3a1a10; border-color: #ff8a4a; color: #ffb27a; }
+
+/* 2026-11-12 batch 2: the cards row scrolls sideways (drag it) when permanents make it wider than the screen */
+#deck-row { overflow-x: auto; overflow-y: visible; justify-content: safe center; scrollbar-width: thin; touch-action: pan-y; padding-top: 14px; margin-top: -14px; }
+#deck-row > * { flex-shrink: 0; }
+#deck-row.dragging, #deck-row.dragging * { cursor: grabbing !important; user-select: none; }
+html.mobile #deck-row { scrollbar-width: none; }
+html.mobile #deck-row::-webkit-scrollbar { display: none; }
+/* the footer is a grid item: let it shrink to the screen so the row scrolls inside it instead of the page */
+#deck-bar { min-width: 0; max-width: 100vw; box-sizing: border-box; }
+#deck-row { max-width: min(1020px, 100%); }
+html.mobile #deck-row { max-width: 100%; }

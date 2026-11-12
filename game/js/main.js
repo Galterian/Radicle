@@ -6,7 +6,11 @@ import { createRenderer } from './renderer.js';
 import { hexDistance, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
-import { featureAt, markFeatureConsumed, isFeatureConsumed, isLabyrinthWallAt } from './features.js';
+import { featureAt, isLabyrinthWallAt, onFeaturesChanged } from './features.js';
+import { buildingBonusAt, bonusText, clearBuildingBonusMemo } from './building-bonus.js';
+import { onBigFeaturesChanged } from './bigfeature.js';
+// Bonus lookups made before a catalogue landed are stale.
+onFeaturesChanged(clearBuildingBonusMemo); onBigFeaturesChanged(clearBuildingBonusMemo);
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf } from './skill_card.js';
@@ -500,6 +504,27 @@ function onEnvelopeFold(env, viaMesh) {
   }
 }
 
+// What the action emitted, on the actor's own row of the log: the element
+// icon, ✓ / ✖ (failed point-buy, blocked cast), step/of, the dice thrown
+// (🎲4,2 — a failed buy shows the stat it missed: 🎲6>3) and combo progress.
+function foldCastIntoLog(env, a) {
+  const cs = a.cast;
+  if (!cs && !a.emitted_element && !a.combo_step && !a.combo && !(a.channel_broken || []).length) return;
+  const li = evtRow({ actor_peer_id: a.actor, turn: env.turn, round: env.round });
+  let span = li.querySelector('.hs-cast');
+  if (!span) { span = document.createElement('span'); li.appendChild(span); }
+  const el = a.emitted_element ? elementById.get(a.emitted_element) : null;
+  const src = el?.iconPath ? assetUrl(el.iconPath) : '';
+  const icon = el ? (src ? `<img class="hs-elem" src="${escHtml(src)}" alt="" title="${escHtml(el.name)}">` : `<b class="hs-elem-g">${escHtml(ELEM_GLYPH[a.emitted_element] || '◉')}</b>`) : '';
+  const fail = !!cs && (cs.status === 'retry' || cs.status === 'blocked') || (a.channel_broken || []).length > 0;
+  const mark = cs || el || (a.channel_broken || []).length ? (fail ? '✖' : '✓') : '';
+  const dice = (cs?.rolls || []).map(r => `🎲${(r.dice || []).join(',')}${r.ok ? '' : `>${r.stat}`}`).join(' ');
+  const combo = a.combo ? ` ✦${escHtml(a.combo)}✓` : a.combo_step ? ` ✦${a.combo_step.k}/${a.combo_step.of}` : '';
+  span.className = `hs-cast ${fail ? 'fail' : 'ok'}`;
+  span.innerHTML = ` ${icon}${mark ? `<b class="hs-mark">${mark}</b>` : ''}${cs ? ` ${cs.step}/${cs.of}` : ''}${dice ? ` <span class="hs-dice">${escHtml(dice)}</span>` : ''}${combo}`;
+  span.title = [cs ? `${cs.name || cs.effect_id}: element ${cs.step}/${cs.of} — ${cs.status === 'retry' ? 'point-buy failed, re-emits next action (count kept)' : cs.status}` : '', el ? `emitted ${el.name}` : '', dice ? `dice ${dice}` : '', (a.channel_broken || []).length ? `channel lost: ${a.channel_broken.join(', ')}` : ''].filter(Boolean).join('\n');
+}
+
 // Translate the queued pick into the action code the server will commit as.
 // Rule 6: the single "Empty" slot plays as EM when the player has pre-declared
 // a tile target (declared-first requirement), otherwise EP.
@@ -828,6 +853,7 @@ function renderDeck() {
     slot.classList.toggle('archive', !!card && state.willArchive.has(card.card_id));
     slot.classList.toggle('locked', state.locked && (state.queued[0] === i || skillQueued || effectQueued || isExtra));
   });
+  moveTitlesToData(document.getElementById('slots'));
 
   // Deck + discard pile counts, straight from the peer's latest hand broadcast.
   const dc = document.getElementById('deck-count');
@@ -868,7 +894,7 @@ function renderArchivePopup() {
   list.innerHTML = state.archive.map(c => {
     const creature = c.kind === 'creature', klass = c.kind === 'class';
     const nm = creature ? `🐾 ${c.name}` : klass ? `⚜ ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
-    const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? 'class · destroyed — emit every colour (any successful roll) to recast it' : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
+    const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? `class · ${c.text || ''} · stats: ${classStatsLine(c.class_id)}` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
     return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div><div class="cd">${cd}</div></div>`;
   }).join('');
   // Any archived card may go back to the discard pile — including creatures
@@ -1239,7 +1265,8 @@ function renderRoster() {
       }).join('');
       const nm = classId.replace(/^class_/, '').replace(/_/g, ' ');
       const state_ = archived ? ' · archived' : tapped ? ' · tapped' : '';
-      return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="class${state_}${archived ? ' — the owner recasts it by emitting every colour' : ''}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
+      const pillTitle = `${nm[0].toUpperCase()}${nm.slice(1)}${state_} — ${state.classTexts?.[classId] || 'class'}\nStats: ${classStatsLine(classId, colours)}`.replace(/"/g, '&quot;');
+      return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="${pillTitle}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
     })();
     const team = teamLabel(e);
     const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
@@ -1770,8 +1797,11 @@ function objectAt(q, r) {
   if (!o) o = scatterAt(seed, q, r);
   if (!o) return null;
   const kind = o.kind || 'building';
-  const desc = (typeof o.desc === 'string' && o.desc.trim()) || featureDescById.get(o.id) || featureDescById.get(o.label)
+  const desc0 = (typeof o.desc === 'string' && o.desc.trim()) || featureDescById.get(o.id) || featureDescById.get(o.label)
     || KIND_DESC[kind] || KIND_DESC.building;
+  // Standing bonus (user ruling 2026-11-12) — what the resolver actually gives on this hex.
+  const bb = buildingBonusAt(seed, q, r);
+  const desc = bb ? `${desc0}\n\nBonus while you stand here${bb.source !== o.label ? ` (${bb.source})` : ''}: ${bonusText(bb.bonus)}.` : desc0;
   return { ...o, kind, desc, q, r };
 }
 
@@ -1905,45 +1935,66 @@ function renderPerms() {
       const label = st === 'will' ? 'Wi' : st[0].toUpperCase();
       return `<span class="chip ${st}${mode ? (isDone ? ' done' : ' clickable') : (cs.down || []).includes(st) ? ' down' : ''}${queued ? ' active' : ''}" data-class-stat="${st}" title="${mode ? (isDone ? `${st} already emitted` : `emit ${st} to ${mode} (any successful roll)`) : `${st} colour: ${(cs.colours[st] || []).map(x => x.replace('elem_', '')).join('/')}`}">${queued ? '⚒' : ''}${label}</span>`;
     }).join('');
-    const ready = !mode && (cs.kind === 'tap' ? !cs.tapped : true);
+    // Passive classes (Elementalist, Rogue) fire by themselves once per turn; a Necromancer with no corpse
+    // around and no archived creature is tilted (user ruling 2026-11-12).
+    const passive = cs.kind === 'passive';
+    const usedNow = cs.kind !== 'tap' && cs.used_turn === state.turn;
+    const ready = !mode && !cs.blocked && (cs.kind === 'tap' ? !cs.tapped : !usedNow);
     const need = cs.needs === 'enemy' ? 'an adjacent enemy (right-click it)' : cs.needs === 'ally_or_self' ? 'an adjacent ally (right-click it) or nobody for yourself' : cs.needs === 'tile' ? 'a tile within one hex (click it)' : cs.needs === 'attach_effect' ? 'an effect card in hand (click it as the attached card)' : cs.needs === 'attach_nonaction' ? 'a non-action card in hand (click it as the attached card)' : null;
-    const title = `${cs.name} (${cs.kind === 'tap' ? 'tap' : 'once per action'}) — ${cs.text}${need ? ` Needs ${need}.` : ''}${mode === 'recast' ? ' ARCHIVED: emit every colour (any successful roll) to recast it.' : mode === 'untap' ? ' TAPPED: emit every colour (any successful roll) to untap it.' : ''} (key Q)`;
-    const cd = mode ? `${mode} ${done.size}/${cols.length}` : state.queuedClassAbility ? '⚜ this action' : ready ? 'ready' : 'used this action';
-    return `<div class="perm class-card${ready && !mode ? ' clickable' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">⚜ ${cs.name}</div><div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
+    const title = `${cs.name} (${cs.kind === 'tap' ? 'tap' : passive ? 'passive — fires by itself, once per turn' : 'once per turn'}) — ${cs.text}\nStats: ${classStatsLine(cs.class_id, cs.colours)}.${need ? ` Needs ${need}.` : ''}${cs.blocked && !mode ? ` NOT NOW: ${cs.blocked}.` : ''}${mode === 'recast' ? ' ARCHIVED: emit every colour (any successful roll) to recast it.' : mode === 'untap' ? ' TAPPED: emit every colour (any successful roll) to untap it.' : ''} (key Q)`;
+    const cd = mode ? `${mode} ${done.size}/${cols.length}` : passive ? (usedNow ? '✓ used this turn' : '◈ passive') : cs.blocked ? '⤵ no corpse' : state.queuedClassAbility ? '⚜ this action' : ready ? 'ready' : 'used this turn';
+    return `<div class="perm class-card${ready && !mode && !passive ? ' clickable' : ''}${cs.blocked && !mode ? ' blocked' : ''}${passive ? ' passive' : ''}${usedNow && !mode ? ' spent' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">⚜ ${cs.name}</div><div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
   })() : '';
   const html = classHtml + perms.map((p, k) => {
     const plans = state.bonus?.plans || [];
     const key = p.action ? KEYS[ki++] : null;
     const blessed = (state.channels || []).find(ch => ch.holder === 'effect_blessing_curse');
-    const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && (state.bonusMode || plans.length > 0)) || (p.action === 'bless' && state.blessMode) || (p.action === 'phylactery' && (state.phylacteryMode || state.queuedPhylactery));
+    // Haste (user ruling 2026-11-12): once per turn — grey from the moment its bonus round is committed until the next turn.
+    const hasteSpent = p.action === 'bonus' && !state.bonus?.balefire && (!!state.bonus?.haste_spent || (plans.length > 0 && !state.bonusMode));
+    const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && !hasteSpent && (state.bonusMode || plans.length > 0)) || (p.action === 'bless' && state.blessMode) || (p.action === 'phylactery' && (state.phylacteryMode || state.queuedPhylactery));
     const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
       : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${key || '·'})`
       : SUMMON_PERM_IDS.has(p.id) ? `${p.name} (6) — holds ${mySummoned().map(x => x.name).join(', ') || 'your creature / ward'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
       : p.id === 'effect_blessing_curse' ? `${PERM_HELP[p.id]} — holds ${blessed?.name || 'nothing'} (key ${key || '·'})`
       : PERM_HELP[p.id] ? `${PERM_HELP[p.id]}${key ? ` (key ${key})` : ''}` : p.name;
-    const cd = p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}`
+    const cd = hasteSpent ? (plans.length ? `⚡ ${plans.map(b => b.action).join('▸')} ✓` : '⚡ next turn') : p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}`
       : p.action === 'bless' ? (state.blessMode ? '📎 pick a card' : blessed ? `📎 ${blessed.name}` : 'empty')
       : p.action === 'phylactery' ? (state.queuedPhylactery ? `💀 ${state.queuedPhylactery.perm.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}` : state.phylacteryMode ? '💀 pick a perm' : `⚄${p.die || 6}`)
       : p.die ? `⚄${p.die}` : 'perm';
     const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
-    return `<div class="perm${p.action ? ' clickable' : ''}${active ? ' active' : ''}" data-k="${k}" title="${title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action && !hasteSpent ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent ? ' spent' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
   el.innerHTML = html;
   el.hidden = perms.length === 0 && !classHtml;
+  moveTitlesToData(el);
   el.querySelectorAll('.perm.clickable:not(.class-card)').forEach(d => d.addEventListener('click', () => { clickPermanent(Number(d.dataset.k)); if (tapCount(`perm:${d.dataset.k}`) >= 3) commitNow('triple-click'); }));
   const cc = el.querySelector('.perm.class-card');
   if (cc) cc.addEventListener('click', (ev) => {
     const chip = ev.target.closest('.chip');
     if (chip?.dataset.classStat && (cs.archived || cs.tapped)) { clickClassColour(chip.dataset.classStat); return; }
     if (cc.classList.contains('clickable')) clickClassCard();
+    else if (cs.blocked || cs.kind === 'passive') clickClassCard();   // explains why nothing happens
   });
 }
+// The stats a class needs = its colours (stat → elements), e.g. "Vitality (vitality/souls) · Matter (earth)".
+function classStatsLine(classId, colours = null) {
+  const cols = colours || state.classColours?.[classId] || {};
+  return Object.entries(cols).map(([st, els]) => `${st[0].toUpperCase()}${st.slice(1)} (${els.map(x => x.replace('elem_', '')).join('/')})`).join(' · ');
+}
 // My class card clicked: the ability goes out with this action (toggle). Card-attach classes need the hand card first.
+// Clicking / tapping any unit plays its mapped sound (select, else order / spawn / fx).
+function playUnitSound(p) {
+  const res = resOf(p);
+  for (const k of ['select', 'order', 'spawn', 'fx']) if (sounds.play(res, k)) return true;
+  return false;
+}
 function clickClassCard() {
   const cs = state.classState;
   if (!cs?.class_id || state.locked) return;
+  if (cs.kind === 'passive') { logUI(`${cs.name} is passive — it fires by itself, once per turn${cs.used_turn === state.turn ? ' (already used this turn)' : ''}`, 'phase'); return; }
+  if (cs.blocked && !cs.archived && !cs.tapped) { logUI(`${cs.name}: ${cs.blocked} — nothing to raise`, 'phase'); return; }
   if ((cs.needs === 'attach_effect' || cs.needs === 'attach_nonaction') && state.queuedAttach === null && !state.queuedClassAbility) {
     logUI(`${cs.name}: click the card in hand it works on first (it becomes the attached card), then the class card`, 'phase');
     return;
@@ -2003,11 +2054,12 @@ function clickPermanent(k) {
     sendQueue(); renderDeck();
   }
   if (p.action === 'bonus') {
+    if (!state.bonus?.balefire && state.bonus?.haste_spent) { logUI('⚡ Haste is used this turn — it comes back next turn', 'phase'); return; }
     if (state.bonus?.plans?.length) { state.bonusPlans = []; send({ kind: 'bonus', plans: [] }); logUI('bonus rounds cleared', 'phase'); clearQueuePick(); return; }
     state.bonusMode = !state.bonusMode;
     // Entering the pick starts from a clean queue; leaving it without committing drops the pick.
     clearQueuePick();
-    logUI(state.bonusMode ? `⚡ bonus round 1/${state.bonus?.max || 1}: pick action, skills, effect — Space commits it` : 'bonus pick cancelled', 'phase');
+    logUI(state.bonusMode ? `⚡ bonus round 1/${state.bonus?.max || 1}: pick an action (or a skill — it brings its action) and it is committed at once` : 'bonus pick cancelled', 'phase');
     renderDeck();
   }
   if (p.action === 'bless') {
@@ -2043,7 +2095,7 @@ function commitBonus() {
   clearQueuePick();
   if (state.bonusPlans.length >= max) {
     state.bonusMode = false;
-    logUI(`⚡ ${state.bonusPlans.length} bonus round(s) committed — now pick your normal action`, 'phase');
+    logUI(`⚡ ${state.bonusPlans.length} bonus round(s) committed — Haste is spent until next turn; now pick your normal action (it commits when planning ends)`, 'phase');
   } else {
     if (carryOn) { const pi = firstActionIdx('P'); state.queued = [pi >= 0 ? pi : 'EMPTY']; state.queuedEffect = carried; sendQueue(); }
     logUI(`⚡ bonus round ${state.bonusPlans.length + 1}/${max}: pick the next (Space commits; click the ⚡ card to stop)`, 'phase');
@@ -2191,6 +2243,7 @@ function connect() {
         mergeEntities(m.peers || []);
         if (m.entity?.stats) mergeEntities([{ peer_id: m.peer_id, stats: m.entity.stats }]);
         if (m.class_colours) state.classColours = m.class_colours;
+        if (m.class_texts) state.classTexts = m.class_texts;
         if (m.class_state) state.classState = m.class_state;
         state.dimension = m.dimension || state.dimension;
         applyMap(m.map);
@@ -2400,7 +2453,11 @@ function connect() {
             else if (cs && cs.step < cs.of) pills.push({ cls: 'step', text: `${cs.step}/${cs.of} ⌛` });
             else if (cs) pills.push({ cls: 'done', text: '✓ cast' });
             for (const id of a.channel_broken || []) pills.push({ cls: 'fail', text: `✖ ${String(id).replace(/^effect_/, '').replace(/_/g, ' ')} channel` });
-            if (a.combo) pills.push({ cls: 'combo', text: `✦ combo ${a.combo}` });
+            // A permanent / token / class colour this emission destroyed (user ruling 2026-11-12).
+            for (const b of a.broke || []) pills.push({ cls: 'break', text: `💥 ${b.result === 'taken' ? 'took' : 'broke'} ${b.kind === 'class' ? `${b.stat} colour` : b.kind === 'perm' ? String(b.id).replace(/^(effect|skill|class)_/, '').replace(/_/g, ' ') : `${b.kind} token`}` });
+            if (a.combo) pills.push({ cls: 'combo', text: `✦ combo ${a.combo} ✓` });
+            else if (a.combo_step) pills.push({ cls: 'combo-step', text: `✦ ${a.combo_step.k}/${a.combo_step.of} combo` });
+            if (!a.bonus) foldCastIntoLog(env, a);
             if (a.emitted_element || pills.length) {
               state.ui.emitBadges ||= {};
               state.ui.emitBadges[a.actor] = {
@@ -2592,7 +2649,6 @@ const _featureVanish = new Map();  // "q,r" -> { startAt, duration, label, kind,
 function maybeConsumeFeature(entity) {
   if (!entity || !Number.isInteger(entity.tile_q) || !Number.isInteger(entity.tile_r)) return;
   const q = entity.tile_q, r = entity.tile_r;
-  if (isFeatureConsumed(q, r)) return;
   // objectAt priority order: obstacle (wall) first, then bigfeature, feature,
   // scatter. We only want to consume `feature` entries here — bigfeatures are
   // landmarks (keeps, forests, lakes) that stay put, and player walls are
@@ -2601,8 +2657,9 @@ function maybeConsumeFeature(entity) {
   if (!seed) return;
   const f = featureAt(seed, q, r);
   if (!f) return;
-  markFeatureConsumed(q, r);
+  if (f.kind === 'wall') return;
   const src = f.path ? assetUrl(f.path) : '';
+  const bonusLine = bonusText(buildingBonusAt(seed, q, r)?.bonus);
   const desc = (typeof f.desc === 'string' && f.desc.trim())
     || featureDescById.get(f.id) || featureDescById.get(f.label)
     || KIND_DESC[f.kind] || KIND_DESC.building || '';
@@ -2614,7 +2671,7 @@ function maybeConsumeFeature(entity) {
   // Log to the event panel so the record is scrollable with the rest of the
   // match. Prefix with 🏛 so a scan picks it out.
   const who = entity.peer_id === state.myPeerId ? 'you' : (entity.name || peerShort(entity.peer_id));
-  logUI(`🏛 ${who} stepped onto ${f.label || f.kind} at (${q},${r}) — ${abbreviate(desc, 180)}`, 'phase');
+  logUI(`🏛 ${who} stepped onto ${f.label || f.kind} at (${q},${r}) — ${abbreviate(desc, 180)}${bonusLine ? ` · bonus while here: ${bonusLine}` : ''}`, 'phase');
   // Nudge the renderer so the sprite disappears at the same frame the badge
   // starts rising.
   try { rendererRef?.repaint?.(); } catch { /* best-effort */ }
@@ -2781,6 +2838,7 @@ function queueSlot(key) {
     cancelPathJourney('manual pick');
     sendQueue();
     renderDeck();
+    if (state.bonusMode && state.phase === 'planning' && !isTrance(card) && state.queuedSkills.includes(key) && state.queued.length) commitBonus();
     return;
   }
   if (tranceActive()) {
@@ -2842,6 +2900,7 @@ function queueSlot(key) {
   cancelPathJourney('manual pick');
   sendQueue();
   renderDeck();
+  if (state.bonusMode && state.phase === 'planning' && state.queued.length) commitBonus();
 }
 
 // Consecutive clicks / taps on the same control (≤ 450 ms apart) — our own count,
@@ -2871,6 +2930,89 @@ function tripleCommit(key) {
   if (!picked) queueSlot(key);
   commitNow('triple-click');
 }
+
+// Cards row drag-scroll (user ruling 2026-11-12): with many permanents the row is wider than the screen
+// and the archive pile slid out of reach. Press and drag sideways (mouse or finger) to scroll it; past a
+// few pixels it is a drag, and the click that ends it is swallowed so no card gets picked by accident.
+(function deckRowDrag() {
+  const init = () => {
+    const row = document.getElementById('deck-row');
+    if (!row) return;
+    let drag = null, swallowClick = false;
+    row.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      if (row.scrollWidth <= row.clientWidth + 1) return;
+      drag = { id: ev.pointerId, x: ev.clientX, left: row.scrollLeft, moved: false };
+    });
+    window.addEventListener('pointermove', (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      const dx = ev.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 6) return;
+      drag.moved = true;
+      row.classList.add('dragging');
+      row.scrollLeft = drag.left - dx;
+      ev.preventDefault();
+    }, { passive: false });
+    const end = (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      if (drag.moved) { swallowClick = true; setTimeout(() => { swallowClick = false; }, 0); }
+      row.classList.remove('dragging');
+      drag = null;
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    row.addEventListener('click', (ev) => { if (swallowClick) { ev.stopPropagation(); ev.preventDefault(); swallowClick = false; } }, true);
+    row.addEventListener('wheel', (ev) => {
+      if (row.scrollWidth <= row.clientWidth + 1 || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return;
+      row.scrollLeft += ev.deltaY; ev.preventDefault();
+    }, { passive: false });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+
+// Full text of a card / permanent / ability: hover on desktop, tap or click
+// anywhere. The text lives in data-full (the native title tooltip is moved
+// there each frame so it doesn't pop up on top of this panel).
+let _cardInfoEl = null, _cardInfoTimer = null, _cardInfoSticky = false;
+function cardInfoText(el) { return el.dataset.full || el.getAttribute('title') || ''; }
+function showCardInfo(el, sticky) {
+  const text = cardInfoText(el);
+  if (!text) return;
+  if (!_cardInfoEl) { _cardInfoEl = document.createElement('div'); _cardInfoEl.id = 'card-info'; _cardInfoEl.addEventListener('click', hideCardInfo); document.body.appendChild(_cardInfoEl); }
+  const name = (el.querySelector('.nm')?.textContent || el.dataset.name || '').trim();
+  _cardInfoEl.innerHTML = `${name ? `<div class="ci-nm">${escHtml(name)}</div>` : ''}<div class="ci-tx">${escHtml(text).replace(/\n/g, '<br>')}</div>`;
+  _cardInfoEl.hidden = false;
+  const r = el.getBoundingClientRect();
+  const w = Math.min(320, window.innerWidth - 16);
+  _cardInfoEl.style.width = `${w}px`;
+  _cardInfoEl.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  _cardInfoEl.style.bottom = `${Math.max(8, window.innerHeight - r.top + 10)}px`;
+  clearTimeout(_cardInfoTimer);
+  _cardInfoSticky = !!sticky;
+  if (sticky) _cardInfoTimer = setTimeout(hideCardInfo, 6000);
+}
+function hideCardInfo() { clearTimeout(_cardInfoTimer); _cardInfoSticky = false; if (_cardInfoEl) _cardInfoEl.hidden = true; }
+const CARD_INFO_SEL = '#slots .slot, #perms .perm, .skill-card, .pill.cls, #ap-list .ac';
+function moveTitlesToData(root) {
+  for (const el of root.querySelectorAll(CARD_INFO_SEL)) {
+    const t = el.getAttribute('title');
+    if (t !== null) { el.dataset.full = t; el.removeAttribute('title'); }
+  }
+}
+document.addEventListener('mouseover', (ev) => {
+  if (IS_MOBILE_UI || _cardInfoSticky) return;
+  const el = ev.target.closest?.(CARD_INFO_SEL);
+  if (el) showCardInfo(el, false);
+});
+document.addEventListener('mouseout', (ev) => {
+  if (IS_MOBILE_UI || _cardInfoSticky) return;
+  const el = ev.target.closest?.(CARD_INFO_SEL);
+  if (el && !el.contains(ev.relatedTarget)) hideCardInfo();
+});
+document.addEventListener('click', (ev) => {
+  const el = ev.target.closest?.(CARD_INFO_SEL);
+  if (el) showCardInfo(el, true);
+}, true);
 
 function toggleDiscard(i) {
   const card = state.hand[i];
@@ -2967,6 +3109,7 @@ function wireInput() {
           lostActions: p.lost_actions || 0,
           emitTrail: state.ui.emitTrails?.[p.peer_id]?.elems || null,
           gone: isGone(p),
+          armor: Number(p.armor) || 0, illusion: Number(p.illusion) || 0,
         };
       });
     },
@@ -3078,7 +3221,18 @@ function wireInput() {
     if (IS_MOBILE_UI) {
       const qeTap = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
       if (!qeTap?.tile_target) {
-        canvas.dispatchEvent(new MouseEvent('contextmenu', { clientX: ev.clientX, clientY: ev.clientY, bubbles: true, cancelable: true }));
+        // User ruling 2026-11-12: a single tap only shows what is there (the unit's sound and card, or the
+        // object card) until the next tap elsewhere; a double tap on a tile / enemy / ally moves or targets.
+        const rect0 = canvas.getBoundingClientRect();
+        const t0 = renderer.pickHex(ev.clientX - rect0.left, ev.clientY - rect0.top, knownHex);
+        const now = Date.now(), prev = state.ui.lastTap;
+        state.ui.lastTap = t0 ? { at: now, q: t0.q, r: t0.r } : null;
+        if (prev && t0 && now - prev.at < 450 && prev.q === t0.q && prev.r === t0.r) {
+          state.ui.lastTap = null;
+          canvas.dispatchEvent(new MouseEvent('contextmenu', { clientX: ev.clientX, clientY: ev.clientY, bubbles: true, cancelable: true }));
+          return;
+        }
+        tapInfo(ev, t0);
         return;
       }
     }
@@ -3103,7 +3257,7 @@ function wireInput() {
       return;
     }
     state.ui.selectedTarget = t;
-    if (occupant && occupant.peer_id === state.myPeerId) sounds.play(resOf(occupant), 'select');
+    if (occupant) playUnitSound(occupant);
     setLogFilter(occupant ? occupant.peer_id : null);
     // general_ux_range_cast_target: with a tile-taking effect queued (Teleport, Creation, Awake, Vision,
     // Artifice, Metaphysics, Disruption, Mind Blast) the left-clicked tile is the cast's target.
@@ -3252,7 +3406,7 @@ function wireInput() {
         send({ kind: 'lock' });
         logUI(`committed: ${label}`, 'phase', { peerId: occupant.peer_id });
       } else {
-        logUI(`staged: ${label} — ${IS_MOBILE_UI ? 'tap' : 'right-click'} again to commit`, 'phase', { peerId: occupant.peer_id });
+        logUI(`staged: ${label} — ${IS_MOBILE_UI ? 'it commits when planning ends (or double-tap twice fast)' : 'right-click again to commit'}`, 'phase', { peerId: occupant.peer_id });
       }
       renderDeck();
       return;
@@ -3344,7 +3498,7 @@ function wireInput() {
       send({ kind: 'lock' });
       logUI(`committed: ${label}`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
     } else {
-      logUI(`staged: ${label} — ${IS_MOBILE_UI ? 'tap' : 'right-click'} again to commit`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
+      logUI(`staged: ${label} — ${IS_MOBILE_UI ? 'it commits when planning ends (or double-tap twice fast)' : 'right-click again to commit'}`, 'phase', isEnemy ? { peerId: occupant.peer_id } : null);
     }
     renderDeck();
   });
@@ -3353,8 +3507,30 @@ function wireInput() {
   // that's a right-click gesture only. If something is already queued (a
   // card, EMPTY with a right-click destination, etc.) a double-click just
   // locks it in. On an empty queue it's a no-op.
+  // Mobile: one tap shows info, a double tap on the same hex stages (handled in the click handler).
+  function tapInfo(ev, t) {
+    const hc = document.getElementById('hover-card');
+    const rect = canvas.getBoundingClientRect();
+    const occupant = t ? entityAtPixel(ev.clientX - rect.left, ev.clientY - rect.top) : null;
+    uilog('tap', { tile: t, detail: occupant ? occupant.peer_id : 'ground' });
+    if (occupant) {
+      hideObjectCard();
+      playUnitSound(occupant);
+      state.ui.hoverPeerId = occupant.peer_id; state.ui.hoverTile = t;
+      renderHoverCard(ev.clientX, ev.clientY);
+      hc?.classList.add('tap');
+      setLogFilter(occupant.peer_id);
+      return;
+    }
+    hc?.classList.remove('tap');
+    state.ui.hoverPeerId = null;
+    const obj = t ? objectAt(t.q, t.r) : null;
+    if (obj) showObjectCard(obj, ev.clientX, ev.clientY); else hideObjectCard();
+    setLogFilter(null);
+  }
   canvas.addEventListener('dblclick', (ev) => {
     uilog('dblclick');
+    if (IS_MOBILE_UI) return;   // a double tap stages the move / target instead of committing
     if (state.phase !== 'planning' || state.locked) return;
     if (!state.queued.length) return;
     state.locked = true;
