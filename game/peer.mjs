@@ -53,7 +53,7 @@ import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEF
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
-import { buildingBonusAt, bonusText } from './js/building-bonus.js';
+import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, exploreTarget, dungeonAt, dungeonExplored, LEARN_REARM_TURNS } from './js/building-bonus.js';
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -167,6 +167,8 @@ const ROUND_SEC         = Number(process.env.ROUND_SEC        || 6);
 const ROUNDS_PER_TURN   = Number(process.env.ROUNDS_PER_TURN  || 3);
 const COMMIT_WAIT_MS    = Number(process.env.COMMIT_WAIT_MS   || 800);
 const REVEAL_WAIT_MS    = Number(process.env.REVEAL_WAIT_MS   || 1500);
+// Extra wait for a reveal whose commit we already hold (a phone over the Nostr bus is seconds slower).
+const REVEAL_GRACE_MS   = Number(process.env.REVEAL_GRACE_MS  || 4000);
 const HAND_SIZE         = 5;
 // Region tiers (sync_region_tiers). Movement per round is bounded so the
 // strong region can be a fixed radius: an Empty Move covers at most
@@ -856,7 +858,9 @@ const classColours = (classId) => { const cols = {}; for (const el of data.class
 const PASSIVE_TURN_CLASSES = new Set(['class_elementalist', 'class_rogue']);
 const classKindOf = (classId) => PASSIVE_TURN_CLASSES.has(classId) ? 'passive' : (data.classes[classId]?.data?.ability_kind || 'static');
 {
-  const forced = (process.env.FORCE_CLASS || '').trim();
+  // FORCE_CLASS may list several (test runs): each peer takes one by its label's hash.
+  const forcedList = (process.env.FORCE_CLASS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const forced = forcedList.length > 1 ? forcedList[parseInt(sha256Hex(`fclass:${PEER_LABEL}`).slice(0, 8), 16) % forcedList.length] : (forcedList[0] || '');
   const pool = Object.keys(data.classes).sort();
   let cls = forced && data.classes[forced] ? forced : null;
   // A monster's class follows from its creature id (every peer derives the same one); a character draws one.
@@ -931,6 +935,8 @@ const SKILLS_IMPLEMENTED = [
   'skill_battle_trance', 'skill_force_shield', 'skill_counter_spell',
 ];
 const TRANCE = 'skill_battle_trance';
+// Instants judged by what they did, not by the damage counterfactual (user ruling 2026-11-12).
+const NEGATING_SKILLS = new Set(['skill_intimidation', 'skill_bluff', 'skill_grapple', 'skill_disruption_move', 'skill_overrun', 'skill_dodge', 'skill_counter_spell']);
 // Reaver (Rule 9 + Rule 20 pc override): Empty Posture / Empty Move count as
 // an Attack, and non-instant effects may ride on the Attack itself.
 const isReaver = () => entity.permanents.has('class_reaver');
@@ -944,13 +950,23 @@ const EFFECTS_IMPLEMENTED = playableEffects(data.effects);
 // same trap. Monsters and summons pass over them.
 const WORLD_TRAP_RATE = 0.35, WORLD_TRAP_MONSTER_RATE = 0.3;
 const WORLD_TRAP_EFFECTS = EFFECTS_IMPLEMENTED.filter(id => EFFECT_RULES[id]?.damage && (data.effects[id]?.data?.element_cost || []).length).sort();
+// The power of the catalogue building on (q, r) (js/building-bonus.js), or null.
+const buildingPowerAt = (q, r) => { const b = Number.isInteger(q) ? buildingBonusAt(MAP_SEED, q, r) : null; return b?.kind === 'building' ? b.bonus.power || null : null; };
+// The trap an unexplored dungeon holds: one damage effect, re-rolled each time the dungeon re-arms (`since` =
+// the turn it was last explored, or 'first').
+function dungeonTrap(dg, since) {
+  if (!WORLD_TRAP_EFFECTS.length) return null;
+  const h = sha256Hex(`${MAP_SEED}:dng:${dg.q},${dg.r}:${since}`);
+  const effect_id = WORLD_TRAP_EFFECTS[parseInt(h.slice(0, 8), 16) % WORLD_TRAP_EFFECTS.length];
+  return { id: dg.id, q: dg.q, r: dg.r, effect_id, elements: [...data.effects[effect_id].data.element_cost], trigger: 'enter', mode: 'damage', power: TRAP_POWER, library: true, building: dg.source, dungeon: true };
+}
 const _worldTraps = new Map();
 function worldTrapAt(q, r) {
   const key = `${q},${r}`;
   if (_worldTraps.has(key)) return _worldTraps.get(key);
   let out = null;
   const f = WORLD_TRAP_EFFECTS.length ? buildingFeatureAt(MAP_SEED, q, r) : null;
-  if (f && f.kind !== 'wall' && !f.blocking) {
+  if (f && f.kind !== 'wall' && !f.blocking && buildingPowerAt(q, r)?.kind !== 'fortress' && !dungeonAt(MAP_SEED, q, r)) {
     const h = sha256Hex(`${MAP_SEED}:wtrap:${key}`);
     if (parseInt(h.slice(0, 8), 16) / 0x100000000 < WORLD_TRAP_RATE) {
       const effect_id = WORLD_TRAP_EFFECTS[parseInt(h.slice(8, 16), 16) % WORLD_TRAP_EFFECTS.length];
@@ -1485,8 +1501,9 @@ function discoverTrapMonsters(cq, cr) {
   for (let dq = -R; dq <= R; dq++) for (let dr = Math.max(-R, -dq - R); dr <= Math.min(R, -dq + R); dr++) {
     const q = cq + dq, r = cr + dr, key = `${q},${r}`;
     if (lurkersChecked.has(key)) continue;
-    const w = worldTrapAt(q, r);
-    if (w === null && !_worldTraps.has(key)) continue;   // catalogue not loaded yet — look again next time
+    const dg = dungeonAt(MAP_SEED, q, r);
+    const w = worldTrapAt(q, r) || (dg ? { building: dg.source } : null);
+    if (w === null && !_worldTraps.has(key) && !dg) continue;   // catalogue not loaded yet — look again next time
     lurkersChecked.add(key);
     if (!w) continue;
     // Discovered at a distance: never right on top of the hero who uncovers it (nor at the spawn disc).
@@ -1767,6 +1784,22 @@ function waitingOnBusyMember(map, phaseWanted) {
   }
   return false;
 }
+// A member whose commit for this action we hold is alive, at our action and about to reveal — over the
+// public bus (phone ↔ desktop) that reveal can land seconds after ours. Closing the action without it
+// means its attack never touches us here while its own resolver applies it (rejoined hero "back to 4 HP").
+function waitingOnCommitter() {
+  if (Date.now() > phaseEndsAt + REVEAL_GRACE_MS) return false;
+  const committed = commitsSeen.get(hg.action), seen = revealsSeen.get(hg.action) || new Set();
+  return !!committed && expectedMembers('reveal').some(id => committed.has(id) && !seen.has(id));
+}
+// Reveals that still arrive after we closed their action — each one is an action our resolver missed.
+let lateReveals = 0;
+function noteLateReveal(env) {
+  const k = actionKey(env.turn, env.round);
+  if (k >= hg.action) return;
+  lateReveals++;
+  if (lateReveals <= 5 || lateReveals % 20 === 0) console.warn(`[${PEER_LABEL}] late reveal #${lateReveals}: ${env.actor_peer_id} T${env.turn}.R${env.round + 1} arrived at action ${hg.action} (${currentPhase}) — not resolved here`);
+}
 async function pullFromDiscovery(kind, map) {
   if (!DISCOVERY_URL) return;
   try {
@@ -1962,7 +1995,7 @@ async function doPlanningEnd() {
   // Rule 24: emitting against a token replaces casting (unless Aura lets you do both).
   let destroy = null;
   if (queuedDestroy && !trance && (wants('P') || wants('EP') || (isReaver() && wants('A')) || (isMonk() && wants('M')))) {
-    destroy = { stat: queuedDestroy.stat, ...(queuedDestroy.class ? { class: queuedDestroy.class, elem: queuedDestroy.elem || null } : {}), ...(queuedDestroy.recast ? { recast: true } : {}), ...(queuedDestroy.untap ? { untap: true } : {}) };
+    destroy = { stat: queuedDestroy.stat, ...(queuedDestroy.building ? { building: queuedDestroy.building } : {}), ...(queuedDestroy.class ? { class: queuedDestroy.class, elem: queuedDestroy.elem || null } : {}), ...(queuedDestroy.recast ? { recast: true } : {}), ...(queuedDestroy.untap ? { untap: true } : {}) };
     if (!entity.permanents.has('effect_aura')) {
       if (casting) console.log(`[${PEER_LABEL}] cast of ${casting.entries.map(e => e.effectId).join('→')} dropped to emit against a token`);
       plan = null; casting = null;
@@ -2263,6 +2296,13 @@ async function doResolution() {
   const lifeOf = (id) => id === PEER_ID_STRING ? entity.life - bonusDmgToMe : (view.get(id)?.life ?? 0);
   for (let i = revealsThisTurn.length - 1; i >= 0; i--) if (lifeOf(revealsThisTurn[i].actor) <= 0) revealsThisTurn.splice(i, 1);
   revealsThisTurn.sort((a, b) => a.actor.localeCompare(b.actor));
+  // A building's skill rides free on the action of whoever stands there (user ruling 2026-11-12); the
+  // skill pass below only uses it when the action fits (ridesFor), like a card from the hand.
+  for (const r of revealsThisTurn) {
+    const v = view.get(r.actor);
+    const pw = v ? buildingPowerAt(v.tile_q, v.tile_r) : null;
+    if (pw?.kind === 'skill' && !(r.skills || []).includes(pw.skill)) { r.skills = [...(r.skills || []), pw.skill]; r.buildingSkill = pw.skill; }
+  }
 
   // Resolve a target object into the tile the target occupies / points at. A
   // character target reads the peer's current public tile; a tile target is
@@ -2392,10 +2432,12 @@ async function doResolution() {
   // Earth obstacles (Creation): every peer's `obstacles_json`; impassable for the creator's enemies.
   const allObstacles = [...view.values()].flatMap(v => parseJson(v?.obstacles_json, []).map(o => ({ ...o, owner: v.peer_id }))).sort((a, b) => String(a.id).localeCompare(String(b.id)));
   const obstacleAt = (q, r) => allObstacles.find(o => o.q === q && o.r === r) || null;
-  const obstacleBlocks = (who, q, r) => { const o = obstacleAt(q, r); return !!o && o.owner !== who && enemyOf(o.owner, who); };
+  // A wall raised by a building (`wall: true`) stops everyone, its raiser included.
+  const obstacleBlocks = (who, q, r) => { const o = obstacleAt(q, r); return !!o && (o.wall || (o.owner !== who && enemyOf(o.owner, who))); };
   // Labyrinth walls (features.js#labyrinthWallAt) are static scenery owned by
   // nobody — impassable to everyone, deterministic from (MAP_SEED, q, r).
-  const labyrinthBlocks = (q, r) => isLabyrinthWallAt(MAP_SEED, q, r);
+  // A fortress building stands in the way the same until someone breaks it (world edit `bld:q,r` gone).
+  const labyrinthBlocks = (q, r) => isLabyrinthWallAt(MAP_SEED, q, r) || !!fortressAt(MAP_SEED, q, r, worldEditsNow);
   const casterStat = (id, el) => Math.max(0, statOf(id, ELEM_TO_STAT[el]) - (counterPen.get(id)?.[el] || 0) - elemPenOf(id, el));
   const castComplete = (o) => !!o.effect && Array.isArray(o.effect.elements) && o.effect.elements.length > 0 && (o.effect.is_instant || (o.effect.step ?? 1) >= (o.effect.of ?? 1));
   const castsDamage = (o) => castComplete(o) && !!EFFECT_RULES[o.effect.effect_id]?.damage;
@@ -2470,6 +2512,29 @@ async function doResolution() {
     return hit ? hit.legs.reduce((s, l) => s + roundHalfUp10(l.sum), 0) : 0;
   };
 
+  // Skill bookkeeping (user ruling 2026-11-12): what each instant actually did. A skill that served its
+  // purpose is discarded; a negated action's card — and the instants riding on it, which never execute —
+  // goes back to its owner's hand; a countered instant is discarded. Read by the card disposition below.
+  const skillFx = [];
+  const nonPerm = (id) => id !== TRANCE && !data.skills[id]?.data?.is_permanent;
+  const fromBuilding = (by, skill) => byActorPre.get(by)?.buildingSkill === skill;
+  const negate = (by, skill, o, what) => {
+    const ridden = (o.skills || []).filter(nonPerm);
+    o.skills = (o.skills || []).filter(id => !nonPerm(id));
+    skillFx.push({ by, skill, on: o.actor, what, negated: true, ridden, building: fromBuilding(by, skill) });
+  };
+  const counterSkills = (by, skill, o) => {
+    const countered = (o.skills || []).filter(nonPerm);
+    o.skills = (o.skills || []).filter(id => !nonPerm(id));
+    skillFx.push({ by, skill, on: o.actor, what: 'skills', countered, building: fromBuilding(by, skill) });
+  };
+  const adjacentFoes = (id) => revealsThisTurn.filter(o => o.actor !== id && enemyOf(id, o.actor) && distBetween(id, o.actor) <= 1).map(o => o.actor);
+  // A targeted skill without a right-clicked enemy picks the adjacent one: attackers first, then lowest id.
+  const foeFor = (r) => {
+    const t = r.target?.kind === 'character' ? r.target.ref : null;
+    if (t && effAction.has(t)) return t;
+    return adjacentFoes(r.actor).sort((a, b) => (Number(codeIs(b, 'A')) - Number(codeIs(a, 'A'))) || a.localeCompare(b))[0] || null;
+  };
   // Counter Spell pre-pass (Rule 8: no stack, but a counter is a prohibition
   // and prohibitions apply "finally as a replacement" — so it runs before any
   // other skill resolves). Target (Rule 15 pc override: Posture has no target,
@@ -2520,6 +2585,8 @@ async function doResolution() {
     const kept = (o.skills || []).filter(id => !!data.skills[id]?.data?.is_permanent);
     const stripped = (o.skills || []).filter(id => !kept.includes(id));
     o.skills = kept;
+    const bCs = bestElem(o);
+    if (stripped.length || bCs) skillFx.push({ by: r.actor, skill: 'skill_counter_spell', on: tgt, what: 'skills', countered: stripped.filter(id => id !== TRANCE), building: fromBuilding(r.actor, 'skill_counter_spell') });
     if (stripped.includes(TRANCE) && o.trance) { effAction.set(tgt, o.trance[0]); tranceOpts.delete(tgt); o.trance = null; }
     const b = bestElem(o);
     if (b) {
@@ -2529,22 +2596,41 @@ async function doResolution() {
     }
     if (r.actor === PEER_ID_STRING || tgt === PEER_ID_STRING) log(`[${PEER_LABEL}] counter spell ${r.actor.slice(0, 8)} → ${tgt.slice(0, 8)}: stripped [${stripped.join(',')}]${b ? `, −${b.amount} on ${b.el} (saves ${b.saved})` : ', nothing to counter'}`);
   }
+  // Pass 1 — prohibitions on a whole action (they go first: an Attack Intimidation negates never gets to
+  // Grapple). Move / Posture skills also ride on Empty Move / Empty Posture.
   for (const r of revealsThisTurn) {
-    const sk = r.skills || [];
-    if (!sk.length) continue;
-    const tgt = r.target?.kind === 'character' ? r.target.ref : null;
-    const tgtKnown = tgt && effAction.has(tgt);
-    // Move / Posture skills also ride on Empty Move / Empty Posture.
-    const rides = ridesFor(r);
-    if (rides('M') && tgtKnown && has(r.actor, 'skill_bluff') && distBetween(r.actor, tgt) <= 1) { effAction.set(tgt, 'EP'); tranceOpts.delete(tgt); }
-    if (rides('P') && has(r.actor, 'skill_intimidation')) {
-      for (const o of revealsThisTurn) {
-        if (o.actor !== r.actor && enemyOf(r.actor, o.actor) && distBetween(r.actor, o.actor) <= 1 && codeIs(o.actor, 'A')) replace(o.actor, 'A', 'EP');
+    if (!(r.skills || []).length) continue;
+    const me = r.actor, rides = ridesFor(r);
+    // Bluff: the enemy's action is negated and played as Empty Posture.
+    if (rides('M') && has(me, 'skill_bluff')) {
+      const t = foeFor(r), o = t && byActorPre.get(t);
+      if (o && distBetween(me, t) <= 1 && (tranceOpts.has(t) || effAction.get(t) !== 'EP')) {
+        const what = tranceOpts.has(t) ? tranceOpts.get(t).join('+') : effAction.get(t);
+        effAction.set(t, 'EP'); tranceOpts.delete(t); negate(me, 'skill_bluff', o, what);
       }
     }
-    if (rides('A') && tgtKnown && has(r.actor, 'skill_grapple') && codeIs(tgt, 'P')) replace(tgt, 'P', 'EP');
-    if (rides('M') && tgtKnown && has(r.actor, 'skill_disruption_move') && codeIs(tgt, 'P')) replace(tgt, 'P', 'EP');
-    if (rides('A') && tgtKnown && has(r.actor, 'skill_overrun') && distBetween(r.actor, tgt) <= 1) noMove.add(tgt);
+    // Intimidation: an adjacent enemy's Attack is negated (no combat damage, the card back to their hand);
+    // with nobody attacking, it counters a non-permanent skill of an adjacent enemy instead.
+    if (rides('P') && has(me, 'skill_intimidation')) {
+      const atk = adjacentFoes(me).filter(id => codeIs(id, 'A'));
+      for (const id of atk) { replace(id, 'A', 'EP'); negate(me, 'skill_intimidation', byActorPre.get(id), 'A'); }
+      if (!atk.length) {
+        const o = [foeFor(r), ...adjacentFoes(me)].filter(Boolean).map(id => byActorPre.get(id))
+          .find(x => x && distBetween(me, x.actor) <= 1 && (x.skills || []).some(nonPerm));
+        if (o) counterSkills(me, 'skill_intimidation', o);
+      }
+    }
+  }
+  // Pass 2 — prohibitions on one kind of action.
+  for (const r of revealsThisTurn) {
+    if (!(r.skills || []).length) continue;
+    const me = r.actor, rides = ridesFor(r);
+    if (rides('A') && has(me, 'skill_grapple')) { const t = foeFor(r); if (t && codeIs(t, 'P')) { replace(t, 'P', 'EP'); negate(me, 'skill_grapple', byActorPre.get(t), 'P'); } }
+    if (rides('M') && has(me, 'skill_disruption_move')) { const t = foeFor(r); if (t && codeIs(t, 'P')) { replace(t, 'P', 'EP'); negate(me, 'skill_disruption_move', byActorPre.get(t), 'P'); } }
+    if (rides('A') && has(me, 'skill_overrun')) {
+      const t = foeFor(r);
+      if (t && distBetween(me, t) <= 1) { const mv = codeIs(t, 'M') ? 'M' : codeIs(t, 'EM') ? 'EM' : null; noMove.add(t); if (mv) negate(me, 'skill_overrun', byActorPre.get(t), mv); }
+    }
   }
   // Afflictions from sprung perm-traps hold while the holder keeps the permanent.
   const afflictedBy = (id, effectId) => parseJson(view.get(id)?.afflictions_json, []).filter(a => a.effect_id === effectId && a.by !== id && hasPerm(a.by, effectId)).map(a => a.by);
@@ -2613,6 +2699,16 @@ async function doResolution() {
     else if (cur !== 'EP') continue;
     else if (c === 'class_barbarian') effAction.set(r.actor, 'B');
     else if (c === 'class_monk') effAction.set(r.actor, 'M');
+  }
+  // Stance buildings (user ruling 2026-11-12): an Empty Posture played there is the building's action
+  // ("always on Posture once in there") — after the class stances, which keep their own.
+  for (const r of revealsThisTurn) {
+    if (effAction.get(r.actor) !== 'EP') continue;
+    const v = view.get(r.actor);
+    const pw = v ? buildingPowerAt(v.tile_q, v.tile_r) : null;
+    if (pw?.kind !== 'stance') continue;
+    effAction.set(r.actor, pw.code);
+    if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] building stance: my Empty Posture fights as ${pw.code}`);
   }
   for (const r of revealsThisTurn) {
     r.action = effAction.get(r.actor);
@@ -3035,6 +3131,18 @@ async function doResolution() {
       if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${kind}: ${stat} emitted, dice [${pb.dice.join(',')}] → ${ok ? 'colour prepared' : 'failed roll, again next action'}`);
       continue;
     }
+    // --- a fortress building (user ruling 2026-11-12): my stat must be above its value, any good roll breaks it ---
+    if (r.destroy.building) {
+      const [bq, br] = String(r.destroy.building).split(',').map(Number);
+      const fz = fortressAt(MAP_SEED, bq, br, worldEditsNow);
+      const av = view.get(r.actor);
+      if (!fz || fz.stat !== stat || hexDistance({ tile_q: av.tile_q, tile_r: av.tile_r }, { tile_q: bq, tile_r: br }) > 1) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] break building: no standing ${stat} fortress next to me at (${bq},${br})`); continue; }
+      const mine = statOf(r.actor, stat);
+      const result = pb.fail ? 'retry' : mine > fz.value ? 'destroyed' : 'too weak';
+      destroyOutcomes.push({ actor: r.actor, owner: 'world', kind: 'building', id: fz.id, label: fz.source, power: fz.value, die: pb.value, dice: pb.dice, result });
+      log(`[${PEER_LABEL}] ${r.actor.slice(0, 8)} emits ${stat} ${mine} against the ${fz.source} at (${bq},${br}) (${stat} ${fz.value}): dice [${pb.dice.join(',')}] → ${result}`);
+      continue;
+    }
     const enemies = [...view.keys()].filter(id => id !== r.actor && lifeOf(id) > 0 && enemyOf(r.actor, id) && distBetween(r.actor, id) <= 1);
     // --- an enemy's class colour (die of 6) ---
     if (r.destroy.class) {
@@ -3207,7 +3315,7 @@ async function doResolution() {
   for (const [victim, list] of damage) {
     if (!has(victim, 'skill_dodge')) continue;
     const hit = list.find(d => d.source === 'action' && d.amount > 0);
-    if (hit) hit.amount -= 1;
+    if (hit) { hit.amount -= 1; skillFx.push({ by: victim, skill: 'skill_dodge', on: hit.attacker, what: 'damage', building: fromBuilding(victim, 'skill_dodge') }); }
   }
 
   // Effect damage (Rule 21): each leg rounded half-up / 10 on its own. Before
@@ -3415,6 +3523,37 @@ async function doResolution() {
     for (const tp of laid) springTrap(tp, who);
     if (wtrap) springTrap({ ...wtrap, owner: 'world' }, who);
   }
+  // Dungeons (user ruling 2026-11-12): the hero who ends the turn's 3rd action in an unexplored one explores
+  // it — its trap springs on them (one hero per dungeon: the lowest peer id), the dungeon stays explored
+  // for 5 turns (world edit `dng:q,r` { explored }), then re-arms with a new trap.
+  if (hg.round === ROUNDS_PER_TURN - 1) {
+    const done = new Set();
+    for (const id of [...view.keys()].sort()) {
+      const t = postTile(id);
+      if (!view.get(id)?.character_id || lifeOf(id) <= 0 || !t) continue;
+      const dg = dungeonAt(MAP_SEED, t.tile_q, t.tile_r);
+      if (!dg || done.has(dg.id)) continue;
+      const ed = worldEditsNow.get(dg.id);
+      if (dungeonExplored(ed, hg.turn)) continue;
+      done.add(dg.id);
+      const tp = dungeonTrap(dg, Number.isInteger(ed?.explored) ? ed.explored : 'first');
+      if (tp) springTrap({ ...tp, owner: 'world' }, id);
+    }
+  }
+  // Teleport buildings (user ruling 2026-11-12): a hero whose step ends on one is sent on to the first free
+  // hex of the building's fixed target list (no unit, wall, obstacle or fortress there after the moves).
+  {
+    const taken = new Set([...view.keys()].filter(id => lifeOf(id) > 0).map(id => { const t = postTile(id); return t ? `${t.tile_q},${t.tile_r}` : ''; }));
+    for (const [who, t] of [...nextTiles.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const before = view.get(who);
+      if (!before?.character_id || lifeOf(who) <= 0 || (before.tile_q === t.q && before.tile_r === t.r) || buildingPowerAt(t.q, t.r)?.kind !== 'teleport') continue;
+      const dest = teleportTargets(MAP_SEED, t.q, t.r).find(x => !taken.has(`${x.q},${x.r}`) && !labyrinthBlocks(x.q, x.r) && !obstacleAt(x.q, x.r));
+      if (!dest) continue;
+      taken.delete(`${t.q},${t.r}`); taken.add(`${dest.q},${dest.r}`);
+      nextTiles.set(who, { q: dest.q, r: dest.r });
+      log(`[${PEER_LABEL}] ${who.slice(0, 8)} steps into the teleport at (${t.q},${t.r}) and comes out at (${dest.q},${dest.r})`);
+    }
+  }
   for (const r of revealsThisTurn) {
     const tgt = targetOf(r);
     if (!tgt || tgt === r.actor || lifeOf(r.actor) <= 0 || !enemyOf(r.actor, tgt)) continue;
@@ -3502,7 +3641,7 @@ async function doResolution() {
     wardFired.push({ victim, warder, moved: !!entry && nextTiles.get(victim) === entry });
     if (victim === PEER_ID_STRING || warder === PEER_ID_STRING) log(`[${PEER_LABEL}] death ward: ${victim.slice(0, 8)} would fall — stands at 1 hp${entry ? ` back at (${entry.q},${entry.r})` : ''}`);
   }
-  return { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, wardFired, trapsSpent, afflictionsOut, obstacleHits, channelsBroken, relocations, blessFired, classOutcomes, classAbilityOut };
+  return { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, wardFired, trapsSpent, afflictionsOut, obstacleHits, channelsBroken, relocations, blessFired, classOutcomes, classAbilityOut, skillFx };
   };
 
   const sumDmg = list => (list || []).reduce((s, d) => s + d.amount, 0);
@@ -3660,12 +3799,14 @@ async function doResolution() {
       _autosave?.markDirty();
     }
     const receiver = ts.disabled ? ts.to : ts.victim;
-    if (ts.owner === 'world' && ts.victim === PEER_ID_STRING && !entity.worldEdits.some(e => e.id === ts.id && e.gone)) entity.worldEdits.push({ id: ts.id, gone: true, at: hg.action });
+    const isDungeon = String(ts.id).startsWith('dng:');
+    if (isDungeon && ts.victim === PEER_ID_STRING) { entity.worldEdits = entity.worldEdits.filter(e => e.id !== ts.id); entity.worldEdits.push({ id: ts.id, explored: hg.turn, at: hg.action }); console.log(`[${PEER_LABEL}] dungeon ${ts.id} explored on turn ${hg.turn} — it re-arms on turn ${hg.turn + 5}`); }
+    else if (ts.owner === 'world' && ts.victim === PEER_ID_STRING && !entity.worldEdits.some(e => e.id === ts.id && e.gone)) entity.worldEdits.push({ id: ts.id, gone: true, at: hg.action });
     if (cardToVictim && receiver === PEER_ID_STRING && receiver !== ts.owner && data.effects[ts.effect_id]) {
       const c = makeEffectCard(ts.effect_id);
       discard.push(c);
       console.log(`[${PEER_LABEL}] I dealt with the ${c.name} trap — its card goes to my discard pile`);
-      if (ts.owner === 'world') broadcastUI(handMsg({ notice: `⚠ A hidden trap in the building springs: ${c.name} — its card goes to your discard pile` }));
+      if (ts.owner === 'world') broadcastUI(handMsg({ notice: isDungeon ? `⚠ You explore the dungeon — its trap springs: ${c.name}. Its card joins your discard pile; the dungeon re-arms in 5 turns` : `⚠ A hidden trap in the building springs: ${c.name} — its card goes to your discard pile` }));
     }
   }
   // Class cards (user ruling 2026-10-30) — what happened to MY class this action.
@@ -3904,8 +4045,18 @@ async function doResolution() {
     const stripSkill = (w, id) => { w.skills = (w.skills || []).filter(s => s !== id); if (id === TRANCE && w.trance) { w.action = w.trance[0]; w.trance = null; } };
     const returned = [];
     myLastReveal.returnedCardIds = [];
+    const fx = real.skillFx || [];
+    const onMe = fx.filter(f => f.on === PEER_ID_STRING);
+    myLastReveal.actionNegated = onMe.some(f => f.negated);
     for (const id of myLastReveal.skillIds || []) {
       if (data.skills[id]?.data?.is_permanent) continue;
+      const cid = myLastReveal.skillCardIds[myLastReveal.skillIds.indexOf(id)];
+      // Riding on an action that was negated: it never executed — back to my hand with the action card.
+      if (onMe.some(f => (f.ridden || []).includes(id))) { returned.push(`${id} (its action was negated)`); myLastReveal.returnedCardIds.push(cid); continue; }
+      // Countered: discarded.
+      if (onMe.some(f => (f.countered || []).includes(id))) continue;
+      // The negating instants: discarded when they did their job, back to hand when they found nothing to do.
+      if (NEGATING_SKILLS.has(id)) { if (!fx.some(f => f.by === PEER_ID_STRING && f.skill === id && !f.building)) { returned.push(id); myLastReveal.returnedCardIds.push(cid); } continue; }
       const without = roundWithout(mine => stripSkill(mine, id));
       if (!without) break;
       if (!paysOff(without)) { returned.push(id); myLastReveal.returnedCardIds.push(myLastReveal.skillCardIds[myLastReveal.skillIds.indexOf(id)]); }
@@ -3938,6 +4089,25 @@ async function doResolution() {
     }
     myLastReveal.returnedCardIds = myLastReveal.returnedCardIds.filter(Boolean);
     if (returned.length) console.log(`[${PEER_LABEL}] instants without benefit return to hand: ${returned.join(', ')}`);
+    // Tell the UI what my instants did (it burns the spent cards) and what was done to me.
+    const nm = (id) => id === PEER_ID_STRING ? 'you' : (view.get(id)?.name || id.slice(5, 13));
+    const skName = (id) => data.skills[id]?.name || id.replace(/^skill_/, '').replace(/_/g, ' ');
+    const actName = (c) => String(c || '').split('+').map(x => ({ A: 'Attack', M: 'Move', B: 'Block', P: 'Posture', EM: 'Empty Move', EP: 'Empty Posture' }[x] || x)).join(' + ');
+    const events = [], notices = [];
+    for (const f of fx) {
+      if (f.by !== PEER_ID_STRING && f.on !== PEER_ID_STRING) continue;
+      const who = f.building ? `the building's ${skName(f.skill)}` : f.by === PEER_ID_STRING ? `your ${skName(f.skill)}` : `${nm(f.by)}'s ${skName(f.skill)}`;
+      const extra = (f.ridden || []).length ? ` (and ${f.ridden.map(skName).join(', ')} riding on it)` : '';
+      const line = f.skill === 'skill_dodge' ? `✦ ${who}: one less combat damage to ${nm(f.by)}`
+        : f.negated ? `✦ ${who} negated ${f.on === PEER_ID_STRING ? 'your' : `${nm(f.on)}'s`} ${actName(f.what)}${extra} — ${f.on === PEER_ID_STRING ? 'the card returns to your hand' : 'their card returns to their hand'}`
+        : `✦ ${who} countered ${f.on === PEER_ID_STRING ? 'your' : `${nm(f.on)}'s`} ${(f.countered || []).map(skName).join(', ') || 'cast'}${(f.countered || []).length ? ' — discarded' : ''}`;
+      notices.push(line);
+      console.log(`[${PEER_LABEL}] skill fx: ${line}`);
+      if (f.by === PEER_ID_STRING && !f.building) { const k = (myLastReveal.skillIds || []).indexOf(f.skill); if (k >= 0) events.push({ card_id: myLastReveal.skillCardIds[k], name: myLastReveal.skillNames[k], outcome: 'spent' }); }
+      for (const id of f.on === PEER_ID_STRING ? (f.countered || []) : []) { const k = (myLastReveal.skillIds || []).indexOf(id); if (k >= 0) events.push({ card_id: myLastReveal.skillCardIds[k], name: myLastReveal.skillNames[k], outcome: 'countered' }); }
+      if (f.on === PEER_ID_STRING && f.negated) events.push({ card_id: myLastReveal.cardId, outcome: 'returned' });
+    }
+    if (events.length || notices.length) broadcastUI({ kind: 'skill-fx', events: events.filter((e, i) => e.card_id && events.findIndex(x => x.card_id === e.card_id) === i), notices });
   }
   // The counterfactual replays moved the board; the real round stands.
   viewApply(viewReal, bonusDmgReal);
@@ -4029,6 +4199,44 @@ async function doResolution() {
       entity.lifeMax = newMax;
     }
   }
+  // Building turn-end powers (user ruling 2026-11-12): whoever stands on the building when the turn's
+  // 3rd action resolves. My own state only — the walls travel in my obstacles_json, the map in map blocks.
+  if (entity.life > 0 && hg.round === ROUNDS_PER_TURN - 1) {
+    const bb = buildingBonusAt(MAP_SEED, entity.tile.q, entity.tile.r);
+    const pw = bb?.kind === 'building' ? bb.bonus.power : null;
+    const at = `${bb?.source} (${entity.tile.q},${entity.tile.r})`;
+    const tell = (t) => { console.log(`[${PEER_LABEL}] building ${at}: ${t}`); broadcastUI(handMsg({ notice: `⌂ ${bb.source}: ${t}` })); };
+    if (pw?.kind === 'mend' && entity.life < entity.lifeMax) { entity.life += 1; tell('+1 life at the end of the turn'); }
+    if (pw?.kind === 'hurt') { entity.life = Math.max(0, entity.life - 1); tell('a curse takes 1 life at the end of the turn'); }
+    if (entity.kind === 'character' && pw?.kind === 'draw') { entity.buildingDraw = 1; tell('you draw one more card for the next turn'); }
+    // Schools teach once, then stay explored for LEARN_REARM_TURNS (world edit `lrn:q,r` { explored }).
+    const lrnId = `lrn:${entity.tile.q},${entity.tile.r}`;
+    const lrnEd = pw?.kind === 'learn' ? [...worldLens(view).edits.values(), ...entity.worldEdits].filter(e => e.id === lrnId && Number.isInteger(e.explored)).sort((a, b) => b.explored - a.explored)[0] : null;
+    if (entity.kind === 'character' && pw?.kind === 'learn' && EFFECTS_IMPLEMENTED.length && !dungeonExplored(lrnEd, hg.turn, LEARN_REARM_TURNS)) {
+      const h = sha256Hex(`${MAP_SEED}:${lrnId}:${hg.turn}`);
+      const c = makeEffectCard(EFFECTS_IMPLEMENTED[parseInt(h.slice(0, 8), 16) % EFFECTS_IMPLEMENTED.length]);
+      discard.push(c);
+      entity.worldEdits = entity.worldEdits.filter(e => e.id !== lrnId);
+      entity.worldEdits.push({ id: lrnId, explored: hg.turn, at: hg.action });
+      tell(`you learn ${c.name} — the card joins your discard pile (${deck.length + discard.length + hand.length} cards); the ${bb.source} is explored until turn ${hg.turn + LEARN_REARM_TURNS}`);
+    }
+    if (entity.kind === 'character' && pw?.kind === 'explore') {
+      const far = exploreTarget(MAP_SEED, entity.tile.q, entity.tile.r, hg.turn);
+      revealAround(far.q, far.r).catch(e => console.warn(`[${PEER_LABEL}] explore failed: ${e.message}`));
+      tell(`a far place is explored around (${far.q},${far.r})`);
+    }
+    if (entity.kind === 'character' && pw?.kind === 'walls') {
+      const tag = `bw:${entity.tile.q},${entity.tile.r}:`;
+      const occ = new Set([...livePeers()].filter(p => p && p.life > 0).map(p => `${p.tile_q},${p.tile_r}`));
+      occ.add(`${entity.tile.q},${entity.tile.r}`);
+      // Each turn adds an arc (they pile up — every arc lasts three turns); hexes already walled are skipped.
+      for (const p of livePeers()) { try { for (const o of JSON.parse(p?.obstacles_json || '[]')) occ.add(`${o.q},${o.r}`); } catch {} }
+      for (const o of entity.obstacles) occ.add(`${o.q},${o.r}`);
+      const arc = wallArc(MAP_SEED, entity.tile.q, entity.tile.r, hg.turn).filter(h => !occ.has(`${h.q},${h.r}`) && !isLabyrinthWallAt(MAP_SEED, h.q, h.r) && !buildingPowerAt(h.q, h.r));
+      arc.forEach((h, i) => entity.obstacles.push({ id: `${tag}${hg.turn}#${i}`, q: h.q, r: h.r, hp: 6, elem: 'elem_earth', wall: true, until_turn: hg.turn + 3, label: `${bb.source} wall` }));
+      if (arc.length) tell(`${arc.length} wall hexes rise 5 hexes away (for 3 turns)`);
+    }
+  }
   if (wasAlive && entity.life <= 0) {
     console.log(`[${PEER_LABEL}] DIED at (${entity.tile.q},${entity.tile.r}) after -${myDmg} on T${hg.turn}.R${hg.round + 1} (life_max=${entity.lifeMax})`);
     // Tell the relays at once: peers on other machines would otherwise keep me alive as a stale shadow.
@@ -4041,7 +4249,7 @@ async function doResolution() {
   // Sanctuary lasts while I rest: declaring anything but the plain Empty
   // Posture — another action, a trance, or a skill riding on the EP — ends it
   // from the next round (damage this round was already judged on the EP).
-  const leftSanctuary = myR && ((myR.declared ?? myR.action) !== 'EP' || (myR.skills || []).length > 0 || !!myR.effect);
+  const leftSanctuary = myR && ((myR.declared ?? myR.action) !== 'EP' || (myR.skills || []).filter(id => id !== myR.buildingSkill).length > 0 || !!myR.effect);
   if (leftSanctuary) entity.permanents.delete('skill_sanctuary');
   if (brokenShield) { entity.permanents.delete('skill_force_shield'); delete entity.permPower.skill_force_shield; console.log(`[${PEER_LABEL}] force shield spent`); }
   const playedCodes = myR?.trance ? new Set([...myR.played].map(i => myR.trance[i])) : null;
@@ -4146,8 +4354,8 @@ async function doResolution() {
   };
   const brokenChannels = (actorId) => channelsBroken.filter(cb => cb.owner === actorId && !cb.why).map(cb => cb.effect_id);
   // What my Rule 24 emission broke this action (perm / token / class colour) — a vanishing "break" pill.
-  const brokeBy = (actorId) => [...destroyOutcomes.filter(d => d.actor === actorId && (d.result === 'destroyed' || d.result === 'taken')).map(d => ({ kind: d.kind, id: d.id, owner: d.owner, result: d.result })),
-    ...classOutcomes.filter(c => c.actor === actorId && c.ok).map(c => ({ kind: 'class', id: c.class_id, owner: c.owner, stat: c.stat, result: c.kind }))];
+  const brokeBy = (actorId) => [...destroyOutcomes.filter(d => d.actor === actorId && (d.result === 'destroyed' || d.result === 'taken')).map(d => ({ kind: d.kind, id: d.id, owner: d.owner, result: d.result, ...(d.label ? { label: d.label } : {}) })),
+    ...classOutcomes.filter(c => c.actor === actorId && c.ok && c.owner !== actorId).map(c => ({ kind: 'class', id: c.class_id, owner: c.owner, stat: c.stat, result: c.kind }))];
   for (const r of revealsThisTurn) {
     const actor = view.get(r.actor);
     if (!actor) continue;
@@ -4228,7 +4436,9 @@ async function endRound() {
   const playedIds = new Set((myLastReveal?.skillCardIds || []).filter(id => !returned.has(id)));
   // Haste bonus round: its action card, skills and instant are spent too.
   for (const b of (myLastReveal?.bonus || []).slice(0, myLastReveal?.bonusUsed ?? 0)) for (const id of [b.cardId, b.extraCardId, ...b.skillCardIds, b.effectCardId]) if (id && !returned.has(id)) playedIds.add(id);
-  for (const id of myPlayedCardIds || (myLastReveal?.cardId ? [myLastReveal.cardId] : [])) playedIds.add(id);
+  // A negated action (Intimidation, Bluff, Grapple, …) never happened: its card stays in my hand.
+  if (!myLastReveal?.actionNegated) for (const id of myPlayedCardIds || (myLastReveal?.cardId ? [myLastReveal.cardId] : [])) playedIds.add(id);
+  else console.log(`[${PEER_LABEL}] my ${myLastReveal.code} was negated — its card returns to my hand`);
   // Archive marks: those cards go to the archive now — played or not — instead
   // of the discard pile. A card still mid-cast stays until the cast is over.
   if (willArchive.size) {
@@ -4339,7 +4549,8 @@ async function endTurn() {
   willDiscard.clear();
   const before = hand.length;
   // Haste ∀: one more card each turn.
-  const handCap = HAND_SIZE + (entity.everyPerms.has('effect_haste') ? 1 : 0);
+  const handCap = HAND_SIZE + (entity.everyPerms.has('effect_haste') ? 1 : 0) + (entity.buildingDraw || 0);
+  entity.buildingDraw = 0;
   while (hand.length < handCap) { reshuffleIfEmpty(); if (!deck.length) break; hand.push(deck.shift()); }
 
   // Guardian: static ability — "when you stay on one tile for a whole round
@@ -4353,6 +4564,8 @@ async function endTurn() {
   if (entity.classFlags) entity.classFlags.movedThisRound = false;
 
   hg.round = 0; hg.turn += 1;
+  // Building walls stand for three turns.
+  entity.obstacles = entity.obstacles.filter(o => !o.until_turn || o.until_turn >= hg.turn);
   // Turn-scoped effect state (paper "until end of round") expires now.
   entity.elemPen = entity.elemPen.filter(x => x.until_turn >= hg.turn);
   entity.shieldElems = entity.shieldElems.filter(x => x.permanent || x.until_turn >= hg.turn);
@@ -4516,7 +4729,7 @@ function inboxApply(env) {
     if (n) console.log(`[${PEER_LABEL}] map sync from ${env.actor_peer_id}: +${n} blocks → ${dimMap.size()} hexes`);
   }
   if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
-  if (env.type === 'evt_action_reveal') noteSeen(revealsSeen, env);
+  if (env.type === 'evt_action_reveal') { noteSeen(revealsSeen, env); noteLateReveal(env); }
   // Vision (hand): the enemy I looked at shows me their cards — a popup for my UI only.
   if (env.type === 'evt_peek' && env.payload?.for_peer === PEER_ID_STRING && Array.isArray(env.payload.cards)) {
     const what = env.payload.what === 'deck' ? 'deck' : 'hand', who = env.payload.name || env.actor_peer_id;
@@ -4611,7 +4824,7 @@ async function tick() {
       enterPhase('resolution');
     } else if (currentPhase === 'resolution') {
       if (!allIn(revealsSeen)) await pullFromDiscovery('reveals', revealsSeen);
-      if (!allIn(revealsSeen) && (!expired || waitingOnBusyMember(revealsSeen, 'reveal'))) return;
+      if (!allIn(revealsSeen) && (!expired || waitingOnBusyMember(revealsSeen, 'reveal') || waitingOnCommitter())) return;
       await doResolution();
       await endRound();
       checkStandoff();
@@ -5047,10 +5260,12 @@ wss.on('connection', (ws) => {
         // Class strikes (m.class = enemy peer id, m.elem one of its colours' elements), recast / untap of my own
         // class (m.recast / m.untap) ride on the same emission (user ruling 2026-10-30).
         const cls = typeof m.class === 'string' && m.class !== PEER_ID_STRING ? m.class : null;
-        const sameAs = (q) => !!q && q.stat === stat && (q.class || null) === cls && !!q.recast === !!m.recast && !!q.untap === !!m.untap;
+        // A fortress building next to me (m.building = "q,r").
+        const bld = typeof m.building === 'string' && /^-?\d+,-?\d+$/.test(m.building) ? m.building : null;
+        const sameAs = (q) => !!q && q.stat === stat && (q.class || null) === cls && (q.building || null) === bld && !!q.recast === !!m.recast && !!q.untap === !!m.untap;
         if (!stat || sameAs(queuedDestroy)) queuedDestroy = null;
         else {
-          queuedDestroy = { stat, ...(cls ? { class: cls, elem: typeof m.elem === 'string' ? m.elem : null } : {}), ...(m.recast && entity.classArchived ? { recast: true } : {}), ...(m.untap && entity.classTapped && !entity.classArchived ? { untap: true } : {}) };
+          queuedDestroy = { stat, ...(bld ? { building: bld } : {}), ...(cls ? { class: cls, elem: typeof m.elem === 'string' ? m.elem : null } : {}), ...(m.recast && entity.classArchived ? { recast: true } : {}), ...(m.untap && entity.classTapped && !entity.classArchived ? { untap: true } : {}) };
           const pi = hand.findIndex(c => c.kind === 'action' && c.code === 'P');
           queued = [pi >= 0 ? pi : 'EMPTY'];
           queuedSkills = queuedSkills.filter(i => hand[i]?.kind === 'skill' && !hand[i].is_trance && (hand[i].requires === 'P' || hand[i].requires === 'M'));

@@ -56,7 +56,7 @@ func _start_with_path(script_path: String) -> void:
     var data_dir := ProjectSettings.globalize_path("user://data")
     var env := {
         "PEER_LABEL": "mobile-dev",
-        "CHARACTER_ID": OS.get_environment("CHARACTER_ID") if OS.get_environment("CHARACTER_ID") != "" else "char_oran_rief",
+        "CHARACTER_ID": OS.get_environment("CHARACTER_ID") if OS.get_environment("CHARACTER_ID") != "" else "random",  # mobile-entry.mjs picks one per launch
         "CHAOSD6_MOBILE": "1",
         "DIM_NAME": OS.get_environment("DIM_NAME") if OS.get_environment("DIM_NAME") != "" else "Ashfall-Micro",
         # Make the UI socket bind to 127.0.0.1 at a stable port — the plugin's

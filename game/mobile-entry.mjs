@@ -150,4 +150,20 @@ if (isMainThread && process.env.JOIN_URI) {
   }
 }
 
+// The phone starts as a random character each launch (user ruling 2026-11-12) unless one is pinned.
+// Same data/ lookup as peer.mjs (../data next to the bundle), falling back to the bundled ./data.
+if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random')) {
+  const fs = await import('node:fs');
+  let ids = [];
+  for (const rel of ['../data/characters.json', './data/characters.json']) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(new URL(rel, import.meta.url), 'utf8'));
+      ids = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status))).map(e => e.id);
+      if (ids.length) break;
+    } catch { /* try the next location */ }
+  }
+  process.env.CHARACTER_ID = ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'char_oran_rief';
+  console.log(`[mobile] random character: ${process.env.CHARACTER_ID} (of ${ids.length})`);
+}
+
 await import('./peer.mjs');

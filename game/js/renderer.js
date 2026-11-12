@@ -4,6 +4,7 @@ import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResou
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
+import { buildingBonusAt } from './building-bonus.js';
 import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
 const ALLIANCE_COLOR = {
@@ -116,6 +117,8 @@ export function createRenderer(canvas, state) {
   // they stay in lock-step with the terrain pass; both are y-sorted (matching
   // Godot's ScatterLayer / FeatureLayer custom sort) so overlapping sprites
   // stack back-to-front correctly.
+  // Building power → roof glyph (js/building-bonus.js).
+  const BUILDING_GLYPH = { skill: '✦', stance: '⚔', teleport: '⟲', walls: '▦', mend: '✚', explore: '👁', draw: '📜', learn: '🎓', hurt: '☠', fortress: '🛡' };
   const tileCache = { version: -1, seed: null, epoch: -1, tiles: [], frontier: [], scatter: [], bigfeatures: [], features: [] };
   function tilesFor(map, version) {
     if (tileCache.version !== version || tileCache.seed !== map.seed || tileCache.epoch !== catalogEpoch) {
@@ -490,7 +493,24 @@ export function createRenderer(canvas, state) {
       const target = hexH * 1.1;
       const scale = Math.min(1.2, Math.max(0.25, target / sy));
       const dw = sx * scale, dh = sy * scale;
+      // A broken fortress stays as a faded ruin (user ruling 2026-11-12).
+      const ruined = state.brokenBuildings?.has(`bld:${it.q},${it.r}`);
+      if (ruined) ctx.globalAlpha = 0.3;
       ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
+      ctx.globalAlpha = 1;
+      // What the building does, as a small glyph on its roof — every building does something.
+      const pw = !ruined && it.f.kind !== 'wall' && it.f.kind !== 'bridge' ? buildingBonusAt(state.map.seed, it.q, it.r)?.bonus?.power : null;
+      // Dungeons: 🕳 while unexplored (a trap waits), a faded ✓ once explored.
+      const dgBonus = !pw && !ruined && it.f.kind !== 'wall' && it.f.kind !== 'bridge' ? buildingBonusAt(state.map.seed, it.q, it.r)?.bonus : null;
+      const dgDone = dgBonus?.dungeon && state.dungeonIsExplored?.(`dng:${it.q},${it.r}`);
+      const glyph = pw?.kind === 'learn' && state.dungeonIsExplored?.(`lrn:${it.q},${it.r}`) ? '✓' : pw ? BUILDING_GLYPH[pw.kind] : dgBonus?.dungeon ? (dgDone ? '✓' : '🕳') : null;
+      if (glyph && zoom > 0.45) {
+        ctx.font = `${Math.round(hexH * 0.32)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const gx = it.x + dw * 0.32 + jx, gy = it.y - dh + hexH * 0.3 + jy;
+        ctx.fillStyle = '#0b0d12cc'; ctx.beginPath(); ctx.arc(gx, gy, hexH * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe66e'; ctx.fillText(glyph, gx, gy + 1);
+      }
     }
 
     // Target highlight.
