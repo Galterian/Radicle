@@ -169,7 +169,7 @@ export function playableEffects(dataEffects) {
 //         stay banked in `kept`; a cast still emitting returns status 'casting' with the updated bank.
 export function resolveEffect(ctx, cast) {
   const rule = EFFECT_RULES[cast.effect_id];
-  const out = { status: 'done', hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0, every: false, kept: null, summon: null, channels: [], traps: [], obstacles: [], links: [], pulls: [], relocations: [], peeks: [], possess: null, phantom: false, notes: [] };
+  const out = { status: 'done', hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0, every: false, kept: null, summon: null, channels: [], traps: [], obstacles: [], links: [], pulls: [], relocations: [], peeks: [], possess: null, phantom: false, notes: [], rolls: [] };
   if (!rule) { out.status = 'fizzled'; out.notes.push('no rules for this effect'); return out; }
   const me = cast.actor;
   const myTile = ctx.tileOf(me);
@@ -190,6 +190,7 @@ export function resolveEffect(ctx, cast) {
   let failed = false;
   const buyPB = (stat, tag) => {
     const pb = pointBuy(stat, seed(tag), ctx.sha);
+    out.rolls.push({ elem: tag, dice: [...pb.dice], stat, ok: !pb.fail });
     if (pb.fail) { failed = true; out.notes.push(`point-buy ${tag} failed [${pb.dice.join(',')}] > ${stat}`); }
     return pb;
   };
@@ -215,6 +216,7 @@ export function resolveEffect(ctx, cast) {
     for (let i = 0; i <= idx; i++) {
       if (kept[i] != null) continue;
       const pb = pointBuy(myStat(elems[i]), seed(`${elems[i]}#${i}`), ctx.sha);
+      out.rolls.push({ elem: elems[i], dice: [...pb.dice], stat: myStat(elems[i]), ok: !pb.fail });
       if (pb.fail) { out.notes.push(`point-buy ${elems[i]} failed [${pb.dice.join(',')}] > ${myStat(elems[i])} — re-emit it`); out.kept = kept; return emptied('retry'); }
       kept[i] = pb.value;
     }
@@ -399,8 +401,9 @@ export function resolveEffect(ctx, cast) {
       let main = 0;
       if (rule.damage === 'delta') main = deltaSum(defId);
       else for (let i = 0; i < elems.length; i++) main += ctx.shieldedAgainst(defId, elems[i]) ? 0 : (out.kept[i] || 0);
-      // Elementalist (class): an extra point-buy die rides on the emission as damage (added to the Σ before rounding).
-      if (cast.boost > 0 && main > 0) main += cast.boost;
+      // Elementalist (passive class, once per turn): an extra point-buy die rides on the completing emission as
+      // damage, added to the Σ before rounding — also when the cast's own Σ is 0 (user ruling 2026-11-12).
+      if (cast.boost > 0) main += cast.boost;
       const legs = [{ kind: 'main', sum: main }];
       if (rule.tileToken) {
         const v = buy(myStat(rule.tileToken.elem), `token:${defId}`);

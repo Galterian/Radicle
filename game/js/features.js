@@ -20,88 +20,111 @@ import { hash32 } from './map.js';
 import { biomeFor } from './biome.js';
 
 // ---------------------------------------------------------------------------
-// Labyrinth walls (user ruling 2026-10-30). A sparse second pass stamps
-// "labyrinth seed hexes" on open ground; each seed radiates a 4-hex half-
-// circle of impassable wall scenery. Produces short connected wall runs that
-// pathfinding routes around. The placer is a PURE function of (seed, q, r) —
-// Features.gd mirrors it one-for-one so browser and Godot runtimes agree.
+// Labyrinth walls (user ruling 2026-10-30; long connected runs 2026-11-12).
+// A sparse pass stamps "wall seed hexes" on open ground; from each seed a wall
+// WALKS 6–12 hexes, bending at most one direction per step (never doubling
+// back), and half of them grow a 2–3 hex side branch — L / T shaped ramparts
+// that pathfinding has to route around. A run stops (it never skips a hex, so
+// every wall stays connected) at ground that isn't open, or near the spawn
+// disc around (0, 0). PURE function of (seed, q, r): every wall hex of every
+// seed whose anchor lies in a 16×16 chunk is computed once per seed and cached,
+// so node (resolver) and browser agree hex for hex. Features.gd mirrors it.
 //
-// Formula (ASCII, hex 6-neighbour order 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE):
-//
-//            NW --- NE                       pivot plus four adjacent neighbours
-//           /    .    \                      around orientation `d`, forming a
-//          W     C     E   <- orientation 0  C-shaped half-circle (5 hexes);
-//           \    .    /                      then drop one of the four shoulder
-//            SW --- SE                       hexes by hash → 4 wall hexes left.
-//
-// A hex is a labyrinth wall if ANY seed within radius 2 would place a wall on
-// it. Overlapping arcs are allowed (produces maze-like fusing).
-const LAB_SEED_RATE = 1 / 300;
+// Hex 6-neighbour order 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE (flat-top, hex.js DIRS).
+const LAB_SEED_RATE = 1 / 350;
+const LAB_MIN_LEN = 6, LAB_MAX_LEN = 12;
+const LAB_BRANCH_RATE = 0.5;
+const LAB_CHUNK = 16;                       // > the furthest a wall reaches from its anchor
+const LAB_SPAWN_CLEAR = 2;                  // hexes around (0, 0) never walled
 const LAB_BIOMES = new Set(['grass', 'high_grass', 'dirt', 'high_dirt']);
-// Flat-top hex directions, matches hex.js DIRS order.
 const LAB_DIRS = [[+1, 0], [+1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
+const LAB_TURNS = [-1, 0, 0, +1];
 // WBC3 wall sprites reused verbatim from feature_table.json (`kind: "wall"`).
-// Picked deterministically per wall hex so the arc isn't a repeating texture.
+// Picked deterministically per wall hex so the run isn't a repeating texture.
 const LAB_WALL_PATHS = [
   'assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png',
   'assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png',
   'assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png',
 ];
-const LAB_DESC = 'Fallen rampart of a long-abandoned keep. Impassable scenery — units must path around.';
+const LAB_DESC = 'Impassable wall — the fallen rampart of a long-abandoned keep. Units must path around it.';
+const labDist0 = (q, r) => (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
+
+// The hexes one seed's wall covers, in walk order (index 0 = the seed).
+function labWallRun(seed, sq, sr, bAt) {
+  const open = (q, r) => LAB_BIOMES.has(bAt(q, r)) && labDist0(q, r) > LAB_SPAWN_CLEAR;
+  if (!open(sq, sr)) return [];
+  const len = LAB_MIN_LEN + Math.floor(roll01(seed, sq, sr, 'lw:len') * (LAB_MAX_LEN - LAB_MIN_LEN + 1));
+  let d = Math.floor(roll01(seed, sq, sr, 'lw:orient') * 6) % 6;
+  const run = [[sq, sr]];
+  const seen = new Set([`${sq},${sr}`]);
+  let q = sq, r = sr;
+  for (let k = 1; k < len; k++) {
+    d = (d + LAB_TURNS[Math.floor(roll01(seed, sq, sr, `lw:turn${k}`) * 4) % 4] + 6) % 6;
+    const nq = q + LAB_DIRS[d][0], nr = r + LAB_DIRS[d][1];
+    if (!open(nq, nr) || seen.has(`${nq},${nr}`)) break;
+    run.push([nq, nr]); seen.add(`${nq},${nr}`); q = nq; r = nr;
+  }
+  // Side branch off the middle of the run, square to the way it was heading.
+  if (run.length >= 4 && roll01(seed, sq, sr, 'lw:branch') < LAB_BRANCH_RATE) {
+    const [mq, mr] = run[Math.floor(run.length / 2)];
+    const bd = (d + (roll01(seed, sq, sr, 'lw:bside') < 0.5 ? 2 : 4)) % 6;
+    const blen = 2 + Math.floor(roll01(seed, sq, sr, 'lw:blen') * 2);
+    let bq = mq, br = mr;
+    for (let k = 0; k < blen; k++) {
+      const nq = bq + LAB_DIRS[bd][0], nr = br + LAB_DIRS[bd][1];
+      if (!open(nq, nr) || seen.has(`${nq},${nr}`)) break;
+      run.push([nq, nr]); seen.add(`${nq},${nr}`); bq = nq; br = nr;
+    }
+  }
+  return run;
+}
+
+// seed → { chunks: Set("cq,cr"), walls: Map("q,r" → {sq, sr, k}) }. Two runs
+// crossing the same hex: the seed with the smaller (sr, sq) owns it, so the
+// sprite / id never depend on which chunk happened to be computed first.
+const _labCache = new Map();
+function labChunk(seed, cq, cr, bAt) {
+  let c = _labCache.get(seed);
+  if (!c) { c = { chunks: new Set(), walls: new Map() }; _labCache.set(seed, c); if (_labCache.size > 8) _labCache.delete(_labCache.keys().next().value); }
+  const ck = `${cq},${cr}`;
+  if (c.chunks.has(ck)) return c;
+  c.chunks.add(ck);
+  for (let sq = cq * LAB_CHUNK; sq < (cq + 1) * LAB_CHUNK; sq++) {
+    for (let sr = cr * LAB_CHUNK; sr < (cr + 1) * LAB_CHUNK; sr++) {
+      if (roll01(seed, sq, sr, 'lw:seed') >= LAB_SEED_RATE) continue;
+      const run = labWallRun(seed, sq, sr, bAt);
+      run.forEach(([q, r], k) => {
+        const key = `${q},${r}`;
+        const cur = c.walls.get(key);
+        if (!cur || sr < cur.sr || (sr === cur.sr && sq < cur.sq)) c.walls.set(key, { sq, sr, k });
+      });
+    }
+  }
+  return c;
+}
 
 // Returns {path, label, kind:"wall", desc, blocking:true, id, biome} if (q, r)
 // is a labyrinth-wall hex for the given seed, else null. Pure.
 export function labyrinthWallAt(seed, q, r, biomeAt = null) {
   const bAt = biomeAt || biomeFor(seed).biomeAt;
-  // Scan every potential seed hex within radius 2 of (q, r). The furthest wall
-  // from its pivot is distance 1, so radius 2 is enough to cover any seed that
-  // could put a wall on us (small headroom for formula changes).
-  for (let dq = -2; dq <= 2; dq++) {
-    const lo = Math.max(-2, -dq - 2);
-    const hi = Math.min(2, -dq + 2);
-    for (let dr = lo; dr <= hi; dr++) {
-      const sq = q + dq, sr = r + dr;
-      if (!LAB_BIOMES.has(bAt(sq, sr))) continue;
-      if (roll01(seed, sq, sr, 'lw:seed') >= LAB_SEED_RATE) continue;
-      const d = Math.floor(roll01(seed, sq, sr, 'lw:orient') * 6) % 6;
-      // Four shoulder offsets around orientation d (CW d, CW d+1, CCW d, CCW d-1).
-      const shoulder = [
-        LAB_DIRS[d],
-        LAB_DIRS[(d + 1) % 6],
-        LAB_DIRS[(d + 5) % 6],
-        LAB_DIRS[(d + 4) % 6],
-      ];
-      // Deterministic shoulder to drop (0..3) — one is omitted so the arc is asymmetric.
-      const drop = Math.floor(roll01(seed, sq, sr, 'lw:drop') * 4) % 4;
-      // Pivot always kept.
-      if (sq === q && sr === r) {
-        return _labWallFeature(seed, sq, sr, 0, 0, bAt(q, r));
-      }
-      for (let i = 0; i < 4; i++) {
-        if (i === drop) continue;
-        const [odq, odr] = shoulder[i];
-        const tq = sq + odq, tr = sr + odr;
-        if (tq !== q || tr !== r) continue;
-        // Shoulder lands here. Only keep it on a valid open biome — a wall
-        // on water/cliffs/mountains would both look wrong and already be
-        // blocked by biome walkability anyway.
-        if (!LAB_BIOMES.has(bAt(tq, tr))) return null;
-        return _labWallFeature(seed, sq, sr, odq, odr, bAt(tq, tr));
-      }
-    }
-  }
-  return null;
+  // Anchors whose run can reach (q, r) lie within LAB_MAX_LEN + 3 < LAB_CHUNK
+  // hexes, so the 3×3 chunks around (q, r)'s own chunk hold all of them.
+  const cq = Math.floor(q / LAB_CHUNK), cr = Math.floor(r / LAB_CHUNK);
+  let c = null;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) c = labChunk(seed, cq + i, cr + j, bAt);
+  const w = c.walls.get(`${q},${r}`);
+  return w ? _labWallFeature(seed, w.sq, w.sr, w.k, bAt(q, r)) : null;
 }
 
-function _labWallFeature(seed, sq, sr, odq, odr, biomeType) {
-  const idx = hash32(`${seed}:lw:sprite:${sq}:${sr}:${odq}:${odr}`) % LAB_WALL_PATHS.length;
+function _labWallFeature(seed, sq, sr, k, biomeType) {
+  const idx = hash32(`${seed}:lw:sprite:${sq}:${sr}:${k}`) % LAB_WALL_PATHS.length;
   return {
     path: LAB_WALL_PATHS[idx],
-    label: 'Labyrinth Wall',
+    label: 'Impassable Wall',
     kind: 'wall',
     desc: LAB_DESC,
     blocking: true,
-    id: `labyrinth_wall/${sq},${sr}:${odq},${odr}`,
+    id: `labyrinth_wall/${sq},${sr}:${k}`,
     biome: biomeType,
   };
 }
@@ -128,6 +151,17 @@ export function markFeatureConsumed(q, r) {
 }
 export function isFeatureConsumed(q, r) { return _consumed.has(`${q},${r}`); }
 export function clearConsumedFeatures() { _consumed.clear(); notify(); }
+
+// Node (the resolver reads the catalogue from disk) and tests: inject it without fetch().
+export function setFeatureCatalog(j) {
+  catalog = j && typeof j === 'object' ? {
+    by_biome: j.by_biome || {},
+    density: j.density || {},
+    min_separation: Number.isInteger(j.min_separation) ? j.min_separation : 2,
+  } : null;
+  loading = Promise.resolve(catalog);
+  notify();
+}
 
 export function loadFeatures() {
   if (!loading) {
@@ -189,7 +223,8 @@ function isCandidate(seed, q, r, biomeAt) {
 // used by biome.js (`state.map.seed`). If a biome function isn't passed, we
 // derive it from biomeFor(seedHex).
 export function featureAt(seedHex, q, r, biomeAt = null) {
-  if (_consumed.has(`${q},${r}`)) return null;
+  // Buildings stay where they are (user ruling 2026-11-12): stepping on one
+  // gives its bonus while you stand there, it is never picked up / consumed.
   const bAt = biomeAt || biomeFor(seedHex).biomeAt;
   // Labyrinth walls win over vanilla features — they're the user-visible
   // "unpassable scenery" pass and must stay on the hex even when a Poisson
@@ -211,7 +246,7 @@ export function featureAt(seedHex, q, r, biomeAt = null) {
     if (s > bestScore) { bestScore = s; bestIdx = i; }
   }
   const c = choices[bestIdx];
-  return { path: c.path, label: c.label, kind: c.kind || 'building', biome: bt, id: c.id || c.label };
+  return { path: c.path, label: c.label, kind: c.kind || 'building', biome: bt, id: c.id || c.label, desc: c.desc || '' };
 }
 
 // ---------------------------------------------------------------------------

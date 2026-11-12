@@ -18,6 +18,10 @@ const ALLIANCE_COLOR = {
 const sideOf = (a) => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
 // HP pip colour per team — filled / spent.
 const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b07cff', '#261a3a'] };
+// Shield life points sit on top of life (user ruling 2026-11-12): Overlord armor gold, Illusionist illusion cyan.
+const HP_ARMOR = '#ffcc33', HP_ILLUSION = '#7fe8ff';
+const DRUID_ORB = 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png';
+const DRUID_OBELISK = 'assets/terrain_scatter/standing_stone_obelisk_on_round_base_fgm0.png';
 // Threat area: an enemy goes for whoever steps within this many hexes of it.
 const THREAT_RADIUS = 2;
 // Enemies my planned journey (pathPlan, else the destination) walks into the
@@ -516,6 +520,22 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
+    // Druid stones (user ruling 2026-11-12): a Druid's tile bonus stands on its hex as a mapped building — a
+    // Healing Orb when it carries Vitality, a standing-stone obelisk otherwise. One sprite per hex.
+    const druidHexes = new Map();
+    for (const t of (state.tileTokens || [])) if (t.druid) { const k = `${t.q},${t.r}`; druidHexes.set(k, druidHexes.get(k) || t.elem === 'elem_vitality'); }
+    for (const [k, orb] of druidHexes) {
+      const [q, r] = k.split(',').map(Number);
+      const { x, y } = tilePx(q, r);
+      if (!inView(x, y)) continue;
+      const tex = featureImage(orb ? DRUID_ORB : DRUID_OBELISK);
+      if (!tex?.ready) continue;
+      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const scale = Math.min(1.0, Math.max(0.2, (hexH * 0.75) / sy));
+      const dw = sx * scale, dh = sy * scale;
+      // Beside whoever stands on the hex (right side), so the unit's sprite doesn't hide it.
+      ctx.drawImage(tex.img, x - dw / 2 + HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
+    }
     // Tile tokens (dice left on hexes by effects), bottom-right of the hex.
     for (const t of (state.tileTokens || [])) {
       const { x, y } = tilePx(t.q, t.r);
@@ -664,27 +684,6 @@ export function createRenderer(canvas, state) {
         ctx.globalAlpha = 1;
       }
       const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
-      // Threat warning: six tiny red arrows around the enemy, pointing out, pulsing.
-      if (threats.has(e.peerId) && !dead) {
-        const pulse = 0.55 + 0.45 * Math.sin(now / 180);
-        ctx.save();
-        ctx.fillStyle = '#ff3b3b';
-        ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-        ctx.lineWidth = 1;
-        ctx.globalAlpha = pulse;
-        const rad = 44 + 4 * pulse, ah = isMobileUI ? 11 : 10;
-        for (let k = 0; k < 6; k++) {
-          const ang = k * Math.PI / 3;
-          const tx = x + Math.cos(ang) * rad, ty = y - 10 + Math.sin(ang) * rad * 0.7;
-          ctx.beginPath();
-          ctx.moveTo(tx + Math.cos(ang) * ah, ty + Math.sin(ang) * ah);
-          ctx.lineTo(tx + Math.cos(ang + 2.4) * ah * 0.7, ty + Math.sin(ang + 2.4) * ah * 0.7);
-          ctx.lineTo(tx + Math.cos(ang - 2.4) * ah * 0.7, ty + Math.sin(ang - 2.4) * ah * 0.7);
-          ctx.closePath(); ctx.fill(); ctx.stroke();
-        }
-        ctx.restore();
-      }
-
       // Health: one tiny square per life point (desktop and phone), in the
       // unit's team colour — A green, B red, C purple; spent points dark.
       const lifeMax = Math.max(1, e.lifeMax || 1);
@@ -692,8 +691,9 @@ export function createRenderer(canvas, state) {
       const lifePx = x - (lifeMax * 4 - 2);
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(lifePx - 1, y + 15, lifeMax * 8 - 1, 6);
+      const shI = e.illusion ? 1 : 0, shA = e.armor ? 1 : 0;
       for (let i = 0; i < lifeMax; i++) {
-        ctx.fillStyle = i < e.life ? hpOn : hpOff;
+        ctx.fillStyle = i >= e.life ? hpOff : i >= e.life - shI ? HP_ILLUSION : i >= e.life - shI - shA ? HP_ARMOR : hpOn;
         ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
       }
 
@@ -758,6 +758,36 @@ export function createRenderer(canvas, state) {
         ctx.fillText(`[${e.queuedCode}]`, x, top - 18);
       }
 
+      ctx.restore();
+    }
+
+    // Threat areas my journey walks into: a ring of tiny red arrows on the hexes
+    // THREAT_RADIUS away from each such enemy, pointing out — "step inside and
+    // it comes for you". Pulses so it reads as a warning, not terrain.
+    if (threats.size) {
+      const pulse = 0.55 + 0.45 * Math.sin(now / 180);
+      const ah = isMobileUI ? 8 : 7;
+      ctx.save();
+      ctx.fillStyle = '#ff3b3b';
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = pulse;
+      for (const e of state.entities) {
+        if (!threats.has(e.peerId) || !e.tile) continue;
+        const c = positions.get(e.peerId) || tilePx(e.tile.q, e.tile.r);
+        for (let dq = -THREAT_RADIUS; dq <= THREAT_RADIUS; dq++) for (let dr = -THREAT_RADIUS; dr <= THREAT_RADIUS; dr++) {
+          const h = { q: e.tile.q + dq, r: e.tile.r + dr };
+          if (hexDistance(h, e.tile) !== THREAT_RADIUS) continue;
+          const t = tilePx(h.q, h.r);
+          const ang = Math.atan2(t.y - c.y, t.x - c.x);
+          const tx = t.x, ty = t.y - 4;
+          ctx.beginPath();
+          ctx.moveTo(tx + Math.cos(ang) * ah, ty + Math.sin(ang) * ah);
+          ctx.lineTo(tx + Math.cos(ang + 2.4) * ah * 0.75, ty + Math.sin(ang + 2.4) * ah * 0.75);
+          ctx.lineTo(tx + Math.cos(ang - 2.4) * ah * 0.75, ty + Math.sin(ang - 2.4) * ah * 0.75);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+      }
       ctx.restore();
     }
 
