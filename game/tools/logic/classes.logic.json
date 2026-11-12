@@ -459,7 +459,7 @@
       "references": []
     },
     "class_druid": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (water/earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: a point-buy of the chosen stat (my strongest by default); the highest die becomes a defence (shield) token of that colour on my tile, absorbing one hit. A failed roll lays nothing and the ability stays ready. Paper text: \"Point buy: put a point-buy defense token over this location for any color.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: V (vitality), W (souls), M (water/earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): a point-buy on the stat I am best at that has no Druid stone on my tile yet; success raises a Druid stone (a bonus tile token of that stat's element, drawn as a Healing Orb / obelisk) on my tile with the highest die as its value. Whoever stands on the tile adds it to that stat — and so to life by the Σ/10 rule. One stone per stat; with all four standing, the roll targets the lowest stone and replaces it only if it beats it. A failed roll lays nothing and the ability stays ready. Paper text: \"Point buy: put a point-buy defense token over this location for any color.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -606,10 +606,19 @@
           }
         },
         {
-          "id": "shield_token",
-          "description": "Defence token on my tile = the point-buy die (fail → nothing, ability stays ready).",
+          "id": "stone_stat",
+          "description": "The stone's stat: my highest stat with no Druid stone on this tile (ties by name); with all four standing, the stat of the lowest stone.",
           "target": "tile",
-          "unit": "shield_token",
+          "unit": "stat",
+          "value": {
+            "var": "cast.stat"
+          }
+        },
+        {
+          "id": "druid_stone",
+          "description": "Druid stone value = the point-buy's highest die on that stat (fail → 0, nothing laid, ability stays ready).",
+          "target": "tile",
+          "unit": "bonus_token",
           "value": {
             "if": [
               {
@@ -641,6 +650,60 @@
               },
               0
             ]
+          }
+        },
+        {
+          "id": "replaces_lowest",
+          "description": "With all four stones standing, the new roll replaces the lowest only if it is higher.",
+          "target": "tile",
+          "unit": "bool",
+          "value": {
+            ">": [
+              {
+                "if": [
+                  {
+                    "rule": [
+                      "point_buy_succeeds",
+                      {
+                        "dice": {
+                          "var": "cast.dice"
+                        },
+                        "stat": {
+                          "stat_of": [
+                            {
+                              "root": "caster"
+                            },
+                            {
+                              "var": "cast.stat"
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "max_of": [
+                      {
+                        "var": "cast.dice"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              },
+              {
+                "var": "tile.druid_lowest"
+              }
+            ]
+          }
+        },
+        {
+          "id": "stands_on_bonus",
+          "description": "Whoever stands on the tile adds the stone to that stat (life follows by Σ/10).",
+          "target": "occupant",
+          "unit": "stat_bonus",
+          "value": {
+            "var": "tile.druid_stone"
           }
         }
       ],
@@ -933,7 +996,7 @@
       "references": []
     },
     "class_elementalist": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap, with an effect emission this action: an extra point-buy of the emitted element's stat; its highest die rides on the effect's MAIN damage leg before ÷10 (fail → nothing added, ability stays ready). Paper text: \"Each time you emit an element you may take an element token and add it to effects as point-buy damage.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn): when one of my damage casts completes, a point-buy on my highest stat among that cast's elements; its highest die is added to the cast's damage. A failed roll adds nothing and the ability stays ready for a later cast this turn. Paper text: \"Each time you emit an element you may take an element token and add it to effects as point-buy damage.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -957,26 +1020,37 @@
           }
         },
         {
-          "id": "untapped",
-          "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).",
+          "id": "once_per_turn",
+          "description": "Passive (user ruling 2026-11-12): fires by itself, at most once per turn — no tap, no untap. peer.mjs: PASSIVE_TURN_CLASSES; the data keeps ability_kind \"tap\" because \"passive\" is not an allowed kind yet.",
           "when": {
-            "rule": [
-              "class_ability_ready",
+            "and": [
               {
-                "kind": "tap",
-                "tapped": {
-                  "var": "caster.class_tapped"
-                }
+                "includes": [
+                  {
+                    "var": "caster.permanents"
+                  },
+                  "class_elementalist"
+                ]
+              },
+              {
+                "!=": [
+                  {
+                    "var": "caster.class_used_turn"
+                  },
+                  {
+                    "var": "turn"
+                  }
+                ]
               }
             ]
           }
         },
         {
-          "id": "emitting",
-          "description": "I emit an element this action.",
+          "id": "damage_cast_completes",
+          "description": "This emission completes one of my casts that deals damage (and it hits).",
           "when": {
             "!!": {
-              "var": "cast.elem"
+              "var": "cast.completes_damage"
             }
           }
         }
@@ -1065,30 +1139,19 @@
           }
         },
         {
-          "id": "untap",
-          "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.",
+          "id": "best_stat",
+          "description": "The die's stat: my highest stat among the cast's elements (ties by name).",
           "target": "caster",
-          "unit": "untap",
+          "unit": "stat",
           "value": {
-            "rule": [
-              "class_progress_complete",
-              {
-                "colours": [
-                  "matter",
-                  "will"
-                ],
-                "done": {
-                  "var": "caster.class_progress.done"
-                }
-              }
-            ]
+            "var": "cast.best_stat"
           }
         },
         {
           "id": "extra_damage",
-          "description": "Point-buy die added to the main damage sum before ÷10.",
+          "description": "Extra damage = the point-buy's highest die on that stat (fail → 0).",
           "target": "target",
-          "unit": "damage_pre_round",
+          "unit": "damage",
           "value": {
             "if": [
               {
@@ -1104,7 +1167,7 @@
                           "root": "caster"
                         },
                         {
-                          "var": "cast.stat"
+                          "var": "cast.best_stat"
                         }
                       ]
                     }
@@ -1834,7 +1897,7 @@
       "references": []
     },
     "class_illusionist": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air), W (space), Wi (concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: this action one point of damage to me and to each ally in contact is ignored (after Super Sense, before shield tokens). Paper text: \"Ignore one damage done to nearby creatures and yourself this action.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: M (air), W (space), Wi (concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): I and every ally within 10 hexes gain one illusion life point (shown cyan). It is the first life lost when damage lands, and it fades after the 3rd action of the turn. Paper text: \"Ignore one damage done to nearby creatures and yourself this action.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -1981,11 +2044,32 @@
           }
         },
         {
-          "id": "damage_ignored",
-          "description": "One point of damage ignored on me and each adjacent ally this action.",
-          "target": "caster",
-          "unit": "damage",
-          "value": -1
+          "id": "illusion_range",
+          "description": "Allies within 10 hexes of me (and me) receive it.",
+          "target": "ally",
+          "unit": "bool",
+          "value": {
+            "<=": [
+              {
+                "var": "dist"
+              },
+              10
+            ]
+          }
+        },
+        {
+          "id": "illusion_life",
+          "description": "One illusion life point each, lost before real life.",
+          "target": "self_and_allies",
+          "unit": "illusion_life",
+          "value": 1
+        },
+        {
+          "id": "fades",
+          "description": "The point fades after the turn's 3rd action.",
+          "target": "self_and_allies",
+          "unit": "expires_after_action",
+          "value": 3
         }
       ],
       "validation": [
@@ -2828,7 +2912,7 @@
       "references": []
     },
     "class_seeker": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), M (air/water/earth/fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap, attached non-action card: the tiles of every trap with that card's id are revealed to me; with none, if the card is a Library effect a copy lies as an enter-trap (library: true) on a random free tile within 10 and its tile is revealed. Paper text: \"Choose a non-action card from your hand; reveal where this card is located in this Dimension. If it exists in Dimension Library, place it on top of an unknown location as a trap.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled R4 2026-10-30. Colours: W (time/space/souls), M (air/water/earth/fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap, user ruling R4): with an effect card of my hand attached, a new copy of that card spawns as an enter-trap (library: true) on a walkable hex 21..50 hexes from me; with no such hex, on the farthest walkable hex. The hex is picked by sha256 over `${salt}:seeker:${turn}` so every peer agrees. This replaces the earlier \"locate\" behaviour. Paper text: \"Choose a non-action card from your hand; reveal where this card is located in this Dimension. If it exists in Dimension Library, place it on top of an unknown location as a trap.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -2868,11 +2952,27 @@
         },
         {
           "id": "card_attached",
-          "description": "A non-action card of my hand is attached.",
+          "description": "An effect card (with elements) from my hand is attached.",
           "when": {
-            "!!": {
-              "var": "cast.attach"
-            }
+            "and": [
+              {
+                "!!": {
+                  "var": "cast.attach.effect_id"
+                }
+              },
+              {
+                ">": [
+                  {
+                    "count": [
+                      {
+                        "var": "cast.attach.elements"
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
           }
         }
       ],
@@ -2980,12 +3080,38 @@
           }
         },
         {
-          "id": "located",
-          "description": "Trap tiles with the attached card's id, else a library copy laid within 10 and shown.",
-          "target": "caster",
-          "unit": "tiles",
+          "id": "spawn_in_band",
+          "description": "The spawn hex lies 21..50 hexes from me (else the farthest walkable hex).",
+          "target": "tile",
+          "unit": "bool",
           "value": {
-            "var": "dimension.trap_tiles_with_id"
+            "and": [
+              {
+                ">": [
+                  {
+                    "var": "spawn.dist"
+                  },
+                  20
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "spawn.dist"
+                  },
+                  50
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "spawned_copy",
+          "description": "A new copy of the attached card lies there as an enter-trap (library: true, damage mode).",
+          "target": "tile",
+          "unit": "trap_card",
+          "value": {
+            "var": "cast.attach.effect_id"
           }
         }
       ],
@@ -6096,7 +6222,7 @@
       "references": []
     },
     "class_overlord": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (space/souls), M (earth), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: the ally in contact I pointed at, else I, gains an armor life token: +1 life maximum (and life) until the first point of damage removes it; not cumulative, reusable once lost. Paper text: \"A nearby ally or yourself gains +1 life token (armor bonus, non-cumulative but reusable once lost).\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: W (space/souls), M (earth), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): I gain one armor life point (shown gold); if I already wear one, the ally I picked — or the first adjacent ally — without one gains it instead. Never two on one unit. It is the first life lost when damage lands and can be gained again once lost. Paper text: \"A nearby ally or yourself gains +1 life token (armor bonus, non-cumulative but reusable once lost).\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6135,32 +6261,30 @@
           }
         },
         {
-          "id": "ally_in_contact_or_self",
-          "description": "An ally in contact was pointed at, else the caster is the target.",
+          "id": "someone_bare",
+          "description": "I, or an adjacent ally, wear no armor point yet.",
           "when": {
             "or": [
               {
-                "==": [
-                  {
-                    "var": "target.peer_id"
-                  },
-                  {
-                    "var": "caster.peer_id"
-                  }
-                ]
+                "!": {
+                  "var": "caster.armor"
+                }
               },
               {
-                "rule": [
-                  "ally_in_contact",
+                "and": [
                   {
-                    "dist": {
-                      "var": "dist"
-                    },
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "!": {
+                      "var": "target.armor"
                     }
                   }
                 ]
@@ -6277,19 +6401,28 @@
           }
         },
         {
-          "id": "armor",
-          "description": "+1 life maximum (armor token) until the first damage.",
-          "target": "target",
-          "unit": "life_max",
+          "id": "armor_on",
+          "description": "Recipient: me if bare, else the adjacent ally without one.",
+          "target": "self_or_ally",
+          "unit": "who",
           "value": {
             "if": [
               {
-                "var": "target.has_armor_token"
+                "!": {
+                  "var": "caster.armor"
+                }
               },
-              0,
-              1
+              "caster",
+              "ally"
             ]
           }
+        },
+        {
+          "id": "armor",
+          "description": "One armor life point, lost before real life; never two on a unit.",
+          "target": "self_or_ally",
+          "unit": "armor_life",
+          "value": 1
         }
       ],
       "validation": [
@@ -6360,7 +6493,7 @@
       "references": []
     },
     "class_rogue": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (space), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: my step this action springs no enter-trap, reveals no new hexes (so wakes no monster behind the fog). Paper text: \"Once per round your Move does not trigger any trap; stepping over unrevealed tile doesn't reveal and monsters don't wake.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: W (space), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn): my first step onto a trap (a laid one or a building's hidden one) or into an enemy monster's 2-hex threat ring is stealthy — the trap does not spring, and monsters neither wake nor chase me for the rest of the turn. Paper text: \"Once per round your Move does not trigger any trap; stepping over unrevealed tile doesn't reveal and monsters don't wake.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6384,16 +6517,48 @@
           }
         },
         {
-          "id": "untapped",
-          "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).",
+          "id": "once_per_turn",
+          "description": "Passive (user ruling 2026-11-12): fires by itself, at most once per turn — no tap, no untap. peer.mjs: PASSIVE_TURN_CLASSES; the data keeps ability_kind \"tap\" because \"passive\" is not an allowed kind yet.",
           "when": {
-            "rule": [
-              "class_ability_ready",
+            "and": [
               {
-                "kind": "tap",
-                "tapped": {
-                  "var": "caster.class_tapped"
+                "includes": [
+                  {
+                    "var": "caster.permanents"
+                  },
+                  "class_rogue"
+                ]
+              },
+              {
+                "!=": [
+                  {
+                    "var": "caster.class_used_turn"
+                  },
+                  {
+                    "var": "turn"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "risky_step",
+          "description": "This action I step onto an enemy enter-trap / a building's hidden trap, or within 2 hexes of an enemy monster.",
+          "when": {
+            "or": [
+              {
+                "!!": {
+                  "var": "step.onto_trap"
                 }
+              },
+              {
+                "<=": [
+                  {
+                    "var": "step.monster_dist"
+                  },
+                  2
+                ]
               }
             ]
           }
@@ -6483,31 +6648,20 @@
           }
         },
         {
-          "id": "untap",
-          "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.",
-          "target": "caster",
-          "unit": "untap",
-          "value": {
-            "rule": [
-              "class_progress_complete",
-              {
-                "colours": [
-                  "world",
-                  "will"
-                ],
-                "done": {
-                  "var": "caster.class_progress.done"
-                }
-              }
-            ]
-          }
+          "id": "trap_stays_shut",
+          "description": "The trap on that tile does not spring.",
+          "target": "tile",
+          "unit": "trap_springs",
+          "value": false
         },
         {
           "id": "stealth",
-          "description": "No trap triggers and no reveal on my step this action.",
+          "description": "Monsters neither wake nor chase me for the rest of the turn.",
           "target": "caster",
-          "unit": "flag",
-          "value": true
+          "unit": "stealth_until_turn_end",
+          "value": {
+            "var": "turn"
+          }
         }
       ],
       "validation": [
@@ -6578,7 +6732,7 @@
       "references": []
     },
     "class_avenger": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static, automatic once per action: every enemy CHARACTER in contact shows me two random cards of their hand (a peek popup). Paper text: \"Reveal two of nearby enemy's cards in hand (you may identify skills/action/effect cards by card backs).\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled R1+R3 2026-10-30. Colours: V (vitality), M (fire), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (static, once per turn — user rulings R1+R3): on the first action of a turn with an enemy character adjacent, each adjacent enemy character shows me two random cards of their hand; then it stays silent until the next turn. Paper text: \"Reveal two of nearby enemy's cards in hand (you may identify skills/action/effect cards by card backs).\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6602,8 +6756,8 @@
           }
         },
         {
-          "id": "not_used_this_action",
-          "description": "Once per action (hg.action).",
+          "id": "not_used_this_turn",
+          "description": "Once per turn (not per action): unused since hg.turn began.",
           "when": {
             "rule": [
               "class_ability_ready",
@@ -6612,12 +6766,35 @@
                 "used_this_round": {
                   "==": [
                     {
-                      "var": "caster.class_used_action"
+                      "var": "caster.class_used_turn"
                     },
                     {
-                      "var": "action.index"
+                      "var": "turn"
                     }
                   ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "enemy_character_adjacent",
+          "description": "An enemy CHARACTER (not a monster) stands in contact.",
+          "when": {
+            "and": [
+              {
+                "rule": [
+                  "in_contact",
+                  {
+                    "dist": {
+                      "var": "dist"
+                    }
+                  }
+                ]
+              },
+              {
+                "!!": {
+                  "var": "target.character_id"
                 }
               }
             ]
@@ -6712,7 +6889,7 @@
         },
         {
           "id": "hand_peek",
-          "description": "Two random hand cards of each adjacent enemy character shown to me.",
+          "description": "Two random hand cards of each adjacent enemy character are shown to me.",
           "target": "target",
           "unit": "cards",
           "value": 2

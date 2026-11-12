@@ -159,6 +159,7 @@ export function setFeatureCatalog(j) {
     density: j.density || {},
     min_separation: Number.isInteger(j.min_separation) ? j.min_separation : 2,
   } : null;
+  _families = null;
   loading = Promise.resolve(catalog);
   notify();
 }
@@ -174,6 +175,7 @@ export function loadFeatures() {
           density: j.density || {},
           min_separation: Number.isInteger(j.min_separation) ? j.min_separation : 2,
         } : null;
+        _families = null;
         notify();
         return catalog;
       });
@@ -219,6 +221,58 @@ function isCandidate(seed, q, r, biomeAt) {
   return true;
 }
 
+// Building themes (user ruling 2026-11-12): a building's look follows what it does, so a map is not a row of
+// White Towers. The hex rolls a power first (weights below), then a sprite of that family from the whole
+// catalogue (any biome — the current biome's entries count double). Natural features (trees, groves,
+// thorns, gravestones) keep their own pick. building-bonus.js reads `theme` as the power.
+// NOTE: Features.gd (native Godot map) does not theme yet — the mobile app draws the map with this file.
+export const BUILDING_THEMES = [
+  ['skill',    16, /shrine|magic well|magic pool|totem|dragonstone|altar/i],
+  ['mend',     12, /temple|cathedral|healer|healing orb|sacred pool|ziggurat/i],
+  ['stance',   10, /^tower \(|goblin tower|dark tower|camp$/i],
+  ['teleport',  9, /portal|archway|henge/i],
+  ['explore',   9, /lookout|scout tower|watcher|scrying pool|white tower|forest tower/i],
+  ['fortress',  9, /citadel|fortress|keep/i],
+  ['walls',     8, /quarry|mine\b|mine \(|foundry|furnace/i],
+  ['draw',      8, /shop|trader|supply depot|mill|barn|hovel|hatchery/i],
+  ['dungeon',   8, /lair|cave/i],
+  ['learn',     7, /library|guild/i],
+  ['hurt',      4, /hall of plague|gallows|graveyard|tomb|barrow|^pit$/i],
+];
+const NATURAL = /\btree\b|tree of|grove|thorns|gravestone|faerie ring/i;
+let _families = null;   // theme → [{ c, biome }], built once per catalogue
+function familyOf(theme) {
+  if (!_families) {
+    _families = new Map(BUILDING_THEMES.map(([t]) => [t, []]));
+    const seen = new Set();
+    for (const [biome, list] of Object.entries(catalog.by_biome)) for (const c of list) {
+      if ((c.kind || 'building') !== 'building' || c.blocking || NATURAL.test(c.label || '')) continue;
+      const t = BUILDING_THEMES.find(([, , re]) => re.test(c.label || ''));
+      if (!t) continue;
+      const k = `${c.path}|${biome}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      _families.get(t[0]).push({ c, biome });
+    }
+  }
+  return _families.get(theme) || [];
+}
+function themedBuilding(seedHex, q, r, bt) {
+  const total = BUILDING_THEMES.reduce((a, [, w]) => a + w, 0);
+  let u = mix32(hash32(`${seedHex}:theme:${q}:${r}`)) / 4294967296 * total;
+  let theme = BUILDING_THEMES[0][0];
+  for (const [t, w] of BUILDING_THEMES) { u -= w; if (u < 0) { theme = t; break; } }
+  const fam = familyOf(theme);
+  if (!fam.length) return null;
+  const weights = fam.map(x => x.biome === bt ? 2 : 1);
+  let v = mix32(hash32(`${seedHex}:look:${q}:${r}`)) / 4294967296 * weights.reduce((a, b) => a + b, 0);
+  let pick = fam[fam.length - 1];
+  for (let i = 0; i < fam.length; i++) { v -= weights[i]; if (v < 0) { pick = fam[i]; break; } }
+  const c = pick.c;
+  return { path: c.path, label: c.label, kind: 'building', biome: bt, id: c.id || c.label, desc: c.desc || '', theme };
+}
+const mix32 = (h) => { h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return h >>> 0; };
+
 // Returns {path, label, kind, biome, id} or null. `seedHex` is the dim seed
 // used by biome.js (`state.map.seed`). If a biome function isn't passed, we
 // derive it from biomeFor(seedHex).
@@ -246,6 +300,10 @@ export function featureAt(seedHex, q, r, biomeAt = null) {
     if (s > bestScore) { bestScore = s; bestIdx = i; }
   }
   const c = choices[bestIdx];
+  if ((c.kind || 'building') === 'building' && !c.blocking && !NATURAL.test(c.label || '')) {
+    const t = themedBuilding(seedHex, q, r, bt);
+    if (t) return t;
+  }
   return { path: c.path, label: c.label, kind: c.kind || 'building', biome: bt, id: c.id || c.label, desc: c.desc || '' };
 }
 

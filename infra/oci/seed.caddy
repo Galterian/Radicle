@@ -15,6 +15,19 @@
     header >Access-Control-Allow-Origin "*"
     header >Cache-Control "public, max-age=86400, immutable"
   }
+  # Rules editor (editor.html as rules.html) + a read-only copy of data/*.json beside it.
+  redir /rules /rules/
+  redir /rules.html /rules/
+  @rules path /rules/*
+  handle @rules {
+    uri strip_prefix /rules
+    root * /var/www/rules
+    file_server {
+      index rules.html
+    }
+    header >Access-Control-Allow-Origin "*"
+    header >Cache-Control "no-cache"
+  }
   handle {
     reverse_proxy 127.0.0.1:8080
     header >Access-Control-Allow-Origin "*"

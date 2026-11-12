@@ -866,8 +866,44 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_overlord"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_air", "elem_water", "elem_earth", "elem_fire", "elem_harmony"],
+            "text": "When you stay on one tile for a whole turn (all three actions), restore one life token at the end of the turn."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: when I did not move during a whole turn I restore one life at turn end (capped). Paper text: \"When you stay on one tile for a whole round, restore one life token.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_guardian"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): M, Wi.", "target": "caster", "unit": "colours", "value": ["matter", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["matter", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["matter", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "regen", "description": "+1 life at turn end when I stayed on my tile the whole turn.", "target": "caster", "unit": "life", "value": {"if": [{"!": {"var": "caster.moved_this_round"}}, 1, 0]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The regen stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): the heal comes at the end of the TURN (after its 3rd action), never at the end of an action. Stay on one tile for all three actions of a turn, then restore one life (never above your life maximum).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_overlord"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
