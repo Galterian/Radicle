@@ -3,11 +3,11 @@
 // hashgraph envelopes, resolver, radicle lottery) runs in the peer processes.
 
 import { createRenderer } from './renderer.js';
-import { hexDistance, stepToward, findPath } from './hex.js';
+import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged } from './features.js';
-import { buildingBonusAt, bonusText, clearBuildingBonusMemo } from './building-bonus.js';
+import { buildingBonusAt, bonusText, clearBuildingBonusMemo, fortressAt, dungeonAt, dungeonExplored, DUNGEON_REARM_TURNS, schoolAt, LEARN_REARM_TURNS } from './building-bonus.js';
 import { onBigFeaturesChanged } from './bigfeature.js';
 // Bonus lookups made before a catalogue landed are stale.
 onFeaturesChanged(clearBuildingBonusMemo); onBigFeaturesChanged(clearBuildingBonusMemo);
@@ -112,8 +112,9 @@ Promise.all([
     const logic = ver.logic || {};
     const res = e.resources || data.resources || {};
     const sprites = res.sprites || {};
-    const description = (typeof logic.description === 'string' && logic.description)
-      || (typeof data.text === 'string' && data.text)
+    // The card text says what the class does; logic.description is the create / destroy rule (not for players).
+    const description = (typeof data.text === 'string' && data.text)
+      || (typeof logic.description === 'string' && logic.description)
       || '';
     classById.set(e.id, {
       id: e.id,
@@ -209,6 +210,9 @@ const PEER_URL = `ws://127.0.0.1:${new URL(location.href).searchParams.get('peer
 // Android WebView (MobileHudWebView.gd appends &mobile=1): phone layout
 // (html.mobile in style.css) + touch input. Desktop never sets it.
 const IS_MOBILE_UI = new URL(location.href).searchParams.get('mobile') === '1';
+// hex.js measures {q, r}; units here carry tile_q / tile_r. Passing a unit to the bare one gave NaN, so
+// "adjacent to the enemy" never held (journeys circled the target, the sight / range checks never matched).
+const hexDistance = (a, b) => hexDistanceQR({ q: a.q ?? a.tile_q, r: a.r ?? a.tile_r }, { q: b.q ?? b.tile_q, r: b.r ?? b.tile_r });
 if (IS_MOBILE_UI) document.documentElement.classList.add('mobile');
 
 const state = {
@@ -292,13 +296,43 @@ function blockedTilesExcluding(myPeerId) {
     occ.add(`${p.tile_q},${p.tile_r}`);
   }
   const seed = state.map.seed;
-  return (q, r) => occ.has(`${q},${r}`) || isLabyrinthWallAt(seed, q, r);
+  const broken = brokenBuildings();
+  for (const o of allObstacles()) if (o.wall) occ.add(`${o.q},${o.r}`);
+  return (q, r) => occ.has(`${q},${r}`) || isLabyrinthWallAt(seed, q, r) || !!fortressAt(seed, q, r, broken);
+}
+// Fortress buildings broken by someone (every peer's world_edits_json `bld:q,r` gone) — a Set of ids.
+let _brokenKey = null, _broken = new Set();
+function brokenBuildings() {
+  const key = state.entities.map(p => p.world_edits_json || '').join('|');
+  if (key === _brokenKey) return _broken;
+  _brokenKey = key; _broken = new Set();
+  for (const p of state.entities) { let list = []; try { list = JSON.parse(p.world_edits_json || '[]'); } catch {} for (const e of list) if (e.gone && String(e.id).startsWith('bld:')) _broken.add(e.id); }
+  return _broken;
+}
+// Dungeon edits (`dng:q,r` { explored: turn }) from everyone's world edits — latest per dungeon.
+function dungeonEdits() {
+  const out = new Map();
+  for (const p of state.entities) { let list = []; try { list = JSON.parse(p.world_edits_json || '[]'); } catch {} for (const e of list) if (/^(dng|lrn):/.test(String(e.id)) && Number.isInteger(e.explored) && !(out.get(e.id)?.explored >= e.explored)) out.set(e.id, e); }
+  return out;
+}
+const dungeonIsExplored = (id) => dungeonExplored(dungeonEdits().get(id), state.turn ?? 0, id.startsWith('lrn:') ? LEARN_REARM_TURNS : undefined);
+// Obstacles (Creation walls, building walls) from everyone's snapshot.
+function allObstacles() {
+  const out = [];
+  for (const p of state.entities) { try { for (const o of JSON.parse(p.obstacles_json || '[]')) out.push({ ...o, owner: p.peer_id, alliance: p.alliance }); } catch {} }
+  return out;
+}
+// The stat a building adds to a unit standing on it (0 elsewhere).
+function buildingStatOf(e, key) {
+  if (!Number.isInteger(e?.tile_q) || !state.map?.seed) return 0;
+  return buildingBonusAt(state.map.seed, e.tile_q, e.tile_r)?.bonus?.stat?.[key] || 0;
 }
 
 // Cancel an in-progress multi-round journey. Called from any manual action the
 // user takes that doesn't fit the "keep walking to the destination" story
 // (slot pick, Space commit of something else, left-click a different tile).
 function cancelPathJourney(reason) {
+  state.ui.chasePeerId = null;
   if (!state.ui.destinationTile && !state.ui.pathPlan) return;
   state.ui.destinationTile = null;
   state.ui.pathPlan = null;
@@ -310,7 +344,68 @@ function cancelPathJourney(reason) {
 // auto-stage an Empty Move toward the next step. Returns true when a journey
 // is being resumed, false when the caller should fall back to the normal
 // first-hand-card autoselect.
+// Chase (mobile double tap on an enemy): every planning phase re-aims at the enemy's CURRENT tile.
+// Adjacent → Attack it (no Attack card: Move, else Empty Move, into it); farther → one EM step along the
+// route (a Move the player picked is kept). Ends when the enemy dies / vanishes or another gesture is made.
+function chaseStep(foe, auto) {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me || !Number.isInteger(me.tile_q) || !foe || !Number.isInteger(foe.tile_q)) return false;
+  const foeTile = { q: foe.tile_q, r: foe.tile_r };
+  const usable = code => state.hand.findIndex(c => c && c.code === code && !state.willDiscard.has(c.card_id));
+  const q0 = state.queued[0];
+  const moveExplicit = !auto && typeof q0 === 'number' && state.hand[q0]?.code === 'M' && !state.queuedIsAuto;
+  let label;
+  state.ui.chasePeerId = foe.peer_id;
+  state.ui.destinationTile = foeTile;
+  if (hexDistance(me, foe) <= 1) {
+    const a = usable('A'), m = usable('M');
+    state.ui.pathPlan = null;
+    if (a >= 0) { state.queued = [a]; state.target = foe.peer_id; label = `Attack → ${foe.name}`; }
+    else if (m >= 0) { state.queued = [m]; state.target = foeTile; label = `Move → into ${foe.name} (no Attack in hand)`; }
+    else { state.queued = ['EMPTY']; state.target = foeTile; label = `EM → into ${foe.name} (no Attack in hand)`; }
+    state.ui.selectedTarget = foeTile;
+  } else {
+    const path = findPath({ q: me.tile_q, r: me.tile_r }, foeTile, blockedTilesExcluding(state.myPeerId), knownHex);
+    const step = path.length ? path[0] : stepToward({ q: me.tile_q, r: me.tile_r }, foeTile, knownHex);
+    if (!moveExplicit) state.queued = ['EMPTY'];
+    state.ui.pathPlan = path.length ? path : [step];
+    state.target = { q: step.q, r: step.r };
+    state.ui.selectedTarget = step;
+    label = `${moveExplicit ? 'Move' : 'EM'} → (${step.q},${step.r}) chasing ${foe.name} (${hexDistance(me, foe)} hexes away)`;
+  }
+  state.queuedIsAuto = !!auto;
+  sendQueue();
+  send({ kind: 'target', target: state.target });
+  logUI(`${auto ? 'chase' : 'staged'}: ${label}`, 'phase', { peerId: foe.peer_id });
+  renderDeck();
+  return true;
+}
+function chaseEnemy(foe) {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me) return;
+  sounds.play(resOf(me), 'order');
+  if (state.phase !== 'planning' || state.locked) {
+    // This action is already decided: the chase starts at the next planning phase.
+    state.ui.chasePeerId = foe.peer_id;
+    state.ui.destinationTile = { q: foe.tile_q, r: foe.tile_r };
+    state.ui.pathPlan = [{ q: foe.tile_q, r: foe.tile_r }];
+    logUI(`chase ${foe.name} — starts next action`, 'phase', { peerId: foe.peer_id });
+    renderDeck();
+    return;
+  }
+  chaseStep(foe, false);
+}
+
 function resumeJourney() {
+  if (state.ui.chasePeerId) {
+    const foe = state.entities.find(p => p.peer_id === state.ui.chasePeerId && (p.life ?? 0) > 0);
+    if (foe && chaseStep(foe, true)) return true;
+    state.ui.chasePeerId = null;
+    state.ui.pathPlan = null;
+    state.ui.destinationTile = null;
+    logUI('chase over — the enemy is gone', 'phase');
+    return false;
+  }
   // A journey only exists when a right-click computed a full A* path and
   // stored it in `pathPlan`. A plain destinationTile from an Attack-step or
   // a blocked single-step fallback is just a visual cue — don't auto-walk.
@@ -704,6 +799,29 @@ function queuedLabel() {
   const trance = tranceActive() ? [queuedActionCode() || 'EP', extraActionCode() || 'EP'] : null;
   const effects = state.queuedEffect !== null && isEffect(state.hand[state.queuedEffect]) ? [state.hand[state.queuedEffect]] : [];
   return composeLabel({ action: code, trance, played: null, skills, effects });
+}
+
+// An instant that did its job (user ruling 2026-11-12): its text vanishes, the card glows green, tilts, turns
+// red and drops into the discard pile. A countered one does the same; a negated action card bounces back.
+function playSkillFx(m) {
+  for (const n of m.notices || []) logUI(n, 'phase');
+  for (const ev of m.events || []) {
+    const i = state.hand.findIndex(c => c?.card_id === ev.card_id);
+    const slot = i >= 0 ? document.querySelector(`#slots .slot[data-slot="${i}"]`) : null;
+    if (ev.outcome === 'returned') {
+      if (slot) { slot.classList.remove('card-returned'); void slot.offsetWidth; slot.classList.add('card-returned'); setTimeout(() => slot.classList.remove('card-returned'), 1400); }
+      continue;
+    }
+    const r = slot?.getBoundingClientRect();
+    const ghost = slot ? slot.cloneNode(true) : document.createElement('div');
+    if (!slot) { ghost.className = 'slot skill'; ghost.innerHTML = `<div class="card" data-code="✦"><div class="nm">${escHtml(ev.name || 'skill')}</div><div class="ds">&nbsp;</div></div>`; }
+    ghost.classList.remove('queued', 'locked', 'queued-extra');
+    ghost.classList.add('skill-burn');
+    ghost.removeAttribute('id');
+    Object.assign(ghost.style, { position: 'fixed', left: `${r ? r.left : innerWidth / 2 - 50}px`, top: `${r ? r.top : innerHeight - 230}px`, width: `${r ? r.width : 100}px`, height: `${r ? r.height : 140}px`, margin: '0', zIndex: '9999', pointerEvents: 'none' });
+    document.body.appendChild(ghost);
+    setTimeout(() => ghost.remove(), 2000);
+  }
 }
 
 function renderDeck() {
@@ -1204,7 +1322,8 @@ function renderRoster() {
       const v = e[flat] ?? e.stats?.[key];
       if (!Number.isFinite(v)) return '—';
       const mod = statTokens.filter(t => t.stat === key).reduce((a, t) => a + t.value, 0);
-      return mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v;
+      const bld = buildingStatOf(e, key);
+      return `${mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v}${bld ? `+${bld}⌂` : ''}`;
     };
     const lost = e.lost_actions > 0 ? `<span class="pill perm" title="lost actions">⏳ ${e.lost_actions}</span>` : '';
     let pens = [];
@@ -1491,7 +1610,9 @@ function renderHeroCard() {
 function statPillsHtml(e) {
   const stat = (flat, key) => {
     const v = e[flat] ?? e.stats?.[key];
-    return Number.isFinite(v) ? v : '—';
+    if (!Number.isFinite(v)) return '—';
+    const b = buildingStatOf(e, key);
+    return b ? `${v}<b class="bld-plus" title="the building under it">+${b}⌂</b>` : v;
   };
   return `
     <span class="pill v"  title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
@@ -1690,7 +1811,9 @@ function renderHoverCard(clientX, clientY) {
     const classEntry = classId ? classById.get(classId) : null;
     const classIconPath = classEntry && (classEntry.iconPath || classEntry.portraitPath || classEntry.infoPath);
     const classIconSrc = classIconPath ? assetUrl(classIconPath) : '';
-    const classDescAbbrev = classEntry?.description ? abbreviate(classEntry.description, 220) : '';
+    const classText = (classId && state.classTexts?.[classId]) || classEntry?.description || '';
+    const classStats = classId ? classStatsLine(classId) : '';
+    const classDescAbbrev = classText ? abbreviate(classText, 220) + (classStats ? ` — stats: ${classStats}` : '') : '';
     const classBlockHtml = classEntry ? `
       <div class="hc-class">
         ${classIconSrc ? `<img class="hc-class-icon" src="${escHtml(classIconSrc)}" alt="">` : ''}
@@ -1769,7 +1892,7 @@ function objectAt(q, r) {
   // if a wall is standing on this hex, that's what you're asking about. Return
   // a synthetic object with the Earth element and remaining hp so the detail
   // card can surface "how much Earth is left to destroy it".
-  for (const ob of (state.obstacles || [])) {
+  for (const ob of allObstacles()) {
     if (ob.q === q && ob.r === r) {
       const owner = state.entities.find(e => e.peer_id === ob.owner);
       const mine = ob.owner === state.myPeerId;
@@ -1786,7 +1909,7 @@ function objectAt(q, r) {
         element: elem, element_name: el?.name || elem.replace(/^elem_/, ''),
         element_tint: el ? elementTint(el.colorHint) : '#78b56a',
         threshold,
-        desc: `${el ? el.name : 'Earth'} wall token placed by Creation. Impassable for low-Matter creatures; destroyed when an enemy emits ${el ? el.name : 'Earth'} and clears every point of its remaining hp (either outright above half, or whittled by Matter-chip damage each action). Allies walk through.`,
+        desc: ob.wall ? `A wall raised by ${ob.label ? `the ${ob.label.replace(/ wall$/, '')}` : 'a building'}${owner ? ` (${owner.name} stood there)` : ''}. Nobody passes it, its raiser included, until it falls${ob.until_turn ? ` at the end of turn ${ob.until_turn}` : ''} or Matter wears it down.` : `${el ? el.name : 'Earth'} wall token placed by Creation. Impassable for low-Matter creatures; destroyed when an enemy emits ${el ? el.name : 'Earth'} and clears every point of its remaining hp (either outright above half, or whittled by Matter-chip damage each action). Allies walk through.`,
       };
     }
   }
@@ -1801,8 +1924,20 @@ function objectAt(q, r) {
     || KIND_DESC[kind] || KIND_DESC.building;
   // Standing bonus (user ruling 2026-11-12) — what the resolver actually gives on this hex.
   const bb = buildingBonusAt(seed, q, r);
-  const desc = bb ? `${desc0}\n\nBonus while you stand here${bb.source !== o.label ? ` (${bb.source})` : ''}: ${bonusText(bb.bonus)}.` : desc0;
-  return { ...o, kind, desc, q, r };
+  const fz = fortressAt(seed, q, r);
+  const broken = fz && brokenBuildings().has(fz.id);
+  const dg = dungeonAt(seed, q, r);
+  const sc = schoolAt(seed, q, r);
+  const scEd = sc && dungeonEdits().get(sc.id);
+  const scNote = sc && dungeonExplored(scEd, state.turn ?? 0, LEARN_REARM_TURNS) ? `\n\nExplored on turn ${scEd.explored} — it teaches again on turn ${scEd.explored + LEARN_REARM_TURNS}.` : '';
+  const dgEd = dg && dungeonEdits().get(dg.id);
+  const desc = dg ? (dungeonExplored(dgEd, state.turn ?? 0)
+      ? `${desc0}\n\nDungeon — explored on turn ${dgEd.explored}; it is empty until turn ${dgEd.explored + DUNGEON_REARM_TURNS}, then a new trap waits inside.`
+      : `${desc0}\n\nDungeon — unexplored. One hidden trap waits inside: end a turn's 3rd action here to explore it — the trap springs on you and its card joins your discard pile (your deck grows). It is unexplored again ${DUNGEON_REARM_TURNS} turns later.`)
+    : broken ? `${desc0}\n\nRuins — someone broke this fortress; the way is open.`
+    : fz ? `${desc0}\n\nFortress: ${bonusText(bb.bonus)}.`
+    : bb ? `${desc0}\n\nWhile you stand here${bb.source !== o.label ? ` (${bb.source})` : ''}: ${bonusText(bb.bonus)}.${scNote}` : desc0;
+  return { ...o, kind, desc, q, r, fortress: fz && !broken ? fz : null };
 }
 
 function showObjectCard(obj, clientX, clientY) {
@@ -1831,6 +1966,24 @@ function showObjectCard(obj, clientX, clientY) {
         <span class="oc-pill elem" style="--pill-tint: ${obj.element_tint}">${escHtml(obj.element_name)}</span>
         <span class="oc-pill hp" title="remaining hit points — at 0 the wall crumbles">${obj.hp} hp</span>
         <span class="oc-pill thresh" title="an enemy emitting ${escHtml(obj.element_name)} this high destroys it outright; otherwise Matter chips it">destroy &gt; ${obj.threshold}</span>`;
+    } else if (obj.fortress) {
+      // A fortress next to me: aim this action's emission at it (Rule 24 style, user ruling 2026-11-12).
+      const fz = obj.fortress;
+      const me = state.entities.find(p => p.peer_id === state.myPeerId);
+      const near = me && hexDistance(me, { q: fz.q, r: fz.r }) <= 1;
+      const mine = me ? (me[`stat_${fz.stat}`] ?? 0) + buildingStatOf(me, fz.stat) : 0;
+      const aimed = state.destroyAim?.building === `${fz.q},${fz.r}`;
+      statsEl.hidden = false;
+      statsEl.innerHTML = `<span class="oc-pill thresh" title="emit a ${fz.stat} element next to it with ${fz.stat} above this">${fz.stat} ${fz.value}</span>
+        <button type="button" class="oc-break${aimed ? ' armed' : ''}" ${near && state.phase === 'planning' && !state.locked ? '' : 'disabled'} title="${near ? `your ${fz.stat} is ${mine}` : 'stand next to it first'}">${aimed ? '✓ aimed — click to cancel' : `💥 break it (${fz.stat} ${mine} vs ${fz.value})`}</button>`;
+      statsEl.querySelector('.oc-break')?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const off = state.destroyAim?.building === `${fz.q},${fz.r}`;
+        state.destroyAim = off ? null : { building: `${fz.q},${fz.r}`, stat: fz.stat };
+        send({ kind: 'destroy', stat: fz.stat, building: `${fz.q},${fz.r}` });
+        logUI(off ? `break ${obj.label}: cancelled` : `staged: emit ${fz.stat} against the ${obj.label} at (${fz.q},${fz.r}) — Posture / Empty Posture`, 'phase');
+        showObjectCard(obj, NaN, NaN);
+      });
     } else {
       statsEl.hidden = true;
       statsEl.innerHTML = '';
@@ -2261,6 +2414,7 @@ function connect() {
       }
       if (m.kind === 'map') applyMap(m.map);
       if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat, m);
+      if (m.kind === 'skill-fx') playSkillFx(m);
       if (m.kind === 'hand')  {
         state.hand = m.hand || state.hand;
         if (typeof m.deck_count    === 'number') state.deckCount    = m.deck_count;
@@ -2395,7 +2549,8 @@ function connect() {
             // If MY journey was blocked, tear down the local multi-round path
             // plan — otherwise next planning phase would auto-stage EM toward
             // the same contested tile and lose again.
-            if (j.actor === state.myPeerId && j.outcome === 'blocked') cancelPathJourney('blocked by Rule 8');
+            // (A chase re-routes to the enemy's new tile every action, so a lost step does not end it.)
+            if (j.actor === state.myPeerId && j.outcome === 'blocked' && !state.ui.chasePeerId) cancelPathJourney('blocked by Rule 8');
           }
           if (state._loggedJourney.size > 500) state._loggedJourney = new Set([...state._loggedJourney].slice(-100));
           // Per-actor action icons for every revealer — heroes, allies and
@@ -2454,7 +2609,8 @@ function connect() {
             else if (cs) pills.push({ cls: 'done', text: '✓ cast' });
             for (const id of a.channel_broken || []) pills.push({ cls: 'fail', text: `✖ ${String(id).replace(/^effect_/, '').replace(/_/g, ' ')} channel` });
             // A permanent / token / class colour this emission destroyed (user ruling 2026-11-12).
-            for (const b of a.broke || []) pills.push({ cls: 'break', text: `💥 ${b.result === 'taken' ? 'took' : 'broke'} ${b.kind === 'class' ? `${b.stat} colour` : b.kind === 'perm' ? String(b.id).replace(/^(effect|skill|class)_/, '').replace(/_/g, ' ') : `${b.kind} token`}` });
+            const prettyId = id => String(id || '').replace(/^(effect|skill|class)_/, '').replace(/_/g, ' ');
+            for (const b of a.broke || []) pills.push({ cls: 'break', text: `💥 ${b.result === 'taken' ? 'took' : 'broke'} ${b.kind === 'class' ? (b.result === 'class_destroyed' ? `the ${prettyId(b.id)} class` : `${prettyId(b.id)}'s ${b.stat} colour`) : b.kind === 'perm' ? prettyId(b.id) : b.kind === 'building' ? `the ${b.label || 'building'}` : `${b.kind} token`}` });
             if (a.combo) pills.push({ cls: 'combo', text: `✦ combo ${a.combo} ✓` });
             else if (a.combo_step) pills.push({ cls: 'combo-step', text: `✦ ${a.combo_step.k}/${a.combo_step.of} combo` });
             if (!a.bonus) foldCastIntoLog(env, a);
@@ -3114,6 +3270,8 @@ function wireInput() {
       });
     },
     ui: state.ui,
+    get brokenBuildings() { return brokenBuildings(); },
+    dungeonIsExplored,
     get tileTokens() {
       const out = [];
       for (const p of state.entities) { try { for (const t of JSON.parse(p.tile_tokens_json || '[]')) out.push({ ...t, owner: p.peer_id, alliance: p.alliance }); } catch {} }
@@ -3225,10 +3383,15 @@ function wireInput() {
         // object card) until the next tap elsewhere; a double tap on a tile / enemy / ally moves or targets.
         const rect0 = canvas.getBoundingClientRect();
         const t0 = renderer.pickHex(ev.clientX - rect0.left, ev.clientY - rect0.top, knownHex);
+        const unit0 = t0 ? entityAtPixel(ev.clientX - rect0.left, ev.clientY - rect0.top) : null;
         const now = Date.now(), prev = state.ui.lastTap;
-        state.ui.lastTap = t0 ? { at: now, q: t0.q, r: t0.r } : null;
-        if (prev && t0 && now - prev.at < 450 && prev.q === t0.q && prev.r === t0.r) {
+        state.ui.lastTap = t0 ? { at: now, q: t0.q, r: t0.r, unit: unit0?.peer_id || null } : null;
+        // Same hex, or the same unit (a tall sprite's head and feet sit on different hexes).
+        if (prev && t0 && now - prev.at < 450 && ((prev.q === t0.q && prev.r === t0.r) || (unit0 && prev.unit === unit0.peer_id))) {
           state.ui.lastTap = null;
+          // Double tap on an enemy: go for it — Attack when adjacent, else walk (EM, or the picked Move) along a
+          // route that ends on it, re-aimed every action as it moves, then Attack (Move / EM into it without A).
+          if (unit0 && unit0.peer_id !== state.myPeerId && !sameSide(unit0)) { chaseEnemy(unit0); return; }
           canvas.dispatchEvent(new MouseEvent('contextmenu', { clientX: ev.clientX, clientY: ev.clientY, bubbles: true, cancelable: true }));
           return;
         }
@@ -3301,6 +3464,7 @@ function wireInput() {
     const t = renderer.pickHex(px, py, knownHex);
     uilog('rightclick', { tile: t });
     if (!t) return;
+    state.ui.chasePeerId = null;   // any other move / target gesture ends a chase
     const me = state.entities.find(p => p.peer_id === state.myPeerId);
     if (!me || typeof me.tile_q !== 'number') return;
 

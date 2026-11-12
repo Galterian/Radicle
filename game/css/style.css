@@ -1161,3 +1161,24 @@ html.mobile #deck-row::-webkit-scrollbar { display: none; }
 #deck-bar { min-width: 0; max-width: 100vw; box-sizing: border-box; }
 #deck-row { max-width: min(1020px, 100%); }
 html.mobile #deck-row { max-width: 100%; }
+
+/* 2026-11-12 batch 3: building bonus stacked on a stat; fortress break button */
+.bld-plus { color: #ffe66e; font-weight: 600; margin-left: 1px; }
+#object-card .oc-break { margin-left: 6px; padding: 2px 8px; border-radius: 4px; border: 1px solid #ff9a5c; background: #2a1a10; color: #ffcf9a; font-size: 11px; cursor: pointer; }
+#object-card .oc-break[disabled] { opacity: 0.45; cursor: default; }
+#object-card .oc-break.armed { border-color: #6ad99f; color: #b8f5d2; background: #10261b; }
+
+/* 2026-11-12: an instant that did its job — text vanishes, glows green, tilts, turns red, drops to the discard pile. */
+.slot.skill-burn { transform-origin: 50% 90%; animation: skill-burn 1.9s ease-in forwards; }
+.slot.skill-burn .card .ds, .slot.skill-burn .card .cd, .slot.skill-burn .card .fx-flags { animation: skill-burn-text .5s ease-out forwards; }
+@keyframes skill-burn-text { to { opacity: 0; filter: blur(2px); } }
+@keyframes skill-burn {
+  0%   { transform: translateY(0) rotate(0); box-shadow: none; filter: none; opacity: 1; }
+  22%  { transform: translateY(-14px) rotate(0); box-shadow: 0 0 0 2px #6ad99f, 0 0 24px #6ad99fcc; filter: brightness(1.25); }
+  45%  { transform: translateY(-14px) rotate(-14deg); box-shadow: 0 0 0 2px #6ad99f, 0 0 18px #6ad99f99; }
+  65%  { transform: translateY(-8px) rotate(-14deg); box-shadow: 0 0 0 2px #ff5a5a, 0 0 20px #ff5a5acc; filter: sepia(1) saturate(4) hue-rotate(-50deg); }
+  100% { transform: translate(-60px, 80px) rotate(-30deg) scale(.4); box-shadow: 0 0 0 1px #ff5a5a; filter: sepia(1) saturate(4) hue-rotate(-50deg); opacity: 0; }
+}
+/* A negated action card comes back to the hand. */
+.slot.card-returned { animation: card-returned 1.3s ease-out; }
+@keyframes card-returned { 0% { transform: translateY(-40px); box-shadow: 0 0 0 2px #ffd76e, 0 0 18px #ffd76e; } 60% { transform: translateY(4px); } 100% { transform: translateY(0); box-shadow: none; } }
