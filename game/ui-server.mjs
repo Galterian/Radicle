@@ -33,6 +33,17 @@ import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors } fro
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
+// No player profiles yet (TBD): a new game starts as a random character, desktop and phone alike
+// (user ruling 2026-11-12). A resumed save keeps the hero it saved.
+function randomCharacter() {
+  try {
+    const doc = JSON.parse(fsSync.readFileSync(path.join(DATA_DIR, 'characters.json'), 'utf8'));
+    const list = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status)));
+    const e = list[Math.floor(Math.random() * list.length)];
+    if (e) { console.log(`[launcher] random character: ${e.id} (of ${list.length})`); return { id: e.id, name: e.name || e.id }; }
+  } catch (err) { console.warn(`[launcher] characters.json unreadable (${err.message}) — Firestroker it is`); }
+  return { id: 'char_exuberant_firestroker', name: 'Exuberant Firestroker' };
+}
 // Curated WBC3 art/sound collection (chaosD6/assets) — sprite sheets, hex
 // terrain tiles, portraits and voice lines referenced by data/*.json `resources`.
 const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
@@ -244,8 +255,9 @@ async function startDimension({ dimensionName, publicIp }) {
   const ip = (publicIp || '').trim() || defaultPublicIp();
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error(`"${ip}" is not an IPv4 address`);
   const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  const hero = randomCharacter();
   const roster = [
-    { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 } },
+    { label: 'player-1', alliance: 'player', character: hero.id, creature: '',                                          name: `You (${hero.name})`,   tile: { q: 1, r: 2 } },
     { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 } },
     { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 } },
     { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 } },
@@ -501,7 +513,7 @@ async function restoreDimension({ tmjPath, label }) {
         const out = await joinDimension({
           dimensionName: DIM_NAME, doorId: myDoor ? myDoor.peer_id : null, placement: 'nearby',
           side: ['player', 'player_c'].includes(playerEnt.p.alliance) ? playerEnt.p.alliance : 'player',
-          characterId: String(playerEnt.p.source_id || '') || 'char_exuberant_firestroker',
+          characterId: String(playerEnt.p.source_id || '') || randomCharacter().id,
           creatureId: '', label: wantLabel,
           entityName: playerEnt.name || 'You',
           preferredTile: tile,
@@ -522,8 +534,10 @@ async function restoreDimension({ tmjPath, label }) {
   // loaded" happens — there is simply no ally spawned). Only player-1 reads
   // the TMJ (hydrating map / obstacles / tokens / traps); the others catch
   // up via the hashgraph's evt_map_sync.
+  const savedHero = String(playerEnt?.p.source_id || '');
+  const hero = savedHero ? { id: savedHero, name: String(playerEnt?.p.name || savedHero) } : randomCharacter();
   const roster = [
-    { label: (label || '').trim() || 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 }, restore: true },
+    { label: (label || '').trim() || 'player-1', alliance: 'player', character: hero.id, creature: '',                  name: savedHero ? hero.name : `You (${hero.name})`, tile: { q: 1, r: 2 }, restore: true },
     { label: 'ally-1',                            alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 }, restore: false },
     { label: 'foe-1',                             alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, restore: false },
     { label: 'foe-2',                             alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, restore: false },

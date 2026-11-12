@@ -110,9 +110,11 @@ function ruleFor(rules, text, fallback) {
 // The full bonus of the catalogue building on (q, r) — deterministic from seed + hex + text.
 function buildingBonus(seed, q, r, f) {
   const text = `${f.label || ''} ${f.desc || ''}`;
-  if (DUNGEON.test(f.label || '')) return { dungeon: true };
+  // A themed building (features.js) does what it looks like: its theme is its power.
+  if (f.theme === 'dungeon' || (!f.theme && DUNGEON.test(f.label || ''))) return { dungeon: true };
   const extras = ruleFor(BUILDING_RULES, text, {});
-  let kind = ruleFor(POWER_HINTS, text, null);
+  let kind = f.theme || ruleFor(POWER_HINTS, text, null);
+  if (!f.theme) {
   // Text hints win half the time, so two Temples are not always the same building.
   if (!kind || roll(seed, q, r, 'hint') < 0.5) {
     const total = POWER_WEIGHTS.reduce((a, [, w]) => a + w, 0);
@@ -124,6 +126,7 @@ function buildingBonus(seed, q, r, f) {
   if (HARMFUL.test(text)) kind = 'hurt';
   // Every Shrine holds exactly one skill, rolled from its hex (user ruling 2026-11-12).
   if (/shrine/i.test(f.label || '')) kind = 'skill';
+  }
   const stat = ruleFor(STAT_HINTS, text, null) && roll(seed, q, r, 'shint') < 0.6 ? ruleFor(STAT_HINTS, text, null) : pickBy(roll(seed, q, r, 'stat'), STATS);
   if (kind === 'fortress') return { power: { kind, stat, value: 10 + Math.floor(roll(seed, q, r, 'fval') * 9) } };
   const power = kind === 'skill' ? { kind, skill: pickBy(roll(seed, q, r, 'skill'), BUILDING_SKILLS) }

@@ -542,15 +542,72 @@ async function openFolder() {
     toast(`loaded ${Object.keys(state.files).length} files from ${dh.name} — remembered for next launch`, "ok");
   } catch (e) { if (e.name !== "AbortError") toast("open failed: " + e.message, "err"); }
 }
+// Read-only load of ./data/*.json over HTTP. File list = directory listing if the server
+// gives one, else data/index.json `collections[].file`. Files get handle=null; saveAll() asks for the folder once.
+async function listHttpDataFiles() {
+  try {
+    const r = await fetch("data/", { cache: "no-store" });
+    if (r.ok) {
+      const names = [...new Set([...(await r.text()).matchAll(/href="([^"?#]+\.json)"/gi)]
+        .map(m => decodeURIComponent(m[1].split("/").pop())))];
+      if (names.length) return names;
+    }
+  } catch (e) {}
+  try {
+    const r = await fetch("data/index.json", { cache: "no-store" });
+    if (!r.ok) return [];
+    const idx = await r.json();
+    return [...new Set(["index.json", ...(idx.collections || []).map(c => c.file).filter(Boolean)])];
+  } catch (e) { return []; }
+}
+async function loadFromHttp() {
+  if (!/^https?:$/.test(location.protocol)) return false;
+  const names = await listHttpDataFiles();
+  if (!names.length) return false;
+  const files = {};
+  for (const name of names) {
+    try {
+      const text = await (await fetch("data/" + encodeURIComponent(name), { cache: "no-store" })).text();
+      const data = JSON.parse(text);
+      files[name] = { name, handle: null, data, dirty: false, originalText: text, originalData: JSON.parse(text) };
+    } catch (e) { toast("skipped " + name + ": " + e.message, "err"); }
+  }
+  if (!Object.keys(files).length) return false;
+  state.dirHandle = null;
+  state.files = files;
+  renderAll(); updateStatus();
+  return true;
+}
+// Called from Save (a user gesture): pick the data folder and attach write handles to HTTP-loaded files.
+async function attachHandles() {
+  let dh = state.pendingHandle;
+  if (dh) { try { if (await dh.requestPermission({ mode: "readwrite" }) !== "granted") dh = null; } catch (e) { dh = null; } }
+  if (!dh) dh = await window.showDirectoryPicker({ mode: "readwrite", id: "dimensions-data", startIn: "documents" });
+  state.pendingHandle = null;
+  await idbSet(IDB_KEY, dh);
+  state.dirHandle = dh;
+  for (const f of Object.values(state.files)) {
+    if (!f.handle) f.handle = await dh.getFileHandle(f.name, { create: true });
+  }
+  $("#forget").style.display = "";
+}
 async function tryAutoOpen() {
   if (!("showDirectoryPicker" in window)) { $("#status").textContent = "File System Access API not available — use Chrome or Edge"; return; }
   const dh = await idbGet(IDB_KEY);
-  if (!dh) { $("#status").textContent = "no folder — open your data/ directory"; return; }
+  if (!dh) {
+    if (await loadFromHttp()) { toast(`auto-loaded ${Object.keys(state.files).length} files from ./data/ — Save will ask for the folder once`, "ok"); return; }
+    $("#status").textContent = "no folder — open your data/ directory"; return;
+  }
   $("#forget").style.display = "";
   let perm = "prompt"; try { perm = await dh.queryPermission({ mode: "readwrite" }); } catch (e) {}
   if (perm === "granted") {
     try { await loadFromHandle(dh); toast(`auto-loaded ${Object.keys(state.files).length} files from ${dh.name}`, "ok"); return; }
     catch (e) { console.error(e); }
+  }
+  if (await loadFromHttp()) {
+    state.pendingHandle = dh;
+    toast(`auto-loaded ${Object.keys(state.files).length} files from ./data/ — Save will re-grant access to ${dh.name}`, "ok");
+    return;
   }
   $("#status").textContent = `remembered "${dh.name}" — click Open to resume`;
   $("#open").textContent = `Resume ${dh.name}/`; $("#open").classList.add("primary");
@@ -559,7 +616,7 @@ async function tryAutoOpen() {
     openFolder();
   };
 }
-async function forgetFolder() { await idbDel(IDB_KEY); state.dirHandle = null; state.files = {}; $("#forget").style.display = "none"; $("#open").textContent = "Open data/…"; $("#open").classList.remove("primary"); $("#open").onclick = openFolder; renderAll(); updateStatus(); toast("forgot folder", "ok"); }
+async function forgetFolder() { await idbDel(IDB_KEY); state.dirHandle = null; state.pendingHandle = null; state.files = {}; $("#forget").style.display = "none"; $("#open").textContent = "Open data/…"; $("#open").classList.remove("primary"); $("#open").onclick = openFolder; renderAll(); updateStatus(); toast("forgot folder", "ok"); }
 /** Collect pending entries whose active version EXISTS on disk — these are the ones that can be bumped. */
 function collectBumpable() {
   const out = [];
@@ -611,6 +668,10 @@ function bumpPendingEntryInPlace(b) {
 }
 async function saveAll() {
   const dirty = Object.values(state.files).filter(f => f.dirty); if (!dirty.length) return;
+  if (dirty.some(f => !f.handle)) {
+    try { await attachHandles(); }
+    catch (e) { toast(e.name === "AbortError" ? "save cancelled — pick the data/ folder to write" : "save failed: " + e.message, "err"); return; }
+  }
 
   const bumpable = collectBumpable();
   if (bumpable.length) {

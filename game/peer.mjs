@@ -4091,16 +4091,18 @@ async function doResolution() {
     if (returned.length) console.log(`[${PEER_LABEL}] instants without benefit return to hand: ${returned.join(', ')}`);
     // Tell the UI what my instants did (it burns the spent cards) and what was done to me.
     const nm = (id) => id === PEER_ID_STRING ? 'you' : (view.get(id)?.name || id.slice(5, 13));
+    // "World Elemental (P-Agent4's)" → "P-Agent4's World Elemental's", never "…(P-Agent4's)'s".
+    const poss = (id) => { const n = nm(id); const m = /^(.*) \((.*)'s\)$/.exec(n); return `${m ? `${m[2]}'s ${m[1]}` : n}'s`; };
     const skName = (id) => data.skills[id]?.name || id.replace(/^skill_/, '').replace(/_/g, ' ');
     const actName = (c) => String(c || '').split('+').map(x => ({ A: 'Attack', M: 'Move', B: 'Block', P: 'Posture', EM: 'Empty Move', EP: 'Empty Posture' }[x] || x)).join(' + ');
     const events = [], notices = [];
     for (const f of fx) {
       if (f.by !== PEER_ID_STRING && f.on !== PEER_ID_STRING) continue;
-      const who = f.building ? `the building's ${skName(f.skill)}` : f.by === PEER_ID_STRING ? `your ${skName(f.skill)}` : `${nm(f.by)}'s ${skName(f.skill)}`;
+      const who = f.building ? `the building's ${skName(f.skill)}` : f.by === PEER_ID_STRING ? `your ${skName(f.skill)}` : `${poss(f.by)} ${skName(f.skill)}`;
       const extra = (f.ridden || []).length ? ` (and ${f.ridden.map(skName).join(', ')} riding on it)` : '';
       const line = f.skill === 'skill_dodge' ? `✦ ${who}: one less combat damage to ${nm(f.by)}`
-        : f.negated ? `✦ ${who} negated ${f.on === PEER_ID_STRING ? 'your' : `${nm(f.on)}'s`} ${actName(f.what)}${extra} — ${f.on === PEER_ID_STRING ? 'the card returns to your hand' : 'their card returns to their hand'}`
-        : `✦ ${who} countered ${f.on === PEER_ID_STRING ? 'your' : `${nm(f.on)}'s`} ${(f.countered || []).map(skName).join(', ') || 'cast'}${(f.countered || []).length ? ' — discarded' : ''}`;
+        : f.negated ? `✦ ${who} negated ${f.on === PEER_ID_STRING ? 'your' : poss(f.on)} ${actName(f.what)}${extra} — ${f.on === PEER_ID_STRING ? 'the card returns to your hand' : 'their card returns to their hand'}`
+        : `✦ ${who} countered ${f.on === PEER_ID_STRING ? 'your' : poss(f.on)} ${(f.countered || []).map(skName).join(', ') || 'cast'}${(f.countered || []).length ? ' — discarded' : ''}`;
       notices.push(line);
       console.log(`[${PEER_LABEL}] skill fx: ${line}`);
       if (f.by === PEER_ID_STRING && !f.building) { const k = (myLastReveal.skillIds || []).indexOf(f.skill); if (k >= 0) events.push({ card_id: myLastReveal.skillCardIds[k], name: myLastReveal.skillNames[k], outcome: 'spent' }); }
@@ -4559,7 +4561,12 @@ async function endTurn() {
   // reset after the check so the next turn's bookkeeping is clean. Dead
   // characters do not regen.
   if (entity.classFlags && entity.permanents.has('class_guardian') && !entity.classFlags.movedThisRound && entity.life > 0) {
-    entity.life = Math.min(entity.lifeMax, entity.life + 1);
+    // Once per TURN, at its end (user ruling 2026-11-12, classes.json 1.1.0) — never at an action's end.
+    if (entity.life < entity.lifeMax) {
+      entity.life += 1;
+      console.log(`[${PEER_LABEL}] guardian: stayed on my tile all turn — +1 life (${entity.life}/${entity.lifeMax})`);
+      broadcastUI(handMsg({ notice: `🛡 Guardian: you stayed on your tile the whole turn — +1 life (${entity.life}/${entity.lifeMax})` }));
+    }
   }
   if (entity.classFlags) entity.classFlags.movedThisRound = false;
 
