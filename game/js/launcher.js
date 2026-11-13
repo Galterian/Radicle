@@ -4,6 +4,7 @@
 // ?peer=<peerPort>.
 
 import { fancyLabel } from './names.js';
+import { initProfilePanel, joinTeamButton, launchJoinTeam, peerSearch, IS_MENU, IS_MOBILE } from './profile-ui.js';
 
 const peer = new URL(location.href).searchParams.get('peer');
 
@@ -67,7 +68,7 @@ async function launch() {
     const out = await r.json();
     if (!out.ok) throw new Error(out.error || 'launch failed');
     msg.textContent = `up on peer :${out.peerPort} — reloading…`;
-    location.search = `?peer=${out.peerPort}`;
+    location.search = peerSearch(out.peerPort);   // keeps ?mobile=1
   } catch (e) {
     msg.textContent = `failed: ${e.message}`;
     btn.disabled = false;
@@ -157,6 +158,8 @@ function renderDimensionsExplorer(items, ago) {
         tile.classList.add('is-selected');
       });
       chips.appendChild(chip);
+      // "Join my <team> team" next to every live player Door (user ruling 2026-11-13); hidden without characters.
+      if (!d.legacy && door.live && (door.life ?? 1) > 0 && (door.alliance === 'player' || door.alliance === 'player_c')) chips.appendChild(joinTeamButton(d.dimension_name, door.peer_id));
     }
     if (ordered.length > shown.length) {
       const more = document.createElement('span');
@@ -180,8 +183,21 @@ function renderDimensionsExplorer(items, ago) {
   }
 }
 
-async function renderLauncher() {
+// Phone menu (?mobile=1&menu=1, served by the phone's menu server): only the profile panel — that server
+// has no /api/dimensions, /api/network …, so none of the host / join / restore setup runs.
+async function renderMenu() {
+  document.documentElement.classList.add('menu-mode');
   document.getElementById('launcher').hidden = false;
+  document.querySelector('#launcher h1').textContent = 'ChaosD6';
+  await initProfilePanel(document.getElementById('profile-panel'));
+  hideEntering();
+}
+
+async function renderLauncher() {
+  if (IS_MENU) return renderMenu();
+  document.getElementById('launcher').hidden = false;
+  // The profile panel loads on its own; a missing profile API only disables it.
+  initProfilePanel(document.getElementById('profile-panel')).catch(() => {});
   // The radios + selects are disabled until we know what dimensions exist and
   // which doors are live, so block interaction behind the same overlay the
   // dimension-entry flow uses — different label, same spinner.
@@ -320,6 +336,13 @@ async function renderLauncher() {
   document.getElementById('go').disabled = false;
 
   document.getElementById('go').addEventListener('click', launch);
+  // "Join my team" next to the Door picker: the picked Door, top profile character, 30–50 hexes away.
+  document.getElementById('pick-door-team').addEventListener('click', () => {
+    const opt = pickDoor.selectedOptions[0];
+    if (!opt || opt.disabled || !opt.value) { document.getElementById('launch-msg').textContent = 'no live Door picked'; return; }
+    const [dimName, doorId] = opt.value.split('|');
+    launchJoinTeam(dimName, doorId);
+  });
   hideEntering();
 }
 
@@ -331,5 +354,7 @@ if (peer) {
   revealGame();
   await import('./main.js');
 } else {
+  document.documentElement.classList.add('in-launcher');
+  if (IS_MOBILE) document.documentElement.classList.add('mobile');
   await renderLauncher();
 }

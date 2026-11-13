@@ -33,10 +33,11 @@ func _ready() -> void:
     if ep == null:
         push_warning("[MobileHudWebView] EmbeddedPeer autoload missing — nothing to overlay")
         return
+    # Stay connected even when a URL is already known: after the start menu
+    # the peer announces the port a second time.
+    ep.peer_url_ready.connect(_show_for_ws)
     if ep.active and ep.peer_url != "":
         _show_for_ws(ep.peer_url)
-    else:
-        ep.peer_url_ready.connect(_show_for_ws)
 
 
 func _show_for_ws(ws_url: String) -> void:
@@ -50,9 +51,20 @@ func _show_for_ws(ws_url: String) -> void:
     # The embedded peer already IS the session: ?peer=<port> makes launcher.js
     # skip the dimension picker (which needs the desktop ui-server's /api/*);
     # mobile=1 switches the page to its phone layout + touch input.
+    # A plain launch (no chaosd6:// link) first serves the start menu on the
+    # same port (user ruling 2026-11-13; EmbeddedPeer.menu_open): open the
+    # profile page (menu=1). launcher.js navigates to ?peer=<port> itself after
+    # a launch; when the peer then takes the port over (second peer_url_ready)
+    # load the game page once more in case the WebView got there before the
+    # peer was listening. A deep link goes straight to the game, as before.
+    var ep := get_node_or_null("/root/EmbeddedPeer")
+    var menu := ep != null and bool(ep.get("menu_open")) and String(ep.get("deep_link")) == ""
     var m := RegEx.create_from_string("^http://127\\.0\\.0\\.1:(\\d+)/?$").search(http_url)
     if m:
-        http_url = "http://127.0.0.1:%s/?peer=%s&mobile=1" % [m.get_string(1), m.get_string(1)]
+        if menu:
+            http_url = "http://127.0.0.1:%s/?mobile=1&menu=1" % m.get_string(1)
+        else:
+            http_url = "http://127.0.0.1:%s/?peer=%s&mobile=1" % [m.get_string(1), m.get_string(1)]
     print("[MobileHudWebView] loading ", http_url)
     _plugin.showFullScreen(http_url)
 
