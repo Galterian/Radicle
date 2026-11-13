@@ -5,9 +5,23 @@ extends CanvasLayer
 
 signal slot_pressed(index: int)
 signal lock_pressed
+## Fired when the mobile Q button is tapped (class-ability trigger, parity
+## with the browser's Q keypress). Game.gd routes to NetBridge.class_ability().
+signal class_ability_pressed
 ## Fired when the player double-taps an enemy's permanent card in the roster.
 ## Carries the stat the destroy intent should emit at the perm (Rule 24).
 signal destroy_perm_requested(peer_id: String, perm_id: String, stat: String)
+## Fired when the player taps a roster row — Game.gd makes that entity the
+## HUD's active one (portrait + camera focus). Mobile-only wire.
+signal entity_activated(entity_id: String)
+## Fired when the player taps a V/W/M/Wi stat chip in a roster row.
+## Game.gd routes:
+##   - own row  → send `destroy` intent with just `stat` (emit this element
+##                against the closest enemy's matching perm, Rule 24)
+##   - enemy row → emit `destroy_perm_requested(peer_id, "", stat)` so the
+##                player can arm a destroy against a specific perm without
+##                having to pick one from a submenu first.
+signal stat_tapped(entity_id: String, stat_key: String, is_own: bool)
 
 const CODE_COLORS := {
 	"A": Color("#d9772a"), "B": Color("#4f8fd6"), "M": Color("#7cc77a"), "P": Color("#c9b35a"),
@@ -15,8 +29,11 @@ const CODE_COLORS := {
 }
 const CODE_NAMES := {"A": "Attack", "B": "Block", "M": "Move", "P": "Posture", "EP": "Empty (hold)", "EM": "Empty (run)"}
 
-const SLOT_SIZE := Vector2(150, 96)   # was 92x76: wider for the rule line, +20px tall
+const SLOT_SIZE_DESKTOP := Vector2(150, 96)
+const SLOT_SIZE_MOBILE  := Vector2(96, 76)
 const SLOT_GAP := 8
+# Runtime: mutated by _apply_layout() based on viewport width.
+var SLOT_SIZE: Vector2 = SLOT_SIZE_DESKTOP
 
 var dl: DataLoader = null             # set by Game so skill cards can show their rule text
 
@@ -31,8 +48,35 @@ var _slot_name: Array[Label] = []
 var _slot_desc: Array[Label] = []
 var _slot_icon: Array[TextureRect] = []    # real skill-card icon when the slot holds a skill_* id
 var _lock_btn: Button
+var _class_ability_btn: Button = null
 var _log: RichTextLabel
 var _hint: Label
+# Always-on top-centre status strip. On mobile this replaces the keyboard
+# shortcut hint so the player can confirm the game is still running even
+# when another panel clips off-screen.
+var _status_strip: PanelContainer
+var _status_lbl: Label
+# Rich chip pills mirroring the browser header (index.html header#hud):
+# dim · turn·round · phase · timer · tier · door·peer. Each chip is a
+# PanelContainer with its own styling so we can colour-code phase and timer.
+var _chip_dim: PanelContainer = null
+var _chip_dim_lbl: Label = null
+var _chip_turn: PanelContainer = null
+var _chip_turn_lbl: Label = null
+var _chip_phase: PanelContainer = null
+var _chip_phase_lbl: Label = null
+var _chip_timer: PanelContainer = null
+var _chip_timer_lbl: Label = null
+var _chip_tier: PanelContainer = null
+var _chip_tier_lbl: Label = null
+var _chip_door: PanelContainer = null
+var _chip_door_lbl: Label = null
+# Secondary strip label — shows "<effect> ch." in orange while the local
+# player is channeling. Game.gd drives it via set_channel_label(). Empty
+# text hides it.
+var _channel_lbl: Label
+# Mobile-only inline hint shown while planning with no card picked.
+var _mobile_hint: Label
 var _hover_lbl: Label
 var _quote_lbl: Label
 
@@ -58,7 +102,9 @@ var _hover_tier: Label
 var _hover_skills_title: Label
 var _hover_skills_box: VBoxContainer
 var _hover_perms_title: Label
-var _hover_perms_box: VBoxContainer
+# GridContainer so >3 permanents wrap into 2 columns instead of overflowing
+# vertically into the log/roster above. columns is toggled per-render.
+var _hover_perms_box: GridContainer
 var _hover_unit_id: String = ""
 
 # Roster panel — vertical stack of every entity, each row = thumb + name + stats
@@ -66,6 +112,7 @@ var _hover_unit_id: String = ""
 # game/js/main.js renderRoster.
 var _roster_panel: PanelContainer
 var _roster_box: VBoxContainer
+var _roster_toggle: Button    # mobile only — floating button to show/hide the roster
 var _roster_signature := ""     # cheap "is anything different?" guard
 
 # Server-view overlay — populated by NetBridge signals when the Node peer is
@@ -82,11 +129,17 @@ var _my_peer_id: String = ""
 var _panel_portrait: PanelContainer      # top-left: portrait + hp + quote
 var _panel_phase: VBoxContainer          # top-centre: phase + timer + hover line
 var _bar: HBoxContainer                  # bottom-centre: 5 slots + lock
+# Opaque backdrop behind the slot bar. On Android some slot modulates can
+# render transparent; the backdrop keeps the hand visible as a block.
+var _bar_bg: PanelContainer
 var _log_panel: PanelContainer           # right column: log
 # Element-emission chip. Fades out ~1.4s after the player's intent emits a
 # non-empty element set — parity with the browser's hero-emit line.
 var _emit_lbl: Label = null
 var _emit_tween: Tween = null
+# Shared emission text — the roster's own-row "emitting …" line mirrors
+# this. show_emit() keeps it in sync.
+var _emit_text: String = ""
 # Destroy-queued chip. Visible while queuedDestroy is non-null in the local
 # peer's handMsg — the user double-tapped an enemy perm and the server is
 # holding the intent until a P / EP / A / M emission resolves at that perm.
@@ -99,6 +152,30 @@ var _world_emits: Dictionary = {}        # peer_id -> Label
 var _last_viewport_size := Vector2i.ZERO
 var _is_portrait := false
 
+# Mobile-only compact strips above the hand bar — the Godot HUD never built
+# the browser's #archive-pile / #deck-pile / #perms widgets, so phones ran
+# without any pile counts or permanents readout. These two labels fill that
+# gap: one line of pile counts, one line of permanent codes.
+var _mobile_piles_lbl: Label = null
+var _mobile_perms_lbl: Label = null
+# Mobile-only big floating commit button. The regular _lock_btn sits inside
+# the HBoxContainer `_bar`; if `_bar`'s position ends up off-screen (narrow
+# viewport, orientation glitch, container measurement race) the player can't
+# commit a turn at all. This independent BOTTOM_RIGHT-anchored button
+# guarantees a commit affordance on phones regardless of _bar's state.
+var _mobile_commit_btn: Button = null
+# Root Control that owns every HUD child. We hold a reference so _apply_layout
+# can force it to the current viewport size — Controls that are direct children
+# of a CanvasLayer don't automatically inherit the viewport rect on Android,
+# so without this every anchor-based child computes from a (0,0,0,0) parent
+# rect and lands off-screen top-left (visible symptom: only the top-left
+# portrait panel renders; hand bar, log, END TURN, roster all missing).
+var _root: Control = null
+# How many pixels of extra bottom padding to add on Android so the hand bar
+# clears the system gesture/nav area. Measured on a Pixel-class phone — the
+# bar's lower edge was ~40 px below the usable rect without this lift.
+const MOBILE_SAFE_BOTTOM := 56.0
+
 
 func _ready() -> void:
 	layer = 10
@@ -107,6 +184,7 @@ func _ready() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	_root = root
 
 	# --- top-left: portrait panel
 	var panel := PanelContainer.new()
@@ -207,6 +285,17 @@ func _ready() -> void:
 	# --- bottom-centre: hand bar
 	# Slots are 5 cards + LOCK; each card button carries a code / name / rule-text
 	# label stack so the rule is always visible (full text in the tooltip).
+	# Backdrop first — must be added BEFORE _bar so it renders beneath.
+	# Backdrop retained as a very subtle semi-transparent layer rather than
+	# the earlier opaque panel ("No background" annotation on the ref image).
+	# Keeping a wisp of darkening so slot buttons stay legible over bright
+	# map tiles, but it no longer reads as a solid bar.
+	_bar_bg = PanelContainer.new()
+	_bar_bg.name = "BarBackdrop"
+	_bar_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_bar_bg.add_theme_stylebox_override("panel", _box(Color(0.0, 0.0, 0.0, 0.0)))
+	_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_bar_bg)
 	var bar := HBoxContainer.new()
 	var bar_w := SLOT_SIZE.x * 5 + 92 + SLOT_GAP * 5
 	bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -219,6 +308,13 @@ func _ready() -> void:
 		b.custom_minimum_size = SLOT_SIZE
 		b.text = ""
 		b.clip_text = true
+		# Explicit styleboxes — Android's default Button theme can render
+		# near-invisible on dark backgrounds, so pin the look here.
+		b.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.14, 0.18, 0.95)))
+		b.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.22, 0.28, 0.98)))
+		b.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.32, 0.40, 1.00)))
+		b.add_theme_stylebox_override("disabled", _box(Color(0.08, 0.08, 0.10, 0.80)))
+		b.add_theme_stylebox_override("focus",    _box(Color(0.55, 0.75, 0.95, 0.20)))
 		b.pressed.connect(func(): slot_pressed.emit(i))
 		bar.add_child(b)
 		_slots.append(b)
@@ -262,8 +358,32 @@ func _ready() -> void:
 	_lock_btn = Button.new()
 	_lock_btn.custom_minimum_size = Vector2(92, SLOT_SIZE.y)
 	_lock_btn.text = "LOCK\n[Space]"
+	# Same explicit styleboxes as the slot buttons — Android's default theme
+	# can render buttons near-invisible on the dark backdrop.
+	_lock_btn.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.14, 0.18, 0.95)))
+	_lock_btn.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.22, 0.28, 0.98)))
+	_lock_btn.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.32, 0.40, 1.00)))
+	_lock_btn.add_theme_stylebox_override("disabled", _box(Color(0.08, 0.08, 0.10, 0.80)))
+	_lock_btn.add_theme_stylebox_override("focus",    _box(Color(0.55, 0.75, 0.95, 0.20)))
 	_lock_btn.pressed.connect(func(): lock_pressed.emit())
 	bar.add_child(_lock_btn)
+	# Q — class ability button next to LOCK. Browser emits `class_ability`
+	# on Q keypress; on mobile we need a tappable fallback since there's no
+	# keyboard. Hidden until the player has a class card in their permanents
+	# (set_class_ability_available toggles).
+	_class_ability_btn = Button.new()
+	_class_ability_btn.name = "ClassAbility"
+	_class_ability_btn.custom_minimum_size = Vector2(76, SLOT_SIZE.y)
+	_class_ability_btn.text = "Q\nclass"
+	_class_ability_btn.add_theme_font_size_override("font_size", 13)
+	_class_ability_btn.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.10, 0.26, 0.95)))
+	_class_ability_btn.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.16, 0.36, 0.98)))
+	_class_ability_btn.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.22, 0.48, 1.00)))
+	_class_ability_btn.add_theme_stylebox_override("disabled", _box(Color(0.08, 0.06, 0.14, 0.80)))
+	_class_ability_btn.add_theme_color_override("font_color", Color(0.92, 0.82, 1.0))
+	_class_ability_btn.visible = false
+	_class_ability_btn.pressed.connect(func(): class_ability_pressed.emit())
+	bar.add_child(_class_ability_btn)
 
 	_hint = _label("1-5 pick card · click hex = target/path · click building = info (Esc closes) · right-click = discard · Space = lock · wheel zoom · MMB pan · C recenter", 11, Color(0.6, 0.6, 0.65))
 	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -271,6 +391,72 @@ func _ready() -> void:
 	_hint.custom_minimum_size = Vector2(880, 14)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(_hint)
+
+	# --- top-centre: always-on status strip (R / DIM / HAND / HEX)
+	_status_strip = PanelContainer.new()
+	_status_strip.name = "StatusStrip"
+	_status_strip.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_status_strip.add_theme_stylebox_override("panel", _box(Color(0.06, 0.06, 0.08, 0.80)))
+	_status_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_status_strip)
+	# HBox wrapper lets the channel chip sit beside the status line without
+	# fighting PanelContainer's single-child layout.
+	var strip_hb := HBoxContainer.new()
+	strip_hb.add_theme_constant_override("separation", 10)
+	strip_hb.alignment = BoxContainer.ALIGNMENT_CENTER
+	strip_hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_status_strip.add_child(strip_hb)
+	# Fallback label kept for solo play / early boot before the chip row fills.
+	# Hidden once the first server phase/hello arrives (set_status_bar hides it).
+	_status_lbl = _label("", 12, Color(0.9, 0.9, 0.95))
+	_status_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	strip_hb.add_child(_status_lbl)
+	# Rich chip pills — one per header field in game/index.html's header#hud.
+	# Each chip is a PanelContainer carrying one centred label; colour
+	# differs per role so planning / reveal / resolution read at a glance.
+	_chip_dim      = _make_chip("dimension: —", Color(0.18, 0.42, 0.26, 0.9), Color(0.78, 0.95, 0.82)); strip_hb.add_child(_chip_dim); _chip_dim_lbl = _chip_dim.get_child(0)
+	_chip_turn     = _make_chip("turn 0 · round 0/0", Color(0.12, 0.14, 0.22, 0.85), Color(0.92, 0.92, 0.98)); strip_hb.add_child(_chip_turn); _chip_turn_lbl = _chip_turn.get_child(0)
+	_chip_phase    = _make_chip("booting…", Color(0.28, 0.14, 0.42, 0.9), Color(0.95, 0.85, 1.0)); strip_hb.add_child(_chip_phase); _chip_phase_lbl = _chip_phase.get_child(0)
+	_chip_timer    = _make_chip("—", Color(0.42, 0.22, 0.08, 0.9), Color(1.0, 0.86, 0.62)); strip_hb.add_child(_chip_timer); _chip_timer_lbl = _chip_timer.get_child(0)
+	_chip_tier     = _make_chip("tier: far", Color(0.12, 0.14, 0.22, 0.85), Color(0.9, 0.9, 0.95)); strip_hb.add_child(_chip_tier); _chip_tier_lbl = _chip_tier.get_child(0)
+	_chip_door     = _make_chip("door: —", Color(0.12, 0.14, 0.22, 0.85), Color(0.85, 0.85, 0.9)); strip_hb.add_child(_chip_door); _chip_door_lbl = _chip_door.get_child(0)
+	_channel_lbl = _label("", 12, Color(0.95, 0.75, 0.4))
+	_channel_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_channel_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_channel_lbl.visible = false
+	strip_hb.add_child(_channel_lbl)
+
+	# --- bottom-centre: compact pile + permanent strips (mobile only)
+	# These sit above the hand bar on phones. On desktop the roster + hover
+	# card already surface the same info, so we keep them hidden there.
+	_mobile_piles_lbl = _label("", 11, Color(0.85, 0.9, 0.95))
+	_mobile_piles_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_mobile_piles_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mobile_piles_lbl.custom_minimum_size = Vector2(560, 14)
+	_mobile_piles_lbl.visible = false
+	_mobile_piles_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mobile_piles_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_mobile_piles_lbl.add_theme_constant_override("outline_size", 3)
+	root.add_child(_mobile_piles_lbl)
+	_mobile_perms_lbl = _label("", 11, Color(0.95, 0.85, 0.5))
+	_mobile_perms_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_mobile_perms_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mobile_perms_lbl.custom_minimum_size = Vector2(560, 14)
+	_mobile_perms_lbl.visible = false
+	_mobile_perms_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mobile_perms_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_mobile_perms_lbl.add_theme_constant_override("outline_size", 3)
+	root.add_child(_mobile_perms_lbl)
+
+	# --- bottom-centre: mobile planning hint (hidden until Game sets text)
+	_mobile_hint = _label("", 11, Color(0.95, 0.85, 0.6))
+	_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_mobile_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mobile_hint.custom_minimum_size = Vector2(360, 14)
+	_mobile_hint.visible = false
+	_mobile_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_mobile_hint)
 
 	# --- right: log
 	var lp := PanelContainer.new()
@@ -331,8 +517,10 @@ func _ready() -> void:
 	hvb.add_child(_hover_skills_box)
 	_hover_perms_title = _label("Permanents", 11, Color(0.65, 0.65, 0.72))
 	hvb.add_child(_hover_perms_title)
-	_hover_perms_box = VBoxContainer.new()
-	_hover_perms_box.add_theme_constant_override("separation", 4)
+	_hover_perms_box = GridContainer.new()
+	_hover_perms_box.columns = 1
+	_hover_perms_box.add_theme_constant_override("h_separation", 4)
+	_hover_perms_box.add_theme_constant_override("v_separation", 4)
 	hvb.add_child(_hover_perms_box)
 
 	# --- bottom-right: roster (every entity, stats, permanents as mini cards)
@@ -347,10 +535,87 @@ func _ready() -> void:
 	_roster_box.add_theme_constant_override("separation", 6)
 	_roster_panel.add_child(_roster_box)
 
+	# Mobile commit (lock) fallback — big, anchored BOTTOM_RIGHT, independent
+	# of the _bar HBoxContainer so a container-sizing glitch can't hide it.
+	# Hidden on desktop; _apply_layout flips it on when OS reports mobile.
+	_mobile_commit_btn = Button.new()
+	_mobile_commit_btn.name = "MobileCommit"
+	_mobile_commit_btn.text = "END\nTURN"
+	_mobile_commit_btn.custom_minimum_size = Vector2(96, 72)
+	_mobile_commit_btn.add_theme_font_size_override("font_size", 16)
+	_mobile_commit_btn.add_theme_stylebox_override("normal",   _box(Color(0.22, 0.14, 0.08, 0.95)))
+	_mobile_commit_btn.add_theme_stylebox_override("hover",    _box(Color(0.32, 0.20, 0.10, 0.98)))
+	_mobile_commit_btn.add_theme_stylebox_override("pressed",  _box(Color(0.45, 0.28, 0.14, 1.00)))
+	_mobile_commit_btn.add_theme_stylebox_override("disabled", _box(Color(0.14, 0.10, 0.08, 0.80)))
+	_mobile_commit_btn.add_theme_color_override("font_color", Color(1, 0.9, 0.6))
+	_mobile_commit_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_mobile_commit_btn.visible = false
+	_mobile_commit_btn.pressed.connect(func(): lock_pressed.emit())
+	root.add_child(_mobile_commit_btn)
+
+	# Mobile roster toggle — a small circular button bottom-right of the slot
+	# bar that flips the roster panel visibility. Hidden on desktop (that
+	# layout has room for the roster at all times).
+	_roster_toggle = Button.new()
+	_roster_toggle.name = "RosterToggle"
+	_roster_toggle.text = "☰"
+	_roster_toggle.custom_minimum_size = Vector2(44, 44)
+	_roster_toggle.add_theme_font_size_override("font_size", 20)
+	_roster_toggle.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_roster_toggle.add_theme_stylebox_override("normal",  _box(Color(0.08, 0.08, 0.1, 0.9)))
+	_roster_toggle.add_theme_stylebox_override("hover",   _box(Color(0.14, 0.14, 0.18, 0.95)))
+	_roster_toggle.add_theme_stylebox_override("pressed", _box(Color(0.22, 0.22, 0.26, 0.95)))
+	_roster_toggle.visible = false
+	_roster_toggle.pressed.connect(_toggle_roster)
+	root.add_child(_roster_toggle)
+
 	# Reflow when the window resizes OR the device rotates. Called once here
 	# to apply the initial layout for whatever orientation we start in.
+	# Android caveat: get_viewport().size_changed fires on surface recreate
+	# (alt-tab, orientation flip) but NOT at first-boot — the viewport is
+	# still (1,1) or stale when _ready runs, so the initial _apply_layout
+	# positions every panel off-screen. We poll in _process until the viewport
+	# stabilises; after that `size_changed` handles subsequent flips.
 	get_viewport().size_changed.connect(_on_viewport_resized)
 	_apply_layout()
+	# Belt-and-braces: on Android the viewport is often still a stub when
+	# _ready fires, so _apply_layout runs with a bad vp and leaves the HUD
+	# off-screen (and the defensive left-clamp drags TOP_RIGHT panels to the
+	# left edge). Schedule two more applies — one on the next frame and one
+	# ~0.6 s later — so even a slow surface warm-up resolves correctly.
+	call_deferred("_apply_layout")
+	get_tree().create_timer(0.6).timeout.connect(_apply_layout)
+	set_process(true)
+
+
+var _layout_poll_t := 0.0
+var _layout_poll_done := false
+
+## Android: `size_changed` doesn't fire at first-boot. Poll the viewport for
+## the first ~4 seconds and re-apply the layout whenever the size differs
+## from the one we last laid out against. Once we hit a stable non-stub
+## viewport we stop polling (set_process(false)).
+func _process(dt: float) -> void:
+	if _layout_poll_done:
+		return
+	_layout_poll_t += dt
+	var sz := get_viewport().get_visible_rect().size
+	var sz_i := Vector2i(sz)
+	if sz_i != _last_viewport_size and sz.x > 32 and sz.y > 32:
+		_last_viewport_size = sz_i
+		_apply_layout()
+	# Stop polling once we have a sensible viewport AND four seconds have
+	# elapsed — covers slow Android surface warm-up without burning CPU
+	# forever. If a rotation happens later, size_changed catches it.
+	if _layout_poll_t > 4.0 and sz.x > 32 and sz.y > 32:
+		_layout_poll_done = true
+		set_process(false)
+
+
+func _toggle_roster() -> void:
+	if _roster_panel == null:
+		return
+	_roster_panel.visible = not _roster_panel.visible
 
 
 func _on_viewport_resized() -> void:
@@ -362,72 +627,235 @@ func _on_viewport_resized() -> void:
 
 
 func _apply_layout() -> void:
-	# Two layouts: landscape (desktop, phone sideways) keeps the dense
-	# right-column stack; portrait (phone upright) compresses panels to half
-	# width so they don't crash into the hand bar, and tightens vertical
-	# spacing. The slot bar always sits at the bottom.
+	# Three layouts, picked from viewport size:
+	#   desktop    (wide, roomy): dense stacks, 150-px slots, full right column.
+	#   landscape-phone (wide but short): smaller slots fit the width, log/roster
+	#                                     collapsed behind a toggle to leave the
+	#                                     hex grid breathing room.
+	#   portrait   (phone upright): compact half-width panels; slots scale down
+	#                               so the whole hand + LOCK fits one row.
 	var vp := get_viewport().get_visible_rect().size
+	# Bail out on a garbage viewport (Android first-boot reports (0,0) / (1,1)
+	# before the surface is laid out). Running _apply_layout with vp.x < 32
+	# would collapse SLOT_SIZE to its clamp min, position the bar at
+	# (-212, -136) → off-screen, and trip the x-clamp below which would drag
+	# every TOP_RIGHT-anchored panel to global x=0 (visible symptom: the log
+	# panel appears at the TOP-LEFT corner instead of top-right, and the hand
+	# bar / commit button / portrait never appear). _process polling will
+	# call us again once the real viewport arrives; the deferred calls in
+	# _ready also retry on the next frame + at 0.6 s.
+	if vp.x < 32 or vp.y < 32:
+		return
+	# Pin _root to the actual viewport rect. CanvasLayer isn't a Control, so a
+	# Control that's a direct child doesn't get resized to the viewport
+	# automatically on Android — its rect stays (0,0,0,0) and every
+	# anchor-based child lands off-screen top-left. PRESET_FULL_RECT would
+	# re-derive the size from the (0,0,0,0) parent rect, so clear the
+	# right/bottom anchors first and set the size explicitly.
+	if _root != null:
+		_root.anchor_left = 0.0
+		_root.anchor_top = 0.0
+		_root.anchor_right = 0.0
+		_root.anchor_bottom = 0.0
+		_root.position = Vector2.ZERO
+		_root.size = vp
 	var portrait := vp.y > vp.x
+	var mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios") or vp.x < 1100
 	_is_portrait = portrait
+
+	# Pick a slot size that lets 5 slots + LOCK button fit in the available
+	# width with gaps. The LOCK button is ~ one slot wide; keep ~24px side
+	# padding so slots don't hug the screen edges.
+	var avail := maxf(vp.x - 24, 320.0)
+	var ideal_slot_w := (avail - (SLOT_GAP * 6)) / 6.0   # 5 slots + 1 lock
+	if not mobile and not portrait:
+		SLOT_SIZE = SLOT_SIZE_DESKTOP
+	else:
+		var w := clampf(ideal_slot_w, 68.0, SLOT_SIZE_DESKTOP.x)
+		var h := clampf(w * 0.64, 60.0, SLOT_SIZE_DESKTOP.y)
+		SLOT_SIZE = Vector2(w, h)
+
+	# Dump once per layout change so you can grep adb logcat for the viewport
+	# Godot actually sees on-device vs what we design for (1440x900).
+	print("[Hud] viewport=", vp, " portrait=", portrait, " mobile=", mobile,
+		  " slot=", SLOT_SIZE)
 
 	if _panel_portrait != null:
 		_panel_portrait.position = Vector2(8, 8)
-		_panel_portrait.custom_minimum_size = Vector2(220 if portrait else 300, 112)
+		if portrait or mobile:
+			_panel_portrait.custom_minimum_size = Vector2(minf(vp.x * 0.44, 240), 100)
+		else:
+			_panel_portrait.custom_minimum_size = Vector2(300, 112)
 	if _panel_phase != null:
-		# In portrait, the phase/timer slides against the right edge so it
-		# doesn't collide with the portrait panel on narrow screens.
-		if portrait:
+		if portrait or mobile:
 			_panel_phase.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_panel_phase.position = Vector2(-180, 8)
-			_panel_phase.custom_minimum_size = Vector2(172, 0)
+			_anchored(_panel_phase, Vector2(-minf(vp.x * 0.44 + 4, 200), 8))
+			_panel_phase.custom_minimum_size = Vector2(minf(vp.x * 0.44, 192), 0)
 		else:
 			_panel_phase.set_anchors_preset(Control.PRESET_CENTER_TOP)
-			_panel_phase.position = Vector2(-160, 12)
+			_anchored(_panel_phase, Vector2(-160, 12))
 			_panel_phase.custom_minimum_size = Vector2(320, 0)
 	if _log_panel != null:
 		if portrait:
-			# Below the top row, half-width — the roster will stack under it.
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_log_panel.position = Vector2(-(vp.x * 0.5 + 4), 128)
-			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 180)
+			_anchored(_log_panel, Vector2(-(vp.x * 0.5 + 4), 120))
+			_log_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, minf(vp.y * 0.28, 180))
+		elif mobile:
+			# Landscape phone: a narrower log so there's room for the hex board.
+			# Cap at 30% height so the bigger mobile font doesn't push the log
+			# into the roster below it.
+			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_anchored(_log_panel, Vector2(-minf(vp.x * 0.33, 320) - 4, 8))
+			_log_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), minf(vp.y * 0.3, 180))
 		else:
 			_log_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			_log_panel.position = Vector2(-372, 12)
+			_anchored(_log_panel, Vector2(-372, 12))
 			_log_panel.custom_minimum_size = Vector2(360, 300)
 	if _hover_panel != null:
 		if portrait:
-			_hover_panel.position = Vector2(-(vp.x * 0.5 + 4), 316)
+			_anchored(_hover_panel, Vector2(-(vp.x * 0.5 + 4), 316))
 			_hover_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
+		elif mobile:
+			# Below the log panel (new mobile log height 0.3*vp.y / 180).
+			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_anchored(_hover_panel, Vector2(-minf(vp.x * 0.33, 320) - 4, minf(vp.y * 0.3, 180) + 16))
+			_hover_panel.custom_minimum_size = Vector2(minf(vp.x * 0.33, 320), 0)
 		else:
-			_hover_panel.position = Vector2(-372, 320)
+			_hover_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			_anchored(_hover_panel, Vector2(-372, 320))
 			_hover_panel.custom_minimum_size = Vector2(360, 0)
 	if _obj_panel != null:
-		if portrait:
-			_obj_panel.position = Vector2(8, 132)
-			_obj_panel.custom_minimum_size = Vector2(220, 0)
+		if portrait or mobile:
+			_obj_panel.position = Vector2(8, _panel_portrait.custom_minimum_size.y + 16)
+			_obj_panel.custom_minimum_size = Vector2(minf(vp.x * 0.44, 240), 0)
 		else:
 			_obj_panel.position = Vector2(12, 136)
 			_obj_panel.custom_minimum_size = Vector2(300, 0)
 	if _roster_panel != null:
 		if portrait:
-			# Narrow strip above the hand bar on the right half.
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			_roster_panel.position = Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 180)
+			_anchored(_roster_panel, Vector2(-(vp.x * 0.5 + 4), -(SLOT_SIZE.y + 20) - 160))
 			_roster_panel.custom_minimum_size = Vector2(vp.x * 0.5 - 12, 0)
+		elif mobile:
+			# Hidden by default; the floating ☰ toggle below reveals it. The
+			# roster is still full-width when shown so the player can read
+			# names/HP/perms without squinting.
+			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			_anchored(_roster_panel, Vector2(-minf(vp.x * 0.5, 340), -(SLOT_SIZE.y + 20) - 240))
+			_roster_panel.custom_minimum_size = Vector2(minf(vp.x * 0.5 - 12, 340), 0)
+			if _roster_panel.visible == true and _last_viewport_size == Vector2i.ZERO:
+				_roster_panel.visible = false
 		else:
 			_roster_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			_roster_panel.position = Vector2(-372, -(SLOT_SIZE.y + 20) - 268)
+			_anchored(_roster_panel, Vector2(-372, -(SLOT_SIZE.y + 20) - 268))
 			_roster_panel.custom_minimum_size = Vector2(360, 0)
+	# Re-apply slot sizes to the (already-built) buttons so the shrink/grow
+	# propagates. SLOT_SIZE changed above; the Button nodes keep whichever
+	# min size they were given on build.
+	for b in _slots:
+		b.custom_minimum_size = SLOT_SIZE
+	if _lock_btn != null:
+		_lock_btn.custom_minimum_size = Vector2(SLOT_SIZE.x * 0.65, SLOT_SIZE.y)
+	# Keep slot text proportions readable on the small size.
+	var small := SLOT_SIZE.x < 110
+	for lc in _slot_code:
+		lc.add_theme_font_size_override("font_size", 14 if small else 18)
+	for ln in _slot_name:
+		ln.add_theme_font_size_override("font_size", 9 if small else 11)
+	for ld in _slot_desc:
+		ld.add_theme_font_size_override("font_size", 8 if small else 10)
+	# On mobile the Android nav/gesture area at the bottom pushes the hand bar
+	# off-screen; add a safe-area lift so the whole bar + its indicators stay
+	# in the usable rect. 0 on desktop so nothing changes there.
+	var safe_bottom: float = MOBILE_SAFE_BOTTOM if (OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")) else 0.0
 	if _bar != null:
-		# Keep the slots centred no matter what; just offset off the bottom.
-		var bar_w := SLOT_SIZE.x * 5 + 92 + SLOT_GAP * 5
-		_bar.position = Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20))
+		var bar_w := SLOT_SIZE.x * 5 + (SLOT_SIZE.x * 0.65) + SLOT_GAP * 5
+		_anchored(_bar, Vector2(-bar_w * 0.5, -(SLOT_SIZE.y + 20) - safe_bottom))
+		# Backdrop follows the bar with ~8px padding so a transparent slot can
+		# never hide the hand entirely.
+		if _bar_bg != null:
+			var pad := 8.0
+			_anchored(_bar_bg, Vector2(-bar_w * 0.5 - pad, -(SLOT_SIZE.y + 20) - pad - safe_bottom))
+			_bar_bg.custom_minimum_size = Vector2(bar_w + pad * 2, SLOT_SIZE.y + pad * 2)
+			_bar_bg.size = _bar_bg.custom_minimum_size
+	# Mobile piles + perms strips stack right above the hand bar. Hidden on
+	# desktop (the roster/hover already carry the same info).
+	var _is_mobile_now := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if _mobile_piles_lbl != null:
+		_mobile_piles_lbl.visible = _is_mobile_now
+		_anchored(_mobile_piles_lbl, Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 16))
+	if _mobile_perms_lbl != null:
+		_mobile_perms_lbl.visible = _is_mobile_now and _mobile_perms_lbl.text != ""
+		_anchored(_mobile_perms_lbl, Vector2(-280, -(SLOT_SIZE.y + 20) - safe_bottom - 30))
 	if _hint != null:
-		_hint.visible = not portrait
-		if portrait:
-			_hint.text = ""
-		else:
+		_hint.visible = not portrait and not mobile
+		if _hint.visible:
 			_hint.text = "1-5 pick card · click hex = target/path · click building = info (Esc closes) · right-click = discard · Space = lock · wheel zoom · MMB pan · C recenter"
+		else:
+			_hint.text = ""
+	# Top-centre status strip. On mobile _panel_phase has moved to the right
+	# corner so the top-centre is free; on desktop it's also top-centre, so
+	# push the status strip a bit lower to avoid overlap.
+	if _status_strip != null:
+		_status_strip.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		var strip_w := minf(vp.x * 0.6, 460.0)
+		_status_strip.custom_minimum_size = Vector2(strip_w, 0)
+		var strip_y := 8.0 if (portrait or mobile) else 56.0
+		_anchored(_status_strip, Vector2(-strip_w * 0.5, strip_y))
+	if _mobile_hint != null:
+		_mobile_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		_anchored(_mobile_hint, Vector2(-180, -(SLOT_SIZE.y + 20) - safe_bottom - 44))
+		var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+		if not on_mobile:
+			_mobile_hint.visible = false
+	# Position the roster toggle above the slot bar. On mobile we also force
+	# the roster panel visible so the player always sees the unit list and
+	# can tap an entry to activate it (the toggle still lets them hide it).
+	if _roster_toggle != null:
+		_roster_toggle.visible = portrait or mobile
+		_anchored(_roster_toggle, Vector2(-56, -(SLOT_SIZE.y + 20) - safe_bottom - 56))
+	if mobile and _roster_panel != null:
+		_roster_panel.visible = true
+	# Mobile commit (lock) fallback: anchored BOTTOM_RIGHT, placed to the LEFT
+	# of the roster toggle so neither covers the other and both clear the hand
+	# bar. Hidden on desktop (the in-bar _lock_btn handles that path).
+	if _mobile_commit_btn != null:
+		_mobile_commit_btn.visible = portrait or mobile
+		_anchored(_mobile_commit_btn, Vector2(-(96 + 56 + 12), -(SLOT_SIZE.y + 20) - safe_bottom - 76))
+	# Mobile log font bump — the 12-pt default is unreadable on a phone and
+	# collides visually with the roster. Keep desktop at 12.
+	if _log != null:
+		_log.add_theme_font_size_override("normal_font_size", 16 if (portrait or mobile) else 12)
+	# Defensive clamps — only pull a panel back on-screen when its RIGHT edge
+	# is still off the left side of the viewport. The previous version
+	# clamped on `position.x < 0`, which on Android fired every time
+	# _apply_layout ran before the viewport settled: a TOP_RIGHT-anchored
+	# panel with offset_left=-324 and parent.right≈0 had position.x = -324,
+	# so the clamp bumped position.x += 324, forcing the control to global
+	# x=0 (TOP-LEFT) permanently. The vp.x < 32 early-return above now
+	# prevents that case; this clamp only catches the rare "panel wider than
+	# viewport" overflow.
+	if _log_panel != null:
+		var lp_rect := _log_panel.get_global_rect()
+		if lp_rect.position.x + lp_rect.size.x < 32.0:
+			_log_panel.position.x += (32.0 - (lp_rect.position.x + lp_rect.size.x))
+	if _hover_panel != null:
+		var hv_rect := _hover_panel.get_global_rect()
+		if hv_rect.position.x + hv_rect.size.x < 32.0:
+			_hover_panel.position.x += (32.0 - (hv_rect.position.x + hv_rect.size.x))
+	if _roster_panel != null:
+		var rp_rect := _roster_panel.get_global_rect()
+		if rp_rect.position.x + rp_rect.size.x < 32.0:
+			_roster_panel.position.x += (32.0 - (rp_rect.position.x + rp_rect.size.x))
+	if _panel_phase != null:
+		var pp_rect := _panel_phase.get_global_rect()
+		if pp_rect.position.x + pp_rect.size.x < 32.0:
+			_panel_phase.position.x += (32.0 - (pp_rect.position.x + pp_rect.size.x))
+	# Boot-time diagnostic: every major panel's absolute rect so adb logcat
+	# makes mis-positioning obvious.
+	print("[Hud] bar=", _bar.get_global_rect() if _bar else "nil",
+		  " log=", _log_panel.get_global_rect() if _log_panel else "nil",
+		  " status=", _status_strip.get_global_rect() if _status_strip else "nil")
 
 
 func attach_mobile_input(mi: MobileInput) -> void:
@@ -439,11 +867,28 @@ func attach_mobile_input(mi: MobileInput) -> void:
 		return
 
 
+# ------------------------------------------------------------------ anchored position
+
+# Set a Control's position in anchor-relative terms (i.e. offset from the
+# anchor origin, which is Godot 3's `.position` semantics). In Godot 4 the
+# plain `.position` setter writes to the final rendered top-left (not the
+# anchor-relative offset), so a `.position = Vector2(-bar_w*0.5, -SLOT_H)`
+# that was correct in the original codebase lands the control at absolute
+# (-bar_w*0.5, -SLOT_H) → off-screen top-left on Android. Writing offset_left
+# / offset_top restores the anchor-relative behavior the code expects.
+static func _anchored(c: Control, p: Vector2) -> void:
+	c.offset_left = p.x
+	c.offset_top = p.y
+
 # ------------------------------------------------------------------ element emission
 
 ## Show the player's own emitted elements (string like "A P"). Mirrors the
 ## browser's `renderHeroCard` emit line in game/js/main.js. Pass "" to hide.
 func show_emit(text: String) -> void:
+	# Keep the shared text in sync so _make_roster_row can read it when it
+	# rebuilds, and so any in-place row-emit label can refresh immediately.
+	_emit_text = text if text != null else ""
+	_refresh_own_row_emit_label()
 	if _emit_lbl == null:
 		return
 	if text == null or text == "":
@@ -466,6 +911,59 @@ func show_emit(text: String) -> void:
 func _hide_emit_lbl() -> void:
 	if _emit_lbl != null:
 		_emit_lbl.visible = false
+
+# ------------------------------------------------------------------ roster helpers
+
+# Peer-id vs entity-id matching: Entity.id is the data id ("char_oran_rief");
+# the local player's row owns the live peer_id. For now, treat the player-
+# faction entity as "mine" — the roster today surfaces at most one player
+# row (companions get npc_a / npc_b factions).
+func _is_my_entity(e: Entity) -> bool:
+	return e != null and e.faction == "player"
+
+func _emit_text_for_hud() -> String:
+	return "emitting %s" % _emit_text if _emit_text != "" else ""
+
+# Keep the in-place "Emit" label on the local player's roster row in sync
+# with _emit_text without rebuilding the whole roster. Called from
+# show_emit() so the chip updates as fast as the server pushes `hand`.
+func _refresh_own_row_emit_label() -> void:
+	if _roster_box == null:
+		return
+	for row in _roster_box.get_children():
+		if row == null:
+			continue
+		var lbl := (row as Control).find_child("Emit", true, false) as Label
+		if lbl == null:
+			continue
+		var txt := _emit_text_for_hud()
+		lbl.text = txt
+		lbl.visible = txt != ""
+
+# Browser roster stat pill: one chip per stat key. Tapping it fires
+# stat_tapped(entity_id, stat_key, is_own) so Game.gd can route the intent
+# (own stat → emit via destroy, enemy stat → arm destroy_perm_requested).
+# Button-based so the parent row's entity_activated gui_input doesn't eat
+# the click: Godot stops click propagation at the Button.
+func _make_stat_chip(entity_id: String, key: String, stat_key: String, value: String, is_own: bool) -> Button:
+	var btn := Button.new()
+	btn.text = "%s %s" % [key, value]
+	btn.flat = true
+	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_color_override("font_color", Color(0.86, 0.86, 0.96))
+	btn.add_theme_stylebox_override("normal",   _box(Color(0.14, 0.16, 0.22, 0.9)))
+	btn.add_theme_stylebox_override("hover",    _box(Color(0.22, 0.26, 0.34, 0.98)))
+	btn.add_theme_stylebox_override("pressed",  _box(Color(0.32, 0.38, 0.48, 1.0)))
+	btn.set_meta("stat_key", stat_key)
+	btn.set_meta("entity_id", entity_id)
+	btn.set_meta("is_own", is_own)
+	# Capture entity_id + stat_key by value so this lambda stays correct even
+	# after the row rebuilds for the next peers tick.
+	var eid := entity_id
+	var sk := stat_key
+	var own := is_own
+	btn.pressed.connect(func(): stat_tapped.emit(eid, sk, own))
+	return btn
 
 
 static func _label(text: String, size: int, col: Color) -> Label:
@@ -524,6 +1022,143 @@ func set_quote(text: String) -> void:
 	_quote_lbl.text = ("“%s”" % text) if text != "" else ""
 
 
+## Update the always-visible top-centre status strip. Called from Game.gd
+## for solo play fallback. Server-driven updates arrive via set_status_bar()
+## (hello / phase messages). While the server is talking we hide this label
+## so it doesn't overlap the chip row.
+func set_status(round_no: int, dim_name: String, hand_size: int, hex_count: int) -> void:
+	if _status_lbl == null:
+		return
+	# Solo play: no server messages yet, so keep the compact line visible as
+	# a liveness indicator next to the (still-empty) chip row.
+	if _chip_dim != null and _chip_dim_lbl != null and _chip_dim_lbl.text != "dimension: —":
+		_status_lbl.visible = false
+		return
+	_status_lbl.visible = true
+	_status_lbl.text = "R:%d · DIM:%s · HAND:%d · HEX:%d" % [round_no, dim_name, hand_size, hex_count]
+
+## Push server-authoritative header fields into the chip row. Mirrors the
+## browser's phase/hello DOM updates in game/js/main.js. Any key missing
+## in `fields` keeps its current value — Game.gd merges hello + phase here.
+func set_status_bar(fields: Dictionary) -> void:
+	if fields.has("dimension") and _chip_dim_lbl != null:
+		var d := String(fields["dimension"])
+		if d != "": _chip_dim_lbl.text = "dimension: %s" % d
+	if _chip_turn_lbl != null and fields.has("turn"):
+		var t := int(fields.get("turn", 0))
+		var r := int(fields.get("round", 0)) + 1
+		var rt := int(fields.get("rounds_per_turn", 3))
+		_chip_turn_lbl.text = "turn %d · round %d/%d" % [t, r, rt]
+	if fields.has("phase") and _chip_phase_lbl != null:
+		var ph := String(fields["phase"])
+		if ph != "":
+			_chip_phase_lbl.text = ph
+			_chip_phase.add_theme_stylebox_override("panel", _box(_phase_color(ph)))
+	if fields.has("seconds") and _chip_timer_lbl != null:
+		var s := float(fields["seconds"])
+		_chip_timer_lbl.text = "%ds" % int(round(s))
+	if fields.has("heartbeat") and _chip_tier_lbl != null:
+		var hb := bool(fields["heartbeat"])
+		_chip_tier_lbl.text = "tier: %s" % ("strong (contact)" if hb else "reachable")
+	if _chip_door_lbl != null and (fields.has("door") or fields.has("peer_id")):
+		var door := String(fields.get("door", ""))
+		var pid  := String(fields.get("peer_id", ""))
+		var short_pid := pid.substr(0, 10) if pid != "" else ""
+		var parts: Array[String] = []
+		if door != "": parts.append("door: %s" % door)
+		if short_pid != "": parts.append("peer: %s" % short_pid)
+		_chip_door_lbl.text = " · ".join(parts) if not parts.is_empty() else "door: —"
+	# Any server update makes the solo-fallback label redundant.
+	if _status_lbl != null:
+		_status_lbl.visible = false
+
+static func _phase_color(name: String) -> Color:
+	match name:
+		"planning":   return Color(0.28, 0.14, 0.42, 0.9)   # purple
+		"reveal":     return Color(0.14, 0.32, 0.42, 0.9)   # teal
+		"resolution": return Color(0.42, 0.14, 0.14, 0.9)   # red
+		"bonus":      return Color(0.42, 0.26, 0.08, 0.9)   # amber
+	return Color(0.12, 0.14, 0.22, 0.85)                    # neutral
+
+static func _make_chip(initial_text: String, bg: Color, fg: Color) -> PanelContainer:
+	var pc := PanelContainer.new()
+	pc.add_theme_stylebox_override("panel", _box(bg))
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var lbl := Label.new()
+	lbl.text = initial_text
+	lbl.add_theme_font_size_override("font_size", 12)
+	lbl.add_theme_color_override("font_color", fg)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.add_child(lbl)
+	return pc
+
+
+## Channel chip beside the status line. Game.gd calls with e.g. "Blizzard ch."
+## while a channel is active, "" when it ends. Hidden when empty.
+func set_channel_label(text: String) -> void:
+	if _channel_lbl == null:
+		return
+	if text == null or text == "":
+		_channel_lbl.visible = false
+		_channel_lbl.text = ""
+		return
+	_channel_lbl.text = text
+	_channel_lbl.visible = true
+
+
+## Mobile piles indicator: compact "arch:A · deck:D (at-min) · disc:X" line.
+## Called from Game.gd whenever any pile count changes. Hidden on desktop
+## (handled by _apply_layout, so no feature check here).
+## Rendered as uppercase chip-style labels (ARCH / DECK / DISC) to match the
+## browser's bottom-bar pile widgets.
+func set_mobile_piles(archive_n: int, deck_n: int, discard_n: int, at_min: bool) -> void:
+	if _mobile_piles_lbl == null:
+		return
+	var deck_frag := "DECK %d" % deck_n
+	if at_min:
+		deck_frag += " ⚠min"
+	_mobile_piles_lbl.text = "ARCH %d  ·  %s  ·  DISC %d" % [archive_n, deck_frag, discard_n]
+
+## Show/hide the Q class-ability button. Game.gd calls this whenever the
+## player's permanents change (presence of a `class_*` card = ability
+## available). Hidden by default.
+func set_class_ability_available(available: bool) -> void:
+	if _class_ability_btn == null:
+		return
+	_class_ability_btn.visible = available
+
+
+## Mobile permanents indicator: compact "perms: codeA · codeB · ..." line.
+## Empty list hides the row. Codes come from the local player's permanents.
+func set_mobile_perms(codes: Array) -> void:
+	if _mobile_perms_lbl == null:
+		return
+	if codes == null or codes.is_empty():
+		_mobile_perms_lbl.text = ""
+		_mobile_perms_lbl.visible = false
+		return
+	var frags: Array = []
+	for c in codes:
+		frags.append(str(c))
+	_mobile_perms_lbl.text = "perms: " + " · ".join(frags)
+	var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	_mobile_perms_lbl.visible = on_mobile
+
+
+## Mobile planning hint ("Tap a card, then tap a hex to move"). Empty text
+## hides the label. Only drawn on mobile and only while unpicked.
+func set_mobile_hint(text: String) -> void:
+	if _mobile_hint == null:
+		return
+	var on_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not on_mobile or text == "":
+		_mobile_hint.visible = false
+		_mobile_hint.text = ""
+		return
+	_mobile_hint.text = text
+	_mobile_hint.visible = true
+
+
 func set_phase(text: String, frac: float) -> void:
 	_phase_lbl.text = text
 	_timer_bar.value = clampf(frac, 0.0, 1.0)
@@ -551,7 +1186,14 @@ func set_hand(hand: Array, chosen: int, locked: bool, targets: Dictionary) -> vo
 		var t: String = str(targets.get(i, ""))
 		var is_skill := code.begins_with("skill_")
 		var full := RulesText.card_help(dl, code)
+		# Defensive fallback — RulesText returns "" for unknown codes; a raw
+		# code is still more useful than an empty tooltip.
+		if full == null or full == "":
+			full = code
 		var name: String = RulesText.skill_name(dl, code) if is_skill else str(CODE_NAMES.get(code, code))
+		if name == null or name == "":
+			name = code
+		var is_channel := _card_has_channeling_tag(code)
 		# Real sprite icon for skill cards (data/skills.json resources.sprites.icon,
 		# frame 0 of the sheet-sliced sprite). When sibling #1 has not populated the
 		# `icon` field yet we fall back to the effect-strip's frame 0 — and when
@@ -569,8 +1211,19 @@ func set_hand(hand: Array, chosen: int, locked: bool, targets: Dictionary) -> vo
 			# slots; action codes already show as A/B/M/P/EM/EP.
 			_slot_code[i].text = "SKILL" if is_skill else code
 			_slot_code[i].add_theme_font_size_override("font_size", 13 if is_skill else 18)
-		_slot_name[i].text = name + ((" → " + t) if t != "" else "")
-		_slot_desc[i].text = RulesText.card_short(dl, code)
+		# Channel chip appended to the slot name — bundled font lacks the
+		# ⟳ glyph so " [CHAN]" + a cold-blue tint flag it.
+		var disp_name := name + ((" → " + t) if t != "" else "")
+		if is_channel:
+			disp_name += " [CHAN]"
+			_slot_name[i].add_theme_color_override("font_color", Color(0.65, 0.95, 1.0))
+		else:
+			_slot_name[i].add_theme_color_override("font_color", Color(0.95, 0.95, 0.95))
+		_slot_name[i].text = disp_name
+		var short := RulesText.card_short(dl, code)
+		if short == null or short == "":
+			short = code
+		_slot_desc[i].text = short
 		b.tooltip_text = full
 		b.disabled = locked
 		var col: Color = CODE_COLORS.get(code, Color("#b58ad6") if is_skill else Color.WHITE)
@@ -765,6 +1418,13 @@ func set_server_hand(payload: Dictionary) -> void:
 			_destroy_chip.text = ""
 
 
+## Read-only view of the last `hand` message. Game.gd reads this to push the
+## mobile piles indicator from the authoritative server state. Returns {} when
+## nothing has arrived yet (solo play without a connected peer).
+func server_hand() -> Dictionary:
+	return _server_hand
+
+
 ## Return the stat string of a currently-queued destroy intent, or "" when none
 ## is active. Game.gd uses this to toggle the intent off (sending the same stat
 ## again clears it, server-side at peer.mjs L4489).
@@ -844,6 +1504,18 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 	row.add_theme_stylebox_override("panel", _box(
 		Color(0.1, 0.14, 0.08, 0.6) if e.faction == "player" else Color(0.18, 0.08, 0.08, 0.6)
 	))
+	# Tap-to-activate: a tap anywhere on the row fires entity_activated so
+	# Game.gd can swap the HUD portrait + camera focus to this unit. The
+	# nested perm cards' own gui_input (double-click → destroy intent) is
+	# still above us in the input stack so this never swallows those.
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	var _ent_id := e.id
+	row.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			entity_activated.emit(_ent_id)
+		elif ev is InputEventScreenTouch and (ev as InputEventScreenTouch).pressed:
+			entity_activated.emit(_ent_id)
+	)
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 3)
 	row.add_child(vb)
@@ -870,25 +1542,72 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
 	hb.add_child(col)
-	var nm := _label(e.display_name, 13, Color(0.98, 0.9, 0.75) if e.faction == "player" else Color(0.95, 0.75, 0.6))
+	var nm := _label(e.display_name, 14, Color(0.98, 0.9, 0.75) if e.faction == "player" else Color(0.95, 0.75, 0.6))
 	col.add_child(nm)
+	# "as <wbc3_name> (<wbc3_race>)" — browser hero-sub line pulled into
+	# every row. Pulled from the entry.resources block (data/characters.json),
+	# which Entity.resources mirrors verbatim.
+	var wname := String(e.resources.get("wbc3_name", ""))
+	var wrace := String(e.resources.get("wbc3_race", ""))
+	if wname != "" or wrace != "":
+		var sub := "as " + wname + ((" (" + wrace + ")") if wrace != "" else "")
+		col.add_child(_label(sub, 11, Color(0.82, 0.78, 0.72)))
 	var life := _label("hp %d/%d · %s" % [e.life, e.life_max, e.faction], 11, Color(0.65, 0.9, 0.65) if e.alive else Color(0.9, 0.4, 0.4))
 	life.name = "Life"
 	col.add_child(life)
+	# "emitting X · Y" chip — only for the local player's row for now. Driven
+	# by show_emit(); set_server_hand feeds the queued/queued_effect union.
+	# Other peers' emission previews need a peers-level payload that peer.mjs
+	# doesn't broadcast yet.
+	if e.id != "" and _is_my_entity(e):
+		var emit_lbl := _label(_emit_text_for_hud(), 11, Color(0.95, 0.75, 0.4))
+		emit_lbl.name = "Emit"
+		emit_lbl.visible = _emit_text_for_hud() != ""
+		col.add_child(emit_lbl)
 	var stats: Dictionary = e.data.get("stats", {})
 	if typeof(stats) != TYPE_DICTIONARY:
 		stats = {}
-	col.add_child(_label("V %s · W %s · M %s · Wi %s" % [
-		str(stats.get("vitality", "—")), str(stats.get("world", "—")),
-		str(stats.get("matter", "—")), str(stats.get("will", "—")),
-	], 10, Color(0.78, 0.78, 0.9)))
+	# Stat row — bigger font + chip-styled background. Task C turns these
+	# into Buttons; for Task B they stay labels but inside a row container
+	# so the layout is already shaped for the clickable upgrade.
+	var stat_row := HBoxContainer.new()
+	stat_row.add_theme_constant_override("separation", 4)
+	stat_row.name = "StatRow"
+	col.add_child(stat_row)
+	var is_own_row := _is_my_entity(e)
+	stat_row.add_child(_make_stat_chip(e.id, "V",  "vitality", str(stats.get("vitality", "—")), is_own_row))
+	stat_row.add_child(_make_stat_chip(e.id, "W",  "world",    str(stats.get("world", "—")),    is_own_row))
+	stat_row.add_child(_make_stat_chip(e.id, "M",  "matter",   str(stats.get("matter", "—")),   is_own_row))
+	stat_row.add_child(_make_stat_chip(e.id, "Wi", "will",     str(stats.get("will", "—")),     is_own_row))
+	# Class pill — browser's `⚜ illusionist` chip. The class card lives
+	# inside e.data.permanents as `class_<name>` (user ruling 2026-10-30);
+	# pull the first match and show its tail as the pill text.
+	var perms_pre: Variant = e.data.get("permanents", [])
+	if typeof(perms_pre) == TYPE_ARRAY:
+		for pm in perms_pre:
+			var ps := str(pm)
+			if ps.begins_with("class_"):
+				var class_lbl := _label("⚜ " + ps.substr(6).replace("_", " "), 10, Color(0.95, 0.85, 0.5))
+				class_lbl.name = "ClassPill"
+				col.add_child(class_lbl)
+				break
 	# Permanent mini cards — one row per permanent, icon + name + full desc.
 	# Thread the owning peer_id in so each card can look up its live power die
 	# (Rule 24) and wire the destroy intent for enemies.
 	var perms = e.data.get("permanents", [])
 	if typeof(perms) == TYPE_ARRAY and not perms.is_empty():
-		var perm_box := VBoxContainer.new()
-		perm_box.add_theme_constant_override("separation", 3)
+		# >3 perms wrap into 2 columns so the row never overflows into the
+		# log panel above. Up to 3 → single column (keeps the familiar look).
+		var perm_box: Container
+		if perms.size() <= 3:
+			perm_box = VBoxContainer.new()
+			perm_box.add_theme_constant_override("separation", 3)
+		else:
+			var g := GridContainer.new()
+			g.columns = 2
+			g.add_theme_constant_override("h_separation", 4)
+			g.add_theme_constant_override("v_separation", 3)
+			perm_box = g
 		vb.add_child(perm_box)
 		var owner := _peer_id_for_entity(e)
 		var enemy := e.faction != "player"
@@ -901,11 +1620,17 @@ func _make_roster_row(e: Entity) -> PanelContainer:
 ## one-line abbreviated form (held skills) and the full data/skills.json text
 ## (permanents). `owner_peer_id` + `is_enemy` thread through to each perm card
 ## so enemy-side perms show a power badge and accept a double-click destroy.
-func _fill_skill_list(box: VBoxContainer, ids: Variant, full_desc: bool, owner_peer_id: String = "", is_enemy: bool = false) -> void:
+func _fill_skill_list(box: Container, ids: Variant, full_desc: bool, owner_peer_id: String = "", is_enemy: bool = false) -> void:
 	for c in box.get_children():
 		c.queue_free()
 	if typeof(ids) != TYPE_ARRAY:
 		return
+	# Keep a single column for ≤3 entries; wrap into 2 columns beyond that so
+	# the perm list never grows taller than the log/roster above (parity for
+	# the browser's grid-template-columns rule on crowded cards).
+	if box is GridContainer:
+		var g := box as GridContainer
+		g.columns = 1 if (ids as Array).size() <= 3 else 2
 	for sid in ids:
 		var s := str(sid)
 		if s == "":
@@ -973,7 +1698,14 @@ func _make_perm_card(card_id: String, full_desc: bool, owner_peer_id: String = "
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 1)
 	hb.add_child(col)
-	var nm := _label(RulesText.card_entry_name(dl, card_id), 11, Color(0.95, 0.85, 0.75))
+	var entry_name := RulesText.card_entry_name(dl, card_id)
+	if entry_name == null or entry_name == "":
+		entry_name = card_id
+	# Flag channeled permanents so the player can see which card is "live"
+	# (parity with the browser's ⟳ chip in skill_card.js).
+	if _card_has_channeling_tag(card_id):
+		entry_name = "ch: " + entry_name
+	var nm := _label(entry_name, 11, Color(0.95, 0.85, 0.75))
 	col.add_child(nm)
 	var text := RulesText.card_entry_text(dl, card_id)
 	var desc := text if full_desc else RulesText.abbreviate(text, 80)
@@ -1000,6 +1732,26 @@ func _on_perm_card_gui_input(event: InputEvent, card: Control) -> void:
 	if card_id == "" or owner == "":
 		return
 	destroy_perm_requested.emit(owner, card_id, "")
+
+
+## True when the catalog entry for `code` carries the "channeling" tag. Looks
+## in effects/* first (effect_blizzard etc.), then skills/* (skill_* ids).
+## Unknown codes / missing dl just return false.
+func _card_has_channeling_tag(code: String) -> bool:
+	if dl == null or code == "":
+		return false
+	var kind := ""
+	if code.begins_with("effect_"):
+		kind = "effects"
+	elif code.begins_with("skill_"):
+		kind = "skills"
+	else:
+		return false
+	var entry := dl.get_entry(kind, code)
+	var tags: Variant = entry.get("tags", [])
+	if typeof(tags) != TYPE_ARRAY:
+		return false
+	return (tags as Array).has("channeling")
 
 
 func _power_badge_for(peer_id: String, card_id: String) -> String:

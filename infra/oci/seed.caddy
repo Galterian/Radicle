@@ -1,0 +1,45 @@
+92-5-138-121.sslip.io {
+  @downloads path /downloads/*
+  handle @downloads {
+    root * /var/www
+    header /downloads/*.apk Content-Type "application/vnd.android.package-archive"
+    header /downloads/*.apk Content-Disposition "attachment; filename=chaosd6-release.apk"
+    header /downloads/* >Access-Control-Allow-Origin "*"
+    file_server browse
+  }
+  @pack path /pack/*
+  handle @pack {
+    uri strip_prefix /pack
+    root * /var/www/pack
+    file_server
+    header >Access-Control-Allow-Origin "*"
+    header >Cache-Control "public, max-age=86400, immutable"
+  }
+  # Rules editor (editor.html as rules.html) + a read-only copy of data/*.json beside it.
+  redir /rules /rules/
+  redir /rules.html /rules/
+  @rules path /rules/*
+  handle @rules {
+    uri strip_prefix /rules
+    root * /var/www/rules
+    file_server {
+      index rules.html
+    }
+    header >Access-Control-Allow-Origin "*"
+    header >Cache-Control "no-cache"
+  }
+  # chaosD6-Profiles write endpoint (profiles-push.mjs; radicle-httpd is read-only).
+  @profiles path /profiles-push /profiles-push/*
+  handle @profiles {
+    request_body {
+      max_size 4MB
+    }
+    reverse_proxy 127.0.0.1:8090
+  }
+  handle {
+    reverse_proxy 127.0.0.1:8080
+    header >Access-Control-Allow-Origin "*"
+    header >Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    header >Access-Control-Allow-Headers "content-type"
+  }
+}

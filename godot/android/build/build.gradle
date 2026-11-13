@@ -59,6 +59,32 @@ dependencies {
     if (pluginsBinaries != null && pluginsBinaries.size() > 0) {
         implementation files(pluginsBinaries)
     }
+
+    // chaosD6: force-include the nodejs_mobile plugin AAR.
+    // Godot 4.3's headless CLI export does NOT auto-discover `.gdap` files
+    // from godot/android/plugins/* — it invokes gradle with
+    // `-Pplugins_local_binaries=` (empty). Until that upstream path is fixed,
+    // we inject the AAR here as a plain file dependency so gradle merges its
+    // manifest, Kotlin classes, JNI bridge (libnodejs_mobile_bridge.so), and
+    // libnode.so into the final APK. If this file disappears (plugin AAR not
+    // built yet), gradle fails fast with a clear "file not found" instead of
+    // silently producing a plugin-less APK.
+    File chaosd6NodejsAar = file("$rootDir/../plugins/nodejs_mobile/nodejs_mobile.aar")
+    if (chaosd6NodejsAar.exists()) {
+        implementation files(chaosd6NodejsAar.absolutePath)
+    } else {
+        logger.warn("[chaosD6] nodejs_mobile.aar not found at " + chaosd6NodejsAar.absolutePath + " — building without the embedded peer. Run _tools/build_nodejs_mobile_plugin.sh to produce it.")
+    }
+
+    // chaosD6: same force-inject for the WebViewHud plugin AAR (Android WebView
+    // overlay that renders the same browser UI as the desktop — see
+    // godot/android/plugins/webview_hud/README).
+    File chaosd6WebviewAar = file("$rootDir/../plugins/webview_hud/webview_hud.aar")
+    if (chaosd6WebviewAar.exists()) {
+        implementation files(chaosd6WebviewAar.absolutePath)
+    } else {
+        logger.warn("[chaosD6] webview_hud.aar not found at " + chaosd6WebviewAar.absolutePath + " — building without the mobile WebView HUD. Run the plugin's `./gradlew assembleRelease` and copy the AAR beside the .gdap.")
+    }
 }
 
 android {
@@ -198,6 +224,14 @@ android {
             res.srcDirs = ['res']
             aidl.srcDirs = ['aidl']
             assets.srcDirs = ['assets']
+            // chaosD6: Godot 4 Android plugin v2 discovery uses ServiceLoader
+            // looking for META-INF/services/org.godotengine.godot.plugin.GodotPlugin.
+            // AAR dependencies don't propagate their Java resources through the
+            // merged APK reliably (AGP's packaging path for library resources
+            // depends on gradle options we don't control from here), so we
+            // ALSO declare the service entries at the app level. This file
+            // lists all plugin classes injected via the AARs in this build.
+            resources.srcDirs = ['resources']
         }
         debug.jniLibs.srcDirs = ['libs/debug', 'libs/debug/vulkan_validation_layers']
         dev.jniLibs.srcDirs = ['libs/dev']

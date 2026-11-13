@@ -103,6 +103,7 @@ main {
 .ros.dead { opacity: 0.4; text-decoration: line-through; }
 .ros.ally .nm::before { content: '◆ '; color: #6ad99f; }
 .ros.enemy .nm::before { content: '◆ '; color: #e36666; }
+.ros.team-c .nm::before { content: '◆ '; color: #b07cff; }   /* third team */
 
 #log-filter-chip { display: inline-flex; align-items: center; gap: 6px; background: #1b1a2e; border: 1px solid #a08eff44; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 10px; color: #d7cfff; margin: 0 0 6px; width: fit-content; }
 /* The #id rule above outranks the UA's [hidden] { display:none }, so re-assert. */
@@ -293,6 +294,31 @@ main {
   color: #8aa0bf;
 }
 
+/* Combo marker: stacks ABOVE the deck/discard piles (inside #deck-stack) so
+   it fills the previously-empty space over them rather than claiming a new
+   column of its own. Shows the active combo's name and three slot pips. */
+#deck-stack { display: flex; flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 2px; }
+#deck-stack #deck-pile { margin-left: 0; margin-bottom: 0; }
+#combo-marker { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 3px 6px; border: 1px solid #2f3f55; border-radius: 6px; background: linear-gradient(180deg, #1b2431 0%, #0f1520 100%); color: #c8d4e3; }
+#combo-marker.armed { outline: 1px solid #ffe66e; }
+/* Clickable toggle (main.js toggleCombo): lit when the combo can start, gold
+   while armed (the slot due now glows), tilts when an action is refused. */
+#combo-marker { cursor: pointer; transform-origin: 50% 100%; }
+#combo-marker.possible { border-color: #6ad99f; box-shadow: 0 0 0 1px #6ad99f88, 0 0 12px #6ad99f66; animation: cm-pulse 1.6s ease-in-out infinite; }
+#combo-marker.possible .cm-slot { color: #c8f0da; border-color: #4f8f70; }
+#combo-marker.armed { border-color: #ffe66e; box-shadow: 0 0 0 1px #ffe66e99, 0 0 14px #ffe66e55; }
+#combo-marker.armed .cm-slot.pending { border-color: #ffe66e; background: #3a3418; color: #ffe66e; box-shadow: 0 0 6px #ffe66e88; }
+#combo-marker.tilt { animation: cm-tilt .45s ease-in-out; }
+@keyframes cm-pulse { 0%, 100% { box-shadow: 0 0 0 1px #6ad99f88, 0 0 6px #6ad99f44; } 50% { box-shadow: 0 0 0 1px #6ad99fcc, 0 0 16px #6ad99f99; } }
+@keyframes cm-tilt { 0% { transform: rotate(0); } 20% { transform: rotate(-9deg); } 40% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 80% { transform: rotate(3deg); } 100% { transform: rotate(0); } }
+#combo-marker .cm-name { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #8aa0bf; display: flex; gap: 4px; align-items: baseline; }
+#combo-marker .cm-name #cm-key { font: 700 10px/1 ui-monospace, Menlo, Consolas, monospace; color: #ffe66e; padding: 1px 3px; border: 1px solid #4a5c7a; border-radius: 3px; }
+#combo-marker .cm-name #cm-label { color: #c8d4e3; }
+#combo-marker .cm-slots { display: flex; gap: 4px; justify-content: center; }
+#combo-marker .cm-slot { width: 18px; height: 22px; border: 1px solid #2f3f55; border-radius: 3px; display: flex; align-items: center; justify-content: center; font: 600 11px/1 ui-monospace, Menlo, Consolas, monospace; color: #4a5368; }
+#combo-marker .cm-slot.pending { color: #c8d4e3; }
+#combo-marker .cm-slot.done { background: #35553a; border-color: #58b25c; color: #c7f1cb; }
+
 /* The archive: my side deck, far left of the hand. */
 #archive-pile { display: flex; margin-right: 10px; margin-bottom: 2px; }
 #archive-pile .pile {
@@ -308,6 +334,8 @@ main {
 #archive-pile .pile:hover { outline: 1px solid #ffe66e; }
 #archive-pile .pile.armed { background: #ffe66e; color: #0b0d12; }
 #archive-pile .pile.armed .pile-label { color: #3a3a1a; }
+#archive-pile .pile.at-min { outline: 1px solid #e05d5d; }
+#archive-pile .pile.at-min .pile-label::after { content: " · min"; color: #e05d5d; }
 #archive-pile .pile-count { font: 600 20px/1 ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 #archive-pile .pile.empty .pile-count { color: #4a5368; }
 #archive-pile .pile-label { margin-top: 4px; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #8aa0bf; }
@@ -334,7 +362,7 @@ main {
 #hint b { color: #c8d4e3; font-weight: 600; }
 
 /* --- launcher --- */
-#launcher { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
+#launcher { min-height: 100%; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; }
 /* The id rule above outranks the UA's [hidden] { display:none }, so re-assert it. */
 #launcher[hidden] { display: none; }
 .launcher-card { background: #0f131b; border: 1px solid #1a1f29; border-radius: 8px; padding: 20px 24px; width: 100%; max-width: 640px; }
@@ -353,6 +381,53 @@ main {
 .launcher-card #go { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
 .launcher-card #go[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
 .launcher-card #launch-msg { font-size: 12px; color: #8aa0bf; }
+
+/* ---- Dimensions explorer -------------------------------------------------- */
+.dim-explorer { border: 1px solid #1a2130; border-radius: 6px; padding: 10px 12px; margin: 14px 0 0; background: #0c1017; }
+.dim-explorer .dx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.dim-explorer .dx-title { color: #8aa0bf; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.dim-explorer .dx-legend { display: inline-flex; align-items: center; gap: 10px; font-size: 11px; color: #6a7a92; }
+.dim-explorer .dx-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; margin-right: 3px; }
+.dim-explorer .dx-side-player { background: #6ad99f; }
+.dim-explorer .dx-side-npc_a  { background: #4ea3ff; }
+.dim-explorer .dx-side-npc_b  { background: #e26b6b; }
+.dim-explorer .dx-stale       { background: #4a5566; }
+.dim-explorer .dx-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); max-height: 50vh; overflow-y: auto; padding-right: 4px; }
+.dim-explorer .dx-empty { margin-top: 4px; }
+
+.dx-tile { background: #141a24; border: 1px solid #1f2838; border-radius: 6px; padding: 8px 10px; cursor: pointer; transition: border-color .1s, background .1s; }
+.dx-tile:hover { border-color: #2a6ddf; background: #171e2b; }
+.dx-tile.is-selected { border-color: #6ad99f; }
+.dx-tile.is-legacy { opacity: .55; cursor: not-allowed; }
+.dx-tile .dx-name { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 13px; font-weight: 600; color: #e8ecf1; }
+.dx-tile .dx-badge { font-size: 10px; padding: 1px 5px; border-radius: 10px; background: #1b2a44; color: #8bb7ff; font-weight: 500; }
+.dx-tile .dx-badge.is-live { background: #1e3a26; color: #8ddc9f; }
+.dx-tile .dx-meta { font-size: 11px; color: #8aa0bf; margin: 2px 0 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+.dx-tile .dx-meta b { color: #d2dae7; font-weight: 500; }
+.dx-tile .dx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Door chip — one per peer. Kept legible when the tile shrinks (zoom-out):
+   fixed max-content with monospace peer_id, elements shrink but never below
+   the readable floor. */
+.door-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #0f131b; border: 1px solid #223049; border-radius: 10px;
+  padding: 1px 6px 1px 4px; font-size: clamp(10px, 0.78vw, 12px); line-height: 1.4;
+  color: #d2dae7; max-width: 100%;
+}
+.door-chip.is-stale { opacity: .55; border-style: dashed; }
+.door-chip:hover { border-color: #2a6ddf; }
+.door-chip .dc-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+.door-chip.side-player .dc-dot { background: #6ad99f; }
+.door-chip.side-npc_a  .dc-dot { background: #4ea3ff; }
+.door-chip.side-npc_b  .dc-dot { background: #e26b6b; }
+.dim-explorer .dx-side-team-c { background: #b07cff; }
+.door-chip.side-team-c .dc-dot { background: #b07cff; }
+.door-chip .dc-id { font-family: ui-monospace, Menlo, Consolas, monospace; max-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.door-chip .dc-coord { color: #8aa0bf; font-variant-numeric: tabular-nums; }
+.door-chip .dc-hp { color: #e8c272; font-variant-numeric: tabular-nums; }
+.door-chip.is-dead .dc-hp { color: #e26b6b; text-decoration: line-through; }
+.dx-chips .dc-more { font-size: 11px; color: #8aa0bf; align-self: center; padding-left: 2px; }
 
 /* ---- WBC3 art: roster thumbnails, hero card, hover card ------------------ */
 .ros { justify-content: flex-start; align-items: center; }
@@ -607,6 +682,10 @@ main {
 /* Vanishing chip above a unit the moment it emits an element (Posture /
    Reaver Attack / Monk Move / Rule-24 destroy). Fades on its own clock
    driven by renderElementEmitOverlay(). */
+/* A unit whose peer went silent (main.js isGone): faded, never removed. */
+.ros.gone { opacity: 0.45; }
+.ros .pill.gone { color: #c8b98a; border-color: #6a5f3a; }
+
 #element-emit-layer {
   position: fixed; inset: 0; z-index: 29; pointer-events: none;
 }
@@ -756,6 +835,125 @@ main {
 }
 #object-card .oc-close:hover { background: #1a2230; color: #e8ecf1; }
 
+/* ======================================================================
+   Phone layout — html.mobile, set by main.js only when the Android WebView
+   loads the page with &mobile=1. Nothing below touches the desktop page.
+   The map fills the screen; the status chips (top), the hand (bottom) and
+   the unit panel (right) float over it. Sized for a ~900×400 CSS viewport.
+   ====================================================================== */
+html.mobile { --m-panel-w: 176px; }
+html.mobile, html.mobile body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+html.mobile main { display: block; padding: 0; }
+html.mobile #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; border-radius: 0; touch-action: none; }
+
+/* Status chips: text only, readable over the terrain via a shadow. */
+html.mobile #hud { position: fixed; top: 0; left: 0; right: var(--m-panel-w); padding: 3px 6px; background: transparent; border: 0; pointer-events: none; z-index: 20; }
+html.mobile #hud .row { gap: 2px 8px; }
+html.mobile #hud .pill { background: transparent; padding: 1px 2px; font-size: 10px; min-width: 0; text-shadow: 0 1px 2px #000, 0 0 6px #000c; }
+html.mobile #hud .pill.dim { color: #b8f0d0; }
+html.mobile #hud .pill.phase { color: #d7cfff; font-weight: 600; }
+html.mobile #hud .pill.timer { color: #ffb0b0; font-weight: 600; }
+
+/* Unit panel: a glass column on the right — compact rows, HP bars, ☠ for the dead. */
+html.mobile #panel { position: fixed; top: 4px; right: 4px; bottom: 4px; width: calc(var(--m-panel-w) - 8px); padding: 5px; gap: 4px; background: rgba(10, 13, 20, 0.58); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid #ffffff14; border-radius: 10px; z-index: 20; }
+html.mobile #hero-card, html.mobile .ros-head, html.mobile #panel h4, html.mobile #log-filter-chip, html.mobile #log { display: none; }
+html.mobile #roster { flex: 1 1 auto; max-height: none; gap: 4px; }
+html.mobile .ros { padding: 4px 5px; gap: 3px 5px; flex-wrap: nowrap; align-items: center; background: rgba(255, 255, 255, 0.04); border: 1px solid transparent; border-radius: 7px; font-size: 11px; }
+html.mobile .ros.ally { border-left: 2px solid #6ad99f88; }
+html.mobile .ros.enemy { border-left: 2px solid #e3666688; }
+html.mobile .ros.team-c { border-left: 2px solid #b07cff88; }
+html.mobile .ros::after, html.mobile .ros .ros-filter, html.mobile .ros .st, html.mobile .ros .nm::before { display: none; }
+html.mobile .ros .thumb { width: 26px; height: 26px; border-radius: 50%; border-color: #ffffff22; }
+html.mobile .ros .txt { flex-wrap: wrap; gap: 2px 4px; align-items: center; }
+html.mobile .ros .nm { padding-right: 0; gap: 4px; font-weight: 600; min-width: 0; flex: 1 1 auto; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
+html.mobile .ros .nm .team { margin-left: 4px; font-size: 8px; padding: 1px 4px; vertical-align: 1px; }
+html.mobile .ros:not(.expanded) .stats, html.mobile .ros:not(.expanded) .perm-cards { display: none; }
+html.mobile .ros.expanded .stats { order: 3; gap: 3px; }
+html.mobile .ros.expanded .perm-cards { order: 4; flex: 1 0 100%; }
+html.mobile .ros .hpbar { order: 2; flex: 1 0 100%; position: relative; height: 11px; border-radius: 6px; background: #2a1a1a; overflow: hidden; }
+html.mobile .ros .hpbar i { display: block; height: 100%; background: linear-gradient(180deg, #ff8a8a, #d94b4b); transition: width .35s ease; }
+html.mobile .ros.ally .hpbar i { background: linear-gradient(180deg, #7ee2a8, #3fae6e); }
+html.mobile .ros .hpbar.low i { background: linear-gradient(180deg, #ffc46b, #e0892f); }
+html.mobile .ros .hpbar b { position: absolute; inset: 0; font: 600 9px/11px ui-monospace, Menlo, Consolas, monospace; text-align: center; color: #fff; text-shadow: 0 1px 1px #000; }
+html.mobile .ros.dead { opacity: 0.6; text-decoration: none; filter: grayscale(0.7); }
+html.mobile .ros.dead .nm { text-decoration: line-through; color: #9aa0a8; }
+html.mobile .ros .hpbar.dead b { color: #ffb0b0; }
+/* ☰ opens the event log in the lower half of the panel. */
+html.mobile.m-log-open #log { display: block; flex: 1 1 45%; font-size: 9px; border-top: 1px solid #ffffff14; padding-top: 3px; }
+html.mobile.m-log-open #roster { flex: 1 1 55%; }
+
+/* The hand: no bar background — the map shows through; smaller cards, no key hints. */
+html.mobile #deck-bar { position: fixed; left: 0; right: var(--m-panel-w); bottom: 0; padding: 0 4px 3px; background: transparent; border: 0; z-index: 20; pointer-events: none; }
+html.mobile #deck-row { gap: 6px; max-width: none; pointer-events: none; }
+html.mobile #deck-row > * { pointer-events: auto; }
+/* The archive popup lives inside #deck-bar: take taps again (✕, cards → discard,
+   "all → discard", tap outside to close) and sit above the toolbar and roster. */
+html.mobile #archive-popup { pointer-events: auto; }
+html.mobile #deck-bar:has(#archive-popup:not([hidden])) { z-index: 70; }
+html.mobile #archive-popup .ap-card { width: min(560px, 86vw); max-height: 88vh; }
+html.mobile #archive-popup header button { min-width: 32px; min-height: 28px; font-size: 14px; }
+html.mobile #archive-popup #ap-list .ac { width: 80px; min-height: 56px; font-size: 10px; }
+/* Emission badge: icon + element name only on the small screen. */
+html.mobile .element-emit-overlay { padding: 2px 7px 2px 3px; gap: 4px; max-width: 120px; }
+html.mobile .element-emit-overlay .ee-icon, html.mobile .element-emit-overlay .ee-glyph { width: 18px; height: 18px; font-size: 11px; }
+html.mobile .element-emit-overlay .ee-sub { display: none; }
+html.mobile #hint, html.mobile #hover-card, html.mobile .slot .k, html.mobile #perms .perm .k, html.mobile #combo-marker #cm-key { display: none !important; }
+html.mobile #slots { gap: 4px; }
+html.mobile .slot { width: 68px; height: 82px; border-radius: 6px; background: rgba(16, 21, 30, 0.82); box-shadow: 0 2px 8px -2px #000c; }
+html.mobile .slot .card { padding: 16px 4px 3px; font-size: 9px; }
+html.mobile .slot .card::before { font-size: 11px; top: 2px; left: 4px; }
+html.mobile .slot.skill .card::before { font-size: 10px; }
+html.mobile .slot .card .nm { font-size: 9.5px; }
+html.mobile .slot .card .ds { font-size: 7.5px; -webkit-line-clamp: 4; margin-top: 2px; }
+html.mobile .slot .card .cd { display: none; }
+/* Element cost as icons on effect cards (main.js mCost), cast progress on the right. */
+.m-cost { display: none; }
+html.mobile .slot .card .m-cost { display: flex; align-items: center; gap: 2px; margin-top: 2px; }
+html.mobile .m-cost .mc { --mc-tint: #9bb3d6; display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; overflow: hidden; background: #0b0d12; border: 1px solid var(--mc-tint); color: var(--mc-tint); font-size: 9px; line-height: 1; position: relative; }
+html.mobile .m-cost .mc img { width: 100%; height: 100%; object-fit: cover; object-position: 0 50%; image-rendering: pixelated; }
+html.mobile .m-cost .mc.done { opacity: 0.45; }
+html.mobile .m-cost .mc.done::after { content: '✓'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 9px; font-weight: 700; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+html.mobile .m-cost .mc.next { box-shadow: 0 0 0 1.5px #ffe66e; }
+html.mobile .m-cost b { margin-left: auto; font-size: 8.5px; color: #ffe66e; }
+html.mobile .slot .card .m-cost ~ .ds { -webkit-line-clamp: 3; }
+html.mobile .slot .card .fx-flags { margin-top: 2px; }
+html.mobile .slot .card .fx-flag { font-size: 7px; padding: 0 2px; }
+html.mobile #slots .slot.empty { margin-left: 8px; background: rgba(13, 17, 26, 0.7); }
+html.mobile #slots .slot.empty::before { left: -5px; }
+html.mobile .slot:hover { transform: none; }
+html.mobile .slot.queued, html.mobile .slot.queued:hover { transform: translateY(-5px); }
+html.mobile .slot.queued-skill, html.mobile .slot.queued-extra { transform: translateY(-3px); }
+/* Archive / deck / discard / combo / permanents: dark glass, a bit lighter than the cards. */
+html.mobile #archive-pile { margin-right: 2px; }
+html.mobile #archive-pile .pile, html.mobile #deck-pile .pile { width: 40px; height: 56px; background: rgba(16, 21, 30, 0.72); border-color: #ffffff38; box-shadow: 0 2px 6px -2px #000a; text-shadow: 0 1px 2px #000; }
+html.mobile #archive-pile .pile.armed { background: #ffe66e; }
+html.mobile #archive-pile .pile-count, html.mobile #deck-pile .pile-count { font-size: 15px; }
+html.mobile #archive-pile .pile-label, html.mobile #deck-pile .pile-label { font-size: 7px; margin-top: 2px; }
+html.mobile #deck-pile { gap: 4px; }
+html.mobile #deck-stack { gap: 3px; }
+html.mobile #combo-marker { background: rgba(16, 21, 30, 0.72); border-color: #ffffff38; padding: 2px 4px; text-shadow: 0 1px 2px #000; }
+html.mobile #combo-marker .cm-name { font-size: 8px; }
+html.mobile #combo-marker.possible { border-color: #6ad99f; }
+html.mobile #combo-marker.armed { border-color: #ffe66e; background: rgba(40, 34, 14, 0.82); }
+html.mobile #combo-marker .cm-slot { width: 13px; height: 15px; font-size: 9px; }
+html.mobile #perms { margin-left: 4px; gap: 4px; }
+html.mobile #perms .perm { width: 50px; min-height: 48px; padding: 4px 3px 3px; font-size: 8px; background: rgba(16, 21, 30, 0.72); border-color: #6ad99f66; text-shadow: 0 1px 2px #000; }
+html.mobile #perms .perm.class-card { background: rgba(38, 32, 18, 0.78); border-color: #8f7a2a; }
+
+/* Toolbar (commit / recentre / mute / log) and the HP / death notices. */
+html.mobile #m-tools { position: fixed; left: 6px; top: 24px; display: flex; flex-direction: column; gap: 6px; z-index: 25; }
+html.mobile #m-tools button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid #ffffff2a; background: rgba(10, 13, 20, 0.55); color: #e8ecf1; font-size: 15px; line-height: 1; padding: 0; }
+html.mobile #m-tools button[data-t="commit"] { background: rgba(160, 142, 255, 0.35); border-color: #a08eff; }
+html.mobile #m-tools button:active { transform: scale(0.94); }
+#m-toasts { display: none; }
+html.mobile #m-toasts { display: flex; flex-direction: column; align-items: center; gap: 3px; position: fixed; top: 22px; left: calc((100vw - var(--m-panel-w)) / 2); transform: translateX(-50%); z-index: 30; pointer-events: none; }
+html.mobile .m-toast { padding: 2px 10px; border-radius: 999px; background: rgba(10, 13, 20, 0.72); color: #e8ecf1; font-size: 11px; font-weight: 600; white-space: nowrap; text-shadow: 0 1px 1px #000; transition: opacity .5s ease, transform .5s ease; }
+html.mobile .m-toast.hurt { color: #ffc9a0; }
+html.mobile .m-toast.heal { color: #a8f0c6; }
+html.mobile .m-toast.death { color: #ffb0b0; border: 1px solid #e3666688; font-size: 13px; }
+html.mobile .m-toast.out { opacity: 0; transform: translateY(-6px); }
+html.mobile #object-card { max-width: 56vw; }
+
 /* Rule 24: my stat pills are buttons — emit that stat against an enemy token. */
 .ros .pill.clickable { cursor: pointer; }
 .ros .pill.clickable:hover { outline: 1px solid #ffe66e; }
@@ -878,3 +1076,256 @@ main {
   border: 0; border-radius: 4px; background: transparent; color: #8aa0bf; cursor: pointer; font-size: 12px; line-height: 20px; padding: 0;
 }
 #object-card .oc-close:hover { background: #1a2230; color: #e8ecf1; }
+
+/* UI batch 2026-11-11: the effect being cast glows (and again when the next
+   action re-picks it); the action that would break it, armed by a first click,
+   shakes red; a picked ability (skill card / permanent) pops up, grows, glows. */
+@keyframes cast-glow {
+  0%, 100% { box-shadow: 0 0 0 1px #ffd76e66 inset, 0 0 10px 1px #ffd76e55, 0 8px 14px -8px #000c; }
+  50%      { box-shadow: 0 0 0 1px #ffd76eaa inset, 0 0 22px 5px #ffd76e99, 0 8px 14px -8px #000c; }
+}
+.slot.effect.casting { border-color: #ffd76e; animation: cast-glow 1.4s ease-in-out infinite; transform: translateY(-6px); z-index: 2; }
+.slot.effect.casting .card .nm { color: #ffe9a8; }
+@keyframes break-armed { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.slot.break-armed { opacity: 1; filter: none; border-color: #ff5a5a; box-shadow: 0 0 14px 2px #ff5a5a88; animation: break-armed .25s ease-in-out 2; }
+.slot.skill.queued-skill {
+  transform: translateY(-8px) scale(1.08); z-index: 3;
+  border-color: #c9b8ff;
+  box-shadow: 0 0 0 1px #c9b8ff88 inset, 0 0 20px 4px #a08eff88, 0 10px 18px -8px #000c;
+}
+.slot.skill.queued-skill:hover { transform: translateY(-9px) scale(1.08); }
+#perms .perm { transition: transform .12s ease, box-shadow .12s ease; }
+#perms .perm.active { transform: translateY(-6px) scale(1.12); z-index: 3; box-shadow: 0 0 18px 4px #ffe66e99, 0 8px 14px -8px #000c; }
+html.mobile .slot.effect.casting { transform: translateY(-5px); }
+html.mobile .slot.skill.queued-skill { transform: translateY(-6px) scale(1.08); }
+html.mobile #perms .perm.active { transform: translateY(-5px) scale(1.1); }
+/* Cast status pills over the emission chip (✖ failed, 1/2 ⌛, ✓ cast, ✦ combo). */
+.element-emit-overlay .ee-pills {
+  position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%);
+  display: flex; gap: 3px; white-space: nowrap;
+}
+.element-emit-overlay.pills-only { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.element-emit-overlay.pills-only .ee-pills { position: static; transform: none; }
+.element-emit-overlay .ee-pill {
+  font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; padding: 3px 7px; border-radius: 10px;
+  background: #0b0d12ee; color: #e8ecf1; border: 1px solid #8aa0bf; text-shadow: 0 1px 2px #000;
+}
+.element-emit-overlay .ee-pill.fail  { color: #ff9c9c; border-color: #ff5a5a; box-shadow: 0 0 8px #ff5a5a88; }
+.element-emit-overlay .ee-pill.step  { color: #ffe9a8; border-color: #ffd76e; }
+.element-emit-overlay .ee-pill.done  { color: #9cf0b8; border-color: #5fe08a; }
+.element-emit-overlay .ee-pill.combo { color: #0b0d12; background: #ffe66e; border-color: #fff3b0; box-shadow: 0 0 12px #ffe66eaa; }
+.element-emit-overlay.failed { --ee-tint: #ff5a5a; filter: saturate(.6); }
+html.mobile .element-emit-overlay .ee-pill { font-size: 9px; padding: 2px 5px; }
+
+/* UI batch 2026-11-12: spent Haste, combo progress pill, the cast column of the
+   event log, and the full-text panel for cards / permanents / abilities. */
+#perms .perm.spent { filter: grayscale(1); opacity: .45; cursor: not-allowed; }
+#perms .perm.spent .cd { color: #8a8f99; }
+.element-emit-overlay .ee-pill.combo-step { color: #ffe66e; border-color: #c9a93a; }
+#log .hs-cast { margin-left: 6px; white-space: nowrap; color: #9cf0b8; }
+#log .hs-cast.fail { color: #ff9c9c; }
+#log .hs-cast .hs-elem { width: 14px; height: 14px; vertical-align: -3px; border-radius: 50%; object-fit: cover; object-position: 0 50%; image-rendering: pixelated; }
+#log .hs-cast .hs-elem-g { font-weight: 400; }
+#log .hs-cast .hs-mark { margin-left: 2px; }
+#log .hs-cast .hs-dice { color: #ffe9a8; font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+#card-info {
+  position: fixed; z-index: 60; pointer-events: auto;
+  padding: 8px 10px; border-radius: 8px;
+  background: #0b0d12f2; border: 1px solid #a08eff88; box-shadow: 0 8px 24px #000c;
+  color: #dbe4f0; font: 400 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+}
+#card-info[hidden] { display: none; }
+#card-info .ci-nm { font-weight: 700; color: #ffe9a8; margin-bottom: 4px; }
+#card-info .ci-tx { white-space: normal; }
+html.mobile #card-info { font-size: 11px; padding: 6px 8px; }
+
+/* 2026-11-12 batch 2: class card states — passive (Elementalist, Rogue), used this turn, Necromancer tilted */
+#perms .perm.class-card.passive .cd { color: #9fd8ff; }
+#perms .perm.class-card.spent { filter: grayscale(0.7); opacity: 0.8; }
+#perms .perm.class-card.blocked { transform: rotate(-10deg); filter: grayscale(0.85); opacity: 0.75; cursor: not-allowed; }
+
+/* 2026-11-12 batch 2: on the phone a single tap on a unit shows its card until the next tap elsewhere */
+html.mobile #hover-card.tap:not([hidden]) { display: flex !important; max-width: calc(100vw - 16px); }
+#card-info .ci-tx { white-space: normal; }
+
+/* 2026-11-12 batch 2: Rule 24 "break" pill next to the emission icon */
+.ee-pill.break { background: #3a1a10; border-color: #ff8a4a; color: #ffb27a; }
+
+/* 2026-11-12 batch 2: the cards row scrolls sideways (drag it) when permanents make it wider than the screen */
+#deck-row { overflow-x: auto; overflow-y: visible; justify-content: safe center; scrollbar-width: thin; touch-action: pan-y; padding-top: 14px; margin-top: -14px; }
+#deck-row > * { flex-shrink: 0; }
+#deck-row.dragging, #deck-row.dragging * { cursor: grabbing !important; user-select: none; }
+html.mobile #deck-row { scrollbar-width: none; }
+html.mobile #deck-row::-webkit-scrollbar { display: none; }
+/* the footer is a grid item: let it shrink to the screen so the row scrolls inside it instead of the page */
+#deck-bar { min-width: 0; max-width: 100vw; box-sizing: border-box; }
+#deck-row { max-width: min(1020px, 100%); }
+html.mobile #deck-row { max-width: 100%; }
+
+/* 2026-11-12 batch 3: building bonus stacked on a stat; fortress break button */
+.bld-plus { color: #ffe66e; font-weight: 600; margin-left: 1px; }
+#object-card .oc-break { margin-left: 6px; padding: 2px 8px; border-radius: 4px; border: 1px solid #ff9a5c; background: #2a1a10; color: #ffcf9a; font-size: 11px; cursor: pointer; }
+#object-card .oc-break[disabled] { opacity: 0.45; cursor: default; }
+#object-card .oc-break.armed { border-color: #6ad99f; color: #b8f5d2; background: #10261b; }
+
+/* 2026-11-12: an instant that did its job — text vanishes, glows green, tilts, turns red, drops to the discard pile. */
+.slot.skill-burn { transform-origin: 50% 90%; animation: skill-burn 1.9s ease-in forwards; }
+.slot.skill-burn .card .ds, .slot.skill-burn .card .cd, .slot.skill-burn .card .fx-flags { animation: skill-burn-text .5s ease-out forwards; }
+@keyframes skill-burn-text { to { opacity: 0; filter: blur(2px); } }
+@keyframes skill-burn {
+  0%   { transform: translateY(0) rotate(0); box-shadow: none; filter: none; opacity: 1; }
+  22%  { transform: translateY(-14px) rotate(0); box-shadow: 0 0 0 2px #6ad99f, 0 0 24px #6ad99fcc; filter: brightness(1.25); }
+  45%  { transform: translateY(-14px) rotate(-14deg); box-shadow: 0 0 0 2px #6ad99f, 0 0 18px #6ad99f99; }
+  65%  { transform: translateY(-8px) rotate(-14deg); box-shadow: 0 0 0 2px #ff5a5a, 0 0 20px #ff5a5acc; filter: sepia(1) saturate(4) hue-rotate(-50deg); }
+  100% { transform: translate(-60px, 80px) rotate(-30deg) scale(.4); box-shadow: 0 0 0 1px #ff5a5a; filter: sepia(1) saturate(4) hue-rotate(-50deg); opacity: 0; }
+}
+/* A negated action card comes back to the hand. */
+.slot.card-returned { animation: card-returned 1.3s ease-out; }
+@keyframes card-returned { 0% { transform: translateY(-40px); box-shadow: 0 0 0 2px #ffd76e, 0 0 18px #ffd76e; } 60% { transform: translateY(4px); } 100% { transform: translateY(0); box-shadow: none; } }
+
+/* ---------------------------------------------------------------------------
+   Profile panel + character / team editors (user ruling 2026-11-13) — js/profile-ui.js.
+   The panel sits under the Launch button; the editors are a fixed overlay sized for a
+   desktop window and a phone in landscape (html.mobile: bigger touch targets).
+   --------------------------------------------------------------------------- */
+html.in-launcher, html.in-launcher body { height: auto; min-height: 100%; overflow: auto; }
+/* The phone layout pins the game's stage / roster full-screen (fixed), which beats `main[hidden]`. */
+html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar { display: none !important; }
+.launcher-card .profile-panel { margin: 14px 0 0; }
+.profile-panel .pp-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #d2dae7; }
+.profile-panel .pp-status { font-size: 12px; color: #8aa0bf; margin-bottom: 2px; }
+.profile-panel .pp-status.bad, .profile-panel .pp-msg.bad { color: #e26b6b; }
+.profile-panel .pp-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.profile-panel .pp-btn { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; min-width: 190px; text-align: left; }
+.profile-panel .pp-btn:hover:not([disabled]) { border-color: #2a6ddf; background: #20335a; }
+.profile-panel .pp-btn[disabled] { background: #141a24; color: #5a6a82; border-color: #1a2130; cursor: not-allowed; }
+.profile-panel .pp-btn.join-team-main { background: #1e3a26; border-color: #2f5c3a; }
+.profile-panel .pp-btn.join-team-main[disabled] { background: #141a24; border-color: #1a2130; }
+.profile-panel .pp-select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 5px 8px; font: inherit; flex: 1 1 200px; min-width: 160px; }
+.profile-panel .pp-select.pp-small { flex: 0 1 auto; min-width: 120px; }
+.profile-panel .pp-hint { font-size: 11px; color: #6a7a92; }
+.profile-panel .pp-msg { font-size: 12px; color: #8aa0bf; min-height: 1em; }
+.join-team-btn { background: #1e3a26; color: #8ddc9f; border: 1px solid #2f5c3a; border-radius: 10px; padding: 1px 8px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.join-team-btn:hover:not([disabled]) { border-color: #6ad99f; }
+.join-team-btn[hidden] { display: none; }
+.launcher-card .mode-panel #pick-door-team { margin: 2px 0 6px; padding: 4px 12px; font-size: 12px; }
+
+/* Phone menu (?mobile=1&menu=1): only the profile panel, big buttons. */
+html.menu-mode .launcher-card > :not(h1):not(#profile-panel) { display: none !important; }
+html.menu-mode #launcher { padding: 12px; }
+html.menu-mode .launcher-card { max-width: 980px; }
+html.menu-mode .profile-panel .pp-body { gap: 10px; font-size: 16px; }
+html.menu-mode .profile-panel .pp-btn { min-height: 52px; min-width: 300px; font-size: 18px; padding: 10px 18px; }
+html.menu-mode .profile-panel .pp-select { min-height: 48px; font-size: 16px; }
+html.menu-mode .profile-panel .pp-hint, html.menu-mode .profile-panel .pp-status, html.menu-mode .profile-panel .pp-msg { font-size: 14px; }
+html.mobile .join-team-btn { min-height: 34px; font-size: 13px; padding: 4px 12px; }
+
+/* Editor overlay */
+.pe-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(8, 10, 15, 0.78); display: flex; align-items: center; justify-content: center; padding: 2vh 2vw; }
+.pe-modal { background: #0f131b; border: 1px solid #2a3447; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); width: min(1180px, 96vw); max-height: 96vh; display: flex; flex-direction: column; color: #d2dae7; font-size: 13px; }
+.pe-modal.pe-team { width: min(640px, 96vw); }
+.pe-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #1a2130; }
+.pe-title { font-size: 16px; font-weight: 600; color: #e8ecf1; }
+.pe-x { background: none; border: 1px solid #2a3447; color: #8aa0bf; border-radius: 4px; width: 32px; height: 32px; font-size: 16px; cursor: pointer; }
+.pe-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.pe-team .pe-body { flex-direction: column; flex-wrap: nowrap; }
+.pe-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pe-ident { flex: 1 1 300px; max-width: 420px; }
+.pe-deck { flex: 3 1 460px; }
+.pe-sec { display: flex; flex-direction: column; gap: 6px; }
+.pe-sec-title { color: #8aa0bf; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.pe-lock { text-transform: none; letter-spacing: 0; color: #6a7a92; font-size: 11px; }
+.pe-name, .pe-select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 6px 8px; font: inherit; width: 100%; }
+.pe-name[disabled] { color: #8aa0bf; }
+.pe-fixed { color: #e8ecf1; font-weight: 600; }
+.pe-stats, .pe-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.pe-stat, .pe-act { display: flex; align-items: center; gap: 6px; background: #141a24; border: 1px solid #1a2130; border-radius: 4px; padding: 4px 8px; }
+.pe-stat-name, .pe-act-name { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-stat.st-vitality .pe-stat-name { color: #e26b6b; }
+.pe-stat.st-world .pe-stat-name { color: #6ad99f; }
+.pe-stat.st-matter .pe-stat-name { color: #e8c272; }
+.pe-stat.st-will .pe-stat-name { color: #8bb7ff; }
+.pe-stat-val { min-width: 2.2ch; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; color: #e8ecf1; }
+.pe-step { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; width: 30px; height: 28px; font: inherit; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.pe-step[disabled] { opacity: .35; cursor: not-allowed; }
+.pe-sum, .pe-deckcount { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 700; color: #8ddc9f; font-variant-numeric: tabular-nums; }
+.pe-sum.bad, .pe-deckcount.bad { color: #e26b6b; }
+.pe-class-text { font-size: 12px; color: #a9b8cd; line-height: 1.35; max-height: 9em; overflow-y: auto; }
+.pe-unit { display: flex; align-items: center; gap: 10px; }
+.pe-portrait { width: 72px; height: 72px; object-fit: contain; image-rendering: pixelated; background: #0b0d12; border: 1px solid #1a2130; border-radius: 4px; }
+.pe-portrait[hidden] { display: none; }
+.pe-unit-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pe-unit-name { color: #e8ecf1; }
+.pe-play { background: #1e3a26; color: #8ddc9f; border: 1px solid #2f5c3a; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 13px; }
+.pe-play[disabled] { opacity: .35; cursor: not-allowed; }
+.pe-combo { display: flex; gap: 6px; }
+.pe-combo-k { background: #141a24; border: 1px solid #2a3447; border-radius: 4px; padding: 3px 10px; font-weight: 700; color: #e8ecf1; }
+.pe-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.pe-card { display: flex; flex-direction: column; gap: 3px; text-align: left; background: #141a24; color: #d2dae7; border: 1px solid #1f2838; border-left: 3px solid #4a5566; border-radius: 5px; padding: 6px 8px; font: inherit; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+.pe-card.in-deck { border-color: #2f5c3a; border-left-color: #6ad99f; background: #13201a; }
+.pe-card.in-archive { opacity: .62; }
+.pe-card:hover { border-color: #2a6ddf; }
+.pe-card-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.pe-card-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #8bb7ff; }
+.pe-card.kind-effect .pe-card-kind { color: #b07cff; }
+.pe-card-name { color: #e8ecf1; }
+.pe-card-elems { font-size: 10px; color: #e8c272; }
+.pe-card-flags { display: flex; flex-wrap: wrap; gap: 3px; }
+.pe-flag { font-size: 10px; line-height: 1.4; padding: 0 5px; border-radius: 3px; background: #1d2636; color: #a9bad3; border: 1px solid #2a3850; text-transform: uppercase; letter-spacing: .03em; }
+.pe-flag.perm { background: #2b2440; color: #d6b8ff; border-color: #5a3f8f; }
+/* A card won from a kill glows until the player taps it (user ruling 2026-11-13). */
+.pe-card.is-new { opacity: 1; border-color: #e8c272; border-left-color: #ffd34d; animation: pe-new-glow 1.6s ease-in-out infinite; }
+.pe-card-new { font-size: 10px; font-weight: 700; color: #1a1406; background: #ffd34d; border-radius: 3px; padding: 0 5px; }
+@keyframes pe-new-glow { 0%, 100% { box-shadow: 0 0 4px 1px rgba(255, 211, 77, .35); } 50% { box-shadow: 0 0 14px 4px rgba(255, 211, 77, .85); } }
+.profile-panel .pp-new { font-size: 12px; color: #ffd34d; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.profile-panel .pp-new-open { font: inherit; font-size: 11px; color: #1a1406; background: #ffd34d; border: 0; border-radius: 4px; padding: 2px 8px; cursor: pointer; animation: pe-new-glow 1.6s ease-in-out infinite; }
+.pe-card-text { color: #a9b8cd; line-height: 1.3; }
+.pe-card-from { font-size: 10px; color: #e8c272; }
+.pe-where { align-self: flex-end; font-size: 11px; font-weight: 700; color: #8ddc9f; }
+.pe-card.in-archive .pe-where { color: #8aa0bf; }
+.pe-foot { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #1a2130; }
+.pe-err { flex: 1 1 auto; font-size: 12px; color: #8aa0bf; }
+.pe-err.bad { color: #e26b6b; }
+.pe-save { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
+.pe-save[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
+.pe-cancel { background: none; color: #8aa0bf; border: 1px solid #2a3447; padding: 8px 14px; border-radius: 4px; font: inherit; cursor: pointer; }
+.pe-team-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pe-member { display: flex; align-items: center; gap: 8px; background: #141a24; border: 1px solid #1a2130; border-radius: 4px; padding: 6px 8px; }
+.pe-member.is-top { border-color: #2f5c3a; background: #13201a; }
+.pe-member.dragging { opacity: .5; }
+.pe-rank { color: #6a7a92; font-variant-numeric: tabular-nums; min-width: 2.5ch; }
+.pe-member-name { flex: 1 1 auto; color: #e8ecf1; }
+.pe-top { font-size: 11px; color: #8ddc9f; white-space: nowrap; }
+.pe-member-moves { display: flex; gap: 4px; }
+html.mobile .pe-overlay { padding: 1vh 1vw; }
+html.mobile .pe-modal { width: 98vw; max-height: 98vh; font-size: 14px; }
+html.mobile .pe-step { width: 40px; height: 38px; font-size: 17px; }
+html.mobile .pe-x, html.mobile .pe-play { width: 40px; height: 40px; }
+html.mobile .pe-save, html.mobile .pe-cancel { min-height: 44px; font-size: 16px; padding: 10px 18px; }
+html.mobile .pe-name, html.mobile .pe-select { min-height: 42px; font-size: 15px; }
+html.mobile .pe-card { min-height: 64px; font-size: 13px; }
+
+/* "<team> team" next to a profile unit's name (roster, hover card). */
+.team-name { font-size: 10px; font-weight: 500; color: #8ddc9f; background: #1e3a26; border-radius: 8px; padding: 0 5px; white-space: nowrap; }
+html.mobile .ros .nm .team-name { margin-left: 4px; font-size: 8px; padding: 1px 4px; vertical-align: 1px; }
+
+/* Profile banners (main.js profileBanner — user ruling 2026-11-13): card won / lost, a teammate's gate,
+   encounter defeated. Desktop and phone, over the map. */
+#pf-banners { position: fixed; top: 46px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; max-width: min(760px, 92vw); }
+html.mobile #pf-banners { top: 30px; left: calc((100vw - var(--m-panel-w, 0px)) / 2); }
+.pf-banner { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(12, 16, 24, .94); color: #e8ecf1; border: 1px solid #2a3850; font-size: 14px; font-weight: 600; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); transition: opacity .5s ease, transform .5s ease; }
+.pf-banner.gain { border-color: #ffd34d; color: #ffe9a8; animation: pe-new-glow 1.6s ease-in-out 3; }
+.pf-banner.loss { border-color: #e36666; color: #ffc0c0; }
+.pf-banner.gate { border-color: #4f8fe8; color: #cfe1ff; }
+.pf-banner.win { border-color: #6ad99f; color: #c9f5dc; font-size: 16px; padding: 12px 16px; animation: pe-new-glow 1.6s ease-in-out 4; }
+.pf-banner.out { opacity: 0; transform: translateY(-8px); }
+.pf-banner-x { flex: none; background: transparent; border: 1px solid #3a4a64; color: #a9bad3; border-radius: 4px; cursor: pointer; font-size: 12px; padding: 2px 7px; }
+
+/* Profile panel: Radicle sync of the team branch (profile-radicle.mjs) */
+.pp-sync { margin: 6px 0; padding: 6px 8px; border: 1px solid #2c4a3a; border-radius: 6px; background: #0f1a15; font-size: 12px; }
+.pp-sync.bad { border-color: #6a5426; background: #1d170c; }
+.pp-sync-line { font-weight: 600; }
+.pp-sync-meta, .pp-sync-req { margin-top: 4px; opacity: .9; }
+.pp-devid { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 3px; background: #ffffff12; border-radius: 3px; cursor: pointer; word-break: break-all; }
+.pp-sync-team { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pp-team-in { width: 12em; padding: 3px 6px; background: #0b1220; color: inherit; border: 1px solid #3a4a66; border-radius: 4px; }

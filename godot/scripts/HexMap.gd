@@ -18,6 +18,7 @@ extends Node2D
 
 signal hex_clicked(h: Vector2i, button: int)
 signal hex_hovered(h: Vector2i)
+signal hex_double_tapped(h: Vector2i)
 
 var gen: MapGen
 var hover: Vector2i = Vector2i(1 << 20, 0)
@@ -309,9 +310,12 @@ func _on_touch_tap(viewport_pos: Vector2) -> void:
 
 
 func _on_touch_double_tap(viewport_pos: Vector2) -> void:
+	# Mobile-only gesture. Game.gd uses this to start a multi-round "journey"
+	# toward the tapped hex (or auto-attack when tapping an adjacent enemy),
+	# which is a strictly better fit than the browser's right-click/discard.
 	var world := _viewport_to_world(viewport_pos)
 	var h := world_to_hex(world)
-	hex_clicked.emit(h, MOUSE_BUTTON_RIGHT)
+	hex_double_tapped.emit(h)
 
 
 func _viewport_to_world(vp: Vector2) -> Vector2:

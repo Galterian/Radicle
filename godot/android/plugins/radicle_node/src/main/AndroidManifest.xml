@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merged into the app manifest by Godot's gradle build. Grants the
+     permissions and declares the ForegroundService we start from
+     RadicleNodePlugin. INTERNET and ACCESS_NETWORK_STATE are already in the
+     app manifest via the export preset, but we re-declare so this plugin is
+     self-contained. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="io.chaosd6.radicle">
+
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <application>
+        <service android:name="io.chaosd6.radicle.RadicleNodeService"
+                 android:exported="false"
+                 android:foregroundServiceType="dataSync"/>
+    </application>
+</manifest>

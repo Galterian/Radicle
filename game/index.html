@@ -24,11 +24,12 @@
         <label><input type="radio" name="mode" value="join-door" disabled> Join a Dimension through a <b>player's Door</b> (you arrive next to them)</label>
         <label><input type="radio" name="mode" value="join-random" disabled> Join a Dimension at a <b>random unknown place</b></label>
         <label><input type="radio" name="mode" value="host" checked> Start a <b>NEW Dimension</b> (you open its first Doors)</label>
-        <label><input type="radio" name="mode" value="restore" disabled> <b>Load a saved dimension</b> from this computer (local TMJ autosave)</label>
+        <label><input type="radio" name="mode" value="restore" disabled> <b>Load a saved dimension</b> from this computer (local TMJ autosave) — if the dim is still on Radicle you rejoin it as yourself (replacing a copy of you that is still running), otherwise the whole mesh is respawned from the save</label>
       </fieldset>
 
       <div class="mode-panel" data-for="join-door">
         <label>Door<select id="pick-door"></select></label>
+        <button type="button" id="pick-door-team" class="join-team-btn" hidden>Join my team</button>
         <div class="hint">Every player holds a Door into the dimension — their piece of the puzzle — and publishes it to Radicle once a minute. A Door newer than 3 minutes means that player is in there right now.</div>
       </div>
 
@@ -54,6 +55,7 @@
             <option value="player">player (fights with npc_a)</option>
             <option value="npc_a">npc_a (allies of player)</option>
             <option value="npc_b">npc_b (opposition)</option>
+            <option value="player_c">3rd team (purple — fights everyone)</option>
           </select>
         </label>
         <label>Play as
@@ -70,6 +72,26 @@
         <button id="go" type="button" disabled>Launch</button>
         <span id="launch-msg" class="hint"></span>
       </div>
+
+      <!-- Profile panel (user ruling 2026-11-13) — filled by js/profile-ui.js. -->
+      <fieldset id="profile-panel" class="profile-panel">
+        <legend>Your profile</legend>
+        <div class="pp-body">loading your profile…</div>
+      </fieldset>
+
+      <section id="dim-explorer" class="dim-explorer" aria-label="Dimensions explorer">
+        <header class="dx-head">
+          <span class="dx-title">Dimensions on Radicle</span>
+          <span class="dx-legend">
+            <span class="dx-dot dx-side-player"></span> player
+            <span class="dx-dot dx-side-npc_a"></span> npc_a
+            <span class="dx-dot dx-side-npc_b"></span> npc_b
+            <span class="dx-dot dx-stale"></span> stale
+          </span>
+        </header>
+        <div class="dx-grid" id="dx-grid"></div>
+        <div class="dx-empty hint" id="dx-empty" hidden>No dimensions published yet. Start a new one above.</div>
+      </section>
     </div>
   </section>
 
@@ -124,17 +146,27 @@
           <div class="slot" data-slot="9" hidden><div class="k"></div><div class="card"></div></div>
           <div class="slot empty" data-slot="EMPTY"><div class="k">8</div><div class="card"><div class="nm">Empty</div><div class="ds"></div><div class="cd">EP · EM if tile</div></div></div>
         </div>
-        <aside id="deck-pile" title="deck remaining · discard pile">
-          <div class="pile deck"><span class="pile-count" id="deck-count">0</span><span class="pile-label">deck</span></div>
-          <div class="pile discard"><span class="pile-count" id="discard-count">0</span><span class="pile-label">disc</span></div>
-        </aside>
+        <div id="deck-stack">
+          <aside id="combo-marker" title="combo (hotkey C) — arm, play the slots in order; a wrong card resets; completing all 3 slots deals 1 damage to one adjacent enemy" hidden>
+            <div class="cm-name"><span id="cm-key">C</span> <span id="cm-label">—</span></div>
+            <div class="cm-slots">
+              <div class="cm-slot" data-slot="0"><span class="cm-code"></span></div>
+              <div class="cm-slot" data-slot="1"><span class="cm-code"></span></div>
+              <div class="cm-slot" data-slot="2"><span class="cm-code"></span></div>
+            </div>
+          </aside>
+          <aside id="deck-pile" title="deck remaining · discard pile">
+            <div class="pile deck"><span class="pile-count" id="deck-count">0</span><span class="pile-label">deck</span></div>
+            <div class="pile discard"><span class="pile-count" id="discard-count">0</span><span class="pile-label">disc</span></div>
+          </aside>
+        </div>
         <aside id="perms" hidden></aside>
       </div>
       <div id="archive-popup" hidden>
         <div class="ap-card">
-          <header><span>Archive</span><span id="ap-sub"></span><button id="ap-close" title="close (Esc)">✕</button></header>
+          <header><span>Archive</span><span id="ap-sub"></span><button id="ap-all" title="move every card in the archive to the discard pile">All → discard</button><button id="ap-close" title="close (Esc)">✕</button></header>
           <div id="ap-list"></div>
-          <footer id="ap-foot">click a card to put it onto your discard pile · creature cards stay for Summoning</footer>
+          <footer id="ap-foot">click a card to put it onto your discard pile · All → discard moves everything (creatures included) in order</footer>
         </div>
       </div>
       <div id="hint">

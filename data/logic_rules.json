@@ -373,11 +373,25 @@
     {
       "id": "proposal_is_versioned",
       "name": "Proposal carries a version, a parent and an origin",
-      "description": "Governance: never edit a version in place — a proposal is a NEW version object with `version`, `parent_version` (the canonical it derives from, null only for a brand-new entry), `origin` and status 'proposal'.",
+      "description": "Governance: never edit a version in place — a proposal is a NEW version object with `version`, `parent_version` (the canonical it derives from, null only for a brand-new entry), `origin` and status 'proposal'. Origin \"user_ruling\" (optionally suffixed _YYYY-MM-DD) is accepted for rulings by the game owner.",
       "tags": ["validation", "governance"],
       "params": {},
-      "logic": {"and": [{"==": [{"typeof": [{"var": "proposal.version"}]}, "string"]}, {"in": [{"var": "proposal.origin"}, ["paper_rules", "player_vote", "rebalance_script", "fork_merge", "playtest_patch", "runtime_contract"]]}, {"or": [{"==": [{"var": "entry"}, null]}, {"==": [{"var": "proposal.parent_version"}, {"var": "entry.version"}]}, {"==": [{"typeof": [{"var": "proposal.parent_version"}]}, "string"]}]}]},
-      "examples": []
+      "logic": {"and": [{"==": [{"typeof": [{"var": "proposal.version"}]}, "string"]}, {"or": [{"in": [{"var": "proposal.origin"}, ["paper_rules", "player_vote", "rebalance_script", "fork_merge", "playtest_patch", "runtime_contract"]]}, {"matches": [{"var": "proposal.origin"}, "^user_ruling(_\\d{4}-\\d{2}-\\d{2})?$"]}]}, {"or": [{"==": [{"var": "entry"}, null]}, {"==": [{"var": "proposal.parent_version"}, {"var": "entry.version"}]}, {"==": [{"typeof": [{"var": "proposal.parent_version"}]}, "string"]}]}]},
+      "examples": [
+        {
+          "data": {
+            "proposal": {
+              "version": "1.1.0",
+              "origin": "user_ruling",
+              "parent_version": "1.0.0"
+            },
+            "entry": {
+              "version": "1.0.0"
+            }
+          },
+          "expect": true
+        }
+      ]
     },
     {
       "id": "proposal_keeps_data_object",

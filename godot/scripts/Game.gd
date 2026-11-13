@@ -20,11 +20,23 @@ const ELEMENT_FX := {
 	"elem_harmony": "effect_aura",
 }
 ## Fallback WBC3 sheets used when data/*.json has no `resources` block for an entity.
+## Summoned creatures (mon_golem_* / mon_elemental_*) are injected at runtime by
+## peer.mjs' BUILT_IN_CREATURES table and never land in data/creatures.json, so
+## without an entry here they spawn as the coloured oval + silent sheet.
 const FALLBACK_SHEETS := {
 	"char_exuberant_firestroker": {"base": "assets/Sprites/Units/Empire/Red Mage/Red Mage - ", "code": "AHGR", "cast": true},
 	"char_pride_guardian": {"base": "assets/Sprites/Units/Knights/Knight Lord/Knight Lord - ", "code": "AHEX"},
 	"mon_ruinous_minotaur": {"base": "assets/Sprites/Units/Minotaurs/Minotaur/Minotaur - ", "code": "AMIX"},
 	"mon_ridge_runnet_3a": {"base": "assets/Sprites/Units/Daemons/Imp/Imp - ", "code": "AAIM"},
+	# Golems — WBC3 has 3 variants; the fourth (Living Golem) reuses Stone.
+	"mon_golem_worldlives": {"base": "assets/Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - ", "code": "AAIX"},
+	"mon_golem_lifematters": {"base": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - ", "code": "AAGX", "cast": true},
+	"mon_golem_worldmatters": {"base": "assets/Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - ", "code": "AAJX"},
+	"mon_golem_living": {"base": "assets/Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - ", "code": "AAIX"},
+	# Elementals — one WBC3 unit per element, matched to the dominant stat.
+	"mon_elemental_world": {"base": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - ", "code": "AAEE"},
+	"mon_elemental_vital": {"base": "assets/Sprites/Units/Temples/Water Elemental/Water Elemental - ", "code": "AAEW"},
+	"mon_elemental_matter": {"base": "assets/Sprites/Units/Temples/Air Elemental/Air Elemental - ", "code": "AAEA"},
 }
 const DEFAULT_SPAWN := [
 	{"id": "char_exuberant_firestroker", "kind": "characters", "faction": "player", "at": Vector2i(2, 2)},
@@ -62,8 +74,36 @@ var intents: Dictionary = {}   # entity id -> {code, target(Vector2i|null)}
 var quiet_rounds := 0
 var _resolving := false
 
+# Mobile "journey" state: a multi-round movement plan set by double-tapping a
+# far hex. Each planning phase auto-picks M (or EM) targeting the next step;
+# any manual card pick or target change cancels. If the double-tapped hex
+# holds an enemy, we walk to the nearest adjacent approach and auto-pick A
+# on arrival. _clear_journey() is the single reset path.
+var _journey_path: Array = []        # Array[Vector2i] — remaining hexes to walk
+var _journey_dest: Vector2i = Vector2i.ZERO
+var _journey_attack: bool = false    # auto-A at destination (enemy was tapped)
+
+# Channeling (Blizzard et al): once a `channeling`-tagged card commits, re-pick
+# the same slot every planning phase until the channel is interrupted. The full
+# "temp perm + enemy destroy" rule lives in peer.mjs; the solo sim only tracks
+# the resume/interrupt flow so the HUD and audio stay honest.
+var _channel_card: String = ""
+var _channel_interrupted: bool = false
+var _channel_target: Variant = null  # last target_hex when the channel started
+
 
 func _ready() -> void:
+	# On Android, the mobile client is a thin shell around the embedded Node
+	# peer + an Android WebView loading the SAME browser UI the desktop uses
+	# (game/index.html + /css + /js served by peer.mjs on 127.0.0.1:7401).
+	# None of the native Godot scene — map/HUD/entities/resolver — is used;
+	# the WebView renders everything and the embedded peer owns the game
+	# state. Short-circuit here so we don't waste CPU/GPU rebuilding a scene
+	# the player never sees. (Autoloads EmbeddedPeer and MobileHudWebView
+	# still run and bring up the peer + WebView independently.)
+	if OS.get_name() == "Android":
+		print("[Game] mobile — scene build skipped (WebView renders the UI)")
+		return
 	rng.randomize()
 	dl.load_all()
 	edges = dl.resolution_edges()
@@ -75,6 +115,7 @@ func _ready() -> void:
 	map.setup(gen)
 	map.hex_clicked.connect(_on_hex_clicked)
 	map.hex_hovered.connect(_on_hex_hovered)
+	map.hex_double_tapped.connect(_on_hex_double_tapped)
 
 	# Decorative scatter (grass tufts, boulders, dead trees, flowers — "bonus"
 	# WBC3 terrain-features borrowed from the extracted archive). Lives above the
@@ -125,6 +166,11 @@ func _ready() -> void:
 	hud.slot_pressed.connect(_pick_slot)
 	hud.lock_pressed.connect(_lock)
 	hud.destroy_perm_requested.connect(_on_destroy_perm_requested)
+	hud.entity_activated.connect(_on_hud_entity_activated)
+	if hud.has_signal("stat_tapped"):
+		hud.stat_tapped.connect(_on_hud_stat_tapped)
+	if hud.has_signal("class_ability_pressed"):
+		hud.class_ability_pressed.connect(_on_hud_class_ability_pressed)
 
 	# Touch gesture router. Attached as a child of Main so it sits alongside the
 	# camera and hex map in the input chain. On desktop its handlers never fire
@@ -153,11 +199,20 @@ func _ready() -> void:
 	net.connected.connect(func(): hud.log_line("peer: connected", Color(0.6, 0.9, 0.6)))
 	net.disconnected.connect(func(): hud.log_line("peer: disconnected", Color(0.9, 0.6, 0.6)))
 
-	# Spawn: snap each default spawn to the nearest walkable hex (otherwise a
+	# Spawn: default roster first, snapped to nearest walkable hex (otherwise a
 	# player spawning on a lava or water biome can't move).
 	for s in DEFAULT_SPAWN:
 		var at: Vector2i = gen.nearest_walkable(s.at, 5)
 		spawn(s.id, s.kind, s.faction, at)
+	# When DimensionLauncher has resolved a join request before Main.tscn
+	# loaded (the mobile picker UI stashes it on the autoload), we move the
+	# player entity to the resolved spawn hex and switch its faction to the
+	# chosen door's alliance so we land as an ally of that peer right next
+	# to their unit — matches the user's "join nearby chosen unit" ask.
+	if typeof(DimensionLauncher) == TYPE_OBJECT and "pending_join" in DimensionLauncher:
+		_apply_pending_join(DimensionLauncher.pending_join)
+		# Deep-link joins resolve after the radicle-httpd fetches, i.e. after _ready.
+		DimensionLauncher.join_resolved.connect(_apply_pending_join)
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
@@ -169,6 +224,31 @@ func _ready() -> void:
 	hud.log_line("Data: %d characters, %d creatures, %d effects loaded from data/*.json" % [dl.ids("characters").size(), dl.ids("creatures").size(), dl.ids("effects").size()])
 	hud.set_roster(entities)
 	_begin_planning()
+	_push_status()
+
+
+## Teleport the player next to the chosen unit and adopt its alliance.
+## One-shot: clears DimensionLauncher.pending_join so a scene reload doesn't re-apply.
+func _apply_pending_join(pj: Variant) -> void:
+	if typeof(pj) != TYPE_DICTIONARY or not (pj as Dictionary).has("spawn_hex"):
+		return
+	var player := player_entity()
+	if player == null:
+		return
+	var hex: Vector2i = pj.spawn_hex
+	var landing: Vector2i = gen.nearest_walkable(hex, 5)
+	player.teleport(landing)
+	map.selected = landing
+	var alliance: String = String(pj.get("alliance", "player"))
+	if alliance != "" and alliance != "player":
+		# Same alliance string as the chosen peer = resolver treats us as their side.
+		player.faction = alliance
+	gen.reveal_around(landing, REVEAL_RADIUS, "join")
+	map.queue_redraw()
+	hud.log_line("joined dimension %s as %s near %s" % [
+		String(pj.get("dim_name", "?")), alliance, Hex.key_of(landing)
+	], Color(0.65, 0.95, 0.75))
+	DimensionLauncher.pending_join = {}
 
 
 # ------------------------------------------------------------------ entities
@@ -239,6 +319,9 @@ func is_enemy(a: Entity, b: Entity) -> bool:
 # ------------------------------------------------------------------ round loop
 
 func _process(dt: float) -> void:
+	# Scene was never built on mobile (see _ready). Nothing to tick.
+	if hud == null:
+		return
 	phase_t += dt
 	match phase:
 		"planning":
@@ -264,6 +347,12 @@ func _begin_planning() -> void:
 	target_hex = null
 	intents.clear()
 	map.path_preview = []
+	# Journey preview is drawn from map.selected; after a resolution move the
+	# hero stands on a new hex, so re-anchor selected before anything redraws
+	# or the dashed journey line origins stay on the previous tile.
+	var _pb := player_entity()
+	if _pb != null:
+		map.selected = _pb.hex
 	_deal_hand()
 	_update_reach()
 	_refresh_hand()
@@ -272,6 +361,27 @@ func _begin_planning() -> void:
 		hud.update_life(p)
 	# Life totals change between rounds (damage pass); keep roster in sync.
 	hud.set_roster(entities)
+	_push_status()
+	# A live channel takes precedence over a journey: find the same card in the
+	# fresh hand and auto-pick it. If the deck didn't deal it, the channel breaks
+	# (matches peer.mjs: lose the component → channel ends).
+	if _channel_card != "":
+		var slot := _find_card_slot([_channel_card])
+		if slot >= 0:
+			_auto_pick(slot, _channel_target)
+			hud.log_line("channel continues (round %d)" % round_no, Color(0.65, 0.8, 0.95))
+		else:
+			hud.log_line("channel broken", Color(0.8, 0.55, 0.4))
+			_channel_interrupted = true
+			_channel_card = ""
+			_channel_target = null
+			if hud.has_method("set_channel_label"):
+				hud.set_channel_label("")
+	# Resume a queued journey (auto-pick M + next step) BEFORE the mobile hint
+	# so the hint reflects the auto-picked state rather than the fresh deal.
+	_journey_resume()
+	_push_mobile_hint()
+	_push_mobile_piles()
 
 
 func _begin_reveal() -> void:
@@ -291,6 +401,8 @@ func _begin_reveal() -> void:
 	var reveal_list := []
 	for k in intents.keys():
 		reveal_list.append({"entity": k, "code": intents[k].code, "target": str(intents[k].target)})
+	_push_status()
+	_push_mobile_hint()
 	net.reveal(round_no, reveal_list, "")
 	for k in intents.keys():
 		var e := _find(k)
@@ -307,12 +419,21 @@ func _npc_plan(e: Entity) -> Dictionary:
 		return {"code": "EP", "target": null}
 	var d := Hex.distance(e.hex, foe.hex)
 	var r := rng.randf()
+	# If the hex-distance says "adjacent" but the foe sits across a labyrinth
+	# wall / unwalkable biome, A would move 1 step into the wall and swing at
+	# nothing. Downgrade to P so the NPC doesn't waste the round.
+	var reachable := not Pathfinding.find_path(e.hex, foe.hex, blocked_map(e), func(h): return gen.has(h)).is_empty()
 	if d <= 1:
+		if not reachable:
+			return {"code": "P", "target": null}
 		if r < 0.6:
 			return {"code": "A", "target": foe.hex}
 		if r < 0.8:
 			return {"code": "B", "target": null}
 		return {"code": "P", "target": foe.hex}
+	# Any mover branch below needs a traversable path; otherwise cast defensively.
+	if not reachable:
+		return {"code": "P", "target": null}
 	if d >= 4 and r < 0.6:
 		return {"code": "EM", "target": foe.hex}
 	if r < 0.75:
@@ -373,16 +494,15 @@ func _resolve() -> void:
 		var budget := 1
 		if it.code == "EM":
 			budget = mini(EM_MAX_STEPS, maxi(1, roundi(d / 2.0)))
-		var blocked := {}
+		# Use blocked_map so unwalkable biomes (water / lava / mountains / cliffs)
+		# join labyrinth walls and other entities in the pathfinder's blocked set.
+		# The inline build used to skip biomes, letting NPCs path through water.
+		var blocked := blocked_map(e)
+		# Overlay `claimed` so same-round movers that already claimed a dest
+		# this pass don't collide; earlier claims shouldn't be re-used.
 		for k in claimed.keys():
 			if claimed[k] != e:
 				blocked[k] = true
-		# Labyrinth walls (parity mirror of features.js#labyrinthWallAt via
-		# Features.gd#is_labyrinth_wall) are static impassable scenery.
-		if gen.features != null:
-			for h in gen.tiles():
-				if gen.features.is_labyrinth_wall(h.x, h.y, gen.biome):
-					blocked[Hex.key_of(h)] = true
 		var path := Pathfinding.find_path(e.hex, tgt, blocked, func(h): return gen.has(h))
 		if path.is_empty():
 			hud.log_line("%s cannot reach %s" % [e.display_name, Hex.key_of(tgt)], Color(0.6, 0.6, 0.6))
@@ -416,6 +536,7 @@ func _resolve() -> void:
 			net.publish_block(b)
 			hud.log_line("map grows: %s (+%d hexes known)" % [b.id, gen.size()], Color(0.6, 0.8, 0.9))
 			map.queue_redraw(); if scatter_layer: scatter_layer.queue_redraw(); if bigfeatures_layer: bigfeatures_layer.queue_redraw(); if features_layer: features_layer.queue_redraw()
+			_push_status()
 
 	# ---- posture / cast visuals (P) — no damage, shows the adept element effect.
 	for id in intents.keys():
@@ -450,6 +571,12 @@ func _resolve() -> void:
 			tgt_e = _adjacent_enemy(a)
 		if tgt_e == null or Hex.distance(a.hex, tgt_e.hex) != 1:
 			hud.log_line("%s swings at nothing" % a.display_name, Color(0.6, 0.6, 0.6))
+			continue
+		# Defence: if either hex went unwalkable mid-round (shouldn't happen with
+		# the pure biome sampler, but belt-and-braces for future dynamic terrain),
+		# skip the swing rather than ignore the geometry.
+		if not gen.terrain_at(a.hex.x, a.hex.y).walkable or not gen.terrain_at(tgt_e.hex.x, tgt_e.hex.y).walkable:
+			hud.log_line("%s · terrain blocks the swing" % a.display_name, Color(0.6, 0.6, 0.6))
 			continue
 		var dcode := "EP"
 		if intents.has(tgt_e.id):
@@ -503,6 +630,8 @@ func _resolve() -> void:
 	await get_tree().create_timer(0.6).timeout
 	_resolving = false
 	round_no += 1
+	_push_status()
+	_push_mobile_hint()
 	net.publish_state(_state())
 	if player_entity() == null:
 		phase = "over"
@@ -510,6 +639,15 @@ func _resolve() -> void:
 		return
 	if _nearest_enemy(player_entity()) == null:
 		hud.log_line("All hostiles cleared — the dimension is yours.", Color(0.6, 0.95, 0.6))
+	# Channel bookkeeping: an interrupted channel clears before the next deal;
+	# an uninterrupted one survives into _begin_planning for the auto-pick.
+	if _channel_card != "" and _channel_interrupted:
+		hud.log_line("channel broken", Color(0.8, 0.55, 0.4))
+		_channel_card = ""
+		_channel_interrupted = false
+		_channel_target = null
+		if hud.has_method("set_channel_label"):
+			hud.set_channel_label("")
 	_begin_planning()
 
 
@@ -565,6 +703,7 @@ func _deal_hand() -> void:
 			hand.append(pool[rng.randi_range(0, pool.size() - 1)])
 	hand.append("EM" if rng.randf() < 0.5 else "EP")
 	hand.shuffle()
+	_push_status()
 
 
 func _refresh_hand() -> void:
@@ -572,6 +711,91 @@ func _refresh_hand() -> void:
 	if chosen >= 0 and target_hex != null:
 		targets[chosen] = Hex.key_of(target_hex)
 	hud.set_hand(hand, chosen, locked, targets)
+
+
+# Guarded: parallel Hud.gd work may not have landed yet, so skip silently
+# when set_status / set_mobile_hint aren't on the HUD.
+func _push_status() -> void:
+	if hud == null or not hud.has_method("set_status"):
+		return
+	# MapGen has no `name` field; the dimension string lives on NetBridge after
+	# hello, with the generator's constructor literal as the solo-play fallback.
+	var dim := "Ashfall-Micro"
+	if net != null and net.dimension_id != "":
+		dim = net.dimension_id
+	var hex_count := 0
+	if gen != null:
+		hex_count = gen.size()
+	hud.set_status(round_no, dim, hand.size(), hex_count)
+
+
+## Mobile only. Pushes the compact pile row (arch / deck / disc) and the perms
+## row above the hand bar. Solo play has no real deck/discard so we fall back
+## to hand size + a dash; a connected peer's `hand` message overrides via
+## _on_net_hand. Perms come from the local player's entity data.
+func _push_mobile_piles() -> void:
+	if hud == null:
+		return
+	var is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not is_mobile:
+		return
+	var archive_n := 0
+	var deck_n := hand.size()
+	var discard_n := 0
+	var at_min := false
+	if hud.has_method("server_hand"):
+		var sh: Dictionary = hud.server_hand()
+		if not sh.is_empty():
+			archive_n = int(sh.get("archiveLeft", sh.get("archive", 0)))
+			deck_n = int(sh.get("deckLeft", sh.get("deck", deck_n)))
+			discard_n = int(sh.get("discardLeft", sh.get("discard", 0)))
+			at_min = bool(sh.get("circulatingAtMin", false))
+	if hud.has_method("set_mobile_piles"):
+		hud.set_mobile_piles(archive_n, deck_n, discard_n, at_min)
+	var p := player_entity()
+	var codes: Array = []
+	if p != null:
+		var perms: Variant = p.data.get("permanents", [])
+		if typeof(perms) == TYPE_ARRAY:
+			for pm in perms:
+				codes.append(str(pm))
+	if hud.has_method("set_mobile_perms"):
+		hud.set_mobile_perms(codes)
+	# Q class-ability button is live iff the player's permanents include a
+	# `class_*` card (parity with the browser's Q keypress gate).
+	if hud.has_method("set_class_ability_available"):
+		var has_class := false
+		for c in codes:
+			if str(c).begins_with("class_"):
+				has_class = true
+				break
+		hud.set_class_ability_available(has_class)
+
+
+## Mobile roster tap handler. Finds the entity by id and makes it the HUD's
+## active one (portrait + quote) plus centres the camera on it. The player's
+## faction stays whatever it is — this is a view switch, not a possession.
+func _on_hud_entity_activated(entity_id: String) -> void:
+	for e in entities:
+		if e.id == entity_id and e.alive:
+			hud.set_entity(e)
+			if cam != null:
+				cam.follow = e
+			e.play_sound("select")
+			return
+
+
+func _push_mobile_hint() -> void:
+	if hud == null or not hud.has_method("set_mobile_hint"):
+		return
+	var is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not is_mobile:
+		hud.set_mobile_hint("")
+		return
+	if phase == "planning" and chosen == -1 and not locked:
+		hud.set_mobile_hint("Tap a card then tap a hex. Or tap a neighbour hex to auto-move.")
+	else:
+		hud.set_mobile_hint("")
 
 
 func _update_reach() -> void:
@@ -596,6 +820,7 @@ func _update_reach() -> void:
 func _pick_slot(i: int) -> void:
 	if phase != "planning" or locked or i < 0 or i >= hand.size():
 		return
+	_clear_journey("manual card pick")
 	chosen = i
 	target_hex = null
 	map.path_preview = []
@@ -605,6 +830,152 @@ func _pick_slot(i: int) -> void:
 		hud.set_quote(p.quote_for("select"))
 	_update_reach()
 	_refresh_hand()
+	_push_mobile_hint()
+
+
+# Internal variant of _pick_slot that does NOT clear the journey — used by the
+# double-tap handler and _journey_resume so the auto-plan survives the pick.
+func _auto_pick(slot: int, target: Variant) -> void:
+	if slot < 0 or slot >= hand.size() or phase != "planning" or locked:
+		return
+	chosen = slot
+	target_hex = target
+	var p := player_entity()
+	if p != null:
+		p.play_sound("select")
+	_update_reach()
+	_refresh_hand()
+	_push_mobile_hint()
+
+
+func _channel_label_text(code: String) -> String:
+	# Short "<Name> ch." for the status-strip channel indicator. Falls back to
+	# the raw code if the data entry can't be resolved.
+	if dl == null:
+		return "%s ch." % code
+	var kind := ""
+	if code.begins_with("effect_"):
+		kind = "effects"
+	elif code.begins_with("skill_"):
+		kind = "skills"
+	if kind == "":
+		return "%s ch." % code
+	var entry: Dictionary = dl.get_entry(kind, code)
+	var name := String(entry.get("name", code))
+	return "%s ch." % name
+
+
+func _find_card_slot(codes: Array) -> int:
+	for code in codes:
+		for i in range(hand.size()):
+			if str(hand[i]) == code:
+				return i
+	return -1
+
+
+func _clear_journey(reason: String) -> void:
+	if _journey_path.is_empty() and not _journey_attack:
+		return
+	_journey_path = []
+	_journey_attack = false
+	if map != null:
+		map.path_preview = []
+	if reason != "" and hud != null:
+		hud.log_line("journey cleared: %s" % reason, Color(0.75, 0.7, 0.5))
+
+
+func _on_hex_double_tapped(h: Vector2i) -> void:
+	if phase != "planning" or locked or not gen.has(h):
+		return
+	var p := player_entity()
+	if p == null:
+		return
+	# Adjacent enemy → auto-attack this round.
+	var e := entity_at(h)
+	if e != null and is_enemy(p, e) and Hex.distance(p.hex, h) == 1:
+		_clear_journey("")
+		var a_slot := _find_card_slot(["A"])
+		if a_slot < 0:
+			hud.log_line("no Attack card in hand", Color(0.75, 0.6, 0.5))
+			return
+		_auto_pick(a_slot, h)
+		map.path_preview = []
+		hud.log_line("auto attack → %s" % e.display_name, Color(0.95, 0.75, 0.5))
+		return
+	# Far hex (empty or enemy): plan the walk. If an enemy sits on `h`, journey
+	# to its nearest walkable, unoccupied neighbour and flag auto-attack.
+	var want_attack: bool = e != null and is_enemy(p, e)
+	var dest := h
+	if want_attack:
+		var best := p.hex
+		var bd := 1 << 30
+		for n in Hex.neighbours(h):
+			if gen.has(n) and gen.terrain_at(n.x, n.y).walkable and entity_at(n) == null:
+				var d := Hex.distance(p.hex, n)
+				if d < bd:
+					bd = d
+					best = n
+		if best == p.hex:
+			hud.log_line("no walkable approach to %s" % e.display_name, Color(0.75, 0.6, 0.5))
+			return
+		dest = best
+	var blocked := blocked_map(p)
+	var path := Pathfinding.find_path(p.hex, dest, blocked, func(x): return gen.has(x))
+	if path.is_empty():
+		hud.log_line("no path to %s" % Hex.key_of(h), Color(0.75, 0.6, 0.5))
+		return
+	_journey_path = path
+	_journey_dest = h
+	_journey_attack = want_attack
+	map.selected = p.hex
+	map.path_preview = path
+	map.queue_redraw()
+	var m_slot := _find_card_slot(["M", "EM"])
+	if m_slot < 0:
+		# Journey is queued; _journey_resume will auto-pick when a mover appears.
+		hud.log_line("journey → %s (%d steps · waiting for M)" % [Hex.key_of(h), path.size()], Color(0.75, 0.85, 0.5))
+		return
+	_auto_pick(m_slot, path[0])
+	hud.log_line("journey → %s (%d steps%s)" % [
+		Hex.key_of(h), path.size(), " then attack" if want_attack else ""
+	], Color(0.6, 0.9, 0.7))
+
+
+func _journey_resume() -> void:
+	# Called at the end of _begin_planning so a running journey picks up where it
+	# left off. Prune hexes we've already walked past (player is now standing on
+	# them). If the path is drained and attack was requested, swap to A against
+	# the nearest adjacent enemy.
+	if _journey_path.is_empty() and not _journey_attack:
+		return
+	var p := player_entity()
+	if p == null:
+		_clear_journey("")
+		return
+	while not _journey_path.is_empty() and _journey_path[0] == p.hex:
+		_journey_path.pop_front()
+	if _journey_path.is_empty():
+		if _journey_attack:
+			_journey_attack = false
+			map.path_preview = []
+			var foe := _nearest_enemy(p)
+			if foe != null and Hex.distance(p.hex, foe.hex) == 1:
+				var a_slot := _find_card_slot(["A"])
+				if a_slot >= 0:
+					_auto_pick(a_slot, foe.hex)
+					hud.log_line("journey ended · auto attack %s" % foe.display_name, Color(0.95, 0.75, 0.5))
+					return
+		_clear_journey("")
+		return
+	var m_slot := _find_card_slot(["M", "EM"])
+	if m_slot < 0:
+		# No mover this round — hold the plan, don't force EM.
+		hud.log_line("journey paused: no mover in hand", Color(0.8, 0.7, 0.5))
+		return
+	_auto_pick(m_slot, _journey_path[0])
+	map.selected = p.hex
+	map.path_preview = _journey_path
+	map.queue_redraw()
 
 
 func _lock() -> void:
@@ -617,7 +988,44 @@ func _lock() -> void:
 		p.play_sound("order")
 		net.commit(round_no, [{"entity": p.id, "code": code, "target": str(target_hex)}])
 		hud.log_line("You lock %s%s" % [code, (" → " + Hex.key_of(target_hex)) if target_hex != null else ""], Color(0.95, 0.85, 0.6))
+		if _is_channeling_card(code):
+			_channel_card = code
+			_channel_target = target_hex
+			_channel_interrupted = false
+			hud.log_line("channeling %s started" % code, Color(0.65, 0.8, 0.95))
+			hud.log_line("channeling %s · temp perm (not yet implemented in solo mode — see peer.mjs for the full rule)" % code, Color(0.6, 0.7, 0.75))
+			if hud.has_method("set_channel_label"):
+				hud.set_channel_label(_channel_label_text(code))
 	_refresh_hand()
+	_push_mobile_hint()
+
+
+## True when `code` resolves to an effect/skill whose top-level tags OR latest-version
+## data.tags include "channeling". Basic cards (A/B/M/P/EP/EM) short-circuit false.
+func _is_channeling_card(code: String) -> bool:
+	if code == "" or code in ["A", "B", "M", "P", "EP", "EM"]:
+		return false
+	for kind in ["effects", "skills"]:
+		var entry: Dictionary = dl.get_entry(kind, code)
+		if entry.is_empty():
+			continue
+		var top: Variant = entry.get("tags", [])
+		if typeof(top) == TYPE_ARRAY and "channeling" in top:
+			return true
+		var data: Dictionary = dl.data_of(kind, code)
+		var inner: Variant = data.get("tags", [])
+		if typeof(inner) == TYPE_ARRAY and "channeling" in inner:
+			return true
+	return false
+
+
+## Public stub so a future "enemy destroyed my temp perm" wire can break the
+## channel. The browser peer owns the real rule; this is here so Hud.gd / NetBridge
+## can call it without a crash.
+func interrupt_channel() -> void:
+	if _channel_card == "":
+		return
+	_channel_interrupted = true
 
 
 ## Map object (building / scatter / landmark) on a hex, with its `desc` filled in, or {}.
@@ -675,6 +1083,35 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 	if not gen.has(h):
 		hud.hide_object_card()
 		return
+	# Mobile fallback: tapping a neighbour hex with nothing picked auto-picks a
+	# mover from the hand. The HUD slot bar is still the primary path; this just
+	# unblocks phones until that bar is wired for touch.
+	var is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if phase == "planning" and not locked and chosen == -1 and is_mobile:
+		var pm := player_entity()
+		if pm == null:
+			return
+		if Hex.distance(pm.hex, h) == 1:
+			var found_i := -1
+			for i in range(hand.size()):
+				if str(hand[i]) == "M":
+					found_i = i
+					break
+			if found_i == -1:
+				for i in range(hand.size()):
+					if str(hand[i]) in ["M", "EM", "A"]:
+						found_i = i
+						break
+			if found_i == -1:
+				hud.log_line("no mover in hand", Color(0.75, 0.6, 0.5))
+				return
+			_pick_slot(found_i)
+			target_hex = h
+			_refresh_hand()
+			_update_reach()
+			map.queue_redraw()
+			hud.log_line("auto-picked %s → %s" % [str(hand[found_i]), Hex.key_of(h)], Color(0.6, 0.9, 0.6))
+			return
 	if not _is_card_target(h):
 		# Not a targeting click: an entity re-selects it in the HUD, an object opens
 		# its info card, bare ground closes any open card.
@@ -687,6 +1124,10 @@ func _on_hex_clicked(h: Vector2i, button: int) -> void:
 		inspect_hex(h)
 		return
 	hud.hide_object_card()
+	# A manual target click overrides any auto-plan — unless the user is
+	# just confirming the next step of the queued journey.
+	if not _journey_path.is_empty() and h != _journey_path[0]:
+		_clear_journey("retargeted")
 	var p := player_entity()
 	var code := str(hand[chosen])
 	target_hex = h
@@ -725,6 +1166,10 @@ func _on_hex_hovered(h: Vector2i) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Mobile: input is captured by the WebView overlay. The Godot scene is
+	# empty so hud/hand are null — bail before dereferencing.
+	if hud == null:
+		return
 	if event.is_action_pressed("ui_cancel"):
 		if hud.object_card_visible():
 			hud.hide_object_card()
@@ -756,10 +1201,16 @@ func _on_net_hello(payload: Dictionary) -> void:
 		hud.set_server_hand(payload)
 	if hud.has_method("set_server_peers"):
 		hud.set_server_peers(payload.get("peers", []))
+	# Fill the top chip row from the hello dump — dimension / door / peer_id
+	# + the first turn/round/phase values. phase_received keeps the timer +
+	# phase pills live afterwards.
+	if hud.has_method("set_status_bar"):
+		hud.set_status_bar(payload)
 
 func _on_net_hand(payload: Dictionary) -> void:
 	if hud.has_method("set_server_hand"):
 		hud.set_server_hand(payload)
+	_push_mobile_piles()
 	# Mirror the browser's myEmissionPreview — union of the queued action, any
 	# extra, and all queued effects' elements. The HUD fades the chip out
 	# shortly after, so leaving an action queued keeps re-triggering it (which
@@ -793,6 +1244,16 @@ func _on_net_phase(payload: Dictionary) -> void:
 		int(payload.get("round", 0)) + 1, float(payload.get("seconds", 0.0))
 	]
 	hud.log_line(label, Color(0.7, 0.7, 0.9))
+	# Phase ticks also drive the top chip row. peer.mjs re-sends every phase
+	# transition and every second during planning, so the timer chip ticks
+	# down live and tier flips strong↔reachable as neighbours change.
+	if hud.has_method("set_status_bar"):
+		# Translate "name" → "phase" to match set_status_bar's field schema
+		# (hello uses "phase", phase uses "name").
+		var merged := payload.duplicate()
+		if payload.has("name"):
+			merged["phase"] = payload["name"]
+		hud.set_status_bar(merged)
 
 func _on_net_evt(env: Dictionary, from_peer: bool) -> void:
 	# Hashgraph envelopes — only surfaced in debug for now; the HUD rebuilds
@@ -843,6 +1304,36 @@ func _on_destroy_perm_requested(_target_peer_id: String, _perm_id: String, sugge
 		return
 	net.toggle_destroy(stat)
 	hud.log_line("destroy queued: emits %s (double-tap again to cancel)" % stat, Color(0.95, 0.75, 0.4))
+
+## Roster stat chip tapped. Browser parity:
+##   - own row stat tap → arm destroy with that stat (emit this element
+##     against the closest enemy's matching perm, Rule 24; tapping again
+##     cancels — toggle_destroy toggles when the same stat re-fires).
+##   - enemy row stat tap → route through the existing destroy-perm hook so
+##     the player can arm a destroy against this unit without first picking
+##     a perm from a submenu.
+func _on_hud_stat_tapped(entity_id: String, stat_key: String, is_own: bool) -> void:
+	if net == null or not net.is_online():
+		hud.log_line("stat tap ignored — not connected to a peer", Color(0.9, 0.6, 0.4))
+		return
+	if is_own:
+		net.toggle_destroy(stat_key)
+		hud.log_line("emit via %s armed (tap again to cancel)" % stat_key, Color(0.95, 0.75, 0.4))
+		return
+	# Enemy row: route through the existing destroy hook. It picks the
+	# player's best emission stat if `suggested_stat` is empty; here we
+	# pass the enemy's tapped stat so the destroy intent targets that
+	# colour-group explicitly (Rule 24). _on_destroy_perm_requested
+	# ignores the first two args, so we can leave them empty.
+	_on_destroy_perm_requested("", "", stat_key)
+
+## Q class-ability button pressed on mobile — browser's Q keypress parity.
+func _on_hud_class_ability_pressed() -> void:
+	if net == null or not net.is_online():
+		hud.log_line("class ability ignored — not connected", Color(0.9, 0.6, 0.4))
+		return
+	net.class_ability()
+	hud.log_line("class ability triggered", Color(0.85, 0.75, 1.0))
 
 func _on_net_peek(payload: Dictionary) -> void:
 	hud.log_line("👁 %s" % String(payload.get("text", "")), Color(0.9, 0.85, 0.6))

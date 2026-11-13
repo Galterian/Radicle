@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET permission is already declared by the nodejs_mobile plugin.
+         Cleartext traffic to 127.0.0.1 is scoped via a network_security_config
+         in that plugin's manifest — the same scoping covers our WebView loads. -->
+</manifest>

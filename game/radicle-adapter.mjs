@@ -1,11 +1,14 @@
 // Radicle adapter. The local bare at game/radicle.git/ is still used as a fast,
 // deterministic rendezvous between peers in the same machine (no node round-trip
 // per push). When RADICLE_PUSH_REMOTE is set (default on), each successful bare
-// push is also mirrored to the project's real Radicle repo via git-remote-rad,
-// so remote clients can browse the pushed branch at
+// push is also mirrored to the project's real Radicle repo via git-remote-rad.
+// By default the adapter does NOT emit any public-mesh explorer URL — the
+// Radicle network stays private to whichever peers hold the RID. Opt in by
+// setting RADICLE_EXPLORER_BASE + RADICLE_SEED to a web explorer that
+// replicates your project, and pushDimension() will then return
 //   <RADICLE_EXPLORER_BASE>/nodes/<RADICLE_SEED>/<rid>/commits/<sha>
-// Both legs happen from the peer's work tree, so an auth/network hiccup on the
-// rad leg does not corrupt the local bare.
+// as a clickable link. Both legs happen from the peer's work tree, so an
+// auth/network hiccup on the rad leg does not corrupt the local bare.
 //
 //   game/radicle.git/                               (bare, local-only)
 //     refs/heads/ActiveDimensions/<DimensionName>
@@ -18,6 +21,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { publishDimensionPush, publishSeedPresence, seedsEnabled } from './local-seeds.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,12 +29,40 @@ export const RADICLE_BARE = path.join(__dirname, 'radicle.git');
 export const RADICLE_WORK = path.join(__dirname, 'radicle-work');
 export const PROJECT_ROOT = path.resolve(__dirname, '..');
 
+// Mobile peers (nodejs-mobile inside the Android APK) have no git / rad /
+// ssh-agent / radicle-node available: all of this module's exec paths would
+// crash with ENOENT or do pointless work. Short-circuit to a disabled env so
+// pushDimension / listPublishedDimensions / syncFromSeeds behave as no-ops and
+// the module-load-time side effects (OCI connect, presence publish, startup
+// sync) all skip. The desktop peer in the swarm is responsible for radicle
+// writes. Set CHAOSD6_MOBILE=1 to activate.
+const IS_MOBILE = process.env.CHAOSD6_MOBILE === '1';
+
 // Resolve the real Radicle repo once at module load. If the project root isn't
 // a Radicle repo (or `rad` isn't installed), we fall back to local-bare-only
 // mode and no explorer URL is emitted — the local /commit/:sha view still works.
+// RADICLE_SEED + RADICLE_EXPLORER_BASE default to empty so the adapter never
+// advertises a public mesh host in its logs. Set them explicitly if (and only
+// if) you want pushDimension() to return a clickable "explorer" link for a
+// third-party viewer. The local-bare /commit/<sha> view in ui-server.mjs is
+// unaffected either way.
 const RADICLE_PUSH_REMOTE   = (process.env.RADICLE_PUSH_REMOTE ?? '1') !== '0';
-const RADICLE_SEED          = process.env.RADICLE_SEED          || 'rosa.radicle.network';
-const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://radicle.network';
+// Defaults point at the project's Firebase-hosted Radicle Explorer deployment
+// (static Svelte SPA at firebase/public/radicle, served from Hosting). The SPA
+// talks to the OCI seed below for data — a public read-only radicle-httpd that
+// anyone (phone, laptop, etc.) can reach without exposing the dev-PC. Local
+// dev with no OCI is still fine: set RADICLE_SEED=localhost to generate
+// loopback explorer URLs again.
+const RADICLE_SEED          = process.env.RADICLE_SEED          || '92-5-138-121.sslip.io';
+const RADICLE_EXPLORER_BASE = process.env.RADICLE_EXPLORER_BASE || 'https://dimensions-4e9ae.web.app';
+// Dev-PC → OCI gossip link. If both are set at boot we `rad node connect` to
+// the OCI seed so this peer's pushes gossip uphill (and incoming branches
+// gossip back down) over one outbound TCP from the dev PC. No inbound port
+// on the home network is required. Leave either unset to skip.
+// NID below is the chaosD6 OCI seed deployed at 92-5-138-121.sslip.io; override
+// via env for a different deployment.
+const OCI_SEED_NID  = process.env.OCI_SEED_NID  || 'z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT';
+const OCI_SEED_ADDR = process.env.OCI_SEED_ADDR || (RADICLE_SEED && RADICLE_SEED !== 'localhost' ? `${RADICLE_SEED}:8776` : '');
 // Default: emit raw explorer URLs (shareable, work from any browser). Setting
 // RADICLE_ALIAS=chaosD6 instead routes the broadcast link through the local
 // UI server as http://127.0.0.1:<UI_PORT>/r/<alias>/commits/<sha>, which 302s
@@ -59,11 +91,21 @@ async function detectSshAuthSock() {
 }
 const SSH_AUTH_SOCK = await detectSshAuthSock();
 
-export const radicleEnv = await (async () => {
+// Build a Radicle-env object for a given RID/push-URL pair. We call this twice
+// so dim-branch pushes (`ActiveDimensions/*`) can land on a dedicated RID
+// (`RADICLE_DIMS_RID`) while code-side commit/tree links still resolve against
+// the main chaosD6 code repo (`RADICLE_RID`). Prefix is the env-var namespace;
+// the second argument is a shared fallback so the dims env, if unconfigured,
+// transparently falls back to the code env (= current single-RID behaviour).
+async function buildEnv(prefix, fallback = null) {
+  if (IS_MOBILE) return { enabled: false, reason: 'mobile peer — radicle disabled' };
   if (!RADICLE_PUSH_REMOTE) return { enabled: false, reason: 'disabled via RADICLE_PUSH_REMOTE=0' };
-  let rid = process.env.RADICLE_RID || '';
-  let pushUrl = process.env.RADICLE_PUSH_URL || '';
-  if (!pushUrl) {
+  let rid = process.env[`${prefix}RID`] || '';
+  let pushUrl = process.env[`${prefix}PUSH_URL`] || '';
+  // For the code env (prefix "RADICLE_"), fall back to the project's own rad
+  // remote. The dims env has no project-root remote to probe — if its vars are
+  // unset we return a special `fallback` marker handled by the caller.
+  if (!pushUrl && prefix === 'RADICLE_') {
     try {
       const { stdout } = await pexec('git', ['-C', PROJECT_ROOT, 'remote', 'get-url', '--push', 'rad'], { windowsHide: true });
       pushUrl = stdout.trim();
@@ -73,11 +115,20 @@ export const radicleEnv = await (async () => {
     const m = pushUrl.match(/^rad:\/\/([^/]+)/);
     if (m) rid = m[1];
   }
-  if (!rid) return { enabled: false, reason: 'no rad remote on project root (set RADICLE_RID to override)' };
+  if (!rid) {
+    if (fallback) return { ...fallback, inherited: true };
+    return { enabled: false, reason: `no ${prefix}RID set and no rad remote on project root` };
+  }
   // Push needs the full rad://<RID>/<NID> form — pushing to the bare rad://<RID>
-  // is rejected with "no public key given as a remote namespace".
+  // is rejected with "no public key given as a remote namespace". For the dims
+  // env, we also accept an auto-derivation: if only RADICLE_DIMS_RID is set,
+  // reuse the code env's NID suffix to build the push URL.
   if (!/^rad:\/\/[^/]+\/[^/]+/.test(pushUrl)) {
-    return { enabled: false, reason: `rad remote push URL missing NID suffix (got "${pushUrl}"); set RADICLE_PUSH_URL=rad://<RID>/<NID>` };
+    if (fallback && fallback.enabled && fallback.nid) {
+      pushUrl = `rad://${rid}/${fallback.nid}`;
+    } else {
+      return { enabled: false, reason: `rad remote push URL missing NID suffix (got "${pushUrl}"); set ${prefix}PUSH_URL=rad://<RID>/<NID>` };
+    }
   }
   try {
     const st = await fs.stat(path.join(RAD_BIN_DIR, 'git-remote-rad'));
@@ -86,10 +137,10 @@ export const radicleEnv = await (async () => {
     return { enabled: false, reason: `git-remote-rad not found at ${RAD_BIN_DIR}` };
   }
   const explorerBase = RADICLE_EXPLORER_BASE.replace(/\/+$/, '');
-  // Explorer expects an URL-encoded colon between "rad" and the RID body.
-  const ridInUrl = `rad%3A${rid}`;
-  const rawCommitUrl = sha => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/commits/${sha}`;
-  const rawTreeUrl   = (sha, pathIn = '') => `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}`;
+  const ridInUrl = `rad:${rid}`;
+  const hasPublicExplorer = !!(explorerBase && RADICLE_SEED);
+  const rawCommitUrl = sha => hasPublicExplorer ? `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/commits/${sha}` : null;
+  const rawTreeUrl   = (sha, pathIn = '') => hasPublicExplorer ? `${explorerBase}/nodes/${RADICLE_SEED}/${ridInUrl}/tree/${sha}${pathIn ? '/' + pathIn.replace(/^\/+/, '') : ''}` : null;
   const alias = (RADICLE_ALIAS || '').trim();
   const makePretty = (kind, sha, pathIn = '') => {
     if (!alias) return kind === 'tree' ? rawTreeUrl(sha, pathIn) : rawCommitUrl(sha);
@@ -109,12 +160,58 @@ export const radicleEnv = await (async () => {
     rawCommitUrl,
     rawTreeUrl,
   };
-})();
+}
+
+export const radicleEnv = await buildEnv('RADICLE_');
+// Dedicated env for ActiveDimensions/* branch pushes. Set RADICLE_DIMS_RID
+// (and optionally RADICLE_DIMS_PUSH_URL) to land dim branches on a separate
+// Radicle repo — the one mobile peers shallow-fetch for the launcher's
+// "Active dimensions" list. If unset, inherits the code env so existing
+// single-RID deployments behave exactly as before.
+export const dimsEnv = await buildEnv('RADICLE_DIMS_', radicleEnv);
 
 if (!radicleEnv.enabled) {
   console.warn(`[radicle] remote push disabled (${radicleEnv.reason}); pushes stay on local bare only`);
 } else {
-  console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad; explorer base ${radicleEnv.explorerBase}`);
+  const explorerTail = radicleEnv.explorerBase ? `; explorer base ${radicleEnv.explorerBase}` : ` (private mesh — no public explorer base)`;
+  console.log(`[radicle] remote push → ${radicleEnv.remoteUrl} via git-remote-rad${explorerTail}`);
+  if (dimsEnv.enabled) {
+    if (dimsEnv.rid !== radicleEnv.rid) {
+      console.log(`[radicle] ActiveDimensions/* → ${dimsEnv.remoteUrl} (separate dims repo rad:${dimsEnv.rid.slice(0, 10)}…)`);
+    } else if (dimsEnv.inherited) {
+      console.log(`[radicle] ActiveDimensions/* → ${radicleEnv.remoteUrl} (dims repo inherits code RID — set RADICLE_DIMS_RID to split)`);
+    }
+  }
+  // One-shot `rad node connect` to the OCI seed when both env vars are set.
+  // The connection is kept alive by rad node, so a single dial is enough —
+  // pushes gossip to OCI over this socket. Failures are logged and swallowed:
+  // the dev-PC still works offline, just without the OCI mirror.
+  if (OCI_SEED_NID && OCI_SEED_ADDR) {
+    (async () => {
+      try {
+        const radBin = path.join(RAD_BIN_DIR, 'rad');
+        const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
+        await pexec(radBin, ['node', 'connect', `${OCI_SEED_NID}@${OCI_SEED_ADDR}`], { windowsHide: true, env: radEnv, timeout: 5000 });
+        console.log(`[radicle] connected to OCI seed ${OCI_SEED_NID.slice(0, 10)}… @ ${OCI_SEED_ADDR}`);
+      } catch (e) {
+        console.warn(`[radicle] OCI seed connect failed (${OCI_SEED_ADDR}): ${(e.stderr || e.message || '').toString().split('\n')[0].slice(0, 160)}`);
+      }
+    })();
+  }
+  // One-shot presence publish so this peer appears in the Firebase registry
+  // immediately, even before the first dimension push. RADICLE_PUBLIC_ADDR
+  // ("ip.ip.ip.ip:8776" — your box's reachable rad node listen) is what makes
+  // this peer qualify as a priority seed; without it the row still shows up
+  // in the explorer but fetchSeeds({requireAddr:true}) skips it.
+  const bootAddr = process.env.RADICLE_PUBLIC_ADDR || '';
+  publishSeedPresence({
+    nid: radicleEnv.nid, rid: `rad:${radicleEnv.rid}`,
+    alias: process.env.PEER_LABEL || process.env.USER || radicleEnv.nid.slice(0, 10),
+    radicleAddr: bootAddr,
+  }).then(r => {
+    if (r?.ok)      console.log(`[radicle] presence registered${bootAddr ? ` as ${bootAddr}` : ' (no public addr — set RADICLE_PUBLIC_ADDR to become a priority seed)'}`);
+    else if (r?.reason) console.warn(`[radicle] presence publish: ${r.reason.split('\n')[0].slice(0, 200)}`);
+  }).catch(() => {});
 }
 
 // Every git call made for a per-peer worktree is fenced with
@@ -168,13 +265,17 @@ export async function ensureBare() {
 function safePeerDir(peerId) { return peerId.replace(/[:/\\]/g, '-'); }
 
 async function ensureRadRemote(dir) {
-  if (!radicleEnv.enabled) return;
+  // The worktree's `rad` remote drives both the branch push and the fetch in
+  // resetBranchToBare, and every push through pushDimension lands on an
+  // ActiveDimensions/* branch — so this remote must point at the DIMS env
+  // (which falls back to the code env when RADICLE_DIMS_RID is unset).
+  if (!dimsEnv.enabled) return;
   try {
     const { stdout } = await pexec('git', ['-C', dir, 'remote', 'get-url', 'rad'], { windowsHide: true, env: FENCED_ENV });
-    if (stdout.trim() === radicleEnv.remoteUrl) return;
-    await pexec('git', ['-C', dir, 'remote', 'set-url', 'rad', radicleEnv.remoteUrl], { windowsHide: true, env: FENCED_ENV });
+    if (stdout.trim() === dimsEnv.remoteUrl) return;
+    await pexec('git', ['-C', dir, 'remote', 'set-url', 'rad', dimsEnv.remoteUrl], { windowsHide: true, env: FENCED_ENV });
   } catch {
-    await pexec('git', ['-C', dir, 'remote', 'add', 'rad', radicleEnv.remoteUrl], { windowsHide: true, env: FENCED_ENV });
+    await pexec('git', ['-C', dir, 'remote', 'add', 'rad', dimsEnv.remoteUrl], { windowsHide: true, env: FENCED_ENV });
   }
 }
 
@@ -202,7 +303,10 @@ export async function ensureWorkTree(peerId) {
 // own call so failures (unauth, offline, slow sync) don't break the local-bare
 // leg — they only disable the explorer URL for this push.
 async function pushToRadicle(dir, branch) {
-  if (!radicleEnv.enabled) return { published: false, reason: radicleEnv.reason };
+  // The only caller is pushDimension — every branch here is ActiveDimensions/*
+  // and must land on dimsEnv (which transparently falls back to codeEnv when
+  // RADICLE_DIMS_RID is unset).
+  if (!dimsEnv.enabled) return { published: false, reason: dimsEnv.reason };
   if (!SSH_AUTH_SOCK) return { published: false, reason: 'no ssh-agent socket found (SSH_AUTH_SOCK unset and no fallback at ~/.ssh/agent.sock); run `rad auth` or export SSH_AUTH_SOCK before launching' };
   try {
     const refspec = `refs/heads/${branch}:refs/heads/${branch}`;
@@ -232,7 +336,8 @@ async function resetBranchToBare(dir, branch) {
     await git(['fetch', '--quiet', 'radicle', `+refs/heads/${branch}:refs/remotes/radicle/${branch}`], dir);
     tips.push((await git(['rev-parse', `refs/remotes/radicle/${branch}`], dir)).trim());
   } catch {}
-  if (radicleEnv.enabled && SSH_AUTH_SOCK) {
+  // Fetch the dim branch from the dims remote so we rebuild on its tip.
+  if (dimsEnv.enabled && SSH_AUTH_SOCK) {
     try {
       await pexec('git', ['-C', dir, 'fetch', '--quiet', 'rad', `+refs/heads/${branch}:refs/remotes/rad/${branch}`], {
         windowsHide: true,
@@ -259,6 +364,9 @@ async function resetBranchToBare(dir, branch) {
 }
 
 export async function pushDimension(peerId, dimensionName, filesByRelPath, removeRelPaths = []) {
+  // Mobile peers never push — desktop peer in the swarm owns radicle writes.
+  // Returning the same shape as "no-changes" keeps the caller's branch tidy.
+  if (IS_MOBILE) return { pushed: false, reason: 'mobile-peer-no-radicle' };
   const dir = await ensureWorkTree(peerId);
   const branch = `ActiveDimensions/${dimensionName}`;
   // Races can happen on BOTH legs: the local bare (sibling peer in this clone)
@@ -270,6 +378,19 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath, remov
   let head = null, remote = { published: false, reason: 'not attempted' };
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     await resetBranchToBare(dir, branch);
+    // Scrub any `ActiveDimensions/<Other>/` left over from a previous dim push
+    // that reused this same work-tree. Without this, the first commit on a
+    // new dim branch sucks in all prior dims' folders via `git add -A` below,
+    // which is why shallow clones of REL2-Ashfall-Micro surfaced Ashfall-Micro
+    // and REL-Ashfall-Micro trees too.
+    const activeDir = path.join(dir, 'ActiveDimensions');
+    try {
+      for (const name of await fs.readdir(activeDir)) {
+        if (name !== dimensionName) {
+          await fs.rm(path.join(activeDir, name), { recursive: true, force: true });
+        }
+      }
+    } catch { /* ActiveDimensions/ doesn't exist yet — fine */ }
     for (const [rel, content] of Object.entries(filesByRelPath)) {
       const abs = path.join(dir, rel);
       await fs.mkdir(path.dirname(abs), { recursive: true });
@@ -290,20 +411,41 @@ export async function pushDimension(peerId, dimensionName, filesByRelPath, remov
       throw e;
     }
     remote = await pushToRadicle(dir, branch);
-    if (remote.published || !radicleEnv.enabled) { head = (await git(['rev-parse', 'HEAD'], dir)).trim(); break; }
+    if (remote.published || !dimsEnv.enabled) { head = (await git(['rev-parse', 'HEAD'], dir)).trim(); break; }
     // rad push failed. Only retry if the failure was a race (non-ff). Auth /
     // network errors won't be fixed by another round-trip.
     if (!/non-fast-forward|fetch first|rejected/.test(remote.reason || '')) { head = (await git(['rev-parse', 'HEAD'], dir)).trim(); break; }
   }
   if (!head) throw new Error(`push ${dimensionName} failed after ${MAX_ATTEMPTS} attempts: ${remote.reason}`);
-  const published = remote.published && radicleEnv.enabled;
-  const explorerUrl = published ? radicleEnv.commitUrl(head) : null;
+  const published = remote.published && dimsEnv.enabled;
+  // Explorer/tree links point at the dims repo — that's where the branch
+  // actually lives. On an inherited dimsEnv (code+dims same RID), these are
+  // identical to what radicleEnv would've produced, so this is backward-safe.
+  const explorerUrl = published ? dimsEnv.commitUrl(head) : null;
   // Point the tree link at the pushed branch's content root. Using the commit
   // SHA (rather than the branch name) keeps the URL stable even if we later
   // rewrite the branch, and sidesteps slash-encoding in the branch path.
-  const treeUrl = published ? radicleEnv.treeUrl(head, `ActiveDimensions/${dimensionName}`) : null;
+  const treeUrl = published ? dimsEnv.treeUrl(head, `ActiveDimensions/${dimensionName}`) : null;
+  // Firebase registry (firebase/ + game/local-seeds.mjs). Fire-and-forget — a
+  // failure here is logged but never fails the push, because the local bare
+  // and rad remote are already updated. The adapter in local-seeds.mjs is a
+  // no-op when FIREBASE_PROJECT_ID / FIREBASE_API_KEY are unset. We advertise
+  // the dims RID so the Firebase explorer's /explore page queries the right
+  // repo for the ActiveDimensions list.
+  if (seedsEnabled && dimsEnv.enabled) {
+    const doorPath = Object.keys(filesByRelPath).find(k => /\/doors\/[^/]+\.json$/.test(k));
+    const doorDoc  = doorPath ? (typeof filesByRelPath[doorPath] === 'string' ? safeParse(filesByRelPath[doorPath]) : filesByRelPath[doorPath]) : null;
+    const subject  = `[${peerId}] push ${dimensionName}`;
+    const addr = process.env.RADICLE_PUBLIC_ADDR || '';
+    Promise.all([
+      publishSeedPresence({ nid: dimsEnv.nid, rid: `rad:${dimsEnv.rid}`, alias: peerId, radicleAddr: addr }),
+      publishDimensionPush({ dimensionName, nid: dimsEnv.nid, rid: `rad:${dimsEnv.rid}`, alias: peerId, doorDoc, commit: head, subject, branch }),
+    ]).catch(e => console.warn(`[radicle] firebase registry publish failed: ${e.message}`));
+  }
   return { pushed: true, commit: head, branch, remote, explorerUrl, treeUrl };
 }
+
+function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 
 export async function fetchDimension(peerId, dimensionName) {
   const dir = await ensureWorkTree(peerId);
@@ -327,7 +469,9 @@ async function radStorageDir() {
   let home = process.env.RAD_HOME || '';
   if (!home) { try { home = (await pexec(radBin, ['path'], { windowsHide: true, env: radEnv })).stdout.trim(); } catch {} }
   if (!home) home = path.join(process.env.HOME || '', '.radicle');
-  return path.join(home, 'storage', radicleEnv.rid);
+  // The caller walks ActiveDimensions/* namespaces — that's dim-branch data,
+  // which lives in the dims repo's storage dir (same as code when inherited).
+  return path.join(home, 'storage', dimsEnv.rid);
 }
 
 // Pull the latest refs for every namespace from the seeds (best effort, bounded).
@@ -338,11 +482,29 @@ async function radStorageDir() {
 // not look like a failure. The caller never blocks on this — the cache in
 // `syncFromSeedsCached` serves whatever storage already has.
 export async function syncFromSeeds(timeoutSec = 10) {
-  if (!radicleEnv.enabled) return false;
+  if (!dimsEnv.enabled) return false;
   const radEnv = { ...process.env, PATH: GIT_PATH_WITH_RAD };
   const radBin = path.join(RAD_BIN_DIR, 'rad');
   const outerMs = Math.max(45_000, (timeoutSec * 4 + 10) * 1000);
-  try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${radicleEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: outerMs }); return true; }
+  // Try the Firebase registry's priority seeds first: `rad node connect` adds
+  // the peer to the live connection set so the subsequent `rad sync --fetch`
+  // has somebody to talk to. Each connect call is budgeted tightly (3s) so a
+  // stale registry row can't make boot hang. Failures are silent — if nobody
+  // is registered yet, we fall straight through to the default gossip walk
+  // and the error message still points the user at the obvious cause.
+  try {
+    const { priorityBootstrap } = await import('./local-seeds.mjs');
+    const { seeds } = await priorityBootstrap({ rid: `rad:${dimsEnv.rid}`, max: 3 });
+    for (const s of seeds) {
+      const target = s.radicleAddr.includes('@') ? s.radicleAddr : `${s.nid}@${s.radicleAddr}`;
+      try {
+        await pexec(radBin, ['node', 'connect', target], { windowsHide: true, env: radEnv, timeout: 3000 });
+        console.log(`[radicle] connected to priority seed ${s.alias || s.nid.slice(0, 10)} @ ${s.radicleAddr}`);
+      } catch { /* seed unreachable; move on */ }
+    }
+    if (!seeds.length) console.log(`[radicle] no priority seeds registered yet in dimensions-4e9ae — publish from any live peer to populate`);
+  } catch { /* local-seeds disabled or offline */ }
+  try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${dimsEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: outerMs }); return true; }
   catch (e) {
     const msg = (e.stderr || e.message || '').toString().split('\n')[0].slice(0, 160);
     const killed = /ETIMEDOUT|SIGTERM|SIGKILL|killed/i.test(String(e.signal || e.code || msg));

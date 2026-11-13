@@ -44,13 +44,36 @@ var _reconnect_at := 0
 
 
 func _ready() -> void:
-	_url = _resolve_url()
+	# On Android, the embedded nodejs-mobile peer boots asynchronously. If the
+	# EmbeddedPeer autoload is active (plugin AAR present), wait for its
+	# peer_url_ready signal before resolving the connect URL. The embedded
+	# path takes precedence over ProjectSettings/env overrides — on-device
+	# peer is always right when available.
+	var embedded: Node = get_node_or_null("/root/EmbeddedPeer")
+	if embedded != null and bool(embedded.get("active")):
+		var ready_url: String = String(embedded.get("peer_url"))
+		if ready_url != "":
+			_url = ready_url
+		else:
+			embedded.connect("peer_url_ready", _on_embedded_url_ready)
+			set_process(true)
+			return
+	if _url == "":
+		_url = _resolve_url()
 	if _url == "":
 		offline = true
 		print("[NetBridge] no peer URL — running offline (set CHAOSD6_PEER_WS or ProjectSettings 'chaosd6/peer_ws_url')")
 		return
 	_connect()
 	set_process(true)
+
+
+func _on_embedded_url_ready(url: String) -> void:
+	if _connected or _ws != null:
+		return
+	_url = url
+	print("[NetBridge] embedded peer up at %s" % url)
+	_connect()
 
 
 func _resolve_url() -> String:
@@ -60,6 +83,16 @@ func _resolve_url() -> String:
 	var proj: Variant = ProjectSettings.get_setting("chaosd6/peer_ws_url", "")
 	if typeof(proj) == TYPE_STRING and String(proj) != "":
 		return String(proj)
+	# On Android we don't have a local Node launcher. Prefer an explicit
+	# Android override from ProjectSettings (chaosd6/peer_ws_url_android);
+	# dev builds point it at ws://10.0.2.2:7401/ so the emulator reaches the
+	# WSL host peer. If unset, fall back to the OCI URL (which currently
+	# 404s until start-all.mjs runs there).
+	if OS.get_name() == "Android":
+		var android_url: Variant = ProjectSettings.get_setting("chaosd6/peer_ws_url_android", "")
+		if typeof(android_url) == TYPE_STRING and String(android_url) != "":
+			return String(android_url)
+		return "wss://92-5-138-121.sslip.io/peer"
 	# Default: first local peer the launcher spawns.
 	return "ws://127.0.0.1:7401/"
 

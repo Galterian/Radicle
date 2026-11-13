@@ -16,12 +16,21 @@ run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+RadicleBoot="*res://scripts/RadicleBoot.gd"
+AssetBootstrap="*res://scripts/AssetBootstrap.gd"
+DimensionLauncher="*res://scripts/DimensionLauncher.gd"
+EmbeddedPeer="*res://scripts/EmbeddedPeer.gd"
+MobileHudWebView="*res://scripts/MobileHudWebView.gd"
+
 [display]
 
 window/size/viewport_width=1440
 window/size/viewport_height=900
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/handheld/orientation="sensor_landscape"
 
 [input]
 
@@ -72,3 +81,7 @@ renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/canvas_textures/default_texture_filter=1
 textures/vram_compression/import_etc2_astc=true
+
+[chaosd6]
+
+peer_ws_url_android="ws://10.0.2.2:7401/"

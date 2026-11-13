@@ -37,6 +37,7 @@ var _tween: Tween
 var _path: Array[Vector2i] = []
 var _rng := RandomNumberGenerator.new()
 var _scale_fix := 1.0
+var _last_play_key: String = ""   # (sheet|state|facing|anim) of the most recent mutation; guards against per-tick re-plays that reset frame to 0 (observed as flicker on mobile GL compat).
 
 
 func setup(ent_id: String, ent_kind: String, dl: DataLoader, start: Vector2i, fac: String, fallback_sheets: Dictionary = {}) -> void:
@@ -99,12 +100,23 @@ func _build_nodes() -> void:
 	_sprites.centered = true
 	_sprites.animation_finished.connect(_on_anim_finished)
 	# WBC3 player-colour ramp (pure green in the extracted sheets) -> faction tint via shader.
-	var shader: Shader = load("res://shaders/team_recolor.gdshader")
-	if shader != null:
-		var mat := ShaderMaterial.new()
-		mat.shader = shader
-		mat.set_shader_parameter("team_color", team_color())
-		_sprites.material = mat
+	# Mobile GL compat sometimes mis-handles the `varying vec4 modulate` in this
+	# shader, which renders as per-frame flicker on every unit. Skip the material
+	# on mobile — sprites fall back to the WBC3 default green but stay stable.
+	var is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
+	if not is_mobile:
+		var shader: Shader = load("res://shaders/team_recolor.gdshader")
+		if shader != null:
+			var mat := ShaderMaterial.new()
+			mat.shader = shader
+			mat.set_shader_parameter("team_color", team_color())
+			_sprites.material = mat
+	# On mobile, tint via modulate instead so player/NPC are still distinguishable.
+	# modulate multiplies the texture; dark team colours would dim everything so
+	# we blend toward white (0.6 team + 0.4 white) to keep sprites readable.
+	elif faction != "":
+		var tc := team_color()
+		_sprites.modulate = Color(tc.r * 0.6 + 0.4, tc.g * 0.6 + 0.4, tc.b * 0.6 + 0.4, 1.0)
 	add_child(_sprites)
 	# Target on-screen height ≈ 1.6 hex so big WBC3 sheets (giants, dragons) don't swamp the map.
 	var g := SheetAnimator.grid_for(_sheets.get("idle", _sheets.get("walk", "")))
@@ -198,16 +210,28 @@ func play(new_state: String, dir := "") -> void:
 	var sf := SheetAnimator.frames_for(_sheets[st], st, 1 if loop else 0)
 	if sf == null:
 		return
-	_sprites.sprite_frames = sf
 	var anim := st + "_" + facing if SheetAnimator.has_directions(sf, st) else st
 	if not sf.has_animation(anim):
 		anim = sf.get_animation_names()[0]
+	# Skip no-op reassignments: setting sprite_frames or calling play(anim) again on
+	# the already-current (sheet,state,facing,anim) resets frame to 0 every call, which
+	# on Android GL compat reads as rapid flicker. is_playing() was in this guard
+	# earlier but can report false after a pause/resume cycle on mobile, so the
+	# guard rebooted every tick -> the flicker returned. Compare the tuple only;
+	# if a non-looping anim actually finished, _on_anim_finished has already set
+	# state back to "idle" and the next explicit play("idle") takes a different key.
+	var key: String = "%s|%s|%s|%s" % [_sheets[st], st, facing, anim]
+	if key == _last_play_key and _sprites.sprite_frames == sf:
+		return
+	_last_play_key = key
+	_sprites.sprite_frames = sf
 	# WBC3 sheets anchor the unit's feet at the bottom-centre of each cell.
 	var tex := sf.get_frame_texture(anim, 0)
 	if tex != null:
 		_sprites.offset = Vector2(0, -tex.get_height() / 2.0 + 4.0)
 	_sprites.play(anim)
 	_layout_overlays()
+	print("[sprite] %s state=%s facing=%s anim=%s frames=%d" % [display_name, state, facing, anim, sf.get_frame_count(anim)])
 
 
 func _on_anim_finished() -> void:
@@ -291,9 +315,12 @@ func take_damage(n: int) -> void:
 
 
 func _flash() -> void:
+	# On mobile the sprite modulate carries the faction tint (shader disabled),
+	# so tween back to that colour, not pure WHITE, or every hit removes the tint.
+	var base: Color = _sprites.modulate if _sprites.modulate != Color(1.6, 0.7, 0.7) else Color.WHITE
 	var t := create_tween()
 	_sprites.modulate = Color(1.6, 0.7, 0.7)
-	t.tween_property(_sprites, "modulate", Color.WHITE, 0.35)
+	t.tween_property(_sprites, "modulate", base, 0.35)
 
 
 # ------------------------------------------------------------------ sound

@@ -1,0 +1,76 @@
+# fastlane/Fastfile — ChaosD6 Dimensions Play Store release pipeline.
+#
+# Prereqs (see fastlane/README.md):
+#   - fastlane installed (gem install fastlane -NV)
+#   - PLAY_JSON_KEY points to a Google Play Developer API service-account JSON
+#     with "Release manager" role on this app.
+#   - A signed .aab exists at _tools/chaosd6-release.aab (produced by
+#     `godot --headless --export-release "Android Play Store (AAB)" <path>`).
+#   - version_code bumped in godot/export_presets.cfg (preset.1 version/code)
+#     before every upload — Play rejects duplicates.
+
+default_platform(:android)
+
+AAB_PATH = ENV["AAB_PATH"] || "_tools/chaosd6-release.aab"
+
+platform :android do
+  before_all do
+    unless File.exist?(AAB_PATH)
+      UI.user_error!("No AAB at #{AAB_PATH}. Build it: " \
+        "`godot --headless --path godot --export-release \"Android Play Store (AAB)\" " \
+        "../_tools/chaosd6-release.aab`")
+    end
+  end
+
+  desc "Upload to the Internal testing track (fastest, invite testers by email)."
+  lane :internal do
+    upload_to_play_store(
+      track: "internal",
+      aab: AAB_PATH,
+      skip_upload_apk: true,
+      skip_upload_metadata: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false,
+      metadata_path: "fastlane/metadata/android",
+      release_status: "draft",
+    )
+  end
+
+  desc "Promote the latest Internal build to Closed testing (Alpha)."
+  lane :alpha do
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "alpha",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+    )
+  end
+
+  desc "Promote the latest Alpha build to Open testing (Beta)."
+  lane :beta do
+    upload_to_play_store(
+      track: "alpha",
+      track_promote_to: "beta",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+    )
+  end
+
+  desc "Promote the latest Beta build to Production (staged 10% → 100%)."
+  lane :production do
+    upload_to_play_store(
+      track: "beta",
+      track_promote_to: "production",
+      rollout: "0.1",
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+    )
+  end
+
+  desc "Pull the current store listing from Play into fastlane/metadata/."
+  lane :pull_listing do
+    download_from_play_store(
+      metadata_path: "fastlane/metadata/android",
+    )
+  end
+end

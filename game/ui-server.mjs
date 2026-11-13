@@ -26,14 +26,27 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { RADICLE_BARE, radicleEnv, listPublishedDimensions } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
-import { hexDistance } from './js/hex.js';
-import { createKnownMap, initialBlock, seedForDimension } from './js/map.js';
 import { fancyLabel } from './js/names.js';
 import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
+import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing } from './join-plan.mjs';
+import { seedForDimension } from './js/map.js';
+import { randomBytes } from 'node:crypto';
+import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
+// No player profiles yet (TBD): a new game starts as a random character, desktop and phone alike
+// (user ruling 2026-11-12). A resumed save keeps the hero it saved.
+function randomCharacter() {
+  try {
+    const doc = JSON.parse(fsSync.readFileSync(path.join(DATA_DIR, 'characters.json'), 'utf8'));
+    const list = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status)));
+    const e = list[Math.floor(Math.random() * list.length)];
+    if (e) { console.log(`[launcher] random character: ${e.id} (of ${list.length})`); return { id: e.id, name: e.name || e.id }; }
+  } catch (err) { console.warn(`[launcher] characters.json unreadable (${err.message}) — Firestroker it is`); }
+  return { id: 'char_exuberant_firestroker', name: 'Exuberant Firestroker' };
+}
 // Curated WBC3 art/sound collection (chaosD6/assets) — sprite sheets, hex
 // terrain tiles, portraits and voice lines referenced by data/*.json `resources`.
 const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
@@ -148,7 +161,6 @@ async function waitForPort(port, timeoutMs = 25000) {
 }
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-const dimIdOf = d => d.dimension_id || d.dimension?.dimension_id || `dim-${slug(d.dimension_name)}`;
 
 // Addresses peers on the same network could dial this box at, for the optional
 // direct libp2p link. Tailscale (100.64/10) first, then LAN, loopback last.
@@ -171,28 +183,9 @@ function defaultPublicIp() {
 }
 const isLoopback = ip => !ip || ip === '127.0.0.1' || ip === 'localhost';
 
-// Every live peer re-publishes its Door once a minute, so a dimension whose
-// newest Door is older than this has nobody in it right now.
-const DOOR_LIVE_MS = Number(process.env.DOOR_LIVE_MS || 3 * 60 * 1000);
+// DOOR_LIVE_MS, unionMembers, mapFromDoors, placeFromDoors live in join-plan.mjs
+// (shared with the Android entry).
 const ageSec = iso => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 1000));
-
-// Union the members every Door knows about into one roster: newest sighting
-// of each peer wins, stale ones (nobody has seen them in a while) drop out.
-function unionMembers(doors, maxAgeMs = DOOR_LIVE_MS) {
-  const byId = new Map();
-  const consider = (m, at) => {
-    if (!m?.peer_id) return;
-    const seen = Date.parse(m.last_seen || at || 0);
-    const prev = byId.get(m.peer_id);
-    if (!prev || seen > prev._seen) byId.set(m.peer_id, { ...m, _seen: seen });
-  };
-  for (const p of doors) {
-    consider({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: p.tile, life: p.life, life_max: p.life_max, last_seen: p.pushed_at }, p.pushed_at);
-    for (const m of p.known_members || []) consider(m, p.pushed_at);
-  }
-  const cutoff = Date.now() - maxAgeMs;
-  return [...byId.values()].filter(m => m._seen > cutoff).map(({ _seen, ...m }) => m);
-}
 
 // Shape a dimension for the launcher page.
 function describeDimension(d) {
@@ -244,14 +237,27 @@ async function freePortRun(start, count) {
 // through if start-all was told to run the optional LAN mirror.
 function commonPeerEnv() {
   return {
-    RADICLE_PUSH_SEC: process.env.RADICLE_PUSH_SEC || '60',
+    // Only forward the two push-cadence env vars if they're set — otherwise
+    // let peer.mjs use its own defaults (600s interval, 60s initial delay).
+    // Hard-coding '60' here used to pin every spawned peer to 1-minute pushes
+    // regardless of the peer-side default; dropping that so the new 10-min
+    // cadence actually takes effect for ui-launched meshes.
+    ...(process.env.RADICLE_PUSH_SEC       ? { RADICLE_PUSH_SEC:       process.env.RADICLE_PUSH_SEC       } : {}),
+    ...(process.env.RADICLE_PUSH_FIRST_SEC ? { RADICLE_PUSH_FIRST_SEC: process.env.RADICLE_PUSH_FIRST_SEC } : {}),
     UI_PORT: String(process.env.UI_PORT || 7357),
     ...(process.env.DISCOVERY_URL ? { DISCOVERY_URL: process.env.DISCOVERY_URL } : {}),
     ...(process.env.NOSTR_RELAYS ? { NOSTR_RELAYS: process.env.NOSTR_RELAYS } : {}),
   };
 }
 
-async function startDimension({ dimensionName, publicIp }) {
+// Test-team allies stand this far from player-1 (user ruling 2026-11-13):
+// 'strong' inside STRONG_RADIUS, 'reachable' just past it, inside REACH_RADIUS.
+const TEAM_TIER_RING = { strong: { min: 2, max: 6 }, reachable: { min: 9, max: 10 } };
+
+// `override` (profile launches, user ruling 2026-11-13) replaces the hero and/or
+// the default ally: { hero: profile character | null (random), allies: [profile
+// characters] (bots, alliance npc_a) | null (the Pride Guardian), tier }.
+async function startDimension({ dimensionName, publicIp }, override = null) {
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   const DIM_NAME = (dimensionName || 'Ashfall-Micro').trim();
   const DIM_ID   = `dim-${slug(DIM_NAME)}`;
@@ -259,12 +265,29 @@ async function startDimension({ dimensionName, publicIp }) {
   const ip = (publicIp || '').trim() || defaultPublicIp();
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error(`"${ip}" is not an IPv4 address`);
   const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  const pc = override?.hero || null;
+  const hero = pc ? { id: pc.base_character, name: pc.name } : randomCharacter();
+  const file = profilePath();
   const roster = [
-    { label: 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 } },
+    { label: 'player-1', alliance: 'player', character: hero.id, creature: '',                                          name: pc ? pc.name : `You (${hero.name})`, tile: { q: 1, r: 2 }, profile: pc },
     { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 } },
     { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 } },
     { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 } },
   ];
+  if (override?.allies?.length) {
+    // "Test my team": the next characters of the team order replace the Pride
+    // Guardian, each on a walkable hex at the tier's distance from player-1.
+    const ring = TEAM_TIER_RING[override.tier] || TEAM_TIER_RING.reachable;
+    const seed = seedForDimension(DIM_ID);
+    roster.splice(1, 1);
+    const occupied = new Set(roster.map(p => `${p.tile.q},${p.tile.r}`));
+    override.allies.forEach((c, i) => {
+      const tile = tileInRing(roster[0].tile, { ...ring, seed, salt: c.id, occupied });
+      if (!tile) throw new Error(`no walkable hex ${ring.min}–${ring.max} hexes from player-1 for ${c.name}`);
+      occupied.add(`${tile.q},${tile.r}`);
+      roster.splice(1 + i, 0, { label: `ally-${i + 1}`, alliance: 'npc_a', character: c.base_character, creature: '', name: c.name, tile, profile: c });
+    });
+  }
   // http and gun live in different base ranges (7401, 7501) and don't collide,
   // so probe them in parallel. libp2p (7410) sits inside http's search region,
   // so it has to wait for httpBase and start past it — this is the fix for the
@@ -301,6 +324,7 @@ async function startDimension({ dimensionName, publicIp }) {
       JOIN_SYNC_WAIT_MS: p === peers[0] ? '500' : '8000',
       ...commonPeerEnv(),
       ...netEnv,
+      ...(p.profile ? profileEnv(file, p.profile) : {}),
     });
     if (!(await waitForPort(p.http))) throw new Error(`peer-${p.label} did not come up on :${p.http}`);
     try {
@@ -311,16 +335,6 @@ async function startDimension({ dimensionName, publicIp }) {
   const ok = await waitForPort(peers[0].http);
   if (!ok) throw new Error(`peer-player-1 did not come up on :${peers[0].http}`);
   return { peerPort: peers[0].http, status: 'started', dimension: DIM_NAME, publicIp: ip };
-}
-
-// The dimension's known map as the union of every Door's blocks. Each Door
-// carries the map as its holder saw it; blocks are idempotent so the union is
-// exactly what a peer that had heard everyone would hold.
-function mapFromDoors(dim) {
-  const seed = dim.doors.find(p => p.map?.seed)?.map.seed || seedForDimension(dimIdOf(dim));
-  const km = createKnownMap(seed, [initialBlock()]);
-  for (const p of dim.doors) km.addBlocks(p.map?.blocks || []);
-  return km;
 }
 
 // Doors lag reality by up to a Door push: a hero who joined seconds ago is not
@@ -345,36 +359,7 @@ function mergeMembers(doorMembers, live) {
   return [...byId.values()];
 }
 
-// Pick a start tile from what the Doors know. 'nearby' = adjacent to a friend
-// (or to the chosen player's Door); 'random' = a known hex outside everyone's
-// strong radius. Only hexes somebody has revealed are candidates.
-function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2 }) {
-  const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : a;
-  const alive = members
-    .map(m => ({ peer_id: m.peer_id, q: m.tile?.q, r: m.tile?.r, alliance: m.alliance ?? m.clan, life: m.life ?? 1 }))
-    .filter(m => Number.isInteger(m.q) && Number.isInteger(m.r) && (m.life ?? 1) > 0);
-  const occupied = new Set(alive.map(m => `${m.q},${m.r}`));
-  const all = [...knownMap.tiles()].map(t => ({ q: t.q, r: t.r }));
-  const free = all.filter(t => !occupied.has(`${t.q},${t.r}`));
-  if (!free.length) throw new Error('the grid is full');
-  const minDist = (t, set) => set.length ? Math.min(...set.map(m => hexDistance(t, m))) : Infinity;
-  const rand = arr => arr[Math.floor(Math.random() * arr.length)];
-  if (placement === 'random') {
-    const hidden = free.filter(t => minDist(t, alive) > strongRadius);
-    if (hidden.length) return rand(hidden);
-    const far = Math.max(...free.map(t => minDist(t, alive)));
-    return rand(free.filter(t => minDist(t, alive) === far));
-  }
-  const anchor = anchorPeerId ? alive.filter(m => m.peer_id === anchorPeerId) : [];
-  const friends = alive.filter(m => sideOf(m.alliance) === sideOf(side));
-  const anchors = anchor.length ? anchor : friends.length ? friends : alive.length ? alive : [{ q: 2, r: 2 }];
-  const adjacent = free.filter(t => anchors.some(a => hexDistance(t, a) === 1));
-  if (adjacent.length) return rand(adjacent);
-  free.sort((a, b) => minDist(a, anchors) - minDist(b, anchors));
-  return free[0];
-}
-
-async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName }) {
+async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null, extraEnv = {} }) {
   if (!radicleEnv.enabled) throw new Error(`radicle disabled: ${radicleEnv.reason}`);
   const items = await listPublishedDimensions();
   const dim = items.find(d => d.dimension_name === dimensionName);
@@ -387,8 +372,10 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   if (!liveDoors.length) console.log(`[launcher] ${dimensionName}: no Door newer than ${DOOR_LIVE_MS / 60000} min — joining an empty dimension; you will be alone until someone else arrives`);
 
   const knownMap = mapFromDoors(dim);
-  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap });
-  if (!knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
+  // 'far' ("Join my team") lands 30–50 hexes out, past the known map, on a hex
+  // the deterministic map says is walkable; every other placement stays on it.
+  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile, salt: randomBytes(4).toString('hex') });
+  if (placement !== 'far' && !knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
   console.log(`[launcher] ${dimensionName}: map from ${dim.doors.length} Doors = ${knownMap.size()} hexes in ${knownMap.blockCount()} blocks (seed ${knownMap.seed})`);
   // Hundreds of blocks don't fit comfortably in an environment variable; hand
   // the joiner a file instead.
@@ -439,10 +426,42 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
     JOIN_SYNC_WAIT_MS: liveDoors.length ? '8000' : '500',
     ...commonPeerEnv(),
     NOSTR_RELAYS:      [...relays].join(','),
+    ...extraEnv,
   });
   const ok = await waitForPort(portHttp);
   if (!ok) throw new Error(`peer did not come up on :${portHttp}`);
   return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length };
+}
+
+// Running copies of one peer of a dimension on this box: this launcher's own
+// children, plus (Linux) any other node peer.mjs whose env says the same
+// DIM_NAME + PEER_LABEL - e.g. one started by an earlier launcher run.
+function localPeerProcs(dimName, label) {
+  const out = children.filter(c => c._dim === dimName && c._name === `peer:${label}` && c.exitCode === null && !c.killed)
+    .map(c => ({ pid: c.pid, http: c._http }));
+  if (process.platform === 'linux') {
+    let pids = [];
+    try { pids = fsSync.readdirSync('/proc').filter(d => /^\d+$/.test(d)); } catch {}
+    for (const pid of pids) {
+      if (out.some(o => String(o.pid) === pid)) continue;
+      try {
+        if (!fsSync.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('peer.mjs')) continue;
+        const env = Object.fromEntries(fsSync.readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').filter(Boolean)
+          .map(kv => [kv.slice(0, kv.indexOf('=')), kv.slice(kv.indexOf('=') + 1)]));
+        if (env.DIM_NAME === dimName && env.PEER_LABEL === label) out.push({ pid: Number(pid), http: Number(env.PEER_PORT_HTTP) || null });
+      } catch {}
+    }
+  }
+  return out;
+}
+// Stop them (SIGTERM, then SIGKILL after 5 s) and wait until they are gone, so
+// the replacement can take the same peer id without two of "me" in the mesh.
+async function stopPeerProcs(procs) {
+  const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  for (const p of procs) { try { process.kill(p.pid, 'SIGTERM'); } catch {} }
+  for (let i = 0; i < 50 && procs.some(p => alive(p.pid)); i++) await new Promise(r => setTimeout(r, 100));
+  for (const p of procs) if (alive(p.pid)) { try { process.kill(p.pid, 'SIGKILL'); } catch {} }
+  for (let i = 0; i < 20 && procs.some(p => alive(p.pid)); i++) await new Promise(r => setTimeout(r, 100));
 }
 
 // Restore a dimension from a local TMJ autosave / hard save on this box.
@@ -460,6 +479,82 @@ async function restoreDimension({ tmjPath, label }) {
   const DIM_ID   = String(props.dim_id   || `dim-${slug(DIM_NAME)}`);
   const DOOR_ID  = 'door-primary';
   const MAP_SEED = String(props.seed || '');
+  // Rejoin path: if the dim named here is still live on Radicle (a recent Door
+  // exists), bring the dead player back as a fresh peer at their saved tile
+  // (or the nearest free hex if someone else now stands on it) instead of
+  // doing a cold respawn of the whole 4-peer mesh. The entities layer of the
+  // TMJ carries each entity's tile; the player tile is the one with
+  // alliance='player'. If no player entity is in the TMJ (shouldn't happen,
+  // but legacy saves exist) we fall through to the cold-respawn code below.
+  // IMPORTANT: this runs BEFORE the `startedDimension` guard so a launcher
+  // that already hosts the (still-live) dim can still spawn one more peer to
+  // bring the dead player back — rejoin only adds one peer, it never touches
+  // the roster already in flight.
+  const entitiesLayer = (map.layers || []).find(l => l.name === 'entities') || { objects: [] };
+  const entProps = o => Object.fromEntries((o.properties || []).map(p => [p.name, p.value]));
+  const ents = (entitiesLayer.objects || []).map(o => ({ p: entProps(o), name: o.name }));
+  // "Me" is the hero that wrote the save (props.peer_id); saves written by a
+  // summon or monster (before only heroes saved) and older saves without the
+  // field fall back to the first human hero in the roster.
+  const isHero = e => ['player', 'player_c'].includes(String(e.p.alliance || '')) && String(e.p.source_id || '').startsWith('char_');
+  const myId = String(props.peer_id || (props.peer_label ? `peer:${props.peer_label}` : ''));
+  const playerEnt = (myId && ents.find(e => e.p.peer_id === myId && isHero(e))) || ents.find(isHero);
+  const myLabel = String(playerEnt?.p.peer_id || '').replace(/^peer:/, '');
+  const savedTile = playerEnt && Number.isInteger(playerEnt.p.tile_q) && Number.isInteger(playerEnt.p.tile_r)
+    ? { q: playerEnt.p.tile_q, r: playerEnt.p.tile_r } : null;
+  // Still published on Radicle (any Door / commit, live or not)? Then join that
+  // dimension as me rather than cold-respawning a private copy of it:
+  //   - a copy of me still running on this box -> read its tile / life / class,
+  //     stop it, and take its place under the same peer id;
+  //   - else my own Door (same peer id) -> its tile if it is newer than the save;
+  //   - else the saved tile. Only a dimension Radicle doesn't know is respawned.
+  if (radicleEnv.enabled && playerEnt) {
+    let dim = null;
+    try {
+      dim = (await listPublishedDimensions()).find(d => d.dimension_name === DIM_NAME);
+    } catch (e) {
+      console.warn(`[launcher] Radicle lookup failed (${e.message}); falling back to cold respawn`);
+    }
+    {
+      // Published: join it or fail — a cold respawn here would put a second,
+      // private copy of the whole mesh into a dimension others are still in.
+      if (dim?.doors?.length && !dim.legacy) {
+        const wantLabel = (label || '').trim() || myLabel || null;
+        const myDoor = wantLabel ? dim.doors.find(d => d.peer_id === `peer:${wantLabel}`) : null;
+        let tile = savedTile, life = Number(playerEnt.p.hp) || 0, classId = playerEnt.p.class_id || '', how = 'saved tile';
+        if (myDoor?.tile && Date.parse(myDoor.pushed_at || 0) > Date.parse(props.saved_at || 0) && (myDoor.life ?? 1) > 0) {
+          tile = { q: myDoor.tile.q, r: myDoor.tile.r }; life = Number(myDoor.life) || life; how = 'my newest Door';
+        }
+        const running = wantLabel ? localPeerProcs(DIM_NAME, wantLabel) : [];
+        let replaced = false;
+        if (running.length) {
+          const st = running[0].http ? await fetch(`http://127.0.0.1:${running[0].http}/status`, { signal: AbortSignal.timeout(2000) }).then(r => r.json()).catch(() => null) : null;
+          if (st?.entity?.tile && (st.entity.life ?? 0) > 0) {
+            tile = { q: st.entity.tile.q, r: st.entity.tile.r }; life = st.entity.life; classId = st.entity.classId || classId; how = 'my running peer';
+          }
+          console.log(`[launcher] ${DIM_NAME}: ${wantLabel} is already in the dimension (pid ${running.map(r => r.pid).join(',')}) — replacing it`);
+          await stopPeerProcs(running);
+          replaced = true;
+        } else if (myDoor && Date.now() - Date.parse(myDoor.pushed_at || 0) < DOOR_LIVE_MS && (myDoor.life ?? 0) > 0) {
+          console.warn(`[launcher] ${DIM_NAME}: ${wantLabel}'s Door is live but no copy runs on this box — it may be playing elsewhere; taking the id over anyway`);
+        }
+        console.log(`[launcher] ${DIM_NAME} is on Radicle (${dim.doors.length} Door${dim.doors.length === 1 ? '' : 's'}) — joining as ${wantLabel || 'a new peer'} at ${how} (${tile?.q},${tile?.r})`);
+        const out = await joinDimension({
+          dimensionName: DIM_NAME, doorId: myDoor ? myDoor.peer_id : null, placement: 'nearby',
+          side: ['player', 'player_c'].includes(playerEnt.p.alliance) ? playerEnt.p.alliance : 'player',
+          characterId: String(playerEnt.p.source_id || '') || randomCharacter().id,
+          creatureId: '', label: wantLabel,
+          entityName: playerEnt.name || 'You',
+          preferredTile: tile,
+          extraEnv: { ...(life > 0 ? { START_LIFE: String(life) } : {}), ...(classId ? { FORCE_CLASS: classId } : {}) },
+        });
+        return { ...out, status: replaced ? 'replaced' : 'rejoined', tmj: absPath, savedTile, tile, from: how };
+      }
+      if (dim) console.log(`[launcher] ${DIM_NAME} has no joinable Doors on Radicle — cold-respawning the whole mesh from TMJ`);
+      else console.log(`[launcher] ${DIM_NAME} is not on Radicle — cold-respawning the whole mesh from TMJ`);
+    }
+  }
+
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   const ip = defaultPublicIp();
   const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
@@ -468,8 +563,10 @@ async function restoreDimension({ tmjPath, label }) {
   // loaded" happens — there is simply no ally spawned). Only player-1 reads
   // the TMJ (hydrating map / obstacles / tokens / traps); the others catch
   // up via the hashgraph's evt_map_sync.
+  const savedHero = String(playerEnt?.p.source_id || '');
+  const hero = savedHero ? { id: savedHero, name: String(playerEnt?.p.name || savedHero) } : randomCharacter();
   const roster = [
-    { label: (label || '').trim() || 'player-1', alliance: 'player', character: 'char_exuberant_firestroker', creature: '',                      name: 'You (Firestroker)',    tile: { q: 1, r: 2 }, restore: true },
+    { label: (label || '').trim() || 'player-1', alliance: 'player', character: hero.id, creature: '',                  name: savedHero ? hero.name : `You (${hero.name})`, tile: { q: 1, r: 2 }, restore: true },
     { label: 'ally-1',                            alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 }, restore: false },
     { label: 'foe-1',                             alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, restore: false },
     { label: 'foe-2',                             alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, restore: false },
@@ -559,17 +656,66 @@ async function handleApi(req, res, p) {
     try {
       const body = JSON.parse(await readBody(req));
       let out;
-      if (body.mode === 'host' || body.mode === 'start') out = await startDimension(body);
-      else if (body.mode === 'join') out = await joinDimension(body);
+      if (body.mode === 'host' || body.mode === 'start' || body.mode === 'test-random') out = await startDimension(body);
+      else if (body.mode === 'test-character' || body.mode === 'test-team' || body.mode === 'join-team') out = await launchProfile(body);
+      else if (body.mode === 'join') out = await joinDimension(withProfileJoiner(body));
       else if (body.mode === 'restore') out = await restoreDimension(body);
       else throw new Error(`unknown mode "${body.mode}"`);
       return json(200, { ok: true, ...out });
     } catch (e) {
       console.error(`[launcher] /api/launch failed: ${e.message}`);
-      return json(500, { ok: false, error: e.message });
+      return json(e.status || 500, { ok: false, error: e.message });
     } finally { launching = false; }
   }
+  if (await handleProfileApi(req, res, p, { file: profilePath(), dataDir: DATA_DIR })) return;
   res.writeHead(404); res.end('not found');
+}
+
+// ---------- profile launches (user ruling 2026-11-13) ----------
+const badRequest = (msg) => Object.assign(new Error(msg), { status: 400 });
+
+// test-character / test-team / join-team: the profile's characters play.
+async function launchProfile(body) {
+  const prof = loadProfile(profilePath());
+  if (!prof.characters.length) throw badRequest('Create a character first');
+  if (body.mode === 'test-character') {
+    const c = characterOf(prof, body.profileCharId);
+    if (!c) throw badRequest(`no profile character "${body.profileCharId}"`);
+    return startDimension(body, { hero: c, allies: null });
+  }
+  if (body.mode === 'test-team') {
+    const count = Number(body.count);
+    const team = teamCharacters(prof);
+    if (body.tier != null && !['strong', 'reachable'].includes(body.tier)) throw badRequest('tier must be "reachable" or "strong"');
+    if (!Number.isInteger(count) || count < 2 || count > team.length) {
+      throw badRequest(team.length < 2
+        ? `Test my team needs at least 2 characters (the profile has ${team.length})`
+        : `count must be a whole number from 2 to ${team.length} (your characters)`);
+    }
+    return startDimension(body, { hero: team[0], allies: team.slice(1, count), tier: body.tier === 'strong' ? 'strong' : 'reachable' });
+  }
+  // join-team: the top character opens a gate 30–50 hexes from that Door.
+  if (!body.dimensionName) throw badRequest('dimensionName is required');
+  if (!body.doorId) throw badRequest('doorId is required');
+  const c = topCharacter(prof);
+  return joinDimension({
+    dimensionName: body.dimensionName, doorId: body.doorId, placement: 'far', side: 'player',
+    characterId: c.base_character, creatureId: '', label: body.label || '', entityName: c.name,
+    extraEnv: { ...profileEnv(profilePath(), c), TEAM_GATE: '1', TEAM_GATE_DOOR: String(body.doorId) },
+  });
+}
+
+// A plain join with no explicit character (or characterId 'profile:top') joins
+// as the top profile character when the profile has one.
+function withProfileJoiner(body) {
+  const wantsTop = body.characterId === 'profile:top' || (!body.characterId && !body.creatureId);
+  if (!wantsTop) return body;
+  const c = topCharacter(loadProfile(profilePath()));
+  if (!c) return body.characterId === 'profile:top' ? { ...body, characterId: '' } : body;
+  return {
+    ...body, characterId: c.base_character, creatureId: '', entityName: c.name,
+    extraEnv: { ...(body.extraEnv || {}), ...profileEnv(profilePath(), c) },
+  };
 }
 
 // ---------- original UI handlers (unchanged below) ----------
@@ -653,5 +799,12 @@ const server = http.createServer(async (req, res) => {
 });
 const PORT = Number(process.env.UI_PORT || 7357);
 server.listen(PORT, '127.0.0.1', () => console.log(`[ui-server] http://127.0.0.1:${PORT}${LAUNCHER_MODE ? ' (launcher mode)' : ''}`));
+
+// Profile ⇄ chaosD6-Profiles on Radicle (teams/<Team> branch; profile-radicle.mjs). Keeps running while games
+// write deaths / kills into profile.json. PROFILE_SYNC=0 turns it off.
+if (process.env.PROFILE_SYNC !== '0') {
+  import('./profile-radicle.mjs').then(({ startProfileSync }) => attachProfileSync(startProfileSync({ file: profilePath() })))
+    .catch(e => console.error(`[profile-sync] not started: ${e.message}`));
+}
 
 process.on('SIGINT', () => { for (const c of children) try { c.kill('SIGINT'); } catch {}; process.exit(0); });

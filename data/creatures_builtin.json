@@ -1,0 +1,158 @@
+{
+  "comment": "Resources for the 7 built-in creatures defined in game/peer.mjs BUILT_IN_CREATURES. The resolver side owns stats/life/actions; this file only carries UI resources (sprite sheets + sound FX) so game/js/sprites.js resourcesFor(sourceId) finds them. Keyed to the same ids the resolver uses as sourceId on summons/companions. Appended 2026-11-05.",
+  "entries": [
+    {
+      "id": "mon_golem_worldlives",
+      "name": "WorldLives Golem",
+      "tags": ["summon_only", "golem"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Bronze Golem",
+        "wbc3_code": "AAGX",
+        "wbc3_race": "Dark Dwarves",
+        "sprites": {
+          "idle":   { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - idle [AAGX].png" },
+          "walk":   { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - walk [AAGXw].png" },
+          "attack": { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - attack [AAGXa].png" },
+          "death":  { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - death [AAGXd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/Build.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    },
+    {
+      "id": "mon_golem_lifematters",
+      "name": "LifeMatters Golem",
+      "tags": ["summon_only", "golem"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Bronze Golem",
+        "wbc3_code": "AAGX",
+        "wbc3_race": "Dark Dwarves",
+        "sprites": {
+          "idle":   { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - idle [AAGX].png" },
+          "walk":   { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - walk [AAGXw].png" },
+          "attack": { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - attack [AAGXa].png" },
+          "death":  { "path": "assets/Sprites/Units/Dark Dwarves/Bronze Golem/Bronze Golem - death [AAGXd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/Build.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    },
+    {
+      "id": "mon_golem_worldmatters",
+      "name": "WorldMatters Golem",
+      "tags": ["summon_only", "golem"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Iron Golem",
+        "wbc3_code": "AAJX",
+        "wbc3_race": "Dark Dwarves",
+        "sprites": {
+          "idle":   { "path": "assets/Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - idle [AAJX].png" },
+          "walk":   { "path": "assets/Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - walk [AAJXw].png" },
+          "attack": { "path": "assets/Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - attack [AAJXa].png" },
+          "death":  { "path": "assets/Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - death [AAJXd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/LongWhoosh.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    },
+    {
+      "id": "mon_golem_living",
+      "name": "Living Golem",
+      "tags": ["summon_only", "golem"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Stone Golem",
+        "wbc3_code": "AAIX",
+        "wbc3_race": "Dark Dwarves",
+        "sprites": {
+          "idle":   { "path": "assets/Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - idle [AAIX].png" },
+          "walk":   { "path": "assets/Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - walk [AAIXw].png" },
+          "attack": { "path": "assets/Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - attack [AAIXa].png" },
+          "death":  { "path": "assets/Sprites/Units/Dark Dwarves/Stone Golem/Stone Golem - death [AAIXd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/Build.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    },
+    {
+      "id": "mon_elemental_world",
+      "name": "World Elemental",
+      "tags": ["summon_only", "elemental"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Air Elemental",
+        "wbc3_code": "AAEA",
+        "wbc3_race": "Temples",
+        "sprites": {
+          "idle":   { "path": "assets/Sprites/Units/Temples/Air Elemental/Air Elemental - idle [AAEA].png" },
+          "walk":   { "path": "assets/Sprites/Units/Temples/Air Elemental/Air Elemental - walk [AAEAw].png" },
+          "attack": { "path": "assets/Sprites/Units/Temples/Air Elemental/Air Elemental - attack [AAEAa].png" },
+          "death":  { "path": "assets/Sprites/Units/Temples/Air Elemental/Air Elemental - death [AAEAd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/LongWhoosh.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    },
+    {
+      "id": "mon_elemental_vital",
+      "name": "Vital Elemental",
+      "tags": ["summon_only", "elemental"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Water Elemental",
+        "wbc3_code": "AAEW",
+        "wbc3_race": "Temples",
+        "sprites": {
+          "idle":  { "path": "assets/Sprites/Units/Temples/Water Elemental/Water Elemental - idle [AAEW].png" },
+          "walk":  { "path": "assets/Sprites/Units/Temples/Water Elemental/Water Elemental - walk [AAEWw].png" },
+          "death": { "path": "assets/Sprites/Units/Temples/Water Elemental/Water Elemental - death [AAEWd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/Splash.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    },
+    {
+      "id": "mon_elemental_matter",
+      "name": "Matter Elemental",
+      "tags": ["summon_only", "elemental"],
+      "resources": {
+        "source": "warlords3_battlecry",
+        "wbc3_name": "Earth Elemental",
+        "wbc3_code": "AAEE",
+        "wbc3_race": "Temples",
+        "sprites": {
+          "idle":   { "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - idle [AAEE].png" },
+          "walk":   { "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - walk [AAEEw].png" },
+          "attack": { "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - attack [AAEEa].png" },
+          "death":  { "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - death [AAEEd].png" }
+        },
+        "sounds": {
+          "spawn":  [{ "path": "assets/Sounds/SoundFX/Build.wav" }],
+          "death":  [{ "path": "assets/Sounds/SoundFX/Assassination.wav" }],
+          "attack": [{ "path": "assets/Sounds/SoundFX/Attack10.wav" }]
+        }
+      }
+    }
+  ]
+}

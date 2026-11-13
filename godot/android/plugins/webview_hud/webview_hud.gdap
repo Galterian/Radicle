@@ -1,0 +1,9 @@
+[config]
+name="WebViewHud"
+binary_type="local"
+binary="webview_hud.aar"
+
+[dependencies]
+local=[]
+remote=[]
+custom_maven_repos=[]

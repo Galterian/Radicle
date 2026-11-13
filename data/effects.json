@@ -200,7 +200,7 @@
       "id": "effect_summoning",
       "name": "Summoning",
       "tags": ["permanent", "stat_buy", "ally"],
-      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)", "wbc3_code": "EZ09", "wbc3_race": "Effects1", "match_reason": "WBC3 summon pillar effect", "confidence": "high", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/Spell effect tall whiteblue flame columns (summon pillar)/Spell effect tall whiteblue flame columns (summon pillar) - idle [EZ09….png", "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex", "blend": "additive"}}, "sounds": {"spell": [{"path": "assets/Sounds/SoundFX/STEZ09.wav", "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}]}},
+      "resources": {"source": "warlords3_battlecry", "wbc3_name": "Spell effect tall whiteblue flame columns (summon pillar)", "wbc3_code": "EZ09", "wbc3_race": "Effects1", "match_reason": "WBC3 summon pillar effect", "confidence": "high", "sprites": {"effect": {"path": "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png", "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex", "blend": "additive"}}, "sounds": {"spell": [{"path": "assets/Sounds/SoundFX/STEZ09.wav", "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}]}},
       "versions": [
         {
           "author_peer_id": "",

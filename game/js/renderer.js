@@ -1,16 +1,46 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
-import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward } from './hex.js';
+import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward, hexDistance } from './hex.js';
 import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame } from './sprites.js';
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
+import { buildingBonusAt } from './building-bonus.js';
 import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
 const ALLIANCE_COLOR = {
-  'player':  '#6ad9ff',
-  'npc_a':   '#6ad99f',
-  'npc_b':   '#e36666',
+  'player':   '#6ad9ff',
+  'npc_a':    '#6ad99f',
+  'npc_b':    '#e36666',
+  'player_c': '#c79bff',
+  'npc_c':    '#b07cff',
 };
+// Teams (same mapping as peer.mjs sideOf): A = the player, npc_a allies and
+// their summons; B = npc_b; C = the third team (player_c / npc_c).
+const sideOf = (a) => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
+// HP pip colour per team — filled / spent.
+const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b07cff', '#261a3a'] };
+// Shield life points sit on top of life (user ruling 2026-11-12): Overlord armor gold, Illusionist illusion cyan.
+const HP_ARMOR = '#ffcc33', HP_ILLUSION = '#7fe8ff';
+const DRUID_ORB = 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png';
+const DRUID_OBELISK = 'assets/terrain_scatter/standing_stone_obelisk_on_round_base_fgm0.png';
+// Threat area: an enemy goes for whoever steps within this many hexes of it.
+const THREAT_RADIUS = 2;
+// Enemies my planned journey (pathPlan, else the destination) walks into the
+// threat area of, where no one else hostile to them stands closer — they would
+// come for me. Ties count as a threat (the chaser may still pick me).
+function threatenedBy(entities, me, mySide, plan) {
+  const out = new Set();
+  if (!me || me.life <= 0 || !plan.length) return out;
+  const alive = entities.filter(e => e.life > 0 && !e.gone && e.tile && Number.isInteger(e.tile.q));
+  for (const foe of alive) {
+    if (foe.isSelf || sideOf(foe.alliance) === mySide) continue;
+    const dPath = Math.min(...plan.map(h => hexDistance(h, foe.tile)));
+    if (dPath > THREAT_RADIUS) continue;
+    const rival = alive.some(o => !o.isSelf && o !== foe && sideOf(o.alliance) !== sideOf(foe.alliance) && hexDistance(o.tile, foe.tile) < dPath);
+    if (!rival) out.add(foe.peerId);
+  }
+  return out;
+}
 // Rule 12 tile tokens: a small die in the element's colour on the hex. Shield
 // tokens are drawn hollow (they absorb an effect hit), bonus tokens filled.
 const ELEM_COLOR = {
@@ -87,6 +117,8 @@ export function createRenderer(canvas, state) {
   // they stay in lock-step with the terrain pass; both are y-sorted (matching
   // Godot's ScatterLayer / FeatureLayer custom sort) so overlapping sprites
   // stack back-to-front correctly.
+  // Building power → roof glyph (js/building-bonus.js).
+  const BUILDING_GLYPH = { skill: '✦', stance: '⚔', teleport: '⟲', walls: '▦', mend: '✚', explore: '👁', draw: '📜', learn: '🎓', hurt: '☠', fortress: '🛡' };
   const tileCache = { version: -1, seed: null, epoch: -1, tiles: [], frontier: [], scatter: [], bigfeatures: [], features: [] };
   function tilesFor(map, version) {
     if (tileCache.version !== version || tileCache.seed !== map.seed || tileCache.epoch !== catalogEpoch) {
@@ -179,6 +211,52 @@ export function createRenderer(canvas, state) {
     cam.x += before.x - after.x; cam.y += before.y - after.y;
     render();
   }, { passive: false });
+
+  // Phone (html.mobile): one finger drags the map, two fingers pinch-zoom
+  // around their midpoint. A finger that moved past the slop marks the gesture
+  // as a drag, so the tap that follows is ignored like a mouse pan's.
+  const isMobileUI = document.documentElement.classList.contains('mobile');
+  if (isMobileUI) {
+    const pts = new Map();
+    const pinch = { dist: 0, zoom: 1 };
+    const TOUCH_SLOP_PX = 10;
+    canvas.addEventListener('touchstart', (ev) => {
+      for (const t of ev.changedTouches) pts.set(t.identifier, { x: t.clientX, y: t.clientY });
+      const list = [...pts.values()];
+      if (list.length === 1) { drag.active = true; drag.moved = false; drag.lastX = list[0].x; drag.lastY = list[0].y; }
+      if (list.length >= 2) { pinch.dist = Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y) || 1; pinch.zoom = zoom; drag.moved = true; }
+    }, { passive: true });
+    canvas.addEventListener('touchmove', (ev) => {
+      ev.preventDefault();
+      for (const t of ev.changedTouches) if (pts.has(t.identifier)) pts.set(t.identifier, { x: t.clientX, y: t.clientY });
+      const list = [...pts.values()];
+      if (list.length >= 2) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = (list[0].x + list[1].x) / 2 - rect.left, my = (list[0].y + list[1].y) / 2 - rect.top;
+        const before = toWorld(mx, my);
+        const d = Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y);
+        zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, pinch.zoom * d / pinch.dist));
+        const after = toWorld(mx, my);
+        cam.x += before.x - after.x; cam.y += before.y - after.y; cam.manual = true;
+        render();
+        return;
+      }
+      if (!list.length || !drag.active) return;
+      const dx = list[0].x - drag.lastX, dy = list[0].y - drag.lastY;
+      if (!drag.moved && Math.hypot(dx, dy) < TOUCH_SLOP_PX) return;
+      drag.moved = true; drag.lastX = list[0].x; drag.lastY = list[0].y;
+      cam.x -= dx / zoom; cam.y -= dy / zoom; cam.manual = true;
+      render();
+    }, { passive: false });
+    const touchEnd = (ev) => {
+      for (const t of ev.changedTouches) pts.delete(t.identifier);
+      const list = [...pts.values()];
+      if (!list.length) drag.active = false;
+      else { drag.lastX = list[0].x; drag.lastY = list[0].y; }   // pinch → pan without a jump
+    };
+    canvas.addEventListener('touchend', touchEnd);
+    canvas.addEventListener('touchcancel', touchEnd);
+  }
 
   function interpAt(mv, now) {
     const t = Math.min(1, (now - mv.startAt) / MOVE_DURATION_MS);
@@ -415,7 +493,24 @@ export function createRenderer(canvas, state) {
       const target = hexH * 1.1;
       const scale = Math.min(1.2, Math.max(0.25, target / sy));
       const dw = sx * scale, dh = sy * scale;
+      // A broken fortress stays as a faded ruin (user ruling 2026-11-12).
+      const ruined = state.brokenBuildings?.has(`bld:${it.q},${it.r}`);
+      if (ruined) ctx.globalAlpha = 0.3;
       ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
+      ctx.globalAlpha = 1;
+      // What the building does, as a small glyph on its roof — every building does something.
+      const pw = !ruined && it.f.kind !== 'wall' && it.f.kind !== 'bridge' ? buildingBonusAt(state.map.seed, it.q, it.r)?.bonus?.power : null;
+      // Dungeons: 🕳 while unexplored (a trap waits), a faded ✓ once explored.
+      const dgBonus = !pw && !ruined && it.f.kind !== 'wall' && it.f.kind !== 'bridge' ? buildingBonusAt(state.map.seed, it.q, it.r)?.bonus : null;
+      const dgDone = dgBonus?.dungeon && state.dungeonIsExplored?.(`dng:${it.q},${it.r}`);
+      const glyph = pw?.kind === 'learn' && state.dungeonIsExplored?.(`lrn:${it.q},${it.r}`) ? '✓' : pw ? BUILDING_GLYPH[pw.kind] : dgBonus?.dungeon ? (dgDone ? '✓' : '🕳') : null;
+      if (glyph && zoom > 0.45) {
+        ctx.font = `${Math.round(hexH * 0.32)}px sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const gx = it.x + dw * 0.32 + jx, gy = it.y - dh + hexH * 0.3 + jy;
+        ctx.fillStyle = '#0b0d12cc'; ctx.beginPath(); ctx.arc(gx, gy, hexH * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe66e'; ctx.fillText(glyph, gx, gy + 1);
+      }
     }
 
     // Target highlight.
@@ -445,6 +540,22 @@ export function createRenderer(canvas, state) {
       ctx.setLineDash([]);
     }
 
+    // Druid stones (user ruling 2026-11-12): a Druid's tile bonus stands on its hex as a mapped building — a
+    // Healing Orb when it carries Vitality, a standing-stone obelisk otherwise. One sprite per hex.
+    const druidHexes = new Map();
+    for (const t of (state.tileTokens || [])) if (t.druid) { const k = `${t.q},${t.r}`; druidHexes.set(k, druidHexes.get(k) || t.elem === 'elem_vitality'); }
+    for (const [k, orb] of druidHexes) {
+      const [q, r] = k.split(',').map(Number);
+      const { x, y } = tilePx(q, r);
+      if (!inView(x, y)) continue;
+      const tex = featureImage(orb ? DRUID_ORB : DRUID_OBELISK);
+      if (!tex?.ready) continue;
+      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const scale = Math.min(1.0, Math.max(0.2, (hexH * 0.75) / sy));
+      const dw = sx * scale, dh = sy * scale;
+      // Beside whoever stands on the hex (right side), so the unit's sprite doesn't hide it.
+      ctx.drawImage(tex.img, x - dw / 2 + HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
+    }
     // Tile tokens (dice left on hexes by effects), bottom-right of the hex.
     for (const t of (state.tileTokens || [])) {
       const { x, y } = tilePx(t.q, t.r);
@@ -521,6 +632,12 @@ export function createRenderer(canvas, state) {
     // leaves a marker on the map (otherwise it looks like the piece vanished).
     // Y-sort so a unit lower on the screen is painted over one behind it.
     const drawOrder = [...state.entities].sort((a, b) => positions.get(a.peerId).y - positions.get(b.peerId).y);
+    const mySide = sideOf(state.entities.find(x => x.isSelf)?.alliance || 'player');
+    const selfEnt = state.entities.find(x => x.isSelf);
+    const journey = state.ui.destinationTile && selfEnt
+      ? (Array.isArray(state.ui.pathPlan) && state.ui.pathPlan.length ? state.ui.pathPlan : [state.ui.destinationTile]) : [];
+    const threats = threatenedBy(state.entities, selfEnt, mySide, journey);
+    if (typeof window !== "undefined") window.__chaosThreats = { journey, threats: [...threats] };   // test hook
     for (const e of drawOrder) {
       const dead = e.life <= 0;
       // Fog of war: enemies the team can't currently see simply don't paint.
@@ -528,7 +645,7 @@ export function createRenderer(canvas, state) {
       // always paint — the sightSet check only culls opponents.
       const mine = e.isSelf;
       const ownedByMe = e.owner_peer_id && state.myPeerId && e.owner_peer_id === state.myPeerId;
-      const alliedChar = e.alliance === 'player' || e.alliance === 'npc_a';
+      const alliedChar = sideOf(e.alliance) === mySide;
       if (sightSet && !mine && !ownedByMe && !alliedChar
           && Number.isInteger(e.tile_q) && Number.isInteger(e.tile_r)
           && !inSight(e.tile_q, e.tile_r)) continue;
@@ -565,10 +682,10 @@ export function createRenderer(canvas, state) {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, dead ? 0.75 : 1) : false;
+      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, e.gone ? 0.35 : dead ? 0.75 : 1) : false;
       if (!drewSprite) {
         // Fallback disc marker while the sheet is loading / no resources.
-        if (dead) ctx.globalAlpha = 0.35;
+        if (dead || e.gone) ctx.globalAlpha = 0.35;
         ctx.beginPath();
         ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -587,22 +704,44 @@ export function createRenderer(canvas, state) {
         ctx.globalAlpha = 1;
       }
       const top = drewSprite ? y + 6 - a.anim.height() : y - 22;
-
-      // Health pips.
+      // Health: one tiny square per life point (desktop and phone), in the
+      // unit's team colour — A green, B red, C purple; spent points dark.
       const lifeMax = Math.max(1, e.lifeMax || 1);
+      const [hpOn, hpOff] = TEAM_HP[sideOf(e.alliance)] || ['#dddddd', '#2a2a2a'];
       const lifePx = x - (lifeMax * 4 - 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(lifePx - 1, y + 15, lifeMax * 8 - 1, 6);
+      const shI = e.illusion ? 1 : 0, shA = e.armor ? 1 : 0;
       for (let i = 0; i < lifeMax; i++) {
-        ctx.fillStyle = i < e.life ? '#ffb0b0' : '#2a1a1a';
+        ctx.fillStyle = i >= e.life ? hpOff : i >= e.life - shI ? HP_ILLUSION : i >= e.life - shI - shA ? HP_ARMOR : hpOn;
         ctx.fillRect(lifePx + i * 8, y + 16, 6, 4);
       }
 
+      // Elements this unit has emitted in its current cast, oldest → newest
+      // (the newest is ringed). Cleared by the UI once it acts without emitting.
+      const trail = !dead && !e.gone && Array.isArray(e.emitTrail) ? e.emitTrail : null;
+      if (trail && trail.length) {
+        const r = isMobileUI ? 4.5 : 4, step = r * 2 + 3;
+        const tx = x - ((trail.length - 1) * step) / 2, ty = y + 28;
+        trail.forEach((el, i) => {
+          ctx.beginPath();
+          ctx.arc(tx + i * step, ty, r, 0, Math.PI * 2);
+          ctx.fillStyle = ELEM_COLOR[el] || '#ccc';
+          ctx.fill();
+          ctx.lineWidth = i === trail.length - 1 ? 2 : 1;
+          ctx.strokeStyle = i === trail.length - 1 ? '#ffffff' : 'rgba(0,0,0,0.8)';
+          ctx.stroke();
+        });
+      }
+
       // Label (outlined so it reads over textured tiles).
+      const label = isMobileUI && dead ? `☠ ${e.name}` : e.gone ? `⌛ ${e.name}` : e.name;
       ctx.font = '11px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineJoin = 'round';
-      ctx.strokeText(e.name, x, top - 6);
-      ctx.fillStyle = dead ? '#9aa0a8' : '#e8ecf1';
-      ctx.fillText(e.name, x, top - 6);
+      ctx.strokeText(label, x, top - 6);
+      ctx.fillStyle = dead || e.gone ? '#9aa0a8' : '#e8ecf1';
+      ctx.fillText(label, x, top - 6);
 
       // Queued-action chip over the player's head during planning. Once
       // committed, keep the letter as-is until the next round — only the
@@ -627,7 +766,7 @@ export function createRenderer(canvas, state) {
         ctx.font = 'bold 11px ui-monospace, Consolas, monospace';
         ctx.lineWidth = 3;
         ctx.strokeStyle = 'rgba(11,13,18,0.9)';
-        ctx.fillStyle = e.isSelf ? '#ffe66e' : (e.alliance === 'npc_b' ? '#ff9c9c' : '#9fd8ff');
+        ctx.fillStyle = e.isSelf ? '#ffe66e' : (sideOf(e.alliance) !== mySide ? '#ff9c9c' : '#9fd8ff');
         const text = `[${badge.text}]`;
         ctx.strokeText(text, x, y - 40 - 6 * bt);
         ctx.fillText(text, x, y - 40 - 6 * bt);
@@ -639,6 +778,36 @@ export function createRenderer(canvas, state) {
         ctx.fillText(`[${e.queuedCode}]`, x, top - 18);
       }
 
+      ctx.restore();
+    }
+
+    // Threat areas my journey walks into: a ring of tiny red arrows on the hexes
+    // THREAT_RADIUS away from each such enemy, pointing out — "step inside and
+    // it comes for you". Pulses so it reads as a warning, not terrain.
+    if (threats.size) {
+      const pulse = 0.55 + 0.45 * Math.sin(now / 180);
+      const ah = isMobileUI ? 8 : 7;
+      ctx.save();
+      ctx.fillStyle = '#ff3b3b';
+      ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = pulse;
+      for (const e of state.entities) {
+        if (!threats.has(e.peerId) || !e.tile) continue;
+        const c = positions.get(e.peerId) || tilePx(e.tile.q, e.tile.r);
+        for (let dq = -THREAT_RADIUS; dq <= THREAT_RADIUS; dq++) for (let dr = -THREAT_RADIUS; dr <= THREAT_RADIUS; dr++) {
+          const h = { q: e.tile.q + dq, r: e.tile.r + dr };
+          if (hexDistance(h, e.tile) !== THREAT_RADIUS) continue;
+          const t = tilePx(h.q, h.r);
+          const ang = Math.atan2(t.y - c.y, t.x - c.x);
+          const tx = t.x, ty = t.y - 4;
+          ctx.beginPath();
+          ctx.moveTo(tx + Math.cos(ang) * ah, ty + Math.sin(ang) * ah);
+          ctx.lineTo(tx + Math.cos(ang + 2.4) * ah * 0.75, ty + Math.sin(ang + 2.4) * ah * 0.75);
+          ctx.lineTo(tx + Math.cos(ang - 2.4) * ah * 0.75, ty + Math.sin(ang - 2.4) * ah * 0.75);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+      }
       ctx.restore();
     }
 

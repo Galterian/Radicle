@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "fallbackPublicExplorer": "",
+    "defaultHttpdPort": 443,
+    "defaultLocalHttpdPort": 8080,
+    "defaultHttpdScheme": "https",
+    "homepage": "node"
+  },
+  "source": {
+    "commitsPerPage": 30
+  },
+  "supportWebsite": "",
+  "deploymentId": "dimensions-4e9ae",
+  "preferredSeeds": [
+    {
+      "hostname": "92-5-138-121.sslip.io",
+      "port": 443,
+      "scheme": "https"
+    },
+    {
+      "hostname": "localhost",
+      "port": 8080,
+      "scheme": "http"
+    }
+  ]
+}

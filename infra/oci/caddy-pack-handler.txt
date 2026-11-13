@@ -1,0 +1,30 @@
+# Caddy handler for the asset pack. Paste these lines into
+# /etc/caddy/sites/seed.caddy on OCI, inside the existing site block (same
+# scope as the /downloads/* handler), then: sudo systemctl reload caddy
+
+	@pack path /pack/*
+	handle @pack {
+		# Serve raw files from /var/www/pack. The AssetBootstrap script
+		# percent-encodes each path segment, so caddy's file_server will
+		# resolve e.g. /pack/assets/Images/Portraits/Hero%20portrait%2000.png
+		# -> /var/www/pack/assets/Images/Portraits/Hero portrait 00.png.
+		uri strip_prefix /pack
+		root * /var/www/pack
+		file_server {
+			# Browse off — pack must not be enumerable.
+			# precompressed gzip optional; most assets are already
+			# png/wav (already compressed), so skip.
+		}
+		# CORS so the Firebase explorer can also pull these in a browser.
+		header >Access-Control-Allow-Origin "*"
+		header >Cache-Control "public, max-age=86400, immutable"
+	}
+
+# Deploy: SSH to OCI and run sudoedit so the block lands INSIDE the site
+# brackets (same scope as the existing /downloads/* handler), then reload.
+#
+#   ssh -i infra/oci/keys/oci_seeder ubuntu@92.5.138.121
+#   sudo nano /etc/caddy/sites/seed.caddy        # paste the @pack block just before the final `}`
+#   sudo caddy validate --config /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#   curl -sI http://127.0.0.1/pack/ && echo OK   # local probe (expects 404 before upload)

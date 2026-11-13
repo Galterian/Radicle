@@ -1,0 +1,34 @@
+// Builds the WebViewHud plugin AAR. The plugin overlays an Android WebView on
+// top of the Godot GLSurfaceView and loads the browser UI (same game/index.html
+// + game/css + game/js that the desktop uses) served by the embedded peer at
+// http://127.0.0.1:<port>/. The Godot HUD is hidden on mobile — all gameplay
+// controls come from the WebView — so we don't maintain two UI codebases.
+//
+// Build:
+//   cd godot/android/plugins/webview_hud && ./gradlew assembleRelease
+//   cp build/outputs/aar/webview_hud-release.aar ../webview_hud.aar
+plugins {
+    id 'com.android.library' version '8.2.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.22'
+}
+
+android {
+    namespace 'io.chaosd6.webview'
+    compileSdk 35
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+    buildFeatures { aidl false; renderScript false; shaders false; buildConfig false }
+}
+
+dependencies {
+    compileOnly fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.webkit:webkit:1.11.0'
+}

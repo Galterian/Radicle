@@ -19,7 +19,13 @@ extends RefCounted
 ## and must match salt names, roll ranges, and the half-circle formula exactly.
 
 ## Labyrinth-wall placer parameters (parity mirror of features.js#labyrinthWallAt).
-const LAB_SEED_RATE: float = 1.0 / 300.0
+const LAB_SEED_RATE: float = 1.0 / 350.0
+const LAB_MIN_LEN := 6
+const LAB_MAX_LEN := 12
+const LAB_BRANCH_RATE := 0.5
+const LAB_CHUNK := 16
+const LAB_SPAWN_CLEAR := 2
+const LAB_TURNS: Array[int] = [-1, 0, 0, 1]
 # Flat-top hex directions, matches Hex.DIRS order exactly.
 const LAB_DIRS: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1),
@@ -32,7 +38,10 @@ const LAB_WALL_PATHS: Array[String] = [
 	"assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png",
 	"assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png",
 ]
-const LAB_DESC := "Fallen rampart of a long-abandoned keep. Impassable scenery — units must path around."
+const LAB_DESC := "Impassable wall — the fallen rampart of a long-abandoned keep. Units must path around it."
+# chunk "cq,cr" computed → true; wall hex "q,r" → [sq, sr, k] (see features.js labChunk)
+var _lab_chunks: Dictionary = {}
+var _lab_walls: Dictionary = {}
 
 var seed_hex: String
 var _catalog: Dictionary = {}         # biome -> Array[Dictionary{id,label,weight,path,kind}]
@@ -168,64 +177,81 @@ func _pick_idx(q: int, r: int, choices: Array, biome: Biome) -> int:
 	return ranks[skip_tier]
 
 
-## Labyrinth-wall placer — parity mirror of features.js#labyrinthWallAt.
-## A sparse second pass puts "labyrinth seed hexes" on open ground; each seed
-## stamps a 4-hex half-circle of impassable wall scenery. Pure (seed, q, r).
-##
-## Half-circle formula (hex 6-neighbour order 0=E, 1=NE, 2=NW, 3=W, 4=SW, 5=SE):
-##   pivot plus four adjacent neighbours around orientation `d`, forming a
-##   C-shape (5 hexes); then drop one of the four shoulder hexes by hash → 4.
+## Labyrinth-wall placer — parity mirror of features.js#labyrinthWallAt (2026-11-12).
+## From each sparse seed hex a wall walks 6–12 hexes, bending at most one
+## direction per step, plus an optional 2–3 hex side branch; it stops (never
+## skips) at ground that isn't open or near the spawn disc. Same salts, rolls and
+## chunk ownership rule as features.js so both runtimes draw the same walls.
+func _lab_open(q: int, r: int, biome: Biome) -> bool:
+	if not LAB_BIOMES.has(biome.biome_at(q, r)): return false
+	return (absi(q) + absi(r) + absi(q + r)) / 2 > LAB_SPAWN_CLEAR
+
+
+func _lab_wall_run(sq: int, sr: int, biome: Biome) -> Array:
+	if not _lab_open(sq, sr, biome): return []
+	var length := LAB_MIN_LEN + int(_roll01(sq, sr, "lw:len") * float(LAB_MAX_LEN - LAB_MIN_LEN + 1))
+	var d := int(_roll01(sq, sr, "lw:orient") * 6.0) % 6
+	var run: Array = [Vector2i(sq, sr)]
+	var seen := {"%d,%d" % [sq, sr]: true}
+	var q := sq
+	var r := sr
+	for k in range(1, length):
+		d = (d + LAB_TURNS[int(_roll01(sq, sr, "lw:turn%d" % k) * 4.0) % 4] + 6) % 6
+		var nq := q + LAB_DIRS[d].x
+		var nr := r + LAB_DIRS[d].y
+		if not _lab_open(nq, nr, biome) or seen.has("%d,%d" % [nq, nr]): break
+		run.append(Vector2i(nq, nr)); seen["%d,%d" % [nq, nr]] = true; q = nq; r = nr
+	if run.size() >= 4 and _roll01(sq, sr, "lw:branch") < LAB_BRANCH_RATE:
+		var mid: Vector2i = run[run.size() / 2]
+		var bd := (d + (2 if _roll01(sq, sr, "lw:bside") < 0.5 else 4)) % 6
+		var blen := 2 + int(_roll01(sq, sr, "lw:blen") * 2.0)
+		var bq := mid.x
+		var br := mid.y
+		for k in range(blen):
+			var nq := bq + LAB_DIRS[bd].x
+			var nr := br + LAB_DIRS[bd].y
+			if not _lab_open(nq, nr, biome) or seen.has("%d,%d" % [nq, nr]): break
+			run.append(Vector2i(nq, nr)); seen["%d,%d" % [nq, nr]] = true; bq = nq; br = nr
+	return run
+
+
+func _lab_chunk(cq: int, cr: int, biome: Biome) -> void:
+	var ck := "%d,%d" % [cq, cr]
+	if _lab_chunks.has(ck): return
+	_lab_chunks[ck] = true
+	for sq in range(cq * LAB_CHUNK, (cq + 1) * LAB_CHUNK):
+		for sr in range(cr * LAB_CHUNK, (cr + 1) * LAB_CHUNK):
+			if _roll01(sq, sr, "lw:seed") >= LAB_SEED_RATE: continue
+			var run := _lab_wall_run(sq, sr, biome)
+			for k in range(run.size()):
+				var key := "%d,%d" % [run[k].x, run[k].y]
+				var cur = _lab_walls.get(key)
+				# The seed with the smaller (sr, sq) owns a shared hex, as in features.js.
+				if cur == null or sr < cur[1] or (sr == cur[1] and sq < cur[0]):
+					_lab_walls[key] = [sq, sr, k]
+
+
 func _labyrinth_wall_at(q: int, r: int, biome: Biome) -> Dictionary:
 	if biome == null: return {}
-	# Any seed within radius 2 could place a wall on (q, r) — the furthest wall
-	# from its pivot is distance 1, radius 2 leaves a small headroom.
-	for dq in range(-2, 3):
-		var lo := maxi(-2, -dq - 2)
-		var hi := mini(2, -dq + 2)
-		for dr in range(lo, hi + 1):
-			var sq := q + dq
-			var sr := r + dr
-			var sbt := biome.biome_at(sq, sr)
-			if not LAB_BIOMES.has(sbt): continue
-			# Parity mirror of features.js#labyrinthWallAt step 1: seed roll.
-			if _roll01(sq, sr, "lw:seed") >= LAB_SEED_RATE: continue
-			# Parity mirror step 2: pick orientation d ∈ 0..5.
-			var d := int(_roll01(sq, sr, "lw:orient") * 6.0) % 6
-			# Four shoulder offsets around d: CW d, CW d+1, CCW d, CCW d-1.
-			var shoulder: Array[Vector2i] = [
-				LAB_DIRS[d],
-				LAB_DIRS[(d + 1) % 6],
-				LAB_DIRS[(d + 5) % 6],
-				LAB_DIRS[(d + 4) % 6],
-			]
-			# Parity mirror step 3: deterministic shoulder index to drop (0..3).
-			var drop := int(_roll01(sq, sr, "lw:drop") * 4.0) % 4
-			# Pivot is always kept.
-			if sq == q and sr == r:
-				return _lab_wall_feature(sq, sr, 0, 0, biome.biome_at(q, r))
-			for i in range(4):
-				if i == drop: continue
-				var off: Vector2i = shoulder[i]
-				var tq := sq + off.x
-				var tr := sr + off.y
-				if tq != q or tr != r: continue
-				# Shoulder lands here. Only keep it on an open biome — walls on
-				# water/cliffs/mountains would look wrong and are already blocked
-				# by biome walkability anyway.
-				if not LAB_BIOMES.has(biome.biome_at(tq, tr)): return {}
-				return _lab_wall_feature(sq, sr, off.x, off.y, biome.biome_at(tq, tr))
-	return {}
+	var cq := floori(float(q) / LAB_CHUNK)
+	var cr := floori(float(r) / LAB_CHUNK)
+	for i in range(-1, 2):
+		for j in range(-1, 2):
+			_lab_chunk(cq + i, cr + j, biome)
+	var w = _lab_walls.get("%d,%d" % [q, r])
+	if w == null: return {}
+	return _lab_wall_feature(w[0], w[1], w[2], biome.biome_at(q, r))
 
 
-func _lab_wall_feature(sq: int, sr: int, odq: int, odr: int, biome_type: String) -> Dictionary:
-	var idx := int(_h32("%s:lw:sprite:%d:%d:%d:%d" % [seed_hex, sq, sr, odq, odr])) % LAB_WALL_PATHS.size()
+func _lab_wall_feature(sq: int, sr: int, k: int, biome_type: String) -> Dictionary:
+	var idx := int(_h32("%s:lw:sprite:%d:%d:%d" % [seed_hex, sq, sr, k])) % LAB_WALL_PATHS.size()
 	return {
 		"path": LAB_WALL_PATHS[idx],
-		"label": "Labyrinth Wall",
+		"label": "Impassable Wall",
 		"kind": "wall",
 		"desc": LAB_DESC,
 		"blocking": true,
-		"id": "labyrinth_wall/%d,%d:%d,%d" % [sq, sr, odq, odr],
+		"id": "labyrinth_wall/%d,%d:%d" % [sq, sr, k],
 		"biome": biome_type,
 	}
 

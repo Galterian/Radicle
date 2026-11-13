@@ -4,6 +4,7 @@
 // ?peer=<peerPort>.
 
 import { fancyLabel } from './names.js';
+import { initProfilePanel, joinTeamButton, launchJoinTeam, peerSearch, IS_MENU, IS_MOBILE } from './profile-ui.js';
 
 const peer = new URL(location.href).searchParams.get('peer');
 
@@ -67,7 +68,7 @@ async function launch() {
     const out = await r.json();
     if (!out.ok) throw new Error(out.error || 'launch failed');
     msg.textContent = `up on peer :${out.peerPort} — reloading…`;
-    location.search = `?peer=${out.peerPort}`;
+    location.search = peerSearch(out.peerPort);   // keeps ?mobile=1
   } catch (e) {
     msg.textContent = `failed: ${e.message}`;
     btn.disabled = false;
@@ -75,8 +76,128 @@ async function launch() {
   }
 }
 
-async function renderLauncher() {
+// Zoom-out-friendly dimensions explorer: a grid of tiles, each listing the
+// door chips (peer_id + side + tile + hp) for players who have published a
+// Door into that ActiveDimensions/<Dim> branch across all Radicle namespaces.
+// Clicking a chip picks that Door (join-door); clicking the tile picks the
+// dimension (join-random). Chips use clamp()-sized text so door IDs stay
+// readable when the launcher panel is narrow.
+const MAX_CHIPS = 10;
+const shortId = id => String(id || '').replace(/^peer:/, '');
+const sideOf = a => (a === 'player' || a === 'npc_a' || a === 'npc_b') ? a : (a === 'player_c' || a === 'npc_c') ? 'team-c' : 'npc_b';
+
+function pickMode(value) {
+  const radio = document.querySelector(`input[name="mode"][value="${value}"]`);
+  if (!radio || radio.disabled) return false;
+  radio.checked = true;
+  radio.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}
+
+function doorChip(door) {
+  const chip = document.createElement('button');
+  chip.type = 'button';
+  const side = sideOf(door.alliance);
+  const isDead = (door.life ?? 1) <= 0;
+  chip.className = `door-chip side-${side}${door.live ? '' : ' is-stale'}${isDead ? ' is-dead' : ''}`;
+  chip.title = `${door.name || shortId(door.peer_id)}\nnid: ${door.nid}\ndoor: ${shortId(door.peer_id)}\ntile: (${door.tile?.q},${door.tile?.r})\nhp: ${door.life}/${door.life_max}\npushed: ${door.pushed_at}`;
+  const dot = document.createElement('span'); dot.className = 'dc-dot'; chip.appendChild(dot);
+  const id = document.createElement('span'); id.className = 'dc-id'; id.textContent = shortId(door.peer_id); chip.appendChild(id);
+  if (Number.isInteger(door.tile?.q) && Number.isInteger(door.tile?.r)) {
+    const c = document.createElement('span'); c.className = 'dc-coord'; c.textContent = `(${door.tile.q},${door.tile.r})`; chip.appendChild(c);
+  }
+  if (door.life != null && door.life_max != null) {
+    const hp = document.createElement('span'); hp.className = 'dc-hp'; hp.textContent = `${door.life}/${door.life_max}`; chip.appendChild(hp);
+  }
+  return chip;
+}
+
+function renderDimensionsExplorer(items, ago) {
+  const grid = document.getElementById('dx-grid');
+  const empty = document.getElementById('dx-empty');
+  if (!grid) return;
+  grid.innerHTML = '';
+  if (!items.length) { empty.hidden = false; return; }
+  empty.hidden = true;
+
+  const sorted = [...items].sort((a, b) => (b.live_doors - a.live_doors) || ((a.age_sec ?? 1e12) - (b.age_sec ?? 1e12)));
+  for (const d of sorted) {
+    const tile = document.createElement('div');
+    tile.className = `dx-tile${d.legacy ? ' is-legacy' : ''}`;
+    tile.dataset.dim = d.dimension_name;
+
+    const name = document.createElement('div'); name.className = 'dx-name';
+    const nm = document.createElement('span'); nm.textContent = d.dimension_name; name.appendChild(nm);
+    const badge = document.createElement('span');
+    badge.className = `dx-badge${d.live_doors > 0 ? ' is-live' : ''}`;
+    badge.textContent = d.legacy ? 'legacy' : d.live_doors > 0 ? `LIVE · turn ${d.turn ?? 0}` : 'quiet';
+    name.appendChild(badge);
+    tile.appendChild(name);
+
+    const meta = document.createElement('div'); meta.className = 'dx-meta';
+    meta.innerHTML = `<span><b>${d.live_doors}</b>/${d.doors.length} door${d.doors.length === 1 ? '' : 's'}</span>` +
+                     `<span><b>${(d.namespaces || []).length}</b> ns</span>` +
+                     `<span>newest ${ago(d.age_sec)}</span>`;
+    tile.appendChild(meta);
+
+    const chips = document.createElement('div'); chips.className = 'dx-chips';
+    // Live first, then by freshness; cap to MAX_CHIPS with a "+N more" badge
+    // so the panel keeps its height bounded when a dimension gets busy.
+    const ordered = [...d.doors].sort((a, b) => (b.live - a.live) || ((a.age_sec ?? 1e12) - (b.age_sec ?? 1e12)));
+    const shown = ordered.slice(0, MAX_CHIPS);
+    for (const door of shown) {
+      const chip = doorChip(door);
+      chip.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (d.legacy || !door.live) return;
+        if (!pickMode('join-door')) return;
+        const sel = document.getElementById('pick-door');
+        const want = `${d.dimension_name}|${door.peer_id}`;
+        for (const o of sel.options) if (o.value === want && !o.disabled) { sel.value = want; break; }
+        document.querySelectorAll('.dx-tile.is-selected').forEach(t => t.classList.remove('is-selected'));
+        tile.classList.add('is-selected');
+      });
+      chips.appendChild(chip);
+      // "Join my <team> team" next to every live player Door (user ruling 2026-11-13); hidden without characters.
+      if (!d.legacy && door.live && (door.life ?? 1) > 0 && (door.alliance === 'player' || door.alliance === 'player_c')) chips.appendChild(joinTeamButton(d.dimension_name, door.peer_id));
+    }
+    if (ordered.length > shown.length) {
+      const more = document.createElement('span');
+      more.className = 'dc-more';
+      more.textContent = `+${ordered.length - shown.length} more`;
+      chips.appendChild(more);
+    }
+    tile.appendChild(chips);
+
+    tile.addEventListener('click', () => {
+      if (d.legacy) return;
+      // Clicking a tile picks the whole dimension (join-random mode).
+      if (!pickMode('join-random')) return;
+      const sel = document.getElementById('pick-dim');
+      for (const o of sel.options) if (o.value === d.dimension_name && !o.disabled) { sel.value = d.dimension_name; break; }
+      document.querySelectorAll('.dx-tile.is-selected').forEach(t => t.classList.remove('is-selected'));
+      tile.classList.add('is-selected');
+    });
+
+    grid.appendChild(tile);
+  }
+}
+
+// Phone menu (?mobile=1&menu=1, served by the phone's menu server): only the profile panel — that server
+// has no /api/dimensions, /api/network …, so none of the host / join / restore setup runs.
+async function renderMenu() {
+  document.documentElement.classList.add('menu-mode');
   document.getElementById('launcher').hidden = false;
+  document.querySelector('#launcher h1').textContent = 'ChaosD6';
+  await initProfilePanel(document.getElementById('profile-panel'));
+  hideEntering();
+}
+
+async function renderLauncher() {
+  if (IS_MENU) return renderMenu();
+  document.getElementById('launcher').hidden = false;
+  // The profile panel loads on its own; a missing profile API only disables it.
+  initProfilePanel(document.getElementById('profile-panel')).catch(() => {});
   // The radios + selects are disabled until we know what dimensions exist and
   // which doors are live, so block interaction behind the same overlay the
   // dimension-entry flow uses — different label, same spinner.
@@ -91,7 +212,7 @@ async function renderLauncher() {
     fetch('/data/characters.json').then(r => r.json()),
     fetch('/data/creatures.json').then(r => r.json()),
     fetch('/api/network').then(r => r.json()).catch(() => ({ candidates: [{ address: '127.0.0.1', kind: 'loopback', iface: 'lo' }], default: '127.0.0.1' })),
-    fetch('/dimensions/local').then(r => r.json()).catch(() => ({ ok: false, items: [] })),
+    fetch('/api/dimensions/local').then(r => r.json()).catch(() => ({ ok: false, items: [] })),
   ]);
 
   const hostIp = document.getElementById('host-ip');
@@ -116,7 +237,7 @@ async function renderLauncher() {
   let liveMonsterDoors = 0;
   const monsterDims = new Set();
   for (const d of items) for (const p of d.doors) {
-    if (p.alliance !== 'player') {
+    if (p.alliance !== 'player' && p.alliance !== 'player_c') {
       if (isAlive(p)) { liveMonsterDoors++; monsterDims.add(d.dimension_name); }
       continue;
     }
@@ -125,6 +246,7 @@ async function renderLauncher() {
     doors.push({ d, p, live: isAlive(p), label: `${d.dimension_name} / ${who}  — ${tag}` });
   }
   const liveDoors = doors.filter(r => r.live);
+  renderDimensionsExplorer(items, ago);
   const livePlayerDims = new Set(liveDoors.map(r => r.d.dimension_name));
   const monstersPhrase = liveMonsterDoors
     ? ` ${liveMonsterDoors} monster${liveMonsterDoors === 1 ? '' : 's'} alive in ${monsterDims.size} dimension${monsterDims.size === 1 ? '' : 's'}.`
@@ -214,6 +336,13 @@ async function renderLauncher() {
   document.getElementById('go').disabled = false;
 
   document.getElementById('go').addEventListener('click', launch);
+  // "Join my team" next to the Door picker: the picked Door, top profile character, 30–50 hexes away.
+  document.getElementById('pick-door-team').addEventListener('click', () => {
+    const opt = pickDoor.selectedOptions[0];
+    if (!opt || opt.disabled || !opt.value) { document.getElementById('launch-msg').textContent = 'no live Door picked'; return; }
+    const [dimName, doorId] = opt.value.split('|');
+    launchJoinTeam(dimName, doorId);
+  });
   hideEntering();
 }
 
@@ -225,5 +354,7 @@ if (peer) {
   revealGame();
   await import('./main.js');
 } else {
+  document.documentElement.classList.add('in-launcher');
+  if (IS_MOBILE) document.documentElement.classList.add('mobile');
   await renderLauncher();
 }

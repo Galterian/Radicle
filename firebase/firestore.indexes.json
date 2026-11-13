@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "peers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "rid",      "order": "ASCENDING" },
+        { "fieldPath": "lastSeen", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "commits",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "branch", "order": "ASCENDING" },
+        { "fieldPath": "when",   "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

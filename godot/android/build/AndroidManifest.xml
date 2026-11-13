@@ -34,6 +34,16 @@
             android:name="org.godotengine.editor.version"
             android:value="${godotEditorVersion}" />
 
+        <!-- Godot v2 plugin registration. Normally injected from each .gdap at
+             export, but the headless CLI export skips that, so without these the
+             AARs are packaged yet Engine.has_singleton() stays false. -->
+        <meta-data
+            android:name="org.godotengine.plugin.v2.NodejsMobile"
+            android:value="io.chaosd6.nodejs.NodejsMobilePlugin" />
+        <meta-data
+            android:name="org.godotengine.plugin.v2.WebViewHud"
+            android:value="io.chaosd6.webview.WebViewHudPlugin" />
+
         <activity
             android:name=".GodotApp"
             android:label="@string/godot_project_name_string"
@@ -52,6 +62,23 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- chaosd6://join?... deep link. An alias, not a filter on GodotApp:
+             Godot's generated src/<variant>/AndroidManifest.xml declares GodotApp
+             with tools:node="mergeOnlyAttributes", which drops child elements
+             from this manifest during the merge. GodotApp.java forwards the URI
+             to OS.get_cmdline_args() for DimensionLauncher.gd. -->
+        <activity-alias
+            android:name="com.godot.game.JoinLink"
+            android:targetActivity="com.godot.game.GodotApp"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="chaosd6" android:host="join" />
+            </intent-filter>
+        </activity-alias>
 
     </application>
 

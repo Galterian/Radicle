@@ -132,8 +132,46 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_healer", "class_shaman"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_vitality", "elem_souls", "elem_water", "elem_earth"],
+            "text": "Tap: point-buy on the stat you are best at that has no Druid stone on this tile yet — a Druid stone (a mapped Healing Orb / obelisk) rises here as a tile bonus of that stat's element. Whoever stands on it adds it to that stat (and to life, by the Σ/10 rule). One stone per stat; with all four standing, it tries to beat the lowest one."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (water/earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: a point-buy of the chosen stat (my strongest by default); the highest die becomes a defence (shield) token of that colour on my tile, absorbing one hit. A failed roll lays nothing and the ability stays ready. Paper text: \"Point buy: put a point-buy defense token over this location for any color.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_druid"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, W, M.", "target": "caster", "unit": "colours", "value": ["vitality", "world", "matter"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "world", "matter"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "matter"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "matter"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "shield_token", "description": "Defence token on my tile = the point-buy die (fail → nothing, ability stays ready).", "target": "tile", "unit": "shield_token", "value": {"if": [{"rule": ["point_buy_succeeds", {"dice": {"var": "cast.dice"}, "stat": {"stat_of": [{"root": "caster"}, {"var": "cast.stat"}]}}]}, {"max_of": [{"var": "cast.dice"}]}, 0]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact", "point_buy_succeeds"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): Tap: point-buy on the stat you are best at that has no Druid stone on this tile yet — a Druid stone (a mapped Healing Orb / obelisk) rises here as a tile bonus of that stat's element. Whoever stands on it adds it to that stat (and to life, by the Σ/10 rule). One stone per stat; with all four standing, it tries to beat the lowest one.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_healer", "class_shaman"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -225,8 +263,47 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_enchanter", "class_transmuter"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_air", "elem_water", "elem_earth", "elem_fire", "elem_harmony"],
+            "text": "Passive, once per turn: when one of your damage spells completes, roll a point-buy on your highest stat among that spell's elements — the die is added to its damage."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap, with an effect emission this action: an extra point-buy of the emitted element's stat; its highest die rides on the effect's MAIN damage leg before ÷10 (fail → nothing added, ability stays ready). Paper text: \"Each time you emit an element you may take an element token and add it to effects as point-buy damage.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_elementalist"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}},
+              {"id": "emitting", "description": "I emit an element this action.", "when": {"!!": {"var": "cast.elem"}}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): M, Wi.", "target": "caster", "unit": "colours", "value": ["matter", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["matter", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["matter", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["matter", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "extra_damage", "description": "Point-buy die added to the main damage sum before ÷10.", "target": "target", "unit": "damage_pre_round", "value": {"if": [{"rule": ["point_buy_succeeds", {"dice": {"var": "cast.dice"}, "stat": {"stat_of": [{"root": "caster"}, {"var": "cast.stat"}]}}]}, {"max_of": [{"var": "cast.dice"}]}, 0]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact", "point_buy_succeeds"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): Passive, once per turn: when one of your damage spells completes, roll a point-buy on your highest stat among that spell's elements — the die is added to its damage.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_enchanter", "class_transmuter"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -407,8 +484,46 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["effect_invisibility"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_air", "elem_space", "elem_concentration"],
+            "text": "Tap: you and every ally within 10 hexes gain one illusion life point (shown cyan). It is the first life lost when damage lands, and fades after the 3rd action of the turn."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: M (air), W (space), Wi (concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: this action one point of damage to me and to each ally in contact is ignored (after Super Sense, before shield tokens). Paper text: \"Ignore one damage done to nearby creatures and yourself this action.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_illusionist"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): M, W, Wi.", "target": "caster", "unit": "colours", "value": ["matter", "world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["matter", "world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["matter", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["matter", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "damage_ignored", "description": "One point of damage ignored on me and each adjacent ally this action.", "target": "caster", "unit": "damage", "value": -1}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): Tap: you and every ally within 10 hexes gain one illusion life point (shown cyan). It is the first life lost when damage lands, and fades after the 3rd action of the turn.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_invisibility"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -751,8 +866,44 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_overlord"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_air", "elem_water", "elem_earth", "elem_fire", "elem_harmony"],
+            "text": "When you stay on one tile for a whole turn (all three actions), restore one life token at the end of the turn."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: when I did not move during a whole turn I restore one life at turn end (capped). Paper text: \"When you stay on one tile for a whole round, restore one life token.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_guardian"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): M, Wi.", "target": "caster", "unit": "colours", "value": ["matter", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["matter", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["matter", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "regen", "description": "+1 life at turn end when I stayed on my tile the whole turn.", "target": "caster", "unit": "life", "value": {"if": [{"!": {"var": "caster.moved_this_round"}}, 1, 0]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The regen stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): the heal comes at the end of the TURN (after its 3rd action), never at the end of an action. Stay on one tile for all three actions of a turn, then restore one life (never above your life maximum).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_overlord"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1297,8 +1448,47 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_guardian"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_space", "elem_souls", "elem_earth", "elem_harmony"],
+            "text": "Tap: you gain one armor life point (shown gold); if you already wear one, an adjacent ally without one gains it instead. Never two on one unit. It is the first life lost when damage lands, and can be gained again once lost."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: W (space/souls), M (earth), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: the ally in contact I pointed at, else I, gains an armor life token: +1 life maximum (and life) until the first point of damage removes it; not cumulative, reusable once lost. Paper text: \"A nearby ally or yourself gains +1 life token (armor bonus, non-cumulative but reusable once lost).\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_overlord"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}},
+              {"id": "ally_in_contact_or_self", "description": "An ally in contact was pointed at, else the caster is the target.", "when": {"or": [{"==": [{"var": "target.peer_id"}, {"var": "caster.peer_id"}]}, {"rule": ["ally_in_contact", {"dist": {"var": "dist"}, "a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, M, Wi.", "target": "caster", "unit": "colours", "value": ["world", "matter", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "matter", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "matter", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["world", "matter", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "armor", "description": "+1 life maximum (armor token) until the first damage.", "target": "target", "unit": "life_max", "value": {"if": [{"var": "target.has_armor_token"}, 0, 1]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["ally_in_contact", "class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact", "is_ally"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): Tap: you gain one armor life point (shown gold); if you already wear one, an adjacent ally without one gains it instead. Never two on one unit. It is the first life lost when damage lands, and can be gained again once lost.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_guardian"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1343,10 +1533,10 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_assassin", "class_cleric"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0
+          "weight": 0.99
         },
         {
           "author_peer_id": "",
@@ -1362,8 +1552,46 @@
           "origin": "user_ruling_2026-10-30",
           "parent_version": "1.0.0",
           "rebalance_links": ["class_assassin", "class_cleric"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.1",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-12",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_space", "elem_concentration", "elem_harmony"],
+            "text": "Passive, once per turn: your first step onto a trap (a laid one or a building's hidden one) or into an enemy monster's 2-hex threat ring is stealthy — the trap does not spring, and monsters neither wake nor chase you for the rest of the turn."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: W (space), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: my step this action springs no enter-trap, reveals no new hexes (so wakes no monster behind the fog). Paper text: \"Once per round your Move does not trigger any trap; stepping over unrevealed tile doesn't reveal and monsters don't wake.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_rogue"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, Wi.", "target": "caster", "unit": "colours", "value": ["world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "stealth", "description": "No trap triggers and no reveal on my step this action.", "target": "caster", "unit": "flag", "value": true}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-12 (supersedes 1.0.0): Passive, once per turn: your first step onto a trap (a laid one or a building's hidden one) or into an enemy monster's 2-hex threat ring is stealthy — the trap does not spring, and monsters neither wake nor chase you for the rest of the turn.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_assassin", "class_cleric"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }

@@ -1,0 +1,44 @@
+// chaosD6 seeds + dimensions registry.
+//
+// MVP policy — world-readable, write-anyone-can-be-anyone. Fine for a private
+// playtest; wire up Firebase App Check or Anonymous Auth before exposing this
+// to the real internet, otherwise anyone can poison the seed registry.
+//
+// The write constraints below do force each record to carry an NID that looks
+// right and a lastSeen within the last hour, so at least a drive-by cannot
+// fill the collection with garbage.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isNid(s)  { return s is string && s.matches('^z[1-9A-HJ-NP-Za-km-z]{20,80}$'); }
+    function fresh(ts) { return ts is timestamp && ts > request.time - duration.value(1, 'h'); }
+
+    match /peers/{nid} {
+      allow read: if true;
+      allow write: if isNid(nid)
+                   && request.resource.data.nid == nid
+                   && fresh(request.resource.data.lastSeen);
+    }
+
+    match /dimensions/{dim} {
+      allow read: if true;
+      allow write: if dim.size() > 0 && dim.size() < 64
+                   && fresh(request.resource.data.lastPushAt);
+
+      match /doors/{nid} {
+        allow read: if true;
+        allow write: if isNid(nid)
+                     && request.resource.data.nid == nid
+                     && fresh(request.resource.data.pushed_at);
+      }
+
+      match /commits/{sha} {
+        allow read: if true;
+        allow write: if sha.matches('^[0-9a-f]{7,40}$')
+                     && isNid(request.resource.data.pushedBy)
+                     && fresh(request.resource.data.when);
+      }
+    }
+  }
+}
