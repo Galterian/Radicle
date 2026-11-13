@@ -541,10 +541,14 @@ async function openCharacterEditor(mode, charId) {
 
   // Skills + effects: each in the deck or the archive
   const cardsBox = h('div', { class: 'pe-cards' });
+  // Cards that were new when the editor opened stay on top for the whole session (tapping one must not
+  // make it jump away into the archive list).
+  const wonNow = new Set(c.cards.filter(x => x.new).map(x => x.uid));
+  let dirty = false;
   function renderCards() {
     cardsBox.innerHTML = '';
     // New cards (taken from kills) first, then skills, then effects.
-    const rank = (x) => (x.new ? 0 : 2) + (x.kind === 'skill' ? 0 : 1);
+    const rank = (x) => (wonNow.has(x.uid) ? 0 : 2) + (x.kind === 'skill' ? 0 : 1);
     const sorted = [...c.cards].sort((a, b) => rank(a) - rank(b));
     for (const x of sorted) {
       const info = (x.kind === 'skill' ? skills : effects).get(x.id);
@@ -555,13 +559,14 @@ async function openCharacterEditor(mode, charId) {
         type: 'button', class: `pe-card kind-${x.kind}${inDeck ? ' in-deck' : ' in-archive'}${x.new ? ' is-new' : ''}`,
         title: `${info?.name || prettyId(x.id)} — ${info?.text || ''}${x.from ? `\n(taken from ${x.from})` : ''}\n\ntap: move to the ${inDeck ? 'archive' : 'deck'}`,
         onclick: () => {
-          // The first tap on a new card only acknowledges it (stops the glow, saved at once);
-          // further taps move it between the deck and the archive.
+          // The first tap on a new card acknowledges it (stops the glow, saved at once) and takes it from
+          // the archive into the deck; further taps move it between the deck and the archive.
           if (x.new) {
             x.new = false;
             if (!create) api('PUT', `/api/profile/characters/${encodeURIComponent(c.id)}`, { seen: [x.uid] })
               .then(out => { if (out.profile) { S.profile = out.profile; renderPanel(); } }).catch(() => {});
-          } else x.where = inDeck ? 'archive' : 'deck';
+            if (!inDeck) { x.where = 'deck'; dirty = true; }
+          } else { x.where = inDeck ? 'archive' : 'deck'; dirty = true; }
           renderCards(); refresh();
         },
       },
@@ -591,7 +596,7 @@ async function openCharacterEditor(mode, charId) {
     const probs = draftProblems(c, L, { create });
     saveBtn.disabled = probs.length > 0;
     errEl.classList.remove('bad');
-    errEl.textContent = probs.length ? `to save: ${probs.join(' · ')}` : create ? 'stats, class, unit and name lock once created' : '';
+    errEl.textContent = probs.length ? `to save: ${probs.join(' · ')}` : create ? 'stats, class, unit and name lock once created' : dirty ? 'deck changed — tap Save deck to keep it' : '';
   }
   refresh();
   saveBtn.addEventListener('click', async () => {
