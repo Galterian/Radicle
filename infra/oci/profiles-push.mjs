@@ -16,7 +16,10 @@
 //
 // Env: PROFILES_REPO (working `rad clone` of chaosD6-Profiles), PORT (8090),
 //      HOST (127.0.0.1), BASE (/profiles-push), MIRROR_REMOTE (rad; "none" =
-//      skip, for local tests), MAX_PROFILE_BYTES (262144).
+//      skip, for local tests), MAX_PROFILE_BYTES (262144),
+//      PROFILES_STORAGE (Radicle storage of the repo; default
+//      $HOME/.radicle/storage/<PROFILES_RID>), PROMOTE_EVERY_MS (3000; 0 = no
+//      promoter). See "Promoter" below for the P2P write path.
 //
 // Deploy: copy this file + game/profile-auth.mjs into one directory
 // (infra/oci/profiles-setup.sh does it).
@@ -130,6 +133,23 @@ async function checkTree(newOid) {
   return null;
 }
 
+/** Why `newOid` may not become `ref` (null = fine). `owners`: the current tip's (null = unclaimed team). */
+async function contentProblem(ref, newOid, owners, id) {
+  const bad = await checkTree(newOid);
+  if (bad || !isTeamRef(ref)) return bad;
+  const next = ownerIds(await profileAt(newOid));
+  if (!next.length) return 'a team profile needs at least one owner';
+  if (owners === null && !next.includes(id)) return 'the first push of a team must list its own key in owners';
+  return null;
+}
+
+/** `git push rad <ref>`; returns the error text, or null. */
+async function mirror(ref) {
+  if (MIRROR === 'none') return null;
+  const m = await git(['push', MIRROR, `${ref}:${ref}`]);
+  return m.code === 0 ? null : (m.stderr || 'failed');
+}
+
 async function receive(req, res) {
   const body = await readBody(req);
   let cmds;
@@ -163,17 +183,10 @@ async function receive(req, res) {
     res.writeHead(200, { 'Content-Type': 'application/x-git-receive-pack-result' });
     return res.end(r.stdout);
   }
-  let bad = await checkTree(newOid);
-  if (!bad && team) {
-    const next = ownerIds(await profileAt(newOid));
-    if (!next.length) bad = 'a team profile needs at least one owner';
-    else if (owners === null && !next.includes(id)) bad = 'the first push of a team must list its own key in owners';
-  }
+  const bad = await contentProblem(ref, newOid, owners, id);
   if (bad) { await rollback(ref, oldOid, newOid); return fail(res, 403, bad); }
-  if (MIRROR !== 'none') {
-    const m = await git(['push', MIRROR, `${ref}:${ref}`]);
-    if (m.code !== 0) { await rollback(ref, oldOid, newOid); return fail(res, 502, `radicle push failed: ${m.stderr}`); }
-  }
+  const m = await mirror(ref);
+  if (m) { await rollback(ref, oldOid, newOid); return fail(res, 502, `radicle push failed: ${m}`); }
   log(`${id.slice(0, 12)} ${oldOid.slice(0, 8)}..${newOid.slice(0, 8)} ok${MIRROR !== 'none' ? ` → ${MIRROR}` : ''}`);
   res.writeHead(200, { 'Content-Type': 'application/x-git-receive-pack-result', 'Cache-Control': 'no-cache' });
   res.end(r.stdout);
@@ -190,6 +203,80 @@ async function upload(req, res) {
 // One push at a time: the ref check, rollback and rad push must not interleave.
 let queue = Promise.resolve();
 const serial = (fn) => (queue = queue.then(fn, fn));
+
+// ---- Promoter: the P2P write path (user ruling 2026-11-13: "P2P writer + OCI promotes") ----
+// A phone running the in-app radicle-node commits its save to refs/heads/{teams/<Team>,profiles/<nid>} in
+// its OWN namespace of Radicle storage, signs refs and announces; this node fetches it (seeding scope all),
+// and Radicle has verified the namespace's signed refs by then, so the namespace NID is the author. Each
+// poll looks for such refs that differ from the canonical branch and promotes them under the same rules
+// as an HTTPS push: fast-forward only, owners for teams, own NID for profiles/<id>, profile.json only.
+
+const STORAGE = process.env.PROFILES_STORAGE
+  || `${process.env.HOME}/.radicle/storage/${(process.env.PROFILES_RID || 'rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH').replace(/^rad:/, '')}`;
+const PROMOTE_EVERY = Number(process.env.PROMOTE_EVERY_MS || 3000);
+const NID_RE = /^z6Mk[1-9A-HJ-NP-Za-km-z]+$/;
+const done = new Set();   // `${nid} ${ref} ${oid}` already promoted or refused: not retried
+const selfNid = (await run('rad', ['self', '--nid'])).stdout.toString().trim();
+
+async function promote(nid, ref, oid) {
+  const key = `${nid} ${ref} ${oid}`;
+  const tip = await refOid(ref);
+  if (tip === oid) return done.add(key);
+  const tmp = `refs/promote/${nid}/${ref.slice('refs/'.length)}`;
+  const why = await (async () => {
+    if (!pushable(ref)) return 'not a profile branch';
+    if (!isTeamRef(ref) && ref !== `refs/heads/profiles/${nid}`) return 'another key\'s profile branch';
+    const f = await git(['fetch', '-q', '--no-tags', STORAGE, `+refs/namespaces/${nid}/${ref}:${tmp}`]);
+    if (f.code !== 0) return `fetch from storage: ${f.stderr.trim()}`;
+    if (tip !== ZERO && (await git(['merge-base', '--is-ancestor', tip, oid])).code !== 0) {
+      // An old save of theirs the branch has since moved past is not worth a log line.
+      return (await git(['merge-base', '--is-ancestor', oid, tip])).code === 0 ? '' : 'not a fast-forward of the canonical branch';
+    }
+    const owners = isTeamRef(ref) && tip !== ZERO ? ownerIds(await profileAt(tip)) : null;
+    if (owners && !owners.includes(nid)) return 'not an owner';
+    return contentProblem(ref, oid, owners, nid);
+  })();
+  await git(['update-ref', '-d', tmp]);
+  if (why !== null) {
+    done.add(key);
+    if (why) log(`promote ${nid.slice(0, 12)} ${ref} ${oid.slice(0, 8)} refused: ${why}`);
+    return;
+  }
+  // Compare-and-swap on the tip we checked against (ZERO = must not exist yet).
+  if ((await git(['update-ref', ref, oid, tip])).code !== 0) return;   // moved meanwhile; next poll re-checks
+  const m = await mirror(ref);
+  if (m) { await rollback(ref, tip, oid); return log(`promote ${ref} ${oid.slice(0, 8)}: radicle push failed, will retry: ${m.trim()}`); }
+  done.add(key);
+  log(`${nid.slice(0, 12)} ${tip.slice(0, 8)}..${oid.slice(0, 8)} ${ref} promoted from radicle${MIRROR !== 'none' ? ` → ${MIRROR}` : ''}`);
+}
+
+let storageWarned = false;
+async function scan() {
+  const r = await git(['for-each-ref', '--format=%(objectname) %(refname)', 'refs/namespaces/'], { cwd: STORAGE });
+  if (r.code !== 0) {
+    if (!storageWarned) log(`promoter: cannot read ${STORAGE}: ${r.stderr.trim()}`);
+    storageWarned = true;
+    return;
+  }
+  storageWarned = false;
+  if (done.size > 20000) done.clear();
+  for (const line of r.stdout.toString().split('\n')) {
+    const m = line.match(/^([0-9a-f]{40}) refs\/namespaces\/([^/]+)\/(refs\/heads\/(?:teams|profiles)\/.+)$/);
+    if (!m) continue;
+    const [, oid, nid, ref] = m;
+    if (nid === selfNid || !NID_RE.test(nid) || done.has(`${nid} ${ref} ${oid}`)) continue;
+    try { await promote(nid, ref, oid); } catch (e) { log(`promote ${ref}: ${e.message}`); }
+  }
+}
+
+let scanning = false;
+if (PROMOTE_EVERY > 0) {
+  setInterval(() => {
+    if (scanning) return;
+    scanning = true;
+    serial(() => scan().finally(() => { scanning = false; }));
+  }, PROMOTE_EVERY);
+}
 
 http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');

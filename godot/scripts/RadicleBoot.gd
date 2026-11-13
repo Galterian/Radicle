@@ -1,21 +1,25 @@
 extends Node
 
-## Boots the on-device Radicle node and saves the player's profile into the
-## chaosD6-Profiles repo. Only lives on Android — a no-op on every other platform.
+## Boots the on-device Radicle node: the P2P write path of the team profile in
+## chaosD6-Profiles (refs/heads/teams/<Team>). Only lives on Android — a no-op
+## on every other platform.
 ##
 ## Pairs with the godot/android/plugins/radicle_node plugin: that plugin
 ## supplies the native `RadicleNode` singleton. Autoload me from
-## project.godot's [autoload] block as `RadicleBoot`.
+## project.godot's [autoload] block as `RadicleBoot` (before EmbeddedPeer).
 ##
-## The phone only ever writes PROFILE_BRANCH in its own namespace
-## (refs/namespaces/<NID>/refs/heads/profile) and seeds the repo with scope
-## `followed`, so it never pulls other players' profiles.
+## The saves themselves come from game/profile-sync.mjs in the embedded peer
+## (EmbeddedPeer passes it bridge_file()): the node commits them to
+## teams/<Team> in its own namespace, signs and announces, and the OCI seed
+## promotes them to the canonical branch (infra/oci/profiles-push.mjs). The
+## node key is the profile identity, user://data/radicle/identity.pem, so its
+## NID is this device's id in the team's `owners`. Seeded with scope
+## `followed`: it never pulls other players' namespaces.
 
-# chaosD6-Profiles RID — set once the repo exists (`rad init` on the desktop,
-# then seed it on OCI with scope all). Empty = node is not started.
-const PROFILES_RID := ""
-const PROFILE_BRANCH := "profile"
-const PROFILE_FILE := "profile.json"
+# chaosD6-Profiles (infra/oci/profiles-setup.sh); same RID as game/profile-sync.mjs.
+const PROFILES_RID := "rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"
+# game/profile-radicle.mjs: <profileDir>/radicle/identity.pem, profileDir = CHAOSD6_USER_DATA_DIR.
+const IDENTITY_PEM := "user://data/radicle/identity.pem"
 
 signal node_ready(nid: String)
 signal node_failed(reason: String)
@@ -44,7 +48,7 @@ func _ready() -> void:
     th.start(_start_on_thread.bind(alias))
 
 func _start_on_thread(alias: String) -> void:
-    var nid: String = _plugin.call("start", alias, PROFILES_RID)
+    var nid: String = _plugin.call("start", alias, PROFILES_RID, ProjectSettings.globalize_path(IDENTITY_PEM))
     call_deferred("_emit_result", nid)
 
 func _emit_result(nid: String) -> void:
@@ -55,14 +59,14 @@ func _emit_result(nid: String) -> void:
         print("[RadicleBoot] node ready, NID=", nid)
         node_ready.emit(nid)
 
-## Commits `profile` as PROFILE_FILE on PROFILE_BRANCH, signs and announces it.
-## Blocking (first call on a device fetches the repo, up to 60 s) — call from a
-## Thread. Returns the commit id, or "error: …".
-func save_profile(profile: Dictionary) -> String:
+## Where the running node publishes its loopback endpoint ({ port, token }) for
+## profile-sync.mjs; "" when the node is not available. The file exists only
+## while the node runs — profile-sync.mjs falls back to HTTPS otherwise.
+func bridge_file() -> String:
     if _plugin == null:
-        return "error: radicle node not available"
-    return String(_plugin.call("saveProfile", PROFILES_RID, PROFILE_BRANCH, PROFILE_FILE,
-        JSON.stringify(profile, "  ")))
+        return ""
+    var home := String(_plugin.call("home"))
+    return "" if home.is_empty() else home.path_join("bridge.json")
 
 func stop() -> void:
     if _plugin != null:

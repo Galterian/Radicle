@@ -1,13 +1,15 @@
 // Player profile persistence in the chaosD6-Profiles Radicle repo, over plain
-// git smart-HTTP (isomorphic-git, pure JS — no native git, no Radicle node on
-// the phone). Live dimension sync is NOT done here; radicle-adapter.mjs stays
-// off on mobile.
+// git smart-HTTP (isomorphic-git, pure JS — no native git). Live dimension
+// sync is NOT done here; radicle-adapter.mjs stays off on mobile.
 //
 //   read : radicle-httpd on the OCI seed, depth 1, one ref only:
 //          <readUrl>  refs/namespaces/<delegate NID>/refs/heads/profiles/<id>
-//   write: infra/oci/profiles-push.mjs on the same host (git receive-pack +
-//          X-Profile-Auth), which then `git push rad`es the branch so Radicle
-//          replicates it.
+//   write: P2P first when the in-app radicle-node runs (CHAOSD6_RADICLE_BRIDGE,
+//          see "P2P write path" below): the commit is signed into this
+//          device's Radicle namespace and the seed promotes it. Otherwise /
+//          as fallback: infra/oci/profiles-push.mjs on the same host (git
+//          receive-pack + X-Profile-Auth), which then `git push rad`es the
+//          branch so Radicle replicates it.
 //
 // The player profile itself lives on the team branch refs/heads/teams/<Team> (`ref` option; owners and the
 // per-character merge are in profile-radicle.mjs); profiles/<id> is each device's own branch (join requests).
@@ -66,16 +68,52 @@ async function loadGit(dir) {
   return gitMods;
 }
 
-/** Load the player key from <dir>/identity.pem, creating it on first run. */
+/**
+ * Load the player key from <dir>/identity.pem, creating it on first run. On Android the in-app Radicle
+ * node (godot/android/radicle-node/ffi) derives its node key from the same file, so creation is
+ * exclusive ('wx'): whichever side runs first writes it, the other reads it.
+ */
 export function loadIdentity(dir) {
   fs.mkdirSync(dir, { recursive: true });
   const keyFile = path.join(dir, 'identity.pem');
-  if (!fs.existsSync(keyFile)) {
-    const { privateKeyPem } = generateIdentity();
-    fs.writeFileSync(keyFile, privateKeyPem, { mode: 0o600 });
+  try {
+    fs.writeFileSync(keyFile, generateIdentity().privateKeyPem, { mode: 0o600, flag: 'wx' });
+  } catch (e) { if (e.code !== 'EEXIST') throw e; }
+  for (let i = 0; ; i++) {
+    const privateKeyPem = fs.readFileSync(keyFile, 'utf8');
+    try { return { id: idFromPrivateKeyPem(privateKeyPem), privateKeyPem }; } catch (e) {
+      if (i >= 20) throw e;   // the node is still writing it
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    }
   }
-  const privateKeyPem = fs.readFileSync(keyFile, 'utf8');
-  return { id: idFromPrivateKeyPem(privateKeyPem), privateKeyPem };
+}
+
+// ---- P2P write path (user ruling 2026-11-13: "P2P writer + OCI promotes") ----
+// With the in-app radicle-node running, a save goes out as a signed Radicle ref in this device's own
+// namespace; infra/oci/profiles-push.mjs (the promoter) moves the canonical branch to it after its owner /
+// fast-forward checks. The node re-creates the exact commit isomorphic-git built (same oid), so if
+// promotion doesn't show up in time the HTTPS push of that same commit is the fallback and both can land.
+// CHAOSD6_RADICLE_BRIDGE = <RAD_HOME>/bridge.json ({ port, token }), written by the node while it runs.
+
+const BRIDGE_WAIT_MS = Number(process.env.PROFILES_BRIDGE_WAIT_MS || 15000);
+
+function readBridge(file) {
+  if (!file) return null;
+  try { const b = JSON.parse(fs.readFileSync(file, 'utf8')); return b.port && b.token ? b : null; } catch { return null; }
+}
+
+async function bridgeSave(bridge, body) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 60000);
+  try {
+    const r = await fetch(`http://127.0.0.1:${bridge.port}/save`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-bridge-token': bridge.token },
+      body: JSON.stringify(body), signal: ctl.signal,
+    });
+    const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
+    if (!j.ok) throw new Error(j.error || 'bridge save failed');
+    return j.oid;
+  } finally { clearTimeout(t); }
 }
 
 const httpReason = (e) => e?.data?.statusMessage || e?.data?.reason || e?.message || String(e);
@@ -84,7 +122,8 @@ const httpReason = (e) => e?.data?.statusMessage || e?.data?.reason || e?.messag
  * `ref` (default: this device's refs/heads/profiles/<id>) picks the branch, e.g. teamRef('Gold') for the
  * team profile; each branch gets its own shallow gitdir + pending file under `dir` (`name` keys them).
  */
-export async function openProfileStore({ dir, readUrl = DEFAULTS.readUrl, pushUrl = DEFAULTS.pushUrl, namespace, ref: wantRef = null, name = null, log = () => {} } = {}) {
+export async function openProfileStore({ dir, readUrl = DEFAULTS.readUrl, pushUrl = DEFAULTS.pushUrl, namespace, ref: wantRef = null, name = null, log = () => {},
+  bridgeFile = process.env.CHAOSD6_RADICLE_BRIDGE || '', rid = PROFILES_RID, seedNid = OCI_NID } = {}) {
   namespace ??= readUrl === DEFAULTS.readUrl ? DEFAULTS.namespace : '';   // the delegate namespace belongs to the seed URL
   if (!dir) throw new Error('openProfileStore: dir required');
   if (!readUrl) throw new Error('openProfileStore: no read URL (set RADICLE_PROFILES_RID or PROFILES_READ_URL)');
@@ -119,17 +158,50 @@ export async function openProfileStore({ dir, readUrl = DEFAULTS.readUrl, pushUr
     return JSON.parse(Buffer.from(blob).toString('utf8'));
   }
 
-  async function push(profile, parent) {
-    const blob = await git.writeBlob({ fs, gitdir, blob: Buffer.from(JSON.stringify(profile, null, 2) + '\n') });
-    const tree = await git.writeTree({ fs, gitdir, tree: [{ mode: '100644', path: FILE, oid: blob, type: 'blob' }] });
-    const who = { name: id.slice(0, 16), email: `${id}@profiles.chaosd6`, timestamp: Math.floor(Date.now() / 1000), timezoneOffset: 0 };
-    const oid = await git.writeCommit({ fs, gitdir, commit: { tree, parent: parent ? [parent] : [], author: who, committer: who, message: 'profile\n' } });
-    await git.writeRef({ fs, gitdir, ref, value: oid, force: true });
+  async function httpsPush(oid, parent) {
     const headers = { [AUTH_HEADER]: signPush(identity.privateKeyPem, { ref, oldOid: parent || ZERO, newOid: oid }) };
     let r;
     try { r = await git.push({ fs, http, gitdir, url: pushUrl, ref, remoteRef: ref, headers }); } catch (e) { throw new Error(httpReason(e)); }
     const st = r.refs?.[ref];
     if (!r.ok || (st && !st.ok)) throw new Error(`push rejected: ${st?.error || r.error || 'unknown'}`);
+  }
+
+  /** Hand `oid` to the in-app node; true once the seed's canonical branch is at it, false = not (yet) promoted. */
+  async function p2pPush(bridge, body, oid, parent) {
+    await bridgeSave(bridge, body);
+    log(`profile: ${oid.slice(0, 8)} announced over Radicle, waiting for the seed to promote it`);
+    const until = Date.now() + BRIDGE_WAIT_MS;
+    while (Date.now() < until) {
+      await new Promise(r => setTimeout(r, 2000));
+      const tip = await fetchTip().catch(() => undefined);
+      if (tip === oid) return true;
+      // Someone else's save got there first: same as a non-fast-forward HTTPS reject (syncOnce re-merges).
+      if (tip !== undefined && tip !== (parent || null)) throw new Error(`push rejected: fetch first (${ref} moved)`);
+    }
+    return false;
+  }
+
+  async function push(profile, parent) {
+    const content = JSON.stringify(profile, null, 2) + '\n';
+    const blob = await git.writeBlob({ fs, gitdir, blob: Buffer.from(content) });
+    const tree = await git.writeTree({ fs, gitdir, tree: [{ mode: '100644', path: FILE, oid: blob, type: 'blob' }] });
+    const who = { name: id.slice(0, 16), email: `${id}@profiles.chaosd6`, timestamp: Math.floor(Date.now() / 1000), timezoneOffset: 0 };
+    const message = 'profile\n';
+    const oid = await git.writeCommit({ fs, gitdir, commit: { tree, parent: parent ? [parent] : [], author: who, committer: who, message } });
+    await git.writeRef({ fs, gitdir, ref, value: oid, force: true });
+    const bridge = readBridge(bridgeFile);
+    if (bridge && rid) {
+      const body = { rid, ref, parent: parent || null, content, name: who.name, email: who.email, timestamp: who.timestamp, message, expect: oid, seed: seedNid };
+      try { if (await p2pPush(bridge, body, oid, parent)) return oid; } catch (e) {
+        if (/fetch first/.test(e.message)) throw e;
+        log(`profile: radicle save failed (${e.message}); pushing over HTTPS`);
+      }
+    }
+    try { await httpsPush(oid, parent); } catch (e) {
+      // The seed may have promoted the P2P copy meanwhile; then the "stale" reject is our own commit.
+      if (bridge && await fetchTip().catch(() => null) === oid) return oid;
+      throw e;
+    }
     return oid;
   }
 

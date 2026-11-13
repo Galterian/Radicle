@@ -25,6 +25,7 @@ radicle-log = { workspace = true }
 # phone. A path dep because `workspace = true` can't turn default features off.
 radicle-node = { path = "../radicle-node", default-features = false, features = ["socket2"] }
 radicle-signals = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"

@@ -1,13 +1,14 @@
 # RadicleNode plugin for Godot 4 (Android)
 
-Runs `radicle-node` **in-process** (a JNI library, never an exec'd binary) so
-the installed APK can save the player's profile into the `chaosD6-Profiles`
-Radicle repo. The phone writes exactly one branch — `profile`, in its own
-namespace — and seeds the repo with scope `followed`, so it never replicates
-other players' profiles. No live dimension sync.
+Runs `radicle-node` **in-process** (a JNI library, never an exec'd binary) as
+the P2P write path of the team profile in the `chaosD6-Profiles` Radicle repo
+(`rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH`), branch `teams/<Team>`. The phone seeds
+the repo with scope `followed` (it follows the OCI seed), so it never
+replicates other players' namespaces. No live dimension sync.
 
-**Nothing in this directory has been built or test-installed on a device.** It
-is a complete scaffold; expect to iterate once an APK boots on hardware.
+**Not test-installed on a device yet.** The library, AAR, APK and AAB build;
+the commit path is covered by `game/tools/profile-sync-check.mjs` and
+`profile-p2p-check.mjs` on the desktop.
 
 ## What ships inside the APK
 
@@ -17,32 +18,31 @@ is a complete scaffold; expect to iterate once an APK boots on hardware.
 | Rust wrapper source | `godot/android/radicle-node/ffi/` (copied into the heartwood workspace at build time) |
 | Kotlin plugin + ForegroundService | AAR built from this folder; the service runs in `android:process=":radicle"` |
 | Node config template | `assets/radicle/config.template.json` |
-| GDScript boot + `save_profile()` | `godot/scripts/RadicleBoot.gd`, autoloaded via `project.godot` |
+| GDScript boot | `godot/scripts/RadicleBoot.gd`, autoloaded via `project.godot` (before `EmbeddedPeer`) |
 
-## How a profile save works
+## How a team-profile save works
 
-`RadicleBoot.save_profile(dict)` → `RadicleNode.saveProfile` →
-`RadicleNative.saveFile` (Rust), which:
+The merge logic stays in `game/profile-radicle.mjs` / `profile-sync.mjs`
+(nodejs-mobile). One key for everything: `RadicleNode.start(alias, rid,
+identityPem)` derives the node key from `user://data/radicle/identity.pem` — the
+key profile-sync signs with — so the NID **is** the device id in the team's
+`owners`. (Whichever side runs first creates the file, exclusively.)
 
-1. on the first save on a device, fetches the repo from the OCI seed (node must be running);
-2. commits `profile.json` onto `refs/namespaces/<NID>/refs/heads/profile` with libgit2;
-3. signs refs (`refs/rad/sigrefs`) with the device key;
-4. announces to the network; the OCI seed (scope `all`) picks it up.
+1. profile-sync builds the commit (`profile.json` only, parent = canonical tip)
+   and POSTs it to the node's loopback bridge (`<RAD_HOME>/bridge.json`:
+   `{port, token}`; EmbeddedPeer passes the path as `CHAOSD6_RADICLE_BRIDGE`).
+2. The node rebuilds the identical commit with libgit2 — it refuses if the oid
+   differs — sets `refs/namespaces/<NID>/refs/heads/teams/<Team>`, signs refs
+   (`refs/rad/sigrefs`) and announces. First save on a device fetches the repo
+   from the OCI seed.
+3. The OCI seed fetches the namespace; `infra/oci/profiles-push.mjs`'s promoter
+   moves the canonical `teams/<Team>` to it if the NID is an owner (or it is a
+   first claim listing itself) and it is a fast-forward, then `git push rad`.
+4. profile-sync polls the canonical tip (`PROFILES_BRIDGE_WAIT_MS`, 15 s). Not
+   promoted in time, or node down → it pushes the **same commit** over HTTPS
+   (`/profiles-push`), so the two paths never conflict.
 
-That is what `git push rad profile` does on the desktop, minus the `git`
-and `git-remote-rad` binaries. Radicle's protocol has no shallow fetch; the
-`followed` scope is the equivalent of `--single-branch`.
-
-## One-time repo setup (desktop + OCI)
-
-```sh
-# desktop: create the repo, then put its RID into RadicleBoot.gd PROFILES_RID
-mkdir chaosD6-Profiles && cd chaosD6-Profiles && git init -b master
-echo '# chaosD6 profiles' > README.md && git add . && git commit -m init
-rad init --name chaosD6-Profiles --description "chaosD6 player profiles" --public --default-branch master
-# OCI seed: replicate every player's namespace
-rad seed <RID> --scope all
-```
+Join requests (`profiles/<id>`) go the same way.
 
 ## Build sequence
 
@@ -88,16 +88,17 @@ The export preset's `Android Play Store (AAB)` already enables gradle_build +
 
 ## What's uncertain (fix on first device test)
 
-- **Never compiled.** `ffi/src/lib.rs` was written against the heartwood
-  `releases/1.10.3` sources but has not been through `cargo check` yet.
-- **Unencrypted device key** — `init()` creates the key without a passphrase
-  (no ssh-agent on Android). Anyone with root on the phone can read it.
+- **Unencrypted device key** — the keystore and identity.pem have no
+  passphrase (no ssh-agent on Android). Anyone with root on the phone can read them.
+- **Existing installs** — a device whose `.radicle/keys` predates identity.pem
+  derivation gets "radicle key … is not the profile identity" from `start()`;
+  clear app data (or delete `files/.radicle`) once.
 - **Re-running the runtime** — `Runtime::run` is treated as single-shot; the
   service kills its `:radicle` process in `onDestroy` so each `start()` gets a
   fresh one.
-- **Battery / doze** — run the node only around a save (start → save → stop)
-  rather than for the whole session; that also keeps the `dataSync`
-  foreground-service declaration in the Play Console easy to justify.
+- **Battery / doze** — the node runs for the session; HTTPS covers saves while
+  it is down. Keep the `dataSync` foreground-service declaration justified in
+  the Play Console.
 - **Config template** — only `{{ALIAS}}` is substituted; the OCI seed is
   hard-coded here and in `RadicleNodePlugin.kt`. Update both in lock-step with
   `infra/oci/seeder.json` if the seed changes.
@@ -109,4 +110,5 @@ adb logcat -s radicle-node                 # the node (Rust `log` → logcat)
 adb logcat -s RadicleNode:*                # the plugin
 adb shell "run-as net.dimensions.radicle ls files/.radicle"
 adb shell "run-as net.dimensions.radicle cat files/.radicle/config.json"
+adb shell "run-as net.dimensions.radicle cat files/.radicle/bridge.json"   # present while the node runs
 ```
