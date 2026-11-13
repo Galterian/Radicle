@@ -130,6 +130,8 @@ godot/android/plugins/radicle_node/gradle/wrapper/gradle-wrapper.jar
 
 # heartwood checkout cloned by godot/android/radicle-node/build.sh
 godot/android/radicle-node/src/
+# git source downloaded by godot/android/radicle-node/build_git.sh
+godot/android/radicle-node/git-src/
 # Rust wrapper, if ever built standalone (build.sh builds it inside the heartwood checkout)
 godot/android/radicle-node/ffi/target/
 

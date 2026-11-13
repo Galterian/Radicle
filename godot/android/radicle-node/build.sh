@@ -4,8 +4,11 @@
 # radicle_node plugin's jniLibs, so it ships inside the plugin AAR.
 #
 # The node is loaded with System.loadLibrary and run on a thread inside
-# RadicleNodeService (process ":radicle") — never exec()'d — so there is no
-# executable in the APK and no useLegacyPackaging/extractNativeLibs needed.
+# RadicleNodeService (process ":radicle"), never exec()'d. It does exec one
+# program: `git upload-pack` (+ pack-objects) to serve the OCI seed's fetches,
+# so this script also runs build_git.sh, which ships git as libgit.so
+# (packaged binary in nativeLibraryDir; needs extracted native libs, i.e.
+# export preset gradle_build/compress_native_libraries=true).
 #
 # Linked with 16 KB max-page-size: Play rejects 4 KB-aligned native libs at
 # targetSdk 35+. (NDK r28+ does this by default; the flag makes r26/r27 work.)
@@ -89,6 +92,25 @@ fi
 rm -rf "$SRC/crates/radicle-node-ffi"
 cp -r "$WORK/ffi" "$SRC/crates/radicle-node-ffi"
 
+# 3b. libgit2 without hard links on Android. Its p_rename() (src/util/posix.c)
+#     tries link()+unlink() before rename(); SELinux denies link() in app data
+#     (avc: denied { link } … tmp_object_git2_*), so every object write logged
+#     a denial before falling back. Patched copy of the locked libgit2-sys,
+#     wired in with [patch.crates-io]; desktop builds are unaffected (__ANDROID__).
+cd "$SRC"
+LG2_VER="$(awk '/^name = "libgit2-sys"$/ { getline; gsub(/"/, "", $3); print $3; exit }' Cargo.lock)"
+cargo fetch -q
+LG2_SRC="$(ls -d "${CARGO_HOME:-$HOME/.cargo}"/registry/src/*/"libgit2-sys-$LG2_VER" | head -1)"
+[ -d "$LG2_SRC" ] || { echo "libgit2-sys $LG2_VER not in the cargo registry" >&2; exit 1; }
+rm -rf vendor/libgit2-sys && mkdir -p vendor && cp -r "$LG2_SRC" vendor/libgit2-sys
+perl -0pi -e 's/(\tif \(!link\(from, to\)\) \{\n\t\tp_unlink\(from\);\n\t\treturn 0;\n\t\}\n)/#ifndef __ANDROID__ \/* chaosD6: SELinux denies link() in Android app data *\/\n$1#endif\n/' \
+  vendor/libgit2-sys/libgit2/src/util/posix.c
+grep -q 'chaosD6: SELinux' vendor/libgit2-sys/libgit2/src/util/posix.c \
+  || { echo "libgit2 p_rename patch did not apply (libgit2-sys $LG2_VER)" >&2; exit 1; }
+grep -q '^libgit2-sys = { path = "vendor/libgit2-sys" }' Cargo.toml \
+  || printf '\n[patch.crates-io]\nlibgit2-sys = { path = "vendor/libgit2-sys" }\n' >> Cargo.toml
+cd - >/dev/null
+
 # 4. Build. cargo-ndk wires linker + sysroot; git2 vendors libgit2 and sqlite
 #    is bundled, so no system C libs are needed. heartwood pins its toolchain
 #    (rust-toolchain file), so the Android target must be added to that one.
@@ -113,3 +135,8 @@ echo
 echo "== built: $SO"
 file "$SO" | head -1
 du -h "$SO"
+
+# git for `git upload-pack` (see build_git.sh); built once, kept across runs.
+if [ ! -f "$OUT/arm64-v8a/libgit.so" ]; then
+  bash "$WORK/build_git.sh"
+fi

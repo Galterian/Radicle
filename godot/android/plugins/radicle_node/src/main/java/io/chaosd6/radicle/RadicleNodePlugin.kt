@@ -2,8 +2,9 @@ package io.chaosd6.radicle
 
 // Godot 4 Android plugin: runs radicle-node in-process from
 // libradicle_node_ffi.so (built by godot/android/radicle-node/build.sh). The
-// library is System.loadLibrary'd, never exec()'d, so the APK carries no
-// executable. GDScript entry points:
+// library is System.loadLibrary'd, not exec()'d. The one program it runs is
+// the bundled git (libgit.so, for `git upload-pack`; see installGit).
+// GDScript entry points:
 //
 //   RadicleNode.start(alias, rid, identityPem: String) -> String     # NID, or "error: …"
 //   RadicleNode.stop()                                    -> Boolean
@@ -31,6 +32,8 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.Process
+import android.system.ErrnoException
+import android.system.Os
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import org.godotengine.godot.Godot
@@ -127,6 +130,7 @@ class RadicleNodeService : Service() {
         // The runtime is single-shot per process (like node::Start); a second
         // start intent while it runs is a no-op.
         if (node?.isAlive == true) return START_NOT_STICKY
+        installGit(File(home))
         node = Thread({
             val result = RadicleNative.run(home)
             if (result.isNotEmpty()) Log.e("RadicleNode", "node exited: $result")
@@ -141,6 +145,31 @@ class RadicleNodeService : Service() {
         super.onDestroy()
         // Fresh process for the next start(): never re-enter the runtime.
         Process.killProcess(Process.myPid())
+    }
+
+    /**
+     * radicle-node serves peers' fetches (the OCI seed pulling our profile refs) by spawning
+     * `git upload-pack`, resolved on PATH — the only variable it passes to the child. git ships as
+     * libgit.so (godot/android/radicle-node/build_git.sh) in nativeLibraryDir, the one place an app
+     * may exec from; <RAD_HOME>/bin/git -> it (re-made each start: nativeLibraryDir changes on
+     * update), and that dir goes first on this process's PATH (libc environ, which Rust reads).
+     */
+    private fun installGit(home: File) {
+        val target = File(applicationInfo.nativeLibraryDir, "libgit.so")
+        if (!target.exists()) {
+            Log.w("RadicleNode", "no $target (native libs not extracted?): peers cannot fetch from this node")
+            return
+        }
+        val bin = File(home, "bin").apply { mkdirs() }
+        val link = File(bin, "git")
+        try {
+            link.delete()
+            Os.symlink(target.absolutePath, link.absolutePath)
+            val path = Os.getenv("PATH") ?: "/system/bin"
+            if (!path.split(':').contains(bin.absolutePath)) Os.setenv("PATH", "${bin.absolutePath}:$path", true)
+        } catch (e: ErrnoException) {
+            Log.e("RadicleNode", "git setup failed: $e")
+        }
     }
 
     private fun createChannel() {
