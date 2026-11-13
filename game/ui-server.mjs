@@ -31,7 +31,7 @@ import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tool
 import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
 import { randomBytes } from 'node:crypto';
-import { handleProfileApi, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
+import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -799,5 +799,12 @@ const server = http.createServer(async (req, res) => {
 });
 const PORT = Number(process.env.UI_PORT || 7357);
 server.listen(PORT, '127.0.0.1', () => console.log(`[ui-server] http://127.0.0.1:${PORT}${LAUNCHER_MODE ? ' (launcher mode)' : ''}`));
+
+// Profile ⇄ chaosD6-Profiles on Radicle (teams/<Team> branch; profile-radicle.mjs). Keeps running while games
+// write deaths / kills into profile.json. PROFILE_SYNC=0 turns it off.
+if (process.env.PROFILE_SYNC !== '0') {
+  import('./profile-radicle.mjs').then(({ startProfileSync }) => attachProfileSync(startProfileSync({ file: profilePath() })))
+    .catch(e => console.error(`[profile-sync] not started: ${e.message}`));
+}
 
 process.on('SIGINT', () => { for (const c of children) try { c.kill('SIGINT'); } catch {}; process.exit(0); });

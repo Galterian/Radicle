@@ -86,7 +86,7 @@ export const assetUrl = (p) => p ? `/${String(p).replace(/\\/g, '/').replace(/^\
 
 // ---------------------------------------------------------------------------------------------
 // DOM
-const S = { profile: null, limits: DEFAULT_LIMITS, catalog: null, error: null, busy: false, body: null };
+const S = { profile: null, limits: DEFAULT_LIMITS, catalog: null, error: null, busy: false, body: null, sync: null };
 
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
@@ -264,6 +264,8 @@ function renderPanel() {
       `✨ new cards in the archive: ${fresh.map(c => `${c.name} ${newCards(c)}`).join(' · ')} — `,
       ...fresh.map(c => h('button', { type: 'button', class: 'pp-new-open', text: `open ${c.name}`, onclick: () => openCharacterEditor('edit', c.id) }))));
   }
+  root.append(h('div', { id: 'pp-sync', class: 'pp-sync' }));
+  renderSync();
   const charOpts = chars.map(c => ({ value: c.id, text: charOptionText(c) }));
   const row = (...kids) => h('div', { class: 'pp-row' }, ...kids);
   const btn = (text, onclick, props = {}) => h('button', { type: 'button', class: 'pp-btn', text, onclick, ...props });
@@ -307,6 +309,83 @@ function renderPanel() {
   refreshJoinTeamButtons();
 }
 
+// Radicle sync (profile-radicle.mjs): the team branch teams/<Team> on chaosD6-Profiles.
+const SYNC_ICON = { synced: '✅', offline: '📴', 'awaiting-approval': '⏳', 'no-team': '✏️', 'not-configured': '⚙️', error: '⚠️', starting: '…', off: '—' };
+export const syncLine = (st) => `${SYNC_ICON[st?.state] || '•'} Radicle: ${st?.message || st?.state || 'unknown'}`;
+export const shortDeviceId = (id) => (id ? `${id.slice(0, 8)}…${id.slice(-4)}` : '');
+function renderSync() {
+  const box = document.getElementById('pp-sync');
+  if (!box) return;
+  const st = S.sync;
+  box.innerHTML = '';
+  if (!st) { box.append(h('div', { class: 'pp-sync-line', text: '… Radicle sync: checking' })); return; }
+  box.classList.toggle('bad', ['error', 'awaiting-approval', 'offline'].includes(st.state));
+  box.append(h('div', { class: 'pp-sync-line', text: syncLine(st) }));
+  if (st.id) {
+    const idEl = h('code', { class: 'pp-devid', text: shortDeviceId(st.id), title: `this device's key: ${st.id} (tap to show it all)` });
+    idEl.addEventListener('click', () => { idEl.textContent = idEl.textContent === st.id ? shortDeviceId(st.id) : st.id; });
+    box.append(h('div', { class: 'pp-sync-meta' }, 'this device ', idEl,
+      st.ref ? ` · branch ${st.ref.replace(/^refs\/heads\//, '')}` : '',
+      st.owners?.length ? ` · ${st.owners.length} device${st.owners.length === 1 ? '' : 's'}` : '',
+      ' ', h('button', { type: 'button', class: 'pp-btn pp-small', text: '↻ Sync now', onclick: syncNow })));
+  }
+  // No team yet (or the name is taken by other keys): name it here; the first sync claims teams/<slug>.
+  if (st.state === 'no-team' || st.state === 'awaiting-approval') {
+    const preview = h('span', { class: 'pp-hint' });
+    const nameIn = h('input', { type: 'text', class: 'pp-team-in', maxLength: 30, placeholder: 'team name', value: S.profile?.team_name || '' });
+    const upd = () => { const s = teamSlugUI(nameIn.value); preview.textContent = s ? `→ branch teams/${s}` : 'letters or digits needed'; claim.disabled = !s; };
+    const claim = h('button', { type: 'button', class: 'pp-btn pp-small', text: st.state === 'no-team' ? 'Save team name' : 'Use this name',
+      title: 'saves the team name; the first device to sync it owns the branch (it cannot be deleted)', onclick: () => saveTeamName(nameIn.value) });
+    nameIn.addEventListener('input', upd);
+    nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !claim.disabled) saveTeamName(nameIn.value); });
+    upd();
+    box.append(h('div', { class: 'pp-sync-team' }, 'Team ', nameIn, ' ', claim, ' ', preview));
+  }
+  for (const r of st.requests || []) {
+    box.append(h('div', { class: 'pp-sync-req' },
+      `📱 ${r.label || 'a device'} asks to join ${st.team}: `, h('code', { class: 'pp-devid', text: shortDeviceId(r.id), title: r.id }), ' ',
+      h('button', { type: 'button', class: 'pp-btn pp-small', text: 'Approve', title: `add ${r.id} to the owners of ${st.ref}`, onclick: (ev) => approveDevice(r, ev.currentTarget) })));
+  }
+}
+// Same slug rule as profile-auth.mjs teamSlug (the branch name).
+export const teamSlugUI = (team) => String(team || '').normalize('NFKD').replace(/[^\x20-\x7e]/g, '').trim()
+  .replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^[-_]+|[-_]+$/g, '').slice(0, 40);
+async function saveTeamName(name) {
+  try {
+    const out = await api('PUT', '/api/profile/team', { team_name: String(name).trim() });
+    S.profile = out.profile || S.profile;
+    renderPanel();
+    await syncNow();
+  } catch (e) { setMsg(e.message, true); }
+}
+async function applySync(st) {
+  const moved = S.sync && st && st.oid && st.oid !== S.sync.oid;
+  const same = JSON.stringify(st) === JSON.stringify(S.sync);
+  S.sync = st;
+  if (same) return;
+  if (moved && !document.getElementById('pe-overlay')) { await reloadProfile().catch(() => {}); renderPanel(); } else renderSync();
+}
+async function syncNow() {
+  try { await applySync(await api('POST', '/api/profile/sync')); } catch (e) { setMsg(e.message, true); }
+}
+// Two taps (no confirm(): the phone's WebView may not show dialogs).
+async function approveDevice(r, btn) {
+  if (btn && btn.dataset.armed !== '1') {
+    btn.dataset.armed = '1';
+    btn.textContent = 'Tap again: same rights as this device';
+    setTimeout(() => { if (btn.isConnected) { btn.dataset.armed = ''; btn.textContent = 'Approve'; } }, 6000);
+    return;
+  }
+  try { await applySync(await api('POST', '/api/profile/sync/approve', { id: r.id })); setMsg(`approved ${shortDeviceId(r.id)}`); } catch (e) { setMsg(e.message, true); }
+}
+let _syncTimer = null;
+function pollSync() {
+  clearInterval(_syncTimer);
+  const tick = () => api('GET', '/api/profile/sync').then(applySync).catch(() => {});
+  tick();
+  _syncTimer = setInterval(() => { if (!document.getElementById('pp-sync')) return; tick(); }, 5000);
+}
+
 // Builds the panel inside `root` (#profile-panel). Resolves once the profile is loaded (or failed).
 export async function initProfilePanel(root) {
   if (!root) return;
@@ -314,6 +393,7 @@ export async function initProfilePanel(root) {
   S.body.textContent = 'loading your profile…';
   try { await reloadProfile(); } catch (e) { S.error = e.message; S.profile = null; }
   renderPanel();
+  if (!S.error) pollSync();
 }
 
 // ---------------------------------------------------------------------------------------------
