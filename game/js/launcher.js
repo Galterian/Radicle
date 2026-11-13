@@ -346,6 +346,52 @@ async function renderLauncher() {
   hideEntering();
 }
 
+// Phone menu: the WebView inside the Godot app never starts a native one-finger scroll (only a two-finger
+// pan of the zoomed view), so the launcher scrolls by drag itself — same workaround as #deck-row in main.js.
+// Drags the nearest scrollable box under the finger (the editor's .pe-body) or else the page, with a short
+// fling; a drag never counts as a tap. If the browser does scroll natively it sends pointercancel and this
+// steps aside.
+function installDragScroll() {
+  const scroller = (el) => {
+    for (; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      const c = getComputedStyle(el);
+      if (/(auto|scroll)/.test(c.overflowY) && el.scrollHeight > el.clientHeight + 1) return el;
+    }
+    return document.scrollingElement || document.documentElement;
+  };
+  let d = null, swallow = false, fling = 0;
+  document.addEventListener('pointerdown', (ev) => {
+    if (ev.pointerType === 'mouse' || ev.target.closest?.('input, textarea')) return;
+    cancelAnimationFrame(fling);
+    const el = scroller(ev.target);
+    d = { id: ev.pointerId, y: ev.clientY, el, top: el.scrollTop, moved: false, t: performance.now(), lastY: ev.clientY, v: 0 };
+  }, true);
+  window.addEventListener('pointermove', (ev) => {
+    if (!d || ev.pointerId !== d.id) return;
+    const dy = ev.clientY - d.y;
+    if (!d.moved && Math.abs(dy) < 8) return;
+    d.moved = true;
+    const now = performance.now();
+    d.v = (ev.clientY - d.lastY) / Math.max(1, now - d.t); d.t = now; d.lastY = ev.clientY;
+    d.el.scrollTop = d.top - dy;
+    ev.preventDefault();
+  }, { passive: false });
+  const end = (ev) => {
+    if (!d || ev.pointerId !== d.id) return;
+    if (d.moved && ev.type === 'pointerup') {
+      swallow = true; setTimeout(() => { swallow = false; }, 0);
+      const el = d.el;
+      let v = d.v * 16;   // px per frame
+      const step = () => { if (Math.abs(v) < 0.5) return; el.scrollTop -= v; v *= 0.94; fling = requestAnimationFrame(step); };
+      if (performance.now() - d.t < 80) fling = requestAnimationFrame(step);
+    }
+    d = null;
+  };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  document.addEventListener('click', (ev) => { if (swallow) { ev.stopPropagation(); ev.preventDefault(); swallow = false; } }, true);
+}
+
 if (peer) {
   // We've just reloaded with ?peer=NNN. Keep the overlay up until main.js
   // hears the peer's first hello (handled over there) — otherwise the user
@@ -355,6 +401,6 @@ if (peer) {
   await import('./main.js');
 } else {
   document.documentElement.classList.add('in-launcher');
-  if (IS_MOBILE) document.documentElement.classList.add('mobile');
+  if (IS_MOBILE) { document.documentElement.classList.add('mobile'); installDragScroll(); }
   await renderLauncher();
 }

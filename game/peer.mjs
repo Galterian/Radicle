@@ -3262,7 +3262,8 @@ async function doResolution() {
   const lifestealForMe = { amount: 0 };
   const assassinScored = new Set();
   const senseFired = new Set();          // Super Sense holders who already evaded their one point this action
-  const addDmg = (victim, attacker, amount, source = 'action') => {
+  // `why` (display only — the death banner names it; never hashed): 'Attack', 'fire token', 'trap Fireball'…
+  const addDmg = (victim, attacker, amount, source = 'action', why = '') => {
     const list = damage.get(victim) || [];
     // Super Sense (user spec 2026-10-29): the holder evades one point of the first damage that lands;
     // the permanent is spent for it (dropped by the owner after the run).
@@ -3271,7 +3272,7 @@ async function doResolution() {
       channelsBroken.push({ owner: victim, effect_id: 'effect_super_sense', why: 'one point of damage evaded' });
       if (victim === PEER_ID_STRING || attacker === PEER_ID_STRING) log(`[${PEER_LABEL}] super sense: ${victim.slice(0, 8)} evades one point of ${attacker.slice(0, 8)}'s ${source} damage`);
     }
-    list.push({ attacker, amount, source });
+    list.push({ attacker, amount, source, ...(why ? { why } : {}) });
     damage.set(victim, list);
     if (amount > 0 && hasPerm(attacker, 'class_noble') && attacker === PEER_ID_STRING) lifestealForMe.amount += amount;
     if (amount > 0) assassinScored.add(attacker);
@@ -3344,7 +3345,7 @@ async function doResolution() {
     if (restingInSanctuary(defId)) dmg = 0;
     if (untouchable(defId, r.actor)) dmg = 0;
     if (dmg > 0 && absorbedByShieldToken(defId)) dmg = 0;
-    addDmg(defId, r.actor, dmg);
+    addDmg(defId, r.actor, dmg, 'action', code === 'A' ? 'Attack' : code === 'B' ? 'Block' : code);
   };
   const targetOf = (r) => r.target?.kind === 'character' ? r.target.ref : null;
   const enemyRevealers = (r) => revealsThisTurn.filter(o => o.actor !== r.actor && enemyOf(r.actor, o.actor)).map(o => o.actor);
@@ -3382,7 +3383,7 @@ async function doResolution() {
       spentIds.add(tok.id); tokensSpent.push({ owner: tok.owner, id: tok.id });
       let d = untouchable(who, tok.owner) ? 0 : roundHalfUp10(tok.value);
       if (d > 0 && absorbedByShieldToken(who)) d = 0;
-      if (d > 0) addDmg(who, tok.owner, d, 'effect');
+      if (d > 0) addDmg(who, tok.owner, d, 'effect', 'fire token');
       if (who === PEER_ID_STRING || tok.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] ${who.slice(0, 8)} steps onto a fire token (${tok.value}) → ${d} dmg`);
     }
   }
@@ -3405,7 +3406,7 @@ async function doResolution() {
       const sum = trapDamageSum(tp.elements || [], el => statOf(victim, ELEM_TO_STAT[el]), el => effCtx.shieldedAgainst(victim, el));
       d = untouchable(victim, tp.owner) ? 0 : roundHalfUp10(sum);
       if (d > 0 && absorbedByShieldToken(victim)) d = 0;
-      if (d > 0) addDmg(victim, tp.owner, d, 'effect');
+      if (d > 0) addDmg(victim, tp.owner, d, 'effect', `${tp.owner === 'world' ? (tp.dungeon ? 'dungeon trap' : `hidden trap in ${tp.building || 'a building'}`) : 'trap'} ${data.effects[tp.effect_id]?.name || tp.effect_id}`);
     } else {
       afflictionsOut.push({ on: victim, effect_id: tp.effect_id, by: tp.owner });
       if (tp.owner === PEER_ID_STRING) permanentsToAdd.push(tp.effect_id);
@@ -3663,8 +3664,9 @@ async function doResolution() {
         leg.dealt = d;
         dmg += d;
       }
-      if (dmg > 0) addDmg(defId, actor, dmg, 'effect');
-      if (dmg > 0 && hit.selfDamageEqual) addDmg(actor, actor, dmg, 'effect');
+      const effName = data.effects[eff.effect_id]?.name || eff.effect_id;
+      if (dmg > 0) addDmg(defId, actor, dmg, 'effect', effName);
+      if (dmg > 0 && hit.selfDamageEqual) addDmg(actor, actor, dmg, 'effect', `${effName} (it hurts its caster too)`);
       if (dmg > 0 && hit.healDealt) oc.heals.push({ on: actor, amount: dmg });
       if (spent && defId === PEER_ID_STRING) brokenShield = true;
       if (actor === PEER_ID_STRING || defId === PEER_ID_STRING) log(`[${PEER_LABEL}] cast ${eff.effect_id} [${eff.elements.join('+')}] ${actor.slice(0, 8)} → ${defId.slice(0, 8)}: ${legs.map(l => `${l.kind} Σ${l.sum}`).join(' + ')}${spent ? ` (shield −${spent})` : ''}${zoned ? ' (no-damage zone)' : ''} → ${dmg} dmg`);
@@ -3808,7 +3810,7 @@ async function doResolution() {
       .sort((a, b) => a.peer_id.localeCompare(b.peer_id))[0];
     if (!victim) continue;
     const list = damage.get(victim.peer_id) || [];
-    list.push({ amount: 1, attacker: r.actor, source: `combo:${seq.join('')}` });
+    list.push({ amount: 1, attacker: r.actor, source: `combo:${seq.join('')}`, why: `combo ${seq.join('')}` });
     damage.set(victim.peer_id, list);
     console.log(`[${PEER_LABEL}] combo ${seq.join('')} by ${r.actor.slice(0, 8)} — 1 dmg → ${victim.peer_id.slice(0, 8)}`);
   }
@@ -4836,8 +4838,20 @@ function dropDeathCard(myDamage) {
     }
   }
   const nm = card ? cardRefName(card) : null;
+  // What hit me this action, e.g. "2 from a hidden trap in Watchtower Fireball · 1 from Nacatl Hunt-Pride's Attack".
+  const causes = new Map();
+  for (const d of myDamage || []) {
+    if (!(d.amount > 0)) continue;
+    const who = d.attacker === PEER_ID_STRING ? 'yourself' : d.attacker === 'world' ? '' : (peersPublic.get(d.attacker)?.name || String(d.attacker || '').slice(0, 8));
+    const what = d.why || (String(d.source || '').startsWith('combo') ? 'combo' : d.source === 'effect' ? 'an effect' : 'attack');
+    const k = d.attacker === 'world' ? `a ${what}` : who === 'yourself' ? `your own ${what}` : `${who}'s ${what}`;
+    causes.set(k, (causes.get(k) || 0) + d.amount);
+  }
+  const cause = [...causes].map(([k, n]) => `${n} from ${k}`).join(' · ');
+  console.log(`[${PEER_LABEL}] death cause: ${cause || 'unknown'}`);
   console.log(`[${PEER_LABEL}] death card: ${card ? `${card.kind} ${card.id} leaves my ${profileChar ? 'profile ' : ''}deck` : 'no non-action card to drop'}${killer ? ` — killer ${killerName} (${killer})` : ' — no killer'}`);
-  if (card) broadcastUI(handMsg({ notice: killer ? `☠ You died — ${nm} leaves your deck for ${killerName}'s archive` : `☠ You died — ${nm} leaves your deck` }));
+  const byTxt = cause ? ` (${cause})` : '';
+  broadcastUI(handMsg({ notice: card ? (killer ? `☠ You died${byTxt} — ${nm} leaves your deck for ${killerName}'s archive` : `☠ You died${byTxt} — ${nm} leaves your deck`) : `☠ You died${byTxt}` }));
   if (!card || !killer) return;
   const gift = { gift_id: `${PEER_ID_STRING}:${hg.turn}:${hg.action}`, for_peer: killer, card, from_name: entity.name };
   // Twice, a few seconds apart: the bus may drop one; the receiver dedupes on gift_id.

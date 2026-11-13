@@ -2435,7 +2435,9 @@ function connect() {
         if (typeof m.circulating === 'number') state.circulating = m.circulating;
         if (m.notice) logUI(m.notice, 'phase');
         // Profile moments (card won / lost on a kill, a teammate's gate) also get a banner over the map.
-        if (m.notice && /^(🏆|☠|⚑)/u.test(m.notice)) profileBanner(m.notice, m.notice.startsWith('☠') ? 'loss' : m.notice.startsWith('🏆') ? 'gain' : 'gate');
+        // Hidden building / dungeon traps too: they hurt without a killer, so the banner is the only clue.
+        const trapNotice = /^⚠ (A hidden trap|You explore the dungeon)/u.test(m.notice || '');
+        if (m.notice && (/^(🏆|☠|⚑)/u.test(m.notice) || trapNotice)) profileBanner(m.notice, m.notice.startsWith('☠') || trapNotice ? 'loss' : m.notice.startsWith('🏆') ? 'gain' : 'gate');
         if (Array.isArray(m.queued)) state.queued = m.queued;
         if (Array.isArray(m.queued_skills)) state.queuedSkills = m.queued_skills;
         if (m.queued_extra !== undefined) state.queuedExtra = typeof m.queued_extra === 'number' ? m.queued_extra : null;
