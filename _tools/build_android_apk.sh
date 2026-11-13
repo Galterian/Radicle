@@ -4,9 +4,10 @@
 # Prerequisites:
 #   - /home/galt/godot-android/env.sh exports JAVA_HOME, ANDROID_HOME,
 #     debug-keystore paths (already configured on this box).
-#   - Godot 4.3's Android export templates installed under
-#     ~/.local/share/godot/export_templates/4.3.stable/ — the first run of
-#     this script will install them if missing.
+#   - Godot $GODOT_VER editor at $GODOT (default ~/godot-android/<ver>/) and its
+#     Android export templates under ~/.local/share/godot/export_templates/ —
+#     the first run of this script will install the templates if missing.
+#     4.5+ is required for Play: 4.3's libgodot_android.so is 4 KB-aligned.
 #   - godot/export_presets.cfg exists (checked in).
 #
 # Usage:
@@ -19,6 +20,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 source /home/galt/godot-android/env.sh
+
+GODOT_VER="${GODOT_VER:-4.5.2}"
+GODOT="${GODOT:-$HOME/godot-android/$GODOT_VER/Godot_v${GODOT_VER}-stable_linux.x86_64}"
 
 MODE="debug"
 PRESET="Android"
@@ -48,26 +52,25 @@ mkdir -p "$OUT_DIR"
 APK_PATH="$OUT_DIR/chaosd6-$MODE.apk"
 
 # Install export templates on first run so a fresh box doesn't fail cryptically.
-TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/4.3.stable"
+TEMPLATES_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VER}.stable"
 if [[ ! -d "$TEMPLATES_DIR" ]]; then
-  echo "[build] fetching Godot 4.3 export templates..."
+  echo "[build] fetching Godot $GODOT_VER export templates..."
   mkdir -p "$TEMPLATES_DIR"
-  TPZ="/tmp/godot-templates-4.3.tpz"
+  TPZ="/tmp/godot-templates-${GODOT_VER}.tpz"
   if [[ ! -f "$TPZ" ]]; then
-    curl -L -o "$TPZ" https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+    curl -L -o "$TPZ" "https://github.com/godotengine/godot/releases/download/${GODOT_VER}-stable/Godot_v${GODOT_VER}-stable_export_templates.tpz"
   fi
   (cd "$TEMPLATES_DIR" && unzip -o "$TPZ" >/dev/null)
   mv "$TEMPLATES_DIR/templates/"* "$TEMPLATES_DIR/" 2>/dev/null || true
 fi
 
 # Install the Android build template inside the project when `use_gradle_build`
-# is enabled — this is the editor's "Project > Install Android Build Template"
-# action done from the CLI. Needed once per Godot version per project.
-if [[ ! -d godot/android/build ]]; then
-  echo "[build] installing Android build template into godot/android/build..."
-  mkdir -p godot/android/build
-  (cd godot/android/build && unzip -o "$TEMPLATES_DIR/android_source.zip" >/dev/null)
-  touch godot/android/build/.gdignore
+# is enabled, or when it's from another Godot version — the editor's "Project >
+# Install Android Build Template" done from the CLI, plus chaosD6's manifest /
+# gradle / GodotApp.java customizations (see port_android_template.py).
+if [[ "$(cat godot/android/.build_version 2>/dev/null)" != "${GODOT_VER}.stable" ]]; then
+  echo "[build] installing Godot $GODOT_VER Android build template into godot/android/build..."
+  python3 _tools/port_android_template.py "${GODOT_VER}.stable"
 fi
 
 # Tell Godot where the SDK + keystore live for this invocation. The editor
@@ -90,9 +93,9 @@ cd godot
 LOG="$(mktemp -t godot-export.XXXXXX.log)"
 WATCH_TIMEOUT=600   # 10 min upper bound on real build time; cold gradle+dex is ~2-3 min.
 if [[ "$MODE" == "debug" ]]; then
-  godot4 --headless --export-debug "$PRESET" "$APK_PATH" >"$LOG" 2>&1 &
+  "$GODOT" --headless --export-debug "$PRESET" "$APK_PATH" >"$LOG" 2>&1 &
 else
-  godot4 --headless --export-release "$PRESET" "$APK_PATH" >"$LOG" 2>&1 &
+  "$GODOT" --headless --export-release "$PRESET" "$APK_PATH" >"$LOG" 2>&1 &
 fi
 GPID=$!
 START=$(date +%s)
@@ -138,7 +141,7 @@ cat <<EOF
 [build] export failed. The headless Godot CLI doesn't print per-field reasons.
 To diagnose:
   1. Open the project in the Godot editor:
-       cd $(pwd) && godot4 .
+       cd $(pwd) && $GODOT .
   2. Project > Export > Android — the dialog will list the exact missing
      setting (usually one of):
        - Java SDK path (should auto-fill from JAVA_HOME)

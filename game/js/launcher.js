@@ -183,8 +183,9 @@ function renderDimensionsExplorer(items, ago) {
   }
 }
 
-// Phone menu (?mobile=1&menu=1, served by the phone's menu server): only the profile panel — that server
-// has no /api/dimensions, /api/network …, so none of the host / join / restore setup runs.
+// Phone menu (?mobile=1&menu=1, served by the phone's menu server): only the profile panel — it carries
+// the phone's Create / Load Dimension row and its own Dimensions list (the menu server's /api/dimensions
+// reads radicle-httpd); the server has no /api/network, so none of the radio-mode setup below runs.
 async function renderMenu() {
   document.documentElement.classList.add('menu-mode');
   document.getElementById('launcher').hidden = false;

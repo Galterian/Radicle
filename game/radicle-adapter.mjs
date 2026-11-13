@@ -18,6 +18,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -363,12 +364,122 @@ async function resetBranchToBare(dir, branch) {
   }
 }
 
+// The one place the dim branch name is built — desktop work-tree push, mobile
+// bridge publish and fetchDimension all agree on it.
+export const dimensionBranch = dimensionName => `ActiveDimensions/${dimensionName}`;
+
+// A dimension name has to be ONE valid git ref component (it becomes
+// refs/heads/ActiveDimensions/<Name> and the ActiveDimensions/<Name>/ folder).
+// Names come from free text in the launcher (ui-server trims, nothing more), so
+// the mobile path checks them against git-check-ref-format before handing them
+// to the node. (The desktop path is left as it was: git itself rejects bad refs.)
+export function isValidDimensionName(name) {
+  if (typeof name !== 'string' || !name || name.length > 200) return false;
+  if (/[\x00-\x20\x7f~^:?*[\\/]/.test(name)) return false;    // control chars, space, git specials, slashes
+  if (name.includes('..') || name.includes('@{') || name === '@') return false;
+  if (name.startsWith('.') || name.endsWith('.') || name.endsWith('.lock')) return false;
+  return true;
+}
+
+// ---- Mobile publish through the in-app Radicle node (phone bridge) ----
+// CHAOSD6_RADICLE_BRIDGE = path of bridge.json { port, token, nid, features }
+// written by the node while it runs. A bridge without "publish" in `features`
+// (older node) means "not supported" — the mobile peer then stays silent.
+const MOBILE_DIMS_RID = (() => {
+  const r = process.env.RADICLE_DIMS_RID || 'rad:z2xbfJfwT3kukR73m8LXmmuvchEwr';
+  return r.startsWith('rad:') ? r : `rad:${r}`;
+})();
+const BRIDGE_PUBLISH_TIMEOUT_MS = Number(process.env.RADICLE_BRIDGE_PUBLISH_TIMEOUT_MS || 60000);
+const BRIDGE_MAX_BODY = 8 * 1024 * 1024;
+
+export function readPublishBridge(file = process.env.CHAOSD6_RADICLE_BRIDGE || '') {
+  if (!file) return null;
+  let b;
+  try { b = JSON.parse(fsSync.readFileSync(file, 'utf8')); } catch { return null; }
+  if (!b || !b.port || !b.token) return null;
+  if (!Array.isArray(b.features) || !b.features.includes('publish')) return null;
+  return b;
+}
+
+// Mobile: the dims publisher when this phone can publish, else null. Re-read on
+// every call — the node may come up (or go away) after the peer started.
+export function mobileDimsPublisher() {
+  if (!IS_MOBILE) return null;
+  const bridge = readPublishBridge();
+  return bridge ? { rid: MOBILE_DIMS_RID, nid: bridge.nid || null, bridge } : null;
+}
+
+// What a Door advertises as radicle.repo / radicle.namespace. Desktop: exactly
+// what peer.mjs computed from dimsEnv before. Mobile: the dims RID + the
+// node's NID when the bridge can publish, else the old local-bare/null.
+export function dimsIdentity() {
+  if (IS_MOBILE) {
+    const p = mobileDimsPublisher();
+    return p ? { repo: p.rid, namespace: p.nid } : { repo: 'rad:local-bare', namespace: null };
+  }
+  return { repo: dimsEnv.enabled ? `rad:${dimsEnv.rid}` : 'rad:local-bare', namespace: dimsEnv.enabled ? dimsEnv.nid : null };
+}
+
+// Repo-relative path under ActiveDimensions/<Name>/: no absolute paths, no
+// backslashes, no empty / "." / ".." segments.
+function validDimPath(rel, dimensionName) {
+  if (typeof rel !== 'string' || !rel.startsWith(`${dimensionBranch(dimensionName)}/`)) return false;
+  if (rel.includes('\\') || /[\x00-\x1f\x7f]/.test(rel)) return false;
+  return rel.split('/').every(s => s && s !== '.' && s !== '..');
+}
+
+async function pushDimensionViaBridge(peerId, dimensionName, filesByRelPath, removeRelPaths, publisher) {
+  if (!isValidDimensionName(dimensionName)) return { pushed: false, reason: `invalid-dimension-name: ${JSON.stringify(dimensionName)}` };
+  const branch = dimensionBranch(dimensionName);
+  const files = {};
+  for (const [rel, content] of Object.entries(filesByRelPath || {})) {
+    if (!validDimPath(rel, dimensionName)) return { pushed: false, reason: `invalid-path: ${rel}` };
+    files[rel] = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  }
+  const remove = [];
+  for (const rel of removeRelPaths || []) {
+    if (!validDimPath(rel, dimensionName)) return { pushed: false, reason: `invalid-path: ${rel}` };
+    remove.push(rel);
+  }
+  const stamp = new Date();
+  const body = JSON.stringify({
+    rid: publisher.rid, ref: `refs/heads/${branch}`, files, remove, prune_prefix: 'ActiveDimensions/',
+    name: peerId, email: `${peerId}@chaosd6.local`, timestamp: Math.floor(stamp.getTime() / 1000),
+    message: `[${peerId}] push ${dimensionName} @ ${stamp.toISOString()}`, seed: OCI_SEED_NID,
+  });
+  if (Buffer.byteLength(body) > BRIDGE_MAX_BODY) return { pushed: false, reason: `bridge-body-too-large (${Buffer.byteLength(body)} bytes)` };
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), BRIDGE_PUBLISH_TIMEOUT_MS);
+  let j;
+  try {
+    const r = await fetch(`http://127.0.0.1:${publisher.bridge.port}/publish`, {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-bridge-token': publisher.bridge.token },
+      body, signal: ctl.signal,
+    });
+    j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
+  } catch (e) {
+    return { pushed: false, reason: `bridge-publish-failed: ${e.name === 'AbortError' ? 'timeout' : e.message}` };
+  } finally { clearTimeout(t); }
+  if (!j || !j.ok) return { pushed: false, reason: `bridge-publish-failed: ${(j && j.error) || 'unknown error'}` };
+  if (j.unchanged) return { pushed: false, reason: 'no-changes', commit: j.oid || null };
+  if (!j.oid) return { pushed: false, reason: 'bridge-publish-failed: no oid in reply' };
+  const explorerBase = RADICLE_EXPLORER_BASE.replace(/\/+$/, '');
+  const hasExplorer = !!(explorerBase && RADICLE_SEED);
+  const explorerUrl = hasExplorer ? `${explorerBase}/nodes/${RADICLE_SEED}/${publisher.rid}/commits/${j.oid}` : null;
+  const treeUrl = hasExplorer ? `${explorerBase}/nodes/${RADICLE_SEED}/${publisher.rid}/tree/${j.oid}/${branch}` : null;
+  return { pushed: true, commit: j.oid, branch, remote: { published: true, info: `bridge → ${publisher.rid} ns ${publisher.nid || '?'}` }, explorerUrl, treeUrl };
+}
+
 export async function pushDimension(peerId, dimensionName, filesByRelPath, removeRelPaths = []) {
-  // Mobile peers never push — desktop peer in the swarm owns radicle writes.
-  // Returning the same shape as "no-changes" keeps the caller's branch tidy.
-  if (IS_MOBILE) return { pushed: false, reason: 'mobile-peer-no-radicle' };
+  // Mobile peers have no git/rad: they publish through the in-app node's
+  // loopback bridge when it supports it, and stay silent otherwise.
+  if (IS_MOBILE) {
+    const publisher = mobileDimsPublisher();
+    if (!publisher) return { pushed: false, reason: 'mobile-peer-no-radicle' };
+    return pushDimensionViaBridge(peerId, dimensionName, filesByRelPath, removeRelPaths, publisher);
+  }
   const dir = await ensureWorkTree(peerId);
-  const branch = `ActiveDimensions/${dimensionName}`;
+  const branch = dimensionBranch(dimensionName);
   // Races can happen on BOTH legs: the local bare (sibling peer in this clone)
   // and the rad remote (sibling peer wrote through our shared NID namespace
   // first). Each peer's content is independent — a door file keyed by
@@ -449,7 +560,7 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 
 export async function fetchDimension(peerId, dimensionName) {
   const dir = await ensureWorkTree(peerId);
-  const branch = `ActiveDimensions/${dimensionName}`;
+  const branch = dimensionBranch(dimensionName);
   try {
     await git(['fetch', 'radicle', branch], dir);
     await git(['checkout', branch], dir);

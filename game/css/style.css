@@ -1195,14 +1195,59 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 .profile-panel .pp-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #d2dae7; }
 .profile-panel .pp-status { font-size: 12px; color: #8aa0bf; margin-bottom: 2px; }
 .profile-panel .pp-status.bad, .profile-panel .pp-msg.bad { color: #e26b6b; }
-.profile-panel .pp-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.profile-panel .pp-btn { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; min-width: 190px; text-align: left; }
+/* Four rows "primary button + pickers | secondary button" on one grid so the columns line up. */
+.profile-panel .pp-grid { display: grid; grid-template-columns: max-content minmax(11em, 1fr) minmax(0, max-content); align-items: center; gap: 5px 6px; }
+.profile-panel .pp-grid > .pp-row { display: contents; }
+.profile-panel .pp-ctl { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.profile-panel .pp-ctl > * { flex: 1 1 6em; min-width: 0; }
+.profile-panel .pp-ctl > .pp-small { flex: 0 1 auto; }
+.profile-panel .pp-side { display: flex; align-items: center; gap: 4px; padding-left: 6px; border-left: 1px solid #2a3c5c; min-width: 0; }
+.profile-panel .pp-pair { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.profile-panel .pp-pair .pp-select { min-width: 0; max-width: 11em; flex: 1 1 auto; }
+.profile-panel .pp-input { width: 100%; box-sizing: border-box; background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 12px; }
+.launcher-card .profile-panel input.pp-input { min-width: 0; flex: 1 1 6em; padding: 3px 6px; }
+.profile-panel .pp-btn { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; padding: 3px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; white-space: nowrap; }
+.profile-panel .pp-btn.pp-alt { background: #1a2333; }
 .profile-panel .pp-btn:hover:not([disabled]) { border-color: #2a6ddf; background: #20335a; }
 .profile-panel .pp-btn[disabled] { background: #141a24; color: #5a6a82; border-color: #1a2130; cursor: not-allowed; }
 .profile-panel .pp-btn.join-team-main { background: #1e3a26; border-color: #2f5c3a; }
 .profile-panel .pp-btn.join-team-main[disabled] { background: #141a24; border-color: #1a2130; }
-.profile-panel .pp-select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 5px 8px; font: inherit; flex: 1 1 200px; min-width: 160px; }
-.profile-panel .pp-select.pp-small { flex: 0 1 auto; min-width: 120px; }
+.profile-panel .pp-select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 12px; min-width: 0; }
+.profile-panel .pp-select.pp-small { flex: 0 1 auto; }
+/* Dimensions list (profile panel): one compact card per dimension, a chip per node with Ally / Enemy / Monster. */
+.profile-panel .pp-dims { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #1f2a3d; padding-top: 6px; }
+.profile-panel .pp-dims-head { display: flex; align-items: center; gap: 8px; }
+.profile-panel .pp-hint.bad { color: #e26b6b; }
+.profile-panel .pp-dim { border: 1px solid #1f2a3d; border-radius: 6px; padding: 4px 6px; background: #0f1520; }
+.profile-panel .pp-dim.is-live { border-color: #2f5c3a; }
+.profile-panel .pp-dim.is-legacy { opacity: .6; }
+.profile-panel .pp-dim-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.profile-panel .pp-dim-name { font-weight: 700; }
+.profile-panel .pp-badge { font-size: 10px; padding: 0 6px; border-radius: 8px; background: #1a2130; color: #8aa0bf; }
+.profile-panel .pp-badge.is-live { background: #1e3a26; color: #8ddc9f; }
+.profile-panel .pp-btn.pp-join-top, .profile-panel .pp-btn.pp-join-team { background: #1e3a26; border-color: #2f5c3a; color: #c9f0d4; font-size: 11px; padding: 2px 8px; }
+.profile-panel .pp-btn.pp-join-top[disabled], .profile-panel .pp-btn.pp-join-team[disabled] { background: #141a24; border-color: #1a2130; color: #5a6a82; }
+.profile-panel .pp-doors { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.profile-panel .pp-door { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #2a3c5c; border-radius: 10px; padding: 1px 3px 1px 6px; font-size: 11px; background: #121a28; }
+.profile-panel .pp-door.is-stale { opacity: .55; border-style: dashed; }
+.profile-panel .pp-door .pp-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; background: #e26b6b; }
+.profile-panel .pp-door.side-player .pp-dot { background: #6ad99f; }
+.profile-panel .pp-door.side-npc_a .pp-dot { background: #4ea3ff; }
+.profile-panel .pp-door.side-team-c .pp-dot { background: #b07cff; }
+.profile-panel .pp-door-name { font-family: ui-monospace, Menlo, Consolas, monospace; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-panel .pp-door-side { color: #8aa0bf; }
+.profile-panel .pp-door-hp { color: #e8c272; font-variant-numeric: tabular-nums; }
+.profile-panel .pp-door.is-dead .pp-door-hp { color: #e26b6b; text-decoration: line-through; }
+.profile-panel .pp-join { font: inherit; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; border: 1px solid #2a3c5c; background: #1b2a44; color: #e8ecf1; cursor: pointer; }
+.profile-panel .pp-join-ally { border-color: #2f5c3a; color: #8ddc9f; }
+.profile-panel .pp-join-enemy { border-color: #5c3a5c; color: #d9a0ff; }
+.profile-panel .pp-join-monster { border-color: #5c2f2f; color: #f0a0a0; }
+.profile-panel .pp-join[disabled] { opacity: .45; cursor: not-allowed; }
+.profile-panel .pp-more { align-self: flex-start; }
+@media (max-width: 620px) {
+  .profile-panel .pp-grid { grid-template-columns: max-content minmax(0, 1fr); }
+  .profile-panel .pp-side { grid-column: 1 / -1; border-left: 0; padding-left: 0; margin-bottom: 3px; }
+}
 .profile-panel .pp-hint { font-size: 11px; color: #6a7a92; }
 .profile-panel .pp-msg { font-size: 12px; color: #8aa0bf; min-height: 1em; }
 .join-team-btn { background: #1e3a26; color: #8ddc9f; border: 1px solid #2f5c3a; border-radius: 10px; padding: 1px 8px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
@@ -1214,10 +1259,14 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 html.menu-mode .launcher-card > :not(h1):not(#profile-panel) { display: none !important; }
 html.menu-mode #launcher { padding: 12px; }
 html.menu-mode .launcher-card { max-width: 980px; }
-html.menu-mode .profile-panel .pp-body { gap: 10px; font-size: 16px; }
-html.menu-mode .profile-panel .pp-btn { min-height: 52px; min-width: 300px; font-size: 18px; padding: 10px 18px; }
-html.menu-mode .profile-panel .pp-select { min-height: 48px; font-size: 16px; }
-html.menu-mode .profile-panel .pp-hint, html.menu-mode .profile-panel .pp-status, html.menu-mode .profile-panel .pp-msg { font-size: 14px; }
+/* Compact, but every tap target stays ≥ 32 px tall on the phone. */
+html.menu-mode .profile-panel .pp-body { gap: 6px; font-size: 14px; }
+html.menu-mode .profile-panel .pp-btn { min-height: 34px; font-size: 14px; padding: 4px 10px; }
+html.menu-mode .profile-panel .pp-select, html.menu-mode .profile-panel .pp-input { min-height: 34px; font-size: 14px; }
+html.menu-mode .profile-panel .pp-btn.pp-join-top, html.menu-mode .profile-panel .pp-btn.pp-join-team { font-size: 13px; }
+html.menu-mode .profile-panel .pp-door { font-size: 12px; padding: 2px 3px 2px 8px; border-radius: 16px; }
+html.menu-mode .profile-panel .pp-join { min-height: 32px; min-width: 44px; font-size: 12px; border-radius: 14px; }
+html.menu-mode .profile-panel .pp-hint, html.menu-mode .profile-panel .pp-status, html.menu-mode .profile-panel .pp-msg { font-size: 13px; }
 html.mobile .join-team-btn { min-height: 34px; font-size: 13px; padding: 4px 12px; }
 
 /* Editor overlay */

@@ -1,7 +1,7 @@
 // Joining a dimension through its Doors — shared by the desktop launcher
 // (ui-server.mjs, Doors read from local Radicle storage) and the Android entry
 // (mobile-entry.mjs, Doors read from radicle-httpd on the OCI seed). Pure apart
-// from fetchDimensionFromHttpd.
+// from fetchDimensionFromHttpd / listDimensionsFromHttpd.
 import fsSync from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -173,47 +173,153 @@ export function networkFromDoors(doors) {
   return { relays: [...relays], bootstrap: [...bootstrap], gunRelays: [...gunRelays] };
 }
 
-// Read a dimension the way listPublishedDimensions() does, but over
-// radicle-httpd: every namespace that holds ActiveDimensions/<name> contributes
-// its Doors. Returns { dimension_name, dimension_id, dimension, doors, namespaces }
-// with the newest Door first, or null if no namespace has the branch.
-export async function fetchDimensionFromHttpd({ seedHost, rid, dimensionName, timeoutMs = 8000 }) {
-  const origin = /^https?:\/\//.test(seedHost) ? seedHost : `https://${seedHost}`;   // bare host = HTTPS seed
+// ---- radicle-httpd (REST) reads: the phone's view of chaosD6-Dimensions ----
+// GET <seed>/api/v1/repos/<rid>/remotes lists every namespace with its heads;
+// blob/<sha>/<path> and tree/<sha>/<path> read files at a commit. Node 18
+// compatible (global fetch + AbortSignal.timeout). `fetchImpl` is injectable for
+// offline tests. Every request goes through one limiter (`concurrency` at once).
+const DEFAULT_SEED_HOST = '92-5-138-121.sslip.io';
+const DEFAULT_DIMS_RID = 'rad:z2xbfJfwT3kukR73m8LXmmuvchEwr';
+const DIM_PREFIX = 'ActiveDimensions/';
+
+function limiter(max) {
+  let active = 0; const queue = [];
+  const next = () => { if (active < max && queue.length) { active++; queue.shift()(); } };
+  return fn => new Promise((resolve, reject) => {
+    queue.push(() => Promise.resolve().then(fn).then(resolve, reject).finally(() => { active--; next(); }));
+    next();
+  });
+}
+
+function httpdClient({ seedHost = DEFAULT_SEED_HOST, rid = DEFAULT_DIMS_RID, timeoutMs = 8000, concurrency = 6, fetchImpl = fetch } = {}) {
+  const origin = (/^https?:\/\//.test(seedHost) ? seedHost : `https://${seedHost}`).replace(/\/+$/, '');   // bare host = HTTPS seed
   const base = `${origin}/api/v1/repos/${rid.startsWith('rad:') ? rid : `rad:${rid}`}`;
-  const get = async tail => {
-    const r = await fetch(`${base}/${tail}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) });
+  const limit = limiter(Math.max(1, concurrency));
+  const fetchJson = tail => limit(async () => {
+    const r = await fetchImpl(`${base}/${tail}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(timeoutMs) });
     if (!r.ok) throw new Error(`HTTP ${r.status} for ${tail}`);
     return r.json();
-  };
-  const blob = async (sha, rel) => JSON.parse((await get(`blob/${sha}/${rel}`)).content);
-  const branch = `ActiveDimensions/${dimensionName}`;
-  const remotes = await get('remotes');
-  const dim = { dimension_name: dimensionName, dimension_id: null, dimension: null, doors: [], namespaces: [] };
-  for (const remote of remotes) {
-    const sha = remote?.heads?.[branch];
-    if (!sha) continue;
-    dim.namespaces.push(remote.id);
-    if (!dim.dimension) {
-      try { dim.dimension = await blob(sha, `${branch}/dimension.json`); dim.dimension_id = dim.dimension.dimension_id || null; } catch {}
-    }
+  });
+  // Per-client memo: the listing reads each doors/ tree twice (rank, then read)
+  // and the same Door blob (same oid) often sits in several namespaces.
+  const memo = new Map();
+  const once = (key, fn) => { if (!memo.has(key)) memo.set(key, fn()); return memo.get(key); };
+  const get = tail => once(`get:${tail}`, () => fetchJson(tail));
+  const blob = async (sha, rel, oid = null) => JSON.parse((await (oid ? once(`oid:${oid}`, () => fetchJson(`blob/${sha}/${rel}`)) : get(`blob/${sha}/${rel}`))).content);
+  return { get, blob };
+}
+
+// One dimension from the namespaces that carry its branch (`heads` = [{ nid, sha }]
+// in /remotes order). Same shape as one listPublishedDimensions() item:
+//   { dimension_name, dimension_id, dimension, doors: [{...door, nid, ref, commit}], namespaces, legacy_doors }
+// dimension.json comes from the first namespace with a readable copy; several
+// namespaces can carry the same peer's Door — the newest one is kept.
+async function readDimensionAt(client, dimensionName, heads) {
+  if (!heads.length) return null;
+  const branch = `${DIM_PREFIX}${dimensionName}`;
+  const dim = { dimension_name: dimensionName, dimension_id: null, dimension: null, doors: [], namespaces: [], legacy_doors: [] };
+  const perNs = await Promise.all(heads.map(async ({ nid, sha }) => {
+    const ref = `refs/namespaces/${nid}/refs/heads/${branch}`;
     let entries = [];
-    try { entries = (await get(`tree/${sha}/${branch}/doors`)).entries || []; } catch {}
-    for (const e of entries) {
-      if (!String(e.name).endsWith('.json')) continue;
-      try {
-        const doc = { ...(await blob(sha, `${branch}/doors/${e.name}`)), nid: remote.id, commit: sha };
-        if (!(doc.door_version >= 2 && doc.peer_id)) continue;
-        // Several namespaces can carry the same peer's Door; keep the newest.
-        const prev = dim.doors.findIndex(d => d.peer_id === doc.peer_id);
-        if (prev >= 0 && Date.parse(dim.doors[prev].pushed_at || 0) >= Date.parse(doc.pushed_at || 0)) continue;
-        if (prev >= 0) dim.doors.splice(prev, 1);
-        dim.doors.push(doc);
-      } catch {}
-    }
+    try { entries = (await client.get(`tree/${sha}/${branch}/doors`)).entries || []; } catch {}
+    const docs = await Promise.all(entries.filter(e => String(e.name).endsWith('.json')).map(async e => {
+      try { return { ...(await client.blob(sha, `${branch}/doors/${e.name}`, e.oid || null)), nid, ref, commit: sha }; } catch { return null; }
+    }));
+    return docs.filter(Boolean);
+  }));
+  for (const { sha } of heads) {
+    try { dim.dimension = await client.blob(sha, `${branch}/dimension.json`); dim.dimension_id = dim.dimension.dimension_id || null; break; } catch {}
   }
-  if (!dim.namespaces.length) return null;
+  heads.forEach(({ nid }, i) => {
+    dim.namespaces.push(nid);
+    for (const doc of perNs[i]) {
+      if (!(doc.door_version >= 2 && doc.peer_id)) { dim.legacy_doors.push(doc); continue; }
+      const prev = dim.doors.findIndex(d => d.peer_id === doc.peer_id);
+      if (prev >= 0 && Date.parse(dim.doors[prev].pushed_at || 0) >= Date.parse(doc.pushed_at || 0)) continue;
+      if (prev >= 0) dim.doors.splice(prev, 1);
+      dim.doors.push(doc);
+    }
+  });
   dim.doors.sort((a, b) => Date.parse(b.pushed_at || 0) - Date.parse(a.pushed_at || 0));
   return dim;
+}
+
+// Group /remotes heads: Map<dimensionName, [{ nid, sha }]> (remotes order).
+function headsByDimension(remotes) {
+  const byName = new Map();
+  for (const remote of Array.isArray(remotes) ? remotes : []) {
+    if (!remote?.id) continue;
+    for (const [head, sha] of Object.entries(remote.heads || {})) {
+      if (!head.startsWith(DIM_PREFIX) || !sha) continue;
+      const name = head.slice(DIM_PREFIX.length);
+      if (!name) continue;
+      if (!byName.has(name)) byName.set(name, []);
+      byName.get(name).push({ nid: remote.id, sha });
+    }
+  }
+  return byName;
+}
+
+const newestOf = d => Date.parse(d.doors[0]?.pushed_at || d.legacy_doors[0]?.last_push?.at || 0) || 0;
+
+// Read a dimension the way listPublishedDimensions() does, but over
+// radicle-httpd: every namespace that holds ActiveDimensions/<name> contributes
+// its Doors. Returns { dimension_name, dimension_id, dimension, doors, namespaces, legacy_doors }
+// with the newest Door first, or null if no namespace has the branch.
+export async function fetchDimensionFromHttpd({ seedHost, rid, dimensionName, timeoutMs = 8000, concurrency = 6, fetchImpl = fetch }) {
+  const client = httpdClient({ seedHost, rid, timeoutMs, concurrency, fetchImpl });
+  const heads = headsByDimension(await client.get('remotes')).get(dimensionName) || [];
+  return readDimensionAt(client, dimensionName, heads);
+}
+
+// Every ActiveDimensions/* branch in every namespace, grouped by dimension name,
+// in the listPublishedDimensions() shape: dimensions with the freshest Door
+// first, at most `limit`. Only /remotes failing is fatal; a dimension that can't
+// be read (or has no readable dimension.json anywhere) is skipped.
+// Two phases, because Door blobs are ~100 KB and the seed answers ~1 s each:
+// first one cheap tree/<sha>/…/doors per (dimension, namespace) — its
+// lastCommit.committer.time ranks the dimensions — then the blobs of only the
+// `limit` freshest are read (backfilling from the rank order if one is
+// unreadable). `maxScan` bounds the phase-1 fan-out.
+export async function listDimensionsFromHttpd({ seedHost = DEFAULT_SEED_HOST, rid = DEFAULT_DIMS_RID, limit = 30, timeoutMs = 8000, concurrency = 6, maxScan = 200, fetchImpl = fetch } = {}) {
+  const client = httpdClient({ seedHost, rid, timeoutMs, concurrency, fetchImpl });
+  const byName = headsByDimension(await client.get('remotes'));
+  const ranked = await Promise.all([...byName.keys()].slice(0, maxScan).map(async name => {
+    const times = await Promise.all(byName.get(name).map(({ sha }) =>
+      client.get(`tree/${sha}/${DIM_PREFIX}${name}/doors`).then(t => Number(t?.lastCommit?.committer?.time) || 0, () => 0)));
+    return { name, at: Math.max(0, ...times) };
+  }));
+  ranked.sort((a, b) => b.at - a.at);
+  const out = [];
+  for (let i = 0; i < ranked.length && out.length < limit;) {
+    const batch = ranked.slice(i, i + (limit - out.length)); i += batch.length;
+    const dims = await Promise.all(batch.map(({ name }) => readDimensionAt(client, name, byName.get(name)).catch(() => null)));
+    out.push(...dims.filter(d => d && d.dimension));
+  }
+  out.sort((a, b) => newestOf(b) - newestOf(a));
+  return out;
+}
+
+// Shape a dimension (a listPublishedDimensions / listDimensionsFromHttpd item)
+// for the launcher page — moved from ui-server.mjs so both servers share it.
+const ageSecAt = (iso, now) => Math.max(0, Math.round((now - Date.parse(iso || 0)) / 1000));
+export function describeDimension(d, now = Date.now()) {
+  const doors = (d.doors || []).map(p => ({
+    peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id,
+    tile: p.tile, life: p.life, life_max: p.life_max, clock: p.clock, pushed_at: p.pushed_at, age_sec: ageSecAt(p.pushed_at, now),
+    live: now - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS, nid: p.nid, commit: p.commit,
+    known_members: (p.known_members || []).length, known_tiles: (p.known_tiles || []).length,
+    map_tiles: p.map?.tiles_known ?? null, map_blocks: (p.map?.blocks || []).length,
+  }));
+  const newest = doors[0]?.pushed_at || d.legacy_doors?.[0]?.last_push?.at || null;
+  return {
+    dimension_name: d.dimension_name, dimension_id: dimIdOf(d), namespaces: d.namespaces,
+    doors, members: unionMembers(d.doors || []),
+    live_doors: doors.filter(p => p.live).length,
+    legacy: !doors.length && (d.legacy_doors || []).length > 0,
+    newest_push: newest, age_sec: newest ? ageSecAt(newest, now) : null,
+    turn: Math.max(0, ...doors.filter(p => p.live).map(p => p.clock?.turn ?? 0)),
+  };
 }
 
 // Everything a joining peer needs, as peer.mjs env vars (minus ports and the

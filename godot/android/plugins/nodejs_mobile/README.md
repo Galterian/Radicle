@@ -63,9 +63,13 @@ env-gated mobile branches.
 
 - **Single Node instance per process lifetime.** `node::Start` is not re-entrant.
   The service must survive Godot scene reloads; don't call `startNode` twice.
-- **16KB page alignment.** v18.20.4 is 4KB-aligned → Play Store rejects when
-  targetSdk is 35+. Dev-build (sideload) is fine. For production, rebuild
-  nodejs-mobile from `main` with `-Wl,-z,max-page-size=16384`.
+- **16KB page alignment.** The v18.20.4 prebuilt is 4KB-aligned → Play Store
+  rejects when targetSdk is 35+. Dev-build (sideload) is fine. For production,
+  run `_tools/build_nodejs_mobile_16k.sh` after the fetch script (source build
+  of `main` @ d9552e0e, 1–3 h). The JNI bridge gets the 16KB link flags from
+  `CMakeLists.txt`. Godot itself must be 4.5+ (4.3's engine lib is 4KB) — its
+  AGP 8.6 template also 16KB-aligns the uncompressed libs inside the APK/AAB.
+  Check a build with `zipalign -c -P 16 -v 4 <apk>`.
 - **Cleartext loopback.** `AndroidManifest.xml` enables cleartext for
   127.0.0.1 only; the game's own WebSocket to the on-device peer uses it.
 - **No C++ addons.** Audit (`find node_modules -name '*.node'`) ran clean on

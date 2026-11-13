@@ -78,6 +78,12 @@ func _start_with_path(script_path: String) -> void:
         "CHAOSD6_ASSETS_DIR": assets_dir,
         "CHAOSD6_USER_DATA_DIR": data_dir,
     }
+    # P2P team-profile saves via the in-app radicle-node (RadicleBoot autoloads first).
+    var rad_boot := get_node_or_null("/root/RadicleBoot")
+    if rad_boot != null:
+        var bridge: String = rad_boot.bridge_file()
+        if not bridge.is_empty():
+            env["CHAOSD6_RADICLE_BRIDGE"] = bridge
     # chaosd6://join?... deep link (GodotApp.java puts it in the cmdline args):
     # mobile-entry.mjs reads the dim's Doors and spawns next to the clicked unit.
     for a in OS.get_cmdline_args():

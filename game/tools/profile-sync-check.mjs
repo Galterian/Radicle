@@ -1,5 +1,7 @@
 // End-to-end check of profile-sync.mjs ↔ infra/oci/profiles-push.mjs against
-// a throwaway local repo (no Radicle: MIRROR_REMOTE=none). Run inside WSL:
+// a throwaway local repo (no Radicle: MIRROR_REMOTE=none; a bare repo with
+// refs/namespaces/<nid>/… stands in for Radicle storage, and a stub of the
+// in-app node's loopback bridge writes into it). Run inside WSL:
 //   node tools/profile-sync-check.mjs        → "all profile checks passed"
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,9 +27,11 @@ fs.writeFileSync(path.join(repo, 'README.md'), 'chaosD6-Profiles\n');
 sh(['add', '.']); sh(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init']);
 sh(['config', 'receive.denyNonFastForwards', 'true']);
 sh(['config', 'receive.denyDeletes', 'true']);
+const storage = path.join(tmp, 'storage.git');
+sh(['init', '-q', '--bare', storage], tmp);
 
 const srv = spawn(process.execPath, [path.join(here, '../../infra/oci/profiles-push.mjs')], {
-  env: { ...process.env, PROFILES_REPO: repo, PORT: String(PORT), MIRROR_REMOTE: 'none' }, stdio: ['ignore', 'pipe', 'inherit'],
+  env: { ...process.env, PROFILES_REPO: repo, PORT: String(PORT), MIRROR_REMOTE: 'none', PROFILES_STORAGE: storage, PROMOTE_EVERY_MS: '300' }, stdio: ['ignore', 'pipe', 'inherit'],
 });
 const srvLog = [];
 srv.stdout.on('data', (d) => srvLog.push(d.toString()));
@@ -172,6 +176,84 @@ try {
   ok((await rawPush({ localOid: noSelf, remoteRef: 'refs/heads/teams/../main', header: signPush(k1.privateKeyPem, { ref: 'refs/heads/teams/../main', oldOid: '0'.repeat(40), newOid: noSelf }) })).includes('refusing'), 'odd team ref refused');
   const m = mergeProfiles({ characters: [ch('x', { rev: 3, name: 'L' })], team_order: ['x'] }, { characters: [ch('x', { rev: 4, name: 'R' }), ch('y')], team_order: ['y', 'x'], deleted: {} });
   ok(m.characters.find(c => c.id === 'x').name === 'R' && m.team_order.join() === 'x,y', 'merge: higher rev wins, order kept, new ids appended');
+
+  // 8. P2P write path: device saves land in their own namespace of Radicle storage, the promoter moves the
+  //    canonical branch (fast-forward + owners rules, same as HTTPS pushes).
+  const work = path.join(tmp, 'p2p-work');
+  execFileSync('git', ['clone', '-q', '--bare', repo, work]);
+  const commitIn = (cwd, content, parent, env = {}) => {
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd, input: content, encoding: 'utf8' }).trim();
+    const tree = execFileSync('git', ['mktree'], { cwd, input: `100644 blob ${blob}\tprofile.json\n`, encoding: 'utf8' }).trim();
+    return execFileSync('git', ['commit-tree', tree, ...(parent ? ['-p', parent] : []), '-m', 'profile'], {
+      cwd, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 'p', GIT_AUTHOR_EMAIL: 'p@p', GIT_COMMITTER_NAME: 'p', GIT_COMMITTER_EMAIL: 'p@p', ...env },
+    }).trim();
+  };
+  const announce = (nid, ref, oid, cwd = work) => sh(['push', '-q', '-f', storage, `${oid}:refs/namespaces/${nid}/${ref}`], cwd);
+  const settle = () => new Promise(r => setTimeout(r, 1200));
+  const desk = sy1.id, mal3 = idFromPrivateKeyPem(mallory.privateKeyPem);
+  sh(['fetch', '-q', 'origin', `+${T}:${T}`], work);
+  let tTip = sh(['rev-parse', T]);
+  const withOwners = (extra) => JSON.stringify({ ...teamJson(), ...extra }, null, 2) + '\n';
+  const p1 = commitIn(work, withOwners({ note: 'p2p' }), tTip);
+  announce(desk, T, p1);
+  await settle();
+  ok(sh(['rev-parse', T]) === p1, 'owner commit in its own radicle namespace → promoted to the team branch');
+  const pm = commitIn(work, withOwners({ note: 'mallory' }), p1);
+  announce(mal3, T, pm);
+  const pnf = commitIn(work, withOwners({ note: 'rewrite' }), tTip);
+  announce(desk, T, pnf);
+  const pother = commitIn(work, '{"x":1}\n', null);
+  announce(mal3, profileRef(desk), pother);
+  await settle();
+  ok(sh(['rev-parse', T]) === p1, 'non-owner namespace and non-fast-forward are not promoted');
+  ok(!sh(['for-each-ref', 'refs/heads/profiles/']).includes(pother) && srvLog.join('').includes("another key's profile branch"), "a key's namespace cannot write another key's profiles/<id>");
+  ok(srvLog.join('').includes('refused: not an owner') && srvLog.join('').includes('refused: not a fast-forward'), 'refusals logged');
+  const T3 = teamRef('Bronze');
+  const claim = commitIn(work, JSON.stringify({ owners: [{ id: mal3 }] }) + '\n', null);
+  announce(mal3, T3, claim);
+  await settle();
+  ok(sh(['rev-parse', T3]) === claim, 'unclaimed team: claim listing its own key promoted');
+
+  // ...driven by profile-sync.mjs through a stub of the node's bridge (recreates the commit with git CLI,
+  //    like the Rust side does with git2: the oid must be isomorphic-git's).
+  const http2 = await import('node:http');
+  let bridgeMode = 'ok', bridgeHits = 0;
+  const bsrv = http2.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => {
+      bridgeHits++;
+      const b = JSON.parse(Buffer.concat(chunks).toString());
+      const reply = (j) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(j)); };
+      if (req.headers['x-bridge-token'] !== 'tok') return reply({ ok: false, error: 'bad token' });
+      if (bridgeMode === 'fail') return reply({ ok: false, error: 'node down' });
+      sh(['fetch', '-q', 'origin', `+${b.ref}:${b.ref}`], work);
+      const date = `${b.timestamp} +0000`;
+      const oid = commitIn(work, b.content, b.parent, { GIT_AUTHOR_NAME: b.name, GIT_AUTHOR_EMAIL: b.email, GIT_COMMITTER_NAME: b.name, GIT_COMMITTER_EMAIL: b.email, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date });
+      if (oid !== b.expect) return reply({ ok: false, error: `commit ${oid} differs from ${b.expect}` });
+      if (bridgeMode !== 'silent') announce(b.email.split('@')[0], b.ref, oid);
+      reply({ ok: true, oid });
+    });
+  });
+  await new Promise(r => bsrv.listen(0, '127.0.0.1', r));
+  const bridgeFile = path.join(tmp, 'bridge.json');
+  fs.writeFileSync(bridgeFile, JSON.stringify({ port: bsrv.address().port, token: 'tok' }));
+  process.env.PROFILES_BRIDGE_WAIT_MS = '4000';
+  const deskDir = path.join(path.dirname(f1), 'radicle');
+  const ps = await openProfileStore({ dir: deskDir, readUrl: URL_, pushUrl: URL_, namespace: '', ref: T, bridgeFile, rid: 'rad:zTest', seedNid: 'z6MkSeed' });
+  const before = srvLog.join('').split('promoted from radicle').length;
+  let cur = await ps.fetch();
+  const o1 = await ps.commit({ ...cur.profile, note: 'via bridge' }, cur.oid);
+  ok(sh(['rev-parse', T]) === o1 && srvLog.join('').split('promoted from radicle').length === before + 1, 'save via bridge: same oid rebuilt, promoted, no HTTPS push needed');
+  bridgeMode = 'fail';
+  cur = await ps.fetch();
+  const o2 = await ps.commit({ ...cur.profile, note: 'https fallback' }, cur.oid);
+  ok(sh(['rev-parse', T]) === o2, 'bridge error → HTTPS push of the same commit');
+  bridgeMode = 'silent';
+  cur = await ps.fetch();
+  const o3 = await ps.commit({ ...cur.profile, note: 'not promoted' }, cur.oid);
+  ok(sh(['rev-parse', T]) === o3 && bridgeHits === 3, 'promotion not seen in time → HTTPS fallback');
+  bsrv.close();
   await sy1.stop(); await sy2.stop();
 } catch (e) {
   failed++; console.error('FAIL exception', e);

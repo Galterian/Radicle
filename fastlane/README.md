@@ -74,4 +74,4 @@ Fill the IARC questionnaire; the game has no gambling, no sexual content, no exp
 
 ## CI (optional)
 
-A GitHub Actions workflow at `.github/workflows/android-release.yml` runs `fastlane internal` on every tag `android-v*`. Enable by adding two repo secrets: `PLAY_JSON_KEY_B64` (base64-encoded JSON) and `GODOT_VERSION` (e.g. `4.3-stable`).
+A GitHub Actions workflow at `.github/workflows/android-release.yml` runs `fastlane internal` on every tag `android-v*`. Enable by adding two repo secrets: `PLAY_JSON_KEY_B64` (base64-encoded JSON) and `GODOT_VERSION` (e.g. `4.5.2-stable`).

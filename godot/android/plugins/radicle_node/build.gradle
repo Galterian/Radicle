@@ -3,11 +3,12 @@
 //   cd godot/android/plugins/radicle_node && ./gradlew assembleRelease
 // then copy build/outputs/aar/radicle_node-release.aar beside radicle_node.gdap.
 //
-// NOT TESTED. The versions below match Godot 4.3 plugin templates; if the
-// local export template uses a different AGP/Kotlin pair, bump these.
+// Same AGP/Kotlin pair as the nodejs_mobile and webview_hud plugins.
+// libradicle_node_ffi.so comes from godot/android/radicle-node/build.sh into
+// src/main/jniLibs/ and is packaged automatically.
 plugins {
-    id 'com.android.library' version '8.2.2'
-    id 'org.jetbrains.kotlin.android' version '1.9.22'
+    id 'com.android.library' version '8.6.1'
+    id 'org.jetbrains.kotlin.android' version '2.1.20'
 }
 
 android {
@@ -25,10 +26,7 @@ android {
     buildFeatures { aidl false; renderScript false; shaders false; buildConfig false }
 }
 
-repositories {
-    google()
-    mavenCentral()
-}
+// Repositories are declared in settings.gradle (FAIL_ON_PROJECT_REPOS mode).
 
 dependencies {
     // Supply the Godot plugin dependency JAR at build time via -PgodotLibsDir=

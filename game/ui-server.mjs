@@ -28,7 +28,7 @@ import { RADICLE_BARE, radicleEnv, listPublishedDimensions } from './radicle-ada
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { fancyLabel } from './js/names.js';
 import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
-import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing } from './join-plan.mjs';
+import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing, describeDimension } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
 import { randomBytes } from 'node:crypto';
 import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
@@ -46,6 +46,16 @@ function randomCharacter() {
     if (e) { console.log(`[launcher] random character: ${e.id} (of ${list.length})`); return { id: e.id, name: e.name || e.id }; }
   } catch (err) { console.warn(`[launcher] characters.json unreadable (${err.message}) — Firestroker it is`); }
   return { id: 'char_exuberant_firestroker', name: 'Exuberant Firestroker' };
+}
+// "Monster" joins (creatureId 'random'): any creature that isn't rejected / superseded.
+function randomCreature() {
+  try {
+    const doc = JSON.parse(fsSync.readFileSync(path.join(DATA_DIR, 'creatures.json'), 'utf8'));
+    const list = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status)));
+    const e = list[Math.floor(Math.random() * list.length)];
+    if (e) { console.log(`[launcher] random creature: ${e.id} (of ${list.length})`); return { id: e.id, name: e.name || e.id }; }
+  } catch (err) { console.warn(`[launcher] creatures.json unreadable (${err.message}) — Ruinous Minotaur it is`); }
+  return { id: 'mon_ruinous_minotaur', name: 'Ruinous Minotaur' };
 }
 // Curated WBC3 art/sound collection (chaosD6/assets) — sprite sheets, hex
 // terrain tiles, portraits and voice lines referenced by data/*.json `resources`.
@@ -187,25 +197,7 @@ const isLoopback = ip => !ip || ip === '127.0.0.1' || ip === 'localhost';
 // (shared with the Android entry).
 const ageSec = iso => Math.max(0, Math.round((Date.now() - Date.parse(iso || 0)) / 1000));
 
-// Shape a dimension for the launcher page.
-function describeDimension(d) {
-  const doors = (d.doors || []).map(p => ({
-    peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id,
-    tile: p.tile, life: p.life, life_max: p.life_max, clock: p.clock, pushed_at: p.pushed_at, age_sec: ageSec(p.pushed_at),
-    live: Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS, nid: p.nid, commit: p.commit,
-    known_members: (p.known_members || []).length, known_tiles: (p.known_tiles || []).length,
-    map_tiles: p.map?.tiles_known ?? null, map_blocks: (p.map?.blocks || []).length,
-  }));
-  const newest = doors[0]?.pushed_at || d.legacy_doors?.[0]?.last_push?.at || null;
-  return {
-    dimension_name: d.dimension_name, dimension_id: dimIdOf(d), namespaces: d.namespaces,
-    doors, members: unionMembers(d.doors || []),
-    live_doors: doors.filter(p => p.live).length,
-    legacy: !doors.length && (d.legacy_doors || []).length > 0,
-    newest_push: newest, age_sec: newest ? ageSec(newest) : null,
-    turn: Math.max(0, ...doors.filter(p => p.live).map(p => p.clock?.turn ?? 0)),
-  };
-}
+// describeDimension (the launcher page's shape of a dimension) lives in join-plan.mjs, shared with the phone's menu.
 
 // Listen on the public bus for a few seconds and report which peers announce
 // themselves on this dimension's tag — ground truth for "is anyone there".
@@ -359,10 +351,14 @@ function mergeMembers(doorMembers, live) {
   return [...byId.values()];
 }
 
-async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null, extraEnv = {} }) {
+// `dim` (already listed), `startTile` (fixed, skips the placement — team allies on the tier ring) and
+// `extraBootstrap` / `extraGunUrls` (peers of this launcher already in there) serve "Join my team".
+async function joinDimension({ dimensionName, doorId, placement, side, characterId, creatureId, label, entityName, preferredTile = null, extraEnv = {}, dim: givenDim = null, startTile: fixedTile = null, extraBootstrap = [], extraGunUrls = [] }) {
   if (!radicleEnv.enabled) throw new Error(`radicle disabled: ${radicleEnv.reason}`);
-  const items = await listPublishedDimensions();
-  const dim = items.find(d => d.dimension_name === dimensionName);
+  // Nobody to play: a random character ('random' creature = the Monster join, picked here too).
+  if (creatureId === 'random') { const m = randomCreature(); creatureId = m.id; entityName ||= m.name; characterId = ''; }
+  if (!characterId && !creatureId) characterId = randomCharacter().id;
+  const dim = givenDim || (await listPublishedDimensions()).find(d => d.dimension_name === dimensionName);
   if (!dim) throw new Error(`dimension "${dimensionName}" is not published on Radicle`);
   if (!dim.doors.length) throw new Error(`${dimensionName} was published by an older version (a single host door) — no player holds a Door into it`);
   const anchorDoor = doorId ? dim.doors.find(p => p.peer_id === doorId || p.door_id === doorId) : dim.doors[0];
@@ -374,8 +370,8 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   const knownMap = mapFromDoors(dim);
   // 'far' ("Join my team") lands 30–50 hexes out, past the known map, on a hex
   // the deterministic map says is walkable; every other placement stays on it.
-  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile, salt: randomBytes(4).toString('hex') });
-  if (placement !== 'far' && !knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
+  const startTile = fixedTile || placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile, salt: randomBytes(4).toString('hex') });
+  if (!fixedTile && placement !== 'far' && !knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
   console.log(`[launcher] ${dimensionName}: map from ${dim.doors.length} Doors = ${knownMap.size()} hexes in ${knownMap.blockCount()} blocks (seed ${knownMap.seed})`);
   // Hundreds of blocks don't fit comfortably in an environment variable; hand
   // the joiner a file instead.
@@ -385,7 +381,7 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
 
   // Network hints from every Door: bus relays (required), plus direct-link
   // addresses that may or may not be reachable from here.
-  const relays = new Set(DEFAULT_RELAYS); const bootstrap = new Set(); const gunRelays = new Set();
+  const relays = new Set(DEFAULT_RELAYS); const bootstrap = new Set(extraBootstrap); const gunRelays = new Set(extraGunUrls);
   for (const p of dim.doors) {
     for (const r of p.network?.nostr?.relays || []) relays.add(r);
     if (Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS) {
@@ -430,7 +426,7 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   });
   const ok = await waitForPort(portHttp);
   if (!ok) throw new Error(`peer did not come up on :${portHttp}`);
-  return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length };
+  return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length, label: peerLabel, side };
 }
 
 // Running copies of one peer of a dimension on this box: this launcher's own
@@ -639,7 +635,7 @@ async function handleApi(req, res, p) {
     const want = new URL(req.url, 'http://x').searchParams.get('sync');
     const doSync = want === null ? true : want !== '0' && want !== 'false';
     try {
-      const items = radicleEnv.enabled ? (await listPublishedDimensions({ sync: doSync })).map(describeDimension) : [];
+      const items = radicleEnv.enabled ? (await listPublishedDimensions({ sync: doSync })).map(d => describeDimension(d, Date.now())) : [];
       return json(200, { ok: true, enabled: radicleEnv.enabled, reason: radicleEnv.enabled ? null : radicleEnv.reason, door_live_ms: DOOR_LIVE_MS, synced: doSync, items });
     } catch (e) {
       return json(200, { ok: false, enabled: radicleEnv.enabled, reason: e.message, synced: doSync, items: [] });
@@ -656,7 +652,9 @@ async function handleApi(req, res, p) {
     try {
       const body = JSON.parse(await readBody(req));
       let out;
-      if (body.mode === 'host' || body.mode === 'start' || body.mode === 'test-random') out = await startDimension(body);
+      // Create Dimension (profile panel): the top profile character is the hero (random without one).
+      if (body.mode === 'host' && body.characterId === 'profile:top') out = await startDimension(body, { hero: topCharacter(loadProfile(profilePath())), allies: null });
+      else if (body.mode === 'host' || body.mode === 'start' || body.mode === 'test-random') out = await startDimension(body);
       else if (body.mode === 'test-character' || body.mode === 'test-team' || body.mode === 'join-team') out = await launchProfile(body);
       else if (body.mode === 'join') out = await joinDimension(withProfileJoiner(body));
       else if (body.mode === 'restore') out = await restoreDimension(body);
@@ -694,15 +692,73 @@ async function launchProfile(body) {
     }
     return startDimension(body, { hero: team[0], allies: team.slice(1, count), tier: body.tier === 'strong' ? 'strong' : 'reachable' });
   }
-  // join-team: the top character opens a gate 30–50 hexes from that Door.
+  // join-team: the top character opens a gate 30–50 hexes from that Door; with count > 1 the next count−1
+  // characters of the team order join beside it as npc_a ally bots on the tier ring (like Test my team).
   if (!body.dimensionName) throw badRequest('dimensionName is required');
   if (!body.doorId) throw badRequest('doorId is required');
-  const c = topCharacter(prof);
-  return joinDimension({
-    dimensionName: body.dimensionName, doorId: body.doorId, placement: 'far', side: 'player',
+  const team = teamCharacters(prof);
+  const c = team[0] || topCharacter(prof);
+  const count = body.count == null ? 1 : Number(body.count);
+  if (!Number.isInteger(count) || count < 1 || count > Math.max(1, team.length)) throw badRequest(`count must be a whole number from 1 to ${Math.max(1, team.length)} (your characters)`);
+  if (body.tier != null && !['strong', 'reachable'].includes(body.tier)) throw badRequest('tier must be "reachable" or "strong"');
+  if (!radicleEnv.enabled) throw new Error(`radicle disabled: ${radicleEnv.reason}`);
+  const dim = (await listPublishedDimensions()).find(d => d.dimension_name === body.dimensionName);
+  if (!dim) throw new Error(`dimension "${body.dimensionName}" is not published on Radicle`);
+  const hero = await joinDimension({
+    dimensionName: body.dimensionName, doorId: body.doorId, placement: 'far', side: 'player', dim,
     characterId: c.base_character, creatureId: '', label: body.label || '', entityName: c.name,
     extraEnv: { ...profileEnv(profilePath(), c), TEAM_GATE: '1', TEAM_GATE_DOOR: String(body.doorId) },
   });
+  const allies = team.slice(1, count);
+  if (!allies.length) return hero;
+  return { ...hero, allies: await joinTeamAllies({ dim, hero, allies, tier: body.tier === 'strong' ? 'strong' : 'reachable' }) };
+}
+
+// Ally tiles for "Join my team": a walkable hex of the tier ring around the hero's start tile per ally
+// (deterministic in seed + character id), never two on one hex. null = the whole ring is blocked.
+function teamAllyTiles(home, allies, { tier = 'strong', seed, occupied = [] } = {}) {
+  const ring = TEAM_TIER_RING[tier] || TEAM_TIER_RING.strong;
+  const taken = new Set([...occupied, `${home.q},${home.r}`]);
+  return allies.map(c => {
+    const t = tileInRing(home, { ...ring, seed, salt: c.id, occupied: taken });
+    if (t) taken.add(`${t.q},${t.r}`);
+    return t;
+  });
+}
+// The hero's team mates: each its own peer (alliance npc_a, profileEnv) on its ring tile, same DIM env and
+// map blocks as the hero, bootstrapping off the peers already up. Failures are reported per ally; the
+// hero stays in.
+async function joinTeamAllies({ dim, hero, allies, tier }) {
+  const seed = mapFromDoors(dim).seed;
+  const tiles = teamAllyTiles(hero.startTile, allies, { tier, seed });
+  const bootstrap = [], gunUrls = [];
+  const addPeer = async (port) => {
+    try {
+      const st = await fetch(`http://127.0.0.1:${port}/status`, { signal: AbortSignal.timeout(2000) }).then(r => r.json());
+      for (const a of st.multiaddrs || []) bootstrap.push(a);
+      if (st.gun_url) gunUrls.push(st.gun_url);
+    } catch (e) { console.warn(`[launcher] could not read :${port} addresses: ${e.message}`); }
+  };
+  await addPeer(hero.peerPort);
+  const out = [];
+  for (const [i, c] of allies.entries()) {
+    const tile = tiles[i];
+    if (!tile) { out.push({ name: c.name, error: `no walkable hex ${TEAM_TIER_RING[tier].min}–${TEAM_TIER_RING[tier].max} hexes from the hero` }); continue; }
+    try {
+      const r = await joinDimension({
+        dimensionName: dim.dimension_name, doorId: null, placement: 'far', side: 'npc_a', dim, startTile: tile,
+        characterId: c.base_character, creatureId: '', label: `${hero.label}-ally${i + 1}`, entityName: c.name,
+        extraBootstrap: bootstrap, extraGunUrls: gunUrls, extraEnv: profileEnv(profilePath(), c),
+      });
+      console.log(`[launcher] ${dim.dimension_name}: ${c.name} joins ${hero.label}'s team as ${r.label} at (${tile.q},${tile.r}) (${tier})`);
+      out.push({ name: c.name, label: r.label, peerPort: r.peerPort, startTile: tile });
+      await addPeer(r.peerPort);
+    } catch (e) {
+      console.error(`[launcher] ${dim.dimension_name}: ally ${c.name} failed: ${e.message}`);
+      out.push({ name: c.name, error: e.message });
+    }
+  }
+  return out;
 }
 
 // A plain join with no explicit character (or characterId 'profile:top') joins

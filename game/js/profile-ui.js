@@ -1,13 +1,20 @@
 // Profile panel + character / team editors (user ruling 2026-11-13).
 //
-// The launcher shows a "Your profile" panel under the Launch button: test one of my characters, test a
-// random one, create / edit a character, edit my team, test my team, join my team next to a Door. The
-// phone's menu server serves the same page with ?mobile=1&menu=1 — there only this panel is shown.
+// The launcher shows a "Your profile" panel under the Launch button, four rows (user ruling 2026-11-13):
+//   Test my character <character> | Test Random character
+//   Edit a character profile <character> | Create New character
+//   Test my team <count> <tier> | Edit order
+//   Create Dimension <name> | Load old Dimension <saved>
+// then a Dimensions list: per dimension "⚑ Join my top character" / "⚑ Join my team" (30–50 hexes from a
+// live Door), per node (Door) Ally / Enemy / Monster (next to it). The phone's menu server serves the same
+// page with ?mobile=1&menu=1 — there only this panel is shown.
 // All data comes from the profile API (game/profile.mjs handleProfileApi):
 //   GET /api/profile · GET /api/profile/catalog · POST /api/profile/draft
 //   POST /api/profile/characters {character} · PUT /api/profile/characters/<id> {actions, cards}
 //   PUT /api/profile/team {team_name, order}
-// and launches go through POST /api/launch {mode: test-character | test-random | test-team | join-team}.
+//   GET /api/dimensions · GET /api/dimensions/local
+// and launches go through POST /api/launch {mode: test-character | test-random | test-team | host | restore |
+// join | join-team}.
 //
 // The top of this file is pure (no DOM) so a node script can import and check the helpers.
 import { ACTION_HELP } from './rules_text.js';
@@ -74,8 +81,49 @@ export const launchBody = {
   testCharacter: (profileCharId) => ({ mode: 'test-character', profileCharId }),
   testRandom: () => ({ mode: 'test-random' }),
   testTeam: (count, tier) => ({ mode: 'test-team', count: Number(count), tier: tier === 'strong' ? 'strong' : 'reachable' }),
-  joinTeam: (dimensionName, doorId) => ({ mode: 'join-team', dimensionName, doorId }),
+  // count > 1: the top character opens the gate, the next count−1 arrive beside it on the tier ring.
+  joinTeam: (dimensionName, doorId, count = null, tier = null) => ({
+    mode: 'join-team', dimensionName, doorId,
+    ...(Number(count) > 1 ? { count: Number(count), tier: tier === 'strong' ? 'strong' : 'reachable' } : {}),
+  }),
+  // Create Dimension: the top profile character is the hero when there is one (the server falls back to random).
+  host: (dimensionName) => ({ mode: 'host', dimensionName: String(dimensionName || '').trim().slice(0, 40) || 'Ashfall-Micro', characterId: 'profile:top' }),
+  restore: (tmjPath) => ({ mode: 'restore', tmjPath }),
+  // Join next to a node (Door) as its Ally / Enemy / a Monster (joinRoleBody).
+  join: (dimensionName, doorId, side, { characterId = null, creatureId = null } = {}) => ({
+    mode: 'join', dimensionName, doorId, placement: 'nearby', side, characterId, creatureId,
+  }),
 };
+
+// Ally / Enemy of a Door's unit (user ruling 2026-11-13). Ally = the Door's own side (an npc_a helper is
+// joined as a player); Enemy = the opposing human side (player ↔ 3rd team); a monster's Door: Ally = another
+// monster, Enemy = a player.
+export const allySideOf = (a) => (a === 'player_c' || a === 'npc_c') ? 'player_c' : a === 'npc_b' ? 'npc_b' : 'player';
+export const enemySideOf = (a) => (a === 'player' || a === 'npc_a') ? 'player_c' : 'player';
+// role: 'ally' | 'enemy' | 'monster'. Characters join as the top profile character ('profile:top' — the
+// server / phone menu falls back to a random character); monsters as a random creature.
+export function joinRoleBody(dimensionName, door, role) {
+  const side = role === 'monster' ? 'npc_b' : role === 'enemy' ? enemySideOf(door?.alliance) : allySideOf(door?.alliance);
+  return side === 'npc_b'
+    ? launchBody.join(dimensionName, door?.peer_id, side, { creatureId: 'random' })
+    : launchBody.join(dimensionName, door?.peer_id, side, { characterId: 'profile:top' });
+}
+// A dimension's Door for "Join my top character / my team": a live, alive player Door first, then a 3rd-team,
+// an npc_a, any live Door. null when nobody is there.
+export const doorJoinable = (d, p) => !d?.legacy && !!p?.live && (p.life ?? 1) > 0;
+export function teamJoinDoor(d) {
+  const live = (d?.doors || []).filter(p => doorJoinable(d, p));
+  for (const a of ['player', 'player_c', 'npc_a']) { const p = live.find(x => x.alliance === a); if (p) return p; }
+  return live[0] || null;
+}
+export const sideLabel = (a) => ({ player: 'player', player_c: '3rd team', npc_a: 'ally bot', npc_b: 'monster', npc_c: '3rd-team bot' }[a] || String(a || '?'));
+export const sideClass = (a) => (a === 'player' || a === 'npc_a' || a === 'npc_b') ? a : (a === 'player_c' || a === 'npc_c') ? 'team-c' : 'npc_b';
+// Default name for "Create Dimension" (a fresh name, so a new dimension doesn't land in someone's Ashfall-Micro).
+const DIM_A = ['Ashen', 'Hollow', 'Gilded', 'Sunken', 'Shattered', 'Ember', 'Frozen', 'Verdant', 'Howling', 'Crimson', 'Silent', 'Drowned'];
+const DIM_B = ['Reach', 'Marches', 'Spire', 'Wilds', 'Vale', 'Barrows', 'Expanse', 'Deep', 'Crown', 'Fen', 'Wastes', 'Hollows'];
+export const fancyDimName = (rnd = Math.random) => `${DIM_A[Math.floor(rnd() * DIM_A.length)]}-${DIM_B[Math.floor(rnd() * DIM_B.length)]}`;
+export const agoText = (sec) => sec == null ? '—' : sec < 90 ? `${sec}s ago` : sec < 5400 ? `${Math.round(sec / 60)} min ago` : sec < 172800 ? `${Math.round(sec / 3600)} h ago` : `${Math.round(sec / 86400)} d ago`;
+export const sortDims = (items) => [...(items || [])].sort((a, b) => (b.live_doors - a.live_doors) || ((a.age_sec ?? 1e12) - (b.age_sec ?? 1e12)));
 export const shortText = (t, n = 140) => {
   const s = String(t || '').replace(/\s+/g, ' ').trim();
   return s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s;
@@ -86,7 +134,10 @@ export const assetUrl = (p) => p ? `/${String(p).replace(/\\/g, '/').replace(/^\
 
 // ---------------------------------------------------------------------------------------------
 // DOM
-const S = { profile: null, limits: DEFAULT_LIMITS, catalog: null, error: null, busy: false, body: null, sync: null };
+const S = { profile: null, limits: DEFAULT_LIMITS, catalog: null, error: null, busy: false, body: null, sync: null,
+  // Dimensions section: GET /api/dimensions items (null = loading), its error, "show more"; saved dims (GET /api/dimensions/local).
+  dims: null, dimsError: null, dimsAll: false, dimsLoading: false, local: [], dimName: null, teamCount: null, teamTier: 'strong' };
+const DIMS_SHOWN = 10, DOORS_SHOWN = 8;
 
 function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
@@ -198,8 +249,10 @@ export async function launchProfile(body, what) {
     setBusy(false);
   }
 }
-export const launchJoinTeam = (dimensionName, doorId) =>
-  launchProfile(launchBody.joinTeam(dimensionName, doorId), `${joinTeamLabel(S.profile?.team_name)} — arriving 30–50 hexes from the Door`);
+export const launchJoinTeam = (dimensionName, doorId, count = null, tier = null) =>
+  launchProfile(launchBody.joinTeam(dimensionName, doorId, count, tier), Number(count) > 1
+    ? `${joinTeamLabel(S.profile?.team_name)} — ${count} characters arriving 30–50 hexes from the Door`
+    : `${orderedCharacters(S.profile)[0]?.name || 'my top character'} — arriving 30–50 hexes from the Door`);
 
 // "Join my <team> team" button for a live Door (explorer chips, next to #pick-door). Hidden without characters.
 export function joinTeamButton(dimensionName, doorId) {
@@ -267,46 +320,161 @@ function renderPanel() {
   root.append(h('div', { id: 'pp-sync', class: 'pp-sync' }));
   renderSync();
   const charOpts = chars.map(c => ({ value: c.id, text: charOptionText(c) }));
-  const row = (...kids) => h('div', { class: 'pp-row' }, ...kids);
+  // Four rows (user ruling 2026-11-13): primary button + its pickers | secondary button. One grid, so the
+  // columns line up across rows.
+  const grid = h('div', { class: 'pp-grid' });
+  const row = (main, ctl, side) => grid.append(h('div', { class: 'pp-row' }, main, h('div', { class: 'pp-ctl' }, ...ctl), h('div', { class: 'pp-side' }, side)));
   const btn = (text, onclick, props = {}) => h('button', { type: 'button', class: 'pp-btn', text, onclick, ...props });
 
-  // Test my character <select>
-  const testSel = sel(charOpts, top?.id, { class: 'pp-select', disabled: !has, title: 'which character to test' });
-  root.append(row(btn('Test my character', () => launchProfile(launchBody.testCharacter(testSel.value), `test game as ${chars.find(c => c.id === testSel.value)?.name || 'my character'}`), { disabled: !has }), testSel));
-  // Test a random character
-  root.append(row(btn('Test a random character', () => launchProfile(launchBody.testRandom(), 'test game with a random character'))));
-  // Create a new character
-  root.append(row(btn('Create a new character', () => openCharacterEditor('create'), { disabled: !!S.error })));
-  // Edit a character profile <select>
-  const editSel = sel(charOpts, top?.id, { class: 'pp-select', disabled: !has, title: 'which character to edit' });
-  root.append(row(btn('Edit a character profile', () => openCharacterEditor('edit', editSel.value), { disabled: !has }), editSel));
-  // Edit my team
-  root.append(row(btn('Edit my team', openTeamEditor, { disabled: !has })));
-  // Test my team <count> <tier>
+  // 1. Test my character <character> | Test Random character
+  const testSel = sel(charOpts.length ? charOpts : [{ value: '', text: 'no characters yet' }], top?.id, { class: 'pp-select', disabled: !has, title: 'which character to test' });
+  row(btn('Test my character', () => launchProfile(launchBody.testCharacter(testSel.value), `test game as ${chars.find(c => c.id === testSel.value)?.name || 'my character'}`), { disabled: !has }),
+    [testSel],
+    btn('Test Random character', () => launchProfile(launchBody.testRandom(), 'test game with a random character'), { class: 'pp-btn pp-alt' }));
+  // 2. Edit a character profile <character> | Create New character
+  const editSel = sel(charOpts.length ? charOpts : [{ value: '', text: 'no characters yet' }], top?.id, { class: 'pp-select', disabled: !has, title: 'which character to edit' });
+  row(btn('Edit a character profile', () => openCharacterEditor('edit', editSel.value), { disabled: !has }),
+    [editSel],
+    btn('Create New character', () => openCharacterEditor('create'), { disabled: !!S.error, class: 'pp-btn pp-alt' }));
+  // 3. Test my team <count> <tier> | Edit order. The count + tier also drive "⚑ Join my team" in the Dimensions list.
   const counts = teamCountOptions(chars.length);
+  if (!counts.includes(Number(S.teamCount))) S.teamCount = counts.length ? counts[counts.length - 1] : null;
   const countSel = sel(counts.length ? counts.map(n => ({ value: n, text: `${n} characters` })) : [{ value: '', text: 'needs 2+ characters' }],
-    counts.length ? counts[counts.length - 1] : '', { class: 'pp-select pp-small', disabled: !counts.length, title: 'how many of my characters (top first)' });
+    S.teamCount ?? '', { id: 'pp-team-count', class: 'pp-select pp-small', disabled: !counts.length, title: 'how many of my characters (top first) — also used by "Join my team" below',
+      onchange: (ev) => { S.teamCount = Number(ev.target.value) || null; } });
   const tierSel = sel([
-    { value: 'reachable', text: 'Reachable (9–10 hexes)' },
     { value: 'strong', text: 'Strong (2–6 hexes)' },
-  ], 'reachable', { class: 'pp-select pp-small', disabled: !counts.length, title: 'how close the allies start: Reachable (default) or Strong contact' });
-  root.append(row(btn('Test my team', () => launchProfile(launchBody.testTeam(countSel.value, tierSel.value), `test game with ${countSel.value} of my team`), { disabled: !counts.length }), countSel, tierSel));
-  // Join my team — desktop: the Door picked in #pick-door (or the button on each live Door chip); phone: needs a link.
-  if (IS_MENU) {
-    root.append(row(btn(joinTeamLabel(team), null, { disabled: true }), h('span', { class: 'pp-hint', text: 'open a team link to join' })));
-  } else {
-    const joinPicked = () => {
-      const pick = document.getElementById('pick-door');
-      const opt = pick?.selectedOptions?.[0];
-      if (!opt || opt.disabled || !opt.value) { setMsg('no live Door picked — pick one in "Join through a player\'s Door" or use the buttons on the Doors below', true); return; }
-      const [dim, doorId] = opt.value.split('|');
-      launchJoinTeam(dim, doorId);
-    };
-    root.append(row(btn(joinTeamLabel(team), joinPicked, { disabled: !has, class: 'pp-btn join-team-main' }),
-      h('span', { class: 'pp-hint', text: 'joins the Door picked above — or use the button on any live Door below' })));
-  }
+    { value: 'reachable', text: 'Reachable (9–10 hexes)' },
+  ], S.teamTier, { id: 'pp-team-tier', class: 'pp-select pp-small', disabled: !counts.length, title: 'how close the allies start: Strong contact (2–6 hexes) or Reachable (9–10)',
+    onchange: (ev) => { S.teamTier = ev.target.value; } });
+  row(btn('Test my team', () => launchProfile(launchBody.testTeam(countSel.value, tierSel.value), `test game with ${countSel.value} of my team`), { disabled: !counts.length }),
+    [countSel, tierSel],
+    btn('Edit order', openTeamEditor, { disabled: !has, class: 'pp-btn pp-alt', title: 'team name + priority order (the top character joins on links)' }));
+  // 4. Create Dimension <name> | Load old Dimension <saved>
+  if (S.dimName == null) S.dimName = fancyDimName();
+  const nameIn = h('input', { type: 'text', class: 'pp-input', maxLength: 40, value: S.dimName, placeholder: 'dimension name', title: 'name of the new dimension (max 40)',
+    oninput: () => { S.dimName = nameIn.value; } });
+  const create = () => {
+    const name = nameIn.value.trim();
+    if (!name) { setMsg('the new dimension needs a name', true); return; }
+    launchProfile(launchBody.host(name), `new dimension ${name}${has ? ` as ${top.name}` : ' with a random character'}`);
+  };
+  nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') create(); });
+  const saved = S.local || [];
+  const loadSel = sel(saved.length
+    ? saved.map(it => ({ value: it.path, text: `${it.dim_name || it.dim_id} (${it.kind}, ${agoText(it.saved_at ? Math.max(0, Math.round((Date.now() - Date.parse(it.saved_at)) / 1000)) : null)})` }))
+    : [{ value: '', text: 'no saved dimensions' }], saved[0]?.path ?? '', { class: 'pp-select pp-load', disabled: !saved.length, title: 'a dimension saved on this device (autosave / hard save)' });
+  row(btn('Create Dimension', create, { title: has ? `open a new dimension as ${top.name}` : 'open a new dimension (random character)' }),
+    [nameIn],
+    h('span', { class: 'pp-pair' },
+      btn('Load old Dimension', () => {
+        const it = saved.find(x => x.path === loadSel.value);
+        if (!it) { setMsg('no saved dimension picked', true); return; }
+        launchProfile(launchBody.restore(it.path), `loading ${it.dim_name || it.dim_id}`);
+      }, { disabled: !saved.length, class: 'pp-btn pp-alt', title: saved.length ? 'continue a dimension saved on this device' : 'no saved dimensions on this device yet' }),
+      loadSel));
+  root.append(grid);
   root.append(h('div', { id: 'pp-msg', class: 'pp-msg' }));
+  root.append(h('div', { id: 'pp-dims', class: 'pp-dims' }));
+  renderDims();
   refreshJoinTeamButtons();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Dimensions (desktop: the launcher's GET /api/dimensions; phone: the menu server's, read from radicle-httpd).
+async function loadDims(sync = false) {
+  if (S.dimsLoading) return;
+  S.dimsLoading = true;
+  renderDims();
+  try {
+    // sync=0: what the launcher's Radicle storage (desktop) / the menu's 30 s cache (phone) knows; ↻ asks the seeds.
+    const out = await fetch(`/api/dimensions?sync=${sync ? 1 : 0}`).then(r => r.json());
+    S.dims = out.items || [];
+    S.dimsError = out.ok === false || out.enabled === false ? (out.reason || out.error || 'not reachable') : null;
+  } catch (e) {
+    S.dims = S.dims || [];
+    S.dimsError = e.message;
+  } finally { S.dimsLoading = false; }
+  renderDims();
+}
+async function loadLocal() {
+  try { S.local = (await api('GET', '/api/dimensions/local')).items || []; } catch { S.local = []; }
+}
+
+function doorBlockReason(d, p) {
+  if (d.legacy) return 'older format — cannot join';
+  if ((p.life ?? 1) <= 0) return 'this unit is dead';
+  if (!p.live) return `this Door is stale (last push ${agoText(p.age_sec)}) — nobody is there right now`;
+  return '';
+}
+function renderDims() {
+  const box = document.getElementById('pp-dims');
+  if (!box) return;
+  box.innerHTML = '';
+  const chars = orderedCharacters(S.profile);
+  const has = chars.length > 0;
+  const items = sortDims(S.dims || []);
+  const status = S.dims == null ? 'loading…'
+    : S.dimsError ? `${items.length ? `${items.length} known · ` : ''}Radicle not reachable (${shortText(S.dimsError, 80)})`
+    : !items.length ? 'nothing published yet — create one above'
+    : `${items.filter(d => d.live_doors > 0).length} live / ${items.length}`;
+  box.append(h('div', { class: 'pp-dims-head' },
+    h('b', { text: 'Dimensions' }),
+    h('span', { class: `pp-hint${S.dimsError ? ' bad' : ''}`, text: status }),
+    h('button', { type: 'button', class: 'pp-btn pp-small', text: S.dimsLoading ? '…' : '↻', disabled: S.dimsLoading, title: 'check the seeds for fresh Doors', onclick: () => loadDims(true) })));
+  const shown = S.dimsAll ? items : items.slice(0, DIMS_SHOWN);
+  const count = Number(document.getElementById('pp-team-count')?.value) || 0;
+  for (const d of shown) {
+    const door = teamJoinDoor(d);
+    const why = !has ? 'create a character first' : !door ? (d.legacy ? 'older format — cannot join' : 'no live Door in this dimension') : '';
+    const teamWhy = why || (count < 2 ? 'needs 2+ characters (see Test my team)' : '');
+    const head = h('div', { class: 'pp-dim-head' },
+      h('span', { class: 'pp-dim-name', text: d.dimension_name }),
+      h('span', { class: `pp-badge${d.live_doors > 0 ? ' is-live' : ''}`, text: d.legacy ? 'legacy' : d.live_doors > 0 ? `LIVE · turn ${d.turn ?? 0}` : 'quiet' }),
+      h('span', { class: 'pp-hint', text: `${d.live_doors}/${(d.doors || []).length} door${(d.doors || []).length === 1 ? '' : 's'} · ${agoText(d.age_sec)}` }),
+      h('button', { type: 'button', class: 'pp-btn pp-join-top', text: '⚑ Join my top character', disabled: !!why,
+        title: why || `${chars[0].name} arrives 30–50 hexes from ${door.name || door.peer_id}; your team there sees the new gate`,
+        onclick: () => launchJoinTeam(d.dimension_name, door.peer_id) }),
+      h('button', { type: 'button', class: 'pp-btn pp-join-team', text: '⚑ Join my team', disabled: !!teamWhy,
+        title: teamWhy || `the top ${count} of your team (count + tier from "Test my team") arrive 30–50 hexes from ${door.name || door.peer_id}`,
+        onclick: () => {
+          const n = Number(document.getElementById('pp-team-count')?.value) || 0;
+          const tier = document.getElementById('pp-team-tier')?.value || 'strong';
+          launchJoinTeam(d.dimension_name, door.peer_id, n, tier);
+        } }));
+    const doorsBox = h('div', { class: 'pp-doors' });
+    // Chips for the nodes you can join next to (live, alive); stale / dead Doors only as a count (tooltip names them).
+    const ordered = [...(d.doors || [])].sort((a, b) => (b.live - a.live) || ((a.age_sec ?? 1e12) - (b.age_sec ?? 1e12)));
+    const open = ordered.filter(p => doorJoinable(d, p)), gone = ordered.filter(p => !doorJoinable(d, p));
+    for (const p of open.slice(0, DOORS_SHOWN)) {
+      const block = doorBlockReason(d, p);
+      const who = p.name || String(p.peer_id || '').replace(/^peer:/, '');
+      const role = (r, text, title) => h('button', { type: 'button', class: `pp-join pp-join-${r}`, text, disabled: !!block, title: block || title,
+        onclick: () => {
+          const body = joinRoleBody(d.dimension_name, p, r);
+          launchProfile(body, `${d.dimension_name}: ${text.toLowerCase()} of ${who} (${sideLabel(body.side)})`);
+        } });
+      const asWho = has ? chars[0].name : 'a random character';
+      const ally = allySideOf(p.alliance), enemy = enemySideOf(p.alliance);
+      doorsBox.append(h('span', { class: `pp-door side-${sideClass(p.alliance)}${p.live ? '' : ' is-stale'}${(p.life ?? 1) <= 0 ? ' is-dead' : ''}`,
+        title: `${who}\nside: ${p.alliance}\ndoor: ${p.peer_id}${p.tile ? `\ntile: (${p.tile.q},${p.tile.r})` : ''}\npushed: ${agoText(p.age_sec)}` },
+        h('span', { class: 'pp-dot' }),
+        h('span', { class: 'pp-door-name', text: who }),
+        h('span', { class: 'pp-door-side', text: sideLabel(p.alliance) }),
+        p.life != null && p.life_max != null ? h('span', { class: 'pp-door-hp', text: `${p.life}/${p.life_max}` }) : null,
+        role('ally', 'Ally', ally === 'npc_b' ? 'join beside it as a random monster' : `join beside it as ${asWho} (${sideLabel(ally)})`),
+        role('enemy', 'Enemy', `join beside it as ${asWho} (${sideLabel(enemy)}) — against it`),
+        role('monster', 'Monster', 'join beside it as a random monster (npc_b, the bot plays it)')));
+    }
+    if (open.length > DOORS_SHOWN) doorsBox.append(h('span', { class: 'pp-hint', text: `+${open.length - DOORS_SHOWN} more live` }));
+    if (gone.length) doorsBox.append(h('span', { class: 'pp-hint pp-gone', text: `${open.length ? '+' : ''}${gone.length} stale / dead`,
+      title: gone.slice(0, 20).map(p => `${p.name || p.peer_id} (${sideLabel(p.alliance)}) — ${doorBlockReason(d, p)}`).join('\n') }));
+    box.append(h('div', { class: `pp-dim${d.live_doors > 0 ? ' is-live' : ''}${d.legacy ? ' is-legacy' : ''}` }, head, ordered.length ? doorsBox : null));
+  }
+  if (items.length > DIMS_SHOWN) {
+    box.append(h('button', { type: 'button', class: 'pp-btn pp-small pp-more', text: S.dimsAll ? 'show fewer' : `show ${items.length - DIMS_SHOWN} more`,
+      onclick: () => { S.dimsAll = !S.dimsAll; renderDims(); } }));
+  }
 }
 
 // Radicle sync (profile-radicle.mjs): the team branch teams/<Team> on chaosD6-Profiles.
@@ -391,9 +559,13 @@ export async function initProfilePanel(root) {
   if (!root) return;
   S.body = root.querySelector('.pp-body') || root;
   S.body.textContent = 'loading your profile…';
-  try { await reloadProfile(); } catch (e) { S.error = e.message; S.profile = null; }
+  await Promise.all([
+    reloadProfile().catch((e) => { S.error = e.message; S.profile = null; }),
+    loadLocal(),
+  ]);
   renderPanel();
   if (!S.error) pollSync();
+  loadDims(false);
 }
 
 // ---------------------------------------------------------------------------------------------

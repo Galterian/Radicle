@@ -1,12 +1,10 @@
 {
-  "_comment": "Template written to <appDataDir>/.radicle/config.json by RadicleNodeService on first launch. {{PLACEHOLDERS}} are substituted at runtime. Seeding policy is 'block' at default, so this node only replicates the exact RID we explicitly seed below — chaosD6 project — and nothing else. See follow-up task #6 for splitting the codebase and dimensions into separate RIDs so the phone doesn't pull the game's history.",
-  "preferredSeeds": [
-    "chaos-oci-seed@92-5-138-121.sslip.io:8776"
-  ],
+  "_comment": "Written to <filesDir>/.radicle/config.json by RadicleNodePlugin.start() on every launch; {{ALIAS}} is substituted. The phone only saves its own profile: no inbound listen, one outbound link to the OCI seed, seeding default 'block' so only the profiles RID passed to start() (scope 'followed') replicates. preferredSeeds is empty because the runtime appends it to node.connect, and the OCI seed is already there.",
+  "preferredSeeds": [],
   "cli": { "hints": false },
   "node": {
     "alias": "{{ALIAS}}",
-    "listen": ["0.0.0.0:8776"],
+    "listen": [],
     "externalAddresses": [],
     "peers": { "type": "dynamic" },
     "connect": [

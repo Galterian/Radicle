@@ -126,3 +126,27 @@ godot/android/plugins/nodejs_mobile/src/main/resources/META-INF/services/org.god
 godot/android/plugins/webview_hud/src/main/resources/META-INF/services/org.godotengine.godot.plugin.GodotPlugin
 godot/android/plugins/webview_hud/gradle/wrapper/gradle-wrapper.jar
 godot/android/plugins/nodejs_mobile/gradle/wrapper/gradle-wrapper.jar
+godot/android/plugins/radicle_node/gradle/wrapper/gradle-wrapper.jar
+
+# heartwood checkout cloned by godot/android/radicle-node/build.sh
+godot/android/radicle-node/src/
+# git source downloaded by godot/android/radicle-node/build_git.sh
+godot/android/radicle-node/git-src/
+# Rust wrapper, if ever built standalone (build.sh builds it inside the heartwood checkout)
+godot/android/radicle-node/ffi/target/
+
+# Godot 4.5 export output: the install-time asset pack is regenerated on every
+# export (4.3 called it assetPacks/installTime). Its build.gradle stays tracked.
+godot/android/build/assetPackInstallTime/build/
+godot/android/build/assetPackInstallTime/src/main/assets/
+
+_tools/chaosd6-release.aab
+godot/android/build/libs/debug/godot-lib.template_debug.aar
+godot/android/build/libs/release/godot-lib.template_release.aar
+godot/android/build/libs/debug/godot-lib.template_debug.aar
+godot/android/build/libs/debug/godot-lib.template_debug.aar
+godot/android/build/libs/release/godot-lib.template_release.aar
+godot/android/build/libs/debug/godot-lib.template_debug.aar
+godot/android/build/libs/release/godot-lib.template_release.aar
+godot/android/build/libs/debug/godot-lib.template_debug.aar
+godot/android/build/libs/release/godot-lib.template_release.aar

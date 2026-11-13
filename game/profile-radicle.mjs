@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { loadProfile, saveProfile, profilePath } from './profile.mjs';
-import { openProfileStore, listDeviceBranches, loadIdentity, DEFAULTS } from './profile-sync.mjs';
+import { openProfileStore, listDeviceBranches, loadIdentity, extraCa, DEFAULTS } from './profile-sync.mjs';
 import { teamRef, teamSlug, ownerIds } from './profile-auth.mjs';
 
 function canon(x) {
@@ -95,6 +95,7 @@ export function startProfileSync({ file = profilePath(), dir = path.join(path.di
   }
 
   async function syncOnce({ requests = false } = {}) {
+    await extraCa(dir);   // a proxy CA dropped in later (extra-ca.pem) is picked up without a restart
     if (!readUrl) return set('not-configured', 'No chaosD6-Profiles repo configured (RADICLE_PROFILES_RID).');
     let local = loadProfile(file);
     const slug = teamSlug(local.team_name);

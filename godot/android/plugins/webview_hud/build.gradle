@@ -8,8 +8,8 @@
 //   cd godot/android/plugins/webview_hud && ./gradlew assembleRelease
 //   cp build/outputs/aar/webview_hud-release.aar ../webview_hud.aar
 plugins {
-    id 'com.android.library' version '8.2.2'
-    id 'org.jetbrains.kotlin.android' version '1.9.22'
+    id 'com.android.library' version '8.6.1'
+    id 'org.jetbrains.kotlin.android' version '2.1.20'
 }
 
 android {

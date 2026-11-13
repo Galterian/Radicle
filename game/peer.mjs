@@ -47,7 +47,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import net from 'node:net';
 
-import { pushDimension, radicleEnv, dimsEnv } from './radicle-adapter.mjs';
+import { pushDimension, radicleEnv, dimsEnv, dimsIdentity } from './radicle-adapter.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { createKnownMap, initialBlock, discBlock, isBlock, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
@@ -5096,7 +5096,9 @@ function buildDoor(now) {
   // that's the RID we advertise to joiners. On a legacy single-RID setup
   // dimsEnv transparently inherits codeEnv, so this still prints the main
   // chaosD6 RID — no behaviour change for callers that haven't opted in.
-  const radRepo = dimsEnv.enabled ? `rad:${dimsEnv.rid}` : 'rad:local-bare';
+  // On a phone whose in-app Radicle node can publish, dimsIdentity() gives the
+  // dims RID + the node's NID instead of local-bare/null.
+  const { repo: radRepo, namespace: radNamespace } = dimsIdentity();
   const members = livePeers().filter(p => p && p.peer_id);
   const bootstrap = new Set(); const gunRelays = new Set(); const relays = new Set(DEFAULT_RELAYS);
   for (const p of members) {
@@ -5138,7 +5140,7 @@ function buildDoor(now) {
       libp2p: { multiaddrs: myMaddrs, topic: TOPIC_STRONG, bootstrap: [...bootstrap] },
       gun: { url: myGunUrl, relays: [...gunRelays] },
     },
-    radicle: { repo: radRepo, namespace: dimsEnv.enabled ? dimsEnv.nid : null, branch: `ActiveDimensions/${DIM_NAME}` },
+    radicle: { repo: radRepo, namespace: radNamespace, branch: `ActiveDimensions/${DIM_NAME}` },
     pushed_at: now,
   };
   return { dimensionDoc, door };
@@ -5167,6 +5169,9 @@ async function publishDoor() {
       if (treeUrl) console.log(`[${PEER_LABEL}]   tree:   ${treeUrl}`);
       broadcastUI({ kind: 'radicle', commit: r.commit, branch: r.branch, url: explorerUrl || localUrl, localUrl, explorerUrl, treeUrl, published: !!explorerUrl });
       await emitEnvelope({ type: 'evt_radicle_push', payload: { door: DOOR_FILE, commit: r.commit, head_pushed: hg.head || '', explorer_url: explorerUrl, tree_url: treeUrl } });
+    } else if (IS_MOBILE && r.reason && r.reason !== 'mobile-peer-no-radicle' && r.reason !== 'no-changes') {
+      // Phone with a publish-capable bridge whose publish failed; no bridge = silent.
+      console.warn(`[${PEER_LABEL}] door #${doorCount} not published: ${r.reason}`);
     }
   } catch (e) { console.warn(`[${PEER_LABEL}] door push failed: ${e.message.split('\n')[0]}`); }
 }

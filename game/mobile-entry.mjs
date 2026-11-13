@@ -99,7 +99,7 @@ if (isMainThread && process.env.JOIN_URI) {
     process.env.DIM_NAME = dimName;
     process.env.DIM_ID = `dim-${dimName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
     try {
-      const { fetchDimensionFromHttpd, planJoin, dimIdOf } = await import('./join-plan.mjs');
+      const { fetchDimensionFromHttpd, dimIdOf } = await import('./join-plan.mjs');
       const dim = await fetchDimensionFromHttpd({
         seedHost: process.env.RADICLE_SEED_HOST || '92-5-138-121.sslip.io',
         rid: q.get('rid') || process.env.RADICLE_DIMS_RID || 'rad:z2xbfJfwT3kukR73m8LXmmuvchEwr',
@@ -124,26 +124,11 @@ if (isMainThread && process.env.JOIN_URI) {
         || (q.get('nid') && dim.doors.find(d => d.nid === q.get('nid')))
         || dim.doors.find(d => mySide.includes(d.alliance))
         || (teamC ? null : dim.doors.find(d => d.alliance !== 'npc_b') || dim.doors[0]);
-      const plan = planJoin(dim, { doorId: anchor?.peer_id || null, side, placement: anchor ? 'nearby' : 'random' });
-      const fs = await import('node:fs');
-      const blocksFile = `${process.env.TMPDIR || '/tmp'}/map-blocks.${Date.now()}.json`;
-      fs.writeFileSync(blocksFile, JSON.stringify(plan.knownMap.blocks()));
-      Object.assign(process.env, {
-        PEER_LABEL: plan.peerLabel,
-        ENTITY_NAME: plan.peerLabel,
-        ALLIANCE: side,
-        START_TILE: JSON.stringify(plan.startTile),
-        MAP_SEED: String(plan.knownMap.seed),
-        MAP_BLOCKS_FILE: blocksFile,
-        BOOTSTRAP: plan.network.bootstrap.join(','),
-        PEER_GUN_URLS: plan.network.gunRelays.join(','),
-        JOIN_SYNC_WAIT_MS: plan.liveDoors.length ? '8000' : '500',
-      });
-      // nostr-bus.mjs already froze NOSTR_RELAYS into DEFAULT_RELAYS when
-      // join-plan.mjs loaded it; peer.mjs uses that same array, so extend it.
-      const { DEFAULT_RELAYS } = await import('./nostr-bus.mjs');
-      for (const r of plan.network.relays) if (!DEFAULT_RELAYS.includes(r)) DEFAULT_RELAYS.push(r);
-      console.log(`[join] ${dimName}: next to ${anchor?.peer_id} at ${anchor?.tile?.q},${anchor?.tile?.r} → ${side} ${plan.peerLabel} at ${plan.startTile.q},${plan.startTile.r} (${dim.doors.length} Doors, ${plan.liveDoors.length} live, ${plan.knownMap.size()} hexes)`);
+      // Same code path as the menu's join buttons (mobile-menu.mjs prepareJoin / applyJoinEnv).
+      const { prepareJoin, applyJoinEnv } = await import('./mobile-menu.mjs');
+      const join = await prepareJoin(dim, { doorId: anchor?.peer_id || null, side, placement: anchor ? 'nearby' : 'random' });
+      await applyJoinEnv(join);
+      console.log(`[join] ${join.summary}`);
     } catch (e) {
       console.error(`[join] ${dimName}: Door placement failed (${e.message}); joining without it`);
     }
@@ -188,6 +173,30 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         Object.assign(process.env, profileEnv(file, plan.hero));
         if (plan.allies.length) teamAllies = { allies: plan.allies, tier: plan.tier, file, profileEnv };
       }
+      // Create Dimension: a named dimension instead of the private Ashfall-Micro (peer.mjs publishes its Door).
+      if (plan.mode === 'host') {
+        Object.assign(process.env, { DIM_NAME: plan.dimName, DIM_ID: plan.dimId });
+        if (plan.character) Object.assign(process.env, profileEnv(file, plan.character));
+        console.log(`[mobile] new dimension ${plan.dimName} (${plan.dimId}) as ${plan.character?.name || 'a random character'}`);
+      }
+      // Load old Dimension: peer.mjs hydrates map / obstacles / tokens / traps from the TMJ (RESTORE_FROM_TMJ).
+      if (plan.mode === 'restore') {
+        Object.assign(process.env, { DIM_NAME: plan.dimName, DIM_ID: plan.dimId, RESTORE_FROM_TMJ: plan.tmjPath, ...(plan.seed ? { MAP_SEED: plan.seed } : {}) });
+        if (plan.character) Object.assign(process.env, profileEnv(file, plan.character));
+        else if (plan.savedHero) Object.assign(process.env, { CHARACTER_ID: plan.savedHero.characterId, ENTITY_NAME: plan.savedHero.name });
+        console.log(`[mobile] loading ${plan.dimName} from ${plan.tmjPath} as ${plan.character?.name || plan.savedHero?.name || 'a random character'}`);
+      }
+      // Dimensions list: Ally / Enemy / Monster next to a node, or Join my top character / my team (30–50 hexes
+      // from the Door) — the env prepareJoin() planned in the menu, applied like the deep link's.
+      if (plan.mode === 'join' || plan.mode === 'join-team') {
+        const { applyJoinEnv } = await import('./mobile-menu.mjs');
+        await applyJoinEnv(plan.join);
+        if (plan.character) Object.assign(process.env, profileEnv(file, plan.character));
+        else if (plan.creatureId) Object.assign(process.env, { CHARACTER_ID: '', CREATURE_ID: plan.creatureId });
+        else if (plan.characterId) process.env.CHARACTER_ID = plan.characterId;
+        if (plan.mode === 'join-team' && plan.allies.length) teamAllies = { allies: plan.allies, tier: plan.tier, file, profileEnv, keepMap: true };
+        console.log(`[join] ${plan.join.summary}${plan.character ? ` as ${plan.character.name}` : plan.creatureId ? ` as ${plan.creatureId}` : ''}${plan.allies?.length ? ` + ${plan.allies.length} allies (${plan.tier})` : ''}`);
+      }
       // test-random: CHARACTER_ID stays 'random' → the block below picks one, as before.
     }
   } catch (e) {
@@ -202,13 +211,16 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
 // strong 2–6 hexes, reachable 9–10 (STRONG_RADIUS 8 < d ≤ REACH_RADIUS 10), never on a
 // labyrinth wall. Started one by one once my peer answers /status, each bootstrapping off the
 // peers already up (what ui-server.mjs startDimension does).
-async function startTeamAllies({ allies, tier, file, profileEnv }) {
+// keepMap (Join my team): the allies enter the same joined dimension, so they keep its map-blocks file.
+async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false }) {
   const { Worker } = await import('node:worker_threads');
   const { Transform } = await import('node:stream');
   const net = await import('node:net');
   const { seedForDimension } = await import('./js/map.js');
   const { hexDistance } = await import('./js/hex.js');
   const { isLabyrinthWallAt } = await import('./js/features.js');
+  // join-plan.mjs hexWalkableAt also refuses water / lava / fortresses; the wall test alone is the fallback.
+  const walkable = await import('./join-plan.mjs').then(m => m.hexWalkableAt).catch(() => null);
   const label = process.env.PEER_LABEL || 'mobile-dev';
   const httpPort = Number(process.env.PEER_PORT_HTTP || 7401);
   const status = async (prt) => {
@@ -232,9 +244,11 @@ async function startTeamAllies({ allies, tier, file, profileEnv }) {
   const ring = [];
   for (let dq = -dMax; dq <= dMax; dq++) for (let dr = -dMax; dr <= dMax; dr++) {
     const t = { q: home.q + dq, r: home.r + dr }, d = hexDistance(home, t);
-    if (d >= dMin && d <= dMax && !isLabyrinthWallAt(seed, t.q, t.r)) ring.push(t);
+    if (d >= dMin && d <= dMax && (walkable ? walkable(seed, t.q, t.r) : !isLabyrinthWallAt(seed, t.q, t.r))) ring.push(t);
   }
-  const bootstrap = [...me.multiaddrs], gunUrls = me.gun_url ? [me.gun_url] : [];
+  const split = (v) => String(v || '').split(',').filter(Boolean);
+  const bootstrap = [...new Set([...me.multiaddrs, ...split(process.env.BOOTSTRAP)])];
+  const gunUrls = [...new Set([...(me.gun_url ? [me.gun_url] : []), ...split(process.env.PEER_GUN_URLS)])];
   // A worker's "UI socket on ws://…" / "peer listening on" line would match the plugin's
   // node_ready regex and repoint the phone's HUD at the ally — reword it (line-buffered).
   const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'ally UI socket at ').replace(/peer listening on/g, 'ally listening at');
@@ -258,9 +272,10 @@ async function startTeamAllies({ allies, tier, file, profileEnv }) {
       PEER_LABEL: tag, ALLIANCE: 'npc_a', CREATURE_ID: '', START_TILE: JSON.stringify(tile),
       PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
       BOOTSTRAP: bootstrap.join(','), PEER_GUN_URLS: gunUrls.join(','), JOIN_SYNC_WAIT_MS: '8000',
-      OWNER_PEER_ID: '', PHANTOM: '', REPLACES_PEER_ID: '', START_LIFE: '',
+      OWNER_PEER_ID: '', PHANTOM: '', REPLACES_PEER_ID: '', START_LIFE: '', TEAM_GATE: '', TEAM_GATE_DOOR: '', RESTORE_FROM_TMJ: '',
     };
-    delete env.JOIN_URI; delete env.MAP_BLOCKS_FILE; delete env.MAP_BLOCKS;
+    delete env.JOIN_URI;
+    if (!keepMap) { delete env.MAP_BLOCKS_FILE; delete env.MAP_BLOCKS; }
     const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
     w.stdout.pipe(relabel()).on('data', b => process.stdout.write(b));
     w.stderr.pipe(relabel()).on('data', b => process.stderr.write(b));
@@ -275,7 +290,7 @@ if (teamAllies) startTeamAllies(teamAllies).catch(e => console.error(`[team] all
 
 // The phone starts as a random character each launch (user ruling 2026-11-12) unless one is pinned.
 // Same data/ lookup as peer.mjs (../data next to the bundle), falling back to the bundled ./data.
-if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random')) {
+if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random') && !process.env.CREATURE_ID) {
   const fs = await import('node:fs');
   let ids = [];
   for (const rel of ['../data/characters.json', './data/characters.json']) {

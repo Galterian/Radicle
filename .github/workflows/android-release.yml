@@ -17,7 +17,7 @@ jobs:
   release:
     runs-on: ubuntu-22.04
     env:
-      GODOT_VERSION: ${{ secrets.GODOT_VERSION || '4.3-stable' }}
+      GODOT_VERSION: ${{ secrets.GODOT_VERSION || '4.5.2-stable' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,10 +31,12 @@ jobs:
 
       - name: Install Godot export templates
         run: |
-          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}"
+          # Godot looks for export_templates/<ver>.stable (dot), not the release tag's -stable.
+          TPL_DIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION/-/.}"
+          mkdir -p "$TPL_DIR"
           curl -sSfL -o tpl.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
           unzip -q tpl.tpz -d /tmp/tpl
-          mv /tmp/tpl/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}/"
+          mv /tmp/tpl/templates/* "$TPL_DIR/"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3

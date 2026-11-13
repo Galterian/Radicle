@@ -1,13 +1,28 @@
 extends Node
 
-## Boots the on-device Radicle node on first launch and keeps it running while
-## the game is open. Only lives on Android — a no-op on every other platform.
+## Boots the on-device Radicle node: the P2P write path of the team profile in
+## chaosD6-Profiles (refs/heads/teams/<Team>). Only lives on Android — a no-op
+## on every other platform.
 ##
 ## Pairs with the godot/android/plugins/radicle_node plugin: that plugin
 ## supplies the native `RadicleNode` singleton. Autoload me from
-## project.godot's [autoload] block as `RadicleBoot`.
+## project.godot's [autoload] block as `RadicleBoot` (before EmbeddedPeer).
+##
+## The saves themselves come from game/profile-sync.mjs in the embedded peer
+## (EmbeddedPeer passes it bridge_file()): the node commits them to
+## teams/<Team> in its own namespace, signs and announces, and the OCI seed
+## promotes them to the canonical branch (infra/oci/profiles-push.mjs). The
+## node key is the profile identity, user://data/radicle/identity.pem, so its
+## NID is this device's id in the team's `owners`. Seeded with scope
+## `followed`: it never pulls other players' namespaces.
 
-const PROJECT_RID := "rad:zqZmP6itceBMqYwi1K1n8phQqCaj"
+# chaosD6-Profiles (infra/oci/profiles-setup.sh); same RID as game/profile-sync.mjs.
+const PROFILES_RID := "rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"
+# chaosD6-Dimensions: the node also publishes refs/heads/ActiveDimensions/<Name>
+# there (bridge POST /publish). Both are seeded; start() takes a comma list.
+const DIMENSIONS_RID := "rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"
+# game/profile-radicle.mjs: <profileDir>/radicle/identity.pem, profileDir = CHAOSD6_USER_DATA_DIR.
+const IDENTITY_PEM := "user://data/radicle/identity.pem"
 
 signal node_ready(nid: String)
 signal node_failed(reason: String)
@@ -22,6 +37,10 @@ func _ready() -> void:
         push_warning("[RadicleBoot] RadicleNode plugin missing from this build. See godot/android/plugins/radicle_node/README.")
         node_failed.emit("plugin-missing")
         return
+    if PROFILES_RID.is_empty():
+        push_warning("[RadicleBoot] PROFILES_RID not set — on-device Radicle node disabled")
+        node_failed.emit("no-rid")
+        return
 
     _plugin = Engine.get_singleton("RadicleNode")
     var alias := "chaos-mobile-%s" % _short_device_id()
@@ -32,16 +51,27 @@ func _ready() -> void:
     th.start(_start_on_thread.bind(alias))
 
 func _start_on_thread(alias: String) -> void:
-    var nid: String = _plugin.call("start", alias, PROJECT_RID)
+    var rids := PROFILES_RID if DIMENSIONS_RID.is_empty() else "%s,%s" % [PROFILES_RID, DIMENSIONS_RID]
+    var nid: String = _plugin.call("start", alias, rids, ProjectSettings.globalize_path(IDENTITY_PEM))
     call_deferred("_emit_result", nid)
 
 func _emit_result(nid: String) -> void:
-    if nid.is_empty():
-        push_warning("[RadicleBoot] radicle node returned empty NID")
-        node_failed.emit("empty-nid")
+    if nid.is_empty() or nid.begins_with("error:"):
+        push_warning("[RadicleBoot] radicle node failed to start: " + nid)
+        node_failed.emit(nid if not nid.is_empty() else "empty-nid")
     else:
         print("[RadicleBoot] node ready, NID=", nid)
         node_ready.emit(nid)
+
+## Where the running node publishes its loopback endpoint ({ port, token, nid,
+## features: ["save","publish"] }) for profile-sync.mjs and the dimension
+## publisher; "" when the node is not available. The file exists only
+## while the node runs — profile-sync.mjs falls back to HTTPS otherwise.
+func bridge_file() -> String:
+    if _plugin == null:
+        return ""
+    var home := String(_plugin.call("home"))
+    return "" if home.is_empty() else home.path_join("bridge.json")
 
 func stop() -> void:
     if _plugin != null:
