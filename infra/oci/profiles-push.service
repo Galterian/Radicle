@@ -1,0 +1,19 @@
+[Unit]
+Description=chaosD6-Profiles push endpoint (git receive-pack -> rad)
+After=network-online.target radicle-node.service
+Wants=radicle-node.service
+
+[Service]
+User=radicle
+Group=radicle
+Environment=HOME=/home/radicle
+Environment=PATH=/home/radicle/.radicle/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PROFILES_REPO=/home/radicle/profiles-work
+Environment=PORT=8090
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/env node /opt/chaosd6-profiles/profiles-push.mjs
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

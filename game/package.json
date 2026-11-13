@@ -24,6 +24,7 @@
     "@multiformats/multiaddr": "^13.0.3",
     "express": "4.21.1",
     "gun": "0.2020.1240",
+    "isomorphic-git": "1.44.13",
     "json-logic-js": "^2.0.5",
     "libp2p": "3.5.1",
     "ws": "8.18.0"
