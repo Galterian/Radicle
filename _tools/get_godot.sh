@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Fetch the Godot 4.3 Linux x86_64 editor binary into this folder (not committed; ~75 MB).
+# Fetch the Godot 4.5.2 Linux x86_64 editor binary into this folder (not committed; ~75 MB).
 # Usage: ./_tools/get_godot.sh            -> _tools/godot
 set -euo pipefail
 cd "$(dirname "$0")"
-VER="${GODOT_VERSION:-4.3-stable}"
+VER="${GODOT_VERSION:-4.5.2-stable}"
 ZIP="Godot_v${VER}_linux.x86_64.zip"
 URL="https://github.com/godotengine/godot/releases/download/${VER}/${ZIP}"
 if [ -x godot ]; then

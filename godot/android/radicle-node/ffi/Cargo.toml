@@ -1,0 +1,30 @@
+# JNI wrapper that runs radicle-node in-process on Android.
+#
+# build.sh copies this crate into the heartwood checkout as
+# crates/radicle-node-ffi (the workspace globs crates/*), so it builds against
+# heartwood's own Cargo.lock and `workspace = true` deps resolve there.
+[package]
+name = "radicle-node-ffi"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+getrandom = { workspace = true, features = ["std"] }
+git2 = { workspace = true, features = ["vendored-libgit2"] }
+jni = "0.21"
+log = { workspace = true, features = ["std"] }
+radicle = { workspace = true }
+radicle-log = { workspace = true }
+# No default features: drops systemd/tor/i2p/backtrace, none of which apply on a
+# phone. A path dep because `workspace = true` can't turn default features off.
+radicle-node = { path = "../radicle-node", default-features = false, features = ["socket2"] }
+radicle-signals = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"

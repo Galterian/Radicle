@@ -4,8 +4,7 @@
      RadicleNodePlugin. INTERNET and ACCESS_NETWORK_STATE are already in the
      app manifest via the export preset, but we re-declare so this plugin is
      self-contained. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="io.chaosd6.radicle">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
@@ -15,7 +14,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
     <application>
+        <!-- Own process: the in-process Rust node can abort without taking
+             Godot down, and each start() gets a fresh runtime. -->
         <service android:name="io.chaosd6.radicle.RadicleNodeService"
+                 android:process=":radicle"
                  android:exported="false"
                  android:foregroundServiceType="dataSync"/>
     </application>

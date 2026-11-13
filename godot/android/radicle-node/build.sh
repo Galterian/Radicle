@@ -1,36 +1,39 @@
 #!/usr/bin/env bash
-# Cross-compile radicle-node for aarch64-linux-android and drop the artifact
-# where Godot's gradle build will bundle it into the APK/AAB.
+# Cross-compile radicle-node as an in-process JNI library (ffi/ →
+# libradicle_node_ffi.so) for aarch64-linux-android and drop it into the
+# radicle_node plugin's jniLibs, so it ships inside the plugin AAR.
 #
-# Target: aarch64-linux-android (arm64-v8a) — matches the only arch our Play
-# Store preset ships. Output: godot/android/build/libs/arm64-v8a/libradicle-node.so
-# (the `lib*.so` name is what Android's packager extracts to the app's native
-# library dir with extractNativeLibs=true; it is a plain ELF executable despite
-# the suffix.)
+# The node is loaded with System.loadLibrary and run on a thread inside
+# RadicleNodeService (process ":radicle") — never exec()'d — so there is no
+# executable in the APK and no useLegacyPackaging/extractNativeLibs needed.
+#
+# Linked with 16 KB max-page-size: Play rejects 4 KB-aligned native libs at
+# targetSdk 35+. (NDK r28+ does this by default; the flag makes r26/r27 work.)
 #
 # Prereqs (install once):
 #   - Android NDK r26+        (ANDROID_NDK_HOME env or ANDROID_HOME/ndk/<ver>)
-#   - rustup                  https://rustup.rs
+#   - rustup                  https://rustup.rs  (heartwood needs Rust >= 1.88)
 #   - rustup target add aarch64-linux-android
 #   - cargo install cargo-ndk
 #   - git
 #
 # One-shot:
 #   godot/android/radicle-node/build.sh
-#   godot/android/radicle-node/build.sh --clean         # wipe & rebuild
-#   godot/android/radicle-node/build.sh --tag 1.10.3    # pin radicle version
+#   godot/android/radicle-node/build.sh --clean                  # wipe & rebuild
+#   godot/android/radicle-node/build.sh --tag releases/1.10.3    # pin radicle version
 #
-# NOT TESTED on this machine (needs NDK + ~500MB of Rust deps + 10-20min). The
-# recipe below follows the published radicle-node Cargo workspace layout.
-# When you run it, verify the output binary runs on your device (adb shell).
+# NOT TESTED (needs NDK + ~500MB of Rust deps + 10-20min). After building,
+# check alignment:  llvm-readelf -l <so> | grep LOAD   → Align 0x4000
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"              # chaosD6 repo root
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"           # chaosD6 repo root
 WORK="$ROOT/godot/android/radicle-node"
 SRC="$WORK/src"
-OUT="$ROOT/godot/android/build/libs/arm64-v8a"
-RADICLE_TAG="${RADICLE_TAG:-v1.10.3}"
+OUT="$ROOT/godot/android/plugins/radicle_node/src/main/jniLibs"
+# Heartwood tags are releases/X.Y.Z (not vX.Y.Z). 1.10.3 = commit 7e1cb406,
+# same as the desktop rad/radicle-node.
+RADICLE_TAG="${RADICLE_TAG:-releases/1.10.3}"
 TARGET="aarch64-linux-android"
 MIN_SDK="${MIN_SDK:-24}"
 
@@ -45,7 +48,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ "$CLEAN" = "1" ]; then
-  rm -rf "$SRC" "$OUT"
+  rm -rf "$SRC" "$OUT/arm64-v8a/libradicle_node_ffi.so"
 fi
 
 # 1. Toolchain checks.
@@ -68,51 +71,45 @@ if [ -z "${ANDROID_NDK_HOME:-}" ] || [ ! -d "$ANDROID_NDK_HOME" ]; then
 fi
 export ANDROID_NDK_HOME
 
-# 2. Fetch the Radicle (heartwood) source at the pinned tag.
+# 2. Fetch heartwood at the pinned tag. The canonical Radicle seed is current;
+#    the GitHub mirror stopped at releases/1.9.1.
 if [ ! -d "$SRC/.git" ]; then
   mkdir -p "$SRC"
   git clone --depth 1 --branch "$RADICLE_TAG" \
-    https://seed.radicle.xyz/z3gqcJUoA1n9HaHKufZs5FCSGazv5.git "$SRC" \
-    || git clone --depth 1 --branch "$RADICLE_TAG" \
-       https://github.com/radicle-dev/heartwood.git "$SRC"
+    https://seed.radicle.xyz/z3gqcJUoA1n9HaHKufZs5FCSGazv5.git "$SRC"
 fi
-
-# 3. OpenSSL / git2 need a C cross toolchain. cargo-ndk sets CC/AR for us. The
-#    git2-sys crate used by radicle-node vendors libgit2 if libgit2-sys's
-#    `vendored` feature is on — which it is by default in heartwood 1.x.
-cd "$SRC"
-mkdir -p "$OUT"
-
-# radicle-node lives at crates/radicle-node (release 1.x). If the layout
-# differs for a given tag, print the actual Cargo.toml path and bail.
-NODE_CRATE="radicle-node"
-if [ ! -f "crates/radicle-node/Cargo.toml" ]; then
-  echo "WARNING: crates/radicle-node not at expected path for $RADICLE_TAG." >&2
-  echo "Available crates:" >&2
-  ls crates 2>/dev/null >&2 || true
+if [ ! -f "$SRC/crates/radicle-node/Cargo.toml" ]; then
+  echo "crates/radicle-node not found in heartwood $RADICLE_TAG. Available crates:" >&2
+  ls "$SRC/crates" >&2 || true
   exit 1
 fi
 
-# 4. Build. cargo-ndk takes care of linker + sysroot wiring.
-echo "== cross-compiling radicle-node $RADICLE_TAG for $TARGET (min-sdk $MIN_SDK)"
+# 3. Drop the wrapper into the workspace (members = crates/*) so it builds
+#    against heartwood's Cargo.lock.
+rm -rf "$SRC/crates/radicle-node-ffi"
+cp -r "$WORK/ffi" "$SRC/crates/radicle-node-ffi"
+
+# 4. Build. cargo-ndk wires linker + sysroot; git2 vendors libgit2 and sqlite
+#    is bundled, so no system C libs are needed. heartwood pins its toolchain
+#    (rust-toolchain file), so the Android target must be added to that one.
+cd "$SRC"
+rustup target add "$TARGET" >/dev/null
+echo "== cross-compiling radicle-node-ffi ($RADICLE_TAG) for $TARGET (min-sdk $MIN_SDK)"
+RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-z,max-page-size=16384" \
 cargo ndk \
   --platform "$MIN_SDK" \
   --target "$TARGET" \
-  -o "$OUT/.staging" \
-  build --release -p "$NODE_CRATE"
+  -o "$OUT" \
+  build --release -p radicle-node-ffi
 
-# cargo-ndk writes the binary into .staging/arm64-v8a/radicle-node — we need
-# it as libradicle-node.so in the final libs/arm64-v8a/ dir.
-STAGED="$OUT/.staging/arm64-v8a/radicle-node"
-if [ ! -f "$STAGED" ]; then
-  echo "cargo-ndk did not produce $STAGED" >&2
-  find "$OUT/.staging" -maxdepth 4 >&2
+SO="$OUT/arm64-v8a/libradicle_node_ffi.so"
+if [ ! -f "$SO" ]; then
+  echo "cargo-ndk did not produce $SO" >&2
+  find "$OUT" -maxdepth 3 >&2
   exit 1
 fi
-mv "$STAGED" "$OUT/libradicle-node.so"
-rm -rf "$OUT/.staging"
 
 echo
-echo "== built: $OUT/libradicle-node.so"
-file "$OUT/libradicle-node.so" | head -1
-du -h "$OUT/libradicle-node.so"
+echo "== built: $SO"
+file "$SO" | head -1
+du -h "$SO"

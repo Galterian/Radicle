@@ -1,13 +1,21 @@
 extends Node
 
-## Boots the on-device Radicle node on first launch and keeps it running while
-## the game is open. Only lives on Android — a no-op on every other platform.
+## Boots the on-device Radicle node and saves the player's profile into the
+## chaosD6-Profiles repo. Only lives on Android — a no-op on every other platform.
 ##
 ## Pairs with the godot/android/plugins/radicle_node plugin: that plugin
 ## supplies the native `RadicleNode` singleton. Autoload me from
 ## project.godot's [autoload] block as `RadicleBoot`.
+##
+## The phone only ever writes PROFILE_BRANCH in its own namespace
+## (refs/namespaces/<NID>/refs/heads/profile) and seeds the repo with scope
+## `followed`, so it never pulls other players' profiles.
 
-const PROJECT_RID := "rad:zqZmP6itceBMqYwi1K1n8phQqCaj"
+# chaosD6-Profiles RID — set once the repo exists (`rad init` on the desktop,
+# then seed it on OCI with scope all). Empty = node is not started.
+const PROFILES_RID := ""
+const PROFILE_BRANCH := "profile"
+const PROFILE_FILE := "profile.json"
 
 signal node_ready(nid: String)
 signal node_failed(reason: String)
@@ -22,6 +30,10 @@ func _ready() -> void:
         push_warning("[RadicleBoot] RadicleNode plugin missing from this build. See godot/android/plugins/radicle_node/README.")
         node_failed.emit("plugin-missing")
         return
+    if PROFILES_RID.is_empty():
+        push_warning("[RadicleBoot] PROFILES_RID not set — on-device Radicle node disabled")
+        node_failed.emit("no-rid")
+        return
 
     _plugin = Engine.get_singleton("RadicleNode")
     var alias := "chaos-mobile-%s" % _short_device_id()
@@ -32,16 +44,25 @@ func _ready() -> void:
     th.start(_start_on_thread.bind(alias))
 
 func _start_on_thread(alias: String) -> void:
-    var nid: String = _plugin.call("start", alias, PROJECT_RID)
+    var nid: String = _plugin.call("start", alias, PROFILES_RID)
     call_deferred("_emit_result", nid)
 
 func _emit_result(nid: String) -> void:
-    if nid.is_empty():
-        push_warning("[RadicleBoot] radicle node returned empty NID")
-        node_failed.emit("empty-nid")
+    if nid.is_empty() or nid.begins_with("error:"):
+        push_warning("[RadicleBoot] radicle node failed to start: " + nid)
+        node_failed.emit(nid if not nid.is_empty() else "empty-nid")
     else:
         print("[RadicleBoot] node ready, NID=", nid)
         node_ready.emit(nid)
+
+## Commits `profile` as PROFILE_FILE on PROFILE_BRANCH, signs and announces it.
+## Blocking (first call on a device fetches the repo, up to 60 s) — call from a
+## Thread. Returns the commit id, or "error: …".
+func save_profile(profile: Dictionary) -> String:
+    if _plugin == null:
+        return "error: radicle node not available"
+    return String(_plugin.call("saveProfile", PROFILES_RID, PROFILE_BRANCH, PROFILE_FILE,
+        JSON.stringify(profile, "  ")))
 
 func stop() -> void:
     if _plugin != null:

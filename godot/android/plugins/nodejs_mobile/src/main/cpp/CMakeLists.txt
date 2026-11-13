@@ -31,3 +31,9 @@ find_library(log-lib log)
 target_link_libraries(nodejs_mobile_bridge
     libnode
     ${log-lib})
+
+# Play rejects 4 KB-aligned native libs at targetSdk 35+. NDK r28+ defaults to
+# 16 KB; the explicit flag makes any NDK (Godot's template pins r23) comply.
+target_link_options(nodejs_mobile_bridge PRIVATE
+    "-Wl,-z,max-page-size=16384"
+    "-Wl,-z,common-page-size=16384")

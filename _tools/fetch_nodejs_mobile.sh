@@ -12,8 +12,9 @@
 #   godot/android/plugins/nodejs_mobile/src/main/cpp/node-headers/*
 #
 # Not fetched here (ship note): for a Play-Store release the stock v18.20.4
-# zip is 4KB-aligned; rebuild nodejs-mobile from `main` with
-# `-Wl,-z,max-page-size=16384` before uploading an AAB targetting SDK 35+.
+# libnode.so is 4KB-aligned (verified: LOAD align 0x1000). After this script,
+# run _tools/build_nodejs_mobile_16k.sh to replace it with a 16KB build from
+# source before uploading an AAB targetting SDK 35+. Headers stay from here.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
