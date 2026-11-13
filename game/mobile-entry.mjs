@@ -150,6 +150,121 @@ if (isMainThread && process.env.JOIN_URI) {
   }
 }
 
+// Player profile (user ruling 2026-11-13; profile.mjs, $CHAOSD6_USER_DATA_DIR/profile.json).
+//   • opened from a chaosd6:// link: join as the TOP character of my team (random if I have none);
+//   • opened plainly: the start menu (mobile-menu.mjs) on PEER_PORT_HTTP until the player picks
+//     Test my character / Test a random character / Test my team; then the peer starts as that.
+// A pinned character (CHARACTER_ID other than 'random', or PROFILE_CHAR_ID) skips both.
+let teamAllies = null;   // test-team: { allies, tier } — started as extra peers once mine is up
+if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random') && !process.env.PROFILE_CHAR_ID) {
+  try {
+    const { profilePath, loadProfile, topCharacter, profileEnv } = await import('./profile.mjs');
+    const file = profilePath();
+    if (process.env.JOIN_URI) {
+      const top = topCharacter(loadProfile(file));
+      if (top) {
+        Object.assign(process.env, profileEnv(file, top));
+        console.log(`[mobile] joining as my top character ${top.name} (${top.base_character})`);
+      }
+    } else {
+      const fs = await import('node:fs');
+      const { fileURLToPath } = await import('node:url');
+      const gameDir = fileURLToPath(new URL('.', import.meta.url)).replace(/\/$/, '');
+      // Same data/ lookup as below: ../data next to the bundle (dev tree), else the bundled ./data.
+      const dataDir = ['../data', './data'].map(rel => fileURLToPath(new URL(rel, import.meta.url)))
+        .find(d => fs.existsSync(`${d}/characters.json`)) || `${gameDir}/data`;
+      const { runMenu } = await import('./mobile-menu.mjs');
+      const plan = await runMenu({ port: Number(process.env.PEER_PORT_HTTP || 7401), dataDir, assetsDir: process.env.CHAOSD6_ASSETS_DIR || '', gameDir });
+      if (plan.mode === 'test-character') Object.assign(process.env, profileEnv(file, plan.character));
+      if (plan.mode === 'test-team') {
+        Object.assign(process.env, profileEnv(file, plan.hero));
+        if (plan.allies.length) teamAllies = { allies: plan.allies, tier: plan.tier, file, profileEnv };
+      }
+      // test-random: CHARACTER_ID stays 'random' → the block below picks one, as before.
+    }
+  } catch (e) {
+    console.error(`[mobile] profile / menu failed (${e.message}); starting as a random character`);
+  }
+}
+
+// Test my team (user ruling 2026-11-13): the next count−1 profile characters fight beside me as
+// bots (alliance npc_a, like the desktop's ally-1) — ordinary peers, not companions (no
+// OWNER_PEER_ID), each in a worker thread running this entry (nodejs-mobile can't exec a second
+// node; same reason as peer.mjs spawnCompanionWorker). Placed around my START_TILE by tier:
+// strong 2–6 hexes, reachable 9–10 (STRONG_RADIUS 8 < d ≤ REACH_RADIUS 10), never on a
+// labyrinth wall. Started one by one once my peer answers /status, each bootstrapping off the
+// peers already up (what ui-server.mjs startDimension does).
+async function startTeamAllies({ allies, tier, file, profileEnv }) {
+  const { Worker } = await import('node:worker_threads');
+  const { Transform } = await import('node:stream');
+  const net = await import('node:net');
+  const { seedForDimension } = await import('./js/map.js');
+  const { hexDistance } = await import('./js/hex.js');
+  const { isLabyrinthWallAt } = await import('./js/features.js');
+  const label = process.env.PEER_LABEL || 'mobile-dev';
+  const httpPort = Number(process.env.PEER_PORT_HTTP || 7401);
+  const status = async (prt) => {
+    try { return await fetch(`http://127.0.0.1:${prt}/status`, { signal: AbortSignal.timeout(1500) }).then(r => r.json()); } catch { return null; }
+  };
+  const waitStatus = async (prt, ms) => {
+    for (const end = Date.now() + ms; Date.now() < end; await new Promise(r => setTimeout(r, 1000))) {
+      const st = await status(prt);
+      if (st?.multiaddrs) return st;
+    }
+    return null;
+  };
+  const freePort = () => new Promise((res, rej) => { const sv = net.createServer(); sv.on('error', rej); sv.listen(0, '127.0.0.1', () => { const prt = sv.address().port; sv.close(() => res(prt)); }); });
+  const me = await waitStatus(httpPort, 180_000);
+  if (!me) { console.error('[team] my peer never answered /status; no allies'); return; }
+  // Tiles: same seed and wall test peer.mjs uses (spawnCompanion).
+  const seed = process.env.MAP_SEED || seedForDimension(process.env.DIM_ID || 'dim-ashfall-micro');
+  const home = JSON.parse(process.env.START_TILE || '{"q":1,"r":2}');
+  const [dMin, dMax] = tier === 'strong' ? [2, 6] : [9, 10];
+  const taken = new Set([`${home.q},${home.r}`]);
+  const ring = [];
+  for (let dq = -dMax; dq <= dMax; dq++) for (let dr = -dMax; dr <= dMax; dr++) {
+    const t = { q: home.q + dq, r: home.r + dr }, d = hexDistance(home, t);
+    if (d >= dMin && d <= dMax && !isLabyrinthWallAt(seed, t.q, t.r)) ring.push(t);
+  }
+  const bootstrap = [...me.multiaddrs], gunUrls = me.gun_url ? [me.gun_url] : [];
+  // A worker's "UI socket on ws://…" / "peer listening on" line would match the plugin's
+  // node_ready regex and repoint the phone's HUD at the ally — reword it (line-buffered).
+  const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'ally UI socket at ').replace(/peer listening on/g, 'ally listening at');
+  const relabel = () => {
+    let tail = '';
+    return new Transform({
+      transform(chunk, _enc, cb) { const lines = (tail + chunk).split('\n'); tail = lines.pop(); cb(null, lines.length ? reword(lines.join('\n') + '\n') : ''); },
+      flush(cb) { cb(null, tail ? reword(tail) : ''); },
+    });
+  };
+  for (const [i, c] of allies.entries()) {
+    const free = ring.filter(t => !taken.has(`${t.q},${t.r}`));
+    const tile = free[Math.floor(Math.random() * free.length)];
+    if (!tile) { console.error(`[team] no free tile ${dMin}–${dMax} hexes from (${home.q},${home.r}) for ${c.name}`); continue; }
+    taken.add(`${tile.q},${tile.r}`);
+    const [pL, pH, pG] = await Promise.all([freePort(), freePort(), freePort()]);
+    const tag = `${label}-ally${i + 1}`;
+    const env = {
+      ...process.env,
+      ...profileEnv(file, c),
+      PEER_LABEL: tag, ALLIANCE: 'npc_a', CREATURE_ID: '', START_TILE: JSON.stringify(tile),
+      PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
+      BOOTSTRAP: bootstrap.join(','), PEER_GUN_URLS: gunUrls.join(','), JOIN_SYNC_WAIT_MS: '8000',
+      OWNER_PEER_ID: '', PHANTOM: '', REPLACES_PEER_ID: '', START_LIFE: '',
+    };
+    delete env.JOIN_URI; delete env.MAP_BLOCKS_FILE; delete env.MAP_BLOCKS;
+    const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
+    w.stdout.pipe(relabel()).on('data', b => process.stdout.write(b));
+    w.stderr.pipe(relabel()).on('data', b => process.stderr.write(b));
+    w.on('error', (e) => console.error(`[team] ${tag} (${c.name}) failed: ${e.message}`));
+    w.on('exit', (code) => console.log(`[team] ${tag} (${c.name}) left (${code})`));
+    console.log(`[team] ${c.name} (${c.base_character}) enters as ${tag} at (${tile.q},${tile.r}), ${hexDistance(home, tile)} hexes from me (${tier})`);
+    const st = await waitStatus(pH, 120_000);
+    if (st) { bootstrap.push(...st.multiaddrs); if (st.gun_url) gunUrls.push(st.gun_url); }
+  }
+}
+if (teamAllies) startTeamAllies(teamAllies).catch(e => console.error(`[team] allies failed: ${e.message}`));
+
 // The phone starts as a random character each launch (user ruling 2026-11-12) unless one is pinned.
 // Same data/ lookup as peer.mjs (../data next to the bundle), falling back to the bundled ./data.
 if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random')) {

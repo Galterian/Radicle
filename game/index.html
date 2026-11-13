@@ -29,6 +29,7 @@
 
       <div class="mode-panel" data-for="join-door">
         <label>Door<select id="pick-door"></select></label>
+        <button type="button" id="pick-door-team" class="join-team-btn" hidden>Join my team</button>
         <div class="hint">Every player holds a Door into the dimension — their piece of the puzzle — and publishes it to Radicle once a minute. A Door newer than 3 minutes means that player is in there right now.</div>
       </div>
 
@@ -71,6 +72,12 @@
         <button id="go" type="button" disabled>Launch</button>
         <span id="launch-msg" class="hint"></span>
       </div>
+
+      <!-- Profile panel (user ruling 2026-11-13) — filled by js/profile-ui.js. -->
+      <fieldset id="profile-panel" class="profile-panel">
+        <legend>Your profile</legend>
+        <div class="pp-body">loading your profile…</div>
+      </fieldset>
 
       <section id="dim-explorer" class="dim-explorer" aria-label="Dimensions explorer">
         <header class="dx-head">

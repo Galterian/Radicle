@@ -43,8 +43,9 @@ import java.io.File
 class NodejsMobilePlugin(godot: Godot) : GodotPlugin(godot) {
     companion object {
         private const val TAG = "NodejsMobile"
-        // peer.mjs prints "UI socket on ws://127.0.0.1:N/"; the older wording is kept too.
-        private const val READY_RE = """(?:peer listening on|UI socket on ws://)127\.0\.0\.1:(\d+)"""
+        // peer.mjs prints "UI socket on ws://127.0.0.1:N/"; the start menu (mobile-menu.mjs)
+        // prints "peer listening on 127.0.0.1:N".
+        private const val READY_RE = """(?:peer listening on\s*|UI socket on ws://)127\.0\.0\.1:(\d+)"""
     }
 
     override fun getPluginName() = "NodejsMobile"

@@ -4,7 +4,7 @@
 
 import { createRenderer } from './renderer.js';
 import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
-import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS } from './map.js';
+import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged } from './features.js';
 import { buildingBonusAt, bonusText, clearBuildingBonusMemo, fortressAt, dungeonAt, dungeonExplored, DUNGEON_REARM_TURNS, schoolAt, LEARN_REARM_TURNS } from './building-bonus.js';
@@ -188,7 +188,8 @@ const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '
 const sounds = createSoundBank();
 try { sounds.set(localStorage.getItem('chaosd6.muted') === '1'); } catch { /* no storage */ }
 let rendererRef = null;   // set in wireInput(); the ws handler needs it for attack triggers
-const sourceIdOf = (p) => p?.source_id || p?.sourceId || p?.character_id || p?.creature_id || null;
+// A profile character (user ruling 2026-11-13) shows the unit it picked: resources_id names that unit.
+const sourceIdOf = (p) => p?.resources_id || p?.source_id || p?.sourceId || p?.character_id || p?.creature_id || null;
 const resOf = (p) => resourcesFor(sourceIdOf(p));
 
 // Direct DOM poke rather than importing from launcher.js — launcher.js is the
@@ -1247,9 +1248,11 @@ function worldFeatures() {
 // known-but-out-of-sight tiles and to hide enemies the team can't see.
 // Monster sight is handled by resolver AI (not shown on the map). HERO +
 // ALLY share the 10-hex ring; everything else contributes nothing.
+// Join my team (user ruling 2026-11-13): a teammate's new gate is in sight until the end of the next
+// turn — one REVEAL_RADIUS disc per `vision-grant` while state.turn <= until_turn.
+const visionGrants = [];
 function recomputeSightSet() {
   const set = new Set();
-  if (!state.entities || !state.entities.length) { state.ui.sightSet = set; return; }
   const addDisc = (q, r, radius) => {
     const R = Math.max(0, radius | 0);
     for (let dq = -R; dq <= R; dq++) {
@@ -1258,6 +1261,12 @@ function recomputeSightSet() {
       for (let dr = lo; dr <= hi; dr++) set.add(`${q + dq},${r + dr}`);
     }
   };
+  for (let i = visionGrants.length - 1; i >= 0; i--) {
+    const g = visionGrants[i];
+    if (Number.isFinite(state.turn) && state.turn > g.until_turn) { visionGrants.splice(i, 1); continue; }
+    addDisc(g.q, g.r, DEFAULT_REVEAL_RADIUS);
+  }
+  if (!state.entities || !state.entities.length) { state.ui.sightSet = set; return; }
   for (const e of state.entities) {
     if (e.life <= 0) continue;
     if (!Number.isInteger(e.tile_q) || !Number.isInteger(e.tile_r)) continue;
@@ -1269,6 +1278,7 @@ function recomputeSightSet() {
     addDisc(e.tile_q, e.tile_r, radius);
   }
   state.ui.sightSet = set;
+  checkEncounter(set);
 }
 
 function hexDistanceTo(e) {
@@ -1389,7 +1399,7 @@ function renderRoster() {
     })();
     const team = teamLabel(e);
     const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
-    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}<span class="team" title="ally"></span></span>
+    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}${e.team_name ? `<span class="team-name" title="profile team">${escHtml(e.team_name)} team</span>` : ''}<span class="team" title="ally"></span></span>
       <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
@@ -1826,7 +1836,7 @@ function renderHoverCard(clientX, clientY) {
       <div class="hc-head">
         ${src ? `<img class="hc-thumb" src="${escHtml(src)}" alt="">` : ''}
         <div class="hc-meta">
-          <div class="hc-name">${escHtml(p.name)}</div>
+          <div class="hc-name">${escHtml(p.name)}${p.team_name ? ` <span class="team-name">${escHtml(p.team_name)} team</span>` : ''}</div>
           <div class="hc-sub">${escHtml(sub)}</div>
           <div class="hc-hp">hp ${p.life}/${p.life_max} · ${escHtml(p.alliance || '')}${p.life <= 0 ? ' · dead' : ''}${tier ? ' · ' + escHtml(tier) : ''}</div>
           <div class="hc-coords">(${p.tile_q ?? '—'}, ${p.tile_r ?? '—'})</div>
@@ -2424,6 +2434,8 @@ function connect() {
         if (typeof m.deck_min === 'number') state.deckMin = m.deck_min;
         if (typeof m.circulating === 'number') state.circulating = m.circulating;
         if (m.notice) logUI(m.notice, 'phase');
+        // Profile moments (card won / lost on a kill, a teammate's gate) also get a banner over the map.
+        if (m.notice && /^(🏆|☠|⚑)/u.test(m.notice)) profileBanner(m.notice, m.notice.startsWith('☠') ? 'loss' : m.notice.startsWith('🏆') ? 'gain' : 'gate');
         if (Array.isArray(m.queued)) state.queued = m.queued;
         if (Array.isArray(m.queued_skills)) state.queuedSkills = m.queued_skills;
         if (m.queued_extra !== undefined) state.queuedExtra = typeof m.queued_extra === 'number' ? m.queued_extra : null;
@@ -2701,6 +2713,14 @@ function connect() {
         }
         if (state._loggedStandoff.size > 500) state._loggedStandoff = new Set([...state._loggedStandoff].slice(-100));
       }
+      if (m.kind === 'vision-grant' && Number.isInteger(m.q) && Number.isInteger(m.r)) {
+        const until = Number.isFinite(Number(m.until_turn)) ? Number(m.until_turn) : (state.turn ?? 0) + 1;
+        if (!visionGrants.some(g => g.q === m.q && g.r === m.r && g.until_turn === until)) {
+          visionGrants.push({ q: m.q, r: m.r, until_turn: until, from_name: m.from_name || '' });
+          logUI(`👁 ${m.from_name || 'a teammate'} opened a gate at (${m.q},${m.r})${m.reason ? ` — ${m.reason}` : ''}: in sight until the end of turn ${until}`, 'phase');
+          recomputeSightSet();
+        }
+      }
       if (m.kind === 'standoff') {
         logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
       }
@@ -2720,6 +2740,52 @@ function connect() {
       }
     } catch (e) { console.error(e); }
   };
+}
+
+// Desktop + phone: banners for the moments a player must not miss (user ruling 2026-11-13) —
+// a card won or lost to the profile, a teammate's gate, the encounter defeated. Sticky ones
+// stay until closed; a card won / lost fades after 25 s, the rest after 12 s. At most three, newest on top.
+function profileBanner(text, kind = '', { sticky = false } = {}) {
+  let box = document.getElementById('pf-banners');
+  if (!box) { box = document.createElement('div'); box.id = 'pf-banners'; document.body.appendChild(box); }
+  const b = document.createElement('div');
+  b.className = `pf-banner ${kind}`;
+  const span = document.createElement('span');
+  span.textContent = text;
+  const x = document.createElement('button');
+  x.type = 'button'; x.className = 'pf-banner-x'; x.textContent = '✕'; x.title = 'dismiss';
+  x.onclick = () => b.remove();
+  b.append(span, x);
+  box.prepend(b);
+  while (box.children.length > 3) box.lastChild.remove();
+  const ms = kind === 'gain' || kind === 'loss' ? 25000 : 12000;
+  if (!sticky) { setTimeout(() => b.classList.add('out'), ms); setTimeout(() => b.remove(), ms + 600); }
+}
+
+// Encounter defeated (user ruling 2026-11-13): once every enemy the team has seen is down and none
+// is in sight, tell the player the encounter is won and they may quit safely (profile writes are
+// immediate). A fresh enemy coming into sight starts a new encounter.
+// (state lives on state.ui: recomputeSightSet can run before this line is evaluated)
+function checkEncounter(sight) {
+  const encounter = (state.ui.encounter ||= { seen: new Set(), done: false });
+  if (!state.myPeerId || !state.entities?.length) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me) return;
+  const byId = new Map(state.entities.map(e => [e.peer_id, e]));
+  for (const e of state.entities) {
+    if (e.peer_id === state.myPeerId || e.owner_peer_id === state.myPeerId || sameSide(e) || !(e.life > 0) || isGone(e)) continue;
+    if (!sight.has(`${e.tile_q},${e.tile_r}`)) continue;
+    if (!encounter.seen.has(e.peer_id)) { encounter.seen.add(e.peer_id); encounter.done = false; }
+  }
+  if (encounter.done || !encounter.seen.size || !(me.life > 0)) return;
+  const ids = [...encounter.seen];
+  // Down = dead, left the mesh, or gone stale (same rule as the roster's isDead).
+  if (!ids.every(id => { const e = byId.get(id); return !e || !(e.life > 0) || isGone(e); })) return;
+  if (!ids.some(id => byId.has(id) && byId.get(id).life <= 0)) return;   // at least one actually killed
+  encounter.done = true;
+  const text = `🏁 Encounter defeated — every enemy you saw (${ids.length}) is down. You may quit safely: your profile is already saved.`;
+  logUI(text, 'phase');
+  profileBanner(text, 'win', { sticky: true });
 }
 
 // Phone: short-lived notices over the map (HP changes, deaths) — the event log

@@ -26,6 +26,18 @@ var peer_url := ""
 ## wait for peer_url_ready vs. fall through to its own URL resolution.
 var active := false
 
+## The chaosd6:// link the app was started with ("" for a plain launch).
+var deep_link := ""
+
+## True while port 7401 is served by the start menu (game/mobile-menu.mjs),
+## not by the peer (user ruling 2026-11-13). A plain launch runs the menu
+## first; its ready line ("[menu] … peer listening on 127.0.0.1:N") fires
+## node_ready like the peer's does, so peer_url_ready is emitted twice: once
+## for the menu (menu_open = true) and once when peer.mjs takes the port over
+## ("UI socket on ws://127.0.0.1:N/", menu_open = false). node_stdout for a
+## line is emitted before its node_ready, so the flag is set in time.
+var menu_open := false
+
 var _plugin: Object = null
 
 
@@ -71,6 +83,7 @@ func _start_with_path(script_path: String) -> void:
     for a in OS.get_cmdline_args():
         if a.begins_with("chaosd6://"):
             env["JOIN_URI"] = a
+            deep_link = a
             break
     print("[EmbeddedPeer] startNode script=%s" % script_path)
     var rc: int = _plugin.startNode(script_path, env)
@@ -88,6 +101,12 @@ func _on_node_ready(port: int) -> void:
 
 
 func _on_node_stdout(line: String) -> void:
+    # Who holds the UI port (see menu_open). Ally / companion workers reword
+    # their ready lines, so only the menu and my own peer match here.
+    if line.contains("[menu] ") and line.contains("peer listening on 127.0.0.1:"):
+        menu_open = true
+    elif line.contains("UI socket on ws://127.0.0.1:"):
+        menu_open = false
     print("[peer] %s" % line)
     peer_log.emit(line, false)
 

@@ -28,7 +28,10 @@ import { RADICLE_BARE, radicleEnv, listPublishedDimensions } from './radicle-ada
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { fancyLabel } from './js/names.js';
 import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
-import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors } from './join-plan.mjs';
+import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing } from './join-plan.mjs';
+import { seedForDimension } from './js/map.js';
+import { randomBytes } from 'node:crypto';
+import { handleProfileApi, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -247,7 +250,14 @@ function commonPeerEnv() {
   };
 }
 
-async function startDimension({ dimensionName, publicIp }) {
+// Test-team allies stand this far from player-1 (user ruling 2026-11-13):
+// 'strong' inside STRONG_RADIUS, 'reachable' just past it, inside REACH_RADIUS.
+const TEAM_TIER_RING = { strong: { min: 2, max: 6 }, reachable: { min: 9, max: 10 } };
+
+// `override` (profile launches, user ruling 2026-11-13) replaces the hero and/or
+// the default ally: { hero: profile character | null (random), allies: [profile
+// characters] (bots, alliance npc_a) | null (the Pride Guardian), tier }.
+async function startDimension({ dimensionName, publicIp }, override = null) {
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   const DIM_NAME = (dimensionName || 'Ashfall-Micro').trim();
   const DIM_ID   = `dim-${slug(DIM_NAME)}`;
@@ -255,13 +265,29 @@ async function startDimension({ dimensionName, publicIp }) {
   const ip = (publicIp || '').trim() || defaultPublicIp();
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error(`"${ip}" is not an IPv4 address`);
   const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
-  const hero = randomCharacter();
+  const pc = override?.hero || null;
+  const hero = pc ? { id: pc.base_character, name: pc.name } : randomCharacter();
+  const file = profilePath();
   const roster = [
-    { label: 'player-1', alliance: 'player', character: hero.id, creature: '',                                          name: `You (${hero.name})`,   tile: { q: 1, r: 2 } },
+    { label: 'player-1', alliance: 'player', character: hero.id, creature: '',                                          name: pc ? pc.name : `You (${hero.name})`, tile: { q: 1, r: 2 }, profile: pc },
     { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 } },
     { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 } },
     { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 } },
   ];
+  if (override?.allies?.length) {
+    // "Test my team": the next characters of the team order replace the Pride
+    // Guardian, each on a walkable hex at the tier's distance from player-1.
+    const ring = TEAM_TIER_RING[override.tier] || TEAM_TIER_RING.reachable;
+    const seed = seedForDimension(DIM_ID);
+    roster.splice(1, 1);
+    const occupied = new Set(roster.map(p => `${p.tile.q},${p.tile.r}`));
+    override.allies.forEach((c, i) => {
+      const tile = tileInRing(roster[0].tile, { ...ring, seed, salt: c.id, occupied });
+      if (!tile) throw new Error(`no walkable hex ${ring.min}–${ring.max} hexes from player-1 for ${c.name}`);
+      occupied.add(`${tile.q},${tile.r}`);
+      roster.splice(1 + i, 0, { label: `ally-${i + 1}`, alliance: 'npc_a', character: c.base_character, creature: '', name: c.name, tile, profile: c });
+    });
+  }
   // http and gun live in different base ranges (7401, 7501) and don't collide,
   // so probe them in parallel. libp2p (7410) sits inside http's search region,
   // so it has to wait for httpBase and start past it — this is the fix for the
@@ -298,6 +324,7 @@ async function startDimension({ dimensionName, publicIp }) {
       JOIN_SYNC_WAIT_MS: p === peers[0] ? '500' : '8000',
       ...commonPeerEnv(),
       ...netEnv,
+      ...(p.profile ? profileEnv(file, p.profile) : {}),
     });
     if (!(await waitForPort(p.http))) throw new Error(`peer-${p.label} did not come up on :${p.http}`);
     try {
@@ -345,8 +372,10 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   if (!liveDoors.length) console.log(`[launcher] ${dimensionName}: no Door newer than ${DOOR_LIVE_MS / 60000} min — joining an empty dimension; you will be alone until someone else arrives`);
 
   const knownMap = mapFromDoors(dim);
-  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile });
-  if (!knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
+  // 'far' ("Join my team") lands 30–50 hexes out, past the known map, on a hex
+  // the deterministic map says is walkable; every other placement stays on it.
+  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile, salt: randomBytes(4).toString('hex') });
+  if (placement !== 'far' && !knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
   console.log(`[launcher] ${dimensionName}: map from ${dim.doors.length} Doors = ${knownMap.size()} hexes in ${knownMap.blockCount()} blocks (seed ${knownMap.seed})`);
   // Hundreds of blocks don't fit comfortably in an environment variable; hand
   // the joiner a file instead.
@@ -627,17 +656,66 @@ async function handleApi(req, res, p) {
     try {
       const body = JSON.parse(await readBody(req));
       let out;
-      if (body.mode === 'host' || body.mode === 'start') out = await startDimension(body);
-      else if (body.mode === 'join') out = await joinDimension(body);
+      if (body.mode === 'host' || body.mode === 'start' || body.mode === 'test-random') out = await startDimension(body);
+      else if (body.mode === 'test-character' || body.mode === 'test-team' || body.mode === 'join-team') out = await launchProfile(body);
+      else if (body.mode === 'join') out = await joinDimension(withProfileJoiner(body));
       else if (body.mode === 'restore') out = await restoreDimension(body);
       else throw new Error(`unknown mode "${body.mode}"`);
       return json(200, { ok: true, ...out });
     } catch (e) {
       console.error(`[launcher] /api/launch failed: ${e.message}`);
-      return json(500, { ok: false, error: e.message });
+      return json(e.status || 500, { ok: false, error: e.message });
     } finally { launching = false; }
   }
+  if (await handleProfileApi(req, res, p, { file: profilePath(), dataDir: DATA_DIR })) return;
   res.writeHead(404); res.end('not found');
+}
+
+// ---------- profile launches (user ruling 2026-11-13) ----------
+const badRequest = (msg) => Object.assign(new Error(msg), { status: 400 });
+
+// test-character / test-team / join-team: the profile's characters play.
+async function launchProfile(body) {
+  const prof = loadProfile(profilePath());
+  if (!prof.characters.length) throw badRequest('Create a character first');
+  if (body.mode === 'test-character') {
+    const c = characterOf(prof, body.profileCharId);
+    if (!c) throw badRequest(`no profile character "${body.profileCharId}"`);
+    return startDimension(body, { hero: c, allies: null });
+  }
+  if (body.mode === 'test-team') {
+    const count = Number(body.count);
+    const team = teamCharacters(prof);
+    if (body.tier != null && !['strong', 'reachable'].includes(body.tier)) throw badRequest('tier must be "reachable" or "strong"');
+    if (!Number.isInteger(count) || count < 2 || count > team.length) {
+      throw badRequest(team.length < 2
+        ? `Test my team needs at least 2 characters (the profile has ${team.length})`
+        : `count must be a whole number from 2 to ${team.length} (your characters)`);
+    }
+    return startDimension(body, { hero: team[0], allies: team.slice(1, count), tier: body.tier === 'strong' ? 'strong' : 'reachable' });
+  }
+  // join-team: the top character opens a gate 30–50 hexes from that Door.
+  if (!body.dimensionName) throw badRequest('dimensionName is required');
+  if (!body.doorId) throw badRequest('doorId is required');
+  const c = topCharacter(prof);
+  return joinDimension({
+    dimensionName: body.dimensionName, doorId: body.doorId, placement: 'far', side: 'player',
+    characterId: c.base_character, creatureId: '', label: body.label || '', entityName: c.name,
+    extraEnv: { ...profileEnv(profilePath(), c), TEAM_GATE: '1', TEAM_GATE_DOOR: String(body.doorId) },
+  });
+}
+
+// A plain join with no explicit character (or characterId 'profile:top') joins
+// as the top profile character when the profile has one.
+function withProfileJoiner(body) {
+  const wantsTop = body.characterId === 'profile:top' || (!body.characterId && !body.creatureId);
+  if (!wantsTop) return body;
+  const c = topCharacter(loadProfile(profilePath()));
+  if (!c) return body.characterId === 'profile:top' ? { ...body, characterId: '' } : body;
+  return {
+    ...body, characterId: c.base_character, creatureId: '', entityName: c.name,
+    extraEnv: { ...(body.extraEnv || {}), ...profileEnv(profilePath(), c) },
+  };
 }
 
 // ---------- original UI handlers (unchanged below) ----------

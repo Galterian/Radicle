@@ -1182,3 +1182,141 @@ html.mobile #deck-row { max-width: 100%; }
 /* A negated action card comes back to the hand. */
 .slot.card-returned { animation: card-returned 1.3s ease-out; }
 @keyframes card-returned { 0% { transform: translateY(-40px); box-shadow: 0 0 0 2px #ffd76e, 0 0 18px #ffd76e; } 60% { transform: translateY(4px); } 100% { transform: translateY(0); box-shadow: none; } }
+
+/* ---------------------------------------------------------------------------
+   Profile panel + character / team editors (user ruling 2026-11-13) — js/profile-ui.js.
+   The panel sits under the Launch button; the editors are a fixed overlay sized for a
+   desktop window and a phone in landscape (html.mobile: bigger touch targets).
+   --------------------------------------------------------------------------- */
+html.in-launcher, html.in-launcher body { height: auto; min-height: 100%; overflow: auto; }
+/* The phone layout pins the game's stage / roster full-screen (fixed), which beats `main[hidden]`. */
+html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar { display: none !important; }
+.launcher-card .profile-panel { margin: 14px 0 0; }
+.profile-panel .pp-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #d2dae7; }
+.profile-panel .pp-status { font-size: 12px; color: #8aa0bf; margin-bottom: 2px; }
+.profile-panel .pp-status.bad, .profile-panel .pp-msg.bad { color: #e26b6b; }
+.profile-panel .pp-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.profile-panel .pp-btn { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; padding: 6px 12px; font: inherit; font-weight: 600; cursor: pointer; min-width: 190px; text-align: left; }
+.profile-panel .pp-btn:hover:not([disabled]) { border-color: #2a6ddf; background: #20335a; }
+.profile-panel .pp-btn[disabled] { background: #141a24; color: #5a6a82; border-color: #1a2130; cursor: not-allowed; }
+.profile-panel .pp-btn.join-team-main { background: #1e3a26; border-color: #2f5c3a; }
+.profile-panel .pp-btn.join-team-main[disabled] { background: #141a24; border-color: #1a2130; }
+.profile-panel .pp-select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 5px 8px; font: inherit; flex: 1 1 200px; min-width: 160px; }
+.profile-panel .pp-select.pp-small { flex: 0 1 auto; min-width: 120px; }
+.profile-panel .pp-hint { font-size: 11px; color: #6a7a92; }
+.profile-panel .pp-msg { font-size: 12px; color: #8aa0bf; min-height: 1em; }
+.join-team-btn { background: #1e3a26; color: #8ddc9f; border: 1px solid #2f5c3a; border-radius: 10px; padding: 1px 8px; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.join-team-btn:hover:not([disabled]) { border-color: #6ad99f; }
+.join-team-btn[hidden] { display: none; }
+.launcher-card .mode-panel #pick-door-team { margin: 2px 0 6px; padding: 4px 12px; font-size: 12px; }
+
+/* Phone menu (?mobile=1&menu=1): only the profile panel, big buttons. */
+html.menu-mode .launcher-card > :not(h1):not(#profile-panel) { display: none !important; }
+html.menu-mode #launcher { padding: 12px; }
+html.menu-mode .launcher-card { max-width: 980px; }
+html.menu-mode .profile-panel .pp-body { gap: 10px; font-size: 16px; }
+html.menu-mode .profile-panel .pp-btn { min-height: 52px; min-width: 300px; font-size: 18px; padding: 10px 18px; }
+html.menu-mode .profile-panel .pp-select { min-height: 48px; font-size: 16px; }
+html.menu-mode .profile-panel .pp-hint, html.menu-mode .profile-panel .pp-status, html.menu-mode .profile-panel .pp-msg { font-size: 14px; }
+html.mobile .join-team-btn { min-height: 34px; font-size: 13px; padding: 4px 12px; }
+
+/* Editor overlay */
+.pe-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(8, 10, 15, 0.78); display: flex; align-items: center; justify-content: center; padding: 2vh 2vw; }
+.pe-modal { background: #0f131b; border: 1px solid #2a3447; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); width: min(1180px, 96vw); max-height: 96vh; display: flex; flex-direction: column; color: #d2dae7; font-size: 13px; }
+.pe-modal.pe-team { width: min(640px, 96vw); }
+.pe-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #1a2130; }
+.pe-title { font-size: 16px; font-weight: 600; color: #e8ecf1; }
+.pe-x { background: none; border: 1px solid #2a3447; color: #8aa0bf; border-radius: 4px; width: 32px; height: 32px; font-size: 16px; cursor: pointer; }
+.pe-body { flex: 1 1 auto; overflow-y: auto; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.pe-team .pe-body { flex-direction: column; flex-wrap: nowrap; }
+.pe-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pe-ident { flex: 1 1 300px; max-width: 420px; }
+.pe-deck { flex: 3 1 460px; }
+.pe-sec { display: flex; flex-direction: column; gap: 6px; }
+.pe-sec-title { color: #8aa0bf; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.pe-lock { text-transform: none; letter-spacing: 0; color: #6a7a92; font-size: 11px; }
+.pe-name, .pe-select { background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 6px 8px; font: inherit; width: 100%; }
+.pe-name[disabled] { color: #8aa0bf; }
+.pe-fixed { color: #e8ecf1; font-weight: 600; }
+.pe-stats, .pe-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+.pe-stat, .pe-act { display: flex; align-items: center; gap: 6px; background: #141a24; border: 1px solid #1a2130; border-radius: 4px; padding: 4px 8px; }
+.pe-stat-name, .pe-act-name { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-stat.st-vitality .pe-stat-name { color: #e26b6b; }
+.pe-stat.st-world .pe-stat-name { color: #6ad99f; }
+.pe-stat.st-matter .pe-stat-name { color: #e8c272; }
+.pe-stat.st-will .pe-stat-name { color: #8bb7ff; }
+.pe-stat-val { min-width: 2.2ch; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; color: #e8ecf1; }
+.pe-step { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; width: 30px; height: 28px; font: inherit; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+.pe-step[disabled] { opacity: .35; cursor: not-allowed; }
+.pe-sum, .pe-deckcount { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 700; color: #8ddc9f; font-variant-numeric: tabular-nums; }
+.pe-sum.bad, .pe-deckcount.bad { color: #e26b6b; }
+.pe-class-text { font-size: 12px; color: #a9b8cd; line-height: 1.35; max-height: 9em; overflow-y: auto; }
+.pe-unit { display: flex; align-items: center; gap: 10px; }
+.pe-portrait { width: 72px; height: 72px; object-fit: contain; image-rendering: pixelated; background: #0b0d12; border: 1px solid #1a2130; border-radius: 4px; }
+.pe-portrait[hidden] { display: none; }
+.pe-unit-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pe-unit-name { color: #e8ecf1; }
+.pe-play { background: #1e3a26; color: #8ddc9f; border: 1px solid #2f5c3a; border-radius: 50%; width: 32px; height: 32px; cursor: pointer; font-size: 13px; }
+.pe-play[disabled] { opacity: .35; cursor: not-allowed; }
+.pe-combo { display: flex; gap: 6px; }
+.pe-combo-k { background: #141a24; border: 1px solid #2a3447; border-radius: 4px; padding: 3px 10px; font-weight: 700; color: #e8ecf1; }
+.pe-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.pe-card { display: flex; flex-direction: column; gap: 3px; text-align: left; background: #141a24; color: #d2dae7; border: 1px solid #1f2838; border-left: 3px solid #4a5566; border-radius: 5px; padding: 6px 8px; font: inherit; font-size: 12px; cursor: pointer; touch-action: manipulation; }
+.pe-card.in-deck { border-color: #2f5c3a; border-left-color: #6ad99f; background: #13201a; }
+.pe-card.in-archive { opacity: .62; }
+.pe-card:hover { border-color: #2a6ddf; }
+.pe-card-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.pe-card-kind { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: #8bb7ff; }
+.pe-card.kind-effect .pe-card-kind { color: #b07cff; }
+.pe-card-name { color: #e8ecf1; }
+.pe-card-elems { font-size: 10px; color: #e8c272; }
+.pe-card-flags { display: flex; flex-wrap: wrap; gap: 3px; }
+.pe-flag { font-size: 10px; line-height: 1.4; padding: 0 5px; border-radius: 3px; background: #1d2636; color: #a9bad3; border: 1px solid #2a3850; text-transform: uppercase; letter-spacing: .03em; }
+.pe-flag.perm { background: #2b2440; color: #d6b8ff; border-color: #5a3f8f; }
+/* A card won from a kill glows until the player taps it (user ruling 2026-11-13). */
+.pe-card.is-new { opacity: 1; border-color: #e8c272; border-left-color: #ffd34d; animation: pe-new-glow 1.6s ease-in-out infinite; }
+.pe-card-new { font-size: 10px; font-weight: 700; color: #1a1406; background: #ffd34d; border-radius: 3px; padding: 0 5px; }
+@keyframes pe-new-glow { 0%, 100% { box-shadow: 0 0 4px 1px rgba(255, 211, 77, .35); } 50% { box-shadow: 0 0 14px 4px rgba(255, 211, 77, .85); } }
+.profile-panel .pp-new { font-size: 12px; color: #ffd34d; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.profile-panel .pp-new-open { font: inherit; font-size: 11px; color: #1a1406; background: #ffd34d; border: 0; border-radius: 4px; padding: 2px 8px; cursor: pointer; animation: pe-new-glow 1.6s ease-in-out infinite; }
+.pe-card-text { color: #a9b8cd; line-height: 1.3; }
+.pe-card-from { font-size: 10px; color: #e8c272; }
+.pe-where { align-self: flex-end; font-size: 11px; font-weight: 700; color: #8ddc9f; }
+.pe-card.in-archive .pe-where { color: #8aa0bf; }
+.pe-foot { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #1a2130; }
+.pe-err { flex: 1 1 auto; font-size: 12px; color: #8aa0bf; }
+.pe-err.bad { color: #e26b6b; }
+.pe-save { background: #2a6ddf; color: white; border: 0; padding: 8px 16px; border-radius: 4px; font: inherit; font-weight: 600; cursor: pointer; }
+.pe-save[disabled] { background: #253044; color: #6a7a92; cursor: not-allowed; }
+.pe-cancel { background: none; color: #8aa0bf; border: 1px solid #2a3447; padding: 8px 14px; border-radius: 4px; font: inherit; cursor: pointer; }
+.pe-team-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pe-member { display: flex; align-items: center; gap: 8px; background: #141a24; border: 1px solid #1a2130; border-radius: 4px; padding: 6px 8px; }
+.pe-member.is-top { border-color: #2f5c3a; background: #13201a; }
+.pe-member.dragging { opacity: .5; }
+.pe-rank { color: #6a7a92; font-variant-numeric: tabular-nums; min-width: 2.5ch; }
+.pe-member-name { flex: 1 1 auto; color: #e8ecf1; }
+.pe-top { font-size: 11px; color: #8ddc9f; white-space: nowrap; }
+.pe-member-moves { display: flex; gap: 4px; }
+html.mobile .pe-overlay { padding: 1vh 1vw; }
+html.mobile .pe-modal { width: 98vw; max-height: 98vh; font-size: 14px; }
+html.mobile .pe-step { width: 40px; height: 38px; font-size: 17px; }
+html.mobile .pe-x, html.mobile .pe-play { width: 40px; height: 40px; }
+html.mobile .pe-save, html.mobile .pe-cancel { min-height: 44px; font-size: 16px; padding: 10px 18px; }
+html.mobile .pe-name, html.mobile .pe-select { min-height: 42px; font-size: 15px; }
+html.mobile .pe-card { min-height: 64px; font-size: 13px; }
+
+/* "<team> team" next to a profile unit's name (roster, hover card). */
+.team-name { font-size: 10px; font-weight: 500; color: #8ddc9f; background: #1e3a26; border-radius: 8px; padding: 0 5px; white-space: nowrap; }
+html.mobile .ros .nm .team-name { margin-left: 4px; font-size: 8px; padding: 1px 4px; vertical-align: 1px; }
+
+/* Profile banners (main.js profileBanner — user ruling 2026-11-13): card won / lost, a teammate's gate,
+   encounter defeated. Desktop and phone, over the map. */
+#pf-banners { position: fixed; top: 46px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; max-width: min(760px, 92vw); }
+html.mobile #pf-banners { top: 30px; left: calc((100vw - var(--m-panel-w, 0px)) / 2); }
+.pf-banner { pointer-events: auto; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: rgba(12, 16, 24, .94); color: #e8ecf1; border: 1px solid #2a3850; font-size: 14px; font-weight: 600; box-shadow: 0 4px 18px rgba(0, 0, 0, .5); transition: opacity .5s ease, transform .5s ease; }
+.pf-banner.gain { border-color: #ffd34d; color: #ffe9a8; animation: pe-new-glow 1.6s ease-in-out 3; }
+.pf-banner.loss { border-color: #e36666; color: #ffc0c0; }
+.pf-banner.gate { border-color: #4f8fe8; color: #cfe1ff; }
+.pf-banner.win { border-color: #6ad99f; color: #c9f5dc; font-size: 16px; padding: 12px 16px; animation: pe-new-glow 1.6s ease-in-out 4; }
+.pf-banner.out { opacity: 0; transform: translateY(-8px); }
+.pf-banner-x { flex: none; background: transparent; border: 1px solid #3a4a64; color: #a9bad3; border-radius: 4px; cursor: pointer; font-size: 12px; padding: 2px 7px; }
