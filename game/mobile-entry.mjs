@@ -156,6 +156,14 @@ if (isMainThread && process.env.JOIN_URI) {
 //     Test my character / Test a random character / Test my team; then the peer starts as that.
 // A pinned character (CHARACTER_ID other than 'random', or PROFILE_CHAR_ID) skips both.
 let teamAllies = null;   // test-team: { allies, tier } — started as extra peers once mine is up
+// Profile ⇄ chaosD6-Profiles on Radicle (profile-radicle.mjs): started before the menu so it shows the sync
+// state, and kept running through the game so deaths / kills reach the team branch.
+if (isMainThread && process.env.PROFILE_SYNC !== '0') {
+  try {
+    const [{ startProfileSync }, { profilePath, attachProfileSync }] = await Promise.all([import('./profile-radicle.mjs'), import('./profile.mjs')]);
+    attachProfileSync(startProfileSync({ file: profilePath(), label: process.env.CHAOSD6_DEVICE_LABEL || 'phone' }));
+  } catch (e) { console.error(`[mobile] profile sync not started (${e.message})`); }
+}
 if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random') && !process.env.PROFILE_CHAR_ID) {
   try {
     const { profilePath, loadProfile, topCharacter, profileEnv } = await import('./profile.mjs');

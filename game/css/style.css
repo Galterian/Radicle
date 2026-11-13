@@ -1320,3 +1320,12 @@ html.mobile #pf-banners { top: 30px; left: calc((100vw - var(--m-panel-w, 0px)) 
 .pf-banner.win { border-color: #6ad99f; color: #c9f5dc; font-size: 16px; padding: 12px 16px; animation: pe-new-glow 1.6s ease-in-out 4; }
 .pf-banner.out { opacity: 0; transform: translateY(-8px); }
 .pf-banner-x { flex: none; background: transparent; border: 1px solid #3a4a64; color: #a9bad3; border-radius: 4px; cursor: pointer; font-size: 12px; padding: 2px 7px; }
+
+/* Profile panel: Radicle sync of the team branch (profile-radicle.mjs) */
+.pp-sync { margin: 6px 0; padding: 6px 8px; border: 1px solid #2c4a3a; border-radius: 6px; background: #0f1a15; font-size: 12px; }
+.pp-sync.bad { border-color: #6a5426; background: #1d170c; }
+.pp-sync-line { font-weight: 600; }
+.pp-sync-meta, .pp-sync-req { margin-top: 4px; opacity: .9; }
+.pp-devid { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 3px; background: #ffffff12; border-radius: 3px; cursor: pointer; word-break: break-all; }
+.pp-sync-team { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pp-team-in { width: 12em; padding: 3px 6px; background: #0b1220; color: inherit; border: 1px solid #3a4a66; border-radius: 4px; }

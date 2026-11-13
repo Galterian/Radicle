@@ -78,9 +78,17 @@ export function saveProfile(p, file = profilePath()) {
   fs.renameSync(tmp, file);   // atomic: a peer and the launcher may both write
 }
 // Read-modify-write in one go (peers write on death / kill while the launcher may be open).
+// Every character the edit changed gets rev+1 / updated_at: the Radicle sync (profile-radicle.mjs) merges
+// devices per character by them.
 export function updateProfile(fn, file = profilePath()) {
   const p = loadProfile(file);
+  const before = new Map(p.characters.map(c => [c.id, JSON.stringify(c)]));
   const out = fn(p);
+  const now = new Date().toISOString();
+  for (const c of p.characters) {
+    if (before.get(c.id) === JSON.stringify(c)) continue;
+    c.rev = (c.rev | 0) + 1; c.updated_at = now;
+  }
   saveProfile(p, file);
   return out;
 }
@@ -238,6 +246,7 @@ export function setTeam(p, { team_name, order }) {
     const o = order.filter((id, i, a) => ids.has(id) && a.indexOf(id) === i);
     for (const c of p.characters) if (!o.includes(c.id)) o.push(c.id);
     p.team_order = o;
+    p.order_at = new Date().toISOString();
   }
   for (const c of p.characters) c.team = p.team_name;
   return p;
@@ -245,6 +254,7 @@ export function setTeam(p, { team_name, order }) {
 export function deleteCharacter(p, id) {
   p.characters = p.characters.filter(c => c.id !== id);
   p.team_order = p.team_order.filter(x => x !== id);
+  (p.deleted ||= {})[id] = new Date().toISOString();   // tombstone: other devices drop it on sync
   return p;
 }
 
@@ -290,7 +300,13 @@ export function profileEnv(file, c) {
 //   PUT    /api/profile/characters/<id>      { actions?, cards?: [{uid, where}] } → deck edit
 //   DELETE /api/profile/characters/<id>
 //   PUT    /api/profile/team                 { team_name?, order?: [id…] }
+//   GET    /api/profile/sync                 → Radicle sync status (profile-radicle.mjs), { state: 'off' } without it
+//   POST   /api/profile/sync                 → sync now, then the status
+//   POST   /api/profile/sync/approve         { id } → add that device to the team's owners
 // Returns true when it answered the request.
+let _sync = null;
+/** The running Radicle sync (profile-radicle.mjs startProfileSync), or null. */
+export function attachProfileSync(s) { _sync = s; }
 async function readBody(req) {
   let s = '';
   for await (const ch of req) { s += ch; if (s.length > 1e6) break; }
@@ -310,6 +326,13 @@ export async function handleProfileApi(req, res, urlPath, { file = profilePath()
     if (m === 'PUT' && cm) { const b = await readBody(req); return send(200, { profile: updateProfile(p => editDeck(p, cm[1], b, cat), file) }), true; }
     if (m === 'DELETE' && cm) return send(200, { profile: updateProfile(p => deleteCharacter(p, cm[1]), file) }), true;
     if (m === 'PUT' && urlPath === '/api/profile/team') { const b = await readBody(req); return send(200, { profile: updateProfile(p => setTeam(p, b), file) }), true; }
+    if (urlPath === '/api/profile/sync' && m === 'GET') return send(200, _sync ? _sync.status() : { state: 'off', message: 'Radicle sync is not running' }), true;
+    if (urlPath === '/api/profile/sync' && m === 'POST') return send(200, _sync ? await _sync.syncNow({ requests: true }) : { state: 'off', message: 'Radicle sync is not running' }), true;
+    if (urlPath === '/api/profile/sync/approve' && m === 'POST') {
+      const b = await readBody(req);
+      if (!_sync) fail('Radicle sync is not running');
+      return send(200, await _sync.approve(String(b.id || ''))), true;
+    }
     send(404, { error: `no ${m} ${urlPath}` });
   } catch (e) { send(e.status || 500, { error: e.message }); }
   return true;
