@@ -2,10 +2,19 @@
 // (ui-server.mjs, Doors read from local Radicle storage) and the Android entry
 // (mobile-entry.mjs, Doors read from radicle-httpd on the OCI seed). Pure apart
 // from fetchDimensionFromHttpd.
+import fsSync from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { hexDistance } from './js/hex.js';
-import { createKnownMap, initialBlock, seedForDimension } from './js/map.js';
+import { createKnownMap, initialBlock, seedForDimension, hash32 } from './js/map.js';
+import { biomeFor } from './js/biome.js';
+import { isLabyrinthWallAt, setFeatureCatalog, featuresReady } from './js/features.js';
+import { setBigFeatureCatalog, bigFeaturesReady } from './js/bigfeature.js';
+import { fortressAt } from './js/building-bonus.js';
 import { fancyLabel } from './js/names.js';
 import { DEFAULT_RELAYS } from './nostr-bus.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 export const dimIdOf = d => d.dimension_id || d.dimension?.dimension_id || `dim-${slug(d.dimension_name)}`;
@@ -43,16 +52,80 @@ export function mapFromDoors(dim) {
   return km;
 }
 
+// The building catalogues decide where fortresses stand. The peer loads them at
+// boot (peer.mjs, same lookup order); a launcher that judges hexes off the known
+// map loads them once, lazily, so importing this file stays side-effect free.
+function ensureBuildingCatalogs() {
+  for (const [rel, ready, set] of [['features/feature_table.json', featuresReady, setFeatureCatalog], ['terrain_bigfeatures/bigfeature_table.json', bigFeaturesReady, setBigFeatureCatalog]]) {
+    if (ready()) continue;
+    const tries = [path.resolve(__dirname, 'js', 'catalog', path.basename(rel)), path.resolve(__dirname, '..', 'assets', rel), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, rel)] : [])];
+    const hit = tries.find(f => fsSync.existsSync(f));
+    if (hit) { try { set(JSON.parse(fsSync.readFileSync(hit, 'utf8'))); } catch {} }
+  }
+}
+
+// Can a unit stand on (q, r) of the dimension with map seed `seed`? Pure
+// (seed, q, r) — works on hexes nobody has revealed yet. Mirrors the peer's
+// static blockers (labyrinth walls, unbroken fortresses — peer.mjs
+// labyrinthBlocks) and refuses unwalkable biomes (water, lava, mountains,
+// cliffs — biome.js isWalkable) on top, so a joiner never starts in a lake.
+export function hexWalkableAt(seed, q, r) {
+  ensureBuildingCatalogs();
+  if (!biomeFor(seed).isWalkable(q, r)) return false;
+  if (isLabyrinthWallAt(seed, q, r)) return false;
+  return !fortressAt(seed, q, r);
+}
+
+// A walkable hex min..max hexes from `anchor`, deterministic in (seed, salt,
+// anchor): every hex of the ring band is ranked by a hash and the first one
+// `isBlocked` lets through wins. `occupied` = Set of "q,r" to avoid as well.
+// Returns null when the whole band is blocked.
+export function tileInRing(anchor, { min, max, seed, salt = '', isBlocked = null, occupied = null }) {
+  const blocked = isBlocked || ((q, r) => !hexWalkableAt(seed, q, r));
+  const cand = [];
+  for (let dq = -max; dq <= max; dq++) {
+    for (let dr = Math.max(-max, -dq - max); dr <= Math.min(max, -dq + max); dr++) {
+      const t = { q: anchor.q + dq, r: anchor.r + dr };
+      const d = hexDistance(t, anchor);
+      if (d < min || d > max) continue;
+      cand.push({ ...t, h: hash32(`${seed}:ring:${salt}:${anchor.q},${anchor.r}:${t.q},${t.r}`) });
+    }
+  }
+  cand.sort((a, b) => a.h - b.h || a.q - b.q || a.r - b.r);
+  for (const t of cand) {
+    if (occupied?.has(`${t.q},${t.r}`)) continue;
+    if (!blocked(t.q, t.r)) return { q: t.q, r: t.r };
+  }
+  return null;
+}
+
+// "Join my team" (user ruling 2026-11-13): the gate opens 30–50 hexes from the
+// anchor Door's hex — usually past the known map, so walkability comes from
+// the deterministic map functions, not from what anybody has revealed.
+export const FAR_MIN = 30, FAR_MAX = 50;
+export function farTileFrom(anchor, { min = FAR_MIN, max = FAR_MAX, seed, salt = '', isBlocked = null, occupied = null } = {}) {
+  return tileInRing(anchor, { min, max, seed, salt, isBlocked, occupied });
+}
+
 // Pick a start tile from what the Doors know. 'nearby' = adjacent to a friend
 // (or to the chosen player's Door); 'random' = a known hex outside everyone's
-// strong radius. Only hexes somebody has revealed are candidates.
-export function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2, preferredTile = null }) {
+// strong radius. Only hexes somebody has revealed are candidates — except
+// 'far' (farTileFrom: 30–50 hexes from the anchor Door, off the known map).
+export function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2, preferredTile = null, salt = '' }) {
   const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
   const alive = members
     .map(m => ({ peer_id: m.peer_id, q: m.tile?.q, r: m.tile?.r, alliance: m.alliance ?? m.clan, life: m.life ?? 1 }))
     .filter(m => Number.isInteger(m.q) && Number.isInteger(m.r) && (m.life ?? 1) > 0);
   const occupied = new Set(alive.map(m => `${m.q},${m.r}`));
-  const all = [...knownMap.tiles()].map(t => ({ q: t.q, r: t.r }));
+  if (placement === 'far') {
+    const own = members.find(m => m.peer_id === anchorPeerId && Number.isInteger(m.tile?.q) && Number.isInteger(m.tile?.r));
+    const friend = alive.find(m => sideOf(m.alliance) === sideOf(side));
+    const at = own ? { q: own.tile.q, r: own.tile.r } : friend ? { q: friend.q, r: friend.r } : { q: 2, r: 2 };
+    const t = farTileFrom(at, { seed: knownMap.seed, salt, occupied });
+    if (!t) throw new Error(`no walkable hex ${FAR_MIN}–${FAR_MAX} hexes from (${at.q},${at.r})`);
+    return t;
+  }
+  const all =[...knownMap.tiles()].map(t => ({ q: t.q, r: t.r }));
   const free = all.filter(t => !occupied.has(`${t.q},${t.r}`));
   if (!free.length) throw new Error('the grid is full');
   const minDist = (t, set) => set.length ? Math.min(...set.map(m => hexDistance(t, m))) : Infinity;
@@ -156,7 +229,7 @@ export function planJoin(dim, { doorId = null, side = 'player', placement = 'nea
   const liveDoors = dim.doors.filter(isLiveDoor);
   const knownMap = mapFromDoors(dim);
   const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile });
-  if (!knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
+  if (placement !== 'far' && !knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
   const taken = new Set(members.map(m => String(m.peer_id || '').replace(/^peer:/, '')));
   const peerLabel = (label || '').trim() || fancyLabel(taken);
   return { anchorDoor, members, liveDoors, knownMap, startTile, peerLabel, network: networkFromDoors(dim.doors) };

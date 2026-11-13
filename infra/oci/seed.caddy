@@ -28,6 +28,14 @@
     header >Access-Control-Allow-Origin "*"
     header >Cache-Control "no-cache"
   }
+  # chaosD6-Profiles write endpoint (profiles-push.mjs; radicle-httpd is read-only).
+  @profiles path /profiles-push /profiles-push/*
+  handle @profiles {
+    request_body {
+      max_size 4MB
+    }
+    reverse_proxy 127.0.0.1:8090
+  }
   handle {
     reverse_proxy 127.0.0.1:8080
     header >Access-Control-Allow-Origin "*"

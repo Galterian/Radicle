@@ -55,6 +55,7 @@ import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt } 
 import { setBigFeatureCatalog } from './js/bigfeature.js';
 import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, exploreTarget, dungeonAt, dungeonExplored, LEARN_REARM_TURNS } from './js/building-bonus.js';
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
+import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard } from './profile.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -111,6 +112,13 @@ const CHARACTER_ID      = process.env.CHARACTER_ID     || '';
 const CREATURE_ID       = process.env.CREATURE_ID      || '';
 const ENTITY_NAME       = process.env.ENTITY_NAME      || PEER_LABEL;
 const ALLIANCE          = process.env.ALLIANCE         || 'player';              // player | npc_a | npc_b | player_c | npc_c
+// Profile character (user ruling 2026-11-13): the launcher passes the profile file + character id; the
+// character's stats / class / combo / deck replace the data entry's. CHARACTER_ID stays its base_character.
+const PROFILE_FILE      = process.env.PROFILE_FILE     || '';
+const PROFILE_CHAR_ID   = process.env.PROFILE_CHAR_ID  || '';
+const PROFILE_TEAM      = process.env.PROFILE_TEAM     || '';
+const TEAM_GATE         = process.env.TEAM_GATE === '1';                      // launched by "Join my team"
+const TEAM_GATE_DOOR    = process.env.TEAM_GATE_DOOR   || '';
 // Human hands: the player of side A and the player of the third team (C).
 // Everything else is played by npcPlan().
 const isHumanAlliance = (a) => a === 'player' || a === 'player_c';
@@ -186,6 +194,10 @@ const PEER_ID_STRING    = `peer:${PEER_LABEL}`;
 // Hoisted so publishPublicState's broadcastUI calls can safely fire before the
 // WebSocket server comes up later in the file. Client set populates lazily.
 const uiClients = new Set();
+// Death-card gifts / team gates already handled, and the gate vision my UI still shows (user ruling
+// 2026-11-13). Hoisted for the same reason: an envelope may arrive while the file is still booting.
+const giftsSeen = new Set(), gatesSeen = new Set();
+const visionGrants = [];   // { kind:'vision-grant', q, r, until_turn, from_name, reason } still running
 // Public Nostr bus handle; created once the peer-state machinery below exists.
 // Declared up here so emitEnvelope/publishPublicState can reference it safely.
 let bus = null;
@@ -490,16 +502,27 @@ if (DISCOVERY_URL) { setInterval(discoveryPoll, 5_000); setTimeout(discoveryPoll
 
 // -------- entity shape / local state --------
 let entity;
+// The profile character this peer plays (read once at startup), or null.
+const profileChar = (() => {
+  if (!PROFILE_FILE || !PROFILE_CHAR_ID || !CHARACTER_ID) return null;
+  try {
+    const c = characterOf(loadProfile(PROFILE_FILE), PROFILE_CHAR_ID);
+    if (!c) console.warn(`[${PEER_LABEL}] profile: no character ${PROFILE_CHAR_ID} in ${PROFILE_FILE} — playing ${CHARACTER_ID} as is`);
+    return c;
+  } catch (e) { console.warn(`[${PEER_LABEL}] profile: ${PROFILE_FILE} unreadable (${e.message}) — playing ${CHARACTER_ID} as is`); return null; }
+})();
 if (CHARACTER_ID) {
   const d = data.characters[CHARACTER_ID].data;
-  const sum = d.stats.vitality + d.stats.world + d.stats.matter + d.stats.will;
+  const st = profileChar?.stats || d.stats;
+  const sum = st.vitality + st.world + st.matter + st.will;
   entity = {
     kind: 'character', peerId: PEER_ID_STRING, name: ENTITY_NAME, alliance: ALLIANCE,
     tile: { ...START_TILE }, sourceId: CHARACTER_ID, sourceName: data.characters[CHARACTER_ID].name,
-    stats: { ...d.stats }, lifeMax: Math.max(1, Math.round(sum / 10)), life: Math.max(1, Math.round(sum / 10)),
-    actionsPerRound: d.actions_per_round, combo: d.combo || [],
+    stats: { ...st }, lifeMax: Math.max(1, Math.round(sum / 10)), life: Math.max(1, Math.round(sum / 10)),
+    actionsPerRound: d.actions_per_round, combo: profileChar ? [...(profileChar.combo || [])] : (d.combo || []),
     permanents: new Set(),
   };
+  if (profileChar) console.log(`[${PEER_LABEL}] profile: ${profileChar.name} (${profileChar.id}) — stats ${['vitality', 'world', 'matter', 'will'].map(k => st[k]).join('/')}, combo ${entity.combo.join('')}, class ${profileChar.class_id}`);
 } else {
   const d = data.creatures[CREATURE_ID].data;
   const sum = d.stats.vitality + d.stats.world + d.stats.matter + d.stats.will;
@@ -689,6 +712,7 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv, at = n
     PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
     MAP_SEED, MAP_BLOCKS_FILE: blocksFile, BOOTSTRAP: [...myMaddrs, ...BOOTSTRAP_MADDRS].join(','), PEER_GUN_URLS: [myGunUrl, ...PEER_GUN_URLS].join(','),
     JOIN_SYNC_WAIT_MS: '4000', OWNER_PEER_ID: wild ? '' : PEER_ID_STRING, FORCE_EFFECTS: '', FORCE_SKILLS: '', FORCE_OPENING: '', FORCE_CLASS: '', REPLACES_PEER_ID: '', START_LIFE: '',
+    PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', TEAM_GATE: '', TEAM_GATE_DOOR: '',
     ...extraEnv,
   };
   delete env.MAP_BLOCKS;
@@ -862,7 +886,8 @@ const classKindOf = (classId) => PASSIVE_TURN_CLASSES.has(classId) ? 'passive' :
   const forcedList = (process.env.FORCE_CLASS || '').split(',').map(s => s.trim()).filter(Boolean);
   const forced = forcedList.length > 1 ? forcedList[parseInt(sha256Hex(`fclass:${PEER_LABEL}`).slice(0, 8), 16) % forcedList.length] : (forcedList[0] || '');
   const pool = Object.keys(data.classes).sort();
-  let cls = forced && data.classes[forced] ? forced : null;
+  // A profile character keeps the class it was created with (user ruling 2026-11-13).
+  let cls = profileChar && data.classes[profileChar.class_id] ? profileChar.class_id : forced && data.classes[forced] ? forced : null;
   // A monster's class follows from its creature id (every peer derives the same one); a character draws one.
   if (!cls && entity.kind === 'creature') cls = pool[parseInt(sha256Hex(`class:${CREATURE_ID}`).slice(0, 8), 16) % pool.length];
   if (!cls) cls = pool[Math.floor(Math.random() * pool.length)];
@@ -884,7 +909,7 @@ const classKindOf = (classId) => PASSIVE_TURN_CLASSES.has(classId) ? 'passive' :
   entity.stealthTurn = -1;        // Rogue: the turn my stealthy step happened — monsters neither wake nor chase me in it
   entity.reanimated = [];         // Necromancer: corpses I raised (no second raise of the same one)
   entity.worldEdits = [];         // what I did to world-generated features: { id, gone, at } | { id, q, r, at }
-  console.log(`[${PEER_LABEL}] class ${cls} (${classKindOf(cls)}; colours ${Object.keys(classColours(cls)).join('/')})${forced ? ' (forced)' : ''}`);
+  console.log(`[${PEER_LABEL}] class ${cls} (${classKindOf(cls)}; colours ${Object.keys(classColours(cls)).join('/')})${profileChar ? ' (profile)' : forced ? ' (forced)' : ''}`);
 }
 const classCard = () => ({ card_id: `${entity.classId}#class`, kind: 'class', class_id: entity.classId, name: entity.className, text: data.classes[entity.classId]?.data?.text || '' });
 let queuedClassAbility = false;   // the class card was clicked for this action (WS `class_ability`)
@@ -983,7 +1008,29 @@ const ACTION_BY_CODE = { A: 'action_attack', B: 'action_block', M: 'action_move'
 // 15-card deck for everyone: 11 basics + 4 skills (Rule 0).
 const deck = [];
 const pushAction = (code) => { const b = ACTION_BY_CODE[code]; deck.push({ card_id: `${b}#${randomBytes(3).toString('hex')}`, kind: 'action', action_id: b, code, action_name: data.actions[b].name }); };
-if (entity.kind === 'character') {
+// A skill card of the given skill (dealt at start, or from a profile deck / a kill's gift).
+function makeSkillCard(id) {
+  const s = data.skills[id];
+  const trance = id === TRANCE;
+  return { card_id: `${id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: id, name: s.name, requires: trance ? '*' : s.data.action_type, is_trance: trance, text: s.data.text, tags: s.tags, is_permanent: !!s.data.is_permanent };
+}
+// A {kind, id} profile / gift card as an in-game card, or null when this build doesn't know it.
+const cardFromRef = (x) => x?.kind === 'skill' && data.skills[x.id] ? makeSkillCard(x.id) : x?.kind === 'effect' && data.effects[x.id] ? makeEffectCard(x.id) : null;
+// Profile deck (user ruling 2026-11-13): the character's action cards + the cards it keeps in the deck;
+// its archive cards start in the in-game archive. Topped up with Postures to DECK_MIN if short.
+const profileArchived = [];
+if (profileChar) {
+  for (const code of ['A', 'B', 'M', 'P']) for (let i = 0; i < (profileChar.actions?.[code] | 0); i++) pushAction(code);
+  for (const x of profileChar.cards || []) {
+    const c = cardFromRef(x);
+    if (!c) { console.warn(`[${PEER_LABEL}] profile: unknown ${x.kind} ${x.id} skipped`); continue; }
+    if (x.from) c.from = x.from;
+    (x.where === 'archive' ? profileArchived : deck).push(c);
+  }
+  const short = 15 - deck.length;   // DECK_MIN (declared further down)
+  for (let i = 0; i < short; i++) pushAction('P');
+  console.log(`[${PEER_LABEL}] profile deck: ${deck.length} cards (${deck.filter(c => c.kind === 'action').length} actions, ${deck.filter(c => c.kind === 'skill').length} skills, ${deck.filter(c => c.kind === 'effect').length} effects), ${profileArchived.length} in the archive${short > 0 ? ` — ${short} Posture card(s) added to reach 15` : ''}`);
+} else if (entity.kind === 'character') {
   for (const c of 'ABMP') for (let i = 0; i < 2; i++) pushAction(c);
   const extra = (entity.combo || []).length ? entity.combo.slice(0, 3) : ['A', 'B', 'M'];
   for (const c of extra) pushAction(c);
@@ -995,18 +1042,14 @@ if (entity.kind === 'character') {
   for (let i = 0; i < 3; i++) pushAction('M');
   pushAction('P'); pushAction('B');
 }
-{
+if (!profileChar) {
   // FORCE_SKILLS=skill_a,skill_b (dev/test only) pins those skills into the 4 dealt.
   const forced = (process.env.FORCE_SKILLS || '').split(',').filter(id => SKILLS_IMPLEMENTED.includes(id) && data.skills[id]);
   const pool = SKILLS_IMPLEMENTED.filter(id => data.skills[id] && !forced.includes(id));
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  for (const id of [...forced, ...pool].slice(0, 4)) {
-    const s = data.skills[id];
-    const trance = id === TRANCE;
-    deck.push({ card_id: `${id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: id, name: s.name, requires: trance ? '*' : s.data.action_type, is_trance: trance, text: s.data.text, tags: s.tags, is_permanent: !!s.data.is_permanent });
-  }
+  for (const id of [...forced, ...pool].slice(0, 4)) deck.push(makeSkillCard(id));
 }
-if (entity.kind === 'character') {
+if (entity.kind === 'character' && !profileChar) {
   // Deal 3 effect cards. Each carries its element_cost sequence so the client
   // can display the required glyphs and the resolver can walk the chain as
   // contiguous Postures emit elements (Rule 19). FORCE_EFFECTS pins them.
@@ -1076,7 +1119,7 @@ const discard = [];
 // cards (a destroyed Summoning's creature) live here too and are never shuffled
 // into the deck. The circulating deck — draw pile + discard + hand — may never
 // drop below DECK_MIN cards.
-const archive = [];
+const archive = [...profileArchived];   // a profile character's archive cards start here (user ruling 2026-11-13)
 const willArchive = new Set();   // card_ids marked for the archive this action
 const DECK_MIN = 15;
 const circulating = () => deck.length + discard.length + hand.length + heldCards.length;
@@ -1348,6 +1391,8 @@ function currentStateSnapshot(slim = false) {
     combo_active: entity.comboState?.active ? 1 : 0,
     combo_slot: entity.comboState?.slot || 0,
     combo_seq_csv: Array.isArray(entity.combo) ? entity.combo.join(',') : '',
+    // Profile (user ruling 2026-11-13) — display only, outside the per-action state hash (id / tile / life).
+    team_name: PROFILE_TEAM, profile_char_id: profileChar ? PROFILE_CHAR_ID : '', resources_id: profileChar?.resources?.id || '',
   };
   if (slim) return s;
   // Live clock + network hints so a joining peer can align its turn counter
@@ -1545,12 +1590,16 @@ setInterval(() => {
       .catch(e => console.warn(`[${PEER_LABEL}] replacement failed: ${e.message}`));
   }
 }, 20_000);
-async function revealAround(q, r) {
-  if (!IS_HUMAN) return;
+// `boot`: a bot that enters OFF the known map (a "Join my team" gate 30–50 hexes out, a test-team ally
+// 9–10 hexes from player-1) reveals the disc around its entry like a human does (user ruling 2026-11-13).
+// Profile bots only (monsters keep today's fog). The block is shared like any other, so every peer resolves
+// against the same map. Bots never wake lurkers.
+async function revealAround(q, r, { boot = false } = {}) {
+  if (!IS_HUMAN && !(boot && (profileChar || TEAM_GATE) && !dimMap.has(q, r))) return;
   if (!dimMap.needsReveal(q, r, REVEAL_RADIUS)) return;
   const b = discBlock(q, r, REVEAL_RADIUS, PEER_ID_STRING);
   if (!addMapBlock(b, 'self')) return;
-  try { discoverTrapMonsters(q, r); } catch (e) { console.warn(`[${PEER_LABEL}] lurker scan failed: ${e.message}`); }
+  if (IS_HUMAN) try { discoverTrapMonsters(q, r); } catch (e) { console.warn(`[${PEER_LABEL}] lurker scan failed: ${e.message}`); }
   gunMap.get(b.id).put(b);
   await emitEnvelope({
     type: 'evt_map_extend',
@@ -4243,6 +4292,7 @@ async function doResolution() {
     console.log(`[${PEER_LABEL}] DIED at (${entity.tile.q},${entity.tile.r}) after -${myDmg} on T${hg.turn}.R${hg.round + 1} (life_max=${entity.lifeMax})`);
     // Tell the relays at once: peers on other machines would otherwise keep me alive as a stale shadow.
     setTimeout(() => publishPublicState(true).catch(() => {}), 0);
+    try { dropDeathCard(damage.get(PEER_ID_STRING)); } catch (e) { console.warn(`[${PEER_LABEL}] death card failed: ${e.message}`); }
   }
   // Permanents land in the NEXT round's snapshot, so they take effect from
   // then on — the reveal that placed them embedded the pre-placement state.
@@ -4737,6 +4787,8 @@ function inboxApply(env) {
   }
   if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
   if (env.type === 'evt_action_reveal') { noteSeen(revealsSeen, env); noteLateReveal(env); }
+  if (env.type === 'evt_card_gift') receiveCardGift(env.payload);
+  if (env.type === 'evt_team_gate') receiveTeamGate(env);
   // Vision (hand): the enemy I looked at shows me their cards — a popup for my UI only.
   if (env.type === 'evt_peek' && env.payload?.for_peer === PEER_ID_STRING && Array.isArray(env.payload.cards)) {
     const what = env.payload.what === 'deck' ? 'deck' : 'hand', who = env.payload.name || env.actor_peer_id;
@@ -4757,6 +4809,85 @@ async function publishPeek(to, { what = 'hand', n = null } = {}) {
   console.log(`[${PEER_LABEL}] peek: I show ${what === 'deck' ? `the top ${cards.length} of my deck` : `${cards.length} card(s) of my hand`} to ${to.slice(0, 14)}`);
   await emitEnvelope({ type: 'evt_peek', payload: { for_peer: to, name: entity.name, cards, what, partial: what === 'hand' && cards.length < hand.length }, viaBus: true });
 }
+
+// -------- death cards (user ruling 2026-11-13) --------
+// Whoever dies drops one random non-action card from its deck: a profile character from the PROFILE (future
+// games lose it), everyone else (monsters, summons, plain heroes) from the in-game deck + discard + hand.
+// The card goes to the killer's archive — the peer that dealt me the most damage this action (ties → the
+// lexically smallest id; the world, traps and myself don't count). Local bookkeeping only: the resolver never
+// sees it, and the gift travels as evt_card_gift on the bus (deduped by gift id).
+const cardRefName = (x) => (x?.kind === 'skill' ? data.skills[x.id]?.name : data.effects[x?.id]?.name) || x?.id || 'a card';
+function dropDeathCard(myDamage) {
+  const by = new Map();
+  for (const d of myDamage || []) {
+    if (!(d.amount > 0) || !d.attacker || d.attacker === PEER_ID_STRING || !peersPublic.has(d.attacker)) continue;
+    by.set(d.attacker, (by.get(d.attacker) || 0) + d.amount);
+  }
+  const killer = [...by].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]?.[0] || null;
+  const killerName = killer ? (peersPublic.get(killer)?.name || killer) : null;
+  let card = null;
+  if (profileChar) card = dropRandomDeckCard(PROFILE_FILE, PROFILE_CHAR_ID);
+  else {
+    const pool = [...deck.map(c => [deck, c]), ...discard.map(c => [discard, c]), ...hand.map(c => [hand, c])].filter(([, c]) => c.kind === 'skill' || c.kind === 'effect');
+    if (pool.length) {
+      const [pile, c] = pool[Math.floor(Math.random() * pool.length)];
+      pile.splice(pile.indexOf(c), 1);
+      card = c.kind === 'skill' ? { kind: 'skill', id: c.skill_id } : { kind: 'effect', id: c.effect_id };
+    }
+  }
+  const nm = card ? cardRefName(card) : null;
+  console.log(`[${PEER_LABEL}] death card: ${card ? `${card.kind} ${card.id} leaves my ${profileChar ? 'profile ' : ''}deck` : 'no non-action card to drop'}${killer ? ` — killer ${killerName} (${killer})` : ' — no killer'}`);
+  if (card) broadcastUI(handMsg({ notice: killer ? `☠ You died — ${nm} leaves your deck for ${killerName}'s archive` : `☠ You died — ${nm} leaves your deck` }));
+  if (!card || !killer) return;
+  const gift = { gift_id: `${PEER_ID_STRING}:${hg.turn}:${hg.action}`, for_peer: killer, card, from_name: entity.name };
+  // Twice, a few seconds apart: the bus may drop one; the receiver dedupes on gift_id.
+  const send = () => emitEnvelope({ type: 'evt_card_gift', payload: gift, viaBus: true }).catch(e => console.warn(`[${PEER_LABEL}] card gift failed: ${e.message}`));
+  setTimeout(send, 0); setTimeout(send, 4000);
+}
+function receiveCardGift(g) {
+  if (!g?.gift_id || g.for_peer !== PEER_ID_STRING || giftsSeen.has(g.gift_id)) return;
+  giftsSeen.add(g.gift_id);
+  // A summon's kill belongs to its owner.
+  if (IS_COMPANION && ownerPeerId) {
+    console.log(`[${PEER_LABEL}] card gift ${g.card?.kind} ${g.card?.id} from ${g.from_name} → my owner ${ownerPeerId}`);
+    const fwd = { ...g, for_peer: ownerPeerId };
+    emitEnvelope({ type: 'evt_card_gift', payload: fwd, viaBus: true }).catch(() => {});
+    setTimeout(() => emitEnvelope({ type: 'evt_card_gift', payload: fwd, viaBus: true }).catch(() => {}), 4000);
+    return;
+  }
+  const c = cardFromRef(g.card);
+  if (!c) { console.warn(`[${PEER_LABEL}] card gift: unknown ${g.card?.kind} ${g.card?.id} from ${g.from_name}`); return; }
+  c.from = String(g.from_name || '').slice(0, 60);
+  archive.push(c);
+  if (profileChar) { try { addArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, g.card, g.from_name || ''); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive write failed: ${e.message}`); } }
+  console.log(`[${PEER_LABEL}] card gift: ${g.card.kind} ${g.card.id} from ${g.from_name} → my archive${profileChar ? ' (profile too)' : ''}`);
+  broadcastUI(handMsg({ notice: `🏆 You took ${c.name} from ${g.from_name || 'your victim'} — it is in your archive` }));
+}
+
+// -------- team gate (user ruling 2026-11-13) --------
+// "Join my team": the new peer tells its team (and the Door it came through) where it entered; they see that
+// spot until the end of the next turn. Vision only — nothing the resolver reads.
+function announceTeamGate() {
+  const payload = { team: PROFILE_TEAM, door: TEAM_GATE_DOOR, q: entity.tile.q, r: entity.tile.r, until_turn: hg.turn + 1, from_name: entity.name, gate_id: `${PEER_ID_STRING}:gate` };
+  console.log(`[${PEER_LABEL}] team gate: ${PROFILE_TEAM || '(no team)'} / door ${TEAM_GATE_DOOR || '-'} at (${payload.q},${payload.r}) until turn ${payload.until_turn}`);
+  for (const ms of [0, 5000, 10_000, 20_000]) setTimeout(() => emitEnvelope({ type: 'evt_team_gate', payload, viaBus: true }).catch(e => console.warn(`[${PEER_LABEL}] team gate failed: ${e.message}`)), ms);
+}
+function receiveTeamGate(env) {
+  const g = env.payload || {};
+  if (env.actor_peer_id === PEER_ID_STRING || !Number.isInteger(g.q) || !Number.isInteger(g.r)) return;
+  if (!((PROFILE_TEAM && g.team === PROFILE_TEAM) || (g.door && g.door === PEER_ID_STRING))) return;
+  const key = g.gate_id || `${env.actor_peer_id}:gate`;
+  if (gatesSeen.has(key)) return;
+  gatesSeen.add(key);
+  revealAround(g.q, g.r).catch(e => console.warn(`[${PEER_LABEL}] gate reveal failed: ${e.message}`));
+  const grant = { kind: 'vision-grant', q: g.q, r: g.r, until_turn: Number(g.until_turn) || hg.turn + 1, from_name: g.from_name || env.actor_peer_id, reason: 'team-gate' };
+  visionGrants.push(grant);
+  console.log(`[${PEER_LABEL}] team gate from ${grant.from_name} at (${g.q},${g.r}) — vision until turn ${grant.until_turn}`);
+  broadcastUI(grant);
+  const who = PROFILE_TEAM && g.team === PROFILE_TEAM ? `${grant.from_name} of your ${PROFILE_TEAM} team` : `${grant.from_name}${g.team ? ` (${g.team} team)` : ''}, who came through your Door,`;
+  broadcastUI(handMsg({ notice: `⚑ ${who} opened a gate at (${g.q},${g.r}) — you see it until the end of the next turn` }));
+}
+const activeVisionGrants = () => { for (let i = visionGrants.length - 1; i >= 0; i--) if (hg.turn > visionGrants[i].until_turn) visionGrants.splice(i, 1); return visionGrants; };
 
 // -------- join sync --------
 // Reveals are matched by turn number, so a peer that boots into a running
@@ -4796,6 +4927,7 @@ async function syncClockFromMesh() {
   await publishPublicState(true);
 }
 await syncClockFromMesh();
+if (TEAM_GATE) announceTeamGate();
 
 // -------- phase ticker --------
 let ticking = false;
@@ -5046,7 +5178,7 @@ const uiHttp = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({
       peer_id: PEER_ID_STRING, dimension: DIM_NAME, phase: currentPhase, phaseEndsIn: Math.max(0, phaseEndsAt - Date.now()),
-      entity, permanents_csv: permanentsCsv(), hand, queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, queued_effect2: queuedEffect2, queued_chain: queuedChain, aura: queuedAura, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
+      entity, permanents_csv: permanentsCsv(), hand, archive, deck_count: deck.length, discard_count: discard.length, queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, queued_effect2: queuedEffect2, queued_chain: queuedChain, aura: queuedAura, target, locked, turn: hg.turn, round: hg.round, action: hg.action, head: hg.head,
       peers: peersForUI(),
       alliance: entity.alliance,
       map: { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, tiles: dimMap.size(), blocks: dimMap.blockCount(), bounds: dimMap.bounds() },
@@ -5154,6 +5286,8 @@ const wss = new WebSocketServer({ server: uiHttp });
 wss.on('connection', (ws) => {
   uiClients.add(ws);
   ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary(), class_texts: Object.fromEntries(Object.keys(data.classes).map(id => [id, data.classes[id]?.data?.text || ''])), class_colours: Object.fromEntries(Object.keys(data.classes).map(id => [id, classColours(id)])), class_state: classStateForUI(), queued_class_ability: queuedClassAbility }));
+  // Gate vision still running (team gate, user ruling 2026-11-13) — a reconnecting UI gets it again.
+  for (const g of activeVisionGrants()) ws.send(JSON.stringify(g));
   ws.on('message', (buf) => {
     try {
       const m = JSON.parse(buf.toString());
@@ -5405,7 +5539,7 @@ await emitEnvelope({
     entry_tile: entity.tile, adopted_head: null,
   },
 });
-await revealAround(entity.tile.q, entity.tile.r);
+await revealAround(entity.tile.q, entity.tile.r, { boot: true });
 console.log(`[${PEER_LABEL}] map: seed ${MAP_SEED}, ${dimMap.size()} hexes in ${dimMap.blockCount()} blocks (reveal radius ${REVEAL_RADIUS})`);
 
 // Hydrate obstacles / tokens / traps from a restored TMJ (map blocks were
