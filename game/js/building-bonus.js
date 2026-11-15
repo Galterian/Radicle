@@ -30,11 +30,16 @@
 //   (world edit `dng:q,r` { explored: turn }) — it re-arms with a new effect 5 turns later.
 //     { kind: 'hurt' }              (haunted / plague text) end of the 3rd action: −1 life
 //   A fortress (power { kind: 'fortress', stat, value }, no stat bonus) blocks the
-//   way: an adjacent unit emitting that stat's element with that stat ABOVE
-//   `value` (any successful point-buy) breaks it — world edit `bld:q,r` gone.
+//   way. Rework (user ruling 2026-11-14, data/rules.json rule_building_fortress →
+//   FORTRESS below): its value is 30..60; a unit within `near` hexes STAT-BUYS it —
+//   once per action (`per`) an emission of that stat banks the unit's stat; once the
+//   bank reaches the value the fortress breaks (world edit `bld:q,r` gone, consumed
+//   for everybody) and the breaker point-buys round(value / 10) dice: the HIGHEST die is a
+//   character stat bonus token on that stat, the same kind Artifice makes (one per element,
+//   replaces an earlier one only if higher; destroyable under Rule 24 like any stat token).
 // Text extras kept from the first pass (all optional):
 //   rest: n | 'all', restNear, guard: n, cover: n, sword: n, sanctuary, sight: n
-import { featureAt } from './features.js';
+import { featureAt, onFeaturesChanged } from './features.js';
 import { bigFeatureAt } from './bigfeature.js';
 import { hash32 } from './map.js';
 
@@ -109,6 +114,10 @@ function ruleFor(rules, text, fallback) {
 
 // The full bonus of the catalogue building on (q, r) — deterministic from seed + hex + text.
 function buildingBonus(seed, q, r, f) {
+  // A building created during play (features.js overlay, 2026-11-14): a fixed bonus (Priest's Shrine), or an
+  // exact copy of the one it was copied from (Animator) — rolled on the source hex.
+  if (f.placed && f.bonus) return JSON.parse(JSON.stringify(f.bonus));
+  if (f.placed && f.copy_of && Number.isInteger(f.copy_of.q) && Number.isInteger(f.copy_of.r)) { q = f.copy_of.q; r = f.copy_of.r; }
   const text = `${f.label || ''} ${f.desc || ''}`;
   // A themed building (features.js) does what it looks like: its theme is its power.
   if (f.theme === 'dungeon' || (!f.theme && DUNGEON.test(f.label || ''))) return { dungeon: true };
@@ -128,7 +137,7 @@ function buildingBonus(seed, q, r, f) {
   if (/shrine/i.test(f.label || '')) kind = 'skill';
   }
   const stat = ruleFor(STAT_HINTS, text, null) && roll(seed, q, r, 'shint') < 0.6 ? ruleFor(STAT_HINTS, text, null) : pickBy(roll(seed, q, r, 'stat'), STATS);
-  if (kind === 'fortress') return { power: { kind, stat, value: 10 + Math.floor(roll(seed, q, r, 'fval') * 9) } };
+  if (kind === 'fortress') return { power: { kind, stat, value: fortressValue(seed, q, r) } };
   const power = kind === 'skill' ? { kind, skill: pickBy(roll(seed, q, r, 'skill'), BUILDING_SKILLS) }
     : kind === 'stance' ? { kind, code: roll(seed, q, r, 'stance') < 0.6 ? 'P' : 'B' }
     : { kind };
@@ -141,7 +150,7 @@ export function bonusText(b) {
   const out = [];
   for (const [k, v] of Object.entries(b.stat || {})) out.push(`+${v} ${STAT_NAME[k] || k} (your life maximum follows)`);
   const p = b.power;
-  if (p?.kind === 'fortress') out.push(`blocks the way — break it by emitting a ${STAT_NAME[p.stat]} element next to it with ${STAT_NAME[p.stat]} above ${p.value} (any successful roll)`);
+  if (p?.kind === 'fortress') out.push(fortressText(p));
   if (p?.kind === 'skill') out.push(`${SKILL_NAME[p.skill] || p.skill} rides free on every action you play here (when the action fits it)`);
   if (p?.kind === 'stance') out.push(`an Empty Posture here fights as ${STANCE_NAME[p.code]}`);
   if (p?.kind === 'teleport') out.push('stepping in teleports a hero far away');
@@ -197,6 +206,53 @@ export function fortressAt(seed, q, r, gone = null) {
   if (gone && gone.has(`bld:${q},${r}`)) return null;
   return { id: `bld:${q},${r}`, q, r, source: b.source, ...b.bonus.power };
 }
+// ---- Fortress stat buy (user ruling 2026-11-14) ----
+// Defaults mirror data/rules.json rule_building_fortress `data.fortress` (tools/fortress-check.mjs keeps the
+// two equal); peer.mjs calls configureFortress() with the data at boot, the browser keeps the defaults.
+//   stat_min / stat_max  the fortress value range (deterministic per hex)
+//   near                 how close (hexes) a unit must stand to stat-buy it
+//   per                  'action' | 'turn' — how often one unit may bank against a fortress
+//   bonus_divisor        dice of the break point-buy = round(value / bonus_divisor)
+//   bonus                'sum' | 'max' — what of the dice becomes the stat bonus
+export const FORTRESS = { stat_min: 30, stat_max: 60, near: 1, per: 'action', bonus_divisor: 10, bonus: 'max' };
+export function configureFortress(cfg) {
+  if (!cfg || typeof cfg !== 'object') return FORTRESS;
+  const int = (v, lo) => Number.isInteger(v) && v >= lo ? v : null;
+  const lo = int(cfg.stat_min, 1), hi = int(cfg.stat_max, 1);
+  if (lo !== null && hi !== null && hi >= lo) { FORTRESS.stat_min = lo; FORTRESS.stat_max = hi; }
+  if (int(cfg.near, 1) !== null) FORTRESS.near = cfg.near;
+  if (cfg.per === 'action' || cfg.per === 'turn') FORTRESS.per = cfg.per;
+  if (int(cfg.bonus_divisor, 1) !== null) FORTRESS.bonus_divisor = cfg.bonus_divisor;
+  if (cfg.bonus === 'sum' || cfg.bonus === 'max') FORTRESS.bonus = cfg.bonus;
+  _memo.clear();
+  return FORTRESS;
+}
+// The value (stat) of the fortress on (q, r): stat_min..stat_max, from the hex hash.
+export function fortressValue(seed, q, r) {
+  return FORTRESS.stat_min + Math.min(FORTRESS.stat_max - FORTRESS.stat_min, Math.floor(roll(seed, q, r, 'fval') * (FORTRESS.stat_max - FORTRESS.stat_min + 1)));
+}
+export function fortressText(p) {
+  const s = STAT_NAME[p.stat] || p.stat;
+  return `blocks the way — stand within ${FORTRESS.near} hex${FORTRESS.near === 1 ? '' : 'es'} and stat-buy it: once per ${FORTRESS.per} a ${s} emission (Posture / Empty Posture) banks your ${s}; when the bank reaches ${p.value} the fortress breaks and is gone, and you point-buy ${fortressBonusDice(p.value)} dice — their ${FORTRESS.bonus === 'max' ? 'highest die' : 'sum'} becomes a ${s} bonus token on your character, like Artifice's (it replaces an earlier one of that element only if higher; an enemy emitting ${s} next to you can destroy it — after your permanents, before your tile tokens)`;
+}
+// Dice of the point-buy a broken fortress grants (round half up, at least one).
+export const fortressBonusDice = (value) => Math.max(1, Math.round(value / FORTRESS.bonus_divisor));
+// The bonus those dice give.
+export const fortressBonusOf = (dice) => !dice?.length ? 0 : FORTRESS.bonus === 'max' ? Math.max(...dice) : dice.reduce((a, d) => a + d, 0);
+// One stat-buy emission: `prev` = my bank record ({ id, bank, turn, action } | null), `add` = my stat now.
+// → { ok: false, why } when not allowed this time, else { ok: true, bank, broken }.
+export function fortressBankStep(prev, fz, add, turn, action) {
+  const same = prev && prev.id === fz.id ? prev : null;
+  if (same && (FORTRESS.per === 'turn' ? same.turn === turn : same.action === action)) return { ok: false, why: `already banked this ${FORTRESS.per}` };
+  const bank = (same?.bank || 0) + Math.max(0, add | 0);
+  return { ok: true, bank, broken: bank >= fz.value };
+}
+// The break bonus is a character stat bonus TOKEN like Artifice's (user ruling 2026-11-14 #2): effect id below,
+// its element = the first element (sorted ids) behind the fortress stat, so a Rule 24 emission of that stat finds
+// it (destroy order: permanents, then these tokens, then tile tokens). One positive token per element: it
+// replaces an earlier one of that element only if higher (effects.mjs placeStatBonusToken).
+export const FORTRESS_TOKEN_EFFECT = 'rule_building_fortress';
+export const fortressTokenElem = (stat, elemToStat) => Object.keys(elemToStat || {}).sort().find(el => elemToStat[el] === stat) || null;
 // A dungeon on (q, r): { id, q, r, source } (explored or not — the caller reads `dng:q,r` edits).
 export function dungeonAt(seed, q, r) {
   const b = buildingBonusAt(seed, q, r);
@@ -242,3 +298,5 @@ export function exploreTarget(seed, q, r, turn) {
 }
 // The catalogue arrived / changed (browser fetch, node injection): forget lookups made without it.
 export function clearBuildingBonusMemo() { _memo.clear(); }
+// Catalogue loads and the placed-building overlay (features.js setPlacedBuildings) change what a hex holds.
+onFeaturesChanged(clearBuildingBonusMemo);

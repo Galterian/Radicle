@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_mind_blast",
+  "name": "Mind Blast",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_concentration"],
+  "cost": 1,
+  "kind": "surgery",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "You take the same amount of damage you dealt. + Switch two unknown tiles. If you beat the creature's Stats at known tiles, you may switch known tiles.",
+  "flags": {"damage":"pointbuy","scope":"target","selfDamageEqual":true,"tileTarget":true,"surgery":"switch"},
+  "uses": ["std","e2c"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"call":["e2c_surgery_ok"]},{"call":["e2c_switch"]}]},
+      {"if":[{"!":[{"len":[{"out":"moves"}]}]},{"seq":[{"call":["require_recipients"]},{"map":[{"var":"recipients"},{"emit":["hits",{"obj":{"victim":{"var":"def"},"legs":[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],"healDealt":false,"selfDamageEqual":true}}]},"def"]}]}]},
+      {"call":["finish"]}
+    ]}
+}

@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_artifice",
+  "name": "Artifice",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_earth"],
+  "cost": 1,
+  "kind": "stat_token",
+  "duration": "permanent",
+  "every": {"behaviour":"none"},
+  "text": "Put an element token in front of your deck as a permanent bonus until destroyed by damage or effect. Alt: put the element token over nearby or your location.",
+  "flags": {"scope":"self","statBonus":["elem_earth"],"tileTarget":true,"altTileToken":true},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","self",1,false]},
+      {"set":["tmp",null]},
+      {"if":[{"and":[{"===":[{"var":"cast.target.kind"},"tile"]},{"<=":[{"hex_dist":[{"var":"my_tile"},{"var":"cast.target.ref"}]},1]}]},{"let":[{"el":{"if":[{"in":[{"var":"cast.elem"},{"all_elems":[]}]},{"var":"cast.elem"},{"at":[{"all_elems":[]},{"rng":["artifice",10]}]}]}},{"let":[{"val":{"call":["buy",{"call":["my_stat",{"var":"el"}]},{"cat":["artifice:",{"var":"el"}]}]}},{"seq":[{"if":[{">":[{"var":"val"},0]},{"emit":["tokens",{"obj":{"kind":"bonus","elem":{"var":"el"},"value":{"var":"val"},"q":{"var":"cast.target.ref.q"},"r":{"var":"cast.target.ref.r"}}}]}]},{"set":["tmp",{"var":"cast.target.ref"}]},{"set":["recipients",[]]}]}]}]}]},
+      {"if":[{"!":[{"var":"tmp"}]},{"map":[{"var":"recipients"},{"call":["stat_token",{"var":"who"},"elem_earth",1,"bonus"]},"who"]}]},
+      {"call":["finish"]}
+    ]}
+}

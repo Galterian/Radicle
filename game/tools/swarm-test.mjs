@@ -10,6 +10,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createKnownMap, initialBlock } from '../js/map.js';
 import { hexDistance } from '../js/hex.js';
+import { biomeFor } from '../js/biome.js';
+import { featureAt as buildingFeatureAt, isBuildingFeature, isLabyrinthWallAt, setFeatureCatalog } from '../js/features.js';
+import { setBigFeatureCatalog } from '../js/bigfeature.js';
+import { fortressAt } from '../js/building-bonus.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const launcher = process.argv[2] || 'http://127.0.0.1:7357';
@@ -23,14 +27,48 @@ const DIM = process.argv[4] || `Swarm-${String(now.getHours()).padStart(2, '0')}
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-// Teams as peer.mjs sideOf(): A = player/npc_a, B = npc_b, C = player_c/npc_c.
-const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
+// Teams as peer.mjs sideOf(): A = player/npc_a, B = npc_b, C = player_c/npc_c, D = player_d/npc_d.
+const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : (a === 'player_d' || a === 'npc_d') ? 'D' : a;
 // Class colours (user ruling 2026-10-30): the agents strike an adjacent enemy's class colour by colour and use
 // their own class ability, so the swarm exercises both resolver paths. Canonical data only.
 const readData = (f) => JSON.parse(fs.readFileSync(path.join(here, '..', '..', 'data', f), 'utf8'));
 const canon = (e) => e.versions.find(v => v.status === 'canonical') || e.versions[e.versions.length - 1];
 const ELEM_TO_STAT = Object.fromEntries(readData('elements.json').entries.map(e => [e.id, (canon(e).data?.stat || '').replace(/^stat_/, '')]));
 const CLASS_COLOURS = Object.fromEntries(readData('classes.json').entries.map(e => { const cols = {}; for (const el of canon(e).data?.colors || []) { const st = ELEM_TO_STAT[el]; if (st) (cols[st] ||= []).push(el); } return [e.id, cols]; }));
+// Building catalogues (same lookup as peer.mjs): the bots look for buildings / fortresses next to them
+// (Animator source, Cleric / Rogue world traps) with the same pure (seed, q, r) functions the resolver uses.
+for (const [rel, set] of [['features/feature_table.json', setFeatureCatalog], ['terrain_bigfeatures/bigfeature_table.json', setBigFeatureCatalog]]) {
+  const hit = [path.resolve(here, '..', 'js', 'catalog', path.basename(rel)), path.resolve(here, '..', '..', 'assets', rel)].find(f => fs.existsSync(f));
+  if (hit) { try { set(JSON.parse(fs.readFileSync(hit, 'utf8'))); } catch {} }
+}
+const hexesWithin = (c, R) => { const out = []; for (let dq = -R; dq <= R; dq++) for (let dr = Math.max(-R, -dq - R); dr <= Math.min(R, -dq + R); dr++) out.push({ q: c.q + dq, r: c.r + dr }); return out; };
+const _bldMemo = new Map();
+// 'b' plain building, 'f' standing fortress (blocks the hex), '' nothing.
+const buildingKind = (seed, q, r) => {
+  const k = `${seed}:${q},${r}`;
+  if (!_bldMemo.has(k)) { const f = buildingFeatureAt(seed, q, r); _bldMemo.set(k, !isBuildingFeature(f) ? '' : fortressAt(seed, q, r) ? 'f' : 'b'); }
+  return _bldMemo.get(k);
+};
+// Buildings within R of c, nearest first (fortress: only with withFortress).
+const buildingsNear = (seed, c, R, withFortress = false) => hexesWithin(c, R).filter(h => { const b = buildingKind(seed, h.q, h.r); return b === 'b' || (withFortress && b === 'f'); })
+  .map(h => ({ ...h, d: hexDistance(c, h) })).sort((x, y) => x.d - y.d || x.q - y.q || x.r - y.r);
+const walkableAt = (seed, q, r) => { try { return biomeFor(seed).isWalkable(q, r) && !isLabyrinthWallAt(seed, q, r) && buildingKind(seed, q, r) !== 'f'; } catch { return false; } };
+// Resolver log lines per class (counted across every peer log) — what the bot counters are checked against.
+const CLASS_LOG = {
+  class_manipulator: /manipulator: \S+ forces \S+ to swap/g,
+  class_rogue: /rogue: (?:trap|threat) charge/g,
+  class_cleric: /cleric \S+ (?:active|passive): /g,
+  class_animator: /class class_animator: a copy of/g,
+  class_seeker: /class class_seeker: .* lies as a trap building/g,
+  class_priest: /class class_priest: a .* rises at/g,
+  class_avenger: /avenger: \S+ lures \d+/g,
+  class_prophet: /prophet: first contact/g,
+  class_witch: /witch: \S+ makes \S+ discard/g,
+  class_alchemist: /class class_alchemist: a \S+ from the Library/g,
+};
+// FORCE_CLASS round-robin (tools/swarm-run.sh exports FORCE_CLASS_LABELS; peer.mjs applies it). Logged once.
+const FORCED_CLASSES = (process.env.FORCE_CLASS || '').split(',').map(s => s.trim()).filter(Boolean);
+const FORCED_LABELS = (process.env.FORCE_CLASS_LABELS || '').split(',').map(s => s.trim()).filter(Boolean);
 
 async function api(route, body, base = launcher) {
   const r = await fetch(`${base}${route}`, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined);
@@ -53,21 +91,180 @@ function startAgent(peerId, port, attempt = 0) {
   const isSkill = c => !!c && c.kind === 'skill';
   // Skill indices riding on the given action codes (trance itself excluded).
   const skillsFor = (...codes) => a.hand.map((c, i) => isSkill(c) && !c.is_trance && codes.includes(c.requires) ? i : -1).filter(i => i >= 0);
-  const isEffect = c => !!c && c.kind === 'effect';
+  // a.reserved: the card id the Seeker attached this action — no other pick may cast it.
+  const isEffect = c => !!c && c.kind === 'effect' && c.card_id !== a.reserved;
   const queue = (slot, skills = [], extra = null, effect = null) => {
     send({ kind: 'queue', slots: [slot], skills, extra, effect });
     a.skillsPlayed += skills.filter(i => !a.hand[i]?.is_trance).length;
     if (effect !== null) a.effectsCast = (a.effectsCast || 0) + 1;
   };
+  // ---- My class ability (2026-11-15): use it whenever it is ready and its precondition holds ----
+  // The reveal's classAbility carries the action's raw target, so only the tile classes (Animator / Priest)
+  // shape the action; every other class just clicks and lets the normal pick below decide the action.
+  // Returns { goal, goalP, act }: goal = a hex worth walking to for the precondition (taken with chance goalP
+  // by the movement code), act = this action is already queued + locked. Skips are counted per class+reason
+  // (a.classSkip) and printed in the summary.
+  const skipClass = (cid, why) => { const k = `${String(cid).replace('class_', '')}:${why}`; (a.classSkip ||= {})[k] = (a.classSkip[k] || 0) + 1; };
+  const useClass = (cid, extra = {}) => {
+    if (extra.attach !== undefined) send({ kind: 'attach', slot: extra.attach });
+    send({ kind: 'class_ability' });
+    a.queuedClass = true;
+    a.classUses = (a.classUses || 0) + 1;
+    (a.classUseBy ||= {})[cid] = (a.classUseBy[cid] || 0) + 1;
+    if (cid === 'class_witch') a.witchTaps = (a.witchTaps || 0) + 1;
+    if (cid === 'class_avenger') a.avengerLures = (a.avengerLures || 0) + 1;
+    if (cid === 'class_cleric') a.clericTaps = (a.clericTaps || 0) + 1;
+  };
+  // A free hex for a new building (Animator: next to me, Priest: ≤ 2), farthest band first so an Empty Move
+  // toward it does not end on it. Known, walkable, no building, nobody standing there.
+  const buildHexNear = (me, R) => {
+    const seed = a.map.seed, here = { q: me.tile_q, r: me.tile_r };
+    const occ = new Set([...a.peers.values()].filter(p => (p.life ?? 1) > 0 && Number.isInteger(p.tile_q)).map(p => `${p.tile_q},${p.tile_r}`));
+    const c = hexesWithin(here, R).filter(h => { const d = hexDistance(here, h); return d >= 1 && a.map.has?.(h.q, h.r) !== false && walkableAt(seed, h.q, h.r) && !buildingKind(seed, h.q, h.r) && !occ.has(`${h.q},${h.r}`); });
+    if (!c.length) return null;
+    const far = c.filter(h => hexDistance(here, h) === R);
+    const pool = far.length ? far : c;
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+  const botClassPolicy = (turn, me, enemies, foeTraps, dist) => {
+    const cs = a.classState, cid = cs?.class_id;
+    const out = { goal: null, goalP: 0, act: false };
+    if (!cid) return out;
+    const seed = a.map.seed, here = { q: me.tile_q, r: me.tile_r };
+    const hexD = (t) => hexDistance(here, t);
+    const slotOf = code => a.hand.findIndex(c => isAction(c) && c.code === code);
+    const wild = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q)
+      && (p.monster_state === 'sleeping' || p.monster_state === 'awake') && !p.owner_peer_id).sort((x, y) => dist(x) - dist(y));
+    // Steering goals (also for passive classes and while not ready — the walk sets the precondition up).
+    if (cid === 'class_animator') { const b = buildingsNear(seed, here, 12, true).find(b => b.d > 2); if (b) { out.goal = b; out.goalP = 0.7; } }
+    if (cid === 'class_cleric') { const t = foeTraps.find(t => t.d > 3 && t.d <= 10) || buildingsNear(seed, here, 10).find(b => b.d > 3); if (t) { out.goal = { q: t.q, r: t.r }; out.goalP = 0.6; } }
+    if (cid === 'class_rogue') { const t = foeTraps.find(t => t.d >= 1 && t.d <= 8) || buildingsNear(seed, here, 8).find(b => b.d >= 1); if (t) { out.goal = { q: t.q, r: t.r }; out.goalP = 0.5; } }
+    if (cid === 'class_avenger' && (!wild.length || dist(wild[0]) > 10)) { const w = wild.find(p => dist(p) <= 25); if (w) { out.goal = { q: w.tile_q, r: w.tile_r }; out.goalP = 0.6; } }
+    if (['class_witch', 'class_prophet', 'class_manipulator'].includes(cid) && enemies[0] && dist(enemies[0]) > 1) { out.goal = { q: enemies[0].tile_q, r: enemies[0].tile_r }; out.goalP = 0.8; }
+    // Readiness.
+    if (cs.kind === 'passive' || cs.kind === 'static') return out;   // fires by itself (Rogue, Prophet, Manipulator, …)
+    if (cs.archived) { skipClass(cid, 'archived'); return out; }
+    if (cs.kind === 'tap' ? cs.tapped : cs.used_turn === turn) { skipClass(cid, cs.kind === 'tap' ? 'tapped' : 'used_this_turn'); return out; }
+    if (cs.blocked) { skipClass(cid, 'blocked'); return out; }
+    if (a.queuedClass) { skipClass(cid, 'already_queued'); return out; }
+    const needs = cs.needs;
+    // Preconditions.
+    if (cid === 'class_witch' || needs === 'enemy_near') {
+      if (!enemies.some(p => dist(p) <= 3)) { skipClass(cid, 'no_enemy_3'); return out; }
+      useClass(cid); return out;
+    }
+    if (cid === 'class_avenger' || needs === 'monster_near') {
+      if (!wild.some(p => dist(p) <= 10)) { skipClass(cid, 'no_wild_10'); return out; }
+      useClass(cid); return out;
+    }
+    if (cid === 'class_cleric') {
+      // Laid enemy traps are in the snapshots; world traps hide in buildings / dungeons (unknown to the bot) — try there too.
+      if (!foeTraps.some(t => t.d <= 3) && !buildingsNear(seed, here, 3).length) { skipClass(cid, 'no_trap_3'); return out; }
+      useClass(cid); return out;
+    }
+    if (needs === 'attach_effect' || needs === 'attach_nonaction') {
+      const busy = new Set(a.casting?.card_ids || []);
+      const ok = (c) => !!c && !busy.has(c.card_id) && (needs === 'attach_effect' ? c.kind === 'effect' : c.kind !== 'action');
+      let i = a.hand.findIndex(c => ok(c) && c.effect_id !== 'effect_invisibility');
+      if (i < 0) i = a.hand.findIndex(ok);
+      if (i < 0) { skipClass(cid, 'no_effect_card'); return out; }
+      useClass(cid, { attach: i }); a.reserved = a.hand[i].card_id; return out;
+    }
+    if (cid === 'class_animator' && !buildingsNear(seed, here, 2, true).length) { skipClass(cid, 'no_building_2'); return out; }
+    if (needs === 'tile' && (cid === 'class_animator' || cid === 'class_priest')) {
+      useClass(cid);
+      if (a.casting?.card_ids?.length) return out;   // keep the cast going (Rule 19); the peer picks a random free hex
+      const R = cid === 'class_animator' ? 1 : 2;
+      const t = buildHexNear(me, R);
+      const p = slotOf('P');
+      // A Posture keeps me in place and carries the tile as the ability target; without one an Empty Move toward
+      // a hex R away (Priest) still leaves it free; else an Empty Posture (no target → a random free hex).
+      if (t && p >= 0) { queue(p, skillsFor('P')); send({ kind: 'target', target: { q: t.q, r: t.r } }); a.animatorPicks = (a.animatorPicks || 0) + 1; }
+      else if (t && R === 2 && hexD(t) === 2) { queue('EMPTY', skillsFor('M', 'P')); send({ kind: 'target', target: { q: t.q, r: t.r } }); a.animatorPicks = (a.animatorPicks || 0) + 1; }
+      else { queue('EMPTY', skillsFor('P')); send({ kind: 'target', target: null }); }
+      send({ kind: 'lock' });
+      out.act = true; return out;
+    }
+    // Alchemist, Healer, Overlord, Druid, Illusionist, … — nothing to check.
+    useClass(cid); return out;
+  };
+  // Fortress stat buy (2026-11-14): standing within reach of a fortress (hand msg `fortresses`) → emit its stat
+  // (the peer stages the Posture). BOT_FORTRESS=1: always, and walk to the nearest fortress when no enemy is close.
+  const botFortressBuy = (me, near, dist) => {
+    const fz = (a.fortresses || [])[0];
+    if (!fz) return false;
+    const keen = process.env.BOT_FORTRESS === '1';
+    if (fz.near && (!near || dist(near) > 1) && Math.random() < (keen ? 0.95 : 0.4)) {
+      send({ kind: 'destroy', stat: fz.stat, building: fz.building }); send({ kind: 'lock' });
+      a.fortressBuys = (a.fortressBuys || 0) + 1;
+      return true;
+    }
+    if (keen && !fz.near && (!near || dist(near) > 3)) {
+      // The fortress hex itself blocks: walk to its neighbour nearest to me.
+      const step = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]].map(([dq, dr]) => ({ q: fz.q + dq, r: fz.r + dr }))
+        .sort((x, y) => hexDistance({ q: me.tile_q, r: me.tile_r }, x) - hexDistance({ q: me.tile_q, r: me.tile_r }, y))[0];
+      queue('EMPTY', skillsFor('M', 'P'));
+      send({ kind: 'target', target: step }); send({ kind: 'lock' });
+      a.moves++;
+      return true;
+    }
+    return false;
+  };
+  // Rule 24 stat of each natural permanent (its element_cost, data/effects.json): what an emission against it must use.
+  const NATURAL_STAT = { effect_earthquake: 'matter', effect_creation: 'matter', effect_spirit_link: 'world', effect_love: 'matter', effect_awe: 'matter', effect_fear: 'matter', effect_anger: 'matter', effect_domination: 'world', effect_petrify: 'vitality', effect_mists: 'matter' };
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
     if (!me || (me.life ?? 1) <= 0) return;
-    const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q));
+    a.reserved = null;
     const dist = p => hexDistance({ q: me.tile_q, r: me.tile_r }, { q: p.tile_q, r: p.tile_r });
+    // A Rogue who spent the threat charge this turn (stealth_turn) is not chased unless already adjacent (user ruling 2026-11-14).
+    // Invisibility (user ruling 2026-11-14): an invisible enemy is not seen (unless I am invisible too).
+    const invisOf = p => String(p?.permanents_csv || '').split(',').includes('effect_invisibility');
+    const amInvis = invisOf(me);
+    const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q) && !(p.stealth_turn === turn && dist(p) > 1) && !(invisOf(p) && !amInvis));
+    // Rogue / Cleric (user rulings 2026-11-14): enemy enter-traps the bot can see in the peers' snapshots.
+    const myClass = a.classState?.class_id || null;
+    const foeTraps = (myClass === 'class_rogue' || myClass === 'class_cleric') ? [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance))
+      .flatMap(p => { try { return JSON.parse(p.traps_json || '[]'); } catch { return []; } }).filter(t => Number.isInteger(t.q) && Number.isInteger(t.r))
+      .map(t => ({ ...t, d: hexDistance({ q: me.tile_q, r: me.tile_r }, { q: t.q, r: t.r }) })).sort((x, y) => x.d - y.d) : [];
     enemies.sort((x, y) => dist(x) - dist(y));
     const near = enemies[0];
     const slotOf = code => a.hand.findIndex(c => isAction(c) && c.code === code);
     const actionIdx = a.hand.map((c, i) => isAction(c) ? i : -1).filter(i => i >= 0);
+    // Recast / untap my own class when it is owed (a Posture emission — Invisibility survives it). A tapped
+    // ability is what keeps a tap class from firing again, so untap eagerly.
+    const cs = a.classState || null;
+    if (cs && (cs.archived || cs.tapped) && !a.casting?.card_ids?.length && Math.random() < (cs.archived ? 0.5 : 0.8)) {
+      const owed = Object.keys(cs.colours || {}).filter(s => !(cs.progress?.done || []).includes(s));
+      if (owed.length) { send({ kind: 'destroy', stat: owed[0], ...(cs.archived ? { recast: true } : { untap: true }) }); if (near) send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.classRecasts = (a.classRecasts || 0) + 1; return; }
+    }
+    // My class ability whenever it is ready (also while invisible — a class ability does not break it).
+    const cp = botClassPolicy(turn, me, enemies, foeTraps, dist);
+    if (cp.act) return;
+    const classGoal = cp.goal && Math.random() < cp.goalP && hexDistance({ q: me.tile_q, r: me.tile_r }, cp.goal) >= 1 ? cp.goal : null;
+    if (classGoal) a.classWalks = (a.classWalks || 0) + 1;
+    // Invisible: keep moving (Move / Empty Move toward the nearest enemy, else wander); in contact, now and
+    // then break it with an Attack / Block so the drop path is exercised. A fortress in reach is still
+    // stat-bought (a Posture emission does not break Invisibility).
+    if (amInvis && !a.casting?.card_ids?.length && botFortressBuy(me, near, dist)) return;
+    if (amInvis && !a.casting?.card_ids?.length) {
+      const s = slotOf('A') >= 0 ? slotOf('A') : slotOf('B');
+      if (near && dist(near) <= 1 && s >= 0 && Math.random() < 0.3) {
+        queue(s, skillsFor(a.hand[s].code)); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+        a.attacks++; a.invisBreaks = (a.invisBreaks || 0) + 1; return;
+      }
+      if (classGoal) a.dest = { q: classGoal.q, r: classGoal.r };
+      else if (near && dist(near) > 1) a.dest = { q: near.tile_q, r: near.tile_r };
+      else if (!a.dest || (a.dest.q === me.tile_q && a.dest.r === me.tile_r) || Math.random() < 0.3) {
+        const cands = [...a.map.tiles()].filter(t => { const d = hexDistance({ q: me.tile_q, r: me.tile_r }, t); return d >= 2 && d <= 6; });
+        a.dest = cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;
+      }
+      if (!a.dest) return;
+      const mv = slotOf('M');
+      if (mv >= 0 && Math.random() < 0.5) queue(mv, skillsFor('M')); else queue('EMPTY', skillsFor('M'));
+      send({ kind: 'target', target: { q: a.dest.q, r: a.dest.r } }); send({ kind: 'lock' });
+      a.moves++; a.invisMoves = (a.invisMoves || 0) + 1; return;
+    }
     // Haste holder: commit a bonus round first (Attack on the nearest enemy in
     // contact, else an Empty Move toward it) — the peer keeps those cards out of
     // the normal pick that follows.
@@ -87,24 +284,31 @@ function startAgent(peerId, port, attempt = 0) {
       a.hastes = (a.hastes || 0) + plans.length;
     }
     // Class strike (user ruling 2026-10-30): an adjacent enemy with a standing class colour — emit that colour
-    // on a Posture against it (needs a die of 6). Also recast / untap my own class when it is owed.
-    const cs = a.classState || null;
-    if (cs && (cs.archived || cs.tapped) && Math.random() < 0.5) {
-      const owed = Object.keys(cs.colours || {}).filter(s => !(cs.progress?.done || []).includes(s));
-      if (owed.length) { send({ kind: 'destroy', stat: owed[0], ...(cs.archived ? { recast: true } : { untap: true }) }); if (near) send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.classRecasts = (a.classRecasts || 0) + 1; return; }
-    }
+    // on a Posture against it (needs a die of 6). (Recast / untap of my own class: above, before Invisibility.)
     if (near && dist(near) <= 1 && near.class_id && !near.class_archived && Math.random() < 0.3) {
       const down = String(near.class_down_csv || '').split(',').filter(Boolean);
       const stat = Object.keys(CLASS_COLOURS[near.class_id] || {}).find(s => !down.includes(s));
       if (stat) { send({ kind: 'destroy', stat, class: near.peer_id, elem: CLASS_COLOURS[near.class_id][stat][0] }); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' }); a.classStrikes = (a.classStrikes || 0) + 1; return; }
     }
-    // My class ability (tap / once per action): click it on about every other action it is ready; a card-attach
-    // class gets an effect / non-action card attached first.
-    if (cs && !cs.archived && !cs.tapped && !a.queuedClass && Math.random() < 0.5) {
-      const needs = cs.needs;
-      if (needs === 'attach_effect' || needs === 'attach_nonaction') { const i = a.hand.findIndex(c => needs === 'attach_effect' ? isEffect(c) : (!!c && c.kind !== 'action')); if (i >= 0) send({ kind: 'attach', slot: i }); }
-      if (!needs || needs !== 'enemy' || (near && dist(near) <= 1)) { send({ kind: 'class_ability' }); a.queuedClass = true; a.classUses = (a.classUses || 0) + 1; }
+    // Monster natural permanents (user rulings 2026-11-15, rule_monster_natural_permanents): an adjacent monster's
+    // natural copies (perm_copies_json, power 6 each) — emit the stat of the effect's element against them (Rule 24
+    // takes one copy at a time). The "cannot damage" afflictions are enforced by the resolver (my hits just do 0);
+    // a hero afflicted by Fear (or Love / Awe of the monster next to it) mostly walks back to its tower to lift it.
+    const natCopies = p => { try { return JSON.parse(p?.perm_copies_json || '{}') || {}; } catch { return {}; } };
+    if (near && dist(near) <= 1 && Object.keys(natCopies(near)).length && Math.random() < 0.35) {
+      const nid = Object.keys(natCopies(near)).sort()[0];
+      send({ kind: 'destroy', stat: NATURAL_STAT[nid] || 'matter' }); send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+      a.natStrikes = (a.natStrikes || 0) + 1; return;
     }
+    let myAffl = []; try { myAffl = JSON.parse(me.afflictions_json || '[]').filter(x => x?.natural); } catch {}
+    const homeBound = myAffl.some(x => x.effect_id === 'effect_fear' || ((x.effect_id === 'effect_love' || x.effect_id === 'effect_awe') && near && x.by === near.peer_id));
+    if (homeBound && Number.isInteger(me.entry_q) && Number.isInteger(me.entry_r) && !(me.tile_q === me.entry_q && me.tile_r === me.entry_r) && Math.random() < 0.5) {
+      a.dest = { q: me.entry_q, r: me.entry_r };
+      queue('EMPTY', skillsFor('M', 'P')); send({ kind: 'target', target: { q: a.dest.q, r: a.dest.r } }); send({ kind: 'lock' });
+      a.towerWalks = (a.towerWalks || 0) + 1; a.moves++; return;
+    }
+    // (My class ability: botClassPolicy above, before Invisibility.)
+    if (botFortressBuy(me, near, dist)) return;
     const tranceIdx = a.hand.findIndex(c => isSkill(c) && c.is_trance);
     // Battle Trance: two options (Attack + a different code, Block preferred).
     if (tranceIdx >= 0 && actionIdx.length >= 2 && near && dist(near) <= 3 && Math.random() < 0.6) {
@@ -131,6 +335,15 @@ function startAgent(peerId, port, attempt = 0) {
         a.continued = (a.continued || 0) + 1;
         return;
       }
+    }
+    // Invisibility in hand and not invisible yet: cast it (Posture / Empty Posture, 2 emissions), mostly.
+    const invIdx = amInvis ? -1 : a.hand.findIndex(c => isEffect(c) && c.effect_id === 'effect_invisibility');
+    if (invIdx >= 0 && Math.random() < 0.7) {
+      const p = slotOf('P');
+      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, invIdx);
+      send({ kind: 'lock' });
+      a.invisCasts = (a.invisCasts || 0) + 1;
+      return;
     }
     // Adjacent with an effect in hand: cast it on a Posture (explicit P card
     // or the Empty Posture) half the time — this is what exercises the
@@ -188,7 +401,13 @@ function startAgent(peerId, port, attempt = 0) {
     // Holding Resurrect with a corpse in view: walk to it (the raise needs contact).
     const corpse = a.hand.some(c => isEffect(c) && c.effect_id === 'effect_resurrect_death_ward')
       ? [...a.peers.values()].filter(p => p.peer_id !== peerId && (p.life ?? 1) <= 0 && Number.isInteger(p.tile_q) && dist(p) <= 8).sort((x, y) => dist(x) - dist(y))[0] : null;
-    if (corpse) a.dest = { q: corpse.tile_q, r: corpse.tile_r };
+    // Rogue: walk onto a visible enemy trap within 8 hexes (trap charge) — hunting monsters exercises the threat charge.
+    const trapGoal = myClass === 'class_rogue' && Math.random() < 0.6 ? foeTraps.find(t => t.d >= 1 && t.d <= 8) : null;
+    if (trapGoal) { a.dest = { q: trapGoal.q, r: trapGoal.r }; a.rogueTrapWalks = (a.rogueTrapWalks || 0) + 1; }
+    // Class precondition walk (botClassPolicy goal): building for the Animator / Cleric / Rogue, a wild monster
+    // for the Avenger, an enemy for the Witch / Prophet / Manipulator.
+    else if (classGoal) a.dest = { q: classGoal.q, r: classGoal.r };
+    else if (corpse) a.dest = { q: corpse.tile_q, r: corpse.tile_r };
     else if (near) a.dest = { q: near.tile_q, r: near.tile_r };
     else if (!a.dest || (a.dest.q === me.tile_q && a.dest.r === me.tile_r) || Math.random() < 0.15) {
       const cands = [...a.map.tiles()].filter(t => { const d = hexDistance({ q: me.tile_q, r: me.tile_r }, t); return d >= 3 && d <= 9; });
@@ -207,9 +426,9 @@ function startAgent(peerId, port, attempt = 0) {
     const m = JSON.parse(e.data);
     if (m.kind === 'hello') { a.me = m.peer_id; a.hand = m.hand || []; if (m.map) { a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); } for (const p of m.peers || []) a.peers.set(p.peer_id, p); log(`  ${peerId} hello: map ${a.map.size()} hexes / ${a.map.blockCount()} blocks`); }
     if (m.kind === 'map') { if (m.map.seed !== a.map.seed) a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); }
-    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; if (m.class_state) a.classState = m.class_state; if (m.queued_class_ability !== undefined) a.queuedClass = !!m.queued_class_ability; }
+    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; if (m.class_state) a.classState = m.class_state; if (m.queued_class_ability !== undefined) a.queuedClass = !!m.queued_class_ability; if (Array.isArray(m.fortresses)) a.fortresses = m.fortresses; }
     if (m.kind === 'peers') for (const p of m.peers || []) a.peers.set(p.peer_id, { ...(a.peers.get(p.peer_id) || {}), ...p });
-    if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
+    if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; a.queuedClass = false;setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
   };
   ws.onerror = () => {};
   const idx = agents.findIndex(x => x.peerId === peerId);
@@ -220,6 +439,9 @@ function startAgent(peerId, port, attempt = 0) {
 const host = await api('/api/launch', { mode: 'host', dimensionName: DIM });
 if (!host.ok) { console.error('host failed', host); process.exit(1); }
 log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
+if (FORCED_CLASSES.length > 1 && FORCED_LABELS.length) log(`force-class: ${FORCED_LABELS.map((l, i) => `${l}=${FORCED_CLASSES[i % FORCED_CLASSES.length]}`).join(', ')}${process.env.FORCE_CLASS_MONSTERS === '1' ? ' (+ wild lurkers by label hash)' : ''}`);
+else if (FORCED_CLASSES.length > 1) log(`force-class: ${FORCED_CLASSES.join(',')} by label hash (no FORCE_CLASS_LABELS — not every class is guaranteed a holder)`);
+else if (FORCED_CLASSES.length === 1) log(`force-class: every peer = ${FORCED_CLASSES[0]}`);
 const ports = new Map([['peer:player-1', host.peerPort], ['peer:ally-1', host.peerPort + 1], ['peer:foe-1', host.peerPort + 2], ['peer:foe-2', host.peerPort + 3]]);
 await sleep(3000);
 startAgent('peer:player-1', host.peerPort);
@@ -231,16 +453,27 @@ for (let i = 0; i < 40; i++) {
   if (mine && mine.doors?.length >= 1) { log(`Doors published (${mine.doors.length})`); break; }
   await sleep(5000);
 }
+// Monsters the bots meet (foe-1 is always the Ruinous Minotaur — natural Earthquake). SWARM_MONSTERS=mon_a,mon_b[,…]
+// pins M-Foe3 / M-Foe4 (and adds M-Foe5…); by default M-Foe3 rotates per run over the monsters with a natural permanent
+// (rule_monster_natural_permanents) and M-Foe4 is the Tangle Spider (natural Creation).
+const NATURAL_POOL = ['mon_etherium_abomination', 'mon_rakewalk_gargantuan', 'mon_bant_battlemage_3p', 'mon_angel_of_mercy', 'mon_selftower_sphynx', 'mon_greater_basilisk', 'mon_nacatl_hunt_pride', 'mon_loxodon_mystic', 'mon_infectious_horror', 'mon_summit_apes'];
+const SWARM_MONSTERS = (process.env.SWARM_MONSTERS || '').split(',').map(x => x.trim()).filter(Boolean);
+if (!SWARM_MONSTERS[0]) SWARM_MONSTERS[0] = NATURAL_POOL[Math.floor(Date.now() / 60000) % NATURAL_POOL.length];
+if (!SWARM_MONSTERS[1]) SWARM_MONSTERS[1] = 'mon_tangle_spider_2b';
+log(`monsters: foe-1 mon_ruinous_minotaur, foe-2 mon_ridge_runnet_3a, ${SWARM_MONSTERS.map((m, i) => `M-Foe${3 + i} ${m}`).join(', ')}`);
 const joins = [
   { label: 'P-Agent2', side: 'player', characterId: 'char_oran_rief' },
   { label: 'P-Agent3', side: 'player', characterId: 'char_cynder_pyromancer' },
   { label: 'P-Agent4', side: 'player', characterId: 'char_rhox_bodyguard' },
   { label: 'P-Agent5', side: 'player', characterId: 'char_godtracker_jund' },
-  { label: 'M-Foe3',   side: 'npc_b',  creatureId: 'mon_hellkite_hatchling' },
-  { label: 'M-Foe4',   side: 'npc_b',  creatureId: 'mon_tangle_spider_2b' },
+  { label: 'M-Foe3',   side: 'npc_b',  creatureId: SWARM_MONSTERS[0] },
+  { label: 'M-Foe4',   side: 'npc_b',  creatureId: SWARM_MONSTERS[1] },
+  ...SWARM_MONSTERS.slice(2).map((creatureId, i) => ({ label: `M-Foe${5 + i}`, side: 'npc_b', creatureId })),
 ];
 // TEAM_C=1: one human-driven bot on the third team (hostile to A and B).
 if (process.env.TEAM_C === '1') joins.push({ label: 'C-Agent6', side: 'player_c', characterId: 'char_akki_coalfinger' });
+// TEAM_D=1: one human-driven bot on the fourth team (player_d, hostile to A, B and C — user ruling 2026-11-15).
+if (process.env.TEAM_D === '1') joins.push({ label: 'D-Agent7', side: 'player_d', characterId: 'char_oran_rief' });
 for (const j of joins) {
   let base = launcher;
   if (launcherC && j.label === 'P-Agent5') {
@@ -257,7 +490,7 @@ for (const j of joins) {
   ports.set(`peer:${j.label}`, out.peerPort);
   log(`joined ${j.label} (${j.side}) at (${out.startTile.q},${out.startTile.r}) on :${out.peerPort}${base === launcherC ? ' via launcher C' : ''}`);
   await sleep(1500);
-  if (j.side === 'player' || j.side === 'player_c') startAgent(`peer:${j.label}`, out.peerPort);
+  if (j.side === 'player' || j.side === 'player_c' || j.side === 'player_d') startAgent(`peer:${j.label}`, out.peerPort);
 }
 log(`agents driving: ${agents.map(a => a.peerId).join(', ')}`);
 
@@ -288,7 +521,7 @@ async function audit(label) {
 const endAt = Date.now() + minutes * 60_000;
 while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} avenger-lures ${a.avengerLures || 0} witch-taps ${a.witchTaps || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0} cleric-taps ${a.clericTaps || 0} class-walks ${a.classWalks || 0} rogue-trap-walks ${a.rogueTrapWalks || 0} invis-casts ${a.invisCasts || 0} invis-moves ${a.invisMoves || 0} invis-breaks ${a.invisBreaks || 0} natural-strikes ${a.natStrikes || 0} tower-walks ${a.towerWalks || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 
@@ -300,13 +533,79 @@ for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir)
   if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
   const txt = fs.readFileSync(path.join(dir, f), 'utf8');
   const c = k => (txt.match(k) || []).length;
-  counts[f] = { divergence: c(/STATE DIVERGENCE/g), heal: c(/mesh heal:/g), relink: c(/closed — will re-dial/g), catchup: c(/clock catch-up/g), uncaught: c(/UNCAUGHT|UNHANDLED/g), died: c(/DIED at/g), mapBlocks: c(/map \+/g), mapSync: c(/map sync/g) };
+  counts[f] = { divergence: c(/STATE DIVERGENCE/g), heal: c(/mesh heal:/g), relink: c(/closed — will re-dial/g), catchup: c(/clock catch-up/g), uncaught: c(/UNCAUGHT|UNHANDLED/g), died: c(/DIED at/g), mapBlocks: c(/map \+/g), mapSync: c(/map sync/g), natural: c(/\] natural /g) };
   const gs = [...txt.matchAll(/gossip state: topics=\d+ totalPeers=(\d+) subscribersOnStrong=(\d+)/g)].at(-1);
   counts[f].lastPubsubPeers = gs ? `${gs[2]}/${gs[1]}` : '?';
   const bus = [...txt.matchAll(/bus: (\d+)\/(\d+) relays, sent (\d+), received (\d+)/g)].at(-1);
   counts[f].bus = bus ? `sent ${bus[3]} rx ${bus[4]} (${bus[1]}/${bus[2]} relays)` : '?';
 }
 console.table(counts);
+// Manipulator swaps (FORCE_CLASS=class_manipulator): every peer logs `manipulator: <A> forces <B> to swap <old>→<new>`.
+{
+  const seen = new Map();   // swap text → number of peer logs that carry it
+  for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
+    for (const m of new Set([...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/manipulator: (\S+ forces \S+ to swap \S+)/g)].map(x => x[1]))) seen.set(m, (seen.get(m) || 0) + 1);
+  }
+  if (seen.size) log(`manipulator swaps: ${seen.size} distinct (${[...seen].slice(0, 6).map(([k, n]) => `${k} ×${n} logs`).join('; ')})`);
+}
+// Invisibility (FORCE_EFFECTS=effect_invisibility): landed / shown (every peer) / broken (holder) / area hits.
+{
+  const inv = { up: 0, shows: 0, broken: 0, area: 0 };
+  for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
+    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+    inv.up += (txt.match(/permanent effect_invisibility up/g) || []).length;
+    inv.shows += (txt.match(/invisibility: \S+ shows itself/g) || []).length;
+    inv.broken += (txt.match(/invisibility broken:/g) || []).length;
+    inv.area += (txt.match(/area hits the invisible/g) || []).length;
+  }
+  if (inv.up || inv.shows) log(`invisibility: ${inv.up} landed, ${inv.shows} show-lines (all peers), ${inv.broken} broken (holder), ${inv.area} area hits`);
+}
+// Fortress stat buy / Animator / Seeker (2026-11-14; BOT_FORTRESS=1, FORCE_CLASS=class_animator,class_seeker,class_alchemist).
+{
+  const k = { banked: 0, broken: 0, animated: 0, animRandom: 0, seekerTraps: 0, seekerVision: 0 };
+  for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
+    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+    k.banked += (txt.match(/\] fortress bld:\S+: banked/g) || []).length;
+    k.broken += (txt.match(/\] fortress bld:\S+ broken/g) || []).length;
+    k.fzTokens = (k.fzTokens || 0) + (txt.match(/\] fortress bld:\S+ broken .* bonus token \+\d+ \(elem_/g) || []).length;
+    k.fzTokenLost = (k.fzTokenLost || 0) + (txt.match(/\] my stat \S+#fz\d+ (destroyed|taken) by /g) || []).length;
+    k.animated += (txt.match(/class class_animator: a copy of the .* rises at/g) || []).length;
+    k.animRandom += (txt.match(/class class_animator: a copy of .* — a random free hex/g) || []).length;
+    k.shrines = (k.shrines || 0) + (txt.match(/class class_priest: a .* rises at/g) || []).length;
+    k.made = (k.made || 0) + (txt.match(/\] building made: /g) || []).length;
+    k.seekerTraps += (txt.match(/class class_seeker: .* lies as a trap building/g) || []).length;
+    k.seekerVision += (txt.match(/seeker vision: /g) || []).length;
+  }
+  log(`fortress: bot stat-buys ${agents.reduce((s, a) => s + (a.fortressBuys || 0), 0)}, banked ${k.banked}, broken ${k.broken} (bonus tokens ${k.fzTokens || 0}, destroyed by Rule 24 ${k.fzTokenLost || 0}) · animator: bot picks ${agents.reduce((s, a) => s + (a.animatorPicks || 0), 0)}, copies ${k.animated} (${k.animRandom} random) · priest: shrines ${k.shrines || 0} · building-made lines (all peers) ${k.made || 0} · seeker: traps ${k.seekerTraps}, vision ${k.seekerVision}`);
+}
+// Per class (2026-11-15): who held it (every agent's peer view + the agent itself), bot uses and skip reasons
+// (botClassPolicy), the clicker's own `class class_x:` lines and the class's resolver lines across every peer log.
+{
+  const holders = new Map();   // label → class id
+  for (const a of agents) {
+    for (const p of a.peers.values()) if (p?.peer_id && p.class_id) holders.set(p.peer_id.replace('peer:', ''), p.class_id);
+    if (a.classState?.class_id) holders.set(a.peerId.replace('peer:', ''), a.classState.class_id);
+  }
+  const bots = new Set(agents.map(a => a.peerId.replace('peer:', '')));
+  const txts = [];
+  for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) if (f.endsWith('.log') && !f.endsWith('.ui.log')) txts.push(fs.readFileSync(path.join(dir, f), 'utf8'));
+  const n = (re) => txts.reduce((s, t) => s + (t.match(re) || []).length, 0);
+  const classes = [...new Set([...FORCED_CLASSES, ...agents.map(a => a.classState?.class_id).filter(Boolean)])].sort();
+  log(`force-class actual: ${[...holders].sort((x, y) => x[0].localeCompare(y[0])).map(([l, c]) => `${l}${bots.has(l) ? '*' : ''}=${c.replace('class_', '')}`).join(', ')} (* = bot-driven)`);
+  for (const cid of classes) {
+    const short = cid.replace('class_', '');
+    const who = [...holders].filter(([, c]) => c === cid).map(([l]) => `${l}${bots.has(l) ? '*' : ''}`);
+    const uses = agents.reduce((s, a) => s + (a.classUseBy?.[cid] || 0), 0);
+    const skips = {};
+    for (const a of agents) for (const [k, v] of Object.entries(a.classSkip || {})) if (k.startsWith(`${short}:`)) skips[k.slice(short.length + 1)] = (skips[k.slice(short.length + 1)] || 0) + v;
+    const fired = n(new RegExp(`\\] class ${cid}: `, 'g'));
+    const lines = CLASS_LOG[cid] ? n(CLASS_LOG[cid]) : null;
+    log(`class ${short}: holders ${who.join(',') || 'none'} · bot uses ${uses} · class skip ${Object.entries(skips).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${v}`).join(' ') || '-'} · fired (clicker log) ${fired}${lines !== null ? ` · resolver lines (all peers) ${lines}` : ''}`);
+  }
+}
 const divergences = Object.values(counts).reduce((s, c) => s + c.divergence, 0);
 
 // ---- 6. tape scan: did skills / Battle Trance actually get played? ----

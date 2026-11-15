@@ -1,7 +1,10 @@
 // Effect engine check against the worked examples from the pc rule overrides.
 //   node tools/effects-check.mjs
 import { createHash } from 'node:crypto';
-import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum } from '../effects.mjs';
+import { manipulatorConfig, pickAltAction, combatHit, pickManipTarget, applyManipSwap } from '../class-manipulator.mjs';
+import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum, invisibilityBreaks } from '../effects.mjs';
+import { pickBySalt, pickHandDiscards } from '../effects.mjs';
+import { rogueConfig, clericConfig, chargesLeft, trapsInRange, clericRoute, disabledCardMoves } from '../class-traps.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 let fails = 0;
@@ -94,6 +97,30 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('invisible target skipped → other enemy', resolveEffect(world(stats, tiles, sides, { perms: { E: ['effect_invisibility'] } }), cast).hits.map(h => h.victim), ['F']);
   eq('emotions bombard blocks my cast', resolveEffect(world(stats, tiles, sides, { perms: { E: ['effect_emotions_bombard'] } }), cast).status, 'blocked');
   eq('disabled element blocks my cast', resolveEffect(world(stats, tiles, sides, { disabled: { C: ['elem_air'] } }), cast).status, 'blocked');
+}
+// Invisibility (user ruling 2026-11-14): hidden from enemies only, seen by another invisible unit, Meteor Shower
+// still hits it; the permanent breaks on Attack / Block / a cast (not on its own cast, a Move or an Empty action).
+{
+  const stats = { C: M(10, 10, 16, 10), E: M(10, 10, 8, 10), F: M(10, 10, 8, 10), A: M(10, 10, 8, 10) };
+  const lt = { actor: 'C', effect_id: 'effect_lightning', elements: ['elem_fire', 'elem_air'], salt: 'abc', target: { kind: 'character', ref: 'E' }, is_instant: false };
+  eq('invisibility: declared invisible enemy not hit, none other in reach', resolveEffect(world(stats, tiles, sides, { perms: { E: ['effect_invisibility'], F: ['effect_invisibility'] } }), lt).hits.map(h => h.victim), []);
+  eq('invisibility: an invisible caster sees an invisible enemy', resolveEffect(world(stats, tiles, sides, { perms: { C: ['effect_invisibility'], E: ['effect_invisibility'] } }), lt).hits.map(h => h.victim), ['E']);
+  const eq1 = { actor: 'C', effect_id: 'effect_earthquake', elements: ['elem_earth'], salt: 'abc', target: null, is_instant: false };
+  eq('invisibility: earthquake skips the invisible adjacent enemy', resolveEffect(world(stats, tiles, sides, { perms: { E: ['effect_invisibility'] } }), eq1).hits.map(h => h.victim), ['F']);
+  const ms = { actor: 'C', effect_id: 'effect_meteor_shower', elements: ['elem_fire', 'elem_fire', 'elem_fire'], salt: 'abc', target: null, is_instant: false, of: 3, step: 3, kept: [3, 4, 5] };
+  eq('invisibility: meteor shower (untargeted area) still hits the invisible', resolveEffect(world(stats, tiles, sides, { perms: { E: ['effect_invisibility'], A: ['effect_invisibility'] } }), ms).hits.map(h => h.victim), ['A', 'C', 'E', 'F']);
+  const inv = { actor: 'C', effect_id: 'effect_invisibility', elements: ['elem_fire', 'elem_space'], salt: 'abc', target: null, is_instant: false, of: 2, step: 2 };
+  eq('invisibility: the cast lands a permanent on me', resolveEffect(world(stats, tiles, sides), inv).permanents, [{ on: 'C', id: 'effect_invisibility' }]);
+  const brk = (rv, o) => invisibilityBreaks(rv, o);
+  eq('invisibility breaks on Attack', brk({ action: 'A' }), true);
+  eq('invisibility breaks on Block', brk({ action: 'B' }), true);
+  eq('invisibility breaks on a Battle Trance with an A/B option', brk({ action: 'BT', trance: ['M', 'B'] }), true);
+  eq('invisibility breaks when a cast emits (Posture + Fireball)', brk({ action: 'P', effect: { effect_id: 'effect_fireball' } }), true);
+  eq('invisibility breaks on an instant / bonus plan effect', brk({ action: 'EP', effect_id: 'effect_counter_spell' }), true);
+  eq('invisibility holds through its own cast', brk({ action: 'P', effect: { effect_id: 'effect_invisibility' } }), false);
+  eq('invisibility holds on Move / EM / EP / bare Posture', ['M', 'EM', 'EP', 'P'].map(a => brk({ action: a })), [false, false, false, false]);
+  eq('invisibility: a Reaver EP / EM fights as Attack → breaks', [brk({ action: 'EP' }, { reaver: true }), brk({ action: 'EM' }, { reaver: true }), brk({ action: 'M' }, { reaver: true })], [true, true, false]);
+  eq('invisibility: no reveal (idle) holds', brk(null), false);
 }
 // Aura turns a single-target cast into a mass one; Earthquake hits every adjacent enemy.
 {
@@ -382,6 +409,131 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('vision: World 14 beats 10 → peek at E\'s hand', resolveEffect(w, vi).peeks, [{ by: 'C', kind: 'hand', of: 'E' }]);
   eq('vision on a tile reveals the map there', resolveEffect(w, { ...vi, target: { kind: 'tile', ref: { q: 4, r: 4 } } }).peeks, [{ by: 'C', kind: 'tile', q: 4, r: 4 }]);
   eq('vision against a higher World fizzles', resolveEffect(world({ ...stats, C: M(12, 8, 16, 12) }, tiles, sides), vi).status, 'fizzled');
+}
+
+// Manipulator (passive, once per turn — user ruling 2026-11-14): committed alt, combat-hit trigger, salted pick, swap.
+{
+  eq('manipulator config defaults', manipulatorConfig({}), { range: 3, publishRange: 6 });
+  eq('manipulator config from data', manipulatorConfig({ range: 2, publish_range: 5 }), { range: 2, publishRange: 5 });
+  const hand = [{ kind: 'action', code: 'A', card_id: 'a1' }, { kind: 'effect', card_id: 'e1' }, { kind: 'action', code: 'A', card_id: 'a2' }, { kind: 'action', code: 'B', card_id: 'b1' }];
+  eq('alt: never the played card, may be the same kind', pickAltAction(hand, ['a1'], () => 0), { code: 'A', card_id: 'a2' });
+  eq('alt: last pool card', pickAltAction(hand, ['a1'], () => 0.99), { code: 'B', card_id: 'b1' });
+  eq('alt: no other Action card → Empty Posture', pickAltAction(hand, ['a1', 'a2', 'b1']), { code: 'EP', card_id: null });
+  eq('combat hit: a matrix strike counts', combatHit([{ source: 'action', amount: 1 }]), true);
+  eq('combat hit: spells, traps, bonus rounds and 0-damage strikes do not', combatHit([{ source: 'effect', amount: 3 }, { source: 'action', amount: 1, bonus: true }, { source: 'action', amount: 0 }]), false);
+  const ids = ['peer:z', 'peer:b', 'peer:m'];
+  const t1 = pickManipTarget('salt1:manipulator:4.1', ids, sha);
+  eq('pick: order of the candidate list does not matter', pickManipTarget('salt1:manipulator:4.1', [...ids].reverse(), sha), t1);
+  eq('pick: index = sha(seed) mod n over sorted ids', t1, ['peer:b', 'peer:m', 'peer:z'][parseInt(sha('salt1:manipulator:4.1').slice(0, 8), 16) % 3]);
+  eq('pick: nobody near → nothing', pickManipTarget('x', [], sha), null);
+  const atk = { actor: 'E', action: 'A', target: { kind: 'character', ref: 'C' }, skills: ['skill_powerful_attack', 'skill_sanctuary_b'], buildingSkill: 'skill_sanctuary_b', trance: null, effect: { effect_id: 'effect_fireball', is_instant: false }, destroy: { stat: 'world' } };
+  const s1 = applyManipSwap(atk, { code: 'B', target: null });
+  eq('swap A→B: action replaced, riding skills back to hand, building skill kept, cast and destroy dropped (B does not emit)', [s1, atk.action, atk.target, atk.skills, atk.effect, atk.destroy], [{ old: 'A', new: 'B' }, 'B', null, ['skill_sanctuary_b'], null, null]);
+  const po = { actor: 'E', action: 'P', target: null, skills: [], trance: null, effect: { effect_id: 'effect_fireball', is_instant: false }, destroy: null };
+  eq('swap P→EP keeps the cast (EP emits)', [applyManipSwap(po, { code: 'EP', target: null }), po.effect?.effect_id], [{ old: 'P', new: 'EP' }, 'effect_fireball']);
+  const bt = { actor: 'E', action: 'BT', target: null, skills: ['skill_battle_trance'], trance: ['A', 'B'], effect: { effect_id: 'effect_haste', is_instant: true }, destroy: null };
+  eq('swap a Battle Trance → A on the Manipulator; an instant effect still rides', [applyManipSwap(bt, { code: 'A', target: { kind: 'character', ref: 'C' } }), bt.trance, bt.skills, bt.target.ref, bt.effect.effect_id], [{ old: 'BT', new: 'A' }, null, [], 'C', 'effect_haste']);
+}
+
+// Rogue / Cleric trap rules (user rulings 2026-11-14, game/class-traps.mjs).
+{
+  const hd = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+  eq('rogue defaults: 1 trap + 1 threat charge per turn, ring 2', rogueConfig({}), { trapPerTurn: 1, threatPerTurn: 1, threatRadius: 2 });
+  eq('rogue config is data-driven', rogueConfig({ trap_dodges_per_turn: 2, threat_dodges_per_turn: 0, threat_radius: 3 }), { trapPerTurn: 2, threatPerTurn: 0, threatRadius: 3 });
+  eq('rogue trap charge fresh this turn', chargesLeft(1, 4, 1, 5), 1);
+  eq('rogue trap charge spent this turn', chargesLeft(1, 5, 1, 5), 0);
+  eq('rogue 2-per-turn charge after one use', chargesLeft(2, 5, 1, 5), 1);
+  eq('rogue never-used (-1) charge', chargesLeft(1, -1, 0, 0), 1);
+  eq('cleric default disable range 3', clericConfig({}), { range: 3 });
+  const traps = [{ id: 'b', q: 3, r: 0 }, { id: 'a', q: 1, r: 1 }, { id: 'c', q: 4, r: 0 }, { id: 'x' }];
+  eq('cleric reach: traps within 3, sorted by id', trapsInRange(traps, { q: 0, r: 0 }, 3, hd).map(t => t.id), ['a', 'b']);
+  const laid = { owner: 'E', id: 't1' }, wt = { owner: 'world', id: 'wtrap:1,1' };
+  eq('cleric active: laid trap card → its owner\'s discard', clericRoute(laid, 'C', 'active'), { victim: 'C', to: 'E' });
+  eq('cleric active: owner keeps the card (it does not change hands)', disabledCardMoves({ ...laid, ...clericRoute(laid, 'C', 'active') }), false);
+  eq('cleric active: a world trap is just gone', clericRoute(wt, 'C', 'active'), { victim: 'C', to: null });
+  eq('cleric passive: building trap card → the Cleric\'s discard', clericRoute(wt, 'C', 'passive'), { victim: 'C', to: 'C' });
+  eq('cleric passive: an enemy\'s laid trap on the building changes hands', disabledCardMoves({ ...laid, ...clericRoute(laid, 'C', 'passive') }), true);
+}
+
+// Hand classes (user rework 2026-11-14): a victim and the Witch's cards are picked from the reveal salt
+// (the Priest's forced discard is gone — it raises a Shrine since rework #2, oracles in tools/fortress-check.mjs).
+{
+  eq('victim among the enemies in range, by the salt', pickBySalt('salt1:priest:7:P:who', ['E', 'F', 'G'], sha), 'E');
+  eq('pick with nobody in range → null', pickBySalt('s', [], sha), null);
+  eq('witch: 3 of 5 hand cards, by the salt', pickHandDiscards('salt1:witch:7:W', ['c5', 'c1', 'c3', 'c2', 'c4'], 3, sha), ['c2', 'c5', 'c4']);
+  eq('witch: hand order does not matter (ids sorted first)', pickHandDiscards('salt1:witch:7:W', ['c4', 'c2', 'c3', 'c1', 'c5'], 3, sha), ['c2', 'c5', 'c4']);
+  eq('witch: fewer cards than 3 → all of them, no repeats', pickHandDiscards('x', ['a', 'b'], 3, sha).sort(), ['a', 'b']);
+  eq('empty hand → nothing', pickHandDiscards('x', [], 3, sha), []);
+  { let ok = true; for (let i = 0; i < 100; i++) { const got = pickHandDiscards(`s${i}`, ['a', 'b', 'c', 'd', 'e', 'f'], 3, sha); if (new Set(got).size !== 3) ok = false; } eq('witch: 3 distinct cards over 100 seeds', ok, true); }
+}
+
+// Monster natural permanents (user rulings 2026-11-15, game/natural-perms.mjs; peer.mjs hooks call these).
+{
+  const N = await import('../natural-perms.mjs');
+  const hd = (a, b) => { const q1 = a.q ?? a.tile_q, r1 = a.r ?? a.tile_r, q2 = b.q ?? b.tile_q, r2 = b.r ?? b.tile_r; return Math.max(Math.abs(q1 - q2), Math.abs(r1 - r2), Math.abs(q1 + r1 - q2 - r2)); };
+  const cfg = N.naturalConfig({ copies: 2, power: 6 });
+  eq('natural: Minotaur starts with 2 Earthquakes, power 6', N.naturalPermFor({ innate_effect: 'effect_earthquake' }, { effect_earthquake: {} }, cfg), { id: 'effect_earthquake', copies: 2, power: 6 });
+  eq('natural: a creature without innate effect gets none', N.naturalPermFor({ innate_effect: null }, { effect_earthquake: {} }, cfg), null);
+  eq('natural: copies 0 in the rule → none', N.naturalPermFor({ innate_effect: 'effect_love' }, { effect_love: {} }, N.naturalConfig({ copies: 0 })), null);
+  // Rule 24 takes the two copies one at a time; the permanent itself only goes with the last.
+  const one = N.dropOneCopy({ effect_earthquake: 2 }, 'effect_earthquake');
+  eq('rule 24: first copy destroyed → 1 left, the permanent stands', [one.left, one.last, one.copies], [1, false, { effect_earthquake: 1 }]);
+  const two = N.dropOneCopy(one.copies, 'effect_earthquake');
+  eq('rule 24: second copy destroyed → the permanent falls', [two.left, two.last, two.copies], [0, true, {}]);
+  eq('rule 24: a non-natural permanent (no count) falls at once', N.dropOneCopy({}, 'effect_shield').last, true);
+  eq('perm_copies_json parse drops junk', N.parseCopies('{"effect_love":2,"x":0,"y":"a"}'), { effect_love: 2 });
+  // Earthquake tick: the existing rule (delta Earth→Matter, all enemies in contact). Minotaur Matter 15 vs E 10, F 12.
+  const stats = { C: M(17, 10, 15, 13), E: M(10, 10, 10, 10), F: M(10, 10, 12, 10), A: M(10, 10, 8, 10) };
+  const tick = { actor: 'C', effect_id: 'effect_earthquake', elements: ['elem_earth'], salt: 'natural:C:4', target: null, is_instant: true, step: 1, of: 1, _channel_tick: true };
+  const oc = resolveEffect(world(stats, tiles, sides), tick);
+  eq('earthquake tick hits E and F (enemies in contact), not the ally', oc.hits.map(h => h.victim), ['E', 'F']);
+  eq('earthquake tick: 15−10 = 5 → 1 dmg, 15−12 = 3 → 0', [dmgTo(oc, 'E'), dmgTo(oc, 'F')], [[1], [0]]);
+  eq('earthquake tick lands no new permanent', oc.permanents, []);
+  // The 7 rule-less effects: never cast, but a rule exists (permanent, fixed power 6) so the card is a real Permanent.
+  for (const id of ['effect_love', 'effect_awe', 'effect_fear', 'effect_anger', 'effect_domination', 'effect_petrify', 'effect_mists']) {
+    const o = resolveEffect(world(stats, tiles, sides), { actor: 'C', effect_id: id, elements: ['elem_harmony'], salt: 's', target: null, is_instant: false });
+    eq(`${id}: a permanent on the caster`, [o.status, o.permanents], ['done', [{ on: 'C', id }]]);
+  }
+  // Damage gates. X = the monster, E = the afflicted hero, F = another unit (its ally or a third monster).
+  const pos = { X: { q: 0, r: 0 }, E: { q: 1, r: 0 }, F: { q: 3, r: 0 }, G: { q: 0, r: 1 } };
+  const dist = (a, b) => hd(pos[a], pos[b]);
+  const holdsAll = () => true;
+  const aff = (e) => [{ effect_id: e, by: 'X', natural: 1 }];
+  eq('love: E cannot damage X', !!N.naturalDamageBlock({ attacker: 'E', victim: 'X', afflictions: aff('effect_love'), holds: holdsAll, dist }), true);
+  eq('love: E may damage F', N.naturalDamageBlock({ attacker: 'E', victim: 'F', afflictions: aff('effect_love'), holds: holdsAll, dist }), null);
+  eq('awe: same as love', !!N.naturalDamageBlock({ attacker: 'E', victim: 'X', afflictions: aff('effect_awe'), holds: holdsAll, dist }), true);
+  eq('fear: E cannot damage F either', !!N.naturalDamageBlock({ attacker: 'E', victim: 'F', afflictions: aff('effect_fear'), holds: holdsAll, dist }), true);
+  eq('fear: self-damage (Mind Blast) is not blocked', N.naturalDamageBlock({ attacker: 'E', victim: 'E', afflictions: aff('effect_fear'), holds: holdsAll, dist }), null);
+  eq('anger in contact: E may damage X', N.naturalDamageBlock({ attacker: 'E', victim: 'X', afflictions: aff('effect_anger'), holds: holdsAll, dist }), null);
+  eq('anger in contact: E cannot damage G', !!N.naturalDamageBlock({ attacker: 'E', victim: 'G', afflictions: aff('effect_anger'), holds: holdsAll, dist }), true);
+  eq('anger out of contact: no restriction', N.naturalDamageBlock({ attacker: 'F', victim: 'G', afflictions: aff('effect_anger'), holds: holdsAll, dist }), null);
+  eq('anger forced target in contact → X', N.angerForcedTarget({ actor: 'E', afflictions: aff('effect_anger'), holds: holdsAll, dist }), 'X');
+  eq('anger forced target out of contact → none', N.angerForcedTarget({ actor: 'F', afflictions: aff('effect_anger'), holds: holdsAll, dist }), null);
+  eq('perms fallen (holds false) → no block', N.naturalDamageBlock({ attacker: 'E', victim: 'X', afflictions: aff('effect_fear'), holds: () => false, dist }), null);
+  eq('a trap affliction (not natural) is ignored', N.naturalDamageBlock({ attacker: 'E', victim: 'X', afflictions: [{ effect_id: 'effect_fear', by: 'X' }], holds: holdsAll, dist }), null);
+  // Contact afflictions and the tower.
+  eq('contact: an adjacent Fear holder afflicts me', N.contactAfflictions({ mine: [], holders: [{ id: 'X', effect_id: 'effect_fear', dist: 1 }, { id: 'Y', effect_id: 'effect_love', dist: 2 }], onTower: false }), [{ effect_id: 'effect_fear', by: 'X', natural: 1 }]);
+  eq('contact: already afflicted → nothing new', N.contactAfflictions({ mine: aff('effect_fear'), holders: [{ id: 'X', effect_id: 'effect_fear', dist: 1 }], onTower: false }), []);
+  eq('contact: on my tower → nothing', N.contactAfflictions({ mine: [], holders: [{ id: 'X', effect_id: 'effect_fear', dist: 1 }], onTower: true }), []);
+  eq('contact: Domination / Petrify leave no affliction', N.contactAfflictions({ mine: [], holders: [{ id: 'X', effect_id: 'effect_petrify', dist: 1 }], onTower: false }), []);
+  eq('tower lifts natural afflictions, keeps a Sleep trap', N.liftAtTower([...aff('effect_love'), { effect_id: 'effect_sleep', by: 'Z' }], true), [{ effect_id: 'effect_sleep', by: 'Z' }]);
+  eq('away from the tower nothing lifts', N.liftAtTower(aff('effect_love'), false), aff('effect_love'));
+  // Creation ward: Matter < the holder's Matter may not enter its adjacent hexes.
+  const spider = [{ id: 'X', q: 0, r: 0, matter: 10 }];
+  eq('creation: Matter 8 cannot step next to the spider', N.creationBars({ dest: { q: 1, r: 0 }, from: { q: 2, r: 0 }, moverMatter: 8, holders: spider, hexDist: hd })?.id, 'X');
+  eq('creation: Matter 10 (not below) may', N.creationBars({ dest: { q: 1, r: 0 }, from: { q: 2, r: 0 }, moverMatter: 10, holders: spider, hexDist: hd }), null);
+  eq('creation: a hex 2 away is free', N.creationBars({ dest: { q: 2, r: 0 }, from: { q: 3, r: 0 }, moverMatter: 8, holders: spider, hexDist: hd }), null);
+  // Domination: one holder in contact → the 3rd action of the turn is lost; two → the 2nd and 3rd.
+  eq('domination 1 holder: actions 1,2,3 → lost?', [0, 1, 2].map(r => N.lostToHolders(1, 3, r)), [false, false, true]);
+  eq('domination 2 holders: actions 1,2,3 → lost?', [0, 1, 2].map(r => N.lostToHolders(2, 3, r)), [false, true, true]);
+  // Spirit Link: the nearest allied creature, none when alone.
+  const me = { peer_id: 'X', tile_q: 0, tile_r: 0, side: 'b' };
+  const others = [{ peer_id: 'H', tile_q: 1, tile_r: 0, life: 3, character_id: 'c', side: 'a' }, { peer_id: 'Y', tile_q: 3, tile_r: 0, life: 3, creature_id: 'm', side: 'b' }, { peer_id: 'W', tile_q: 2, tile_r: 0, life: 0, creature_id: 'm', side: 'b' }];
+  eq('spirit link: nearest living allied creature', N.nearestAlliedCreature(me, others, hd)?.peer_id, 'Y');
+  eq('spirit link: alone → nothing', N.nearestAlliedCreature(me, others.slice(0, 1), hd), null);
+  eq('spirit link: 2 copies = ∀ → all four stats', N.naturalLinkStats(2), ['vitality', 'world', 'will', 'matter']);
+  eq('spirit link: 1 copy left → Vitality only', N.naturalLinkStats(1), ['vitality']);
+  eq('spirit link: no copy → no link', N.naturalLinkStats(0), []);
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nall checks passed');

@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_the_void",
+  "name": "The Void",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_concentration"],
+  "cost": 1,
+  "kind": "counter",
+  "duration": "channel",
+  "every": {"behaviour":"resolver","note":"∀ instant (peer.mjs EVERY_INSTANT); channel ticks via cast._channel_tick"},
+  "text": "You take no damage this action. Channel: put a Concentration token every action over the effect for the action's duration.",
+  "every_text": "Instant.",
+  "flags": {"voidThisAction":true,"selfTileTokens":["elem_concentration"],"permanent":true,"channel":{"stop":"break"}},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["self_tile_token","elem_concentration","bonus","tile"]},
+      {"emit":["voidFor",{"var":"me"}]},
+      {"call":["land_permanent"]},
+      {"call":["channel_reg","break"]},
+      {"call":["finish"]}
+    ]}
+}

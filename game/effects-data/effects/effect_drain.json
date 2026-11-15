@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_drain",
+  "name": "Drain",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality","elem_harmony"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Channel: draw Vitality and Harmony tokens every action until contact; at each resolution calculate damage. You gain the same calculated points as life tokens. Inverse option: convert the life gain into point-buy damage.",
+  "flags": {"damage":"pointbuy","scope":"target","healDealt":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],true,false]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

@@ -1,0 +1,26 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_harm",
+  "name": "Harm",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality"],
+  "cost": 1,
+  "kind": "damage",
+  "duration": "channel",
+  "every": {"behaviour":"resolver","note":"channel ticks re-enter with cast._channel_tick (peer.mjs)"},
+  "text": "Permanent until round-end. Put a temporary Vitality token as a defense token every action until contact with target; calculate damage each action.",
+  "flags": {"damage":"pointbuy","scope":"target","permanent":true,"selfShieldTokens":["elem_vitality"],"channel":{"stop":"break"}},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],false,false]},"def"]},
+      {"call":["self_tile_token","elem_vitality","shield","shield"]},
+      {"call":["land_permanent"]},
+      {"call":["channel_reg","break"]},
+      {"call":["finish"]}
+    ]}
+}

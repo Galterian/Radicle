@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_confusion",
+  "name": "Confusion",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space","elem_souls"],
+  "cost": 2,
+  "kind": "trap",
+  "duration": "trap",
+  "every": {"behaviour":"resolver","note":"enter trap; the afflicted enemy can only Empty Posture (peer.mjs)"},
+  "text": "Set as trap on your location. Target cannot perform any basic action except Empty Posture (not even Empty Move). On trap resolve: becomes Permanent with power 20 point-buy.",
+  "flags": {"trap":{"trigger":"enter","mode":"perm"},"fixedPower":6},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["trap_self","enter","perm"]},{"call":["finish"]}]}
+}

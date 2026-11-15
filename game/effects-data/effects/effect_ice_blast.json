@@ -1,0 +1,26 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_ice_blast",
+  "name": "Ice blast",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_water","elem_fire"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "+ You may put a Water AND Fire permanent bonus token on your tile. + Also put a damage-shield Water or Fire token on your tile.",
+  "flags": {"damage":"pointbuy","scope":"target","selfTileTokens":["elem_water","elem_fire"],"selfShieldTokens":["elem_water"]},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],false,false]},"def"]},
+      {"call":["self_tile_token","elem_water","bonus","tile"]},
+      {"call":["self_tile_token","elem_fire","bonus","tile"]},
+      {"call":["self_tile_token","elem_water","shield","shield"]},
+      {"call":["finish"]}
+    ]}
+}

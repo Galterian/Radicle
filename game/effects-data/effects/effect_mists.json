@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_mists",
+  "name": "Mists",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.1.0"},
+  "elements": ["elem_water"],
+  "cost": 1,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"monster natural permanent (no_attack): 2 copies at power 6; behaviour lives in peer.mjs"},
+  "text": "Monster natural permanent (Nacatl Hunt Pride starts with 2, power 6 each): adjacent enemies cannot Attack while in contact (their Attack is an Empty Posture) while the copies stand (Rule 24, Matter).",
+  "flags": {"permanent":true,"fixedPower":6},
+  "uses": ["std"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_fireball",
+  "name": "Fireball",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_fire","elem_fire"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Put a permanent fire token for each cast Fireball over a tile. The token vanishes when a character passes over it, dealing the point-buy damage.",
+  "flags": {"damage":"delta","scope":"target","tileToken":{"kind":"fire","elem":"elem_fire"}},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"let":[{"main":{"call":["main_delta",{"var":"def"}]},"val":{"call":["buy",{"call":["my_stat","elem_fire"]},{"cat":["token:",{"var":"def"}]}]},"t":{"tile_of":[{"var":"def"}]}},{"seq":[{"if":[{"var":"t"},{"emit":["tokens",{"obj":{"kind":"fire","elem":"elem_fire","value":{"var":"val"},"q":{"var":"t.q"},"r":{"var":"t.r"},"consumed":true}}]}]},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"var":"main"}}},{"obj":{"kind":"token","sum":{"var":"val"}}}]]}]}]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

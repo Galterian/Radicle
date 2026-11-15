@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chaosd6/effects-data/effect.schema.json",
+  "title": "chaosD6 effect definition (chaosd6.effect/1) and effect library (chaosd6.effect-lib/1)",
+  "description": "Structural schema. Semantic checks (known operations, known subroutines, outcome keys, statuses) are done by effect-engine.mjs#validateEffectDef / validateLib; see SCHEMA.md.",
+  "oneOf": [{ "$ref": "#/$defs/effect" }, { "$ref": "#/$defs/lib" }],
+  "$defs": {
+    "elem": { "enum": ["elem_vitality", "elem_souls", "elem_time", "elem_space", "elem_air", "elem_water", "elem_earth", "elem_fire", "elem_concentration", "elem_harmony"] },
+    "logic": {
+      "description": "A JsonLogic-dialect program: a primitive, an array (evaluated element-wise) or an object with exactly ONE key (the operation).",
+      "anyOf": [
+        { "type": ["string", "number", "boolean", "null"] },
+        { "type": "array", "items": { "$ref": "#/$defs/logic" } },
+        { "type": "object", "minProperties": 1, "maxProperties": 1 }
+      ]
+    },
+    "effect": {
+      "type": "object",
+      "required": ["schema", "id", "name", "version", "elements", "kind", "duration", "flags", "logic"],
+      "additionalProperties": false,
+      "properties": {
+        "schema": { "const": "chaosd6.effect/1" },
+        "id": { "type": "string", "pattern": "^effect_[a-z0-9_]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
+        "source": {
+          "type": "object",
+          "description": "Where the metadata came from (data/effects.json active version) — provenance only.",
+          "properties": { "collection": { "type": "string" }, "version": { "type": "string" } }
+        },
+        "elements": { "type": "array", "items": { "$ref": "#/$defs/elem" }, "minItems": 1, "description": "The card's element cost, in emission order." },
+        "cost": { "type": "integer", "minimum": 1, "description": "= elements.length (∀ adds 1 at cast time)." },
+        "kind": { "enum": ["damage", "lock", "stat_token", "permanent", "counter", "trap", "relocation", "surgery", "summon", "scouting", "meta"] },
+        "duration": { "enum": ["instant", "permanent", "channel", "trap", "cast"] },
+        "every": {
+          "type": "object",
+          "description": "∀ (double cast) behaviour, documentation for UI / validator; the logic reads cast.every itself.",
+          "properties": { "behaviour": { "type": "string" }, "note": { "type": "string" } }
+        },
+        "text": { "type": "string" },
+        "every_text": { "type": "string" },
+        "flags": {
+          "type": "object",
+          "description": "Resolver metadata peer.mjs / bots read (exactly the EFFECT_RULES entry: damage, scope, range, permanent, statBuy, fixedPower, channel, trap, tileTarget, …). Not read by the logic."
+        },
+        "uses": { "type": "array", "items": { "type": "string" }, "description": "Library ids whose subroutines `call` may use (searched in order)." },
+        "logic": { "$ref": "#/$defs/logic" }
+      }
+    },
+    "lib": {
+      "type": "object",
+      "required": ["schema", "id", "version", "subs"],
+      "additionalProperties": false,
+      "properties": {
+        "schema": { "const": "chaosd6.effect-lib/1" },
+        "id": { "type": "string" },
+        "version": { "type": "string" },
+        "description": { "type": "string" },
+        "subs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["params", "body"],
+            "additionalProperties": false,
+            "properties": {
+              "params": { "type": "array", "items": { "type": "string" } },
+              "doc": { "type": "string" },
+              "body": { "$ref": "#/$defs/logic" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

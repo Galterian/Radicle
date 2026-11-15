@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_meteor_shower",
+  "name": "Meteor Shower",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_earth","elem_concentration","elem_space"],
+  "cost": 3,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Damages all known creatures at once.",
+  "flags": {"damage":"pointbuy","scope":"everyone","range":10},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","everyone",10,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}]]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

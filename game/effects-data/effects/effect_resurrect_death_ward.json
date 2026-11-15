@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_resurrect_death_ward",
+  "name": "Resurrect / Death Ward",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality"],
+  "cost": 1,
+  "kind": "summon",
+  "duration": "cast",
+  "every": {"behaviour":"none"},
+  "text": "Start spawning an archived creature as an ally until Stat spent rounds to that creature's Stats. When creature vanishes it goes back to archives. Alt (Death Ward): on target's death, move it out of dimension with 1 life.",
+  "flags": {"permanent":true,"statBuy":true,"fixedPower":6,"resurrect":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["stat_buy",true]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

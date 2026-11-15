@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_delay_time",
+  "name": "Delay time",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_time","elem_time"],
+  "cost": 2,
+  "kind": "meta",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"adjacent enemies lose their last action per holder (peer.mjs planning)"},
+  "text": "All affected adjacent enemies perform one less action per round until someone destroys the effect. At first contact enemies still finish their current action; enemies perform at least one action per round.",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

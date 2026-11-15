@@ -184,6 +184,8 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         Object.assign(process.env, { DIM_NAME: plan.dimName, DIM_ID: plan.dimId, RESTORE_FROM_TMJ: plan.tmjPath, ...(plan.seed ? { MAP_SEED: plan.seed } : {}) });
         if (plan.character) Object.assign(process.env, profileEnv(file, plan.character));
         else if (plan.savedHero) Object.assign(process.env, { CHARACTER_ID: plan.savedHero.characterId, ENTITY_NAME: plan.savedHero.name });
+        // The saved hero's side (a human npc_b hero plays on the monsters' side, user ruling 2026-11-15).
+        if (plan.alliance && plan.alliance !== 'player') Object.assign(process.env, { ALLIANCE: plan.alliance, HUMAN: '1' });
         console.log(`[mobile] loading ${plan.dimName} from ${plan.tmjPath} as ${plan.character?.name || plan.savedHero?.name || 'a random character'}`);
       }
       // Dimensions list: Ally / Enemy / Monster next to a node, or Join my top character / my team (30–50 hexes
@@ -194,8 +196,11 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         if (plan.character) Object.assign(process.env, profileEnv(file, plan.character));
         else if (plan.creatureId) Object.assign(process.env, { CHARACTER_ID: '', CREATURE_ID: plan.creatureId });
         else if (plan.characterId) process.env.CHARACTER_ID = plan.characterId;
-        if (plan.mode === 'join-team' && plan.allies.length) teamAllies = { allies: plan.allies, tier: plan.tier, file, profileEnv, keepMap: true };
-        console.log(`[join] ${plan.join.summary}${plan.character ? ` as ${plan.character.name}` : plan.creatureId ? ` as ${plan.creatureId}` : ''}${plan.allies?.length ? ` + ${plan.allies.length} allies (${plan.tier})` : ''}`);
+        // Join my team: the allies are the third team's bots (npc_a / npc_c); a quiet join also brings back the
+        // Door-known monsters at their last tiles (user rulings 2026-11-15) — all as in-process workers.
+        const allies = plan.mode === 'join-team' ? plan.allies : [];
+        if (allies.length || plan.monsters?.length) teamAllies = { allies, tier: plan.tier || 'strong', file, profileEnv, keepMap: true, allySide: plan.allySide || 'npc_a', monsters: plan.monsters || [] };
+        console.log(`[join] ${plan.join.summary}${plan.character ? ` as ${plan.character.name}` : plan.creatureId ? ` as ${plan.creatureId}` : ''}${allies.length ? ` + ${allies.length} allies (${plan.tier}, ${plan.allySide})` : ''}`);
       }
       // test-random: CHARACTER_ID stays 'random' → the block below picks one, as before.
     }
@@ -212,7 +217,10 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
 // labyrinth wall. Started one by one once my peer answers /status, each bootstrapping off the
 // peers already up (what ui-server.mjs startDimension does).
 // keepMap (Join my team): the allies enter the same joined dimension, so they keep its map-blocks file.
-async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false }) {
+// allySide: the team's bot side (npc_a; npc_c when I am the third team). monsters: a quiet join's regenerated
+// Door-known monsters [{ label, name, creature_id, tile, life }] — npc_b bots on their last tiles, under their old
+// peer ids (so the Doors' records of them are superseded, not doubled), started after the allies.
+async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false, allySide = 'npc_a', monsters = [] }) {
   const { Worker } = await import('node:worker_threads');
   const { Transform } = await import('node:stream');
   const net = await import('node:net');
@@ -240,7 +248,7 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
   const seed = process.env.MAP_SEED || seedForDimension(process.env.DIM_ID || 'dim-ashfall-micro');
   const home = JSON.parse(process.env.START_TILE || '{"q":1,"r":2}');
   const [dMin, dMax] = tier === 'strong' ? [2, 6] : [9, 10];
-  const taken = new Set([`${home.q},${home.r}`]);
+  const taken = new Set([`${home.q},${home.r}`, ...monsters.map(m => `${m.tile.q},${m.tile.r}`)]);
   const ring = [];
   for (let dq = -dMax; dq <= dMax; dq++) for (let dr = -dMax; dr <= dMax; dr++) {
     const t = { q: home.q + dq, r: home.r + dr }, d = hexDistance(home, t);
@@ -259,31 +267,38 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
       flush(cb) { cb(null, tail ? reword(tail) : ''); },
     });
   };
-  for (const [i, c] of allies.entries()) {
-    const free = ring.filter(t => !taken.has(`${t.q},${t.r}`));
-    const tile = free[Math.floor(Math.random() * free.length)];
-    if (!tile) { console.error(`[team] no free tile ${dMin}–${dMax} hexes from (${home.q},${home.r}) for ${c.name}`); continue; }
-    taken.add(`${tile.q},${tile.r}`);
+  const startWorker = async (tag, who, envExtra) => {
     const [pL, pH, pG] = await Promise.all([freePort(), freePort(), freePort()]);
-    const tag = `${label}-ally${i + 1}`;
     const env = {
       ...process.env,
-      ...profileEnv(file, c),
-      PEER_LABEL: tag, ALLIANCE: 'npc_a', CREATURE_ID: '', START_TILE: JSON.stringify(tile),
-      PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
+      OWNER_PEER_ID: '', PHANTOM: '', REPLACES_PEER_ID: '', START_LIFE: '', TEAM_GATE: '', TEAM_GATE_DOOR: '', RESTORE_FROM_TMJ: '', HUMAN: '',
+      ...envExtra,
+      PEER_LABEL: tag, PEER_PORT_LIBP2P: String(pL), PEER_PORT_HTTP: String(pH), PEER_PORT_GUN: String(pG),
       BOOTSTRAP: bootstrap.join(','), PEER_GUN_URLS: gunUrls.join(','), JOIN_SYNC_WAIT_MS: '8000',
-      OWNER_PEER_ID: '', PHANTOM: '', REPLACES_PEER_ID: '', START_LIFE: '', TEAM_GATE: '', TEAM_GATE_DOOR: '', RESTORE_FROM_TMJ: '',
     };
     delete env.JOIN_URI;
     if (!keepMap) { delete env.MAP_BLOCKS_FILE; delete env.MAP_BLOCKS; }
     const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
     w.stdout.pipe(relabel()).on('data', b => process.stdout.write(b));
     w.stderr.pipe(relabel()).on('data', b => process.stderr.write(b));
-    w.on('error', (e) => console.error(`[team] ${tag} (${c.name}) failed: ${e.message}`));
-    w.on('exit', (code) => console.log(`[team] ${tag} (${c.name}) left (${code})`));
-    console.log(`[team] ${c.name} (${c.base_character}) enters as ${tag} at (${tile.q},${tile.r}), ${hexDistance(home, tile)} hexes from me (${tier})`);
+    w.on('error', (e) => console.error(`[team] ${tag} (${who}) failed: ${e.message}`));
+    w.on('exit', (code) => console.log(`[team] ${tag} (${who}) left (${code})`));
     const st = await waitStatus(pH, 120_000);
     if (st) { bootstrap.push(...st.multiaddrs); if (st.gun_url) gunUrls.push(st.gun_url); }
+  };
+  for (const [i, c] of allies.entries()) {
+    const free = ring.filter(t => !taken.has(`${t.q},${t.r}`));
+    const tile = free[Math.floor(Math.random() * free.length)];
+    if (!tile) { console.error(`[team] no free tile ${dMin}–${dMax} hexes from (${home.q},${home.r}) for ${c.name}`); continue; }
+    taken.add(`${tile.q},${tile.r}`);
+    const tag = `${label}-ally${i + 1}`;
+    console.log(`[team] ${c.name} (${c.base_character}) enters as ${tag} (${allySide}) at (${tile.q},${tile.r}), ${hexDistance(home, tile)} hexes from me (${tier})`);
+    await startWorker(tag, c.name, { ...profileEnv(file, c), ALLIANCE: allySide, CREATURE_ID: '', START_TILE: JSON.stringify(tile) });
+  }
+  for (const m of monsters) {
+    console.log(`[regen] ${m.name} (${m.creature_id}) comes back as ${m.label} at its last tile (${m.tile.q},${m.tile.r})${m.life ? ` with ${m.life} life` : ''}`);
+    await startWorker(m.label, m.name, { PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', CHARACTER_ID: '', CREATURE_ID: m.creature_id, ENTITY_NAME: m.name,
+      ALLIANCE: 'npc_b', START_TILE: JSON.stringify(m.tile), START_LIFE: m.life ? String(m.life) : '', FORCE_CLASS: '' });
   }
 }
 if (teamAllies) startTeamAllies(teamAllies).catch(e => console.error(`[team] allies failed: ${e.message}`));

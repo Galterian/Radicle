@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_blizzard",
+  "name": "Blizzard",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_air","elem_water"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "After casting, no one — not even you (except Blizzard effects) — can deal any damage at adjacent tiles and your tile until end of round.",
+  "flags": {"damage":"pointbuy","scope":"all_enemies","zone":"no_damage"},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","all_enemies",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],false,false]},"def"]},
+      {"call":["zone_around"]},
+      {"call":["finish"]}
+    ]}
+}

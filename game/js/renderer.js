@@ -13,12 +13,14 @@ const ALLIANCE_COLOR = {
   'npc_b':    '#e36666',
   'player_c': '#c79bff',
   'npc_c':    '#b07cff',
+  'player_d': '#ffc266',
+  'npc_d':    '#f0a040',
 };
 // Teams (same mapping as peer.mjs sideOf): A = the player, npc_a allies and
-// their summons; B = npc_b; C = the third team (player_c / npc_c).
-const sideOf = (a) => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
+// their summons; B = npc_b; C = the third team (player_c / npc_c); D = the fourth (player_d / npc_d).
+const sideOf = (a) => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : (a === 'player_d' || a === 'npc_d') ? 'D' : a;
 // HP pip colour per team — filled / spent.
-const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b07cff', '#261a3a'] };
+const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b07cff', '#261a3a'], D: ['#ffa83a', '#3a2610'] };
 // Shield life points sit on top of life (user ruling 2026-11-12): Overlord armor gold, Illusionist illusion cyan.
 const HP_ARMOR = '#ffcc33', HP_ILLUSION = '#7fe8ff';
 const DRUID_ORB = 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png';
@@ -682,10 +684,12 @@ export function createRenderer(canvas, state) {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, e.gone ? 0.35 : dead ? 0.75 : 1) : false;
+      // Invisibility: I and my allies still see the hidden unit, faded (enemies never get it — main.js hiddenFromMe).
+      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, e.gone ? 0.35 : dead ? 0.75 : e.invisible ? 0.45 : 1) : false;
       if (!drewSprite) {
         // Fallback disc marker while the sheet is loading / no resources.
         if (dead || e.gone) ctx.globalAlpha = 0.35;
+        else if (e.invisible) ctx.globalAlpha = 0.45;
         ctx.beginPath();
         ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
         ctx.fillStyle = color;

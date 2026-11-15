@@ -1,0 +1,17 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_emotions_bombard",
+  "name": "Emotions bombard",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality","elem_harmony"],
+  "cost": 2,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"blocks adjacent enemy casts (std prelude); ∀ instant handled by peer.mjs (EVERY_INSTANT)"},
+  "text": "Enemy cannot cast effects while in contact with you.",
+  "every_text": "Instant — cast as two sequencing instant actions in one go.",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

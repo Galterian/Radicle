@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_nature_embrace",
+  "name": "Nature embrace",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality"],
+  "cost": 1,
+  "kind": "stat_token",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Choose an element: put lowest element token upside-down as penalty, then highest as permanent bonus.",
+  "flags": {"scope":"self","swapTokens":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","self",1,false]},
+      {"map":[{"var":"recipients"},{"call":["swap_tokens",{"var":"who"},{"call":["buy_pb",{"call":["my_stat",{"at":[{"var":"elems"},0]}]},{"cat":["swap:",{"var":"who"}]}]}]},"who"]},
+      {"call":["finish"]}
+    ]}
+}

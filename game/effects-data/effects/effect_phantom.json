@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_phantom",
+  "name": "Phantom",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality","elem_souls","elem_space"],
+  "cost": 3,
+  "kind": "meta",
+  "duration": "permanent",
+  "every": {"behaviour":"none"},
+  "text": "Destroyed upon taking damage. Create a mirror of yourself to act as you while you remain on your tile. +: Option to enter the mirror character at any time.",
+  "flags": {"permanent":true,"phantom":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"if":[{"===":[{"out":"status"},"done"]},{"put":["phantom",true]}]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

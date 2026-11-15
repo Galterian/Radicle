@@ -2176,6 +2176,99 @@
         {"args": {"stats": {"vitality": 10, "world": 10, "matter": 10, "will": 10}, "token_values": [5, 6, -3]}, "expect": 5},
         {"args": {"stats": {"vitality": 10, "world": 10, "matter": 10, "will": 10}}, "expect": 4}
       ]
+    },
+    {
+      "id": "invisibility_breaks",
+      "name": "Invisibility breaks",
+      "description": "User ruling 2026-11-14: the Invisibility permanent is destroyed (and its holder is seen already in that action) when the holder uses Attack or Block (a Battle Trance option counts; a Reaver's Empty Posture / Empty Move fights as Attack) or emits for any effect other than Invisibility (any cast emission, instants and bonus plans included). Moving, a bare Posture, Empty actions, skills and Rule 24 destroy emissions keep it. Mirrors game/effects.mjs invisibilityBreaks().",
+      "tags": ["effect_invisibility", "permanent", "stealth", "core"],
+      "params": {"action": {"type": "string", "description": "Action code the holder played (A, B, M, P, EM, EP, BT)."}, "trance": {"type": "array", "description": "Battle Trance options (codes) or null.", "default": null}, "effect_id": {"type": "string", "description": "Effect the holder emits for this action, or null.", "default": null}, "reaver": {"type": "boolean", "description": "The holder is a Reaver (EP / EM fight as Attack).", "default": false}},
+      "logic": {"!!": [{"or": [{"in": [{"param": "action"}, ["A", "B"]]}, {"some": [{"param": "trance"}, {"in": [{"var": ""}, ["A", "B"]]}]}, {"and": [{"param": "reaver"}, {"in": [{"param": "action"}, ["EP", "EM"]]}]}, {"and": [{"param": "effect_id"}, {"!=": [{"param": "effect_id"}, "effect_invisibility"]}]}]}]},
+      "examples": [
+        {"args": {"action": "A"}, "expect": true},
+        {"args": {"action": "B"}, "expect": true},
+        {"args": {"action": "BT", "trance": ["M", "B"]}, "expect": true},
+        {"args": {"action": "P", "effect_id": "effect_fireball"}, "expect": true},
+        {"args": {"action": "P", "effect_id": "effect_invisibility"}, "expect": false},
+        {"args": {"action": "M"}, "expect": false},
+        {"args": {"action": "EP"}, "expect": false},
+        {"args": {"action": "EM", "reaver": true}, "expect": true}
+      ]
+    },
+    {
+      "id": "avenger_chase_bonus",
+      "name": "Avenger chase bonus",
+      "description": "User rework #2 2026-11-14: life points the Avenger gains (to life max AND life) when `fresh` monsters started chasing it this action while it already holds `bonus` chase-bonus points; never more than `max` (1) in total. A point lost to damage is granted again by the next new chaser. Mirrors game/class-chase.mjs chaseBonusStep().grant.",
+      "tags": ["class_avenger", "class", "life", "core"],
+      "params": {"fresh": {"type": "number", "description": "Monsters that started chasing the Avenger now (not chasing at the last resolution)."}, "bonus": {"type": "number", "description": "Chase-bonus points the Avenger holds now (0..max).", "default": 0}, "max": {"type": "number", "description": "Cap of the bonus (class data chase_bonus.max).", "default": 1}},
+      "logic": {"if": [{">": [{"param": "fresh"}, 0]}, {"max": [0, {"min": [{"param": "fresh"}, {"-": [{"param": "max"}, {"param": "bonus"}]}]}]}, 0]},
+      "examples": [
+        {"args": {"fresh": 2, "bonus": 0, "max": 1}, "expect": 1},
+        {"args": {"fresh": 1, "bonus": 1, "max": 1}, "expect": 0},
+        {"args": {"fresh": 0, "bonus": 0, "max": 1}, "expect": 0},
+        {"args": {"fresh": 1, "bonus": 0, "max": 1}, "expect": 1}
+      ]
+    },
+    {
+      "id": "monster_effect_affordable",
+      "name": "Monster effect affordable",
+      "description": "User ruling 2026-11-15 (rule_monster_deck_effects): an effect card is cheap enough for a monster when it has 1..max_len elements, every element is backed by a stat ≥ min_stat (the point-buy rolls mostly succeed) and — for delta damage (Rule 21) — the mean of those stats is ≥ min_stat_delta (else it deals 0 to a hero). element_stats = the monster stat behind each element of the card, in cost order. Mirrors game/monster-deck.mjs affordable().",
+      "tags": ["monster", "deck", "effects", "core"],
+      "params": {"element_stats": {"type": "array", "description": "The monster stat behind each element of the effect (ELEM_TO_STAT)."}, "delta": {"type": "boolean", "description": "The effect deals delta damage (damage type without point_buy).", "default": false}, "max_len": {"type": "number", "description": "Most elements (emissions) allowed.", "default": 3}, "min_stat": {"type": "number", "description": "Least stat behind every element.", "default": 10}, "min_stat_delta": {"type": "number", "description": "Least mean stat for delta damage.", "default": 15}},
+      "logic": {"and": [{">": [{"len": [{"param": "element_stats"}]}, 0]}, {"<=": [{"len": [{"param": "element_stats"}]}, {"param": "max_len"}]}, {">=": [{"min_of": [{"param": "element_stats"}]}, {"param": "min_stat"}]}, {"or": [{"!": [{"param": "delta"}]}, {">=": [{"/": [{"sum": [{"param": "element_stats"}]}, {"len": [{"param": "element_stats"}]}]}, {"param": "min_stat_delta"}]}]}]},
+      "examples": [
+        {"args": {"element_stats": [17]}, "expect": true},
+        {"args": {"element_stats": [8]}, "expect": false},
+        {"args": {"element_stats": [15, 15, 15, 15]}, "expect": false},
+        {"args": {"element_stats": [12, 12], "delta": true}, "expect": false},
+        {"args": {"element_stats": [18, 18], "delta": true}, "expect": true},
+        {"args": {"element_stats": [12, 12], "delta": false}, "expect": true}
+      ]
+    },
+    {
+      "id": "monster_deck_effects_valid",
+      "name": "Monster deck_effects valid",
+      "description": "User ruling 2026-11-15 (rule_monster_deck_effects): a creature version either has no deck_effects (an older version) or exactly `count` distinct effect ids (data.monster_deck.thematic, 4).",
+      "tags": ["monster", "deck", "effects", "validation"],
+      "params": {"deck_effects": {"type": "array", "description": "The creature version's deck_effects (effect ids) or null.", "default": null}, "count": {"type": "number", "description": "How many thematic effects a creature holds.", "default": 4}},
+      "logic": {"or": [{"==": [{"param": "deck_effects"}, null]}, {"and": [{"==": [{"len": [{"param": "deck_effects"}]}, {"param": "count"}]}, {"distinct": [{"param": "deck_effects"}]}]}]},
+      "examples": [
+        {"args": {}, "expect": true},
+        {"args": {"deck_effects": ["effect_harm", "effect_throw", "effect_shield", "effect_drain"]}, "expect": true},
+        {"args": {"deck_effects": ["effect_harm", "effect_harm", "effect_shield", "effect_drain"]}, "expect": false},
+        {"args": {"deck_effects": ["effect_harm"], "count": 4}, "expect": false}
+      ]
+    },
+    {
+      "id": "natural_damage_blocked",
+      "name": "Natural Love / Awe / Fear / Anger damage gate",
+      "description": "User rulings 2026-11-15 (rule_monster_natural_permanents): an attacker afflicted by a monster's natural permanent (it came in contact, has not visited its tower since, and the monster still holds a copy) deals no damage: Love / Awe — not to that monster; Fear — to nobody; Anger — to anyone but that monster while in contact with it. Self-damage is never blocked. Mirrors game/natural-perms.mjs naturalDamageBlock().",
+      "tags": ["monster", "natural_permanent", "effect_love", "effect_awe", "effect_fear", "effect_anger", "core"],
+      "params": {"kind": {"type": "string", "description": "the affliction: effect_love | effect_awe | effect_fear | effect_anger"}, "victim_is_holder": {"type": "boolean", "description": "the damage would land on the afflicting monster"}, "in_contact_with_holder": {"type": "boolean", "description": "the attacker stands next to the afflicting monster", "default": false}, "self_damage": {"type": "boolean", "description": "attacker = victim (Mind Blast)", "default": false}},
+      "logic": {"and": [{"!": {"param": "self_damage"}}, {"or": [{"==": [{"param": "kind"}, "effect_fear"]}, {"and": [{"in": [{"param": "kind"}, ["effect_love", "effect_awe"]]}, {"param": "victim_is_holder"}]}, {"and": [{"==": [{"param": "kind"}, "effect_anger"]}, {"!": {"param": "victim_is_holder"}}, {"param": "in_contact_with_holder"}]}]}]},
+      "examples": [
+        {"args": {"kind": "effect_love", "victim_is_holder": true}, "expect": true},
+        {"args": {"kind": "effect_love", "victim_is_holder": false}, "expect": false},
+        {"args": {"kind": "effect_awe", "victim_is_holder": true}, "expect": true},
+        {"args": {"kind": "effect_fear", "victim_is_holder": false}, "expect": true},
+        {"args": {"kind": "effect_fear", "victim_is_holder": false, "self_damage": true}, "expect": false},
+        {"args": {"kind": "effect_anger", "victim_is_holder": false, "in_contact_with_holder": true}, "expect": true},
+        {"args": {"kind": "effect_anger", "victim_is_holder": true, "in_contact_with_holder": true}, "expect": false},
+        {"args": {"kind": "effect_anger", "victim_is_holder": false, "in_contact_with_holder": false}, "expect": false}
+      ]
+    },
+    {
+      "id": "creation_ward_bars",
+      "name": "Natural Creation ward",
+      "description": "User rulings 2026-11-15: while a monster holds its natural Creation, an enemy whose Matter is below the monster's cannot enter a hex next to it (dist ≤ 1). Mirrors game/natural-perms.mjs creationBars().",
+      "tags": ["monster", "natural_permanent", "effect_creation", "core"],
+      "params": {"mover_matter": {"type": "number", "description": "the mover's Matter"}, "holder_matter": {"type": "number", "description": "the monster's Matter"}, "dist": {"type": "number", "description": "hex distance destination → monster"}},
+      "logic": {"and": [{"<": [{"param": "mover_matter"}, {"param": "holder_matter"}]}, {"<=": [{"param": "dist"}, 1]}]},
+      "examples": [
+        {"args": {"mover_matter": 8, "holder_matter": 10, "dist": 1}, "expect": true},
+        {"args": {"mover_matter": 10, "holder_matter": 10, "dist": 1}, "expect": false},
+        {"args": {"mover_matter": 8, "holder_matter": 10, "dist": 2}, "expect": false}
+      ]
     }
   ]
 }

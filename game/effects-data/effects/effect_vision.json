@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_vision",
+  "name": "Vision",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_time"],
+  "cost": 1,
+  "kind": "scouting",
+  "duration": "instant",
+  "every": {"behaviour":"none","note":"paper ∀ (take a Library effect) not modelled"},
+  "text": "Look at any unknown tile from the tileset or look at the enemy's hand (stat vs stat).",
+  "every_text": "Take a chosen effect from the Dimension Library and put into your discard pile.",
+  "flags": {"scope":"target","vision":true,"tileTarget":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,false]},
+      {"if":[{"===":[{"var":"cast.target.kind"},"tile"]},{"seq":[{"emit":["peeks",{"obj":{"by":{"var":"me"},"kind":"tile","q":{"var":"cast.target.ref.q"},"r":{"var":"cast.target.ref.r"}}}]},{"set":["recipients",[]]}]},{"let":[{"tgt":{"at":[{"var":"recipients"},0]},"el":{"at":[{"var":"elems"},0]}},{"if":[{"!":[{"var":"tgt"}]},{"call":["fizzle","nobody in reach and no tile"]},{"<=":[{"call":["my_stat",{"var":"el"}]},{"stat_of":[{"var":"tgt"},{"var":"el"}]}]},{"seq":[{"put":["status","fizzled"]},{"note":[{"var":"tgt"}," keeps their hand hidden (World ",{"stat_of":[{"var":"tgt"},{"var":"el"}]}," ≥ mine ",{"call":["my_stat",{"var":"el"}]},")"]}]},{"emit":["peeks",{"obj":{"by":{"var":"me"},"kind":"hand","of":{"var":"tgt"}}}]}]}]}]},
+      {"call":["finish"]}
+    ]}
+}

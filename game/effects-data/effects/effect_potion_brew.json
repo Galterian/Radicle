@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_potion_brew",
+  "name": "Potion brew",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality"],
+  "cost": 1,
+  "kind": "stat_token",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Create a distributive potion; the target puts an element token over their hero as a permanent bonus until someone destroys it by point-buy.",
+  "flags": {"scope":"self_or_ally","statBonus":["elem_vitality"]},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","self_or_ally",1,false]},
+      {"map":[{"var":"recipients"},{"call":["stat_token",{"var":"who"},"elem_vitality",1,"bonus"]},"who"]},
+      {"call":["finish"]}
+    ]}
+}

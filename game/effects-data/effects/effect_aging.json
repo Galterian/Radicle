@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_aging",
+  "name": "Aging",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_time","elem_souls"],
+  "cost": 2,
+  "kind": "stat_token",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Draw time and souls tokens and apply as enemy's stat-penalty permanents. + Put a bonus effect from the Library over a known location.",
+  "flags": {"scope":"target","statPenalty":["elem_time","elem_souls"],"altFeature":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,false]},
+      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"call":["alt_feature",2]}]},
+      {"map":[{"var":"recipients"},{"map":[["elem_time","elem_souls"],{"call":["stat_token",{"var":"def"},{"var":"el"},-1,"pen"]},"el"]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

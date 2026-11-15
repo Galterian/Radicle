@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_teleportation",
+  "name": "Teleportation",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space"],
+  "cost": 1,
+  "kind": "relocation",
+  "duration": "instant",
+  "every": {"behaviour":"none","note":"paper ∀ (instant, unknown location) not modelled"},
+  "text": "You or a subject teleport willingly to a known location.",
+  "every_text": "Instant. You or a subject teleport willingly to an unknown location.",
+  "flags": {"teleportSelf":true,"tileTarget":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"set":["tmp",{"if":[{"===":[{"var":"cast.target.kind"},"tile"]},{"var":"cast.target.ref"},null]}]},
+      {"if":[{"and":[{"var":"tmp"},{"!":[{"and":[{"is_free":[{"var":"tmp.q"},{"var":"tmp.r"}]},{"<=":[{"hex_dist":[{"var":"my_tile"},{"var":"tmp"}]},10]}]}]}]},{"seq":[{"note":["tile (",{"var":"tmp.q"},",",{"var":"tmp.r"},") not free within 10 — random tile instead"]},{"set":["tmp",null]}]}]},
+      {"if":[{"!":[{"var":"tmp"}]},{"let":[{"free":{"free_tiles_within":[{"var":"my_tile.q"},{"var":"my_tile.r"},10]}},{"if":[{"len":[{"var":"free"}]},{"set":["tmp",{"at":[{"var":"free"},{"rng":["teleport",{"len":[{"var":"free"}]}]}]}]}]}]}]},
+      {"if":[{"!":[{"var":"tmp"}]},{"call":["fizzle","no free tile within 10"]},{"let":[{"ally":{"at":[{"sort_by":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"id"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},1]},{"<":[{"life_of":[{"var":"id"}]},{"life_of":[{"var":"me"}]}]}]},"id"]},{"asc":{"life_of":[{"var":"it"}]}},{"locale":{"var":"it"}}]},0]}},{"seq":[{"emit":["moves",{"obj":{"who":{"or":[{"var":"ally"},{"var":"me"}]},"q":{"var":"tmp.q"},"r":{"var":"tmp.r"},"reason":"teleported"}}]},{"if":[{"var":"ally"},{"note":["teleports ally ",{"var":"ally"}," (life ",{"life_of":[{"var":"ally"}]}," < mine ",{"life_of":[{"var":"me"}]},")"]}]}]}]}]},
+      {"call":["finish"]}
+    ]}
+}

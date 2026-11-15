@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_oblivion",
+  "name": "Oblivion",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_time","elem_souls"],
+  "cost": 2,
+  "kind": "lock",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"the lock holds while the caster's permanent stands (peer.mjs planning filter)"},
+  "text": "Target cannot play an action for the rest of the round; next rounds may play only Empty Posture (may destroy the permanent).",
+  "flags": {"scope":"target","lockRestOfTurn":true,"lockNextTurn":true,"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,false]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["lock_rest",{"var":"def"},true]},"def"]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

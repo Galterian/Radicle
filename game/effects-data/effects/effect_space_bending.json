@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_space_bending",
+  "name": "Space Bending",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space","elem_souls"],
+  "cost": 2,
+  "kind": "lock",
+  "duration": "instant",
+  "every": {"behaviour":"lock ×2","note":"Rule 23 ∀: each hit target loses 2 actions"},
+  "text": "Target loses next action cumulatively (loses one action per Space-bending cast). + Put a bonus effect from the Library over an unknown tile.",
+  "flags": {"damage":"delta","scope":"target","lock":1,"altTrap":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"let":[{"free":{"filter":[{"free_tiles_within":[{"var":"my_tile.q"},{"var":"my_tile.r"},10]},{"!":[{"and":[{"===":[{"var":"t.q"},{"var":"my_tile.q"}]},{"===":[{"var":"t.r"},{"var":"my_tile.r"}]}]}]},"t"]},"lib":{"library":[]},"card":{"if":[{"len":[{"var":"lib"}]},{"at":[{"var":"lib"},{"rng":["altcard",{"len":[{"var":"lib"}]}]}]},{"call":["attached"]},{"obj":{"effect_id":{"var":"cast.attach.effect_id"},"elements":{"var":"cast.attach.elements"},"card_id":{"or":[{"var":"cast.attach.card_id"},null]}}},null]}},{"if":[{"!":[{"len":[{"var":"free"}]}]},{"call":["fizzle","no free tile within 10"]},{"!":[{"var":"card"}]},{"call":["fizzle","no card to lay"]},{"let":[{"pick":{"at":[{"var":"free"},{"rng":["alttrap",{"len":[{"var":"free"}]}]}]}},{"seq":[{"emit":["traps",{"obj":{"by":{"var":"me"},"q":{"var":"pick.q"},"r":{"var":"pick.r"},"effect_id":{"var":"card.effect_id"},"elements":{"merge":[{"var":"card.elements"}]},"card_id":{"or":[{"var":"card.card_id"},null]},"library":{"!":[{"var":"card.card_id"}]},"power":20,"trigger":"enter","mode":"damage","holder":null}}]},{"note":["trap ",{"var":"card.effect_id"}," laid at (",{"var":"pick.q"},",",{"var":"pick.r"},")"]}]}]}]}]}]},
+      {"map":[{"var":"recipients"},{"seq":[{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},{"call":["lock_n",{"var":"def"},{"*":[1,{"if":[{"var":"cast.every"},2,1]}]}]}]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

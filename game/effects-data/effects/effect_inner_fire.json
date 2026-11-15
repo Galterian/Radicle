@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_inner_fire",
+  "name": "Inner Fire",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality","elem_fire"],
+  "cost": 2,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"a 1-damage hit of the holder becomes 2 (peer.mjs)"},
+  "text": "When you make one non-effect damage, you deal two damage instead.",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

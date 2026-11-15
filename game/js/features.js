@@ -273,10 +273,59 @@ function themedBuilding(seedHex, q, r, bt) {
 }
 const mix32 = (h) => { h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16; return h >>> 0; };
 
+// ---- Buildings created during play (user rulings 2026-11-14: Animator copies a nearby building, Priest raises
+// a Shrine). They travel as world edits `{ id: 'made:q,r', q, r, made: {...}, at }` in the CREATOR's
+// world_edits_json; every peer (resolver: from its resolution view, browser: from the roster) folds them into
+// this overlay, and featureAt answers them first — so building-bonus.js, the renderer and the object cards see
+// a placed building exactly like a generated one. NOT part of the pure (seed, q, r) contract (Features.gd has no
+// overlay; the mobile HUD draws with this file).
+const _placed = new Map();   // "q,r" → feature record
+let _placedKey = '';
+// The real (catalogue) building a feature record stands for — what an Animator may copy.
+const NOT_BUILDING = /\btree\b|tree of|grove|thorns|gravestone|faerie ring/i;
+export const isBuildingFeature = (f) => !!f && (f.kind || 'building') === 'building' && !f.blocking && !NOT_BUILDING.test(f.label || '');
+// World edits of every unit → the placed-building list (first `at` per hex wins, then the creator id).
+// `units` = [{ peer_id, world_edits_json }].
+export function placedBuildingsFrom(units) {
+  const best = new Map();
+  for (const u of units || []) {
+    let list = []; try { list = JSON.parse(u?.world_edits_json || '[]'); } catch { list = []; }
+    for (const e of Array.isArray(list) ? list : []) {
+      if (!e || e.gone || !e.made || !Number.isInteger(e.q) || !Number.isInteger(e.r) || e.id !== `made:${e.q},${e.r}`) continue;
+      const k = `${e.q},${e.r}`, cur = best.get(k), by = String(u?.peer_id || '');
+      if (!cur || (e.at ?? 0) < cur.at || ((e.at ?? 0) === cur.at && by < cur.by)) best.set(k, { e, at: e.at ?? 0, by });
+    }
+  }
+  return [...best.values()].map(({ e, by }) => ({ ...e.made, q: e.q, r: e.r, by })).sort((a, b) => a.q - b.q || a.r - b.r);
+}
+// Replace the overlay. Returns true when it changed (listeners notified: renderer, building-bonus memo).
+export function setPlacedBuildings(list) {
+  const key = JSON.stringify(list || []);
+  if (key === _placedKey) return false;
+  _placedKey = key; _placed.clear();
+  for (const b of list || []) if (Number.isInteger(b.q) && Number.isInteger(b.r)) _placed.set(`${b.q},${b.r}`, {
+    path: b.path || '', label: b.label || 'Building', kind: 'building', biome: b.biome || '', id: `made:${b.q},${b.r}`, desc: b.desc || '',
+    ...(b.theme ? { theme: b.theme } : {}), ...(b.copy_of ? { copy_of: { q: b.copy_of.q, r: b.copy_of.r } } : {}), ...(b.bonus ? { bonus: b.bonus } : {}),
+    placed: true, by: b.by || null, made_by: b.made_by || null,
+  });
+  notify();
+  return true;
+}
+export const placedBuildingAt = (q, r) => _placed.get(`${q},${r}`) || null;
+// A catalogue sprite whose label matches `re` (deterministic: the first one in biome / list order) — for a
+// created building that has no source to copy (the Priest's Shrine).
+export function catalogSpriteFor(re) {
+  if (!catalog) return null;
+  for (const b of Object.keys(catalog.by_biome).sort()) for (const c of catalog.by_biome[b]) if ((c.kind || 'building') === 'building' && re.test(c.label || '')) return { path: c.path, label: c.label, desc: c.desc || '' };
+  return null;
+}
+
 // Returns {path, label, kind, biome, id} or null. `seedHex` is the dim seed
 // used by biome.js (`state.map.seed`). If a biome function isn't passed, we
 // derive it from biomeFor(seedHex).
 export function featureAt(seedHex, q, r, biomeAt = null) {
+  const made = _placed.get(`${q},${r}`);
+  if (made) return made;
   // Buildings stay where they are (user ruling 2026-11-12): stepping on one
   // gives its bonus while you stand there, it is never picked up / consumed.
   const bAt = biomeAt || biomeFor(seedHex).biomeAt;

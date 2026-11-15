@@ -378,8 +378,60 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": [],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_souls"],
+            "every_bonus": "Connect all elements.",
+            "text": "Connect two Stats of two friendly subjects (draw the chosen element value as dice and put over the card). The sum becomes the new Stat value.",
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "link",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Loxodon Mystic starts with 2, power 6 each): the monster is linked to its nearest allied creature — with both copies standing that is the ∀ double cast, all four of that creature's stats are added to its own; with one copy left only its Vitality; a lone monster gets nothing. A destroyed copy goes to the monster's archive (Rule 24, World). Players still cast Spirit Link on an ally stat.",
+              "every_with_copies": 2
+            }
+          },
+          "logic": {
+            "description": "Implemented (2026-10-29). The clicked ally stat (else the biggest stat among my living allies) is added to my stat while the permanent stands — not a token, so it overrides nothing; my life maximum follows (general_ux_hitpoints_calculations). ∀: all four stats. Natural: the holder (after every action, its own state) links to its nearest living allied creature (distance, then id) — with both copies standing it is the ∀ double cast: all four of that creature's stats are added to its own (links_json, every_csv); with one copy left a plain Vitality link; a lone monster has no link. The link moves to whichever allied creature is nearest. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again. Players still cast it as described first; the natural reading applies only to a monster's starting copies.",
+            "prerequisites": [
+              {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}},
+              {"id": "ally_alive", "description": "The linked unit is a living ally (any distance).", "when": {"and": [{"!": {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}}, {">": [{"var": "target.life"}, 0]}]}}
+            ],
+            "effects": [
+              {"id": "linked_stat_sum", "description": "My stat while linked = my base stat + the ally's current base stat for the chosen stat.", "target": "caster", "unit": "stat", "value": {"+": [{"var": "caster.stats.world"}, {"var": "target.stats.world"}]}},
+              {"id": "stats_linked", "description": "How many stats are linked: 1, all 4 on a ∀ double cast.", "target": "target", "unit": "stat", "value": {"if": [{"var": "cast.every"}, 4, 1]}},
+              {"id": "permanent_power", "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.", "target": "caster", "unit": "die", "value": {"var": "die"}},
+              {"id": "destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"max_of": [{"map": [{"filter": [{"var": "caster.tokens"}, {"==": [{"var": "elem"}, {"root": "elements.0"}]}]}, {"var": "value"}]}]}}]}},
+              {"id": "natural_link_stat", "description": "Natural: the nearest allied creature's stat is added to the holder's — all four with 2 copies (∀), Vitality with 1.", "target": "caster", "unit": "stat", "value": {"var": "ally.stats.vitality"}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_souls"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "keeps_every_bonus", "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).", "assert": {"==": [{"typeof": [{"var": "proposal.data.every_bonus"}]}, "string"]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["action_can_cast_non_instant", "elements_not_disabled", "is_enemy", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Players keep casting it as before (in_player_deck unchanged); the natural behaviour applies only to the copies a monster starts with. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json). User answer 2026-11-15: 2 copies standing count as ∀ (all four stats linked, every_csv); 1 copy → Vitality only. Destroyed copies go to the archive.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": [],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -926,8 +978,50 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["effect_phantom", "class_rogue", "class_cleric"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-14",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_fire", "elem_space"],
+            "every_bonus": "Permanent until you make damage.",
+            "text": "Point-buy permanent: put it in your permanents holder. While it stands you may move around the map and you are not visible to enemies (only to your allies, other invisible characters, the Vision effect and the Cleric's class skill): they cannot target you and monsters do not see you. Once you start casting a spell, or use Attack or Block, the permanent is destroyed. Untargeted area effects (Meteor Shower) still reach you.",
+            "hidden_from": "enemies",
+            "breaks_on": ["attack", "block", "cast"],
+            "area_hits": true
+          },
+          "logic": {
+            "description": "Implemented point-buy permanent (user ruling 2026-11-14). Lands in the caster's permanents holder with a point-buy die (Rule 12, its Rule 24 power). While it stands the caster is hidden from ENEMIES (allies still see it, drawn faded; another invisible unit sees it): enemy UIs drop it from map, roster, hover and click targets; enemy casts and autotargets (Rule 15, Counter Spell, Reaver, Battle Trance, combo, targeted skills, Rule 24 destroy) skip it; Attacks, aimed effects, traps and fire tokens do not hurt it; monsters neither wake on it nor chase it. It is destroyed the moment the caster uses Attack or Block (a Battle Trance A/B option, a Reaver EP/EM fighting as Attack) or starts casting any other effect (any emission, instants and bonus plans included) — and it is already seen in that action. Moving, a bare Posture, Empty actions, skills and Rule 24 destroy emissions keep it. Untargeted area damage (Meteor Shower) still hits it. With the ∀ double cast it holds (hidden even while fighting) until the caster deals damage.",
+            "prerequisites": [
+              {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}}
+            ],
+            "effects": [
+              {"id": "permanent_power", "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.", "target": "caster", "unit": "die", "value": {"var": "die"}},
+              {"id": "destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"max_of": [{"map": [{"filter": [{"var": "caster.tokens"}, {"==": [{"var": "elem"}, {"root": "elements.0"}]}]}, {"var": "value"}]}]}}]}},
+              {"id": "hidden_from_enemies", "description": "1 while the permanent stands and this action's reveal does not break it (invisibility_breaks); ∀: 1 until the caster deals damage. Enemies cannot see / target it; allies and other invisible units can.", "target": "caster", "unit": "flag", "value": {"if": [{"or": [{"var": "cast.every"}, {"!": [{"rule": ["invisibility_breaks", {"action": {"var": "caster.action"}, "trance": {"var": "caster.trance"}, "effect_id": {"var": "caster.effect_id"}, "reaver": {"var": "caster.is_reaver"}}]}]}]}, 1, 0]}},
+              {"id": "ends_on", "description": "Own reveals that end it: the first one that uses Attack / Block or emits for another effect (invisibility_breaks); ∀: the first damage dealt.", "target": "caster", "unit": "actions", "value": 1}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_fire (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_fire"]}]}},
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_space (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_space"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "keeps_every_bonus", "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).", "assert": {"==": [{"typeof": [{"var": "proposal.data.every_bonus"}]}, "string"]}}
+            ],
+            "references": ["action_can_cast_non_instant", "elements_not_disabled", "invisibility_breaks", "using_rule_24"]
+          },
+          "notes": "User rework 2026-11-14 (supersedes 1.0.0): \"Fix Invisibility: When you cast the invisibility and put it as point buy permanent in your permanents holder: you may move around the map and you are not visible to enemies. Once you start casting spell or use Attack or Block your invisibility permanent is destroyed.\" Hidden state derives from permanents_csv / every_csv + the reveals, so every peer agrees; visibility is a per-viewer UI filter.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_phantom", "class_rogue", "class_cleric"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1751,8 +1845,56 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["effect_fossilization", "effect_ice_blast"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent", "point_buy", "channeling"],
+            "element_cost": ["elem_earth"],
+            "text": "Place an impassable (for low-Matter creatures) adjacent wall token with power 20 × number of Creations cast. To destroy, enemy must emit Earth > wall/2× wall. + Put an Earth token on that tile.",
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "ward",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Tangle Spider, Ember Weaver start with 2, power 6 each): enemies whose Matter is below the monster's cannot enter the hexes next to it. No hit points — it falls with the permanents (Rule 24, Matter). Players still cast Creation as an Earth obstacle."
+            }
+          },
+          "logic": {
+            "description": "Implemented (2026-10-29). An Earth obstacle with 5 hp appears on the left-clicked adjacent free tile (else the free neighbour nearest the closest enemy). The caster's side walks over it; an enemy moving or aiming into it is held there and knocks round(Matter ÷10) off it per action (Matter under 5 scratches nothing). At 0 hp it is gone. The card is spent (no permanent in the holding). Natural: while the copies stand, an enemy whose Matter is below the holder's may not end a move on a hex within 1 of the holder (peer.mjs simulate, after the labyrinth-wall veto, against the holders' tiles before the action's moves; creation_ward_bars) — the move is vetoed (journey blocked), no hit points, nothing to wear down. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again. Players still cast it as described first; the natural reading applies only to a monster's starting copies.",
+            "prerequisites": [
+              {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}},
+              {"id": "wall_tile_adjacent", "description": "The wall goes on a right-clicked adjacent tile (q, r at distance 1).", "when": {"or": [{"==": [{"var": "target"}, null]}, {"and": [{"and": [{"==": [{"typeof": [{"var": "target.q"}]}, "number"]}, {"==": [{"typeof": [{"var": "target.r"}]}, "number"]}]}, {"rule": ["in_contact", {"dist": {"var": "dist"}}]}]}]}}
+            ],
+            "effects": [
+              {"id": "wall_power", "description": "Obstacle hit points.", "target": "tile", "unit": "hp", "value": 5},
+              {"id": "obstacle_wear_per_hit", "description": "What an enemy moving into the obstacle knocks off it: round(Matter ÷10).", "target": "tile", "unit": "hp", "value": {"round_div10": [{"var": "target.stats.matter"}]}},
+              {"id": "natural_ward_bars", "description": "Natural: an enemy with less Matter may not enter a hex next to the holder.", "target": "target", "unit": "flag", "value": {"rule": ["creation_ward_bars", {"mover_matter": {"var": "target.stats.matter"}, "holder_matter": {"var": "caster.stats.matter"}, "dist": {"var": "dist"}}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_earth (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_earth"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "keeps_type_point_buy", "description": "effect_types keeps \"point_buy\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "point_buy"]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["action_can_cast_non_instant", "creation_ward_bars", "elements_not_disabled", "in_contact", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Players keep casting it as before (in_player_deck unchanged); the natural behaviour applies only to the copies a monster starts with. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_fossilization", "effect_ice_blast"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -2274,7 +2416,7 @@
             "text": "Damages all known creatures at once."
           },
           "logic": {
-            "description": "Implemented point-buy damage to EVERYONE within 10 hexes of the caster — the caster, allies and enemies alike (pc ruling; invisible units other than the caster are skipped). One die per emission (Earth→Matter, Concentration→Will, Space→World), Σ kept ÷10 rounded half up per victim; shields per element apply per victim. No target is chosen. A failed roll re-emits only that element.",
+            "description": "Implemented point-buy damage to EVERYONE within 10 hexes of the caster — the caster, allies and enemies alike (pc ruling; invisible units are hit too — untargeted area, ruling 2026-11-14). One die per emission (Earth→Matter, Concentration→Will, Space→World), Σ kept ÷10 rounded half up per victim; shields per element apply per victim. No target is chosen. A failed roll re-emits only that element.",
             "prerequisites": [
               {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
               {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}}
@@ -2682,10 +2824,10 @@
           "notes": "Listed in the paper only on creature cards (Ruinous Minotaur, Canyon Minotaur). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_fossilization", "effect_metaphysics"],
           "data": {
             "effect_types": ["damage"],
@@ -2711,6 +2853,54 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "rule_21_delta_damage"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["damage", "permanent"],
+            "element_cost": ["elem_earth"],
+            "text": "Monster natural permanent (Ruinous / Canyon Minotaur start with 2, power 6 each): at the end of every turn each enemy in contact takes Earthquake's damage (Earth against Matter). It lasts until both copies are destroyed (Rule 24, Matter).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "turn_tick",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Ruinous / Canyon Minotaur start with 2, power 6 each): at the end of every turn each enemy in contact takes Earthquake's damage (Earth against Matter). It lasts until both copies are destroyed (Rule 24, Matter)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: at the end of every engine turn (its 3rd action, never in a bonus round) every peer re-fires the effect on each living holder like a channel tick (resolveEffect with _channel_tick, salt natural:<holder>:<turn>) — Rule 21 delta damage Earth→Matter to every visible enemy in contact; logged `natural earthquake tick`. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again. (The old cast reading stays in EFFECT_RULES: delta damage Earth→Matter to every enemy in contact.)",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_turn_end", "description": "The tick fires on the last action of the engine turn (round index 2), never in a bonus round.", "when": {"==": [{"var": "round"}, 2]}}
+            ],
+            "effects": [
+              {"id": "delta_damage", "description": "Rule 21 delta damage computed against each adjacent enemy in turn (defender = that enemy).", "target": "all_enemies", "unit": "damage", "value": {"rule": ["rule_21_delta_damage", {"caster": {"root": "caster"}, "defender": {"root": "defender"}, "elements": {"root": "elements"}}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_earth (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_earth"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_damage", "description": "effect_types keeps \"damage\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "damage"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["rule_21_delta_damage", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_fossilization", "effect_metaphysics"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -2726,10 +2916,10 @@
           "notes": "Listed in the paper only on creature cards (Bant Battlemage 3P). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_awe", "effect_fear", "effect_anger"],
           "data": {
             "effect_types": ["permanent"],
@@ -2760,6 +2950,54 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy", "using_rule_24"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_water", "elem_harmony"],
+            "text": "Monster natural permanent (Bant Battlemage starts with 2, power 6 each): an enemy that comes in contact cannot deal damage to this monster until it visits its tower (or both copies are destroyed — Rule 24, Matter / Will).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "spare_holder",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Bant Battlemage starts with 2, power 6 each): an enemy that comes in contact cannot deal damage to this monster until it visits its tower (or both copies are destroyed — Rule 24, Matter / Will)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy that ends an action in contact with the holder (not on its own tower = entry hex) gets the affliction {effect_love, by, natural} in its afflictions_json; while the holder keeps a copy, every damage that enemy would deal to the HOLDER is dropped (addDmg / effect hits, natural_damage_blocked). Visiting its tower lifts it (doPlanningEnd), so does the holder's last copy falling. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "damage_to_caster_allowed", "description": "Damage the target may deal to the caster while the permanent stands.", "target": "target", "unit": "damage", "value": 0},
+              {"id": "natural_damage_to_holder_blocked", "description": "Natural: an afflicted enemy's damage to the holder is dropped.", "target": "target", "unit": "flag", "value": {"rule": ["natural_damage_blocked", {"kind": "effect_love", "victim_is_holder": true}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_water (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_water"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "natural_damage_blocked", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_awe", "effect_fear", "effect_anger"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -2775,10 +3013,10 @@
           "notes": "Listed in the paper only on creature cards (Angel of Mercy). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_love", "effect_fear", "effect_anger"],
           "data": {
             "effect_types": ["permanent"],
@@ -2809,6 +3047,54 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy", "using_rule_24"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_air", "elem_harmony"],
+            "text": "Monster natural permanent (Angel of Mercy starts with 2, power 6 each): an enemy that comes in contact cannot deal damage to this monster until it visits its tower (or both copies are destroyed — Rule 24, Matter / Will).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "spare_holder",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Angel of Mercy starts with 2, power 6 each): an enemy that comes in contact cannot deal damage to this monster until it visits its tower (or both copies are destroyed — Rule 24, Matter / Will)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: exactly as Love — an enemy that came in contact cannot damage the holder until it visits its tower (entry hex) or the copies fall. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "damage_to_caster_allowed", "description": "Damage the target may deal to the caster while the permanent stands.", "target": "target", "unit": "damage", "value": 0},
+              {"id": "natural_damage_to_holder_blocked", "description": "Natural: an afflicted enemy's damage to the holder is dropped.", "target": "target", "unit": "flag", "value": {"rule": ["natural_damage_blocked", {"kind": "effect_awe", "victim_is_holder": true}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_air (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_air"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "natural_damage_blocked", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_love", "effect_fear", "effect_anger"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -2824,10 +3110,10 @@
           "notes": "Listed in the paper only on creature cards (Selftower Sphynx). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_possess_phylactery", "effect_confusion"],
           "data": {
             "effect_types": ["permanent", "channeling"],
@@ -2859,6 +3145,55 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy", "using_rule_24"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent", "channeling"],
+            "element_cost": ["elem_souls", "elem_harmony"],
+            "text": "Monster natural permanent (Selftower Sphynx starts with 2, power 6 each): an enemy in contact loses one action per turn (like Delay Time) while the copies stand (Rule 24, World / Will).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "lose_action",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Selftower Sphynx starts with 2, power 6 each): an enemy in contact loses one action per turn (like Delay Time) while the copies stand (Rule 24, World / Will)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy in contact with a holder loses one action per turn — the Delay Time model in doPlanningEnd (each adjacent holder costs the last action of the turn; Delay Time and Domination holders add up). Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "control_radius", "description": "The target stays controlled while within this distance of the caster.", "target": "target", "unit": "hexes", "value": 1},
+              {"id": "natural_actions_lost", "description": "Natural: actions an enemy in contact loses per turn (per holder).", "target": "target", "unit": "actions", "value": 1},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_souls"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_type_channeling", "description": "effect_types keeps \"channeling\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "channeling"]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_possess_phylactery", "effect_confusion"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -2874,10 +3209,10 @@
           "notes": "Listed in the paper only on creature cards (Rakewalk Gargantuan, Summit Apes). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_love", "effect_awe", "effect_fear"],
           "data": {
             "effect_types": ["permanent"],
@@ -2908,6 +3243,54 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy", "using_rule_24"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_fire", "elem_harmony"],
+            "text": "Monster natural permanent (Rakewalk Gargantuan, Summit Apes start with 2, power 6 each): an enemy that came in contact and is in contact with this monster may only attack and damage this monster, until it visits its tower (or both copies are destroyed — Rule 24, Matter / Will).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "only_holder",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Rakewalk Gargantuan, Summit Apes start with 2, power 6 each): an enemy that came in contact and is in contact with this monster may only attack and damage this monster, until it visits its tower (or both copies are destroyed — Rule 24, Matter / Will)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy that ends an action in contact with the holder is afflicted; while it stands in contact with the holder its character target (Attack, Move, any cast) is forced to the holder (Rule 15 autotarget override, angerForcedTarget) and damage it would deal to anyone else is dropped. Lifted at its tower (entry hex) or with the last copy. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "damage_to_others_allowed", "description": "Damage the target may deal to anyone but the caster while the permanent stands.", "target": "target", "unit": "damage", "value": 0},
+              {"id": "natural_damage_to_others_blocked", "description": "Natural: an afflicted enemy in contact deals no damage to anyone but the holder.", "target": "target", "unit": "flag", "value": {"rule": ["natural_damage_blocked", {"kind": "effect_anger", "victim_is_holder": false, "in_contact_with_holder": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_fire (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_fire"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "natural_damage_blocked", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_love", "effect_awe", "effect_fear"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -2923,10 +3306,10 @@
           "notes": "Listed in the paper only on creature cards (Nacatl Hunt-Pride, Bonebreaker Giant). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_blizzard", "effect_sleep"],
           "data": {
             "effect_types": ["instant"],
@@ -2953,6 +3336,56 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["instant", "permanent"],
+            "element_cost": ["elem_water"],
+            "text": "Monster natural permanent (Nacatl Hunt Pride starts with 2, power 6 each): adjacent enemies cannot Attack while in contact (their Attack is an Empty Posture) while the copies stand (Rule 24, Matter).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "no_attack",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Nacatl Hunt Pride starts with 2, power 6 each): adjacent enemies cannot Attack while in contact (their Attack is an Empty Posture) while the copies stand (Rule 24, Matter)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy in contact with a holder cannot Attack — its Attack (a Battle Trance option, a Reaver / stance-building Attack too) is played as an Empty Posture (simulate, after the stances). Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "attacks_allowed_adjacent", "description": "Attacks an affected adjacent creature may make this round while in contact.", "target": "all_enemies", "unit": "actions", "value": 0},
+              {"id": "radius", "description": "Contact distance of the mist.", "target": "all_enemies", "unit": "hexes", "value": 1},
+              {"id": "natural_attacks_allowed", "description": "Natural: Attacks an adjacent enemy may make while in contact.", "target": "all_enemies", "unit": "actions", "value": 0},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_water (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_water"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_instant", "description": "effect_types keeps \"instant\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "instant"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_blizzard", "effect_sleep"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -2968,10 +3401,10 @@
           "notes": "Listed in the paper only on creature cards (Greater Basilisk). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_fossilization", "effect_sleep"],
           "data": {
             "effect_types": ["permanent", "channeling"],
@@ -3004,6 +3437,56 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy", "using_rule_24"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent", "channeling"],
+            "element_cost": ["elem_vitality", "elem_harmony"],
+            "text": "Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "stone",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy that plans an action in contact with a holder is stone for the rest of that turn (entity.petrifiedTurn; every remaining action is a bare Empty Posture like a lock — a Rule 24 destroy emission still rides), and again every turn it is found in contact while the copies stand. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "actions_while_petrified", "description": "Actions the target may take while petrified.", "target": "target", "unit": "actions", "value": 0},
+              {"id": "petrify_radius", "description": "Contact distance that keeps the petrification up.", "target": "target", "unit": "hexes", "value": 1},
+              {"id": "natural_locked_rest_of_turn", "description": "Natural: an enemy in contact sits out the rest of the turn.", "target": "target", "unit": "actions", "value": {"-": [2, {"var": "round"}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_vitality"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_type_channeling", "description": "effect_types keeps \"channeling\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "channeling"]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_fossilization", "effect_sleep"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     },
@@ -3019,10 +3502,10 @@
           "notes": "Listed in the paper only on creature cards (Etherium Abomination, Infectious Horror). Added as a real effect so the engine can put it into the awakened creature's hand per Rule 3; status creature_innate means it is not in the player effect deck until a vote says otherwise.",
           "origin": "paper_rules",
           "parent_version": null,
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
           "vote_log": [],
-          "weight": 1.0,
+          "weight": 0.99,
           "rebalance_links": ["effect_love", "effect_awe", "effect_anger"],
           "data": {
             "effect_types": ["permanent"],
@@ -3053,6 +3536,54 @@
             ],
             "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy", "using_rule_24"]
           }
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-15",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_air", "elem_harmony"],
+            "text": "Monster natural permanent (Etherium Abomination, Infectious Horror start with 2, power 6 each): an enemy that comes in contact cannot deal any damage until it reaches its tower (or both copies are destroyed — Rule 24, Matter / Will).",
+            "creature_innate": true,
+            "in_player_deck": false,
+            "natural_permanent": {
+              "copies": 2,
+              "power": 6,
+              "semantics": "no_damage",
+              "holders": "monsters_with_this_innate_effect",
+              "text": "Monster natural permanent (Etherium Abomination, Infectious Horror start with 2, power 6 each): an enemy that comes in contact cannot deal any damage until it reaches its tower (or both copies are destroyed — Rule 24, Matter / Will)."
+            }
+          },
+          "logic": {
+            "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy that ends an action in contact with the holder is afflicted (afflictions_json, natural) and deals NO damage to anyone (combat, effects, traps; its own Mind Blast recoil excepted) until it reaches its tower (entry hex) or the holder's copies fall. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+            "prerequisites": [
+              {"id": "natural_holder", "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).", "when": {"and": [{"==": [{"var": "caster.kind"}, "creature"]}, {"!": {"var": "caster.is_companion"}}]}},
+              {"id": "natural_contact", "description": "The enemy is in contact with the holder.", "when": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}
+            ],
+            "effects": [
+              {"id": "damage_allowed", "description": "Damage the target may deal to anyone while the permanent stands.", "target": "target", "unit": "damage", "value": 0},
+              {"id": "natural_damage_blocked", "description": "Natural: an afflicted enemy deals no damage to anyone.", "target": "target", "unit": "flag", "value": {"rule": ["natural_damage_blocked", {"kind": "effect_fear", "victim_is_holder": false}]}},
+              {"id": "natural_copies", "description": "Copies the monster starts with (rule_monster_natural_permanents).", "target": "caster", "unit": "cards", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.copies"]}},
+              {"id": "natural_power", "description": "Rule 24 power of each copy (fixed).", "target": "caster", "unit": "die", "value": {"entry": ["rule_monster_natural_permanents", "natural_permanents.power"]}},
+              {"id": "natural_copy_destroyed_by_rule_24", "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": 6}]}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_air (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_air"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "stays_creature_innate", "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).", "assert": {"==": [{"var": "proposal.data.creature_innate"}, true]}},
+              {"id": "keeps_natural_permanent", "description": "The natural_permanent block (copies, power, semantics) stays.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.natural_permanent"}]}, "object"]}, {">=": [{"var": "proposal.data.natural_permanent.copies"}, 1]}]}}
+            ],
+            "references": ["in_contact", "natural_damage_blocked", "using_rule_24"]
+          },
+          "notes": "User rulings 2026-11-15: \"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck.\" Accepted semantics per effect (same day). Monster-only (in_player_deck false): never cast, never in a deck — the monster holds 2 copies from the start. Engine: game/natural-perms.mjs + peer.mjs (perm_copies_json).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_love", "effect_awe", "effect_anger"],
+          "status": "canonical",
+          "version": "1.1.0",
+          "vote_log": [],
+          "weight": 1.0
         }
       ]
     }

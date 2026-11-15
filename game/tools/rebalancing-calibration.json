@@ -1,0 +1,795 @@
+{
+  "format": "chaosd6-rebalancing-calibration/1",
+  "description": "Inputs of tools/rebalancing-check.mjs (E5). Hashed into the validator pin: changing ANY value here changes the pin, so peers that accept foreign effects must run the same file. 'weights' are hand-set (transparent, in life-point equivalents); 'fit' and 'builtins' are written by `node tools/rebalancing-check.mjs calibrate --write`.",
+  "elements": {
+    "elem_vitality": "vitality",
+    "elem_souls": "world",
+    "elem_time": "world",
+    "elem_space": "world",
+    "elem_air": "matter",
+    "elem_water": "matter",
+    "elem_earth": "matter",
+    "elem_fire": "matter",
+    "elem_concentration": "will",
+    "elem_harmony": "will"
+  },
+  "pool_source": "data/characters.json active versions 2026-11-15 (the 12 playable characters), frozen here so a data change does not move verdicts silently",
+  "pool": [
+    {
+      "id": "char_oran_rief",
+      "vitality": 16,
+      "world": 10,
+      "matter": 3,
+      "will": 11
+    },
+    {
+      "id": "char_pride_guardian",
+      "vitality": 11,
+      "world": 16,
+      "matter": 10,
+      "will": 3
+    },
+    {
+      "id": "char_exuberant_firestroker",
+      "vitality": 6,
+      "world": 16,
+      "matter": 16,
+      "will": 2
+    },
+    {
+      "id": "char_razorfin_abolisher",
+      "vitality": 9,
+      "world": 9,
+      "matter": 20,
+      "will": 2
+    },
+    {
+      "id": "char_manor_skeleton",
+      "vitality": 15,
+      "world": 5,
+      "matter": 5,
+      "will": 15
+    },
+    {
+      "id": "char_rhox_bodyguard",
+      "vitality": 10,
+      "world": 10,
+      "matter": 10,
+      "will": 10
+    },
+    {
+      "id": "char_sanctum_gargoyle",
+      "vitality": 9,
+      "world": 17,
+      "matter": 7,
+      "will": 7
+    },
+    {
+      "id": "char_moonglove_changeling",
+      "vitality": 7,
+      "world": 2,
+      "matter": 10,
+      "will": 21
+    },
+    {
+      "id": "char_behemoth_herald",
+      "vitality": 18,
+      "world": 7,
+      "matter": 8,
+      "will": 7
+    },
+    {
+      "id": "char_cynder_pyromancer",
+      "vitality": 13,
+      "world": 7,
+      "matter": 15,
+      "will": 5
+    },
+    {
+      "id": "char_akki_coalfinger",
+      "vitality": 5,
+      "world": 10,
+      "matter": 20,
+      "will": 5
+    },
+    {
+      "id": "char_godtracker_jund",
+      "vitality": 6,
+      "world": 2,
+      "matter": 16,
+      "will": 16
+    }
+  ],
+  "policy": {
+    "tolerance": 0.15,
+    "hard_cap_ratio": 2,
+    "hard_floor_ratio": 0.2,
+    "max_elements": 6,
+    "caps": {
+      "range": 10,
+      "lock": 3,
+      "draw": 5,
+      "push": 3,
+      "fixedPower": 6,
+      "token_elems": 4,
+      "copies": 3
+    },
+    "audit": true,
+    "audit_scenarios": 48,
+    "audit_slack": 0.05
+  },
+  "weights": {
+    "act_value": 0.6,
+    "instant_actions": 1,
+    "element_cost": 0.25,
+    "damage": 2,
+    "scope": {
+      "target": 1,
+      "self": 1,
+      "self_or_ally": 1,
+      "self_or_enemy": 1,
+      "all_enemies": 1.6,
+      "all_adjacent": 1.3,
+      "all_seen": 2.5,
+      "everyone": 1.4
+    },
+    "range_bonus_per_hex": 0.1,
+    "tile_token_damage": 1,
+    "heal_dealt": 0.6,
+    "self_damage_equal": 0.8,
+    "heal_if_no_target": 0.3,
+    "rest_of_turn_actions": 1,
+    "next_turn_actions": 3,
+    "push_per_hex": 0.2,
+    "pull_token": 0.3,
+    "tile_target": 0.1,
+    "surgery": {
+      "unite": 0.4,
+      "split": 0.4,
+      "switch": 0.5,
+      "awake": 0.6
+    },
+    "alt_trap": 0.4,
+    "alt_feature": 0.4,
+    "alt_tile_token": 0.3,
+    "completes_without_target": 0.2,
+    "self_tile_token_per_pt": 0.12,
+    "self_shield_token_per_pt": 0.15,
+    "stat_penalty_per_pt": 0.2,
+    "stat_bonus_per_pt": 0.2,
+    "swap_per_pt": 0.2,
+    "zone_no_damage": 0.6,
+    "void_this_action": 0.6,
+    "shield_elem": 0.7,
+    "disable_elem": 1,
+    "teleport_self": 0.6,
+    "banish": 2.2,
+    "obstacle": 1,
+    "spirit_link_per_stat_pt": 0.06,
+    "bless_attach": 1.5,
+    "phantom": 2.5,
+    "possess": 4,
+    "phylactery": 0.8,
+    "vision_tile": 0.3,
+    "vision_hand": 0.6,
+    "draw_per_card": 0.4,
+    "trap_trigger_prob": 0.5,
+    "trap_power": 20,
+    "trap_attach": 1,
+    "summon_per_need_pt": 0.1,
+    "stat_buy_need": {
+      "effect_summoning": 40,
+      "effect_resurrect_death_ward": 30,
+      "default": 30
+    },
+    "permanent_base": 0.5,
+    "channel_extra_fires": 0.5,
+    "every_bonus": 0.4,
+    "named_note": "Behaviour that lives in peer.mjs hooks keyed on the effect id (the rule entry is only `permanent: true` or a trap). A foreign effect may claim one only through `extends: <built-in id>`.",
+    "named": {
+      "effect_inner_fire": 1.5,
+      "effect_emotions_bombard": 1,
+      "effect_aura": 1.5,
+      "effect_haste": 0.8,
+      "effect_disable": 0.8,
+      "effect_delay_time": 1.5,
+      "effect_empower": 0.8,
+      "effect_super_sense": 0.8,
+      "effect_invisibility": 1.2,
+      "effect_sleep": 1.8,
+      "effect_confusion": 2,
+      "effect_love": 1,
+      "effect_awe": 1,
+      "effect_fear": 1.5,
+      "effect_anger": 0.8,
+      "effect_domination": 1.5,
+      "effect_petrify": 2,
+      "effect_mists": 1
+    },
+    "named_natural_note": "Monster natural permanents (data.natural_permanent, 2 copies, fixed Rule 24 power 6 — user ruling 2026-11-15): permanent term = permanent_base x 6/6 x copies (the stat-buy family scale); behaviour by semantics: spare_holder (love, awe) 1.0, no_damage (fear) 1.5, only_holder (anger) 0.8, lose_action (domination, like Delay Time) 1.5, stone (petrify, rest-of-turn lock each turn in contact) 2.0, no_attack (mists) 1.0."
+  },
+  "fit": {
+    "a": 0.822146,
+    "b": 0.479979,
+    "n": 66,
+    "n_fit": 64,
+    "model": "V = a + b·C (OLS, refit without |r−1|>0.6)",
+    "unpriced": []
+  },
+  "builtins": {
+    "effect_aging": {
+      "value": 1.901028,
+      "actions": 3.285852,
+      "ratio": 0.792331,
+      "curve_verdict": "boost"
+    },
+    "effect_anger": {
+      "value": 1.8,
+      "actions": 2.5,
+      "ratio": 0.890166,
+      "curve_verdict": "ok"
+    },
+    "effect_artifice": {
+      "value": 1.228363,
+      "actions": 1.379917,
+      "ratio": 0.827472,
+      "curve_verdict": "boost"
+    },
+    "effect_aura": {
+      "value": 2.212714,
+      "actions": 1.25,
+      "ratio": 1.555926,
+      "curve_verdict": "nerf"
+    },
+    "effect_awake": {
+      "value": 1.1,
+      "actions": 1.25,
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    "effect_awe": {
+      "value": 2,
+      "actions": 2.5,
+      "ratio": 0.989074,
+      "curve_verdict": "ok"
+    },
+    "effect_balefire": {
+      "value": 4.836364,
+      "actions": 3.75,
+      "ratio": 1.844485,
+      "curve_verdict": "nerf"
+    },
+    "effect_banish": {
+      "value": 1.4,
+      "actions": 2.5,
+      "ratio": 0.692352,
+      "curve_verdict": "boost"
+    },
+    "effect_blessing_curse": {
+      "value": 2.212714,
+      "actions": 1.25,
+      "ratio": 1.555926,
+      "curve_verdict": "nerf"
+    },
+    "effect_blizzard": {
+      "value": 3.447216,
+      "actions": 2.759834,
+      "ratio": 1.60574,
+      "curve_verdict": "nerf"
+    },
+    "effect_combustion": {
+      "value": 1.336687,
+      "actions": 1.71655,
+      "ratio": 0.812055,
+      "curve_verdict": "boost"
+    },
+    "effect_confusion": {
+      "value": 2,
+      "actions": 2.5,
+      "ratio": 0.989074,
+      "curve_verdict": "ok"
+    },
+    "effect_creation": {
+      "value": 1.1,
+      "actions": 1.25,
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    "effect_dark_matter": {
+      "value": 3.028278,
+      "actions": 3.545687,
+      "ratio": 1.199793,
+      "curve_verdict": "nerf"
+    },
+    "effect_delay_time": {
+      "value": 1.812714,
+      "actions": 2.5,
+      "ratio": 0.896454,
+      "curve_verdict": "ok"
+    },
+    "effect_disable": {
+      "value": 1.490584,
+      "actions": 1.25,
+      "ratio": 1.048142,
+      "curve_verdict": "ok"
+    },
+    "effect_disruption": {
+      "value": 1.909091,
+      "actions": 2.5,
+      "ratio": 0.944116,
+      "curve_verdict": "ok"
+    },
+    "effect_domination": {
+      "value": 2.5,
+      "actions": 2.5,
+      "ratio": 1.236342,
+      "curve_verdict": "nerf"
+    },
+    "effect_drain": {
+      "value": 2.862699,
+      "actions": 3.032124,
+      "ratio": 1.256947,
+      "curve_verdict": "nerf"
+    },
+    "effect_earthquake": {
+      "value": 1.163636,
+      "actions": 1.25,
+      "ratio": 0.81824,
+      "curve_verdict": "boost"
+    },
+    "effect_elementals_air": {
+      "value": 3.5,
+      "actions": 6.666667,
+      "ratio": 0.870213,
+      "curve_verdict": "ok"
+    },
+    "effect_elementals_earth": {
+      "value": 3.5,
+      "actions": 6.666667,
+      "ratio": 0.870213,
+      "curve_verdict": "ok"
+    },
+    "effect_elementals_water": {
+      "value": 3.5,
+      "actions": 6.666667,
+      "ratio": 0.870213,
+      "curve_verdict": "ok"
+    },
+    "effect_emotions_bombard": {
+      "value": 1.746798,
+      "actions": 2.5,
+      "ratio": 0.863856,
+      "curve_verdict": "ok"
+    },
+    "effect_empower": {
+      "value": 1.090584,
+      "actions": 1.25,
+      "ratio": 0.766872,
+      "curve_verdict": "boost"
+    },
+    "effect_fear": {
+      "value": 2.5,
+      "actions": 2.5,
+      "ratio": 1.236342,
+      "curve_verdict": "nerf"
+    },
+    "effect_fireball": {
+      "value": 1.79512,
+      "actions": 2.629917,
+      "ratio": 0.861196,
+      "curve_verdict": "ok"
+    },
+    "effect_fossilization": {
+      "value": 1.71829,
+      "actions": 2.759834,
+      "ratio": 0.800393,
+      "curve_verdict": "boost"
+    },
+    "effect_golems_air": {
+      "value": 2.9,
+      "actions": 3.833333,
+      "ratio": 1.08938,
+      "curve_verdict": "ok"
+    },
+    "effect_golems_earth": {
+      "value": 2.9,
+      "actions": 3.833333,
+      "ratio": 1.08938,
+      "curve_verdict": "ok"
+    },
+    "effect_golems_water": {
+      "value": 2.9,
+      "actions": 3.833333,
+      "ratio": 1.08938,
+      "curve_verdict": "ok"
+    },
+    "effect_harm": {
+      "value": 2.742661,
+      "actions": 1.381149,
+      "ratio": 1.846824,
+      "curve_verdict": "nerf"
+    },
+    "effect_haste": {
+      "value": 1.912714,
+      "actions": 2.5,
+      "ratio": 0.945908,
+      "curve_verdict": "ok"
+    },
+    "effect_ice_blast": {
+      "value": 3.394818,
+      "actions": 3.149586,
+      "ratio": 1.454581,
+      "curve_verdict": "nerf"
+    },
+    "effect_inner_fire": {
+      "value": 1.846798,
+      "actions": 2.5,
+      "ratio": 0.91331,
+      "curve_verdict": "ok"
+    },
+    "effect_invisibility": {
+      "value": 1.945151,
+      "actions": 2.5,
+      "ratio": 0.961949,
+      "curve_verdict": "ok"
+    },
+    "effect_light_darkness": {
+      "value": 2.390678,
+      "actions": 1.379917,
+      "ratio": 1.610451,
+      "curve_verdict": "nerf"
+    },
+    "effect_lightning": {
+      "value": 1.90303,
+      "actions": 2.5,
+      "ratio": 0.941118,
+      "curve_verdict": "ok"
+    },
+    "effect_love": {
+      "value": 2,
+      "actions": 2.5,
+      "ratio": 0.989074,
+      "curve_verdict": "ok"
+    },
+    "effect_metaphysics": {
+      "value": 1.863636,
+      "actions": 2.5,
+      "ratio": 0.921637,
+      "curve_verdict": "ok"
+    },
+    "effect_meteor_shower": {
+      "value": 3.018229,
+      "actions": 4.739394,
+      "ratio": 0.974579,
+      "curve_verdict": "ok"
+    },
+    "effect_mind_blast": {
+      "value": 0.743742,
+      "actions": 1.71655,
+      "ratio": 0.451833,
+      "curve_verdict": "boost"
+    },
+    "effect_mists": {
+      "value": 2,
+      "actions": 1.25,
+      "ratio": 1.406351,
+      "curve_verdict": "nerf"
+    },
+    "effect_mutate": {
+      "value": 1.307889,
+      "actions": 2.629917,
+      "ratio": 0.62745,
+      "curve_verdict": "boost"
+    },
+    "effect_nature_embrace": {
+      "value": 1.345531,
+      "actions": 1.315574,
+      "ratio": 0.925658,
+      "curve_verdict": "ok"
+    },
+    "effect_oblivion": {
+      "value": 2.712714,
+      "actions": 2.5,
+      "ratio": 1.341537,
+      "curve_verdict": "nerf"
+    },
+    "effect_petrify": {
+      "value": 3,
+      "actions": 2.5,
+      "ratio": 1.483611,
+      "curve_verdict": "nerf"
+    },
+    "effect_phantom": {
+      "value": 2.846798,
+      "actions": 3.75,
+      "ratio": 1.085708,
+      "curve_verdict": "ok"
+    },
+    "effect_poison": {
+      "value": 2.132576,
+      "actions": 2.5,
+      "ratio": 1.054637,
+      "curve_verdict": "ok"
+    },
+    "effect_possess_phylactery": {
+      "value": 1.3,
+      "actions": 1.25,
+      "ratio": 0.914128,
+      "curve_verdict": "ok"
+    },
+    "effect_potion_brew": {
+      "value": 0.832315,
+      "actions": 1.315574,
+      "ratio": 0.572591,
+      "curve_verdict": "boost"
+    },
+    "effect_resurrect_death_ward": {
+      "value": 3.5,
+      "actions": 3.916667,
+      "ratio": 1.295306,
+      "curve_verdict": "nerf"
+    },
+    "effect_shield": {
+      "value": 1.1,
+      "actions": 1.25,
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    "effect_sleep": {
+      "value": 1.8,
+      "actions": 2.5,
+      "ratio": 0.890166,
+      "curve_verdict": "ok"
+    },
+    "effect_sound_wave": {
+      "value": 2.066667,
+      "actions": 3.75,
+      "ratio": 0.788182,
+      "curve_verdict": "boost"
+    },
+    "effect_space_bending": {
+      "value": 2.19697,
+      "actions": 2.5,
+      "ratio": 1.086483,
+      "curve_verdict": "ok"
+    },
+    "effect_spirit_link": {
+      "value": 1.625428,
+      "actions": 1.25,
+      "ratio": 1.142961,
+      "curve_verdict": "ok"
+    },
+    "effect_summoning": {
+      "value": 4.9,
+      "actions": 7.416667,
+      "ratio": 1.118213,
+      "curve_verdict": "ok"
+    },
+    "effect_super_force": {
+      "value": 1.184848,
+      "actions": 2.5,
+      "ratio": 0.585951,
+      "curve_verdict": "boost"
+    },
+    "effect_super_sense": {
+      "value": 1.146798,
+      "actions": 1.25,
+      "ratio": 0.8064,
+      "curve_verdict": "boost"
+    },
+    "effect_teleportation": {
+      "value": 1.1,
+      "actions": 1.25,
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    "effect_the_void": {
+      "value": 2.218246,
+      "actions": 1.71655,
+      "ratio": 1.347614,
+      "curve_verdict": "nerf"
+    },
+    "effect_throw": {
+      "value": 1.027273,
+      "actions": 1.25,
+      "ratio": 0.722353,
+      "curve_verdict": "boost"
+    },
+    "effect_traps_mastery": {
+      "value": 1.5,
+      "actions": 1.25,
+      "ratio": 1.054763,
+      "curve_verdict": "ok"
+    },
+    "effect_turn_life": {
+      "value": 1.556818,
+      "actions": 1.5,
+      "ratio": 1.009534,
+      "curve_verdict": "ok"
+    },
+    "effect_vision": {
+      "value": 1.072727,
+      "actions": 1.25,
+      "ratio": 0.754315,
+      "curve_verdict": "boost"
+    }
+  },
+  "known_outliers": [
+    {
+      "id": "effect_harm",
+      "ratio": 1.846824,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_balefire",
+      "ratio": 1.844485,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_light_darkness",
+      "ratio": 1.610451,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_blizzard",
+      "ratio": 1.60574,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_aura",
+      "ratio": 1.555926,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_blessing_curse",
+      "ratio": 1.555926,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_petrify",
+      "ratio": 1.483611,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_ice_blast",
+      "ratio": 1.454581,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_mists",
+      "ratio": 1.406351,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_the_void",
+      "ratio": 1.347614,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_oblivion",
+      "ratio": 1.341537,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_resurrect_death_ward",
+      "ratio": 1.295306,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_drain",
+      "ratio": 1.256947,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_domination",
+      "ratio": 1.236342,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_fear",
+      "ratio": 1.236342,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_dark_matter",
+      "ratio": 1.199793,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_artifice",
+      "ratio": 0.827472,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_earthquake",
+      "ratio": 0.81824,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_combustion",
+      "ratio": 0.812055,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_super_sense",
+      "ratio": 0.8064,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_fossilization",
+      "ratio": 0.800393,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_aging",
+      "ratio": 0.792331,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_sound_wave",
+      "ratio": 0.788182,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_awake",
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_creation",
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_shield",
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_teleportation",
+      "ratio": 0.773493,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_empower",
+      "ratio": 0.766872,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_vision",
+      "ratio": 0.754315,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_throw",
+      "ratio": 0.722353,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_banish",
+      "ratio": 0.692352,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_mutate",
+      "ratio": 0.62745,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_super_force",
+      "ratio": 0.585951,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_potion_brew",
+      "ratio": 0.572591,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_mind_blast",
+      "ratio": 0.451833,
+      "curve_verdict": "boost"
+    }
+  ],
+  "calibrated_from": "data/effects.json + effects.mjs EFFECT_RULES"
+}

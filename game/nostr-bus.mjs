@@ -41,7 +41,9 @@ function signEvent(sk, pk, { kind, tags, content, created_at }) {
   return { id: bytesToHex(idBytes), pubkey: pk, created_at, kind, tags, content, sig };
 }
 
-export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer', onEvent, log = console.log, warn = console.warn }) {
+// `meter(dir, type, envType, bytes)` (optional, telemetry only): called once per published event with the
+// frame length × relays it went to, and once per received EVENT frame (duplicates across relays → type 'dup').
+export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer', onEvent, log = console.log, warn = console.warn, meter = null }) {
   const sk = randomBytes(32);
   const pk = bytesToHex(schnorr.getPublicKey(sk));
   const dTag = `${TAG_PREFIX}${dimId}`;
@@ -67,9 +69,10 @@ export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer',
       if (ev.kind !== CHAOS_KIND || ev.pubkey === pk) return;
       if (!(ev.tags || []).some(t => t[0] === 'd' && t[1] === dTag)) return;
       if (Math.floor(Date.now() / 1000) - ev.created_at > MAX_AGE_SEC) return;
-      if (!remember(ev.id)) return;
+      if (!remember(ev.id)) { meter?.('in', 'dup', null, raw.length); return; }
       stats.received++;
       let body; try { body = JSON.parse(ev.content); } catch { return; }
+      meter?.('in', body.type, body.payload?.type, raw.length);
       try { onEvent?.(body.type, body.payload, { from: body.from, pubkey: ev.pubkey, relay: url, created_at: ev.created_at }); }
       catch (e) { warn(`[${label}] nostr handler error: ${e.message}`); }
     } else if (m[0] === 'OK' && m[2] === false) {
@@ -124,7 +127,7 @@ export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer',
       const frame = JSON.stringify(['EVENT', ev]);
       let n = 0;
       for (const slot of sockets.values()) if (slot.open && slot.ws?.readyState === 1) { try { slot.ws.send(frame); n++; } catch {} }
-      if (n) stats.sent++;
+      if (n) { stats.sent++; meter?.('out', type, payload?.type, frame.length * n); }
       return n;
     },
     stats() { return { ...stats, relays: { ...stats.relays } }; },

@@ -36,7 +36,8 @@ import { blockTiles } from '../js/map.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(__dirname, '..', '..');
-export const DIMENSIONS_DIR = path.join(REPO_ROOT, 'data', 'dimensions');
+// CHAOSD6_DIMENSIONS_DIR: test launchers only (a temp dir instead of the real saves).
+export const DIMENSIONS_DIR = process.env.CHAOSD6_DIMENSIONS_DIR || path.join(REPO_ROOT, 'data', 'dimensions');
 
 export const SCHEMA_VERSION = 'chaosd6-tmj-1';
 export const CHUNK = 16;
@@ -244,12 +245,31 @@ export async function listSavedDimensions(baseDir = DIMENSIONS_DIR) {
       let map;  try { map = JSON.parse(raw); } catch { continue; }
       const p = propsOf(map);
       if (!String(p.schema_version || '').startsWith('chaosd6-tmj-')) continue;
+      // Hexes revealed = non-zero GIDs of the terrain chunks (GID 0 = unknown).
+      let hexes = 0;
+      for (const ch of ((map.layers || []).find(l => l.name === 'terrain')?.chunks || [])) for (const g of ch.data || []) if (g) hexes++;
+      let mtime = null;
+      try { mtime = (await fs.stat(fp)).mtime.toISOString(); } catch {}
+      // The save's author (props.peer_id, else the first human hero) — the launcher UI greys "Load old Dimension"
+      // when that character is alive in ANOTHER dimension (one dimension at a time, user ruling 2026-11-15).
+      const ents = ((map.layers || []).find(l => l.name === 'entities')?.objects || []).map(o => ({ name: o.name, p: propsOf(o) }));
+      const myId = String(p.peer_id || (p.peer_label ? `peer:${p.peer_label}` : ''));
+      const heroEnt = (myId && ents.find(e => e.p.peer_id === myId && String(e.p.source_id || '').startsWith('char_')))
+        || ents.find(e => ['player', 'player_c', 'player_d'].includes(String(e.p.alliance || '')) && String(e.p.source_id || '').startsWith('char_'));
+      const hero = heroEnt ? { character_id: String(heroEnt.p.source_id), name: String(heroEnt.name || heroEnt.p.name || '') } : null;
       out.push({
+        hero,
         dim_id:   String(p.dim_id   || d.name),
         dim_name: String(p.dim_name || d.name),
         path: fp, kind,
         saved_at: String(p.saved_at || ''),
         seed:     String(p.seed || ''),
+        dir: d.name,
+        turn: Number(p.turn) || 0,
+        round: Number(p.round) || 0,
+        hexes,
+        file_bytes: Buffer.byteLength(raw),
+        mtime,
       });
     }
   }

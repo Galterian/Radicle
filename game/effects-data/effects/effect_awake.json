@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_awake",
+  "name": "Awake",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_harmony"],
+  "cost": 1,
+  "kind": "surgery",
+  "duration": "instant",
+  "every": {"behaviour":"none","note":"∀ (combine both Awakes into one permanent) is not modelled by the resolver"},
+  "text": "Move around a terrain card, wall token, ally, or yourself. Channel: draw a Harmony token every action until contact.",
+  "every_text": "Permanent — combine both Awakes into one permanent — add the target's Stat to your Stat.",
+  "flags": {"tileTarget":true,"surgery":"awake"},
+  "uses": ["std","e2c"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"if":[{"call":["e2c_surgery_ok"]},{"call":["e2c_awake"]}]},
+      {"if":[{"and":[{"!":[{"len":[{"out":"moves"}]}]},{"===":[{"out":"status"},"done"]}]},{"seq":[{"put":["status","fizzled"]},{"note":["awake needs a free tile within 10"]}]}]},
+      {"call":["finish"]}
+    ]}
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_aura",
+  "name": "Aura",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_souls"],
+  "cost": 1,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"widens the holder's casts (std targets); ∀ = cast.aura on the widened cast"},
+  "text": "Each effect you cast becomes a mass effect, affecting all neighboring targets of your choice. Emit-an-element may target tokens/permanents and perform casting at the same time.",
+  "every_text": "Each Permanent you cast may affect any known targets on the tileset chosen by you.",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

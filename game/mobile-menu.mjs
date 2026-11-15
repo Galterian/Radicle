@@ -19,13 +19,20 @@
 //   { mode: 'test-team', hero, allies: [character…], tier }  top character + the next count−1
 //   { mode: 'host', dimName, dimId, character|null }         Create Dimension <name> (top character or random)
 //   { mode: 'restore', tmjPath, dimName, dimId, seed, character|null, savedHero|null }   Load old Dimension
-//   { mode: 'join', dimName, side, character|null, characterId, creatureId, join }       Ally / Enemy / Monster
-//   { mode: 'join-team', dimName, hero, character, allies, tier, join }                  Join my top character / team
+//   { mode: 'join', dimName, side, character|null, characterId, creatureId, join, monsters }   a unit's name (next to it, nearTile,
+//                                                                                        as its ally — npc_b next to a monster, HUMAN=1)
+//   { mode: 'join-team', dimName, side, allySide, hero, character, allies, tier, join, monsters }  Join my top character / team
+//                                                                                        (a new team: join-plan.mjs newTeamSide)
+// `monsters` = Door-known monsters a quiet join regenerates at their last tiles (mobile-entry.mjs starts them as workers).
+// A profile character the Doors know alive in ANY known dimension is refused with 409 (no cloning, one dimension at a
+// time — user rulings 2026-11-15).
 // `join` = prepareJoin() output: { env (peer.mjs env vars, incl. the map-blocks file), relays, summary } —
 // mobile-entry.mjs applies it with applyJoinEnv(), the same path its chaosd6:// deep link takes.
 //
 // Besides the profile API the menu answers GET /api/dimensions (published dimensions, read from
-// radicle-httpd on the seed) and GET /api/dimensions/local (TMJ saves on the phone).
+// radicle-httpd on the seed) and GET /api/dimensions/local (TMJ saves on the phone), both with the launcher stats
+// (dims-local.mjs enrichDimensions), and POST /api/dimensions/delete {dimensionName|dimId} — the ✕ of an old
+// dimension: removes the phone's save dir + tape dir only, tombstones a Radicle-listed one (the seed keeps it).
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
@@ -38,18 +45,25 @@ const DIMS_RID = () => process.env.RADICLE_DIMS_RID || 'rad:z2xbfJfwT3kukR73m8LX
 // Same slug rule as ui-server.mjs / join-plan.mjs (DIM_ID = dim-<slug>).
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 export const dimIdFor = (name) => `dim-${slug(name)}`;
-export const JOIN_SIDES = ['player', 'player_c', 'npc_a', 'npc_b', 'npc_c'];
+export const JOIN_SIDES = ['player', 'player_c', 'player_d', 'npc_a', 'npc_b', 'npc_c', 'npc_d'];
 
 // ---------------------------------------------------------------------------------------------
 // Joining through a Door — one code path for the chaosd6:// deep link and the menu's join buttons.
 // planJoin (join-plan.mjs) places the joiner from the Doors; the known map goes to a file (too big for env).
-export async function prepareJoin(dim, { doorId = null, side = 'player', placement = 'nearby', label = '', tmpDir = os.tmpdir() } = {}) {
+// `nearTile` {q,r}: next to that unit (the menu's unit list). Stale Doors work: no live Door → the joiner
+// starts the dimension from the Doors' map (JOIN_SYNC_WAIT_MS 500, nobody to sync with).
+// `regen` (quiet dimensions): plan the Door-known monsters' return (join-plan.mjs planJoin) — `regen` in the result.
+export async function prepareJoin(dim, { doorId = null, side = 'player', placement = 'nearby', label = '', nearTile = null, tmpDir = os.tmpdir(), regen = false, regenMax = undefined } = {}) {
   const { planJoin, dimIdOf } = await import('./join-plan.mjs');
-  const plan = planJoin(dim, { doorId, side, placement, label });
+  const plan = planJoin(dim, { doorId, side, placement, label, nearTile, regen, ...(regenMax != null ? { regenMax } : {}) });
   const blocksFile = path.join(tmpDir, `map-blocks.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.json`);
   await fs.mkdir(tmpDir, { recursive: true });
   await fs.writeFile(blocksFile, JSON.stringify(plan.knownMap.blocks()));
+  // Per-Door map share inputs for the HUD telemetry (nodes known only via their Door).
+  const doorMapsFile = blocksFile.replace(/map-blocks\./, 'door-maps.');
+  await fs.writeFile(doorMapsFile, JSON.stringify(plan.doorMaps || []));
   const env = {
+    DOOR_MAPS_FILE: doorMapsFile,
     DIM_NAME: dim.dimension_name,
     DIM_ID: dimIdOf(dim),
     PEER_LABEL: plan.peerLabel,
@@ -63,8 +77,9 @@ export async function prepareJoin(dim, { doorId = null, side = 'player', placeme
     JOIN_SYNC_WAIT_MS: plan.liveDoors.length ? '8000' : '500',
   };
   const a = plan.anchorDoor;
-  const summary = `${dim.dimension_name}: ${placement} ${a?.peer_id || '(no anchor)'} at ${a?.tile?.q},${a?.tile?.r} → ${side} ${plan.peerLabel} at ${plan.startTile.q},${plan.startTile.r} (${dim.doors.length} Doors, ${plan.liveDoors.length} live, ${plan.knownMap.size()} hexes)`;
-  return { env, relays: plan.network.relays, summary, startTile: plan.startTile, peerLabel: plan.peerLabel };
+  const summary = `${dim.dimension_name}: ${placement} ${a?.peer_id || '(no anchor)'} at ${a?.tile?.q},${a?.tile?.r}${nearTile ? ` near (${nearTile.q},${nearTile.r})` : ''} → ${side} ${plan.peerLabel} at ${plan.startTile.q},${plan.startTile.r} (${dim.doors.length} Doors, ${plan.liveDoors.length} live${plan.liveDoors.length ? '' : ' — quiet, starting it from its Doors'}, ${plan.knownMap.size()} hexes)`
+    + (plan.regen?.length ? `; ${plan.regen.length}/${plan.regenKnown} known monsters come back` : '');
+  return { env, relays: plan.network.relays, summary, startTile: plan.startTile, peerLabel: plan.peerLabel, quiet: !plan.liveDoors.length, regen: plan.regen || [] };
 }
 // Puts a prepareJoin() result into this process's env before peer.mjs loads. nostr-bus.mjs froze
 // NOSTR_RELAYS into DEFAULT_RELAYS when join-plan.mjs loaded it; peer.mjs uses that same array, so extend it.
@@ -97,7 +112,9 @@ function describeLocal(jp, d, now = Date.now()) {
     turn: Math.max(0, ...doors.filter(p => p.live).map(p => p.clock?.turn ?? 0)),
   };
 }
-async function listDimensionsDefault({ limit = 30 } = {}) {
+// `mines` = Map<dim id, Set "q,r"> of my saves (dims-local.mjs mineMapsOf): shares + units are computed here,
+// once per seed fetch, so the cached items the menu serves carry no block lists.
+async function listDimensionsDefault({ limit = 30, mines = null } = {}) {
   const jp = await import('./join-plan.mjs');
   const seedHost = SEED_HOST(), rid = DIMS_RID();
   let raw;
@@ -114,7 +131,7 @@ async function listDimensionsDefault({ limit = 30 } = {}) {
     }
   }
   const now = Date.now();
-  return (raw || []).map(d => (typeof jp.describeDimension === 'function' ? jp.describeDimension(d, now) : describeLocal(jp, d, now)));
+  return (raw || []).map(d => (typeof jp.describeDimension === 'function' ? jp.describeDimension(d, now, { mine: mines?.get(jp.dimIdOf(d)) || null, sketch: false }) : describeLocal(jp, d, now)));
 }
 
 function randomEntryId(dataDir, file, fallback) {
@@ -129,9 +146,10 @@ function randomEntryId(dataDir, file, fallback) {
 function savedHeroOf(map) {
   const props = Object.fromEntries((map.properties || []).map(p => [p.name, p.value]));
   const ents = ((map.layers || []).find(l => l.name === 'entities')?.objects || []).map(o => ({ p: Object.fromEntries((o.properties || []).map(x => [x.name, x.value])), name: o.name }));
-  const isHero = e => ['player', 'player_c'].includes(String(e.p.alliance || '')) && String(e.p.source_id || '').startsWith('char_');
+  const isHero = e => ['player', 'player_c', 'player_d'].includes(String(e.p.alliance || '')) && String(e.p.source_id || '').startsWith('char_');
   const myId = String(props.peer_id || (props.peer_label ? `peer:${props.peer_label}` : ''));
-  const e = (myId && ents.find(x => x.p.peer_id === myId && isHero(x))) || ents.find(isHero);
+  // The author on any side: only human hands write saves (a human npc_b hero too, user ruling 2026-11-15).
+  const e = (myId && ents.find(x => x.p.peer_id === myId && String(x.p.source_id || '').startsWith('char_'))) || ents.find(isHero);
   return { props, hero: e ? { characterId: String(e.p.source_id), name: String(e.name || e.p.name || e.p.source_id), alliance: String(e.p.alliance) } : null };
 }
 async function listSaves(dimensionsDir) {
@@ -195,11 +213,23 @@ export async function planOf(body, file, deps = {}) {
   const mode = String(body?.mode || '');
   if (mode === 'test-random') return { mode };
   const p = loadProfile(file);
+  // One dimension at a time (user ruling 2026-11-15) for Create Dimension / Restore / Test launches: a profile
+  // character (or team member) alive in ANOTHER dimension the menu knows (the list cache) → 409 naming it. `except`
+  // = the dimension a Restore goes back to (alive there is the allowed way back). Dead is allowed.
+  const refuseElsewhere = async (chars, except = null) => {
+    chars = (chars || []).filter(Boolean);
+    if (!chars.length) return;
+    const jp = await import('./join-plan.mjs');
+    const dims = ((deps.knownDims && deps.knownDims()) || []).filter(d => d?.dimension_name !== except);
+    const hits = jp.aliveInDimensions(dims, chars);
+    if (hits.length) fail(409, jp.aliveWhereText(hits));
+  };
   if (mode === 'host') {
     const dimName = String(body.dimensionName || '').trim().slice(0, 40);
     if (!slug(dimName)) fail(400, 'the new dimension needs a name with letters or digits');
     // Create Dimension plays the top profile character (random without one), like the desktop panel.
     const character = !body.characterId || body.characterId === 'profile:top' ? topCharacter(p) : characterOf(p, String(body.characterId));
+    await refuseElsewhere([character]);
     return { mode, dimName, dimId: dimIdFor(dimName), character };
   }
   if (mode === 'restore') {
@@ -212,7 +242,9 @@ export async function planOf(body, file, deps = {}) {
     const match = saved.hero && p.characters.find(c => c.base_character === saved.hero.characterId && c.name === saved.hero.name);
     const character = match || (saved.hero ? null : topCharacter(p));
     const dimName = String(saved.props.dim_name || it.dim_name || 'Restored-Dimension');
-    return { mode, tmjPath: it.path, dimName, dimId: String(saved.props.dim_id || it.dim_id || dimIdFor(dimName)), seed: String(saved.props.seed || it.seed || ''), character, savedHero: match ? null : saved.hero };
+    await refuseElsewhere([character], dimName);
+    return { mode, tmjPath: it.path, dimName, dimId: String(saved.props.dim_id || it.dim_id || dimIdFor(dimName)), seed: String(saved.props.seed || it.seed || ''), character, savedHero: match ? null : saved.hero,
+      alliance: saved.hero?.alliance || null };
   }
   if (mode === 'join' || mode === 'join-team') {
     const dimensionName = String(body.dimensionName || '').trim();
@@ -227,29 +259,63 @@ export async function planOf(body, file, deps = {}) {
     if (!dim) fail(404, `${dimensionName} is not published on the seed`);
     if (!dim.doors?.length) fail(400, `${dimensionName} has no Doors to join through`);
     // A placement that can't be done (no such Door, no walkable hex) is the player's 400, not a crash.
-    const prep = (side, placement, label = '') => prepareJoin(dim, { doorId, side, placement, label, tmpDir: deps.tmpDir || os.tmpdir() });
+    // nearTile (unit list: next to that unit) — integers or nothing.
+    const nt = body.nearTile ?? null;
+    if (nt != null && !(Number.isInteger(nt?.q) && Number.isInteger(nt?.r))) fail(400, 'nearTile must be {q, r} integers');
+    const jp = await import('./join-plan.mjs');
+    // No cloning (user ruling 2026-11-15): a profile character the Doors know alive in this dimension → 409.
+    // One dimension at a time (ruling 2): alive in ANY dimension the menu knows (this one, freshly read, first; then
+    // the list cache — the newest MENU_DIMS_LIMIT dimensions of the seed) → 409 naming that dimension.
+    const refuseAlive = (chars) => {
+      const hits = jp.aliveInDimensions([dim, ...((deps.knownDims && deps.knownDims()) || [])], chars.filter(Boolean));
+      if (hits.length) fail(409, jp.aliveWhereText(hits));
+    };
+    // Quiet dimension: the Door-known monsters come back (≤ MOBILE_REGEN_MAX nearest, in-process workers — the phone).
+    const regenMax = deps.regenMax ?? Number(process.env.MOBILE_REGEN_MAX || 4);
+    const prep = async (side, placement, label = '') => {
+      const join = await prepareJoin(dim, { doorId, side, placement, label, nearTile: placement === 'nearby' && nt ? { q: nt.q, r: nt.r } : null, tmpDir: deps.tmpDir || os.tmpdir(), regen: true, regenMax })
+        .catch(e => fail(400, e.message));
+      if (join.regen.length) {
+        // No live Door (DOOR_LIVE_MS 25 min) is not enough: anybody on the bus → it runs, nothing is regenerated.
+        const heard = await (deps.probeLive || jp.probeDimensionLive)({ dimId: jp.dimIdOf(dim), relays: join.relays }).catch(() => ({ peers: [] }));
+        if (heard.peers?.length) { join.summary += ` — but ${heard.peers.length} peer(s) answer on the bus: it is live, no monster regenerated`; join.regen = []; }
+      }
+      return join;
+    };
     if (mode === 'join-team') {
       // The top character opens a gate 30–50 hexes from the Door; count−1 more arrive beside it (tier ring).
+      // A NEW team (user rulings 2026-11-15); the allies are its bots.
       const count = Math.max(1, Math.min(team.length, Math.floor(Number(body.count) || 1)));
       const tier = body.tier === 'reachable' ? 'reachable' : 'strong';
-      const join = await prep('player', 'far', body.label || '').catch(e => fail(400, e.message));
-      Object.assign(join.env, { TEAM_GATE: '1', TEAM_GATE_DOOR: doorId });
-      return { mode, dimName: dim.dimension_name, hero: team[0], character: team[0], allies: team.slice(1, count), tier, join };
+      refuseAlive(team.slice(0, count));
+      // A new team on the first FREE side (A, C, D; ruling 2026-11-15) — none free → refused.
+      const side = jp.newTeamSide(jp.dimensionUnits(dim.doors).sides);
+      if (!side) fail(409, `${dim.dimension_name}: ${jp.NO_FREE_SIDE}`);
+      const join = await prep(side, 'far', body.label || '');
+      Object.assign(join.env, { TEAM_GATE: '1', TEAM_GATE_DOOR: doorId, HUMAN: '1' });
+      return { mode, dimName: dim.dimension_name, side, allySide: jp.teamBotSide(side), hero: team[0], character: team[0], allies: team.slice(1, count), tier, join, monsters: join.regen };
     }
     const side = String(body.side || 'player');
     if (!JOIN_SIDES.includes(side)) fail(400, `side must be one of ${JOIN_SIDES.join(', ')}`);
     const placement = body.placement === 'random' ? 'random' : 'nearby';
     let character = null, characterId = '', creatureId = '';
-    if (body.creatureId) creatureId = body.creatureId === 'random' ? randomEntryId(deps.dataDir || '', 'creatures.json', 'mon_ruinous_minotaur') : String(body.creatureId);
+    // 'random' / 'known' = the Monster join: the known type there (join-plan.mjs knownMonsterType), a bot; random
+    // only when the dimension knows no monster.
+    if (body.creatureId) creatureId = ['random', 'known'].includes(body.creatureId)
+      ? (jp.knownMonsterType(dim, { doorId, nearTile: nt }) || randomEntryId(deps.dataDir || '', 'creatures.json', 'mon_ruinous_minotaur')) : String(body.creatureId);
     else if (!body.characterId || body.characterId === 'profile:top') character = topCharacter(p);   // null → random below
     else characterId = String(body.characterId);
     if (!creatureId && !character && !characterId) characterId = randomEntryId(deps.dataDir || '', 'characters.json', 'char_oran_rief');
-    const join = await prep(side, placement, body.label || '').catch(e => fail(400, e.message));
-    return { mode, dimName: dim.dimension_name, side, character, characterId, creatureId, join };
+    if (character) refuseAlive([character]);
+    const join = await prep(side, placement, body.label || '');
+    // I play it (user ruling 2026-11-15): a character joining next to a monster is a human npc_b, not a bot.
+    if (!creatureId) join.env.HUMAN = '1';
+    return { mode, dimName: dim.dimension_name, side, character, characterId, creatureId, join, monsters: join.regen };
   }
   if (mode === 'test-character') {
     const c = characterOf(p, String(body.profileCharId || ''));
     if (!c) fail(400, `no profile character ${body.profileCharId || '(none given)'}`);
+    await refuseElsewhere([c]);
     return { mode, character: c };
   }
   if (mode === 'test-team') {
@@ -258,6 +324,7 @@ export async function planOf(body, file, deps = {}) {
     // Asking for more characters than the team has plays the whole team.
     const count = Math.max(1, Math.min(team.length, Math.floor(Number(body.count) || 1)));
     const tier = body.tier === 'strong' ? 'strong' : 'reachable';
+    await refuseElsewhere(team.slice(0, count));
     return { mode, hero: team[0], allies: team.slice(1, count), tier };
   }
   fail(400, `unknown launch mode "${mode}"`);
@@ -268,20 +335,34 @@ const planText = (plan) => [
   plan.character ? ` as ${plan.character.name}` : plan.savedHero ? ` as ${plan.savedHero.name}` : plan.creatureId ? ` as ${plan.creatureId}` : plan.characterId ? ` as ${plan.characterId}` : '',
   plan.allies ? ` + ${plan.allies.length} allies (${plan.tier})` : '',
   plan.side ? ` (${plan.side})` : '',
+  plan.monsters?.length ? ` + ${plan.monsters.length} regenerated monsters` : '',
 ].join('');
 
-// `fetchDimension`, `listDimensions`, `dimensionsDir`, `tmpDir`: test hooks (defaults: the seed's radicle-httpd,
-// tools/autosave.mjs DIMENSIONS_DIR, os.tmpdir()).
+// Saves + the Radicle list (the menu's cache) → both lists with the launcher stats, tombstoned ones dropped.
+async function dimsView({ radicle, dimensionsDir, sessionsDir }) {
+  const dl = await import('./dims-local.mjs');
+  const { items } = await listSaves(dimensionsDir);
+  const opts = { ...(dimensionsDir ? { dimensionsDir } : {}), ...(sessionsDir ? { sessionsDir } : {}) };
+  return { ...(await dl.enrichDimensions({ ...opts, saves: items, hidden: await dl.loadHidden(), radicle })), raw: items, dl, opts };
+}
+
+// `fetchDimension`, `listDimensions`, `dimensionsDir`, `sessionsDir`, `tmpDir`, `probeLive`: test hooks (defaults: the seed's
+// radicle-httpd, tools/autosave.mjs DIMENSIONS_DIR, dims-local.mjs SESSIONS_DIR, os.tmpdir(), join-plan.mjs probeDimensionLive).
 export async function runMenu({ port, dataDir, assetsDir = '', gameDir, userDataDir = process.env.CHAOSD6_USER_DATA_DIR || '',
-  fetchDimension = null, listDimensions = null, dimensionsDir = null, tmpDir = null }) {
+  fetchDimension = null, listDimensions = null, dimensionsDir = null, sessionsDir = null, tmpDir = null, probeLive = null }) {
   const file = profilePath();
-  const deps = { fetchDimension, dataDir, dimensionsDir, tmpDir: tmpDir || os.tmpdir() };
+  const deps = { fetchDimension, dataDir, dimensionsDir, tmpDir: tmpDir || os.tmpdir(), ...(probeLive ? { probeLive } : {}),
+    knownDims: () => dimsCache?.items || [] };   // one dimension at a time: the listed dimensions' alive_chars
   let dimsCache = null;   // { at, items } — the seed is slow; ?sync=1 (the ↻ button) skips it
   // ~100 KB per Door blob at ~1 s each over radicle-httpd: only the newest few, one read at a time
   // (overlapping requests share it), started as soon as the menu opens.
   let dimsLoading = null;
   const loadDims = () => (dimsLoading ??= Promise.resolve()
-    .then(() => (listDimensions || listDimensionsDefault)({ limit: Number(process.env.MENU_DIMS_LIMIT || 6) }))
+    .then(async () => {
+      const { mineMapsOf } = await import('./dims-local.mjs');
+      const mines = await listSaves(dimensionsDir).then(({ items }) => mineMapsOf(items)).catch(() => new Map());
+      return (listDimensions || listDimensionsDefault)({ limit: Number(process.env.MENU_DIMS_LIMIT || 6), mines });
+    })
     .then(items => { dimsCache = { at: Date.now(), items }; return items; })
     .finally(() => { dimsLoading = null; }));
   loadDims().catch(e => console.error(`[menu] dimensions prefetch: ${e.message}`));
@@ -310,18 +391,35 @@ export async function runMenu({ port, dataDir, assetsDir = '', gameDir, userData
         if (await handleProfileApi(req, res, u, { file, dataDir })) return;
         if (u === '/api/dimensions' && req.method === 'GET') {
           const fresh = new URLSearchParams((req.url || '').split('?')[1] || '').get('sync') === '1';
-          if (!fresh && dimsCache && Date.now() - dimsCache.at < 30_000) return json(200, { ok: true, enabled: true, cached: true, items: dimsCache.items });
+          // + on_radicle / saved_locally / local_bytes / last_active / old / hexes / turn_max; tombstoned ones dropped.
+          const view = async (list) => (await dimsView({ radicle: list || [], dimensionsDir, sessionsDir }).catch(() => ({ radicle: list || [] }))).radicle;
+          if (!fresh && dimsCache && Date.now() - dimsCache.at < 30_000) return json(200, { ok: true, enabled: true, cached: true, items: await view(dimsCache.items) });
           try {
             const items = await loadDims();
-            return json(200, { ok: true, enabled: true, items });
+            return json(200, { ok: true, enabled: true, items: await view(items) });
           } catch (e) {
             console.error(`[menu] dimensions: ${e.message}`);
-            return json(200, { ok: false, enabled: false, reason: e.message, items: dimsCache?.items || [] });
+            return json(200, { ok: false, enabled: false, reason: e.message, items: await view(dimsCache?.items) });
           }
         }
         if (u === '/api/dimensions/local' && req.method === 'GET') {
-          try { return json(200, { ok: true, ...(await listSaves(dimensionsDir)) }); }
+          try {
+            const v = await dimsView({ radicle: dimsCache?.items || null, dimensionsDir, sessionsDir });
+            return json(200, { ok: true, baseDir: dimensionsDir || (await import('./tools/autosave.mjs')).DIMENSIONS_DIR, old_after_ms: v.dl.OLD_AFTER_MS, items: v.saves });
+          }
           catch (e) { return json(200, { ok: false, error: e.message, items: [] }); }
+        }
+        if (u === '/api/dimensions/delete' && req.method === 'POST') {
+          // Nothing runs while the menu is up (peer.mjs starts after it), so only the 72 h rule applies. The
+          // Radicle list is the menu's cache; the seed is never asked to delete anything.
+          try {
+            const v = await dimsView({ radicle: dimsCache?.items || [], dimensionsDir, sessionsDir });
+            const plan = await v.dl.planDelete(await readBody(req), { ...v.opts, radicle: dimsCache?.items || [], saves: v.raw });
+            const out = await v.dl.removeLocalDirs(plan, v.opts);
+            if (plan.onRadicle) await v.dl.hideDimension(plan.name);
+            console.log(`[menu] deleted local copy of ${plan.name || plan.dimId}: ${out.removed.length} dir(s)${plan.onRadicle ? ', hidden (still on Radicle)' : ''}`);
+            return json(200, { ok: true, dimension_name: plan.name, dim_id: plan.dimId, removed: out.removed, freed_bytes: out.freed_bytes, hidden: plan.onRadicle, note: v.dl.LOCAL_ONLY_NOTE });
+          } catch (e) { return json(e.status || 500, { ok: false, error: e.message }); }
         }
         if (u === '/api/launch' && req.method === 'POST') {
           if (done || pending) return json(409, { error: 'a game is already starting', peerPort: port });

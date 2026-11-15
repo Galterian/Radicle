@@ -1,0 +1,17 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_haste",
+  "name": "Haste",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_time","elem_time"],
+  "cost": 2,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"bonus action / extra card handled by peer.mjs (bonusAllowance)"},
+  "text": "Draw an additional card and gain +1 bonus action per Haste you cast.",
+  "every_text": "Draw an additional card each round.",
+  "flags": {"permanent":true,"draw":1},
+  "uses": ["std"],
+  "logic": {"seq":[{"call":["prelude"]},{"put":["draw",1]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

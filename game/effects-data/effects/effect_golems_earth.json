@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_golems_earth",
+  "name": "Earth Golem",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_souls","elem_harmony"],
+  "cost": 2,
+  "kind": "summon",
+  "duration": "cast",
+  "every": {"behaviour":"resolver","note":"∀ binds a creature in view (cast.summon.bind, prepared by peer.mjs prepareSummon)"},
+  "text": "Permanent. Stat buy (channeling). Perform summoning a creature until the sum of your Stats spent can be rounded to 24. The creature always follows you and stays onto your tile. Earth golem stats 10/5/9/0. 2 hits, 2 actions.",
+  "flags": {"permanent":true,"statBuy":true,"fixedPower":6},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["stat_buy",false]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

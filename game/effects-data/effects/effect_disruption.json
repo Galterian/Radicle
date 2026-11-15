@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_disruption",
+  "name": "Disruption",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_souls","elem_harmony"],
+  "cost": 2,
+  "kind": "surgery",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Damage by trying to split an object into two. + Split an unknown tile into two tiles (choose any cards and put them in adjacent tile face-down). If you beat the creature's Stats, you may split known tiles.",
+  "flags": {"damage":"delta","scope":"target","tileTarget":true,"surgery":"split"},
+  "uses": ["std","e2c"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"and":[{"call":["e2c_surgery_ok"]},{"!":[{"len":[{"call":["enemies_within",1]}]}]}]},{"call":["e2c_move_one","split"]}]},
+      {"if":[{"!":[{"len":[{"out":"relocations"}]}]},{"seq":[{"call":["require_recipients"]},{"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},"def"]}]}]},
+      {"call":["finish"]}
+    ]}
+}

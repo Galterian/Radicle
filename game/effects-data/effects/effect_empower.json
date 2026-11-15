@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_empower",
+  "name": "Empower",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_concentration"],
+  "cost": 1,
+  "kind": "meta",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"spent to emit two elements of one cast in one action (peer.mjs planning)"},
+  "text": "Remove this permanent to immediately gain one bonus action spendable only for emitting an element (speed up casting).",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

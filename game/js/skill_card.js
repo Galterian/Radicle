@@ -28,6 +28,7 @@
 // so the fallback and the final sprite are both reachable without caller help.
 
 import { assetUrl } from './sprites.js';
+import { effectSource, setEffectSource, makeSourceBadge, sourceTitle } from './effect_source.js';
 
 // Unicode fallbacks mirror renderer.js's SKILL_ICON — same glyphs so the three
 // surfaces (canvas floating icon, deck slot, roster permanent, hover card) all
@@ -57,8 +58,20 @@ const _nameIndex = [];        // [{ nameLower, id, pattern }]
 let _frames = null;           // frames.json cache (path -> {cols, rows, cell_w, cell_h})
 let _loading = null;
 const _listeners = new Set();
+let _catalogDone = false;     // the one catalog fetch has settled (loaded or failed)
 function _notify() { for (const fn of _listeners) { try { fn(); } catch { /* ignore */ } } }
 export function onCatalogChanged(fn) { _listeners.add(fn); return () => _listeners.delete(fn); }
+// Per-mount "re-try once the catalog lands". The catalog loads ONCE, so after it
+// settled an id it doesn't know (class_* cards, which are not in skills/effects)
+// never resolves — subscribing then leaked the closure and with it the whole card
+// (its <canvas> included) for the life of the page. renderRoster rebuilds the
+// roster every frame, so a class permanent leaked ~60 cards/s and the phone's
+// WebView renderer grew ~110 MB/min until it was OOM-killed (2026-11-14).
+// One-shot: the listener drops itself on the first notification.
+function _onceCatalog(fn) {
+  if (_catalogDone) return;
+  const off = onCatalogChanged(() => { off(); fn(); });
+}
 
 function _activeVersion(entry) {
   const vs = Array.isArray(entry?.versions) ? entry.versions : [];
@@ -94,6 +107,11 @@ function _ingest(entry, isPermanentDefault) {
     isTrance: entry.id === 'skill_battle_trance',
   };
   _entries.set(entry.id, info);
+  // Provenance (chaosD6-Effects, E6): a player-branch effect carries `source` on the catalog
+  // entry (else on its active version's data). Built-in (main) ones carry none. Only ever SET
+  // from here, so a source learned over the wire before the catalog landed is not wiped.
+  const src = entry.source || data.source || null;
+  if (src && String(entry.id).startsWith('effect_')) setEffectSource(entry.id, src);
 }
 
 export function loadCatalog() {
@@ -111,8 +129,9 @@ export function loadCatalog() {
     for (const e of effects?.entries || []) _ingest(e, (e.tags || []).includes('permanent'));
     _frames = frames || {};
     _rebuildNameIndex();
+    _catalogDone = true;
     _notify();
-  }).catch(() => { _frames = {}; });
+  }).catch(() => { _frames = {}; _catalogDone = true; });
   return _loading;
 }
 
@@ -199,8 +218,10 @@ function _loadImg(url, onReady) {
   if (!t) {
     t = { img: new Image(), ready: false, failed: false, listeners: new Set() };
     _imgs.set(url, t);                                       // ← BEFORE src
-    t.img.onload = () => { t.ready = true; for (const fn of t.listeners) { try { fn(t); } catch { /* ignore */ } } };
-    t.img.onerror = () => { t.failed = true; console.warn('[skill_card] image failed to load:', url); for (const fn of t.listeners) { try { fn(t); } catch { /* ignore */ } } };
+    // Waiters are one-shot: clear them once fired, or every canvas mounted while
+    // the sheet was in flight stays reachable from this cache forever.
+    t.img.onload = () => { t.ready = true; for (const fn of t.listeners) { try { fn(t); } catch { /* ignore */ } } t.listeners.clear(); };
+    t.img.onerror = () => { t.failed = true; console.warn('[skill_card] image failed to load:', url); for (const fn of t.listeners) { try { fn(t); } catch { /* ignore */ } } t.listeners.clear(); };
     t.img.src = url;
   }
   if (onReady) {
@@ -263,8 +284,10 @@ function _draw(img, info, path, canvas, size) {
 let _repaintQueue = [];
 onCatalogChanged(() => {
   for (const { canvas, info, size } of _repaintQueue.slice()) _paintIcon(canvas, info, size);
+  _repaintQueue = [];
 });
 function _trackRepaint(canvas, info, size) {
+  if (_catalogDone) return;   // the catalog only lands once — nothing left to repaint for, don't pin the canvas
   _repaintQueue.push({ canvas, info, size });
   if (_repaintQueue.length > 500) _repaintQueue = _repaintQueue.slice(-200);
 }
@@ -277,7 +300,7 @@ const _escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', 
 // A square icon element — <canvas> on top of a glyph fallback <span>. The
 // glyph sits behind the canvas and shows through until the paint lands (or
 // permanently, if neither the icon nor the effect strip resolved).
-export function makeSkillIcon(id, { size = 32, title = null } = {}) {
+export function makeSkillIcon(id, { size = 32, title = null, srcMark = true } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'skill-icon';
   wrap.style.width = `${size}px`;
@@ -298,6 +321,15 @@ export function makeSkillIcon(id, { size = 32, title = null } = {}) {
   canvas.width = size;
   canvas.height = size;
   wrap.appendChild(canvas);
+  // Player-branch effect (chaosD6-Effects): a tiny ⎇ in the corner; the full badge lives on cards.
+  const src = srcMark ? effectSource(id) : null;
+  if (src) {
+    const mk = document.createElement('span');
+    mk.className = `skill-icon-src${src.verdict ? ' v-' + src.verdict : ''}`;
+    mk.textContent = '⎇';
+    mk.title = sourceTitle(src);
+    wrap.appendChild(mk);
+  }
 
   // _paintIcon flips `.sprite-loaded` on us once the sprite's actually drawn.
   const _mount = (i) => {
@@ -310,11 +342,9 @@ export function makeSkillIcon(id, { size = 32, title = null } = {}) {
   else {
     // Catalog not here yet — subscribe once, then re-attempt. Keeps the
     // caller DOM-static (no reparenting).
-    const off = onCatalogChanged(() => {
+    _onceCatalog(() => {
       const i2 = skillInfo(id);
-      if (!i2) return;
-      _mount(i2);
-      off();
+      if (i2) _mount(i2);
     });
   }
   return wrap;
@@ -351,7 +381,7 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
   const text = textOverride || info?.text || '';
   const px = iconSize || (variant === 'reveal' ? 36 : variant === 'tooltip' ? 24 : 28);
 
-  el.appendChild(makeSkillIcon(id, { size: px, title }));
+  el.appendChild(makeSkillIcon(id, { size: px, title, srcMark: false }));
 
   const body = document.createElement('div');
   body.className = 'skill-card-body';
@@ -366,6 +396,9 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
     nm.appendChild(b);
   }
   body.appendChild(nm);
+  // Source badge (chaosD6-Effects): only for effects NOT from the built-in main branch.
+  const srcBadge = makeSourceBadge(effectSource(id), { compact: variant === 'strip' });
+  if (srcBadge) body.appendChild(srcBadge);
 
   // Effect cards: one line listing the elements this card emits (its
   // element_cost). Lets a reader see at a glance what colours a cast puts out
@@ -389,15 +422,13 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
     // because the name index is empty before that lands.
     const _decorate = () => decorateEffectRefs(ds, { selfId: id, iconSize: 14 });
     _decorate();
-    if (!_nameIndex.length) {
-      const off = onCatalogChanged(() => { _decorate(); off(); });
-    }
+    if (!_nameIndex.length) _onceCatalog(_decorate);
   }
 
   el.appendChild(body);
   // Catalog-arrived refresh for the name/text fallback case.
   if (!info) {
-    const off = onCatalogChanged(() => {
+    _onceCatalog(() => {
       const i2 = skillInfo(id);
       if (!i2) return;
       if (!nameOverride) nm.firstChild && (nm.firstChild.nodeValue = i2.name);
@@ -418,7 +449,6 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
         em.title = `emission: ${i2.elementCost.map(e => e.replace(/^elem_/, '')).join(', ')}`;
         body.insertBefore(em, body.querySelector('.skill-card-text'));
       }
-      off();
     });
   }
   return el;
@@ -478,7 +508,7 @@ export function decorateEffectRefs(host, { selfId = null, iconSize = 14 } = {}) 
     if (m.start > cur) host.appendChild(document.createTextNode(text.slice(cur, m.start)));
     const span = document.createElement('span');
     span.className = 'inline-fx';
-    span.appendChild(makeSkillIcon(m.id, { size: iconSize, title: skillInfo(m.id)?.name || m.label }));
+    span.appendChild(makeSkillIcon(m.id, { size: iconSize, title: skillInfo(m.id)?.name || m.label, srcMark: false }));
     span.appendChild(document.createTextNode(m.label));
     host.appendChild(span);
     cur = m.end;

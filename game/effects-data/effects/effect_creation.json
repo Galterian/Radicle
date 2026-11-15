@@ -1,0 +1,20 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_creation",
+  "name": "Creation",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_earth"],
+  "cost": 1,
+  "kind": "surgery",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Place an impassable (for low-Matter creatures) adjacent wall token with power 20 × number of Creations cast. To destroy, enemy must emit Earth > wall/2× wall. + Put an Earth token on that tile.",
+  "flags": {"obstacle":true,"tileTarget":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"let":[{"nb":{"filter":[{"neighbours":[{"var":"my_tile.q"},{"var":"my_tile.r"}]},{"is_free":[{"var":"n.q"},{"var":"n.r"}]},"n"]}},{"seq":[{"set":["tmp",{"if":[{"and":[{"===":[{"var":"cast.target.kind"},"tile"]},{"some":[{"var":"nb"},{"and":[{"===":[{"var":"n.q"},{"var":"cast.target.ref.q"}]},{"===":[{"var":"n.r"},{"var":"cast.target.ref.r"}]}]},"n"]}]},{"var":"cast.target.ref"},null]}]},{"if":[{"and":[{"!":[{"var":"tmp"}]},{"len":[{"var":"nb"}]}]},{"let":[{"foe":{"at":[{"sort_by":[{"call":["enemies_within",10]},{"asc":{"dist":[{"var":"me"},{"var":"it"}]}},{"locale":{"var":"it"}}]},0]},"ft":{"if":[{"var":"foe"},{"tile_of":[{"var":"foe"}]},null]}},{"set":["tmp",{"if":[{"var":"ft"},{"at":[{"sort_by":[{"var":"nb"},{"asc":{"hex_dist":[{"var":"n"},{"var":"ft"}]}},{"asc":{"var":"n.q"}},{"asc":{"var":"n.r"}},"n"]},0]},{"at":[{"var":"nb"},0]}]}]}]}]},{"if":[{"!":[{"var":"tmp"}]},{"call":["fizzle","no free neighbour for the obstacle"]},{"emit":["obstacles",{"obj":{"by":{"var":"me"},"q":{"var":"tmp.q"},"r":{"var":"tmp.r"},"hp":5,"elem":"elem_earth"}}]}]}]}]},
+      {"call":["finish"]}
+    ]}
+}

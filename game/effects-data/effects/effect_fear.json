@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_fear",
+  "name": "Fear",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.1.0"},
+  "elements": ["elem_air","elem_harmony"],
+  "cost": 2,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"monster natural permanent (no_damage): 2 copies at power 6; behaviour lives in peer.mjs"},
+  "text": "Monster natural permanent (Etherium Abomination, Infectious Horror start with 2, power 6 each): an enemy that comes in contact cannot deal any damage until it reaches its tower (or both copies are destroyed — Rule 24, Matter / Will).",
+  "flags": {"permanent":true,"fixedPower":6},
+  "uses": ["std"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_disable",
+  "name": "Disable",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_concentration"],
+  "cost": 1,
+  "kind": "counter",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"fires by itself on the defender side in peer.mjs; ∀ bars everyone (every_csv)"},
+  "text": "Put any element as a permanent defense token. Target cannot make effects with this element for a round (counter action).",
+  "every_text": "Globally no one can make effects with this element for the round.",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

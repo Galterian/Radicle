@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_combustion",
+  "name": "Combustion",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_harmony"],
+  "cost": 1,
+  "kind": "stat_token",
+  "duration": "channel",
+  "every": {"behaviour":"resolver","note":"channel ticks re-enter with cast._channel_tick (peer.mjs)"},
+  "text": "Channel: put an element token every action until contact; put it in front of enemy's deck upside-down as stat penalty + defense token over this effect for duration.",
+  "flags": {"scope":"target","statPenalty":["elem_harmony"],"permanent":true,"channel":{"stop":"break"}},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,false]},
+      {"seq":[{"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"seq":[{"put":["status","fizzled"]},{"note":["nobody in reach"]}]}]},{"map":[{"var":"recipients"},{"map":[["elem_harmony"],{"call":["stat_token",{"var":"def"},{"var":"el"},-1,"pen"]},"el"]},"def"]}]},
+      {"call":["land_permanent"]},
+      {"call":["channel_reg","break"]},
+      {"call":["finish"]}
+    ]}
+}

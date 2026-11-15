@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_mutate",
+  "name": "Mutate",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_water","elem_harmony"],
+  "cost": 2,
+  "kind": "stat_token",
+  "duration": "permanent",
+  "every": {"behaviour":"none"},
+  "text": "Choose an element: put the lowest element token upside-down as a penalty, then put the highest element token as a permanent bonus. May target yourself, ally, or enemy.",
+  "flags": {"scope":"self_or_enemy","swapTokens":true},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","self_or_enemy",1,false]},
+      {"map":[{"var":"recipients"},{"let":[{"st":{"sort_by":[{"map":[["vitality","world","will","matter"],[{"var":"it"},{"base_stat":[{"var":"who"},{"var":"it"}]},{"var":"i"}]]},{"asc":{"at":[{"var":"it"},1]}},{"asc":{"at":[{"var":"it"},2]}}]},"pb":{"call":["buy_pb",{"call":["my_stat",{"at":[{"var":"elems"},0]}]},{"cat":["swap:",{"var":"who"}]}]}},{"let":[{"low":{"at":[{"var":"st"},0]},"high":{"last":[{"var":"st"}]},"big":{"var":"pb.value"},"small":{"if":[{"var":"pb.fail"},0,{"min_of":[{"var":"pb.dice"}]}]}},{"if":[{">":[{"var":"big"},0]},{"if":[{"and":[{"!==":[{"var":"who"},{"var":"me"}]},{"enemy_of":[{"var":"me"},{"var":"who"}]}]},{"seq":[{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"high"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"-":[{"var":"big"}]},"effect_id":{"var":"effect_id"}}}]},{"if":[{">":[{"var":"small"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"low"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"var":"small"},"effect_id":{"var":"effect_id"}}}]}]}]},{"seq":[{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"low"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"var":"big"},"effect_id":{"var":"effect_id"}}}]},{"if":[{">":[{"var":"small"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"high"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"-":[{"var":"small"}]},"effect_id":{"var":"effect_id"}}}]}]}]}]}]}]}]},"who"]},
+      {"call":["finish"]}
+    ]}
+}

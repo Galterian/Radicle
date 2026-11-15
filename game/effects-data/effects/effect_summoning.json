@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_summoning",
+  "name": "Summoning",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_souls"],
+  "cost": 1,
+  "kind": "summon",
+  "duration": "cast",
+  "every": {"behaviour":"resolver","note":"∀ binds a creature in view (cast.summon.bind, prepared by peer.mjs prepareSummon)"},
+  "text": "Perform summoning of your archived creature or Library's top creature until Stat spent is rounded to the creature's Stats. On destruction: creature returns to your archives.",
+  "every_text": "Summon unknown creature from the tileset.",
+  "flags": {"permanent":true,"statBuy":true,"fixedPower":6},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["stat_buy",false]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

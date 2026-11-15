@@ -151,6 +151,7 @@ export function createKnownMap(seed, blocks = []) {
     size: () => tiles.size,
     blockCount: () => byId.size,
     blocks: () => [...byId.values()],
+    getBlock: id => byId.get(id),   // map-sync.mjs serves pulled blocks by id
     bounds: () => (bounds ? { ...bounds } : { min_q: 0, max_q: 0, min_r: 0, max_r: 0 }),
     addBlock,
     addBlocks(list) { let n = 0; for (const b of list || []) if (addBlock(b)) n++; return n; },

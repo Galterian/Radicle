@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_shield",
+  "name": "Shield",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_concentration"],
+  "cost": 1,
+  "kind": "counter",
+  "duration": "instant",
+  "every": {"behaviour":"becomes permanent","note":"Rule 23 ∀: the shield lands as a permanent"},
+  "text": "Invulnerability of the chosen element until end of round (playable as a counter action).",
+  "every_text": "Permanent. Take an element token and put it over these two permanent cards.",
+  "flags": {"shieldElem":true},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"put":["shieldElem",{"obj":{"on":{"var":"me"},"elem":{"if":[{"ctx_has":["threatElem"]},{"threat_elem":[{"var":"me"}]},{"at":[{"var":"elems"},0]}]}}}]},
+      {"if":[{"var":"cast.every"},{"emit":["permanents",{"obj":{"on":{"var":"me"},"id":{"var":"effect_id"}}}]}]},
+      {"call":["finish"]}
+    ]}
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_earthquake",
+  "name": "Earthquake",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_earth"],
+  "cost": 1,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Damages all adjacent enemies.",
+  "flags": {"damage":"delta","scope":"all_enemies"},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","all_enemies",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

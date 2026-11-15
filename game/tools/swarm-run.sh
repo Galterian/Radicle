@@ -5,6 +5,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 for d in "$HOME"/.nvm/versions/node/v2*/bin; do [ -d "$d" ] && PATH="$d:$PATH"; done
 export PATH
+# FORCE_CLASS=a,b,c: round-robin over every hero label (bot-driven ones first, then the NPC roster and the
+# joined monsters) so each listed class is held by at least one peer — peer.mjs reads FORCE_CLASS_LABELS.
+# FORCE_CLASS_MONSTERS=1 also hands the list to wild lurkers (by label hash).
+if [[ "${FORCE_CLASS:-}" == *,* && -z "${FORCE_CLASS_LABELS:-}" ]]; then
+  FORCE_CLASS_LABELS="player-1,P-Agent2,P-Agent3,P-Agent4,P-Agent5"
+  [ "${TEAM_C:-0}" = 1 ] && FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,C-Agent6"
+  [ "${TEAM_D:-0}" = 1 ] && FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,D-Agent7"
+  export FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,ally-1,foe-1,foe-2,M-Foe3,M-Foe4"
+fi
 ps -eo pid,comm,args | grep -E '^ *[0-9]+ +node +.*\.mjs' | grep -v bash | awk '{print $1}' | xargs -r kill 2>/dev/null || true
 sleep 1
 node --check peer.mjs

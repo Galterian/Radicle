@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_light_darkness",
+  "name": "Light / Darkness",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_fire"],
+  "cost": 1,
+  "kind": "counter",
+  "duration": "channel",
+  "every": {"behaviour":"resolver","note":"∀ instant (peer.mjs EVERY_INSTANT); channel ticks via cast._channel_tick"},
+  "text": "Until end of round, no one may deal damage to adjacent tiles and your tile. Channel: draw Fire token every action.",
+  "every_text": "Instant.",
+  "flags": {"zone":"no_damage","selfTileTokens":["elem_fire"],"permanent":true,"channel":{"stop":"break"}},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["self_tile_token","elem_fire","bonus","tile"]},
+      {"call":["zone_around"]},
+      {"call":["land_permanent"]},
+      {"call":["channel_reg","break"]},
+      {"call":["finish"]}
+    ]}
+}

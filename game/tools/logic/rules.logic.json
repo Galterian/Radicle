@@ -473,7 +473,7 @@
       ]
     },
     "rule_24_destroy_permanent_token": {
-      "description": "Destroying permanents and tokens. Pc: on a Posture / Empty Posture the caster emits a stat (one point-buy of one of the token's elements) against the closest adjacent enemy's permanents; a die at least the token's power destroys it (using_rule_24); fixed-power permanents (class card, summons, golems, elementals, resurrect) need a 6 (fixed_power_6); the class card itself can never be destroyed. Without an Aura permanent a caster either emits an element or targets exactly one permanent/token, not both. Context: token.{power, fixed, is_class_card}, die, cast.aura, cast.emitting, target.permanents.",
+      "description": "Destroying permanents and tokens. Pc: on a Posture / Empty Posture the caster emits a stat (one point-buy of one of the token's elements) against the closest adjacent enemy's permanents; a die at least the token's power destroys it (using_rule_24); fixed-power permanents (class card, summons, golems, elementals, resurrect) need a 6 (fixed_power_6); the class card itself can never be destroyed. Without an Aura permanent a caster either emits an element or targets exactly one permanent/token, not both. Target order (user ruling 2026-11-14, peer.mjs candidatesOf → effects.mjs rule24Order): of the adjacent enemy (sorted ids; a Possess in an adjacent ally's holding first) the emission takes its permanents first, then its character stat bonus tokens (Artifice, a broken Fortress …), then the bonus tile tokens under it — stable inside a class. Context: token.{power, fixed, is_class_card, kind}, die, cast.aura, cast.emitting, target.permanents.",
       "prerequisites": [
         { "id": "adjacent-enemy-with-permanent", "description": "An enemy in contact holds at least one permanent or token.", "when": { "and": [{ "rule": ["in_contact", { "dist": { "var": "dist" } }] }, { "rule": ["is_enemy", { "a_alliance": { "var": "caster.alliance" }, "b_alliance": { "var": "target.alliance" } }] }, { ">": [{ "count": [{ "var": "target.permanents" }] }, 0] }] } },
         { "id": "emitting-action", "description": "The point-buy rides a Posture / Empty Posture.", "when": { "rule": ["action_can_cast_non_instant", { "action": { "var": "caster.action" } }] } },
@@ -483,7 +483,8 @@
         { "id": "dice-count", "description": "Dice of the destroying point-buy (stat behind the chosen element).", "target": "caster", "unit": "die", "value": { "rule": ["point_buy_dice_count", { "stat": { "stat_of": [{ "var": "caster" }, { "var": "elements.0" }] } }] } },
         { "id": "effective-power", "description": "The power the die must reach: 6 for fixed-power permanents, else the token's value.", "target": "target", "unit": "die", "value": { "if": [{ "!!": { "var": "token.fixed" } }, { "rule": ["fixed_power_6", {}] }, { "var": "token.power" }] } },
         { "id": "destroyed", "description": "True when the die reaches the power and the target is not the class card.", "target": "target", "unit": "tokens", "value": { "rule": ["using_rule_24", { "die": { "var": "die" }, "power": { "if": [{ "!!": { "var": "token.fixed" } }, { "rule": ["fixed_power_6", {}] }, { "var": "token.power" }] }, "is_class_card": { "!!": { "var": "token.is_class_card" } } }] } },
-        { "id": "targets-per-action", "description": "Permanents/tokens that may be targeted this action: all of them with Aura, otherwise one.", "target": "target", "unit": "tokens", "value": { "if": [{ "!!": { "var": "cast.aura" } }, { "count": [{ "var": "target.permanents" }] }, 1] } }
+        { "id": "targets-per-action", "description": "Permanents/tokens that may be targeted this action: all of them with Aura, otherwise one.", "target": "target", "unit": "tokens", "value": { "if": [{ "!!": { "var": "cast.aura" } }, { "count": [{ "var": "target.permanents" }] }, 1] } },
+        { "id": "target-priority", "description": "Destroy order class of a candidate: 0 permanent, 1 character stat bonus token (Artifice / Fortress), 2 bonus tile token — the lowest class is taken first.", "target": "target", "unit": "rank", "value": { "if": [{ "==": [{ "var": "token.kind" }, "perm"] }, 0, { "==": [{ "var": "token.kind" }, "stat"] }, 1, 2] } }
       ],
       "validation": [
         { "id": "keeps-number", "description": "A new version keeps the paper rule number.", "assert": { "==": [{ "var": "proposal.data.number" }, { "var": "entry.data.number" }] } },
@@ -508,6 +509,726 @@
         { "id": "text-long-enough", "description": "The rule text is longer than 40 characters.", "assert": { ">": [{ "len": [{ "var": "proposal.data.text" }] }, 40] } },
         { "id": "cross-refs-resolve", "description": "At most 8 cross_refs and every one names an existing catalog entry.", "assert": { "and": [{ "<=": [{ "count": [{ "var": "proposal.data.cross_refs" }] }, 8] }, { "or": [{ "==": [{ "count": [{ "var": "proposal.data.cross_refs" }] }, 0] }, { "all": [{ "var": "proposal.data.cross_refs" }, { "!=": [{ "entry": [{ "var": "" }] }, null] }] }] }] } },
         { "id": "stays-superseded", "description": "The entry keeps pointing at rule_0_setup and is marked superseded in its text.", "assert": { "and": [{ "==": [{ "var": "proposal.data.superseded_by" }, "rule_0_setup"] }, { "matches": [{ "var": "proposal.data.text" }, "SUPERSEDED"] }, { "!=": [{ "entry": ["rule_0_setup"] }, null] }] } }
+      ]
+    },
+    "rule_building_fortress": {
+      "description": "User ruling 2026-11-14 (supersedes the 2026-11-12 \"stat above its value, any good roll breaks it\"); bonus re-ruled 2026-11-14 #2 (\"Highest die. Just a bonus stat token, just like the one that Artifice generates … destroyable the same way\"). js/building-bonus.js: the fortress value = data.fortress.stat_min + floor(hex roll × (stat_max − stat_min + 1)) (30..60, deterministic per hex; its stat = the building's stat hint / hash as before). peer.mjs fortressStatBuy (inside the Rule 24 destroy loop, reveal `destroy: { stat, building: \"q,r\" }` on P / EP): within data.fortress.near, once per data.fortress.per (action | turn), bank += my current stat of that kind (stat buy, no roll); bank ≥ value → broken: world edit `bld:q,r` gone (applied by the breaker, read by everyone), dice = round(value / bonus_divisor) from the reveal salt, bonus = the HIGHEST die (data.fortress.bonus max | sum). applyFortressOutcomes puts it in my stat_tokens_json as a character stat bonus token — exactly Artifice's kind: { stat, elem = first element (sorted ids) behind the stat (fortressTokenElem), value, effect_id: rule_building_fortress }, one positive token per element (effects.mjs placeStatBonusToken: a new one replaces an earlier one of that element only if higher; stacks with an Artifice token of another element). It counts in my stat, my life maximum (Σ/10 rule) and the UI token modifier like any stat token, and falls under Rule 24: an adjacent enemy emitting that stat against me takes my permanents first, then my character stat bonus tokens (this one), then the bonus tile tokens under me (rule24Order); a die ≥ the token value destroys it. Snapshot: fortress_bank_json { id, stat, value, bank, turn, action }; the old fortress_bonus_json is no longer written (ignored if an older peer sends it). Another unit breaking it voids my bank. Lifetime (user ruling 2026-11-15: \"permanent token from the highest die\"): the token is permanent — no turn / round / action end, snapshot rebuild or later token of that element that is not higher takes it; only Rule 24 (as above) or my death removes it (peer.mjs DIED branch drops my Fortress tokens; a Resurrect does not bring them back); tokens are not kept when a save is loaded. The breaker gets a HUD notice with the dice and the token. UI: the stat-buy button shows the peer-queued emission (hand msg destroy), which the peer clears after every action — stat-buy again each action.",
+      "prerequisites": [
+        {
+          "id": "within_reach",
+          "description": "The unit stands within data.fortress.near hexes of the standing fortress.",
+          "when": {
+            "<=": [
+              {
+                "var": "dist"
+              },
+              {
+                "var": "entry.data.fortress.near"
+              }
+            ]
+          }
+        },
+        {
+          "id": "emitting_action",
+          "description": "The stat buy rides a Posture / Empty Posture emission.",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_matches",
+          "description": "The emitted stat is the fortress stat.",
+          "when": {
+            "==": [
+              {
+                "var": "cast.stat"
+              },
+              {
+                "var": "building.stat"
+              }
+            ]
+          }
+        },
+        {
+          "id": "once_per_action",
+          "description": "Not banked against this fortress yet in this action (data.fortress.per = action; per = turn compares the turn).",
+          "when": {
+            "or": [
+              {
+                "!=": [
+                  {
+                    "var": "caster.fortress_bank.id"
+                  },
+                  {
+                    "var": "building.id"
+                  }
+                ]
+              },
+              {
+                "!=": [
+                  {
+                    "var": "caster.fortress_bank.action"
+                  },
+                  {
+                    "var": "action"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "fortress_value",
+          "description": "The fortress stat from the hex roll (0 ≤ roll < 1).",
+          "target": "tile",
+          "unit": "stat",
+          "value": {
+            "+": [
+              {
+                "var": "entry.data.fortress.stat_min"
+              },
+              {
+                "floor": [
+                  {
+                    "*": [
+                      {
+                        "var": "building.roll"
+                      },
+                      {
+                        "+": [
+                          {
+                            "-": [
+                              {
+                                "var": "entry.data.fortress.stat_max"
+                              },
+                              {
+                                "var": "entry.data.fortress.stat_min"
+                              }
+                            ]
+                          },
+                          1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "bank_after",
+          "description": "The bank after this emission: the earlier bank against this fortress plus my current stat.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "+": [
+              {
+                "if": [
+                  {
+                    "==": [
+                      {
+                        "var": "caster.fortress_bank.id"
+                      },
+                      {
+                        "var": "building.id"
+                      }
+                    ]
+                  },
+                  {
+                    "var": "caster.fortress_bank.bank"
+                  },
+                  0
+                ]
+              },
+              {
+                "var": "caster.stat_now"
+              }
+            ]
+          }
+        },
+        {
+          "id": "broken",
+          "description": "The fortress breaks (and is consumed) once the bank reaches its value.",
+          "target": "tile",
+          "unit": "building",
+          "value": {
+            ">=": [
+              {
+                "+": [
+                  {
+                    "if": [
+                      {
+                        "==": [
+                          {
+                            "var": "caster.fortress_bank.id"
+                          },
+                          {
+                            "var": "building.id"
+                          }
+                        ]
+                      },
+                      {
+                        "var": "caster.fortress_bank.bank"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "var": "caster.stat_now"
+                  }
+                ]
+              },
+              {
+                "var": "building.value"
+              }
+            ]
+          }
+        },
+        {
+          "id": "bonus_dice",
+          "description": "Dice of the break point-buy: round(value / bonus_divisor), at least 1.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "max": [
+              1,
+              {
+                "round_half_up": [
+                  {
+                    "/": [
+                      {
+                        "var": "building.value"
+                      },
+                      {
+                        "var": "entry.data.fortress.bonus_divisor"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "bonus_value",
+          "description": "The stat bonus: the highest of those dice (data.fortress.bonus = max).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "max_of": [
+              {
+                "var": "dice"
+              }
+            ]
+          }
+        },
+        {
+          "id": "bonus_token",
+          "description": "The bonus lands as a character stat bonus token (Artifice's kind) on that stat: one per element — it stands only if it is bigger than my token of that element already there (else the old one stays).",
+          "target": "caster",
+          "unit": "token",
+          "value": {
+            ">": [
+              {
+                "max_of": [
+                  {
+                    "var": "dice"
+                  }
+                ]
+              },
+              {
+                "max_of": [
+                  {
+                    "map": [
+                      {
+                        "filter": [
+                          {
+                            "var": "caster.tokens"
+                          },
+                          {
+                            "==": [
+                              {
+                                "var": "elem"
+                              },
+                              {
+                                "root": "token.elem"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an adjacent enemy emitting that stat (after my permanents, before my tile tokens) destroys the token with a point-buy die at least its value.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "var": "token.value"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "keeps-scope",
+          "description": "A new version keeps the scope.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.scope"
+              },
+              {
+                "var": "entry.data.scope"
+              }
+            ]
+          }
+        },
+        {
+          "id": "text-long-enough",
+          "description": "The rule text is longer than 40 characters.",
+          "assert": {
+            ">": [
+              {
+                "len": [
+                  {
+                    "var": "proposal.data.text"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "range-ordered",
+          "description": "stat_min ≤ stat_max, both positive.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.fortress.stat_min"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.fortress.stat_min"
+                  },
+                  {
+                    "var": "proposal.data.fortress.stat_max"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "per-valid",
+          "description": "per is action | turn.",
+          "assert": {
+            "in": [
+              {
+                "var": "proposal.data.fortress.per"
+              },
+              [
+                "action",
+                "turn"
+              ]
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "using_rule_24"
+      ]
+    },
+    "rule_monster_deck_effects": {
+      "description": "User rulings 2026-11-15 (\"can you make the monsters to hold in deck 4 effects and to cast them.\" + \"let the monsters have 2 more random effects, besides the 4 effects mix they have.\"). A monster = a wild creature (npc side, not a companion / summon). peer.mjs deck build: 11 action cards + 4 skills + data.monster_deck.thematic effect cards = the creature version's deck_effects (data/creatures.json, chosen once by game/monster-deck.mjs pickThematicEffects: AI-castable — none of ai_exclude_keys / ai_exclude_effects —, affordable under monster_effect_affordable with max_len / min_stat / min_stat_delta, mix 2 damage + 1 defence + the best remaining) + data.monster_deck.random random playable effects (pickRandomEffects, seed sha256(map seed : peer label : creature id : k), distinct from each other and from the thematic ones, need not be affordable) — 21 cards, above DECK_MIN 15. Logged as `monster deck: <creature> thematic [...] + random [...]`. They circulate like any card (draw, hand, discard, reshuffle; dropDeathCard may drop one). npcPlan (once awake): a cast in progress goes on with Posture / Empty Posture, never a move (Rule 19), aimed at the nearest enemy; else npcCastChoice over the hand — damage on an enemy within the effect's reach (delta only if it hurts), defence with an enemy within threat_range, control on an enemy in contact, Meteor Shower only when more enemies than allies are within 10 and life ≥ 3 — each with chance cast_chance[kind] from the monster's own RNG; otherwise the old weighted A/M/P/B pick. An effect card it can never use (not AI-castable or not affordable) goes back to its discard pile when its hand holds no action card. User ruling 2026-11-15 (\"Should allied npc_a heroes and summons also cast their effect cards? -> Yes, they should do\"): with data.monster_deck.ally_cast every other bot-driven non-human unit (npc_a / npc_c heroes, companions, summons, bound creatures; never HUMAN / profile heroes played by a person) casts the effect cards of its OWN deck through the same npcCastChoice (ally mode) — same pool / affordability / cast_chance, never moving while casting; a companion keeps a running cast even when its owner walks off and starts one only next to its owner; Turn Life heals the most hurt friend in contact (at half life or less, or when nobody in reach can be hurt and it is worse off than the caster); Meteor Shower needs more enemies within 10 than its side counting itself (owner and allies). Potion Brew (self_or_ally) goes on the friend in contact it helps more than the caster (lower life share, or the same share and a smaller life max); planning keeps a pointed unit for self_or_ally / self_or_enemy effects in the reveal (players too), effects.mjs falls back to the caster when it is not allied / in contact. Ally-mode affordability (monster deck_effects unchanged): ally_min_stat per element, ally_min_stat_delta delta mean, and with heal_ignores_delta a heal (Turn Life) needs no delta mean, only round(Vitality/10) >= 1. Rule 8: a heal my cast gives an ally counts as a benefit (user ruling 2026-11-15). The stuck-card rule applies to them too (their hand can fill with cards the AI never casts the same way).",
+      "prerequisites": [
+        {
+          "id": "wild_creature",
+          "description": "Only wild creatures (monsters, lurkers) get the effect cards; companions / summons keep their 15-card deck.",
+          "when": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "caster.kind"
+                  },
+                  "creature"
+                ]
+              },
+              {
+                "!": {
+                  "var": "caster.is_companion"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "thematic_effects",
+          "description": "Effect cards from the creature version's deck_effects.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "var": "entry.data.monster_deck.thematic"
+          }
+        },
+        {
+          "id": "random_effects",
+          "description": "Random playable effect cards per monster instance.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "var": "entry.data.monster_deck.random"
+          }
+        },
+        {
+          "id": "deck_size",
+          "description": "Monster deck: 11 actions + 4 skills + the effect cards.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "+": [
+              11,
+              4,
+              {
+                "var": "entry.data.monster_deck.thematic"
+              },
+              {
+                "var": "entry.data.monster_deck.random"
+              }
+            ]
+          }
+        },
+        {
+          "id": "damage_cast_chance",
+          "description": "npcPlan starts a cast of a sensible affordable damage effect in hand with this chance per action (defence / control: cast_chance.defence / .control).",
+          "target": "caster",
+          "unit": "chance",
+          "value": {
+            "var": "entry.data.monster_deck.cast_chance.damage"
+          }
+        },
+        {
+          "id": "deck_floor",
+          "description": "The deck stays above DECK_MIN 15 (circulating cards).",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            ">=": [
+              {
+                "+": [
+                  11,
+                  4,
+                  {
+                    "var": "entry.data.monster_deck.thematic"
+                  },
+                  {
+                    "var": "entry.data.monster_deck.random"
+                  }
+                ]
+              },
+              15
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "keeps-scope",
+          "description": "A new version keeps the scope.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.scope"
+              },
+              {
+                "var": "entry.data.scope"
+              }
+            ]
+          }
+        },
+        {
+          "id": "text-long-enough",
+          "description": "The rule text is longer than 40 characters.",
+          "assert": {
+            ">": [
+              {
+                "len": [
+                  {
+                    "var": "proposal.data.text"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "counts-valid",
+          "description": "thematic 1..10, random 0..10, mix damage + defence ≤ thematic.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.monster_deck.thematic"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.monster_deck.thematic"
+                  },
+                  10
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.monster_deck.random"
+                  },
+                  0
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.monster_deck.random"
+                  },
+                  10
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "+": [
+                      {
+                        "var": "proposal.data.monster_deck.mix.damage"
+                      },
+                      {
+                        "var": "proposal.data.monster_deck.mix.defence"
+                      }
+                    ]
+                  },
+                  {
+                    "var": "proposal.data.monster_deck.thematic"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "monster_deck_effects_valid",
+        "monster_effect_affordable"
+      ]
+    },
+    "rule_monster_natural_permanents": {
+      "description": "User rulings 2026-11-15 (\"A monster's natural effect becomes a card with a Permanent type. Each such monster starts with 2 copies of it already cast as permanents, power 6 each (Rule 24), held in play, with no further copies in its deck\"). peer.mjs boot (IS_MONSTER only — wild creatures; companions, summons, human / npc_b heroes excluded): naturalPermFor(creature data) → entity.permanents.add(id), permPower[id] = data.natural_permanents.power, permCopies[id] = data.natural_permanents.copies (snapshot perm_copies_json), that many effect cards pushed into heldCards (counted by circulating() for DECK_MIN), the id excluded from the thematic / random deck picks (destroyed copies are archived, so the card never circulates and npcCastChoice never sees it). Natural Spirit Link: 2 copies standing = ∀ (all four stats linked), 1 copy = Vitality. Logged `natural permanents: <name> ×2 (power 6 each)`. Two copies = one id + a count, so every Set-by-id reader (Rule 24 candidatesOf / permStats via element_cost, hasPerm, Delay-Time-style readers of permanents_csv, the perms strip, dropPermanent, heldCards) stays correct: Rule 24 destroying it takes ONE copy (dropPermanent decrements and moves that copy's held card to the ARCHIVE — out of circulation, user answer 2026-11-15; the last copy drops the permanent). A restart / rejoin / ghost replacement (START_LIFE) boots a fresh process with exactly the configured copies — never doubled. Semantics per effect (data.natural_permanents.effects): turn_tick Earthquake, ward Creation, link Spirit Link, spare_holder Love / Awe, no_damage Fear, only_holder Anger, lose_action Domination, stone Petrify, no_attack Mists — see each effect's logic and game/natural-perms.mjs.",
+      "prerequisites": [
+        {
+          "id": "wild_creature",
+          "description": "Only wild creatures (monsters, lurkers, ghost replacements) start with natural permanents.",
+          "when": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "caster.kind"
+                  },
+                  "creature"
+                ]
+              },
+              {
+                "!": {
+                  "var": "caster.is_companion"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "has_innate_effect",
+          "description": "The creature card names an innate effect (15 creatures have none — no permanents).",
+          "when": {
+            "!!": [
+              {
+                "var": "caster.innate_effect"
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "copies",
+          "description": "Copies standing at the start.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "var": "entry.data.natural_permanents.copies"
+          }
+        },
+        {
+          "id": "power",
+          "description": "Rule 24 power of each copy.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "var": "entry.data.natural_permanents.power"
+          }
+        },
+        {
+          "id": "deck_cards",
+          "description": "Monster deck: 11 actions + 4 skills + 6 effects + the held natural copies (circulating, ≥ DECK_MIN 15).",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "+": [
+              21,
+              {
+                "var": "entry.data.natural_permanents.copies"
+              }
+            ]
+          }
+        },
+        {
+          "id": "destroy_one_copy",
+          "description": "Rule 24 takes one copy per success; the effect lasts while ≥ 1 stands.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "var": "entry.data.natural_permanents.power"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "keeps-scope",
+          "description": "A new version keeps the scope.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.scope"
+              },
+              {
+                "var": "entry.data.scope"
+              }
+            ]
+          }
+        },
+        {
+          "id": "text-long-enough",
+          "description": "The rule text is longer than 40 characters.",
+          "assert": {
+            ">": [
+              {
+                "len": [
+                  {
+                    "var": "proposal.data.text"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "copies-valid",
+          "description": "copies 0..4, power 1..6.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.natural_permanents.copies"
+                  },
+                  0
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.natural_permanents.copies"
+                  },
+                  4
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.natural_permanents.power"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.natural_permanents.power"
+                  },
+                  6
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "using_rule_24",
+        "natural_damage_blocked",
+        "creation_ward_bars"
       ]
     }
   }

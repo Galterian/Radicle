@@ -103,7 +103,8 @@ function pickActive(entry) {
   const live = (entry.versions || []).filter(v => v.status !== 'rejected' && v.status !== 'superseded');
   live.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   const v = live[0] ?? entry.versions?.[0];
-  return { id: entry.id, name: entry.name, tags: entry.tags || [], data: v?.data || {}, resources: entry.resources || null };
+  return { id: entry.id, name: entry.name, tags: entry.tags || [], data: v?.data || {}, resources: entry.resources || null,
+    source: entry.source || v?.data?.source || null };   // chaosD6-Effects provenance (js/effect_source.js contract)
 }
 const _catalogs = new Map();
 export function loadCatalog(dataDir) {
@@ -142,7 +143,7 @@ export function catalogForUI(cat) {
       const types = Array.isArray(e.data.effect_types) ? e.data.effect_types : [];
       return { id, name: e.name, text: e.data.text || '', elements: e.data.element_cost || [], permanent: !!rule.permanent,
         damage: !!rule.damage, point_buy: rule.damage === 'pointbuy', instant: types.includes('instant'), channel: types.includes('channel'),
-        tile_target: !!rule.tileTarget, tags: e.tags || [] };
+        tile_target: !!rule.tileTarget, tags: e.tags || [], source: e.source || null };
     }),
     base_characters: Object.values(cat.characters).map(c => ({ id: c.id, name: c.name })),
   };

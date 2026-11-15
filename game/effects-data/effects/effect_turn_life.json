@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_turn_life",
+  "name": "Turn life",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality","elem_harmony"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Damage by spreading inverted vital energy. Alt: restore life = Vitality stat after calculations instead of dealing damage.",
+  "flags": {"damage":"delta","scope":"target","healIfNoTarget":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"set":["tmp",{"if":[{"and":[{"var":"declared"},{"!==":[{"var":"declared"},{"var":"me"}]},{"call":["alive",{"var":"declared"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"declared"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"declared"}]},1]}]},{"var":"declared"},null]}]},
+      {"if":[{"var":"tmp"},{"set":["recipients",[]]}]},
+      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"emit":["heals",{"obj":{"on":{"or":[{"var":"tmp"},{"var":"me"}]},"amount":{"round_div10":[{"base_stat":[{"var":"me"},"vitality"]}]}}}]}]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}],false,false]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

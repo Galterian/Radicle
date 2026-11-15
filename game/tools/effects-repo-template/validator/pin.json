@@ -1,0 +1,8 @@
+{
+  "_comment": "Filled by milestone E5: the validator that gates merges into main. repo/commit pin the validator source, sha256 is of the validator entry file, entry is its path inside that repo.",
+  "repo": "",
+  "commit": "",
+  "entry": "",
+  "sha256": "",
+  "schema_version": null
+}

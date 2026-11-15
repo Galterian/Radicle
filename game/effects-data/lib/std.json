@@ -1,0 +1,109 @@
+{
+  "schema": "chaosd6.effect-lib/1",
+  "id": "std",
+  "version": "1.0.0",
+  "description": "Shared building blocks of the built-in effects (prelude, targeting, point-buy bank, hits, locks, tokens, permanents). Pure; mirrors effects.mjs#resolveEffect.",
+  "subs": {
+    "alive": {"params":["id"],"doc":"life > 0","body":{">":[{"life_of":[{"var":"id"}]},0]}},
+    "visible": {
+      "params": ["id"],
+      "doc": "invisible units are hidden from their ENEMIES only; an invisible caster sees them (ruling 2026-11-14)",
+      "body": {"or":[{"!":[{"and":[{"invisible":[{"var":"id"}]},{"enemy_of":[{"var":"me"},{"var":"id"}]}]}]},{"invisible":[{"var":"me"}]}]}
+    },
+    "my_stat": {
+      "params": ["el"],
+      "doc": "the caster's stat for an element (ctx.statFor)",
+      "body": {"stat_of":[{"var":"me"},{"var":"el"}]}
+    },
+    "enemies_within": {
+      "params": ["d"],
+      "doc": "living visible enemies within d hexes, sorted by id",
+      "body": {"sort":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"call":["visible",{"var":"id"}]},{"enemy_of":[{"var":"me"},{"var":"id"}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},{"var":"d"}]}]},"id"]}]}
+    },
+    "delta_sum": {
+      "params": ["def"],
+      "doc": "Rule 21: Σ per element max(0, caster − defender), shielded elements add 0",
+      "body": {"reduce":[{"var":"elems"},{"+":[{"var":"acc"},{"if":[{"shielded":[{"var":"def"},{"var":"it"}]},0,{"max":[0,{"-":[{"call":["my_stat",{"var":"it"}]},{"stat_of":[{"var":"def"},{"var":"it"}]}]}]}]}]},0]}
+    },
+    "boost": {
+      "params": [],
+      "doc": "Elementalist extra die on the completing emission",
+      "body": {"if":[{">":[{"var":"cast.boost"},0]},{"var":"cast.boost"},0]}
+    },
+    "main_delta": {
+      "params": ["def"],
+      "doc": "delta damage main leg (+ boost)",
+      "body": {"+":[{"call":["delta_sum",{"var":"def"}]},{"call":["boost"]}]}
+    },
+    "main_kept": {
+      "params": ["def"],
+      "doc": "point-buy damage main leg: Σ banked dice of unshielded elements (+ boost)",
+      "body": {"+":[{"reduce":[{"range":[0,{"len":[{"var":"elems"}]}]},{"+":[{"var":"acc"},{"if":[{"shielded":[{"var":"def"},{"at":[{"var":"elems"},{"var":"it"}]}]},0,{"or":[{"at":[{"out":"kept"},{"var":"it"}]},0]}]}]},0]},{"call":["boost"]}]}
+    },
+    "buy_pb": {
+      "params": ["stat","tag"],
+      "doc": "one recorded point-buy: rolls[] entry; a failure marks the cast for retry and notes it",
+      "body": {"let":[{"pb":{"point_buy":[{"var":"stat"},{"var":"tag"}]}},{"seq":[{"emit":["rolls",{"obj":{"elem":{"var":"tag"},"dice":{"var":"pb.dice"},"stat":{"var":"stat"},"ok":{"!":[{"var":"pb.fail"}]}}}]},{"if":[{"var":"pb.fail"},{"seq":[{"set":["failed",true]},{"note":["point-buy ",{"var":"tag"}," failed [",{"join":[{"var":"pb.dice"},","]},"] > ",{"var":"stat"}]}]}]},{"var":"pb"}]}]}
+    },
+    "buy": {
+      "params": ["stat","tag"],
+      "doc": "buy_pb → its value (0 on a failure)",
+      "body": {"get":[{"call":["buy_pb",{"var":"stat"},{"var":"tag"}]},"value"]}
+    },
+    "prelude": {
+      "params": [],
+      "doc": "caster on the map; Rule 8 prohibitions: a disabled element or an adjacent enemy Emotions Bombard blocks the cast",
+      "body": {"seq":[{"set":["my_tile",{"tile_of":[{"var":"me"}]}]},{"if":[{"!":[{"var":"my_tile"}]},{"return":"fizzled"}]},{"let":[{"dis":{"disabled_elems":[{"var":"me"}]}},{"if":[{"some":[{"var":"elems"},{"includes":[{"var":"dis"},{"var":"it"}]}]},{"seq":[{"put":["status","blocked"]},{"note":["element disabled"]},{"return":null}]}]}]},{"if":[{"some":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"enemy_of":[{"var":"me"},{"var":"id"}]},{"has_perm":[{"var":"id"},"effect_emotions_bombard"]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},1]}]},"id"]},{"seq":[{"put":["status","blocked"]},{"note":["emotions bombard in contact"]},{"return":null}]}]}]}
+    },
+    "pointbuy_bank": {
+      "params": [],
+      "doc": "Rule 20 pc override: emission i buys element i, good dice banked in kept[]; a failure re-emits that element (retry); a cast still emitting returns casting",
+      "body": {"let":[{"of":{"??":[{"var":"cast.of"},{"len":[{"var":"elems"}]}]},"step":{"min":[{"??":[{"var":"cast.step"},{"var":"of"}]},{"max":[1,{"var":"of"}]}]},"complete":{"or":[{"var":"cast.is_instant"},{">=":[{"var":"step"},{"var":"of"}]}]},"kept0":{"if":[{"and":[{"is_array":[{"var":"cast.kept"}]},{"===":[{"len":[{"var":"cast.kept"}]},{"len":[{"var":"elems"}]}]}]},{"slice":[{"var":"cast.kept"},0]},{"map":[{"var":"elems"},null]}]},"idx":{"-":[{"min":[{"var":"step"},{"len":[{"var":"elems"}]}]},1]}},{"seq":[{"set":["tmp",{"reduce":[{"range":[0,{"+":[{"var":"idx"},1]}]},{"if":[{"!=":[{"at":[{"var":"acc"},{"var":"current"}]},null]},{"var":"acc"},{"let":[{"el":{"at":[{"var":"elems"},{"var":"current"}]}},{"let":[{"st":{"call":["my_stat",{"var":"el"}]}},{"let":[{"pb":{"point_buy":[{"var":"st"},{"cat":[{"var":"el"},"#",{"var":"current"}]}]}},{"seq":[{"emit":["rolls",{"obj":{"elem":{"var":"el"},"dice":{"var":"pb.dice"},"stat":{"var":"st"},"ok":{"!":[{"var":"pb.fail"}]}}}]},{"if":[{"var":"pb.fail"},{"seq":[{"note":["point-buy ",{"var":"el"}," failed [",{"join":[{"var":"pb.dice"},","]},"] > ",{"var":"st"}," — re-emit it"]},{"put":["kept",{"var":"acc"}]},{"return_empty":"retry"}]}]},{"set_at":[{"var":"acc"},{"var":"current"},{"var":"pb.value"}]}]}]}]}]}]},{"var":"kept0"}]}]},{"put":["kept",{"var":"tmp"}]},{"if":[{"!":[{"var":"complete"}]},{"return_empty":"casting"}]}]}]}
+    },
+    "targets": {
+      "params": ["scope","range","by_damage"],
+      "doc": "recipients by scope (target | all_enemies | all_adjacent | all_seen | everyone | self_or_ally | self_or_enemy | self), Rule 15 auto-target, Aura widening, Aura ∀ (10 hexes); sets the registers recipients / aura / declared",
+      "body": {"seq":[{"set":["aura",{"has_perm":[{"var":"me"},"effect_aura"]}]},{"set":["declared",{"if":[{"===":[{"var":"cast.target.kind"},"character"]},{"var":"cast.target.ref"},null]}]},{"set":["recipients",{"if":[{"===":[{"var":"scope"},"target"]},{"if":[{"var":"aura"},{"call":["enemies_within",{"var":"range"}]},{"and":[{"var":"declared"},{"!==":[{"var":"declared"},{"var":"me"}]},{"call":["alive",{"var":"declared"}]},{"call":["visible",{"var":"declared"}]},{"<=":[{"dist":[{"var":"me"},{"var":"declared"}]},{"var":"range"}]}]},[{"var":"declared"}],{"slice":[{"sort_by":[{"call":["enemies_within",{"var":"range"}]},{"desc":{"if":[{"var":"by_damage"},{"call":["delta_sum",{"var":"it"}]},0]}},{"asc":{"life_of":[{"var":"it"}]}},{"locale":{"var":"it"}}]},0,1]}]},{"===":[{"var":"scope"},"all_enemies"]},{"call":["enemies_within",1]},{"===":[{"var":"scope"},"all_adjacent"]},{"sort":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"call":["visible",{"var":"id"}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},1]}]},"id"]}]},{"===":[{"var":"scope"},"all_seen"]},{"sort":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"call":["visible",{"var":"id"}]}]},"id"]}]},{"===":[{"var":"scope"},"everyone"]},{"sort":[{"filter":[{"peers":[]},{"and":[{"call":["alive",{"var":"id"}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},{"var":"range"}]}]},"id"]}]},{"===":[{"var":"scope"},"self_or_ally"]},[{"if":[{"and":[{"var":"declared"},{"!==":[{"var":"declared"},{"var":"me"}]},{"call":["alive",{"var":"declared"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"declared"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"declared"}]},1]}]},{"var":"declared"},{"var":"me"}]}],{"===":[{"var":"scope"},"self_or_enemy"]},[{"if":[{"and":[{"var":"declared"},{"!==":[{"var":"declared"},{"var":"me"}]},{"call":["alive",{"var":"declared"}]},{"call":["visible",{"var":"declared"}]},{"enemy_of":[{"var":"me"},{"var":"declared"}]},{"<=":[{"dist":[{"var":"me"},{"var":"declared"}]},1]}]},{"var":"declared"},{"var":"me"}]}],{"===":[{"var":"scope"},"self"]},[{"var":"me"}],[]]}]},{"if":[{"and":[{"var":"aura"},{"in":[{"var":"scope"},["self","self_or_ally"]]}]},{"set":["recipients",{"sort":[{"uniq":[{"concat":[{"var":"recipients"},{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"id"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},1]}]},"id"]}]}]}]}]}]},{"if":[{"var":"cast.aura"},{"if":[{"in":[{"var":"scope"},["target","all_enemies","all_adjacent","all_seen","self_or_enemy"]]},{"set":["recipients",{"call":["enemies_within",10]}]},{"in":[{"var":"scope"},["self","self_or_ally"]]},{"set":["recipients",{"sort":[{"filter":[{"peers":[]},{"and":[{"call":["alive",{"var":"id"}]},{"or":[{"===":[{"var":"id"},{"var":"me"}]},{"call":["visible",{"var":"id"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},10]}]},"id"]}]}]}]}]},{"var":"recipients"}]}
+    },
+    "require_recipients": {
+      "params": [],
+      "doc": "nobody in reach → fizzled (the cast's other legs still run, as in effects.mjs)",
+      "body": {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"seq":[{"put":["status","fizzled"]},{"note":["nobody in reach"]}]}]}
+    },
+    "hit": {
+      "params": ["def","legs"],
+      "doc": "a damage hit with raw leg sums (the resolver applies Force Shield / tokens / rounding)",
+      "body": {"emit":["hits",{"obj":{"victim":{"var":"def"},"legs":{"var":"legs"},"healDealt":false,"selfDamageEqual":false}}]}
+    },
+    "lock_n": {
+      "params": ["def","n"],
+      "doc": "the target loses n actions",
+      "body": {"emit":["locks",{"obj":{"on":{"var":"def"},"n":{"var":"n"},"by":{"var":"me"},"effect_id":{"var":"effect_id"}}}]}
+    },
+    "lock_rest": {
+      "params": ["def","next_turn"],
+      "doc": "the target loses the rest of this turn (and the next one)",
+      "body": {"emit":["locks",{"obj":{"on":{"var":"def"},"restOfTurn":true,"nextTurn":{"var":"next_turn"},"by":{"var":"me"},"effect_id":{"var":"effect_id"}}}]}
+    },
+    "self_tile_token": {
+      "params": ["el","kind","tag"],
+      "doc": "point-buy token on the caster's tile (bonus | shield)",
+      "body": {"let":[{"val":{"call":["buy",{"call":["my_stat",{"var":"el"}]},{"cat":[{"var":"tag"},":",{"var":"el"}]}]}},{"if":[{">":[{"var":"val"},0]},{"emit":["tokens",{"obj":{"kind":{"var":"kind"},"elem":{"var":"el"},"value":{"var":"val"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]}]}]}
+    },
+    "stat_token": {
+      "params": ["who","el","sign","tag"],
+      "doc": "point-buy stat token (bonus sign 1 / penalty sign -1) on a unit",
+      "body": {"let":[{"val":{"call":["buy",{"call":["my_stat",{"var":"el"}]},{"cat":[{"var":"tag"},":",{"var":"el"},":",{"var":"who"}]}]}},{"if":[{">":[{"var":"val"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"elem_stat":[{"var":"el"}]},"elem":{"var":"el"},"value":{"*":[{"var":"sign"},{"var":"val"}]},"effect_id":{"var":"effect_id"}}}]}]}]}
+    },
+    "land_permanent": {
+      "params": [],
+      "doc": "Rule 12: a completed (non-tick) cast leaves the card in front of the caster",
+      "body": {"if":[{"and":[{"===":[{"out":"status"},"done"]},{"!":[{"var":"cast._channel_tick"}]}]},{"emit":["permanents",{"obj":{"on":{"var":"me"},"id":{"var":"effect_id"}}}]}]}
+    },
+    "finish": {
+      "params": [],
+      "doc": "∀ flag; a failed point-buy anywhere turns the whole cast into a retry (nothing lands)",
+      "body": {"seq":[{"put":["every",{"!!":[{"var":"cast.every"}]}]},{"if":[{"var":"failed"},{"return_empty":"retry"}]},{"return":null}]}
+    }
+  }
+}

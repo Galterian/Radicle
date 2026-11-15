@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_lightning",
+  "name": "Lightning",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_fire","elem_air"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"lock ×2","note":"Rule 23 ∀: each hit target loses 2 actions"},
+  "text": "Target loses next N actions, where N = number of Lightnings cast.",
+  "flags": {"damage":"delta","scope":"target","lock":1},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"seq":[{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},{"call":["lock_n",{"var":"def"},{"*":[1,{"if":[{"var":"cast.every"},2,1]}]}]}]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

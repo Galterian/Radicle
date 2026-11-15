@@ -1,0 +1,17 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_invisibility",
+  "name": "Invisibility",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.1.0"},
+  "elements": ["elem_fire","elem_space"],
+  "cost": 2,
+  "kind": "permanent",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"∀ 'until you deal damage' is handled by peer.mjs (invisibleNow)"},
+  "text": "Point-buy permanent: put it in your permanents holder. While it stands you may move around the map and you are not visible to enemies (only to your allies, other invisible characters, the Vision effect and the Cleric's class skill): they cannot target you and monsters do not see you. Once you start casting a spell, or use Attack or Block, the permanent is destroyed. Untargeted area effects (Meteor Shower) still reach you.",
+  "every_text": "Permanent until you make damage.",
+  "flags": {"permanent":true},
+  "uses": ["std"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

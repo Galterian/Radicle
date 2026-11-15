@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_sleep",
+  "name": "Sleep",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_souls","elem_concentration"],
+  "cost": 2,
+  "kind": "trap",
+  "duration": "trap",
+  "every": {"behaviour":"resolver","note":"enter trap; the afflicted enemy cannot cast while in contact (peer.mjs)"},
+  "text": "Set as a trap on your location. Enemy cannot cast effects while in contact. On trap resolve: effect becomes Permanent targeting trapped character with power 20 point-buy.",
+  "flags": {"trap":{"trigger":"enter","mode":"perm"},"fixedPower":6},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["trap_self","enter","perm"]},{"call":["finish"]}]}
+}

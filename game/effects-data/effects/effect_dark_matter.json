@@ -1,0 +1,25 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_dark_matter",
+  "name": "Dark matter",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space","elem_fire"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Damage by colliding the target with the inverted target. + Also put a damage-shield Space AND Fire token on your tile.",
+  "flags": {"damage":"pointbuy","scope":"target","selfShieldTokens":["elem_space","elem_fire"]},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["pointbuy_bank"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],false,false]},"def"]},
+      {"call":["self_tile_token","elem_space","shield","shield"]},
+      {"call":["self_tile_token","elem_fire","shield","shield"]},
+      {"call":["finish"]}
+    ]}
+}

@@ -26,8 +26,9 @@ import { publishDimensionPush, publishSeedPresence, seedsEnabled } from './local
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const RADICLE_BARE = path.join(__dirname, 'radicle.git');
-export const RADICLE_WORK = path.join(__dirname, 'radicle-work');
+// CHAOSD6_RADICLE_BARE / CHAOSD6_RADICLE_WORK: test launchers only (a temp bare + work dir).
+export const RADICLE_BARE = process.env.CHAOSD6_RADICLE_BARE || path.join(__dirname, 'radicle.git');
+export const RADICLE_WORK = process.env.CHAOSD6_RADICLE_WORK || path.join(__dirname, 'radicle-work');
 export const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 // Mobile peers (nodejs-mobile inside the Android APK) have no git / rad /
@@ -701,6 +702,75 @@ export async function listPublishedDimensions({ sync = true } = {}) {
   const out = [...byName.values()];
   for (const d of out) d.doors.sort((a, b) => Date.parse(b.pushed_at || 0) - Date.parse(a.pushed_at || 0));
   out.sort((a, b) => Date.parse(b.doors[0]?.pushed_at || b.legacy_doors[0]?.last_push?.at || 0) - Date.parse(a.doors[0]?.pushed_at || a.legacy_doors[0]?.last_push?.at || 0));
+  return out;
+}
+
+// ---- Local copies of dimension branches (launcher "✕ delete old dimension", user ruling 2026-11-15) ----
+// Only the local bare (game/radicle.git) and the per-peer work trees are touched — never the Radicle
+// storage (~/.radicle/storage: signed refs, re-fetched from the seeds anyway), never a push, never `rad`.
+
+// Map<dimensionName, { sha, at }> of the local bare's ActiveDimensions/* branches (empty without a bare).
+export async function localDimensionBranches() {
+  const out = new Map();
+  if (IS_MOBILE) return out;
+  try {
+    const { stdout } = await pexec('git', ['--git-dir', RADICLE_BARE, 'for-each-ref', '--format=%(refname) %(objectname) %(committerdate:iso-strict)', 'refs/heads/ActiveDimensions/*'], { windowsHide: true, env: FENCED_ENV, timeout: 10_000 });
+    for (const line of stdout.split('\n').filter(Boolean)) {
+      const [ref, sha, at] = line.split(' ');
+      const name = ref.slice('refs/heads/ActiveDimensions/'.length);
+      if (name) out.set(name, { sha, at: at || null });
+    }
+  } catch { /* no bare yet */ }
+  return out;
+}
+
+// Bytes of the objects only this branch reaches in the local bare (what deleting it would free on the next gc).
+// Cached by tip sha: ~0.3 s per branch the first time.
+const _branchBytes = new Map();
+export async function localBranchBytes(dimensionName, sha) {
+  if (IS_MOBILE || !sha) return 0;
+  const key = `${dimensionName}@${sha}`;
+  if (_branchBytes.has(key)) return _branchBytes.get(key);
+  const ref = `refs/heads/${dimensionBranch(dimensionName)}`;
+  let n = 0;
+  try {
+    const { stdout } = await pexec('git', ['--git-dir', RADICLE_BARE, 'rev-list', '--disk-usage', '--objects', ref, '--not', `--exclude=${ref}`, '--all'], { windowsHide: true, env: FENCED_ENV, timeout: 15_000 });
+    n = Number(stdout.trim()) || 0;
+  } catch { n = 0; }
+  _branchBytes.set(key, n);
+  return n;
+}
+
+// Drop ActiveDimensions/<Name> from the local bare and from every per-peer work tree (its local branch unless
+// checked out there, and the radicle/ + rad/ remote-tracking refs). Returns what went, for the report.
+export async function forgetLocalDimension(dimensionName) {
+  if (IS_MOBILE || !isValidDimensionName(dimensionName)) return { bare: false, work_trees: 0, skipped: [] };
+  const branch = dimensionBranch(dimensionName);
+  const out = { bare: false, work_trees: 0, skipped: [] };
+  const gitIn = (args) => pexec('git', args, { windowsHide: true, env: FENCED_ENV, timeout: 10_000 });
+  try {
+    await gitIn(['--git-dir', RADICLE_BARE, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+    await gitIn(['--git-dir', RADICLE_BARE, 'update-ref', '-d', `refs/heads/${branch}`]);
+    out.bare = true;
+  } catch { /* not in the bare */ }
+  let dirs = [];
+  try { dirs = (await fs.readdir(RADICLE_WORK, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => path.join(RADICLE_WORK, d.name)); } catch {}
+  for (const dir of dirs) {
+    if (!(await isValidWorkTree(dir))) continue;
+    let touched = false;
+    for (const ref of [`refs/remotes/radicle/${branch}`, `refs/remotes/rad/${branch}`]) {
+      try { await gitIn(['-C', dir, 'rev-parse', '--verify', '--quiet', ref]); await gitIn(['-C', dir, 'update-ref', '-d', ref]); touched = true; } catch {}
+    }
+    try {
+      await gitIn(['-C', dir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+      let head = '';
+      try { head = (await gitIn(['-C', dir, 'symbolic-ref', '-q', 'HEAD'])).stdout.trim(); } catch {}
+      if (head === `refs/heads/${branch}`) out.skipped.push(path.basename(dir));   // checked out: a peer may be using it
+      else { await gitIn(['-C', dir, 'update-ref', '-d', `refs/heads/${branch}`]); touched = true; }
+    } catch {}
+    if (touched) out.work_trees++;
+  }
+  for (const k of [..._branchBytes.keys()]) if (k.startsWith(`${dimensionName}@`)) _branchBytes.delete(k);
   return out;
 }
 

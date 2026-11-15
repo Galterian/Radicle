@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_fossilization",
+  "name": "Fossilization",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_earth","elem_vitality"],
+  "cost": 2,
+  "kind": "lock",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Target misses actions until end of round. + You may put an Earth or Vitality permanent bonus token on your tile. + Also put a damage-shield Earth token on your tile.",
+  "flags": {"scope":"target","lockRestOfTurn":true,"selfTileTokens":["elem_earth"],"selfShieldTokens":["elem_earth"]},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,false]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"call":["lock_rest",{"var":"def"},false]},"def"]},
+      {"call":["self_tile_token","elem_earth","bonus","tile"]},
+      {"call":["self_tile_token","elem_earth","shield","shield"]},
+      {"call":["finish"]}
+    ]}
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_banish",
+  "name": "Banish",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space","elem_souls"],
+  "cost": 2,
+  "kind": "relocation",
+  "duration": "instant",
+  "every": {"behaviour":"none","note":"paper ∀ (relocate a tile) not modelled"},
+  "text": "Relocate a subject against their will anywhere onto a known (open) tile or unknown tile.",
+  "every_text": "Relocate a tile against its will anywhere onto an unknown (closed) tile or known tile.",
+  "flags": {"scope":"target","banish":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,false]},
+      {"let":[{"tgt":{"at":[{"var":"recipients"},0]}},{"if":[{"!":[{"var":"tgt"}]},{"call":["fizzle","nobody in reach"]},{"let":[{"gap":{"reduce":[{"var":"elems"},{"+":[{"var":"acc"},{"max":[0,{"-":[{"call":["my_stat",{"var":"it"}]},{"stat_of":[{"var":"tgt"},{"var":"it"}]}]}]}]},0]}},{"if":[{"<=":[{"var":"gap"},0]},{"seq":[{"put":["status","fizzled"]},{"note":[{"var":"tgt"}," holds (World ",{"stat_of":[{"var":"tgt"},{"at":[{"var":"elems"},0]}]}," ≥ mine ",{"call":["my_stat",{"at":[{"var":"elems"},0]}]},")"]}]},{"let":[{"all":{"free_tiles_within":[{"var":"my_tile.q"},{"var":"my_tile.r"},24]},"far":{"filter":[{"var":"all"},{">=":[{"hex_dist":[{"var":"my_tile"},{"var":"t"}]},18]},"t"]},"pool":{"if":[{"len":[{"var":"far"}]},{"var":"far"},{"slice":[{"sort_by":[{"var":"all"},{"desc":{"hex_dist":[{"var":"my_tile"},{"var":"t"}]}},{"asc":{"var":"t.q"}},{"asc":{"var":"t.r"}},"t"]},0,6]}]}},{"if":[{"!":[{"len":[{"var":"pool"}]}]},{"call":["fizzle","no free tile to banish to"]},{"let":[{"t":{"at":[{"var":"pool"},{"rng":[{"cat":["banish:",{"var":"tgt"}]},{"len":[{"var":"pool"}]}]}]}},{"seq":[{"emit":["moves",{"obj":{"who":{"var":"tgt"},"q":{"var":"t.q"},"r":{"var":"t.r"},"reason":"banished"}}]},{"note":["banish ",{"var":"tgt"}," → (",{"var":"t.q"},",",{"var":"t.r"},"), ",{"hex_dist":[{"var":"my_tile"},{"var":"t"}]}," away"]}]}]}]}]}]}]}]}]},
+      {"call":["finish"]}
+    ]}
+}

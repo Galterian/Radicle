@@ -1,0 +1,24 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_balefire",
+  "name": "Fiery Beam / Balefire",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_fire","elem_harmony","elem_time"],
+  "cost": 3,
+  "kind": "damage",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"perm 6 until the end of my next turn, 9 bonus plans, instants (peer.mjs)"},
+  "text": "On successful cast, earn an extra round just for you (only you may take new actions during it).",
+  "flags": {"damage":"delta","scope":"target","permanent":true,"fixedPower":6,"draw":5,"completesWithoutTarget":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"note":["nobody in reach — the cast still completes"]}]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}],false,false]},"def"]},
+      {"put":["draw",5]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

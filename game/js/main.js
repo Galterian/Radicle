@@ -6,14 +6,19 @@ import { createRenderer } from './renderer.js';
 import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
-import { featureAt, isLabyrinthWallAt, onFeaturesChanged } from './features.js';
+import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
+// Buildings created during play (Animator copy / Priest Shrine, 2026-11-14): everyone's world_edits_json
+// `made:q,r` → the features.js overlay (renderer + object cards repaint through onFeaturesChanged).
+const syncPlacedBuildings = () => { try { setPlacedBuildings(placedBuildingsFrom(state.entities || [])); } catch (e) { console.warn('[placed buildings]', e); } };
+import { FORTRESS, fortressBonusDice } from './building-bonus.js';
 import { buildingBonusAt, bonusText, clearBuildingBonusMemo, fortressAt, dungeonAt, dungeonExplored, DUNGEON_REARM_TURNS, schoolAt, LEARN_REARM_TURNS } from './building-bonus.js';
 import { onBigFeaturesChanged } from './bigfeature.js';
 // Bonus lookups made before a catalogue landed are stale.
 onFeaturesChanged(clearBuildingBonusMemo); onBigFeaturesChanged(clearBuildingBonusMemo);
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
-import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf } from './skill_card.js';
+import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf, skillInfo } from './skill_card.js';
+import { effectSourceBadge, sourceEpoch, setEffectSource, refText, DEV_FIXTURE } from './effect_source.js';
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
 // still landing. Pull it in defensively: when the module (or its export) is
@@ -324,6 +329,11 @@ function allObstacles() {
   return out;
 }
 // The stat a building adds to a unit standing on it (0 elsewhere).
+// Rule 12 stat tokens on a unit's stat (Artifice, Mutate, a broken Fortress — user ruling 2026-11-14: the fortress
+// bonus is such a token), from its snapshot stat_tokens_json.
+function statTokenSumOf(e, key) {
+  try { return JSON.parse(e?.stat_tokens_json || '[]').filter(t => t.stat === key).reduce((a, t) => a + (Number(t.value) || 0), 0); } catch { return 0; }
+}
 function buildingStatOf(e, key) {
   if (!Number.isInteger(e?.tile_q) || !state.map?.seed) return 0;
   return buildingBonusAt(state.map.seed, e.tile_q, e.tile_r)?.bonus?.stat?.[key] || 0;
@@ -399,7 +409,7 @@ function chaseEnemy(foe) {
 
 function resumeJourney() {
   if (state.ui.chasePeerId) {
-    const foe = state.entities.find(p => p.peer_id === state.ui.chasePeerId && (p.life ?? 0) > 0);
+    const foe = state.entities.find(p => p.peer_id === state.ui.chasePeerId && (p.life ?? 0) > 0 && !hiddenFromMe(p));
     if (foe && chaseStep(foe, true)) return true;
     state.ui.chasePeerId = null;
     state.ui.pathPlan = null;
@@ -825,6 +835,16 @@ function playSkillFx(m) {
   }
 }
 
+// renderDeck runs every animation frame: rewrite a slot's card body only when its markup
+// (or, for a skill, the skill) changed. Returns true when it rewrote it.
+function setCardHtml(div, html, key = '') {
+  const sig = key + '\u0000' + html;
+  if (div._cardSig === sig) return false;
+  div._cardSig = sig;
+  div.innerHTML = html;
+  return true;
+}
+
 function renderDeck() {
   renderComboMarker();   // lit / armed state follows phase, commit and casts
   document.getElementById('slots')?.classList.toggle('haste-mode', state.bonusMode);
@@ -846,7 +866,7 @@ function renderDeck() {
       const n = state.queued[0] === 'EMPTY' ? state.queuedSkills.length : 0;
       const sanct = code === 'EP' && !emptyIsSecond && inSanctuary();
       const help = ACTION_HELP[emptyIsSecond ? 'EP' : code];
-      cardDiv.innerHTML = `<div class="nm">Empty${code === 'EM' ? ' Move' : ' Posture'}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`;
+      setCardHtml(cardDiv, `<div class="nm">Empty${code === 'EM' ? ' Move' : ' Posture'}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${emptyIsSecond ? '2nd · EP' : code === 'EM' ? 'move' : sanct ? '⛩ sanctuary' : 'posture'}${n ? ` +${n}✦` : ''}</div>`);
       slot.title = (sanct ? 'Sanctuary: you take no damage while you rest in Empty Posture; any other action or skill ends it\n\n' : '') + (help?.full || '');
       slot.classList.toggle('queued', state.queued[0] === 'EMPTY');
       slot.classList.toggle('queued-extra', emptyIsSecond);
@@ -913,7 +933,7 @@ function renderDeck() {
           return `<span class="mc${cls}" title="${escHtml(el?.name || e)}" style="--mc-tint:${el ? elementTint(el.colorHint) : '#9bb3d6'}">${src ? `<img src="${escHtml(src)}" alt="">` : escHtml(ELEM_GLYPH[e] || '?')}</span>`;
         }).join('')}${inCast ? `<b>${state.casting.step}/${state.casting.of}</b>` : ''}</div>`;
       }
-      cardDiv.innerHTML = `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div>${mCost}${flags}${desc ? `<div class="ds">${escHtml(abbreviate(desc, 110))}</div>` : ''}<div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`;
+      setCardHtml(cardDiv, `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div>${effectSourceBadge(card, { compact: true })}${mCost}${flags}${desc ? `<div class="ds">${escHtml(abbreviate(desc, 110))}</div>` : ''}<div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`);
       const hints = [
         card.tile_target ? 'Left-click a tile for its target (general_ux_range_cast_target).' : '',
         card.takes_attach ? 'Click a second effect card in hand — it rides on this cast.' : '',
@@ -935,13 +955,15 @@ function renderDeck() {
       // skill-card icon shows the real effect sprite (frame 0) when a skill's
       // resources.sprites.icon or .effect is mapped, otherwise the unicode
       // glyph. slot .ds carries the short rule; the full line stays in title.
-      cardDiv.innerHTML = `
+      // Only remount (new icon canvas) when the card actually changed — this runs every frame.
+      if (setCardHtml(cardDiv, `
         <div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div>
         <div class="skill-slot-icon"></div>
         <div class="ds">${escHtml(abbreviate(text, 70))}</div>
-        <div class="cd">needs ${escHtml(needs)}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`;
-      const iconMount = cardDiv.querySelector('.skill-slot-icon');
-      if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name }));
+        <div class="cd">needs ${escHtml(needs)}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`, card.skill_id)) {
+        const iconMount = cardDiv.querySelector('.skill-slot-icon');
+        if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name }));
+      }
       slot.title = text || card.name;
     } else if (card) {
       const code = card.code;
@@ -950,12 +972,12 @@ function renderDeck() {
       const short = ACTION_SHORT[code] || card.action_name || code;
       const n = state.queued[0] === i ? state.queuedSkills.length : 0;
       const help = ACTION_HELP[code];
-      cardDiv.innerHTML = `<div class="nm">${escHtml(short)}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`;
+      setCardHtml(cardDiv, `<div class="nm">${escHtml(short)}</div><div class="ds">${escHtml(help?.card || '')}</div><div class="cd">${isExtra ? '2nd · ' : ''}${card.card_id.slice(-5)}${n ? ` +${n}✦` : ''}</div>`);
       slot.title = help?.full || '';
     } else {
       delete slot.dataset.code;
       delete cardDiv.dataset.code;
-      cardDiv.innerHTML = `<div class="nm" style="opacity:.4">—</div>`;
+      setCardHtml(cardDiv, `<div class="nm" style="opacity:.4">—</div>`);
       slot.title = '';
     }
     slot.classList.toggle('skill', skill);
@@ -1014,7 +1036,7 @@ function renderArchivePopup() {
     const creature = c.kind === 'creature', klass = c.kind === 'class';
     const nm = creature ? `🐾 ${c.name}` : klass ? `⚜ ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
     const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? `class · ${c.text || ''} · stats: ${classStatsLine(c.class_id)}` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
-    return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div><div class="cd">${cd}</div></div>`;
+    return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div>${isEffect(c) ? effectSourceBadge(c) : ''}<div class="cd">${cd}</div></div>`;
   }).join('');
   // Any archived card may go back to the discard pile — including creatures
   // and class cards (user override of the "creatures stay for Summoning"
@@ -1180,7 +1202,7 @@ function showPeek(text, cards = null) {
     el.addEventListener('click', () => { el.hidden = true; });
     document.body.appendChild(el);
   }
-  const cardsHtml = cards ? `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 12px">${cards.map(c => `<div style="width:96px;min-height:50px;padding:8px 6px;border-radius:6px;border:1px solid #26303f;background:linear-gradient(180deg,#1a2230,#10151e);color:#d2dae7;font-size:11px;text-align:center">${c.name}<div style="margin-top:4px;font-size:9px;color:#8aa0bf">${c.kind}${c.code ? ` · ${c.code}` : ''}</div></div>`).join('')}</div>` : '';
+  const cardsHtml = cards ? `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 12px">${cards.map(c => `<div style="width:96px;min-height:50px;padding:8px 6px;border-radius:6px;border:1px solid #26303f;background:linear-gradient(180deg,#1a2230,#10151e);color:#d2dae7;font-size:11px;text-align:center">${escHtml(c.name)}<div style="margin-top:4px;font-size:9px;color:#8aa0bf">${c.kind === 'effect' ? '✺ ' : c.kind === 'skill' ? '✦ ' : ''}${escHtml(c.kind || '')}${c.code ? ` · ${escHtml(c.code)}` : ''}</div>${c.kind === 'effect' ? effectSourceBadge(c, { compact: true }) : ''}${Array.isArray(c.element_cost) && c.element_cost.length ? `<div style="margin-top:3px;font-size:11px">${elemGlyphs(c.element_cost)}</div>` : ''}</div>`).join('')}</div>` : '';
   el.innerHTML = `<div style="background:#0f131b;border:1px solid #2f3f55;border-radius:8px;width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 50px -10px #000c;color:#e8ecf1">
     <header style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1a2130;font-weight:600"><span>👁 Peek</span><span style="flex:1"></span><button style="background:transparent;border:1px solid #2f3f55;color:#c8d4e3;border-radius:4px;cursor:pointer;padding:2px 7px">✕</button></header>
     <div style="padding:12px 14px;font-size:12px;line-height:1.5">${text}</div>${cardsHtml}</div>`;
@@ -1264,7 +1286,7 @@ function recomputeSightSet() {
   for (let i = visionGrants.length - 1; i >= 0; i--) {
     const g = visionGrants[i];
     if (Number.isFinite(state.turn) && state.turn > g.until_turn) { visionGrants.splice(i, 1); continue; }
-    addDisc(g.q, g.r, DEFAULT_REVEAL_RADIUS);
+    addDisc(g.q, g.r, Number.isInteger(g.radius) ? g.radius : DEFAULT_REVEAL_RADIUS);   // Seeker: radius 5
   }
   if (!state.entities || !state.entities.length) { state.ui.sightSet = set; return; }
   for (const e of state.entities) {
@@ -1302,8 +1324,21 @@ function isGone(e) {
   return Number.isFinite(ls) && Date.now() - ls > GONE_MS;
 }
 
+// renderRoster runs every animation frame and rebuilds every row (skill-card canvases
+// included) from scratch — so only when what it shows changed, and at least once a second
+// for the clock-driven bits (⌛ gone, late portraits / class texts). Rebuilding 60×/s was the
+// main DOM churn of the phone HUD (2026-11-14 memory probe).
+let _rosterSig = '';
 function renderRoster() {
   const el = document.getElementById('roster');
+  let sig;
+  try {
+    sig = JSON.stringify([Math.floor(Date.now() / 1000), state.entities, state.myPeerId, state.ui.logFilterPeerId, [..._expandedRosterIds],
+      state.classStrike, state.destroy, state.locked, state.phylacteryMode, state.queuedPhylactery, state.queuedEffect, state.queuedLink,
+      state.queuedEffect != null ? state.hand?.[state.queuedEffect]?.card_id : null, state.mapVersion, sourceEpoch()]);
+  } catch { sig = String(Math.random()); }
+  if (sig === _rosterSig && el.childElementCount) return;
+  _rosterSig = sig;
   el.innerHTML = '';
   const activeFilter = state.ui.logFilterPeerId;
   const head = document.createElement('div');
@@ -1316,9 +1351,10 @@ function renderRoster() {
   const isMe = e => e.peer_id === state.myPeerId, isDead = e => (e.life ?? 0) <= 0 || isGone(e);
   const rosterList = IS_MOBILE_UI ? [...state.entities].sort((a, b) => (isMe(b) - isMe(a)) || (isDead(a) - isDead(b))) : state.entities;
   for (const e of rosterList) {
+    if (hiddenFromMe(e)) continue;   // Invisibility: an invisible enemy is not listed
     const row = document.createElement('div');
     const expanded = _expandedRosterIds.has(e.peer_id);
-    row.className = `ros ${sameSide(e) ? 'ally' : 'enemy'} ${sideOfAlliance(e.alliance) === 'C' ? 'team-c' : ''} ${e.life > 0 ? '' : 'dead'} ${isGone(e) ? 'gone' : ''} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
+    row.className = `ros ${sameSide(e) ? 'ally' : 'enemy'} ${sideOfAlliance(e.alliance) === 'C' ? 'team-c' : sideOfAlliance(e.alliance) === 'D' ? 'team-d' : ''} ${e.life > 0 ? '' : 'dead'} ${isGone(e) ? 'gone' : ''} ${activeFilter === e.peer_id ? 'filter-active' : ''} ${expanded ? 'expanded' : ''}`;
     row.dataset.peerId = e.peer_id;
     const srcTag = (e.source_id || e.sourceId || '').split('_').slice(1, 3).join(' ');
     const tier = e.tier && e.tier !== 'self' ? ` · ${e.tier === 'strong' ? 'in contact' : e.tier}` : '';
@@ -1349,7 +1385,10 @@ function renderRoster() {
     const isEnemyRow = !mine && !sameSide(e) && e.life > 0;
     // Phylactery pick: an enemy's permanents become clickable (class cards excepted).
     const permPills = isEnemyRow && state.phylacteryMode;
-    const permLabel = s => `${s.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}${permPower[s] ? ` ⚄${permPower[s]}` : ''}`;
+    // Monster natural permanents stand in copies (perm_copies_json, rule_monster_natural_permanents): "earthquake ×2 ⚄6".
+    let permCopies = {};
+    try { permCopies = JSON.parse(e.perm_copies_json || '{}') || {}; } catch {}
+    const permLabel = s => `${s.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}${permCopies[s] > 1 ? ` ×${permCopies[s]}` : ''}${permPower[s] ? ` ⚄${permPower[s]}` : ''}`;
     const perms = allPerms.filter(s => !s.startsWith('class_')).map(s => permPills
       ? `<span class="pill perm clickable${state.queuedPhylactery?.peer_id === e.peer_id && state.queuedPhylactery?.perm === s ? ' active' : ''}" data-perm="${s}" title="Phylactery — shatter ${permLabel(s)} at the end of this action">💀 ${permLabel(s)}</span>`
       : permLabel(s));
@@ -1622,7 +1661,10 @@ function statPillsHtml(e) {
     const v = e[flat] ?? e.stats?.[key];
     if (!Number.isFinite(v)) return '—';
     const b = buildingStatOf(e, key);
-    return b ? `${v}<b class="bld-plus" title="the building under it">+${b}⌂</b>` : v;
+    // Stat tokens (Artifice, a broken Fortress …) as the roster shows them: base±tokens.
+    const mod = statTokenSumOf(e, key);
+    const base = mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v;
+    return b ? `${base}<b class="bld-plus" title="the building under it">+${b}⌂</b>` : base;
   };
   return `
     <span class="pill v"  title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
@@ -1788,7 +1830,7 @@ function renderHoverCard(clientX, clientY) {
   // mousemove; keeping it DOM-light avoids layout churn — plus the key below
   // skips the rebuild when nothing material has changed.
   const key = p
-    ? `U:${p.peer_id}|${p.life}/${p.life_max}|${p.permanents_csv || ''}|${p.peer_id === state.myPeerId ? state.hand.filter(c=>isSkill(c)).map(c=>c.card_id).join(',') : ''}`
+    ? `U:${p.peer_id}|${p.life}/${p.life_max}|${p.permanents_csv || ''}|${sourceEpoch()}|${p.peer_id === state.myPeerId ? state.hand.filter(c=>isSkill(c)).map(c=>c.card_id).join(',') : ''}`
     : `O:${obj.q},${obj.r}|${obj.id || obj.label || obj.kind}`;
   const dirty = key !== _hoverCardKey;
   _hoverCardKey = key;
@@ -1977,19 +2019,25 @@ function showObjectCard(obj, clientX, clientY) {
         <span class="oc-pill hp" title="remaining hit points — at 0 the wall crumbles">${obj.hp} hp</span>
         <span class="oc-pill thresh" title="an enemy emitting ${escHtml(obj.element_name)} this high destroys it outright; otherwise Matter chips it">destroy &gt; ${obj.threshold}</span>`;
     } else if (obj.fortress) {
-      // A fortress next to me: aim this action's emission at it (Rule 24 style, user ruling 2026-11-12).
+      // A fortress near me: stat-buy it with this action's emission (user ruling 2026-11-14) — my stat banks once
+      // per action; at bank ≥ its value it breaks and I point-buy value/10 dice — the highest is a stat bonus token.
       const fz = obj.fortress;
       const me = state.entities.find(p => p.peer_id === state.myPeerId);
-      const near = me && hexDistance(me, { q: fz.q, r: fz.r }) <= 1;
-      const mine = me ? (me[`stat_${fz.stat}`] ?? 0) + buildingStatOf(me, fz.stat) : 0;
-      const aimed = state.destroyAim?.building === `${fz.q},${fz.r}`;
+      const near = me && hexDistance(me, { q: fz.q, r: fz.r }) <= FORTRESS.near;
+      const mine = me ? (me[`stat_${fz.stat}`] ?? 0) + buildingStatOf(me, fz.stat) + statTokenSumOf(me, fz.stat) : 0;
+      let bk = null; try { bk = JSON.parse(me?.fortress_bank_json || 'null'); } catch {}
+      const bank = bk?.id === fz.id ? bk.bank : 0;
+      // Aimed = what my peer has queued (hand msg `destroy`): the peer drops it after every action, so a local
+      // flag would keep showing "aimed" while nothing is banked (2026-11-15 fix).
+      const aimed = state.destroy?.building === `${fz.q},${fz.r}`;
       statsEl.hidden = false;
-      statsEl.innerHTML = `<span class="oc-pill thresh" title="emit a ${fz.stat} element next to it with ${fz.stat} above this">${fz.stat} ${fz.value}</span>
-        <button type="button" class="oc-break${aimed ? ' armed' : ''}" ${near && state.phase === 'planning' && !state.locked ? '' : 'disabled'} title="${near ? `your ${fz.stat} is ${mine}` : 'stand next to it first'}">${aimed ? '✓ aimed — click to cancel' : `💥 break it (${fz.stat} ${mine} vs ${fz.value})`}</button>`;
+      statsEl.innerHTML = `<span class="oc-pill thresh" title="stat-buy it: each ${fz.stat} emission within ${FORTRESS.near} hex banks your ${fz.stat}; the bank must reach this">${fz.stat} ${fz.value}</span>
+        <span class="oc-pill hp" title="what you have banked against it so far">bank ${bank}/${fz.value}</span>
+        <button type="button" class="oc-break${aimed ? ' armed' : ''}" ${near && state.phase === 'planning' && !state.locked ? '' : 'disabled'} title="${near ? `your ${fz.stat} is ${mine}; breaking it point-buys ${fortressBonusDice(fz.value)} dice — the highest becomes a ${fz.stat} bonus token (like Artifice's)` : `stand within ${FORTRESS.near} hex of it first`}">${aimed ? '✓ aimed — click to cancel' : `💥 stat buy (+${mine} → ${Math.min(fz.value, bank + mine)}/${fz.value})`}</button>`;
       statsEl.querySelector('.oc-break')?.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        const off = state.destroyAim?.building === `${fz.q},${fz.r}`;
-        state.destroyAim = off ? null : { building: `${fz.q},${fz.r}`, stat: fz.stat };
+        const off = state.destroy?.building === `${fz.q},${fz.r}`;
+        state.destroy = off ? null : { stat: fz.stat, building: `${fz.q},${fz.r}` };   // optimistic; the next hand msg is the truth
         send({ kind: 'destroy', stat: fz.stat, building: `${fz.q},${fz.r}` });
         logUI(off ? `break ${obj.label}: cancelled` : `staged: emit ${fz.stat} against the ${obj.label} at (${fz.q},${fz.r}) — Posture / Empty Posture`, 'phase');
         showObjectCard(obj, NaN, NaN);
@@ -2101,11 +2149,16 @@ function renderPerms() {
     // Passive classes (Elementalist, Rogue) fire by themselves once per turn; a Necromancer with no corpse
     // around and no archived creature is tilted (user ruling 2026-11-12).
     const passive = cs.kind === 'passive';
-    const usedNow = cs.kind !== 'tap' && cs.used_turn === state.turn;
+    // Rogue (user ruling 2026-11-14): two passive charges per turn — trap and threat — shown as uses left.
+    const ch = cs.charges || null;
+    const usedNow = ch ? !ch.trap_left && !ch.threat_left : cs.kind !== 'tap' && cs.used_turn === state.turn;
     const ready = !mode && !cs.blocked && (cs.kind === 'tap' ? !cs.tapped : !usedNow);
-    const need = cs.needs === 'enemy' ? 'an adjacent enemy (right-click it)' : cs.needs === 'ally_or_self' ? 'an adjacent ally (right-click it) or nobody for yourself' : cs.needs === 'tile' ? 'a tile within one hex (click it)' : cs.needs === 'attach_effect' ? 'an effect card in hand (click it as the attached card)' : cs.needs === 'attach_nonaction' ? 'a non-action card in hand (click it as the attached card)' : null;
-    const title = `${cs.name} (${cs.kind === 'tap' ? 'tap' : passive ? 'passive — fires by itself, once per turn' : 'once per turn'}) — ${cs.text}\nStats: ${classStatsLine(cs.class_id, cs.colours)}.${need ? ` Needs ${need}.` : ''}${cs.blocked && !mode ? ` NOT NOW: ${cs.blocked}.` : ''}${mode === 'recast' ? ' ARCHIVED: emit every colour (any successful roll) to recast it.' : mode === 'untap' ? ' TAPPED: emit every colour (any successful roll) to untap it.' : ''} (key Q)`;
-    const cd = mode ? `${mode} ${done.size}/${cols.length}` : passive ? (usedNow ? '✓ used this turn' : '◈ passive') : cs.blocked ? '⤵ no corpse' : state.queuedClassAbility ? '⚜ this action' : ready ? 'ready' : 'used this turn';
+    const need = cs.class_id === 'class_animator' ? 'a building within 2 hexes to copy; optionally the free hex next to you where the copy rises (click it) — none picked: a random free hex next to you'
+      : cs.class_id === 'class_priest' ? 'optionally the free hex within 2 hexes where the Shrine rises (click it) — none picked: a random free hex near you'
+      : cs.class_id === 'class_seeker' ? 'an effect card in hand (click it as the attached card) — it lies as a trap 20–30 hexes away, in your sight until the end of your next turn'
+      : cs.needs === 'enemy' ?'an adjacent enemy (right-click it)' : cs.needs === 'enemy_near' ? 'an enemy within 3 hexes (right-click it first, else the nearest)' : cs.needs === 'monster_near' ? 'nothing — every wild monster within 10 hexes starts chasing you' : cs.needs === 'ally_or_self' ? 'an adjacent ally (right-click it) or nobody for yourself' : cs.needs === 'tile' ? 'a tile within one hex (click it)' : cs.needs === 'attach_effect' ? 'an effect card in hand (click it as the attached card)' : cs.needs === 'attach_nonaction' ? 'a non-action card in hand (click it as the attached card)' : null;
+    const title = `${cs.name} (${cs.kind === 'tap' ? 'tap' : passive ? `passive — fires by itself, once per turn` : 'once per turn'}) — ${cs.text}\nStats: ${classStatsLine(cs.class_id, cs.colours)}.${need ? ` Needs ${need}.` : ''}${cs.blocked && !mode ? ` NOT NOW: ${cs.blocked}.` : ''}${mode === 'recast' ? ' ARCHIVED: emit every colour (any successful roll) to recast it.' : mode === 'untap' ? ' TAPPED: emit every colour (any successful roll) to untap it.' : ''} (key Q)`;
+    const cd = mode ? `${mode} ${done.size}/${cols.length}` : passive && ch ? `trap ${ch.trap_left}/${ch.trap_per_turn} · threat ${ch.threat_left}/${ch.threat_per_turn}` : passive ? (usedNow ? '✓ used this turn' : '◈ passive') : cs.blocked ? '⤵ no corpse' : state.queuedClassAbility ? '⚜ this action' : ready ? 'ready' : 'used this turn';
     return `<div class="perm class-card${ready && !mode && !passive ? ' clickable' : ''}${cs.blocked && !mode ? ' blocked' : ''}${passive ? ' passive' : ''}${usedNow && !mode ? ' spent' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">⚜ ${cs.name}</div><div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
   })() : '';
   const html = classHtml + perms.map((p, k) => {
@@ -2125,7 +2178,7 @@ function renderPerms() {
       : p.action === 'phylactery' ? (state.queuedPhylactery ? `💀 ${state.queuedPhylactery.perm.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}` : state.phylacteryMode ? '💀 pick a perm' : `⚄${p.die || 6}`)
       : p.die ? `⚄${p.die}` : 'perm';
     const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
-    return `<div class="perm${p.action && !hasteSpent ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent ? ' spent' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div><div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action && !hasteSpent ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent ? ' spent' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
@@ -2185,10 +2238,19 @@ function mySummoned() {
 }
 // Teams, as peer.mjs sideOf(): A = player + npc_a (and their summons), B = npc_b,
 // C = the third team (player_c + npc_c). Ally / enemy is always relative to me.
-function sideOfAlliance(a) { return (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a; }
+// D = the fourth team (player_d + npc_d, user ruling 2026-11-15).
+function sideOfAlliance(a) { return (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : (a === 'player_d' || a === 'npc_d') ? 'D' : a; }
 function sameSide(e) {
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   return sideOfAlliance(e?.alliance) === sideOfAlliance(me?.alliance || 'player');
+}
+// Invisibility (user ruling 2026-11-14): an ENEMY holding the permanent is off my map, roster, hover and
+// click targets unless I am invisible too; allies still see it (drawn faded). Per-viewer filter only — the
+// resolver decides hits from the same permanents_csv on every peer.
+const hasInvis = (e) => String(e?.permanents_csv || '').split(',').includes('effect_invisibility');
+function hiddenFromMe(e) {
+  if (!e || e.peer_id === state.myPeerId || !hasInvis(e) || sameSide(e)) return false;
+  return !hasInvis(state.entities.find(p => p.peer_id === state.myPeerId));
 }
 // Team label (user spec): a creature belongs to "<Owner> Team" when summoned, bound or
 // raised, else it is a "Monster"; characters read You / <name> Team / Ally / Enemy.
@@ -2196,9 +2258,9 @@ function teamLabel(e) {
   const isFoe = !sameSide(e);
   const owner = e.owner_peer_id ? state.entities.find(p => p.peer_id === e.owner_peer_id) : null;
   if (e.owner_peer_id) return `${owner?.peer_id === state.myPeerId ? 'Your' : (owner?.name || peerShort(e.owner_peer_id))} Team`;
-  if (e.creature_id || e.source_id?.startsWith('mon_')) return isFoe ? (sideOfAlliance(e.alliance) === 'C' ? 'Team C' : 'Monster') : 'Ally';
+  if (e.creature_id || e.source_id?.startsWith('mon_')) return isFoe ? (sideOfAlliance(e.alliance) === 'C' ? 'Team C' : sideOfAlliance(e.alliance) === 'D' ? 'Team D' : 'Monster') : 'Ally';
   if (e.peer_id === state.myPeerId) return 'You';
-  if (e.alliance === 'player' || e.alliance === 'player_c') return `${e.name} Team`;
+  if (e.alliance === 'player' || e.alliance === 'player_c' || e.alliance === 'player_d') return `${e.name} Team`;
   return isFoe ? 'Enemy' : 'Ally';
 }
 // Keys 9 0 - = address the n-th permanent WITH an ability.
@@ -2325,6 +2387,85 @@ function castContinue() {
   return true;
 }
 
+// ---- HUD telemetry pill: RAM · hexes held · map share (peer `telemetry` message, every ~5 s) ----
+// One short segment in the top bar; the per-node detail lives in the tooltip (desktop) and in a
+// tap popover (phone). Text is only written when it changed, so this never touches the DOM per frame.
+const TELEM_ALL_KEY = 'chaosd6.telemShareAll';   // '1' → companions & monsters count too (default: players only)
+let telemLast = null, telemBarText = '', telemTitle = '', telemPopHtml = '';
+const fmtMB = b => `${Math.round(b / 1048576)}`;
+const fmtInt = n => Number(n || 0).toLocaleString('en-US');
+function telemShareAll() { try { return localStorage.getItem(TELEM_ALL_KEY) === '1'; } catch { return false; } }
+// Network table (peer net-stats.mjs, rolling last minute): per layer msgs + KB out/in, Gun wire + graph size.
+function telemNetLines(n) {
+  if (!n?.layers) return [];
+  const kb = b => { const k = (b || 0) / 1024; return k < 10 ? k.toFixed(1) : String(Math.round(k)); };
+  const row = (name, om, ob, im, ib) => `${name.padEnd(9)}${String(om).padStart(6)}${kb(ob).padStart(7)}${String(im).padStart(6)}${kb(ib).padStart(7)}`;
+  const out = ['Network, last minute:', `${'layer'.padEnd(9)}${'↑msg'.padStart(6)}${'↑KB'.padStart(7)}${'↓msg'.padStart(6)}${'↓KB'.padStart(7)}`];
+  for (const [name, l] of Object.entries(n.layers)) {
+    if (!l.out.msgs && !l.in.msgs && name !== 'gun') continue;
+    out.push(row(name, l.out.min_msgs, l.out.min_bytes, l.in.min_msgs, l.in.min_bytes));
+  }
+  const w = n.gun_wire;
+  if (w) out.push(row('gun wire', w.out_msgs, w.out_bytes, w.in_msgs, w.in_bytes));
+  const g = n.graph || {};
+  const wr = Object.entries(n.gun_writes || {}).map(([k, v]) => `${k} ${v.min}`).join(', ');
+  out.push(`Gun graph: ${fmtInt(g.nodes)} nodes ~${((g.approx_bytes || 0) / 1048576).toFixed(1)} MB${wr ? `; field writes/min ${wr}` : ''}`);
+  return out;
+}
+function renderTelemetry() {
+  const m = telemLast; if (!m) return;
+  const el = document.getElementById('telem'); if (!el) return;
+  const ui = performance?.memory?.usedJSHeapSize;   // Chrome / Android WebView only
+  const all = telemShareAll();
+  const shares = (m.shares || []).filter(s => all || s.role === 'player');
+  const known = shares.filter(s => typeof s.pct === 'number');
+  const top = known.length ? Math.max(...known.map(s => s.pct)) : null;
+  const avg = known.length ? known.reduce((a, s) => a + s.pct, 0) / known.length : null;
+  const rss = m.mem?.rss || 0, heap = m.mem?.heap_used || 0;
+  const bar = `RAM ${fmtMB(rss)} MB${ui ? ` (UI ${fmtMB(ui)})` : ''} · ⬡ ${fmtInt(m.map?.tiles)}${top != null ? ` · ⇄ ${Math.round(top)}%` : ''}`;
+  const pctTxt = s => (typeof s.pct === 'number' ? `${s.exact ? '' : '~'}${Math.round(s.pct)}%` : '?');
+  const rssLabel = m.mobile ? 'app process (Godot + Node + WebView host)' : 'peer process (Node)';
+  const lines = [
+    `RAM: ${fmtMB(rss)} MB rss — ${rssLabel}; Node heap ${fmtMB(heap)} / ${fmtMB(m.mem?.heap_total || 0)} MB`,
+    ui ? `UI (this page) JS heap: ${fmtMB(ui)} MB` : 'UI JS heap: n/a in this browser',
+    `Hexes held locally: ${fmtInt(m.map?.tiles)} in ${fmtInt(m.map?.blocks)} blocks`,
+    shares.length ? `Share of my hexes they also hold (${all ? 'all nodes' : 'players'}${avg != null ? `, avg ${Math.round(avg)}%` : ''}):` : `No other ${all ? 'node' : 'player'} known in this dimension`,
+    ...shares.slice().sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1)).map(s => `  ${s.name}${s.role !== 'player' ? ` (${s.role})` : ''} ${pctTxt(s)}${s.tiles != null ? ` of ⬡ ${fmtInt(s.tiles)}` : ''}${s.source === 'door' ? ' · via Door' : s.fresh ? '' : ' · stale'}`),
+    ...telemNetLines(m.net),
+  ];
+  const title = lines.join('\n');
+  if (bar !== telemBarText) { el.textContent = bar; telemBarText = bar; }
+  if (title !== telemTitle) { el.title = title; telemTitle = title; }
+  const pop = document.getElementById('telem-pop');
+  if (pop && !pop.hidden) {
+    const html = `${lines.map(l => `<div>${escHtml(l)}</div>`).join('')}<label class="tp-opt"><input type="checkbox" id="telem-all"${all ? ' checked' : ''}> include companions &amp; monsters</label>`;
+    if (html !== telemPopHtml) { pop.innerHTML = html; telemPopHtml = html; }
+  }
+}
+function onTelemetry(m) { telemLast = m; renderTelemetry(); }
+function toggleTelemPop(ev) {
+  ev?.stopPropagation?.();
+  let pop = document.getElementById('telem-pop');
+  if (!pop) {
+    pop = document.createElement('div'); pop.id = 'telem-pop'; pop.hidden = true;
+    pop.addEventListener('click', e => e.stopPropagation());
+    pop.addEventListener('change', e => {
+      if (e.target?.id !== 'telem-all') return;
+      try { localStorage.setItem(TELEM_ALL_KEY, e.target.checked ? '1' : '0'); } catch {}
+      telemPopHtml = ''; renderTelemetry();
+    });
+    document.body.appendChild(pop);
+    document.addEventListener('click', () => { pop.hidden = true; });
+  }
+  pop.hidden = !pop.hidden;
+  if (!pop.hidden) {
+    const r = document.getElementById('telem').getBoundingClientRect();
+    pop.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - 300))}px`; pop.style.top = `${r.bottom + 4}px`;
+    telemPopHtml = ''; renderTelemetry();
+  }
+}
+document.getElementById('telem')?.addEventListener('click', toggleTelemPop);
+
 function setPhase(name, seconds, heartbeat, m = {}) {
   state.phase = name; state.seconds = seconds; state.heartbeat = heartbeat;
   renderComboMarker();   // only lit during planning
@@ -2423,6 +2564,7 @@ function connect() {
         renderComboMarker();
       }
       if (m.kind === 'map') applyMap(m.map);
+      if (m.kind === 'telemetry') onTelemetry(m);
       if (m.kind === 'phase') setPhase(m.name, m.seconds || 0, !!m.heartbeat, m);
       if (m.kind === 'skill-fx') playSkillFx(m);
       if (m.kind === 'hand')  {
@@ -2483,6 +2625,8 @@ function connect() {
         if (state.phase === 'planning' && !state.locked && !state.castBroken && state.queuedIsAuto && state.queuedEffect === null && state.casting?.card_ids?.length && !comboNeed()) castContinue();
       }
       // Vision / Super Sense: a popup with what was seen (a tile, an enemy's hand).
+      // Effect provenance (chaosD6-Effects, E4 → E6): learned / shared / missing — see effectSourceNotice().
+      if (m.kind === 'effect_source') effectSourceNotice(m);
       if (m.kind === 'peek') showPeek(m.text || (m.what === 'hand' ? `${m.of_name}: ${(m.cards || []).map(c => c.name).join(', ')}` : `tile (${m.q},${m.r})`), m.cards || null);
       // Merge peer updates so a transient broadcast missing an entity doesn't
       // flicker it off the map / roster. The server never *removes* a peer
@@ -2491,7 +2635,7 @@ function connect() {
         mergeEntities(m.peers || []);
         // The peer prunes stale members and flags the broadcast; mirror the
         // removal so ghosts from dead processes leave the roster and map.
-        if (m.dropped) { const keep = new Set((m.peers || []).map(p => p.peer_id)); state.entities = state.entities.filter(e => keep.has(e.peer_id)); }
+        if (m.dropped) { const keep = new Set((m.peers || []).map(p => p.peer_id)); state.entities = state.entities.filter(e => keep.has(e.peer_id)); syncPlacedBuildings(); }
         renderComboMarker();
         comboAutoSelect();   // combo_slot may have just advanced: pick that slot's action
       }
@@ -2718,8 +2862,10 @@ function connect() {
       if (m.kind === 'vision-grant' && Number.isInteger(m.q) && Number.isInteger(m.r)) {
         const until = Number.isFinite(Number(m.until_turn)) ? Number(m.until_turn) : (state.turn ?? 0) + 1;
         if (!visionGrants.some(g => g.q === m.q && g.r === m.r && g.until_turn === until)) {
-          visionGrants.push({ q: m.q, r: m.r, until_turn: until, from_name: m.from_name || '' });
-          logUI(`👁 ${m.from_name || 'a teammate'} opened a gate at (${m.q},${m.r})${m.reason ? ` — ${m.reason}` : ''}: in sight until the end of turn ${until}`, 'phase');
+          visionGrants.push({ q: m.q, r: m.r, until_turn: until, from_name: m.from_name || '', ...(Number.isInteger(m.radius) ? { radius: m.radius } : {}) });
+          logUI(m.from_name === 'Seeker'
+            ? `👁 Seeker: ${m.reason || 'your trap'} lies at (${m.q},${m.r}) — it and ${m.radius ?? DEFAULT_REVEAL_RADIUS} hexes around are in sight until the end of turn ${until}`
+            : `👁 ${m.from_name || 'a teammate'} opened a gate at (${m.q},${m.r})${m.reason ? ` — ${m.reason}` : ''}: in sight until the end of turn ${until}`, 'phase');
           recomputeSightSet();
         }
       }
@@ -2762,6 +2908,52 @@ function profileBanner(text, kind = '', { sticky = false } = {}) {
   while (box.children.length > 3) box.lastChild.remove();
   const ms = kind === 'gain' || kind === 'loss' ? 25000 : 12000;
   if (!sticky) { setTimeout(() => b.classList.add('out'), ms); setTimeout(() => b.remove(), ms + 600); }
+}
+
+// Effect provenance notices (program chaosD6-Effects, E6 — 2026-11-15). peer.mjs (E4) emits over the UI
+// WebSocket:
+//   { kind: 'effect_source', event: 'learned' | 'shared' | 'missing', ref, peer }
+//   ref  = { repo: 'chaosD6-Effects', branch: 'players/ana/fire-whip', commit, sha256, id: 'effect_fire_whip',
+//            author?, verdict?: 'ok'|'nerf'|'boost'|'reject', name?: 'Fire Whip' }   (the source contract,
+//            js/effect_source.js)
+//   peer = the other side: a peer_id string or { peer_id, name } — who we learned it from / shared it with /
+//          whose cast needs it. Optional.
+// learned → "📥 learned Fire Whip from players/ana/fire-whip (commit abc1234)" and the ref is registered, so every
+//           card of that effect gets its source badge; shared → "📤 shared Fire Whip with P-Larkin";
+//           missing → "⚠ couldn't load Fire Whip from players/ana/fire-whip — cast postponed".
+// Each goes to the event log and to a banner over the map (desktop + phone); a repeat of the same line within
+// 10 s only logs. Also callable as window.chaosHud.effectSourceNotice(msg) (dev / tests).
+const _fxNoticeSeen = new Map();   // text -> last banner time
+function effectSourceNotice(m) {
+  const ref = m?.ref || {};
+  const ev = m?.event;
+  if (!ev) return;
+  const id = ref.id || ref.effect_id || null;
+  if (ev === 'learned' && id) setEffectSource(id, ref);
+  const name = ref.name || (id && skillInfo(id)?.name) || (id ? String(id).replace(/^effect_/, '').replace(/_/g, ' ') : 'an effect');
+  const pid = typeof m.peer === 'string' ? m.peer : m.peer?.peer_id;
+  const who = (typeof m.peer === 'object' && m.peer?.name) || (pid ? peerShort(pid).replace(/ - \d+❤️$/u, '') : '');
+  const text = ev === 'learned' ? `📥 learned ${name} from ${refText(ref)}${who ? ` (via ${who})` : ''}`
+    : ev === 'shared' ? `📤 shared ${name}${who ? ` with ${who}` : ''}`
+    : ev === 'missing' ? `⚠ couldn't load ${name} from ${refText(ref)} — cast postponed`
+    : `${ev}: ${name} (${refText(ref)})`;
+  logUI(text, 'phase', pid ? { peerId: pid } : null);
+  const now = Date.now();
+  if (now - (_fxNoticeSeen.get(text) || 0) < 10000) return;
+  _fxNoticeSeen.set(text, now);
+  if (_fxNoticeSeen.size > 50) _fxNoticeSeen.delete(_fxNoticeSeen.keys().next().value);
+  profileBanner(text, ev === 'missing' ? 'fx-missing' : ev === 'learned' ? 'fx-learned' : 'fx-shared');
+  if (ev === 'learned' || ev === 'missing') { renderDeck(); renderPerms(); renderRoster(); }
+}
+window.chaosHud = Object.assign(window.chaosHud || {}, { effectSourceNotice, setEffectSource, showPeek });
+// Dev: ?fxsrc=demo|all&fxnotice=1 — fire one notice of each kind a few seconds after load (screenshots / tests).
+if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === '1') {
+  setTimeout(() => {
+    const ref = { repo: 'chaosD6-Effects', branch: 'players/ana/fire-whip', commit: 'abc1234def567890', sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', id: 'effect_fire_whip', author: 'ana', verdict: 'nerf', name: 'Fire Whip' };
+    effectSourceNotice({ kind: 'effect_source', event: 'learned', ref, peer: { peer_id: 'dev-ana', name: 'Ana' } });
+    effectSourceNotice({ kind: 'effect_source', event: 'shared', ref, peer: { peer_id: 'dev-larkin', name: 'P-Larkin' } });
+    effectSourceNotice({ kind: 'effect_source', event: 'missing', ref: { ...ref, branch: 'players/oran/frost-lance', id: 'effect_frost_lance', name: 'Frost Lance', commit: 'def9876' } });
+  }, 3000);
 }
 
 // Encounter defeated (user ruling 2026-11-13): once every enemy the team has seen is down and none
@@ -2841,6 +3033,7 @@ function mergeEntities(incoming) {
     byId.set(p.peer_id, { ...(cur || {}), ...upd });
   }
   state.entities = [...byId.values()];
+  syncPlacedBuildings();
   // Suppress spawn sounds during the first cold-sync window of a (re)connect —
   // otherwise every pre-existing unit would ring on reload.
   const coldSync = (state.ui.coldSyncUntil || 0) > performance.now();
@@ -3320,7 +3513,7 @@ function wireInput() {
   // ws handler needs this to trigger attack animations on reveal.
   const renderer = rendererRef = createRenderer(canvas, {
     get entities() {
-      return state.entities.map(p => {
+      return state.entities.filter(p => !hiddenFromMe(p)).map(p => {
         const isMe = p.peer_id === state.myPeerId;
         return {
           peerId: p.peer_id, alliance: p.alliance, name: p.name,
@@ -3334,6 +3527,7 @@ function wireInput() {
           emitTrail: state.ui.emitTrails?.[p.peer_id]?.elems || null,
           gone: isGone(p),
           armor: Number(p.armor) || 0, illusion: Number(p.illusion) || 0,
+          invisible: hasInvis(p),
         };
       });
     },
@@ -3424,7 +3618,7 @@ function wireInput() {
     const w = renderer.toWorld(px, py);
     let best = null, bestD2 = HEX_SIZE_SQ_HIT;
     for (const p of state.entities) {
-      if (!p || (!includeDead && p.life <= 0)) continue;
+      if (!p || (!includeDead && p.life <= 0) || hiddenFromMe(p)) continue;
       if (!Number.isInteger(p.tile_q) || !Number.isInteger(p.tile_r)) continue;
       const pos = renderer.tilePx(p.tile_q, p.tile_r);
       const dx = w.x - pos.x;

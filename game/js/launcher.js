@@ -84,7 +84,7 @@ async function launch() {
 // readable when the launcher panel is narrow.
 const MAX_CHIPS = 10;
 const shortId = id => String(id || '').replace(/^peer:/, '');
-const sideOf = a => (a === 'player' || a === 'npc_a' || a === 'npc_b') ? a : (a === 'player_c' || a === 'npc_c') ? 'team-c' : 'npc_b';
+const sideOf = a => (a === 'player' || a === 'npc_a' || a === 'npc_b') ? a : (a === 'player_c' || a === 'npc_c') ? 'team-c' : (a === 'player_d' || a === 'npc_d') ? 'team-d' : 'npc_b';
 
 function pickMode(value) {
   const radio = document.querySelector(`input[name="mode"][value="${value}"]`);
@@ -159,7 +159,7 @@ function renderDimensionsExplorer(items, ago) {
       });
       chips.appendChild(chip);
       // "Join my <team> team" next to every live player Door (user ruling 2026-11-13); hidden without characters.
-      if (!d.legacy && door.live && (door.life ?? 1) > 0 && (door.alliance === 'player' || door.alliance === 'player_c')) chips.appendChild(joinTeamButton(d.dimension_name, door.peer_id));
+      if (!d.legacy && door.live && (door.life ?? 1) > 0 && (door.alliance === 'player' || door.alliance === 'player_c' || door.alliance === 'player_d')) chips.appendChild(joinTeamButton(d.dimension_name, door.peer_id));
     }
     if (ordered.length > shown.length) {
       const more = document.createElement('span');
@@ -238,7 +238,7 @@ async function renderLauncher() {
   let liveMonsterDoors = 0;
   const monsterDims = new Set();
   for (const d of items) for (const p of d.doors) {
-    if (p.alliance !== 'player' && p.alliance !== 'player_c') {
+    if (p.alliance !== 'player' && p.alliance !== 'player_c' && p.alliance !== 'player_d') {
       if (isAlive(p)) { liveMonsterDoors++; monsterDims.add(d.dimension_name); }
       continue;
     }

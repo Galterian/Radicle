@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_super_force",
+  "name": "Super Force",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality","elem_vitality"],
+  "cost": 2,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "You or a creature moves forcefully to a neighboring tile. Variants: super throw, super leap, super push.",
+  "flags": {"damage":"delta","scope":"target","push":1},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"call":["require_recipients"]},
+      {"map":[{"var":"recipients"},{"let":[{"t":{"tile_of":[{"var":"def"}]}},{"seq":[{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},{"if":[{"var":"t"},{"let":[{"aq":{"+":[{"var":"t.q"},{"-":[{"var":"t.q"},{"var":"my_tile.q"}]}]},"ar":{"+":[{"var":"t.r"},{"-":[{"var":"t.r"},{"var":"my_tile.r"}]}]}},{"if":[{"is_free":[{"var":"aq"},{"var":"ar"}]},{"emit":["moves",{"obj":{"who":{"var":"def"},"q":{"var":"aq"},"r":{"var":"ar"},"reason":"pushed"}}]}]}]}]}]}]},"def"]},
+      {"call":["finish"]}
+    ]}
+}

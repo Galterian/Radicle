@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_traps_mastery",
+  "name": "Traps Mastery",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space"],
+  "cost": 1,
+  "kind": "trap",
+  "duration": "permanent",
+  "every": {"behaviour":"none"},
+  "text": "Put an effect beneath this card as a trap (cast with power 20 × number of times this effect has been cast). It will not trigger from your character but from an approaching enemy.",
+  "flags": {"permanent":true,"trapAttach":true,"fixedPower":6},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"if":[{"!":[{"call":["attached"]}]},{"call":["fizzle","no effect attached as the trap"]},{"emit":["traps",{"obj":{"by":{"var":"me"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"},"effect_id":{"var":"cast.attach.effect_id"},"elements":{"merge":[{"var":"cast.attach.elements"}]},"card_id":{"or":[{"var":"cast.attach.card_id"},null]},"power":20,"trigger":"targeted","mode":"damage","holder":{"var":"effect_id"}}}]}]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

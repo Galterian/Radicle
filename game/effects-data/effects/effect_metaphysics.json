@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_metaphysics",
+  "name": "Metaphysics",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_space","elem_earth"],
+  "cost": 2,
+  "kind": "surgery",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "Damage by changing the mass of the subject's body. + Unite two unknown tiles into one tile. If you beat the creature's stats, you may unite known tiles.",
+  "flags": {"damage":"delta","scope":"target","tileTarget":true,"surgery":"unite"},
+  "uses": ["std","e2c"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"and":[{"call":["e2c_surgery_ok"]},{"!":[{"len":[{"call":["enemies_within",1]}]}]}]},{"call":["e2c_move_one","unite"]}]},
+      {"if":[{"!":[{"len":[{"out":"relocations"}]}]},{"seq":[{"call":["require_recipients"]},{"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},"def"]}]}]},
+      {"call":["finish"]}
+    ]}
+}

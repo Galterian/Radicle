@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_throw",
+  "name": "Throw",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_air"],
+  "cost": 1,
+  "kind": "damage",
+  "duration": "instant",
+  "every": {"behaviour":"none"},
+  "text": "You may also throw a location-token permanent (yours or a nearby location's) to a nearby location (point-buy ability): must beat the permanent token element with your point-buy die for that element.",
+  "flags": {"damage":"delta","scope":"target","pullToken":true},
+  "uses": ["std"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"ctx_has":["tileTokensAt"]},{"let":[{"ally_tiles":{"filter":[{"map":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"id"}]}]}]},"id"]},{"tile_of":[{"var":"id"}]},"id"]},{"var":"t"},"t"]}},{"let":[{"cands":{"sort_by":[{"reduce":[{"map":[{"filter":[{"neighbours":[{"var":"my_tile.q"},{"var":"my_tile.r"}]},{"none":[{"var":"ally_tiles"},{"and":[{"===":[{"var":"a.q"},{"var":"n.q"}]},{"===":[{"var":"a.r"},{"var":"n.r"}]}]},"a"]},"n"]},{"filter":[{"tile_tokens_at":[{"var":"n.q"},{"var":"n.r"}]},{"and":[{"===":[{"var":"tk.kind"},"bonus"]},{"!==":[{"var":"tk.owner"},{"var":"me"}]}]},"tk"]},"n"]},{"concat":[{"var":"acc"},{"var":"current"}]},[]]},{"desc":{"call":["my_stat",{"var":"it.elem"}]}},{"locale":{"var":"it.id"}}]}},{"if":[{"len":[{"var":"cands"}]},{"let":[{"tk":{"at":[{"var":"cands"},0]}},{"let":[{"pb":{"call":["buy_pb",{"call":["my_stat",{"var":"tk.elem"}]},{"cat":["pull:",{"var":"tk.id"}]}]}},{"if":[{"!":[{"var":"pb.fail"}]},{"seq":[{"if":[{">=":[{"var":"pb.value"},{"var":"tk.value"}]},{"seq":[{"emit":["pulls",{"obj":{"by":{"var":"me"},"token_id":{"var":"tk.id"},"owner":{"var":"tk.owner"},"elem":{"var":"tk.elem"},"value":{"var":"tk.value"},"item":{"or":[{"var":"tk.item"},null]},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]},{"note":["pulled ",{"or":[{"var":"tk.item"},{"var":"tk.elem"}]}," (",{"var":"tk.value"},") with a ",{"var":"pb.value"}]}]},{"note":["pull failed: die ",{"var":"pb.value"}," < token ",{"var":"tk.value"}]}]},{"set":["recipients",[]]}]}]}]}]}]}]}]}]},
+      {"if":[{"and":[{"!":[{"len":[{"out":"pulls"}]}]},{"!":[{"some":[{"out":"notes"},{"starts_with":[{"var":"n"},"pull failed"]},"n"]}]}]},{"seq":[{"call":["require_recipients"]},{"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},"def"]}]}]},
+      {"call":["finish"]}
+    ]}
+}

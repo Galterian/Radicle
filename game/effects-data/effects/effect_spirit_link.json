@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_spirit_link",
+  "name": "Spirit Link",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_souls"],
+  "cost": 1,
+  "kind": "meta",
+  "duration": "permanent",
+  "every": {"behaviour":"all stats","note":"Rule 23 ∀: all four stats of the ally are linked"},
+  "text": "Connect two Stats of two friendly subjects (draw the chosen element value as dice and put over the card). The sum becomes the new Stat value.",
+  "every_text": "Connect all elements.",
+  "flags": {"permanent":true,"spiritLink":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"let":[{"ally":{"var":"cast.link.peer_id"}},{"if":[{"or":[{"!":[{"var":"ally"}]},{"===":[{"var":"ally"},{"var":"me"}]},{"!":[{"call":["alive",{"var":"ally"}]}]},{"enemy_of":[{"var":"me"},{"var":"ally"}]}]},{"call":["fizzle","no ally to link"]},{"map":[{"if":[{"var":"cast.every"},["vitality","world","will","matter"],[{"if":[{"in":[{"var":"cast.link.stat"},["vitality","world","will","matter"]]},{"var":"cast.link.stat"},"vitality"]}]]},{"emit":["links",{"obj":{"on":{"var":"me"},"from":{"var":"ally"},"stat":{"var":"sk"},"value":{"base_stat":[{"var":"ally"},{"var":"sk"}]}}}]},"sk"]}]}]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

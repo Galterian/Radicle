@@ -43,6 +43,20 @@ export function pointBuyPermanentMin(stat, seed, sha256Hex) {
 
 export const roundHalfUp10 = (sum) => Math.round(sum / 10);
 
+// Invisibility (user ruling 2026-11-14): the permanent is destroyed the moment its holder uses Attack or
+// Block (a Battle Trance option counts; a Reaver's EP / EM fights as Attack) or starts / goes on casting any
+// effect other than Invisibility itself (every emission, instants included). Moving, Posture without a
+// cast, Empty Posture / Move, skills and Rule 24 destroy emissions keep it. `rv` = a reveal
+// ({action, trance, effect}) or a bonus plan; pure, so every peer agrees.
+export function invisibilityBreaks(rv, opts = {}) {
+  if (!rv) return false;
+  const codes = Array.isArray(rv.trance) && rv.trance.length ? rv.trance : [rv.action];
+  if (codes.some(c => c === 'A' || c === 'B')) return true;
+  if (opts.reaver && codes.some(c => c === 'EP' || c === 'EM')) return true;
+  const eff = rv.effect_id ?? rv.effect?.effect_id ?? null;
+  return !!eff && eff !== 'effect_invisibility';
+}
+
 // What each effect does once its last element is emitted. Keys:
 //   damage: 'delta' (Rule 21 Σ max(0, caster − defender) per element) | 'pointbuy' (one die per element, Σ)
 //   scope: everyone (every living unit within `range`, caster included) | target | all_enemies | all_adjacent | all_seen (every creature in view but me) | self | self_or_ally
@@ -83,6 +97,33 @@ export const FEATURES = [
 export const ALL_ELEMS = ['elem_vitality', 'elem_souls', 'elem_time', 'elem_space', 'elem_air', 'elem_water', 'elem_earth', 'elem_fire', 'elem_concentration', 'elem_harmony'];
 export const trapDamageSum = (elements, statOfVictim, shielded = () => false) =>
   elements.reduce((s, el) => s + (shielded(el) ? 0 : Math.max(0, TRAP_POWER - statOfVictim(el))), 0);
+
+// Hand classes (user rework 2026-11-14: Witch, Priest; reused by anything that makes a unit drop hand cards).
+// Deterministic picks from a reveal salt so every peer agrees on WHO; the victim alone knows its hand, so it
+// alone applies WHICH cards — still deterministic: card ids sorted, index = sha(seed:k) mod what is left.
+export const pickBySalt = (seed, list, sha256Hex) => list.length ? list[parseInt(sha256Hex(seed).slice(0, 8), 16) % list.length] : null;
+export function pickHandDiscards(seed, cardIds, n, sha256Hex) {
+  const pool = [...cardIds].map(String).sort(), out = [];
+  for (let k = 0; k < n && pool.length; k++) out.push(pool.splice(parseInt(sha256Hex(`${seed}:${k}`).slice(0, 8), 16) % pool.length, 1)[0]);
+  return out;
+}
+
+// Character stat bonus tokens (general_ux_tokens; Artifice, Mutate, a broken Fortress — user ruling 2026-11-14):
+// one POSITIVE token per element in a unit's holding — a new one replaces a smaller one of that element, else
+// it is dropped (penalties always stack). Pure: → { tokens (new list), placed, replaced (old token | null) }.
+export function placeStatBonusToken(tokens, tok) {
+  const list = Array.isArray(tokens) ? tokens : [];
+  if (!(tok?.value > 0)) return { tokens: [...list, tok], placed: true, replaced: null };
+  const same = list.find(x => x.value > 0 && x.elem === tok.elem);
+  if (same && same.value >= tok.value) return { tokens: list, placed: false, replaced: null, kept: same };
+  return { tokens: [...list.filter(x => x !== same), tok], placed: true, replaced: same || null };
+}
+// Rule 24 destroy target order (user ruling 2026-11-14): an emission of a stat against an adjacent enemy takes
+// 1) its permanents, 2) its character stat bonus tokens (Artifice, Fortress …), 3) the bonus tile tokens under
+// it. Stable inside a class (the caller lists them in a deterministic order).
+export const RULE24_KIND_RANK = { perm: 0, stat: 1, tile: 2 };
+export const rule24Order = (cands) => cands.map((c, i) => [c, i])
+  .sort((a, b) => (RULE24_KIND_RANK[a[0].kind] ?? 9) - (RULE24_KIND_RANK[b[0].kind] ?? 9) || a[1] - b[1]).map(x => x[0]);
 
 export const EFFECT_RULES = {
   // damage
@@ -126,7 +167,7 @@ export const EFFECT_RULES = {
   effect_elementals_water: { permanent: true, statBuy: true, fixedPower: 6 },
   effect_elementals_earth: { permanent: true, statBuy: true, fixedPower: 6 },
   effect_resurrect_death_ward: { permanent: true, statBuy: true, fixedPower: 6, resurrect: true },   // Vitality → raise the dead unit next to me / spawn an archived creature / Death Ward an ally
-  effect_invisibility:     { permanent: true },
+  effect_invisibility:     { permanent: true },   // point-buy permanent: hidden from enemies until I Attack / Block / start a cast (peer.mjs invisibleNow)
   effect_emotions_bombard: { permanent: true },
   effect_aura:             { permanent: true },
   effect_haste:            { permanent: true, draw: 1 },
@@ -153,6 +194,15 @@ export const EFFECT_RULES = {
   // scouting
   effect_vision:         { scope: 'target', vision: true, tileTarget: true },     // a tile: reveal the map around it; an enemy: beat their World (Time) → see their hand
   effect_super_sense:    { permanent: true },                                     // see the traps around me; the permanent is spent to evade one point of damage (peer.mjs)
+  // monster natural permanents (user rulings 2026-11-15, rule_monster_natural_permanents): never cast — a monster
+  // starts with 2 copies of power 6 standing; what they do lives in peer.mjs hooks + game/natural-perms.mjs.
+  effect_love:           { permanent: true, fixedPower: 6 },   // an enemy that came in contact cannot damage me until it visits its tower
+  effect_awe:            { permanent: true, fixedPower: 6 },   // (same as Love)
+  effect_fear:           { permanent: true, fixedPower: 6 },   // … cannot damage anyone until it visits its tower
+  effect_anger:          { permanent: true, fixedPower: 6 },   // … in contact with me may only attack / damage me
+  effect_domination:     { permanent: true, fixedPower: 6 },   // an enemy in contact loses one action per turn
+  effect_petrify:        { permanent: true, fixedPower: 6 },   // an enemy in contact is locked for the rest of the turn
+  effect_mists:          { permanent: true, fixedPower: 6 },   // adjacent enemies cannot Attack
 };
 
 // Effects a character deck may hold: everything with rules, minus creature-innate ones.
@@ -167,7 +217,52 @@ export function playableEffects(dataEffects) {
 //         step, of, kept: [die|null per element] } — point-buy damage rolls one element per emission (Rule 20 pc override):
 //         the element emitted this step is bought now; a failed roll re-emits that element next action ('retry'), good dice
 //         stay banked in `kept`; a cast still emitting returns status 'casting' with the updated bank.
+//
+// Engine switch (chaosD6-Effects E1): EFFECT_ENGINE=js (default) | data | shadow.
+//   data   → an effect with a definition in game/effects-data/effects/<id>.json (or EFFECT_DEFS_DIR) runs on
+//            effect-engine.mjs#resolveEffectData; every other effect stays on resolveEffectJs below.
+//   shadow → both engines run; any outcome difference (JSON-identical comparison) is logged, thrown with
+//            EFFECT_SHADOW_STRICT=1; the JS outcome is returned. EFFECT_SHADOW_REPORT=1 prints a tally at exit.
+const ENGINE_ENV = (typeof process !== 'undefined' && process.env) || {};
+export const EFFECT_ENGINE = ['data', 'shadow'].includes(ENGINE_ENV.EFFECT_ENGINE) ? ENGINE_ENV.EFFECT_ENGINE : 'js';
+const dataEngine = EFFECT_ENGINE === 'js' ? null : await import('./effect-engine.mjs').then(m => ({ m, defs: m.loadEffectDefs() }));
+export const shadowStats = { compared: 0, mismatches: 0, byEffect: {} };
+if (dataEngine && ENGINE_ENV.EFFECT_SHADOW_REPORT === '1') process.on('exit', () => console.log(`[effects] ${EFFECT_ENGINE}: ${dataEngine.defs.size} data effects; shadow compared ${shadowStats.compared}, mismatches ${shadowStats.mismatches} ${JSON.stringify(shadowStats.byEffect)}`));
+// Foreign (player-branch) effects, E4 (effects-handshake.mjs): a cast whose reveal carried a ref runs the
+// pinned definition (`cast.fx.key` = fxKey: effect sha + lib shas) on every peer, whatever EFFECT_ENGINE says.
+// A foreign id is added to EFFECT_RULES (flags only, never over a built-in) so peer.mjs / bots read its
+// metadata; it is never in playableEffects (data.effects lacks it), so dealing / library picks are unchanged.
+// A foreign id cast WITHOUT a ref (bonus plan, channel tick) resolves as "no rules" — the same outcome a peer
+// that never learned it computes.
+const foreignRuns = new Map();          // fxKey -> (ctx, cast) => outcome
+const foreignIds = new Set();           // ids registered by registerForeignEffect (not built-in)
+export function registerForeignEffect(key, id, flags, run) {
+  foreignRuns.set(key, run);
+  if (!EFFECT_RULES[id]) { EFFECT_RULES[id] = { ...(flags || {}) }; foreignIds.add(id); }
+}
+export const isForeignEffectId = (id) => foreignIds.has(id);
 export function resolveEffect(ctx, cast) {
+  if (cast?.fx || foreignIds.has(cast?.effect_id)) {
+    const run = cast?.fx ? foreignRuns.get(cast.fx.key) : null;
+    return run ? run(ctx, cast) : resolveEffectJs(ctx, { ...cast, effect_id: '' });
+  }
+  const def = dataEngine?.defs.get(cast?.effect_id);
+  if (!def) return resolveEffectJs(ctx, cast);
+  if (EFFECT_ENGINE === 'data') return dataEngine.m.resolveEffectData(def, ctx, cast);
+  const js = resolveEffectJs(ctx, cast);
+  let got;
+  try { got = JSON.stringify(dataEngine.m.resolveEffectData(def, ctx, cast)); } catch (e) { got = `throws ${e?.message}`; }
+  const want = JSON.stringify(js);
+  shadowStats.compared++;
+  shadowStats.byEffect[cast.effect_id] = (shadowStats.byEffect[cast.effect_id] || 0) + 1;
+  if (got !== want) {
+    shadowStats.mismatches++;
+    console.error(`[effects] SHADOW MISMATCH ${cast.effect_id}\n  js:   ${want}\n  data: ${got}`);
+    if (ENGINE_ENV.EFFECT_SHADOW_STRICT === '1') throw new Error(`shadow mismatch on ${cast.effect_id}`);
+  }
+  return js;
+}
+export function resolveEffectJs(ctx, cast) {
   const rule = EFFECT_RULES[cast.effect_id];
   const out = { status: 'done', hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [], draw: 0, every: false, kept: null, summon: null, channels: [], traps: [], obstacles: [], links: [], pulls: [], relocations: [], peeks: [], possess: null, phantom: false, notes: [], rolls: [] };
   if (!rule) { out.status = 'fizzled'; out.notes.push('no rules for this effect'); return out; }
@@ -229,7 +324,10 @@ export function resolveEffect(ctx, cast) {
   const range = rule.range || 1;
   const alive = (id) => ctx.lifeOf(id) > 0;
   const declared = cast.target?.kind === 'character' ? cast.target.ref : null;
-  const visible = (id) => !ctx.invisible(id);
+  // Invisibility (user ruling 2026-11-14): an invisible unit is hidden from its ENEMIES only (allies still
+  // see it); another invisible unit sees it (paper text). ctx.invisible(id) is already "invisible this action"
+  // (peer.mjs: holds the permanent and its reveal does not break it).
+  const visible = (id) => !(ctx.invisible(id) && ctx.enemyOf(me, id)) || ctx.invisible(me);
   const enemiesWithin = (d) => ctx.peers().filter(id => id !== me && alive(id) && visible(id) && ctx.enemyOf(me, id) && ctx.dist(me, id) <= d).sort();
   const deltaSum = (defId) => elems.reduce((s, el) => s + (ctx.shieldedAgainst(defId, el) ? 0 : Math.max(0, myStat(el) - ctx.statFor(defId, el))), 0);
   let recipients = [];
@@ -247,7 +345,8 @@ export function resolveEffect(ctx, cast) {
     case 'all_enemies': recipients = enemiesWithin(1); break;
     case 'all_adjacent': recipients = ctx.peers().filter(id => id !== me && alive(id) && visible(id) && ctx.dist(me, id) <= 1).sort(); break;
     case 'all_seen': recipients = ctx.peers().filter(id => id !== me && alive(id) && visible(id)).sort(); break;
-    case 'everyone': recipients = ctx.peers().filter(id => alive(id) && (id === me || visible(id)) && ctx.dist(me, id) <= range).sort(); break;
+    // Untargeted area (Meteor Shower): nobody is aimed at, so invisible units are hit too (ruling 2026-11-14).
+    case 'everyone': recipients = ctx.peers().filter(id => alive(id) && ctx.dist(me, id) <= range).sort(); break;
     case 'self_or_ally': recipients = [declared && declared !== me && alive(declared) && !ctx.enemyOf(me, declared) && ctx.dist(me, declared) <= 1 ? declared : me]; break;
     case 'self_or_enemy': recipients = [declared && declared !== me && alive(declared) && visible(declared) && ctx.enemyOf(me, declared) && ctx.dist(me, declared) <= 1 ? declared : me]; break;
     case 'self': recipients = [me]; break;

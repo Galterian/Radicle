@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_super_sense",
+  "name": "Super sense",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_vitality"],
+  "cost": 1,
+  "kind": "scouting",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"adjacent traps listed; spent to evade one point of damage (peer.mjs)"},
+  "text": "Look at a neighboring location without activating the trap and reveal its contents to others. Remove the Super Sense permanent to evade one damage.",
+  "flags": {"permanent":true},
+  "uses": ["std","e2a"],
+  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+}

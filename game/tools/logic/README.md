@@ -12,6 +12,18 @@ node tools/logic-check.mjs            # expansion + validation + coverage, must 
 Never edit `data/<collection>.json` by hand for this — regenerate from the
 mapping so the work is reviewable and re-runnable.
 
+**Single source of truth (2026-11-14).** The mapping files here ARE the logic: one file per collection
+(no side files such as `classes.manipulator.logic.json`). Edit them directly (or with a new script that
+edits them), then regenerate every collection with one command — a byte-for-byte no-op when data is in sync:
+
+```
+bash tools/logic/apply-all.sh [--dry-run]     # logic-apply --replace over every mapping, under flock /tmp/chaosd6-data.lock
+```
+
+The old generators in `tools/out/` (`_patch_logic_2026-10-30.mjs`, `_patch_class_logic_2026-11-1*.mjs`,
+`_rogue_cleric_*`, `_animator_*`, `_fz_token_data_*`, …) are retired one-shot migrations: re-running them would
+revert later rulings, so they exit unless given `--rerun-retired`.
+
 ## Mapping file
 
 ```json

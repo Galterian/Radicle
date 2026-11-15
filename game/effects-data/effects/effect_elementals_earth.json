@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_elementals_earth",
+  "name": "Earth Elemental",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_harmony","elem_concentration"],
+  "cost": 2,
+  "kind": "summon",
+  "duration": "cast",
+  "every": {"behaviour":"resolver","note":"∀ binds a creature in view (cast.summon.bind, prepared by peer.mjs prepareSummon)"},
+  "text": "Σstat 30. Earth elemental stats 20/5/5/0. 3 hits, 1 action.",
+  "flags": {"permanent":true,"statBuy":true,"fixedPower":6},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["stat_buy",false]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

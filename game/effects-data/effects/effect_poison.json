@@ -1,0 +1,23 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_poison",
+  "name": "Poison",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_water","elem_vitality"],
+  "cost": 2,
+  "kind": "trap",
+  "duration": "trap",
+  "every": {"behaviour":"resolver","note":"trap springs in peer.mjs (targeted, Σ max(0, 20 − stat) /10)"},
+  "text": "Leave this card as a trap on your tile after casting.",
+  "flags": {"damage":"delta","scope":"target","trap":{"trigger":"targeted","mode":"damage"}},
+  "uses": ["std","e2a"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"call":["targets","target",1,true]},
+      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"note":["nobody in reach — the trap is set"]}]},
+      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}],false,false]},"def"]},
+      {"call":["trap_self","targeted","damage"]},
+      {"call":["finish"]}
+    ]}
+}

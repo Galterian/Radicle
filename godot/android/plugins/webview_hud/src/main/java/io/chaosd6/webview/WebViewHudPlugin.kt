@@ -43,6 +43,7 @@ class WebViewHudPlugin(godot: Godot) : GodotPlugin(godot) {
     )
 
     private var webView: WebView? = null
+    private var lastUrl: String? = null   // reloaded into a fresh WebView if the renderer dies
 
     @UsedByGodot
     fun showFullScreen(url: String): Boolean {
@@ -85,6 +86,22 @@ class WebViewHudPlugin(godot: Godot) : GodotPlugin(godot) {
                                 emitSignal("load_error", code, desc)
                             }
                         }
+                        // The HUD renderer died (OOM-killed at 3–5.5 GB on the Redmi, 2026-11-10..13).
+                        // Unhandled, Chromium aborts the whole app ("Render process's crash wasn't
+                        // handled by all associated webviews"), taking Godot and the embedded peer
+                        // with it. Drop the dead view and attach a fresh one on the same URL; the
+                        // peer keeps running and the HUD reconnects to its socket.
+                        override fun onRenderProcessGone(view: WebView?, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+                            Log.w(TAG, "HUD renderer gone (crashed=${detail?.didCrash()}, priority=${detail?.rendererPriorityAtExit()}); recreating")
+                            if (view != null && view === webView) {
+                                (view.parent as? ViewGroup)?.removeView(view)
+                                view.destroy()
+                                webView = null
+                                val again = lastUrl
+                                if (again != null) act.window.decorView.postDelayed({ if (webView == null) showFullScreen(again) }, 1000)
+                            }
+                            return true
+                        }
                     }
                 }
                 // Attach to the activity's root content view so it floats over
@@ -95,6 +112,7 @@ class WebViewHudPlugin(godot: Godot) : GodotPlugin(godot) {
                 webView = wv
                 Log.i(TAG, "WebView attached, loading $url")
             }
+            lastUrl = url
             webView?.loadUrl(url)
         }
         return true

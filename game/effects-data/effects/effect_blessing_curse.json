@@ -1,0 +1,22 @@
+{
+  "schema": "chaosd6.effect/1",
+  "id": "effect_blessing_curse",
+  "name": "Blessing / Curse",
+  "version": "1.0.0",
+  "source": {"collection":"effects","version":"1.0.0"},
+  "elements": ["elem_time"],
+  "cost": 1,
+  "kind": "meta",
+  "duration": "permanent",
+  "every": {"behaviour":"resolver","note":"Blessing ∀ negates one hostile effect per action and is spent (peer.mjs)"},
+  "text": "Turn target effect into a permanent effect (put target effect under Blessing/Curse).",
+  "every_text": "Remove one of your Blessings to instantly negate an enemy effect.",
+  "flags": {"permanent":true,"blessAttach":true},
+  "uses": ["std","e2b"],
+  "logic": {"seq": [
+      {"call":["prelude"]},
+      {"if":[{"!":[{"call":["attached"]}]},{"call":["fizzle","no effect attached to bless"]},{"emit":["channels",{"obj":{"on":{"var":"me"},"effect_id":{"var":"cast.attach.effect_id"},"target":{"if":[{"===":[{"var":"cast.target.kind"},"character"]},{"var":"cast.target.ref"},null]},"elements":{"merge":[{"var":"cast.attach.elements"}]},"salt":{"or":[{"var":"cast.salt"},""]},"stop":"never","holder":{"var":"effect_id"},"card_id":{"or":[{"var":"cast.attach.card_id"},null]}}}]}]},
+      {"call":["land_permanent"]},
+      {"call":["finish"]}
+    ]}
+}

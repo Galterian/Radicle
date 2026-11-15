@@ -19,9 +19,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 export const dimIdOf = d => d.dimension_id || d.dimension?.dimension_id || `dim-${slug(d.dimension_name)}`;
 
-// Every live peer re-publishes its Door once a minute, so a dimension whose
-// newest Door is older than this has nobody in it right now.
-export const DOOR_LIVE_MS = Number(process.env.DOOR_LIVE_MS || 3 * 60 * 1000);
+// A Door counts as live while its last push is within two push intervals plus a 5-min margin (user ruling
+// 2026-11-15: the live window matches the Door cadence — it was 3 min while peers push every RADICLE_PUSH_SEC =
+// 600 s, so live dimensions looked quiet; 2 × 600 s + 300 s = 25 min). Same env + default as peer.mjs.
+// A dimension whose newest Door is older is quiet; before regenerating its monsters the caller still asks its bus.
+export const DOOR_PUSH_SEC = Number(process.env.RADICLE_PUSH_SEC || 600);
+export const DOOR_LIVE_MS = Number(process.env.DOOR_LIVE_MS || (2 * DOOR_PUSH_SEC + 300) * 1000);
+// The engine's sides (peer.mjs sideOf): A = player + npc_a, B = npc_b (monsters), C = player_c + npc_c,
+// D = player_d + npc_d (the fourth team, user ruling 2026-11-15). Unknown strings are sides of their own.
+export const sideOfAlliance = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : (a === 'player_d' || a === 'npc_d') ? 'D' : a;
+// The human side of each player team, in the order a new team takes them.
+export const TEAM_SIDES = [['A', 'player'], ['C', 'player_c'], ['D', 'player_d']];
 export const isLiveDoor = p => Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS;
 
 // Union the members every Door knows about into one roster: newest sighting
@@ -111,17 +119,39 @@ export function farTileFrom(anchor, { min = FAR_MIN, max = FAR_MAX, seed, salt =
 // (or to the chosen player's Door); 'random' = a known hex outside everyone's
 // strong radius. Only hexes somebody has revealed are candidates — except
 // 'far' (farTileFrom: 30–50 hexes from the anchor Door, off the known map).
-export function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2, preferredTile = null, salt = '' }) {
-  const sideOf = a => (a === 'player' || a === 'npc_a') ? 'A' : a === 'npc_b' ? 'B' : (a === 'player_c' || a === 'npc_c') ? 'C' : a;
+// `anchorTile` = the anchor Door's own tile (its unit may be missing from `members` when the Door is stale);
+// `nearTile` = "join next to this unit" (launcher unit list): a free, walkable known hex adjacent to it
+// (else the closest one), never the unit's own hex.
+export const validTile = t => (t && Number.isInteger(t.q) && Number.isInteger(t.r)) ? { q: t.q, r: t.r } : null;
+export function placeFromDoors({ members, anchorPeerId, side, placement, knownMap, strongRadius = 2, preferredTile = null, salt = '', anchorTile = null, nearTile = null, farFrom = null }) {
+  const sideOf = sideOfAlliance;
   const alive = members
     .map(m => ({ peer_id: m.peer_id, q: m.tile?.q, r: m.tile?.r, alliance: m.alliance ?? m.clan, life: m.life ?? 1 }))
     .filter(m => Number.isInteger(m.q) && Number.isInteger(m.r) && (m.life ?? 1) > 0);
   const occupied = new Set(alive.map(m => `${m.q},${m.r}`));
+  anchorTile = validTile(anchorTile); nearTile = validTile(nearTile);
   if (placement === 'far') {
     const own = members.find(m => m.peer_id === anchorPeerId && Number.isInteger(m.tile?.q) && Number.isInteger(m.tile?.r));
     const friend = alive.find(m => sideOf(m.alliance) === sideOf(side));
-    const at = own ? { q: own.tile.q, r: own.tile.r } : friend ? { q: friend.q, r: friend.r } : { q: 2, r: 2 };
-    const t = farTileFrom(at, { seed: knownMap.seed, salt, occupied });
+    const at = own ? { q: own.tile.q, r: own.tile.r } : anchorTile || (friend ? { q: friend.q, r: friend.r } : { q: 2, r: 2 });
+    // A new team's Door is distant to them (user ruling 2026-11-15): at least FAR_MIN from every alive unit of
+    // another side too, when such a hex exists in the ring; else just FAR_MIN–FAR_MAX from the anchor. `farFrom` =
+    // every alive record whatever its age (a quiet dimension's units are still there when it wakes up).
+    // Other TEAMS only (user ruling 2026-11-15): wild monsters (npc_b, no owner) don't count; a summon counts with
+    // its owner's side (unknown owner → skipped).
+    const src = farFrom || members.filter(m => (m.life ?? 1) > 0);
+    const allianceOf = new Map(src.map(m => [m.peer_id, m.alliance ?? m.clan]));
+    const teamSideOf = (m) => {
+      const a = m.alliance ?? m.clan;
+      if (a !== 'npc_b') return sideOf(a);
+      const oa = m.owner_peer_id ? allianceOf.get(m.owner_peer_id) : null;
+      return oa && oa !== 'npc_b' ? sideOf(oa) : null;
+    };
+    const others = src.map(m => ({ s: teamSideOf(m), q: m.q ?? m.tile?.q, r: m.r ?? m.tile?.r }))
+      .filter(m => m.s && Number.isInteger(m.q) && Number.isInteger(m.r) && m.s !== sideOf(side));
+    const distant = others.length ? farTileFrom(at, { seed: knownMap.seed, salt, occupied,
+      isBlocked: (q, r) => !hexWalkableAt(knownMap.seed, q, r) || others.some(m => hexDistance({ q, r }, m) < FAR_MIN) }) : null;
+    const t = distant || farTileFrom(at, { seed: knownMap.seed, salt, occupied });
     if (!t) throw new Error(`no walkable hex ${FAR_MIN}–${FAR_MAX} hexes from (${at.q},${at.r})`);
     return t;
   }
@@ -148,9 +178,22 @@ export function placeFromDoors({ members, anchorPeerId, side, placement, knownMa
     const far = Math.max(...free.map(t => minDist(t, alive)));
     return rand(free.filter(t => minDist(t, alive) === far));
   }
+  if (nearTile) {
+    const nk = `${nearTile.q},${nearTile.r}`;
+    const cand = free.filter(t => `${t.q},${t.r}` !== nk).map(t => ({ t, d: hexDistance(t, nearTile) })).sort((a, b) => a.d - b.d);
+    if (!cand.length) throw new Error('the grid is full');
+    // Closest walkable ring first (labyrinth walls, fortresses, water… refused); all blocked → closest free hex.
+    let best = null;
+    for (const c of cand) {
+      if (best != null && c.d > best) break;
+      if (hexWalkableAt(knownMap.seed, c.t.q, c.t.r)) { best = c.d; }
+    }
+    const ring = best == null ? cand.filter(c => c.d === cand[0].d) : cand.filter(c => c.d === best && hexWalkableAt(knownMap.seed, c.t.q, c.t.r));
+    return rand(ring.map(c => c.t));
+  }
   const anchor = anchorPeerId ? alive.filter(m => m.peer_id === anchorPeerId) : [];
   const friends = alive.filter(m => sideOf(m.alliance) === sideOf(side));
-  const anchors = anchor.length ? anchor : friends.length ? friends : alive.length ? alive : [{ q: 2, r: 2 }];
+  const anchors = anchor.length ? anchor : anchorTile ? [anchorTile] : friends.length ? friends : alive.length ? alive : [{ q: 2, r: 2 }];
   const adjacent = free.filter(t => anchors.some(a => hexDistance(t, a) === 1));
   if (adjacent.length) return rand(adjacent);
   free.sort((a, b) => minDist(a, anchors) - minDist(b, anchors));
@@ -303,15 +346,232 @@ export async function listDimensionsFromHttpd({ seedHost = DEFAULT_SEED_HOST, ri
 // Shape a dimension (a listPublishedDimensions / listDimensionsFromHttpd item)
 // for the launcher page — moved from ui-server.mjs so both servers share it.
 const ageSecAt = (iso, now) => Math.max(0, Math.round((now - Date.parse(iso || 0)) / 1000));
-export function describeDimension(d, now = Date.now()) {
+
+// ---- exact map shares from the Doors' blocks (user ruling 2026-11-15) ----
+// A Door lists its holder's map as blocks (rects / discs), so its hex set is exact: blockTiles() over them,
+// as createKnownMap does. Sets are memoised per Door copy (seed + peer + commit + pushed_at + block count) and
+// the union per dimension (its Doors' keys), so a launcher re-listing every few seconds recomputes nothing.
+const MEMO_MAX = 256;
+const _doorKeys = new Map(), _unionKeys = new Map();
+const memoPut = (m, k, v) => { if (m.size >= MEMO_MAX) m.delete(m.keys().next().value); m.set(k, v); return v; };
+export const seedOfDim = d => (d.doors || []).find(p => p.map?.seed)?.map.seed || seedForDimension(dimIdOf(d));
+const doorMemoKey = (seed, p) => `${seed}|${p.peer_id}|${p.commit || ''}|${p.pushed_at || ''}|${(p.map?.blocks || []).length}`;
+// Set of "q,r" a Door holds, or null when the Door carries no (valid) blocks.
+export function doorTileKeys(seed, p) {
+  const blocks = p?.map?.blocks || [];
+  if (!blocks.length) return null;
+  const k = doorMemoKey(seed, p);
+  if (_doorKeys.has(k)) return _doorKeys.get(k);
+  const set = new Set();
+  for (const t of createKnownMap(seed, blocks).tiles()) set.add(t.key);
+  return memoPut(_doorKeys, k, set.size ? set : null);
+}
+const interSize = (a, b) => { const [s, l] = a.size <= b.size ? [a, b] : [b, a]; let n = 0; for (const k of s) if (l.has(k)) n++; return n; };
+const ratio = (n, of) => of > 0 ? Math.round((n / of) * 1000) / 1000 : null;
+// → { union_hexes, best, median, mine_hexes, mine_cover, doors: Map<peer_id, { hexes, share, mine_share }> }
+//   median = the median Door's share (user ruling 2026-11-15: the summary shows the median Door, not the best)
+//   share      = |door| / |union of every Door (+ the genesis block, like mapFromDoors)|
+//   mine_share = |door ∩ my save| / |my save|      mine_cover = |my save ∩ union| / |union|
+// `mine` = Set of "q,r" of my local save of this dimension (dims-local.mjs saveTileKeys) or null.
+export function dimensionMapShares(d, { mine = null } = {}) {
+  const seed = seedOfDim(d);
+  const doors = (d.doors || []).filter(p => p?.peer_id);
+  const sets = doors.map(p => doorTileKeys(seed, p));
+  const out = { union_hexes: 0, best: null, median: null, mine_hexes: mine?.size || 0, mine_cover: null, doors: new Map() };
+  if (!sets.some(Boolean)) return out;
+  const uk = `${seed}#${doors.map(p => doorMemoKey(seed, p)).sort().join('#')}`;
+  let union = _unionKeys.get(uk);
+  if (!union) {
+    union = new Set();
+    for (const t of blockTilesOfGenesis()) union.add(t);
+    for (const s of sets) if (s) for (const k of s) union.add(k);
+    memoPut(_unionKeys, uk, union);
+  }
+  out.union_hexes = union.size;
+  doors.forEach((p, i) => {
+    const s = sets[i];
+    if (!s) return;
+    const share = ratio(s.size, union.size);
+    out.doors.set(p.peer_id, { hexes: s.size, share, mine_share: mine?.size ? ratio(interSize(s, mine), mine.size) : null });
+    if (share != null && (out.best == null || share > out.best)) out.best = share;
+  });
+  out.median = medianOf([...out.doors.values()].map(x => x.share).filter(x => x != null));
+  if (mine?.size) out.mine_cover = ratio(interSize(mine, union), union.size);
+  return out;
+}
+// Median of the Doors' shares (even count → mean of the two middle ones), 3 decimals; null without any.
+export function medianOf(xs) {
+  const s = xs.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const m = s.length >> 1;
+  return Math.round((s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) * 1000) / 1000;
+}
+let _genesis = null;
+function blockTilesOfGenesis() {
+  if (!_genesis) _genesis = [...createKnownMap('genesis', [initialBlock()]).tiles()].map(t => t.key);
+  return _genesis;
+}
+
+// ---- alive units a dimension knows (user ruling 2026-11-15) ----
+// Every Door's owner plus its known_members, one record per peer_id (newest sighting wins; on a tie the
+// unit's own Door). Alive = life > 0 in that newest record. Grouped from the side my top character joins
+// as by default (player): ally = player / npc_a, enemy = player_c / npc_c (3rd team), monster = npc_b.
+// `via` = the Door that reported the record (the anchor for "join next to it"); no age cut-off, so quiet
+// dimensions list their last known units too.
+export const unitGroupOf = a => (a === 'player' || a === 'npc_a') ? 'ally' : a === 'npc_b' ? 'monster' : 'enemy';
+const GROUP_ORDER = { ally: 0, enemy: 1, monster: 2 };
+// Every unit the Doors know, one record per peer_id: the newest sighting wins (on a tie the unit's own Door),
+// `_seen` = that sighting's time, `_via` = the Door that reported it. No age cut-off.
+export function doorRecords(doors) {
+  const byId = new Map();
+  const consider = (m, via, at, own) => {
+    if (!m?.peer_id) return;
+    const seen = Date.parse(m.last_seen || at || 0) || 0;
+    const prev = byId.get(m.peer_id);
+    if (prev && (seen < prev._seen || (seen === prev._seen && !own))) return;
+    byId.set(m.peer_id, { ...m, _seen: seen, _via: via });
+  };
+  for (const p of doors || []) {
+    if (!p?.peer_id) continue;
+    consider({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: p.tile, life: p.life, life_max: p.life_max,
+      profile_char_id: p.profile_char_id || '', team_name: p.team_name || '', last_seen: p.pushed_at }, p, p.pushed_at, true);
+    for (const m of p.known_members || []) if (m?.peer_id !== p.peer_id) consider(m, p, p.pushed_at, false);   // the Door's own fields describe its owner
+  }
+  return [...byId.values()];
+}
+const isAliveRec = m => (Number(m.life ?? 1) || 0) > 0;
+export function dimensionUnits(doors, now = Date.now(), { max = 36 } = {}) {
+  const all = doorRecords(doors);
+  const alive = all.filter(isAliveRec);
+  const count = { ally: 0, enemy: 0, monster: 0 };
+  const sides = { A: 0, B: 0, C: 0, D: 0 };   // alive units per engine side (newTeamSide)
+  const units = alive.map(m => {
+    const group = unitGroupOf(m.alliance);
+    count[group]++;
+    const sd = sideOfAlliance(m.alliance); if (sd in sides) sides[sd]++;
+    return {
+      peer_id: m.peer_id, name: m.name || String(m.peer_id).replace(/^peer:/, ''), alliance: m.alliance ?? null, group,
+      kind: m.creature_id ? 'creature' : 'character', life: m.life ?? null, life_max: m.life_max ?? null,
+      character_id: m.character_id || null, creature_id: m.creature_id || null, profile_char_id: m.profile_char_id || null,
+      tile: validTile(m.tile), age_sec: m._seen ? ageSecAt(new Date(m._seen).toISOString(), now) : null,
+      via: m._via.peer_id, via_live: now - Date.parse(m._via.pushed_at || 0) < DOOR_LIVE_MS,
+    };
+  }).sort((a, b) => (GROUP_ORDER[a.group] - GROUP_ORDER[b.group]) || ((a.age_sec ?? 1e12) - (b.age_sec ?? 1e12)) || String(a.name).localeCompare(String(b.name)));
+  return { units: units.slice(0, max), alive: count, sides, dead: all.length - alive.length };
+}
+
+// ---- "Join my top character / my team" = a NEW team on a free side (user rulings 2026-11-15) ----
+// "The only way to join as a third team is … the two buttons"; "Fourth team is joining at 4th side on a door
+// that is distant to them." The new team takes the first side among A (player), C (player_c), D (player_d) with
+// nobody alive on it (`sides` = dimensionUnits().sides / describeDimension units_sides); never B (the monsters).
+// All three taken → null: the join is refused (never merged into a side that has units).
+export function newTeamSide(sides = {}) {
+  for (const [s, alliance] of TEAM_SIDES) if (!(Number(sides[s]) > 0)) return alliance;
+  return null;
+}
+export const thirdTeamSide = newTeamSide;   // older name
+export const NO_FREE_SIDE = 'all three player sides (A player, C 3rd team, D 4th team) have units alive in this dimension — no free side for a new team';
+// The bot side of a team's characters ("Join my team" / "Test my team" allies): player → npc_a, player_c → npc_c,
+// player_d → npc_d.
+export const teamBotSide = side => side === 'player_c' ? 'npc_c' : side === 'player_d' ? 'npc_d' : side === 'npc_b' ? 'npc_b' : 'npc_a';
+
+// ---- no cloning (user ruling 2026-11-15) ----
+// Is this Door record my profile character `c`? The profile id when the Door carries one (newer builds), else
+// base character + name (older Doors).
+export const recordIsCharacter = (m, c) => !!(m && c) && (m.profile_char_id ? m.profile_char_id === c.id
+  : (!m.creature_id && !!c.base_character && m.character_id === c.base_character && m.name === c.name));
+// My profile characters still alive in this dimension, as the Doors know it: [{ character, unit }].
+export function aliveProfileUnits(doors, chars) {
+  const alive = doorRecords(doors).filter(isAliveRec);
+  const out = [];
+  for (const c of chars || []) { const u = alive.find(m => recordIsCharacter(m, c)); if (u) out.push({ character: c, unit: { peer_id: u.peer_id, name: u.name, alliance: u.alliance, life: u.life, tile: validTile(u.tile) } }); }
+  return out;
+}
+export const ALREADY_ALIVE = 'you are already alive in this dimension — rejoin/restore instead';
+export const aliveText = (hits) => `${hits.map(h => `${h.character.name} (as ${String(h.unit.peer_id).replace(/^peer:/, '')}, hp ${h.unit.life ?? '?'})`).join(', ')}: ${ALREADY_ALIVE}`;
+// One dimension at a time (user ruling 2026-11-15): where my characters are alive over EVERY known dimension.
+// `dims` = raw dimensions ({ dimension_name, doors }) or launcher items ({ dimension_name, alive_chars }); the first
+// item of a name wins (pass the freshly read target dimension first). → [{ character, dimension_name, unit }]
+export function aliveInDimensions(dims, chars) {
+  const out = [], seen = new Set();
+  for (const d of dims || []) {
+    if (!d?.dimension_name || seen.has(d.dimension_name)) continue;
+    seen.add(d.dimension_name);
+    const recs = Array.isArray(d.alive_chars) ? d.alive_chars : doorRecords(d.doors || []).filter(isAliveRec);
+    for (const c of chars || []) {
+      const u = recs.find(m => isAliveRec(m) && recordIsCharacter(m, c));
+      if (u) out.push({ character: c, dimension_name: d.dimension_name, unit: { peer_id: u.peer_id, name: u.name, life: u.life ?? null } });
+    }
+  }
+  return out;
+}
+export const aliveWhereText = (hits) => hits.map(h => `${h.character.name} (as ${String(h.unit.peer_id || '?').replace(/^peer:/, '')}, hp ${h.unit.life ?? '?'}) is alive in ${h.dimension_name} — rejoin/restore there`).join('; ');
+
+// The 'Monster' join (user ruling 2026-11-15: "We know its type, so the same type of monster should be joined and
+// the computer should control it"): the creature type of the Door / unit it joins next to when that is a monster,
+// else the dimension's commonest alive wild monster type, else null (the caller falls back to a random creature).
+export function knownMonsterType(dim, { doorId = null, nearTile = null } = {}) {
+  const recs = doorRecords(dim?.doors || []).filter(m => isAliveRec(m) && m.creature_id && m.alliance === 'npc_b');
+  const nt = validTile(nearTile);
+  const at = nt && recs.find(m => validTile(m.tile) && m.tile.q === nt.q && m.tile.r === nt.r);
+  if (at) return at.creature_id;
+  const door = doorId ? (dim?.doors || []).find(p => p.peer_id === doorId || p.door_id === doorId) : null;
+  if (door?.creature_id && door.alliance === 'npc_b') return door.creature_id;
+  const n = new Map();
+  for (const m of recs) if (!m.owner_peer_id) n.set(m.creature_id, (n.get(m.creature_id) || 0) + 1);
+  return [...n.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || null;
+}
+
+// ---- quiet joins regenerate the Door-known monsters (user ruling 2026-11-15) ----
+// "yes they shall be regenerated in their last known place": every alive npc_b creature of the newest records
+// (no owner — summons stay with their summoner) on its last tile, with its life. Heroes / allies of other players
+// are never regenerated. The joiner starts at most `max` of them, the nearest to its start tile.
+export const REGEN_MAX = Number(process.env.REGEN_MAX || 6);
+export function quietMonsters(doors) {
+  return doorRecords(doors)
+    .filter(m => isAliveRec(m) && m.alliance === 'npc_b' && m.creature_id && !m.owner_peer_id && validTile(m.tile))
+    .map(m => ({ peer_id: m.peer_id, label: String(m.peer_id).replace(/^peer:/, ''), name: m.name || m.creature_id, creature_id: m.creature_id,
+      tile: validTile(m.tile), life: Number(m.life) || null, life_max: Number(m.life_max) || null }));
+}
+export function nearestMonsters(list, at, max = REGEN_MAX) {
+  if (!at) return list.slice(0, max);
+  return [...list].sort((a, b) => hexDistance(a.tile, at) - hexDistance(b.tile, at) || String(a.peer_id).localeCompare(String(b.peer_id))).slice(0, Math.max(0, max));
+}
+// Doors are pushed every ~10 min but count as live for 3: a dimension can look quiet while its peers still run.
+// Before regenerating, listen on the dimension's bus for `ms`: anybody heard → it is live, nothing is regenerated
+// (two copies of one monster peer id would fight over its state).
+export async function probeDimensionLive({ dimId, relays = DEFAULT_RELAYS, ms = Number(process.env.REGEN_PROBE_MS || 4000) }) {
+  const { createNostrBus } = await import('./nostr-bus.mjs');
+  const heard = new Set();
+  const bus = createNostrBus({ relays, dimId, label: 'regen-probe', log: () => {}, warn: () => {}, onEvent(type, payload) {
+    const id = type === 'state' ? payload?.peer_id : type === 'env' ? payload?.actor_peer_id : null;
+    if (id) heard.add(id);
+  } });
+  await new Promise(r => setTimeout(r, ms));
+  try { bus.close(); } catch {}
+  return { peers: [...heard] };
+}
+// As placement members (their tiles are taken before they are up).
+export const asMembers = (mons) => mons.map(m => ({ peer_id: m.peer_id, name: m.name, alliance: 'npc_b', creature_id: m.creature_id, tile: m.tile, life: m.life ?? 1 }));
+
+// `mine` = Set of "q,r" of my local save of this dimension (for the "% shared with my copy" fields) or null.
+// `sketch: false` drops the Doors' map_sketch strings (~0.9 KB each; the phone's list — exact shares replace them).
+export function describeDimension(d, now = Date.now(), { mine = null, sketch = true } = {}) {
+  let shares;
+  try { shares = dimensionMapShares(d, { mine }); } catch { shares = { union_hexes: 0, best: null, median: null, mine_hexes: 0, mine_cover: null, doors: new Map() }; }
   const doors = (d.doors || []).map(p => ({
     peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id,
     tile: p.tile, life: p.life, life_max: p.life_max, clock: p.clock, pushed_at: p.pushed_at, age_sec: ageSecAt(p.pushed_at, now),
     live: now - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS, nid: p.nid, commit: p.commit,
     known_members: (p.known_members || []).length, known_tiles: (p.known_tiles || []).length,
-    map_tiles: p.map?.tiles_known ?? null, map_blocks: (p.map?.blocks || []).length,
+    map_tiles: p.map_tiles ?? p.map?.tiles_known ?? null, map_blocks: (p.map?.blocks || []).length,
+    map_sketch: sketch && typeof p.map_sketch === 'string' ? p.map_sketch : null,   // bottom-K map fingerprint (newer Doors only)
+    // Exact, from the Door's blocks (null without blocks): its hexes, its share of the dimension, of my copy.
+    map_hexes: shares.doors.get(p.peer_id)?.hexes ?? null, map_share: shares.doors.get(p.peer_id)?.share ?? null,
+    mine_share: shares.doors.get(p.peer_id)?.mine_share ?? null,
   }));
   const newest = doors[0]?.pushed_at || d.legacy_doors?.[0]?.last_push?.at || null;
+  const u = dimensionUnits(d.doors || [], now);
   return {
     dimension_name: d.dimension_name, dimension_id: dimIdOf(d), namespaces: d.namespaces,
     doors, members: unionMembers(d.doors || []),
@@ -319,24 +579,73 @@ export function describeDimension(d, now = Date.now()) {
     legacy: !doors.length && (d.legacy_doors || []).length > 0,
     newest_push: newest, age_sec: newest ? ageSecAt(newest, now) : null,
     turn: Math.max(0, ...doors.filter(p => p.live).map(p => p.clock?.turn ?? 0)),
+    // Launcher stats (user ruling 2026-11-15): turn so far over every Door, live or not, and the hexes revealed
+    // (the union of the Doors' map blocks; the biggest single Door's count if the blocks can't be read).
+    turn_max: Math.max(0, ...doors.map(p => Number(p.clock?.turn) || 0)),
+    hexes: Math.max(shares.union_hexes, ...doors.map(p => Math.max(Number(p.map_tiles) || 0, Number(p.known_tiles) || 0)), 0),
+    // Map shares: the median Door's share of the dimension (user ruling 2026-11-15, was the best Door's);
+    // my save's hexes and how much of the dimension it covers.
+    map_share_median: shares.median, mine_hexes: shares.mine_hexes, mine_cover: shares.mine_cover,
+    // Alive units it knows (any age): [{ peer_id, name, alliance, group, kind, life, life_max, character_id, creature_id,
+    // profile_char_id, tile, age_sec, via, via_live }].
+    units: u.units, units_alive: u.alive, units_dead: u.dead,
+    // The side "Join my top character / my team" takes (newTeamSide; null = no free side), the alive units per
+    // engine side, and every alive character the Doors know (not capped like `units`) so the launcher can grey
+    // out joins of a profile character that is alive (here or in another dimension).
+    new_team_side: newTeamSide(u.sides), units_sides: u.sides,
+    alive_chars: doorRecords(d.doors || []).filter(m => isAliveRec(m) && !m.creature_id)
+      .map(m => ({ peer_id: m.peer_id, name: m.name || null, character_id: m.character_id || null, profile_char_id: m.profile_char_id || null, life: m.life ?? null })),
   };
 }
 
 // Everything a joining peer needs, as peer.mjs env vars (minus ports and the
 // map-blocks file, which depend on where the caller runs). `doorId` is the
 // anchor unit's peer_id (or door_id); `side` the joiner's alliance.
-export function planJoin(dim, { doorId = null, side = 'player', placement = 'nearby', label = '', extraMembers = [], preferredTile = null } = {}) {
+// Stale Doors are fine (user ruling 2026-11-15): with no live Door the joiner starts the dimension from the
+// Doors' map and nobody else is there until someone arrives. `nearTile` = next to that unit (unit list).
+// `regen` (quiet dimensions only — no live Door): the Door-known monsters come back (quietMonsters) — their tiles
+// count as taken for my placement, and the `regenMax` nearest to my start tile are returned as `regen`. The caller
+// adds its vetoes (nobody answers on the bus — probeDimensionLive —, no local peers in it) before starting them.
+export function planJoin(dim, { doorId = null, side = 'player', placement = 'nearby', label = '', extraMembers = [], preferredTile = null, nearTile = null, regen = false, regenMax = REGEN_MAX } = {}) {
   if (!dim.doors.length) throw new Error(`${dim.dimension_name} has no Doors`);
   const anchorDoor = doorId ? dim.doors.find(p => p.peer_id === doorId || p.door_id === doorId) : dim.doors[0];
   if (doorId && !anchorDoor) throw new Error(`no Door from ${doorId} on ${dim.dimension_name}`);
-  const byId = new Map(unionMembers(dim.doors).map(m => [m.peer_id, m]));
-  for (const m of extraMembers) byId.set(m.peer_id, { ...(byId.get(m.peer_id) || {}), ...m });   // live view wins
-  const members = [...byId.values()];
   const liveDoors = dim.doors.filter(isLiveDoor);
+  const regenAll = regen && !liveDoors.length ? quietMonsters(dim.doors) : [];
+  const byId = new Map(unionMembers(dim.doors).map(m => [m.peer_id, m]));
+  for (const m of [...asMembers(regenAll), ...extraMembers]) byId.set(m.peer_id, { ...(byId.get(m.peer_id) || {}), ...m });   // live view wins
+  const members = [...byId.values()];
   const knownMap = mapFromDoors(dim);
-  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile });
+  const startTile = placeFromDoors({ members, anchorPeerId: anchorDoor?.peer_id, side, placement, knownMap, preferredTile,
+    anchorTile: anchorDoor?.tile, nearTile: placement === 'nearby' ? nearTile : null,
+    farFrom: placement === 'far' ? [...doorRecords(dim.doors).filter(isAliveRec), ...members.filter(m => (m.life ?? 1) > 0)] : null });
   if (placement !== 'far' && !knownMap.has(startTile.q, startTile.r)) throw new Error('placement failed');
   const taken = new Set(members.map(m => String(m.peer_id || '').replace(/^peer:/, '')));
   const peerLabel = (label || '').trim() || fancyLabel(taken);
-  return { anchorDoor, members, liveDoors, knownMap, startTile, peerLabel, network: networkFromDoors(dim.doors) };
+  return { anchorDoor, members, liveDoors, knownMap, startTile, peerLabel, network: networkFromDoors(dim.doors), doorMaps: doorMapSummaries(dim, knownMap),
+    regen: nearestMonsters(regenAll, startTile, regenMax), regenKnown: regenAll.length };
+}
+
+// What a joiner's HUD needs about each Door's map (telemetry shares[] with source 'door', for nodes it
+// knows only through their Door). `held` = hexes of the Door's blocks the joiner starts with: the joiner
+// seeds its map from `knownMap` (the union of all Doors' blocks) and its map only grows, so `held` stays
+// exactly |theirs ∩ mine| and held / (my hexes) is the exact share. A Door without blocks keeps only its
+// `map_sketch` (the peer estimates from it) or nothing (older builds). Written to DOOR_MAPS_FILE.
+export function doorMapSummaries(dim, knownMap = mapFromDoors(dim)) {
+  return (dim.doors || []).filter(p => p?.peer_id).map(p => {
+    let held = null;
+    const blocks = p.map?.blocks || [];
+    if (blocks.length) {
+      const own = createKnownMap(knownMap.seed, blocks);
+      held = 0;
+      for (const t of own.tiles()) if (knownMap.hasKey(t.key)) held++;
+    }
+    return {
+      peer_id: p.peer_id, name: p.name || p.peer_id, alliance: p.alliance ?? null,
+      character_id: p.character_id || null, creature_id: p.creature_id || null,
+      tile: p.tile || null, life: p.life ?? null, life_max: p.life_max ?? null, pushed_at: p.pushed_at || null,
+      map_tiles: p.map_tiles ?? p.map?.tiles_known ?? null, map_sketch: typeof p.map_sketch === 'string' ? p.map_sketch : '',
+      held, held_of: knownMap.size(),
+    };
+  });
 }

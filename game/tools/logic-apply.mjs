@@ -48,23 +48,28 @@ for (const [id, block] of Object.entries(map.entries)) {
 if (problems) { console.error(`${problems} problem(s) — nothing written`); process.exit(1); }
 
 // 2. apply
-let added = 0, replaced = 0, kept = 0;
+// 2026-11-14: a block identical to what is already there counts as `unchanged`, and a run that changes nothing
+// does not rewrite the file — so `--replace` over every mapping is a byte-for-byte no-op on data in sync
+// (tools/logic/*.logic.json is the single source of truth for every `logic` key; see tools/logic/README.md).
+let added = 0, replaced = 0, kept = 0, unchanged = 0;
 for (const [id, block] of Object.entries(map.entries)) {
   const entry = byId.get(id);
   const v = activeVersion(entry);
   if (!v) continue;
   if (v.logic && !replace) { kept++; continue; }
-  if (v.logic) replaced++; else added++;
   // references: the named rules the block uses (for lint / docs)
   const refs = new Set();
   for (const k of ['prerequisites', 'effects', 'validation']) for (const item of block[k] || []) eng.references(item.when ?? item.value ?? item.assert, refs);
   const logic = { ...block, references: [...refs].sort() };
+  const keys = Object.keys(v), at = keys.indexOf('logic');
+  if (v.logic && JSON.stringify(v.logic) === JSON.stringify(logic) && at === keys.indexOf('data') + 1) { unchanged++; continue; }
+  if (v.logic) { replaced++; console.log(`  ~ ${id}@${v.version}`); } else { added++; console.log(`  + ${id}@${v.version}`); }
   // rebuild the version so `logic` follows `data`
   const out = {};
   for (const k of Object.keys(v)) { if (k === 'logic') continue; out[k] = v[k]; if (k === 'data') out.logic = logic; }
   if (!('logic' in out)) out.logic = logic;
   entry.versions[entry.versions.indexOf(v)] = out;
 }
-console.log(`${collection}: ${added} added, ${replaced} replaced, ${kept} kept (use --replace to overwrite)${dryRun ? ' [dry-run]' : ''}`);
+console.log(`${collection}: ${added} added, ${replaced} replaced, ${unchanged} unchanged, ${kept} kept (use --replace to overwrite)${dryRun ? ' [dry-run]' : ''}`);
 // Compact writer (2026-10-30): one JsonLogic rule per line, opening brackets on the key's line (logic-engine compactJson).
 if (!dryRun && (added || replaced)) writeDataFile(dataPath, json);

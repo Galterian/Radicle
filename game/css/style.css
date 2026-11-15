@@ -104,6 +104,7 @@ main {
 .ros.ally .nm::before { content: '◆ '; color: #6ad99f; }
 .ros.enemy .nm::before { content: '◆ '; color: #e36666; }
 .ros.team-c .nm::before { content: '◆ '; color: #b07cff; }   /* third team */
+.ros.team-d .nm::before { content: '◆ '; color: #f0a040; }   /* fourth team */
 
 #log-filter-chip { display: inline-flex; align-items: center; gap: 6px; background: #1b1a2e; border: 1px solid #a08eff44; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 10px; color: #d7cfff; margin: 0 0 6px; width: fit-content; }
 /* The #id rule above outranks the UA's [hidden] { display:none }, so re-assert. */
@@ -423,6 +424,8 @@ main {
 .door-chip.side-npc_b  .dc-dot { background: #e26b6b; }
 .dim-explorer .dx-side-team-c { background: #b07cff; }
 .door-chip.side-team-c .dc-dot { background: #b07cff; }
+.dim-explorer .dx-side-team-d { background: #f0a040; }
+.door-chip.side-team-d .dc-dot { background: #f0a040; }
 .door-chip .dc-id { font-family: ui-monospace, Menlo, Consolas, monospace; max-width: 10ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .door-chip .dc-coord { color: #8aa0bf; font-variant-numeric: tabular-nums; }
 .door-chip .dc-hp { color: #e8c272; font-variant-numeric: tabular-nums; }
@@ -853,6 +856,12 @@ html.mobile #hud .pill { background: transparent; padding: 1px 2px; font-size: 1
 html.mobile #hud .pill.dim { color: #b8f0d0; }
 html.mobile #hud .pill.phase { color: #d7cfff; font-weight: 600; }
 html.mobile #hud .pill.timer { color: #ffb0b0; font-weight: 600; }
+/* Telemetry pill (RAM · hexes held · share) — tappable even though the mobile HUD passes taps through. */
+.pill.telem { cursor: pointer; color: #9fd3ff; white-space: nowrap; }
+html.mobile #hud .pill.telem { pointer-events: auto; color: #9fd3ff; }
+#telem-pop { position: fixed; z-index: 60; max-width: min(300px, 92vw); padding: 6px 8px; background: #0f131bf2; color: #c9d4e3; border: 1px solid #2a3550; border-radius: 6px; font: 11px/1.4 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; box-shadow: 0 4px 14px #000a; }
+#telem-pop[hidden] { display: none; }
+#telem-pop .tp-opt { display: block; margin-top: 4px; white-space: normal; cursor: pointer; }
 
 /* Unit panel: a glass column on the right — compact rows, HP bars, ☠ for the dead. */
 html.mobile #panel { position: fixed; top: 4px; right: 4px; bottom: 4px; width: calc(var(--m-panel-w) - 8px); padding: 5px; gap: 4px; background: rgba(10, 13, 20, 0.58); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid #ffffff14; border-radius: 10px; z-index: 20; }
@@ -862,6 +871,7 @@ html.mobile .ros { padding: 4px 5px; gap: 3px 5px; flex-wrap: nowrap; align-item
 html.mobile .ros.ally { border-left: 2px solid #6ad99f88; }
 html.mobile .ros.enemy { border-left: 2px solid #e3666688; }
 html.mobile .ros.team-c { border-left: 2px solid #b07cff88; }
+html.mobile .ros.team-d { border-left: 2px solid #f0a04088; }
 html.mobile .ros::after, html.mobile .ros .ros-filter, html.mobile .ros .st, html.mobile .ros .nm::before { display: none; }
 html.mobile .ros .thumb { width: 26px; height: 26px; border-radius: 50%; border-color: #ffffff22; }
 html.mobile .ros .txt { flex-wrap: wrap; gap: 2px 4px; align-items: center; }
@@ -1189,6 +1199,14 @@ html.mobile #deck-row { max-width: 100%; }
    desktop window and a phone in landscape (html.mobile: bigger touch targets).
    --------------------------------------------------------------------------- */
 html.in-launcher, html.in-launcher body { height: auto; min-height: 100%; overflow: auto; }
+/* Phone: the WebView over Godot won't one-finger-scroll the root document, but nested scrollers work (the
+   character editor's .pe-body) — so the launcher is its own fixed scroller, which installDragScroll finds. */
+html.in-launcher.mobile, html.in-launcher.mobile body { height: 100%; overflow: hidden; }
+html.in-launcher.mobile #launcher { position: fixed; inset: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* Phone: the Godot-hosted WebView does not scroll the document itself on a one-finger drag (only nested
+   scrollers like the character editor's .pe-body do), so the start screen scrolls inside its own fixed box. */
+html.mobile.in-launcher, html.mobile.in-launcher body { height: 100%; overflow: hidden; }
+html.mobile.in-launcher #launcher { position: fixed; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 /* The phone layout pins the game's stage / roster full-screen (fixed), which beats `main[hidden]`. */
 html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar { display: none !important; }
 .launcher-card .profile-panel { margin: 14px 0 0; }
@@ -1225,6 +1243,13 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 .profile-panel .pp-dim-name { font-weight: 700; }
 .profile-panel .pp-badge { font-size: 10px; padding: 0 6px; border-radius: 8px; background: #1a2130; color: #8aa0bf; }
 .profile-panel .pp-badge.is-live { background: #1e3a26; color: #8ddc9f; }
+/* Per-dimension stats (source · turn · hexes · local bytes) and the ✕ of an old dimension (two taps). */
+.profile-panel .pp-dim.is-local { border-style: dashed; }
+.profile-panel .pp-dim-stats { font-size: 11px; color: #8aa0bf; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.profile-panel .pp-dim-del { font: inherit; font-size: 11px; line-height: 1; padding: 2px 6px; border-radius: 8px; border: 1px solid #3a2a2a; background: #1a1416; color: #c98a8a; cursor: pointer; }
+.profile-panel .pp-dim-del:hover { border-color: #7a3a3a; color: #f0a0a0; }
+.profile-panel .pp-dim-del.is-armed { background: #5c2020; border-color: #a04040; color: #ffe0e0; font-weight: 700; }
+.profile-panel .pp-dim-del[disabled] { opacity: .5; cursor: default; }
 .profile-panel .pp-btn.pp-join-top, .profile-panel .pp-btn.pp-join-team { background: #1e3a26; border-color: #2f5c3a; color: #c9f0d4; font-size: 11px; padding: 2px 8px; }
 .profile-panel .pp-btn.pp-join-top[disabled], .profile-panel .pp-btn.pp-join-team[disabled] { background: #141a24; border-color: #1a2130; color: #5a6a82; }
 .profile-panel .pp-doors { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
@@ -1234,6 +1259,7 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 .profile-panel .pp-door.side-player .pp-dot { background: #6ad99f; }
 .profile-panel .pp-door.side-npc_a .pp-dot { background: #4ea3ff; }
 .profile-panel .pp-door.side-team-c .pp-dot { background: #b07cff; }
+.profile-panel .pp-door.side-team-d .pp-dot { background: #f0a040; }
 .profile-panel .pp-door-name { font-family: ui-monospace, Menlo, Consolas, monospace; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-panel .pp-door-side { color: #8aa0bf; }
 .profile-panel .pp-door-hp { color: #e8c272; font-variant-numeric: tabular-nums; }
@@ -1243,6 +1269,25 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 .profile-panel .pp-join-enemy { border-color: #5c3a5c; color: #d9a0ff; }
 .profile-panel .pp-join-monster { border-color: #5c2f2f; color: #f0a0a0; }
 .profile-panel .pp-join[disabled] { opacity: .45; cursor: not-allowed; }
+/* Map shares + alive units (2026-11-15) */
+.profile-panel .pp-share, .profile-panel .pp-door-share { font-size: 11px; color: #9fd0e8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.profile-panel .pp-door-age { font-size: 10px; color: #6f7f99; }
+.profile-panel .pp-dim-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 3px; }
+.profile-panel .pp-quiet { font-style: italic; }
+.profile-panel .pp-units { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.profile-panel .pp-unit-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.profile-panel .pp-unit-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; min-width: 7.5em; color: #8aa0bf; }
+.profile-panel .pp-unit-group.grp-ally .pp-unit-label { color: #8ddc9f; }
+.profile-panel .pp-unit-group.grp-enemy .pp-unit-label { color: #d9a0ff; }
+.profile-panel .pp-unit-group.grp-monster .pp-unit-label { color: #f0a0a0; }
+.profile-panel .pp-unit { font: inherit; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 10px; border: 1px solid #2a3c5c; background: #121a28; color: #e8ecf1; cursor: pointer; }
+.profile-panel .pp-unit:hover { background: #1b2a44; }
+.profile-panel .pp-unit.grp-ally { border-color: #2f5c3a; }
+.profile-panel .pp-unit.grp-enemy { border-color: #5c3a5c; }
+.profile-panel .pp-unit.grp-monster { border-color: #5c2f2f; }
+.profile-panel .pp-unit.is-stale { border-style: dashed; opacity: .8; }
+.profile-panel .pp-unit[disabled] { opacity: .45; cursor: not-allowed; }
+.profile-panel .pp-unit-name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-panel .pp-more { align-self: flex-start; }
 @media (max-width: 620px) {
   .profile-panel .pp-grid { grid-template-columns: max-content minmax(0, 1fr); }
@@ -1266,6 +1311,10 @@ html.menu-mode .profile-panel .pp-select, html.menu-mode .profile-panel .pp-inpu
 html.menu-mode .profile-panel .pp-btn.pp-join-top, html.menu-mode .profile-panel .pp-btn.pp-join-team { font-size: 13px; }
 html.menu-mode .profile-panel .pp-door { font-size: 12px; padding: 2px 3px 2px 8px; border-radius: 16px; }
 html.menu-mode .profile-panel .pp-join { min-height: 32px; min-width: 44px; font-size: 12px; border-radius: 14px; }
+html.menu-mode .profile-panel .pp-dim-stats { font-size: 12px; white-space: normal; }
+html.menu-mode .profile-panel .pp-unit { min-height: 32px; font-size: 12px; padding: 2px 10px; border-radius: 16px; }
+html.menu-mode .profile-panel .pp-share, html.menu-mode .profile-panel .pp-door-share { font-size: 12px; }
+html.menu-mode .profile-panel .pp-dim-del { min-height: 32px; min-width: 32px; font-size: 13px; border-radius: 14px; }
 html.menu-mode .profile-panel .pp-hint, html.menu-mode .profile-panel .pp-status, html.menu-mode .profile-panel .pp-msg { font-size: 13px; }
 html.mobile .join-team-btn { min-height: 34px; font-size: 13px; padding: 4px 12px; }
 
@@ -1378,3 +1427,34 @@ html.mobile #pf-banners { top: 30px; left: calc((100vw - var(--m-panel-w, 0px)) 
 .pp-devid { font-family: ui-monospace, monospace; font-size: 11px; padding: 0 3px; background: #ffffff12; border-radius: 3px; cursor: pointer; word-break: break-all; }
 .pp-sync-team { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .pp-team-in { width: 12em; padding: 3px 6px; background: #0b1220; color: inherit; border: 1px solid #3a4a66; border-radius: 4px; }
+
+/* Effect provenance (chaosD6-Effects, E6 2026-11-15): source badge on player-branch effect cards
+   (js/effect_source.js sourceBadgeHtml). Built-in (main) effects render nothing. */
+.fx-src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; margin-top: 2px; padding: 0 4px; border-radius: 3px;
+  background: #4fb3ff14; border: 1px solid #4fb3ff44; color: #9fd2ff; font: 500 8.5px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; overflow: hidden; vertical-align: middle; cursor: help; }
+.fx-src-br { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fx-src-au { flex: none; color: #c8d4e3; opacity: .85; }
+.fx-src-au::before { content: '· '; opacity: .6; }
+.fx-src-v { flex: none; font-weight: 700; padding: 0 3px; border-radius: 2px; }
+.fx-src.v-ok     .fx-src-v { color: #0b1a10; background: #6ad99f; }
+.fx-src.v-nerf   .fx-src-v { color: #1c1406; background: #e8c272; }
+.fx-src.v-boost  .fx-src-v { color: #061322; background: #6ea8ff; }
+.fx-src.v-reject { border-color: #e3666699; background: #e3666614; }
+.fx-src.v-reject .fx-src-v { color: #fff; background: #e36666; }
+.slot .card .fx-src { align-self: flex-start; }
+.slot .card:has(.fx-src) .ds { -webkit-line-clamp: 3; }
+#perms .perm .fx-src { display: flex; font-size: 7.5px; margin: 2px 0 0; }
+#ap-list .ac .fx-src, #peek-popup .fx-src { display: flex; margin: 3px auto 0; }
+.skill-card .fx-src { display: flex; margin: 1px 0 1px; width: fit-content; }
+.pe-card .fx-src { align-self: flex-start; font-size: 10px; }
+/* Icon-only surfaces (inline refs excluded): a tiny ⎇ in the icon corner. */
+.skill-icon .skill-icon-src { position: absolute; right: 0; bottom: 0; z-index: 2; font: 700 8px/1 ui-monospace, Consolas, monospace; color: #061322; background: #9fd2ff; border-radius: 2px 0 0 0; padding: 1px 1px 0 2px; pointer-events: auto; }
+.skill-icon .skill-icon-src.v-nerf { background: #e8c272; }
+.skill-icon .skill-icon-src.v-reject { background: #e36666; color: #fff; }
+html.mobile .slot .card .fx-src { font-size: 7px; line-height: 1.4; padding: 0 2px; gap: 2px; }
+html.mobile #perms .perm .fx-src .fx-src-br { display: none; }   /* 50px perm: verdict chip + ⎇ only */
+html.mobile #perms .perm .fx-src::before { content: '⎇'; }
+/* Notices (main.js effectSourceNotice) */
+.pf-banner.fx-learned { border-color: #6ea8ff; color: #cfe1ff; }
+.pf-banner.fx-shared  { border-color: #6ad99f; color: #c9f5dc; font-weight: 500; font-size: 13px; }
+.pf-banner.fx-missing { border-color: #e8c272; color: #ffe1a0; }
