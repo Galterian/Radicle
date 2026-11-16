@@ -2,8 +2,8 @@
 // phase clock reference. Oracles are the two Swarm-0407 divergences.
 // Run from game/: node tools/merge-order-check.mjs  → "all merge-order checks passed"
 import assert from 'node:assert/strict';
-import { orderedMerge, pickClockRef, cohortDeadline, snapAction, meshZones } from '../merge-order.mjs';
-import { gunMergeable } from '../gun-member.mjs';
+import { orderedMerge, pickClockRef, cohortDeadline, snapAction, meshZones, resolverPeers, clockFrame } from '../merge-order.mjs';
+import { gunMergeable, GUN_MEMBER_CORE } from '../gun-member.mjs';
 
 const iso = (ms) => new Date(ms).toISOString();
 const T = 1_700_000_000_000;
@@ -104,6 +104,56 @@ assert.equal(snapAction({ action: 9, turn: 99 }), 9);
   assert.deepEqual(meshZones([snap('peer:x', 14, 'garbage')], 14, 4, { now }), []);
   assert.deepEqual(meshZones([{ peer_id: 'peer:y', action: 14, last_seen: iso(now), zones_json: '{bad' }], 14, 4, { now }), []);
   console.log('ok  mid-turn joiner adopts the no-damage zones laid earlier this turn (Swarm-0544 T4.R3 oracle)');
+}
+
+// --- (e) GunLive85 run 3 T8.R3: gX (cut from libp2p + bus) is known on gA / gD only through Gun, on (15,-16).
+//     gA moves to (15,-16). Before: the resolver view = every held snapshot → gA / gD vetoed the move, gB / gC let it.
+{
+  const now = T + 500_000;
+  const s = (id, q, r, life = 5) => ({ peer_id: id, tile_q: q, tile_r: r, life, alliance: 'npc_a', last_seen: iso(now - 800) });
+  const common = [s('peer:gA', 15, -15), s('peer:gB', 3, 1), s('peer:gC', 2, 3), s('peer:gM', 4, 4)];
+  const gX = s('peer:gX', 15, -16);
+  const wire = new Set(common.map(p => p.peer_id));
+  const heldA = new Map([...common, gX].map(p => [p.peer_id, p]));   // gA / gD: gX merged from a Gun echo
+  const heldB = new Map(common.map(p => [p.peer_id, p]));            // gB / gC: no Gun echo of gX yet
+  const occupied = (view) => new Set([...view.values()].filter(p => p.life > 0).map(p => `${p.tile_q},${p.tile_r}`));
+  const naive = [occupied(heldA).has('15,-16'), occupied(heldB).has('15,-16')];
+  assert.deepEqual(naive, [true, false], 'the bug: the raw held map disagrees on (15,-16)');
+  const vA = resolverPeers(heldA, 'peer:gA', wire), vB = resolverPeers(heldB, 'peer:gB', wire);
+  assert.deepEqual([...vA.keys()].sort(), [...vB.keys()].sort(), 'same resolver members on both sides');
+  assert.equal(occupied(vA).has('15,-16'), occupied(vB).has('15,-16'), 'same occupancy of the disputed hex');
+  assert.ok(!vA.has('peer:gX'), 'a Gun-only member is not in the view');
+  // once gX is heard on the wire (an envelope / state / clock frame), it is in everyone's view again
+  const wire2 = new Set([...wire, 'peer:gX']);
+  assert.ok(resolverPeers(heldA, 'peer:gA', wire2).has('peer:gX'));
+  // self is always in, even if never "heard"
+  assert.ok(resolverPeers(new Map([['peer:me', s('peer:me', 0, 0)]]), 'peer:me', new Set()).has('peer:me'));
+  console.log('ok  a member known only through Gun never enters the resolver view / occupancy (GunLive85 T8.R3 oracle)');
+}
+// --- (f) Swarm-0226 without Gun: the planning clock reaches the cohort as a wire `clock` frame.
+{
+  const now = T + 600_000;
+  const keys = GUN_MEMBER_CORE.filter(k => k !== 'gun_v');
+  const full = { peer_id: 'peer:J', name: 'J', alliance: 'player', tile_q: 1, tile_r: 2, life: 9, life_max: 9, turn: 3, round: 1, action: 10,
+    phase: 'resolution', phase_ends_at: now - 100, last_seen: iso(now - 2000), permanents_csv: 'effect_shield', stat_will: 6, map_sketch: 'x'.repeat(900) };
+  let held = fold({}, full);                    // from J's state_hash envelope: resolving action 10
+  const plan = { ...full, turn: 3, round: 2, action: 11, phase: 'planning', phase_ends_at: now + 4000, last_seen: iso(now - 50) };
+  const { sig, rec } = clockFrame(plan, keys);
+  assert.equal(sig, `11|planning|${now + 4000}`);
+  assert.ok(!('permanents_csv' in rec) && !('map_sketch' in rec) && !('gun_v' in rec), 'core fields only');
+  assert.ok(JSON.stringify({ kind: 'clock', dim: 'dim-x', state: rec }).length < 600, 'small frame');
+  held = fold(held, rec);
+  assert.equal(held.action, 11); assert.equal(held.phase, 'planning'); assert.equal(held.phase_ends_at, now + 4000);
+  assert.equal(held.permanents_csv, 'effect_shield', 'a partial frame keeps the rest of the snapshot');
+  // waitingOnBusyMember's test on the merged record: J is at our action, planning, deadline not passed → wait for it
+  const busy = held.action === 11 && held.phase === 'planning' && held.phase_ends_at + 400 > now;
+  assert.ok(busy, 'the joiner still planning is waited on, not closed out (Swarm-0226 signature)');
+  assert.equal(cohortDeadline([held], 11, { now }), now + 4000, 'enterPhase sees its deadline');
+  // the older envelope (bus copy, arriving late) can't roll the clock back
+  held = fold(held, full);
+  assert.equal(held.action, 11, 'clock not rolled back by a late older statement');
+  assert.equal(clockFrame(plan, keys).sig, sig, 'same clock → same sig (deduped)');
+  console.log('ok  clock frame: planning deadline reaches waitingOnBusyMember / cohortDeadline without Gun (Swarm-0226 oracle)');
 }
 
 console.log('all merge-order checks passed');

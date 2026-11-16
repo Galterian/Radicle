@@ -150,3 +150,5 @@ godot/android/build/libs/debug/godot-lib.template_debug.aar
 godot/android/build/libs/release/godot-lib.template_release.aar
 godot/android/build/libs/debug/godot-lib.template_debug.aar
 godot/android/build/libs/release/godot-lib.template_release.aar
+# scratch from local test runs (Gun radata etc.)
+tmp/

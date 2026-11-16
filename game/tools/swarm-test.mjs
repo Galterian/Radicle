@@ -439,6 +439,8 @@ function startAgent(peerId, port, attempt = 0) {
 const host = await api('/api/launch', { mode: 'host', dimensionName: DIM });
 if (!host.ok) { console.error('host failed', host); process.exit(1); }
 log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
+// NOGUN=1 reaches every peer through the launcher's env (tools/swarm-run.sh exports it before start-all.mjs).
+log(`gun: ${process.env.NOGUN === '1' ? 'OFF (NOGUN=1) — clock via libp2p/bus clock frames, directory via Door + bus who' : 'on (default)'}`);
 if (FORCED_CLASSES.length > 1 && FORCED_LABELS.length) log(`force-class: ${FORCED_LABELS.map((l, i) => `${l}=${FORCED_CLASSES[i % FORCED_CLASSES.length]}`).join(', ')}${process.env.FORCE_CLASS_MONSTERS === '1' ? ' (+ wild lurkers by label hash)' : ''}`);
 else if (FORCED_CLASSES.length > 1) log(`force-class: ${FORCED_CLASSES.join(',')} by label hash (no FORCE_CLASS_LABELS — not every class is guaranteed a holder)`);
 else if (FORCED_CLASSES.length === 1) log(`force-class: every peer = ${FORCED_CLASSES[0]}`);

@@ -43,7 +43,9 @@ function signEvent(sk, pk, { kind, tags, content, created_at }) {
 
 // `meter(dir, type, envType, bytes)` (optional, telemetry only): called once per published event with the
 // frame length × relays it went to, and once per received EVENT frame (duplicates across relays → type 'dup').
-export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer', onEvent, log = console.log, warn = console.warn, meter = null }) {
+// `onOpen(url)` (optional): a relay socket just opened and subscribed — the first moment a publish can go out
+// (peer.mjs sends its `who` + full state there: a publish before any relay is open reaches nobody).
+export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer', onEvent, onOpen = null, log = console.log, warn = console.warn, meter = null }) {
   const sk = randomBytes(32);
   const pk = bytesToHex(schnorr.getPublicKey(sk));
   const dTag = `${TAG_PREFIX}${dimId}`;
@@ -97,6 +99,7 @@ export function createNostrBus({ relays = DEFAULT_RELAYS, dimId, label = 'peer',
       stats.relays[url] = 'open';
       ws.send(JSON.stringify(['REQ', subId, { kinds: [CHAOS_KIND], '#d': [dTag], since: Math.floor(Date.now() / 1000) - LOOKBACK_SEC }]));
       log(`[${label}] nostr ↔ ${url}`);
+      try { onOpen?.(url); } catch (e) { warn(`[${label}] nostr onOpen error: ${e.message}`); }
     };
     ws.onmessage = (e) => handleFrame(url, typeof e.data === 'string' ? e.data : e.data.toString());
     ws.onerror = () => { stats.relays[url] = 'error'; };

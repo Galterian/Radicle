@@ -92,3 +92,23 @@ export function cohortDeadline(others, action, { now = Date.now(), freshMs = 20_
   }
   return latest;
 }
+
+// (4) M6 step 1 (drop Gun) — the resolver's view and the wire clock frame.
+//
+// resolverPeers — which held snapshots the resolver may read: self and peers heard on a WIRE transport
+//     (envelope, libp2p state / clock frame, Nostr bus, discovery). A member known only through a side
+//     channel (Gun) is in some resolvers' views and not in others', and every read of the view (move
+//     occupancy, collision, targets, Creation bars, zones…) then splits them (GunLive85 run 3, T8.R3:
+//     gX on (15,-16) vetoed gA's move on gA / gD only). Revealers are re-added from their envelopes.
+export function resolverPeers(held, selfId, wireHeard) {
+  return new Map([...held].filter(([id]) => id === selfId || wireHeard.has(id)));
+}
+
+// clockFrame — what a clock change puts on the wire at once (the Swarm-0226 duty Gun's GUN_URGENT put
+// had): the slim core record (`keys`), and the dedupe signature action|phase|deadline. Partial by design:
+// mergePeerState spreads it over the held snapshot under the same orderedMerge rule as everything else.
+export function clockFrame(snap, keys) {
+  const rec = {};
+  for (const k of keys) if (snap?.[k] !== undefined && snap[k] !== null) rec[k] = snap[k];
+  return { sig: `${snap?.action}|${snap?.phase}|${snap?.phase_ends_at}`, rec };
+}

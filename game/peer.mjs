@@ -34,7 +34,8 @@ import { multiaddr } from '@multiformats/multiaddr';
 // permissive JSON pre-parser over every incoming string value that crashes
 // the process on plain CSV strings (yson.js "Cannot set properties of
 // undefined") as soon as relays actually exchange data.
-import Gun from 'gun';
+// NOGUN=1 (P2P rework M6 step 1): Gun is not even loaded — no relay, no client, no puts / reads.
+const Gun = process.env.NOGUN === '1' ? null : (await import('gun')).default;
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import fs from 'node:fs/promises';
@@ -55,8 +56,8 @@ import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { netStat, netAttachGun, netSnapshot, netStart } from './net-stats.mjs';   // telemetry only (P2P rework M1)
 import { createDigest, createMapSync, createBusRpc, encodeFrame, createFrameDecoder, MAX_FRAME_BYTES } from './map-sync.mjs';   // map compare-then-pull (P2P rework M3)
 import { createFxPeer } from './effects-handshake.mjs';   // foreign (player-branch) effects by ref (chaosD6-Effects E4)
-import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP } from './gun-member.mjs';
-import { orderedMerge, pickClockRef, cohortDeadline, meshZones } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
+import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP, GUN_MEMBER_CORE } from './gun-member.mjs';
+import { orderedMerge, pickClockRef, cohortDeadline, meshZones, resolverPeers, clockFrame } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
 import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor } from './js/features.js';
@@ -229,7 +230,10 @@ function mapSketchAdd(key) {
 }
 function mapSketchCsv() { return mapSketchCsvCache ??= mapSketch.map(h => h.toString(36)).join(','); }
 let _autosave = null;   // local TMJ autosave controller (see game/tools/autosave.mjs); _autosave?.markDirty() is a safe no-op before start()
-const PEER_GUN_URLS     = (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
+// NOGUN=1: run without Gun (M6 step 1). The clock rides libp2p / bus `clock` frames, the directory the
+// Door + bus `who` / replay — Gun's two jobs. Default stays Gun ON until a swarm confirms.
+const NOGUN = !Gun;
+const PEER_GUN_URLS     = NOGUN ? [] : (process.env.PEER_GUN_URLS   || '').split(',').filter(Boolean); // relays of other peers
 const BOOTSTRAP_MADDRS  = (process.env.BOOTSTRAP || '').split(',').filter(Boolean);        // libp2p peers
 const RADICLE_PUSH_SEC  = Number(process.env.RADICLE_PUSH_SEC || 600);           // first push at t=60s (end of turn 2 round 3 at 6s/round), then every 10 min
 const RADICLE_PUSH_FIRST_SEC = Number(process.env.RADICLE_PUSH_FIRST_SEC || 60); // initial delay before the first door push — paper rule: 2nd turn, 3rd round = 60s
@@ -408,7 +412,7 @@ await libp2p.services.pubsub.subscribe(TOPIC_STRONG);
 // Advertise the announce address explicitly so remote peers get the dialable
 // public form, regardless of how libp2p chooses to render its own listen set.
 const myMaddrs = [`/ip4/${PEER_PUBLIC_IP}/tcp/${PEER_PORT_LIBP2P}/p2p/${libp2p.peerId.toString()}`];
-const myGunUrl = `http://${PEER_PUBLIC_IP}:${PEER_PORT_GUN}/gun`;
+const myGunUrl = NOGUN ? '' : `http://${PEER_PUBLIC_IP}:${PEER_PORT_GUN}/gun`;   // '' = no relay (NOGUN): snapshots / Doors advertise none
 console.log(`[${PEER_LABEL}] libp2p peer id = ${libp2p.peerId.toString()}`);
 console.log(`[${PEER_LABEL}] bound ${BIND_HOST}:${PEER_PORT_LIBP2P}; advertising ${myMaddrs.join(', ')}`);
 
@@ -419,8 +423,8 @@ for (const addr of BOOTSTRAP_MADDRS) {
 }
 
 // -------- GunDB relay (per peer) --------
-const gunHttp = http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('gun relay'); });
-gunHttp.listen(PEER_PORT_GUN, BIND_HOST);
+const gunHttp = NOGUN ? null : http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('gun relay'); });
+gunHttp?.listen(PEER_PORT_GUN, BIND_HOST);
 // Gun needs its storage adapter to answer `get`s coming from OTHER relays —
 // with `radisk: false` a put stays readable locally but every remote read is
 // silently unanswered (tools/gun-selftest.mjs demonstrates it), which made
@@ -432,7 +436,7 @@ const GUN_LABEL = String(PEER_LABEL).replace(/[^a-z0-9._-]+/gi, '_');
 const GUN_DIR = path.join(os.tmpdir(), 'chaosd6-gun', _slug(DIM_NAME), `${GUN_LABEL}-${process.pid}`);
 // Only our own label's leftovers: sibling peers of this dimension may be live.
 try { for (const d of fsSync.readdirSync(path.dirname(GUN_DIR))) if (d.startsWith(`${GUN_LABEL}-`)) fsSync.rmSync(path.join(path.dirname(GUN_DIR), d), { recursive: true, force: true }); } catch {}
-try { fsSync.mkdirSync(GUN_DIR, { recursive: true }); } catch {}
+if (!NOGUN) try { fsSync.mkdirSync(GUN_DIR, { recursive: true }); } catch {}
 // Gun's Node build always loads SEA, and lib/server.js defaults `opt.faith`
 // to true, which routes data coming back from the store through
 // SEA.opt.pack → a permissive JSON pre-parser that throws on some plain
@@ -440,7 +444,7 @@ try { fsSync.mkdirSync(GUN_DIR, { recursive: true }); } catch {}
 // three peers down in one swarm run. `faith: false` keeps incoming data on
 // the ordinary path; the wrapper below is the belt to that brace — if pack is
 // ever reached and throws, log the value once and pass the data through.
-if (Gun.SEA?.opt?.pack) {
+if (Gun?.SEA?.opt?.pack) {
   const origPack = Gun.SEA.opt.pack;
   let packWarned = 0;
   Gun.SEA.opt.pack = function (d, cb, ...rest) {
@@ -451,7 +455,9 @@ if (Gun.SEA?.opt?.pack) {
     }
   };
 }
-const gun = Gun({
+// NOGUN: an inert chain (get/map return itself, put/on do nothing) so the Gun call sites below stay as they are.
+const nullGun = () => { const c = { get: () => c, map: () => c, on: () => c, once: () => c, off: () => c, put: () => c }; return c; };
+const gun = NOGUN ? nullGun() : Gun({
   web: gunHttp,
   peers: PEER_GUN_URLS,              // mesh with the other peers' relays
   file: GUN_DIR,
@@ -460,10 +466,11 @@ const gun = Gun({
   multicast: false,
   faith: false,
 });
-netAttachGun(gun); netStart({ label: PEER_LABEL });
+if (!NOGUN) netAttachGun(gun);
+netStart({ label: PEER_LABEL });
 const wipeGunDir = () => { try { fsSync.rmSync(GUN_DIR, { recursive: true, force: true }); } catch {} };
 process.on('exit', wipeGunDir);
-console.log(`[${PEER_LABEL}] gun relay on ${myGunUrl}; peers = ${PEER_GUN_URLS.join(', ') || '(none yet)'}`);
+console.log(NOGUN ? `[${PEER_LABEL}] NOGUN=1 — Gun off: no relay, no client, no puts / reads` : `[${PEER_LABEL}] gun relay on ${myGunUrl}; peers = ${PEER_GUN_URLS.join(', ') || '(none yet)'}`);
 
 const dimRoot = gun.get('chaosd6').get('dimensions').get(DIM_ID);
 const myNode  = dimRoot.get('doors').get(DOOR_ID).get('members').get(PEER_ID_STRING);
@@ -483,7 +490,11 @@ const DIAL_RETRY_MS = 30_000;
 const dialled = new Map();      // libp2p peer id string -> last attempt (ms)
 const dialFailed = new Map();   // peerId string -> failures, to keep the log quiet
 const addrsOf = new Map();      // libp2p peer id string -> { peerId (label), addr }
+// LIBP2P_DIAL=0: test only (tools/out/_gun_live.sh partition check) — never dial anyone, so with an
+// unreachable PEER_PUBLIC_IP and NOSTR_ENABLED=0 this peer hears the others through Gun alone.
+const LIBP2P_DIAL_OFF = process.env.LIBP2P_DIAL === '0';
 async function dialPeerAddrs(peerId, addrs, force = false) {
+  if (LIBP2P_DIAL_OFF) return;
   for (const addr of addrs) {
     const theirPid = addr.split('/p2p/').at(-1);
     if (!theirPid || theirPid === libp2p.peerId.toString()) continue;
@@ -1444,11 +1455,39 @@ const hg = {
   otherParent: null,
   head: null,
   tape: [],
+  lastStateHash: '',   // payload.state_hash of the newest evt_state_hash pushed (own or received)
   turn: 0,
   round: 0,
   action: 0,
 };
 const actionKey = (turn, round) => turn * ROUNDS_PER_TURN + round;
+
+// Bounded tape (2026-11-15, save-size + M5 soak). Every reader of hg.tape only looks at the current
+// turn/round (reveals, fx refs) or the newest state hash, so the in-memory tape keeps the envelopes of
+// the last two turns (+ any without a turn). It used to grow with every own AND received envelope for
+// the whole session. The on-disk tape (game/sessions/<dim>/hashgraph.jsonl, diagnostics only — restore
+// reads the TMJ) rotates to hashgraph.1.jsonl past TAPE_MAX_BYTES, so a dimension's local footprint stays
+// ≤ 2 × cap: default 512 KB on the phone (it was 1.8 MB after 32 turns), 16 MB on desktop; 0 = unbounded.
+const TAPE_MAX_BYTES = Number(process.env.TAPE_MAX_BYTES ?? (IS_MOBILE ? 512 * 1024 : 16 * 1024 * 1024));
+let tapePruneAt = 2000;
+function tapePush(env) {
+  hg.tape.push(env);
+  if (env.type === 'evt_state_hash' && env.payload?.state_hash) hg.lastStateHash = env.payload.state_hash;
+  if (hg.tape.length <= tapePruneAt) return;
+  const keepFrom = hg.turn - 1;
+  hg.tape = hg.tape.filter(e => !Number.isInteger(e.turn) || e.turn >= keepFrom);
+  tapePruneAt = Math.max(2000, hg.tape.length * 2);
+}
+let tapeDirReady = false, tapeAppends = 0;
+async function tapeAppend(line) {
+  const abs = path.join(__dirname, 'sessions', DIM_NAME, 'hashgraph.jsonl');
+  if (!tapeDirReady) { await fs.mkdir(path.dirname(abs), { recursive: true }); tapeDirReady = true; }
+  await fs.appendFile(abs, line + '\n');
+  if (TAPE_MAX_BYTES > 0 && ++tapeAppends % 16 === 0) {
+    const st = await fs.stat(abs).catch(() => null);
+    if (st && st.size > TAPE_MAX_BYTES) await fs.rename(abs, abs.replace(/\.jsonl$/, '.1.jsonl')).catch(() => {});
+  }
+}
 
 // Phase clock lives up here because the public-state snapshot (published
 // before the FSM section) reports it to joining peers.
@@ -1480,7 +1519,7 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round, viaBus = nu
   env._hash = digestObj(env);
   hg.selfParent = env._hash;
   hg.head = env._hash;
-  hg.tape.push(env);
+  tapePush(env);
 
   // 1) Broadcast via libp2p gossipsub to the strong-region mesh (direct links)
   //    and over the public Nostr bus (peers on other machines). Receivers
@@ -1494,10 +1533,8 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round, viaBus = nu
   if (viaBus ?? (type === 'evt_action_commit' || type === 'evt_action_reveal' || type === 'evt_map_extend')) { bus?.publish('env', env); lastBusAt = Date.now(); }
   lastEnvelopeAt = Date.now();
 
-  // 2) Append to the on-disk tape under the Radicle work dir — pushed on the hourly lottery.
-  const abs = path.join(__dirname, 'sessions', DIM_NAME, 'hashgraph.jsonl');
-  await fs.mkdir(path.dirname(abs), { recursive: true });
-  await fs.appendFile(abs, line + '\n');
+  // 2) Append to the on-disk tape (bounded, see tapeAppend).
+  await tapeAppend(line);
 
   // 3) Mirror to the UI.
   broadcastUI({ kind: 'evt', env });
@@ -1520,7 +1557,7 @@ function receiveEnvelope(env, via) {
   const n = via === 'libp2p' ? pubsubRxCount : busRxCount;
   if (n <= 3 || n % 50 === 0) console.log(`[${PEER_LABEL}] ${via} rx #${n}: ${env.type} from ${env.actor_peer_id}`);
   hg.otherParent = env._hash;
-  hg.tape.push(env);
+  tapePush(env);
   if (env.state && mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: peersForUI() });
   inboxApply(env);
   broadcastUI({ kind: 'evt', env, from_peer: true });
@@ -1530,7 +1567,8 @@ libp2p.services.pubsub.addEventListener('message', (ev) => {
   try {
     const env = JSON.parse(new TextDecoder().decode(ev.detail.data)); netStat('libp2p', 'in', env?.type || env?.kind, ev.detail.data.length);
     // Full public snapshot frame (not an envelope: no tape, no hash — older builds drop it on dimension_id).
-    if (env?.kind === 'state' && env.dim === DIM_ID) { if (mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: peersForUI() }); return; }
+    // `clock` (M6 step 1): the slim core record sent on every clock change (publishClock) — merged the same way.
+    if ((env?.kind === 'state' || env?.kind === 'clock') && env.dim === DIM_ID) { if (mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: peersForUI() }); return; }
     receiveEnvelope(env, 'libp2p');
   }
   catch (e) { console.warn(`[${PEER_LABEL}] bad pubsub frame: ${e.message}`); }
@@ -1538,6 +1576,8 @@ libp2p.services.pubsub.addEventListener('message', (ev) => {
 libp2p.services.pubsub.addEventListener('subscription-change', (ev) => {
   const subs = ev.detail.subscriptions.map(s => `${s.topic}:${s.subscribe ? '+' : '-'}`).join(',');
   console.log(`[${PEER_LABEL}] pubsub sub-change from ${ev.detail.peerId.toString().slice(0, 14)}…: ${subs}`);
+  // A new neighbour on our topic gets our full state right away (the libp2p half of the Gun-free directory).
+  if (ev.detail.subscriptions.some(s => s.topic === TOPIC_STRONG && s.subscribe)) { try { whoReply('libp2p'); } catch { /* still booting */ } }
 });
 // Periodic snapshot of gossipsub mesh state.
 setInterval(() => {
@@ -1630,6 +1670,10 @@ const isFresh = p => p && p.peer_id === PEER_ID_STRING || (p && Date.parse(p.las
 // standoff and roster logic all tolerate stale snapshots because a stale
 // snapshot is still the *last authoritative statement* about that peer.
 function livePeers() { return [...peersPublic.values()]; }
+// The peers whose clock may pace ours (enterPhase cohort / trail, catchUpClock): self + wire-heard peers.
+// A Gun-only member can't take part in our handshake, yet its clock made the whole live cohort jump
+// (GunLive85 M6 run: "clock catch-up +2 from peer:gX" on every peer, 57 phase offsets vs 0 with Gun off).
+function clockPeers() { return livePeers().filter(p => p.peer_id === PEER_ID_STRING || wireHeard.has(p.peer_id)); }
 // Invisibility as a peer snapshot tells it (bots / NPC planning only; the resolver uses invisibleNow).
 const snapInvisible = (p) => String(p?.permanents_csv || '').split(',').includes('effect_invisibility');
 // What the browser gets: every snapshot plus the region tier relative to us.
@@ -1641,7 +1685,7 @@ setInterval(() => {
   for (const [id, p] of peersPublic) {
     if (id === PEER_ID_STRING) continue;
     const ls = Date.parse(p?.last_seen || 0);
-    if (!Number.isFinite(ls) || ls < cutoff) { peersPublic.delete(id); mapSync?.forget(id); swept++; }
+    if (!Number.isFinite(ls) || ls < cutoff) { peersPublic.delete(id); wireHeard.delete(id); mapSync?.forget(id); swept++; }
   }
   if (swept) broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true });
 }, 60_000);
@@ -1659,9 +1703,15 @@ async function postJson(url, body) {
 // opportunistically try a direct link to it.
 const knownTiles = new Map();   // "q,r" -> last time we saw someone there (part of our Door)
 function noteTile(q, r) { if (typeof q === 'number' && typeof r === 'number') knownTiles.set(`${q},${r}`, Date.now()); }
-function mergePeerState(p) {
+// Peers we have heard on a WIRE transport (an envelope, a libp2p state / clock frame, the bus, the
+// discovery mirror) — not only through Gun. The resolver's view and the strong region take only these
+// (GunLive85 run 3, T8.R3: gX, cut from libp2p + bus and visible only via Gun, sat on (15,-16) in some
+// resolvers' views and not in others', so gA's move there was vetoed on gA / gD only → divergence).
+const wireHeard = new Set();
+function mergePeerState(p, via = 'wire') {
   if (!p || typeof p !== 'object' || !p.peer_id || p.peer_id === PEER_ID_STRING) return false;
   if (!isFresh(p)) return false;
+  if (via !== 'gun') wireHeard.add(p.peer_id);
   const prev = peersPublic.get(p.peer_id) || {};
   // One ordering rule for every transport (merge-order.mjs): an older statement only fills gaps —
   // a replayed pre-death envelope must not bring a dead monster back (Swarm-0407 T2.R3).
@@ -2019,6 +2069,7 @@ async function revealAround(q, r, { boot = false } = {}) {
 let gunLastRec = null, gunLastPutAt = 0, gunDropWarned = '';
 const gunPutStats = { puts: 0, bytes: 0, last: 0, max: 0, skipped: 0 };
 function putGunMember(snap) {
+  if (NOGUN) return;
   const { rec, bytes, dropped, over } = slimMemberRecord(snap);
   const sig = dropped.join(',') + (over ? ' OVER' : '');
   if (sig !== gunDropWarned) { gunDropWarned = sig; if (sig) console.warn(`[${PEER_LABEL}] gun member record ${bytes} B > cap ${GUN_MEMBER_CAP} B — dropped ${sig}`); }
@@ -2040,11 +2091,29 @@ const FULL_STATE_BUS_MS = 60_000;
 let lastFullBusAt = 0, lastFullBusSig = '';
 const fullOnlySig = (s) => `${s.map_tiles}|${s.map_sketch}|${s.multiaddrs_csv}|${s.nostr_relays_csv}|${s.gun_url}`;
 function fullStateDue() { return Date.now() - lastFullBusAt >= FULL_STATE_BUS_MS && fullOnlySig(currentStateSnapshot()) !== lastFullBusSig; }
+// M6 step 1 — the live clock on the wire (Gun's GUN_URGENT job, the Swarm-0226 fix): between a peer's
+// state hash and its next commit nothing else says "I am planning action N until T", and enterPhase
+// (cohort / trail the slowest), waitingOnBusyMember and catchUpClock read exactly that. Every clock change
+// goes out at once as a small `clock` frame (the slim core record, ~300 B): on libp2p always, on the bus
+// when it opens a planning window (≈1 relay event per action — the handshake envelopes already carry the
+// reveal / resolution phases). Deduped on action|phase|deadline; receivers merge it like any snapshot.
+const CLOCK_KEYS = GUN_MEMBER_CORE.filter(k => k !== 'gun_v');
+let lastClockSig = '', lastClockBusSig = '';
+function publishClock(snap) {
+  const { sig, rec } = clockFrame(snap, CLOCK_KEYS);
+  if (sig === lastClockSig) return;
+  lastClockSig = sig;
+  const raw = JSON.stringify({ kind: 'clock', dim: DIM_ID, state: rec });
+  netStat('libp2p', 'out', 'clock', raw.length);
+  libp2p.services.pubsub.publish(TOPIC_STRONG, new TextEncoder().encode(raw)).catch(() => {});
+  if (bus && snap.phase === 'planning' && sig !== lastClockBusSig) { lastClockBusSig = sig; bus.publish('clock', rec); }
+}
 // `viaBus` is for the heartbeat/startup/join paths; the per-round calls skip
 // it because every envelope already carries the snapshot.
 async function publishPublicState(viaBus = false) {
   const snap = currentStateSnapshot();
   putGunMember(snap);
+  publishClock(snap);
   peersPublic.set(PEER_ID_STRING, snap);
   noteTile(snap.tile_q, snap.tile_r);
   if (viaBus) {
@@ -2059,14 +2128,39 @@ async function publishPublicState(viaBus = false) {
   broadcastUI({ kind: 'peers', peers: peersForUI() });
 }
 
+// Answer a newcomer (bus `who`, or a new libp2p subscriber to our topic) with our full state, after a
+// short jitter so a crowd does not answer in the same instant; at most once per WHO_REPLY_MS per transport.
+let busWhoAt = 0;
+const WHO_REPLY_MS = 5_000;
+const whoReplyAt = { bus: 0, libp2p: 0 };
+function whoReply(via) {
+  if (Date.now() - whoReplyAt[via] < WHO_REPLY_MS) return;
+  whoReplyAt[via] = Date.now();
+  setTimeout(() => {
+    if (via === 'bus') { publishPublicState(true).catch(() => {}); return; }
+    const raw = JSON.stringify({ kind: 'state', dim: DIM_ID, state: currentStateSnapshot() });
+    netStat('libp2p', 'out', 'state', raw.length);
+    libp2p.services.pubsub.publish(TOPIC_STRONG, new TextEncoder().encode(raw)).catch(() => {});
+  }, 150 + Math.floor(Math.random() * 750));
+}
 // -------- public Nostr bus --------
 if (NOSTR_ENABLED) {
   bus = createNostrBus({
     relays: DEFAULT_RELAYS, dimId: DIM_ID, label: PEER_LABEL,
     meter: (dir, t, et, bytes) => netStat('bus', dir, t === 'env' ? (et || 'env') : t, bytes),
+    // Directory without Gun (M6 step 1): on the first open relay (and on a reconnect, ≥ 10 s apart) ask
+    // `who` is here and send our full state — public relays never store the ephemeral kind, so there is
+    // no replay to lean on; every peer that hears a `who` answers with its full state (whoReply).
+    onOpen() {
+      if (Date.now() - (busWhoAt || 0) < 10_000) return;
+      busWhoAt = Date.now();
+      bus.publish('who', { peer_id: PEER_ID_STRING });
+      publishPublicState(true).catch(() => {});
+    },
     onEvent(type, payload) {
       if (type === 'env') receiveEnvelope(payload, 'bus');
-      else if (type === 'state') { if (mergePeerState(payload)) broadcastUI({ kind: 'peers', peers: peersForUI() }); }
+      else if (type === 'state' || type === 'clock') { if (mergePeerState(payload)) broadcastUI({ kind: 'peers', peers: peersForUI() }); }
+      else if (type === 'who' && payload?.peer_id && payload.peer_id !== PEER_ID_STRING) whoReply('bus');
       else if (type === 'map' && busRpc && payload?.to === PEER_ID_STRING) busRpc.deliver(payload);   // map-sync request/response addressed to us (M3; metered by the bus as kind `map`)
       else if (type === 'fx' && payload?.to === PEER_ID_STRING) fxPeer.onBus(payload);   // E4 foreign-effect fetch addressed to us
     },
@@ -2101,7 +2195,7 @@ dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m) => {
   netStat('gun', 'in', 'members', m && typeof m === 'object' ? Object.keys(m).length * 24 : 0);   // ≈ bytes without a stringify
   const rec = pickGunMember(m);
   const p = rec && rec.peer_id !== PEER_ID_STRING ? gunMergeable(peersPublic.get(rec.peer_id), rec) : null;
-  if (p && mergePeerState(p)) broadcastUI({ kind: 'peers', peers: peersForUI() });
+  if (p && mergePeerState(p, 'gun')) broadcastUI({ kind: 'peers', peers: peersForUI() });
 });
 
 // Optional discovery mirror: pull everyone's registered state and merge.
@@ -2180,7 +2274,7 @@ function enterPhase(name) {
     // closes its window well before ours, our cadence slid behind the cohort's — we would commit after
     // they closed the action and our reveal would land "late" everywhere, action after action, while
     // our own resolver applied it. Pull in to the cohort's (latest) deadline, keeping the 2 s floor.
-    const cohortEnd = cohortDeadline(livePeers().filter(p => p.peer_id !== PEER_ID_STRING), hg.action);
+    const cohortEnd = cohortDeadline(clockPeers().filter(p => p.peer_id !== PEER_ID_STRING), hg.action);
     if (cohortEnd !== null && roundDeadline > cohortEnd + 1000) {
       const was = roundDeadline;
       roundDeadline = Math.max(cohortEnd, Date.now() + 2000);
@@ -2193,7 +2287,7 @@ function enterPhase(name) {
     // freeze the dimension indefinitely.
     const maxLag = Date.now() + ROUND_SEC * 2000;
     let laggingBehind = false;
-    for (const p of livePeers()) {
+    for (const p of clockPeers()) {
       if (p.peer_id === PEER_ID_STRING || typeof p.action !== 'number') continue;
       // Peer one action behind us is still finishing *their* previous handshake.
       // If we tear off into a new planning window they'll never catch up through
@@ -2211,6 +2305,9 @@ function enterPhase(name) {
     ms = name === 'reveal' ? COMMIT_WAIT_MS : REVEAL_WAIT_MS;
     phaseEndsAt = Date.now() + ms;
   }
+  // M6 step 1: a new planning window / deadline on the wire at once (deduped). Reveal / resolution are
+  // announced by the commit / reveal envelopes themselves — no extra frame (keeps it ≈ 2 frames per action).
+  if (name === 'planning') publishClock(currentStateSnapshot(true));
   broadcastUI({ kind: 'phase', name, seconds: Math.round(ms / 100) / 10, heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
 }
 
@@ -2235,6 +2332,7 @@ function computeStrongMembers() {
   const me = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   return [...peersPublic.values()].filter(p =>
     p && p.peer_id !== PEER_ID_STRING && p.life > 0 && Date.parse(p.last_seen || 0) > cutoff
+    && wireHeard.has(p.peer_id)   // a Gun-only member can't send us a commit / reveal: never waited on
     && Number.isInteger(p.tile_q) && Number.isInteger(p.tile_r)
     && hexDistance(me, p) <= STRONG_RADIUS
   ).map(p => p.peer_id);
@@ -2801,7 +2899,10 @@ async function doResolution() {
   // only contend for occupancy), so a far actor only ever changes far
   // entities, and the state hash compares entities both peers resolved. The
   // region tiers decide whom we WAIT for, never whose reveal we use.
-  const view = new Map(peersPublic);
+  // Only peers heard on a wire transport (wireHeard): a member known solely through a side channel
+  // (Gun) is not in every resolver's view, so it must not block moves, be targeted or count anywhere
+  // (GunLive85 T8.R3). The reveal loop below re-adds any revealer from its envelope's own snapshot.
+  const view = resolverPeers(peersPublic, PEER_ID_STRING, wireHeard);
   const revealsThisTurn = [];
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
@@ -5511,7 +5612,7 @@ async function endTurn() {
     type: 'evt_turn_commit',
     payload: {
       turn: hg.turn,
-      region_state_hash: hg.tape.filter(e => e.type === 'evt_state_hash').at(-1)?.payload.state_hash || '',
+      region_state_hash: hg.lastStateHash || '',
       positions: Object.fromEntries([...peersPublic.values()].map(p => [p.peer_id, { q: p.tile_q, r: p.tile_r }])),
       hashgraph_head: hg.head,
       draws: [{ peer_id: PEER_ID_STRING, cards_drawn: hand.length - before }],
@@ -6102,7 +6203,7 @@ function checkStandoff() {
 // drift up to a full round build up between runs.
 function catchUpClock() {
   let ref = null;
-  for (const p of livePeers()) {
+  for (const p of clockPeers()) {
     if (p.peer_id === PEER_ID_STRING || typeof p.action !== 'number') continue;
     if (p.action > hg.action && (!ref || p.action > ref.action)) ref = p;
   }

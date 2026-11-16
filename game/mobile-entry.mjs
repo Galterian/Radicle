@@ -94,6 +94,7 @@ Symbol.asyncDispose ??= Symbol.for('nodejs.asyncDispose');
 // dimension (Nostr bus finds the others), just without the Door placement.
 if (isMainThread && process.env.JOIN_URI) {
   const q = new URLSearchParams(process.env.JOIN_URI.split('?')[1] || '');
+  if (q.get('nogun') === '1') process.env.NOGUN = '1';   // M6 step 1 test switch on the phone (EmbeddedPeer's env is fixed)
   const dimName = q.get('dim');
   if (dimName) {
     process.env.DIM_NAME = dimName;
@@ -256,7 +257,8 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
   }
   const split = (v) => String(v || '').split(',').filter(Boolean);
   const bootstrap = [...new Set([...me.multiaddrs, ...split(process.env.BOOTSTRAP)])];
-  const gunUrls = [...new Set([...(me.gun_url ? [me.gun_url] : []), ...split(process.env.PEER_GUN_URLS)])];
+  // NOGUN=1 (M6 step 1): the workers inherit it via process.env and get no Gun relays to mesh with.
+  const gunUrls = process.env.NOGUN === '1' ? [] : [...new Set([...(me.gun_url ? [me.gun_url] : []), ...split(process.env.PEER_GUN_URLS)])];
   // A worker's "UI socket on ws://…" / "peer listening on" line would match the plugin's
   // node_ready regex and repoint the phone's HUD at the ally — reword it (line-buffered).
   const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'ally UI socket at ').replace(/peer listening on/g, 'ally listening at');

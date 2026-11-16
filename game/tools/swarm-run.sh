@@ -14,6 +14,10 @@ if [[ "${FORCE_CLASS:-}" == *,* && -z "${FORCE_CLASS_LABELS:-}" ]]; then
   [ "${TEAM_D:-0}" = 1 ] && FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,D-Agent7"
   export FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,ally-1,foe-1,foe-2,M-Foe3,M-Foe4"
 fi
+# The swarm summary scans the whole hashgraph tape (swarm-test.mjs §6): keep it unbounded here (peer.mjs TAPE_MAX_BYTES).
+export TAPE_MAX_BYTES="${TAPE_MAX_BYTES:-0}"
+# NOGUN=1: every peer (launcher A/C, joiners, companions) runs without Gun (P2P rework M6 step 1). Default: Gun on.
+export NOGUN="${NOGUN:-0}"
 ps -eo pid,comm,args | grep -E '^ *[0-9]+ +node +.*\.mjs' | grep -v bash | awk '{print $1}' | xargs -r kill 2>/dev/null || true
 sleep 1
 node --check peer.mjs

@@ -101,4 +101,88 @@ assert.equal(desc.doors.find(d => d.peer_id === 'peer:a').map_sketch, 'abc,def')
 assert.equal(desc.doors.find(d => d.peer_id === 'peer:b').map_sketch, null);
 console.log(`ok  door summaries: A holds ${A.held}/${km.size()} hexes (exact), C sketch-only`);
 
+// 6. Source guard (M5 "Gun is used properly"): every Gun put in peer.mjs is either the slim member
+//    patch (putGunMember → myNode.put(patch)) or a map put behind MAP_SYNC_LEGACY; the member reader
+//    goes through pickGunMember. A new put / a new Gun path added later fails here first.
+{
+  const fsm = await import('node:fs');
+  const src = fsm.readFileSync(new URL('../peer.mjs', import.meta.url), 'utf8').split('\n');
+  const puts = src.map((l, i) => [i + 1, l]).filter(([, l]) => /\.put\(/.test(l) && !/^\s*\/\//.test(l));
+  const allowed = ([, l]) => /myNode\.put\(patch\)/.test(l) || (/gunMap\.get\(b\.id\)\.put\(b\)/.test(l) && (/MAP_SYNC_LEGACY/.test(l) || /function syncMapToGun/.test(l)));
+  const bad = puts.filter(p => !allowed(p));
+  assert.equal(bad.length, 0, `unexpected Gun put(s) in peer.mjs: ${bad.map(([n, l]) => `${n}: ${l.trim().slice(0, 100)}`).join(' | ')}`);
+  const memberPut = puts.filter(([, l]) => /myNode\.put\(patch\)/.test(l));
+  assert.equal(memberPut.length, 1, 'exactly one member put site');
+  const syncCalls = src.filter(l => /syncMapToGun\(\)/.test(l) && !/function syncMapToGun/.test(l));
+  assert.ok(syncCalls.length && syncCalls.every(l => /if \(MAP_SYNC_LEGACY\)/.test(l)), 'syncMapToGun only under MAP_SYNC_LEGACY');
+  const readers = src.map((l, i) => [i + 1, l]).filter(([, l]) => /\.get\('members'\)\.map\(\)\.on\(/.test(l));
+  assert.equal(readers.length, 1, 'one member reader');
+  const body = src.slice(readers[0][0], readers[0][0] + 6).join('\n');
+  assert.ok(/pickGunMember\(m\)/.test(body) && /gunMergeable\(/.test(body), 'member reader takes pickGunMember + gunMergeable');
+  const gets = [...new Set(src.flatMap(l => [...l.matchAll(/(?:dimRoot|gun)\.get\('([a-z0-9]+)'\)/g)].map(m => m[1])))].sort();
+  assert.deepEqual(gets, ['chaosd6', 'doors', 'map'], `Gun paths used: ${gets}`);
+  console.log(`ok  source guard: ${puts.length} put sites (1 member patch, ${puts.length - 1} MAP_SYNC_LEGACY-only), reader whitelisted, paths ${gets.join('/')}`);
+}
+
+// 7. Simulated 10-minute session through a real in-process Gun, driven exactly like peer.mjs
+//    publishPublicState (every phase change + the 15 s heartbeat): puts per action, keep-alive gaps,
+//    souls / keys written, record size, graph growth.
+{
+  const os = await import('node:os'), path = await import('node:path');
+  const fsRm = (d) => (await_fs).rmSync(d, { recursive: true, force: true });
+  const await_fs = await import('node:fs');
+  const { default: Gun } = await import('gun');
+  const gunDir = path.join(os.tmpdir(), `gun-member-check-${process.pid}`);   // radisk on (with radisk:false Gun drops chained puts), removed below
+  process.on('exit', () => { try { fsRm(gunDir); } catch {} });
+  const gun = Gun({ peers: [], file: gunDir, localStorage: false, axe: false, multicast: false, faith: false });
+  const writes = [];
+  gun._.on('put', function (msg) { this.to.next(msg); const p = msg?.put; if (p && typeof p['#'] === 'string') writes.push({ soul: p['#'], key: p['.'] }); });
+  const node = gun.get('chaosd6').get('dimensions').get('dim-check').get('doors').get('door-primary').get('members').get('peer:alice');
+  let last = null, lastAt = 0, puts = 0;
+  const putTimes = [];
+  const ROUND = 6000, RES = 900, HB = 15000, SPAN = 10 * 60_000;
+  let t = 0, action = 0, phase = 'planning', ends = ROUND, tile = 0, life = 9, nextHb = HB;
+  const snap = () => ({ ...full, turn: Math.floor(action / 3), round: action % 3, action, phase, phase_ends_at: 1_000_000 + ends, tile_q: tile, life, last_seen: new Date(1_000_000 + t).toISOString(), map_tiles: 1419 + action });
+  const publish = () => {
+    const { rec } = slimMemberRecord(snap());
+    const patch = gunMemberPatch(last, rec, { now: t, lastPutAt: lastAt });
+    if (!patch) return;
+    assert.ok(recordBytes(patch) <= GUN_MEMBER_CAP);
+    node.put(patch); last = rec; lastAt = t; puts++; putTimes.push(t);
+  };
+  publish();
+  const graph0 = () => Object.keys(gun._.graph).length;
+  let g1 = null;
+  while (t < SPAN) {
+    const next = Math.min(ends, nextHb);
+    t = next;
+    if (t === nextHb) { nextHb += HB; publish(); }
+    if (t === ends) {
+      if (phase === 'planning') { phase = 'resolution'; ends = t + RES; }
+      else { phase = 'planning'; action++; ends = t + ROUND; if (action % 4 === 0) tile++; if (action % 7 === 0) life--; }
+      publish();
+    }
+    if (t >= 60_000 && g1 === null) g1 = graph0();
+  }
+  const memberSoul0 = 'chaosd6/dimensions/dim-check/doors/door-primary/members/peer:alice';
+  for (let i = 0; i < 50 && !(gun._.graph[memberSoul0] && gun._.graph[memberSoul0].map_tiles === 1419 + action); i++) await new Promise(r => setTimeout(r, 100));
+  const perAction = puts / action;
+  const gaps = putTimes.slice(1).map((x, i) => x - putTimes[i]);
+  const souls = new Set(writes.map(w => w.soul));
+  const memberSoul = 'chaosd6/dimensions/dim-check/doors/door-primary/members/peer:alice';
+  const keys = new Set(writes.filter(w => w.soul === memberSoul).map(w => w.key));
+  assert.ok(perAction <= 3, `${perAction.toFixed(2)} puts per action (GUN_URGENT: ≤ 2 phase changes + 1 rate-limited change)`);
+  assert.ok(Math.max(...gaps) <= GUN_KEEPALIVE_MS, `max gap ${Math.max(...gaps)} ms`);
+  for (const s of souls) assert.ok(memberSoul.startsWith(s), `soul outside the member path: ${s}`);
+  for (const k of keys) assert.ok(GUN_MEMBER_KEYS.includes(k), `key ${k}`);
+  assert.ok(![...souls].some(s => /\/map/.test(s)), 'no map soul');
+  assert.ok(souls.has(memberSoul) && keys.size >= 10, `Gun saw the puts: ${souls.size} souls, ${keys.size} keys`);
+  const gEnd = graph0();
+  assert.ok(gEnd > 0 && gEnd <= 7, `graph ${gEnd} nodes (member + its 6 path nodes)`);
+  const rec = gun._.graph[memberSoul]; const clean = { ...rec }; delete clean._;
+  assert.ok(recordBytes(clean) <= GUN_MEMBER_CAP, `graph record ${recordBytes(clean)} B`);
+  console.log(`ok  10-min sim: ${action} actions, ${puts} puts (${perAction.toFixed(2)}/action — literal "≤ 1/action" would need dropping GUN_URGENT), max gap ${Math.max(...gaps) / 1000} s, ${souls.size} souls (member path only), ${keys.size} keys ⊆ GUN_MEMBER_KEYS, graph ${gEnd} nodes after 10 min, record ${recordBytes(clean)} B`);
+}
+
 console.log('all gun-member checks passed');
+process.exit(0);   // the in-process Gun keeps timers alive
