@@ -6103,6 +6103,7 @@ function checkStateHash(env) {
     if (t.tile[0] !== e.tile[0] || t.tile[1] !== e.tile[1] || t.life !== e.life) diffs.push(`${e.id}: ours (${e.tile}) hp${e.life} vs theirs (${t.tile}) hp${t.life}`);
     else if ((t.fx || e.fx) && t.fx !== e.fx) diffs.push(`${e.id}: foreign effect ours ${e.fx || 'none'} vs theirs ${t.fx || 'none'}`);   // E4
     else if ((t.sk || e.sk) && t.sk !== e.sk) diffs.push(`${e.id}: foreign skill ours ${e.sk || 'none'} vs theirs ${t.sk || 'none'}`);   // S4
+    else if ((t.cl || e.cl) && t.cl !== e.cl) diffs.push(`${e.id}: foreign class ours ${e.cl || 'none'} vs theirs ${t.cl || 'none'}`);   // CH
   }
   if (!diffs.length) return;
   divergenceCount++;
