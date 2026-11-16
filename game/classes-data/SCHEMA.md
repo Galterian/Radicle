@@ -34,7 +34,7 @@ The chaosD6-Classes program (user request 2026-11-16) splits the classes out the
   - `local`: the descriptor of a local class.
   - `passiveTurn`: the card is never tapped.
   - `handDefaults`: `hand_reveal` / `hand_discard` defaults.
-  - `stance` and `emits`: Reaver, Barbarian, Monk.
+  - `stance` and `emits`: Reaver, Barbarian, Monk (`emits`: code → `true` for every site, or a list of sites).
   - `planEmits`: Enchanter.
   - `attackBonus`: Assassin.
   - `illusionRange`: Illusionist.
@@ -60,7 +60,8 @@ A program sees the hook arguments as root registers (`{"var": "cs.archived"}`) p
 | `life_points` | ✓ | `dmg, illusion, armor, chaseBonus` | `{illusion, armor, chaseBonus, absorbed}` (shields go first) |
 | `stance` | | `code` | the code it fights as, or `null` |
 | `stance_target` | | `cands` | id, or `null` (Reaver auto-target) |
-| `emits` | | `code, site` | bool (`site`: `plan\|destroy\|manip\|badge`) |
+| `emits` | | `code, site` | bool (`site`: `plan\|destroy\|manip\|badge`; since the 2026-11-16 rulings the built-ins answer the same at every site) |
+| `reanimated_strike` | | `down, stat, elem, enemy, pb` | `null` (no open element of `stat`, or not in reach) or `{result: retry\|destroyed\|too weak, ok, last, elem}`. It is asked of the class in a unit's `raised_by` (Necromancer: Harmony + Concentration, die of 6) |
 | `plan_emits` | | `held, archived, usedTurn, turn, options, code, queued` | bool (Enchanter) |
 | `attack_out` | | `attacker, dmg, scored` | number |
 | `lifesteal` | | `attacker, amount` | number gained by me |
@@ -111,3 +112,18 @@ To mirror JS exactly, a program must follow JS's edge cases: `!(d > 1)` is not t
 - `node tools/class-engine-check.mjs` (C2): compares the definitions with the JS hooks over N worlds per class and hook, then checks limits, denied ops, foreign classes and classes-check under shadow and data.
 - `node tools/classes-repo-check.mjs`: covers the repo layer, the manifest, the template, the validator pin, and the sync dry-run.
 - `node tools/classes-rebalancing-check.mjs check`: checks the power of each class against the fitted curve (±10%).
+
+## Lava (user ruling 2026-11-16, option c)
+
+Lava hexes stay walkable, and nothing is built or planted on them. This is the current behaviour, so there is no data or hook change. A class whose ability places something on the map (a building, a Shrine, a copy, a planted trap) must refuse lava hexes, as the built-in Priest, Animator and Seeker do through join-plan.mjs `hexWalkableAt` (biome.js `isWalkable` refuses lava). Unit movement onto lava is unchanged.
+
+## Foreign classes (handshake)
+
+A foreign class is a definition from a player branch of chaosD6-Classes. Its id is not a built-in id: a variant of a built-in is a new id that `extends` it. It travels by ref `{id, sha256, libs, repo?, branch?, commit?, name?, verdict?}` (game/classes-handshake.mjs, the twin of the effects and skills handshakes).
+
+- **Where the ref rides.** On the holder: the snapshot `cl_ref_json` (slim, a JSON string because Gun is flat), `cl_have` (the foreign classes a peer holds and serves), `cl_set` (the bundled set, full heartbeat), and the Door `cl_ref` (own and every known member). On the actions: the commit and the reveal carry `cl_ref` (the revealer's class), and the reveal carries `cl_missing` (the sha256 of every foreign class in play that this revealer cannot run).
+- **How peers learn it.** Over libp2p `/chaos/<dim>/classes/1`, the Nostr bus `cl` events, then git (`CHAOSD6_CLASSES_DIR`) / radicle-httpd (classes-repo.mjs). The content is checked against its sha256. Then come validateClassDef, the C3 validator (`classes-rebalancing-check.mjs` checkClass: a `reject` verdict refuses it) and `registerForeignClass`.
+- **Fallback.** A foreign class whose sha is in any revealer's `cl_missing` is dormant for that resolution on every peer (`suspendForeignClasses`: no flags, no data, every hook answers as for an unknown class). If a class in play is neither dormant nor ready on this peer, the peer abstains: it publishes `state_hash ''` for that action. The region tag per revealer is `cl:<key16>`, `dormant:<key16>`, `missing:<key16>` or `bad:<id>`.
+- **Switches.** `FORCE_FOREIGN_CLASS=<def.json>` (dev / test: boot with it; `tools/classes-handshake-check.mjs --write-fixture <f>` writes the Marauder, a player branch of the Reaver). `CL_ACCEPT=0` refuses every foreign class. `CL_VALIDATOR=0` skips the validator. `CL_HTTPD=0` turns off the httpd fallback. `CHAOSD6_CLASSES_CACHE=memory` keeps the content cache in memory. `CL_REVEAL_WAIT_MS` / `CL_RESOLVE_WAIT_MS` / `CL_BOOT_WAIT_MS` set the waits.
+- **Profile.** A profile character may hold `class_id` = a foreign id together with `class_ref`. The peer boots it from the content cache (then git / httpd), and if that fails it falls back to the built-in path.
+- **Limits.** These tables are built from CLASS_RULES at load, so a foreign class does not join them: `PASSIVE_TURN_CLASSES` (passive once-per-turn firing) and the `handDefaults` table. A foreign class can have no peer-resolved ability (no JS markers).

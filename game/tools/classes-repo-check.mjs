@@ -47,7 +47,7 @@ const tm = await import(pathToFileURL(path.join(HERE, 'classes-repo-template', '
 ok([A1, A2, B, C, LIB].every(d => tm.defHash(d) === classHash(d)), 'repo tools/manifest.mjs hashes like the loader');
 
 console.log('refs');
-ok(CLASSES_RID === (process.env.CHAOSD6_CLASSES_RID || 'rad:TODO_CLASSES_RID'), `CLASSES_RID default/env (${CLASSES_RID})`);
+ok(CLASSES_RID === (process.env.CHAOSD6_CLASSES_RID || 'rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi'), `CLASSES_RID default/env (${CLASSES_RID})`);
 const ref = classRef(A1, { repo: 'rad:z2xbfJfwT3kukR73m8LXmmuvchEwr', branch: 'players/alice/alpha', commit: 'a'.repeat(40) });
 ok(JSON.stringify(parseClassRef(JSON.parse(JSON.stringify(ref)))) === JSON.stringify(ref), 'ref JSON round-trip');
 ok(Object.keys(ref).sort().join() === 'branch,commit,id,repo,sha256', 'ref fields {repo, branch, commit, sha256, id}');

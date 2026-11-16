@@ -51,7 +51,8 @@ export const ELEM_TO_STAT = Object.freeze({ elem_vitality: 'vitality', elem_soul
 //   passiveTurn fires by itself once per turn (peer.mjs PASSIVE_TURN_CLASSES)
 //   handDefaults  fallbacks for hand classes (peer.mjs HAND_CLASS_DEFAULTS)
 //   stance      code → code the action fights as (Reaver EP/EM → A, Barbarian EP → B, Monk EP → M)
-//   emits       action codes that emit an element: true = every site, [sites] = only there (Monk's EM)
+//   emits       action codes that emit an element: true = every site, [sites] = only there (user rulings 2026-11-16:
+//               Barbarian B and Monk M / EM emit at every site — planning, Rule 24, Manipulator, element badge)
 //   planEmits   Enchanter: these codes emit once per turn while a cast is queued / running
 //   hooks       the hook points it acts in (HOOKS.md); 'peer:<name>' = behaviour that stays in peer.mjs
 export const CLASS_RULES = {
@@ -74,18 +75,18 @@ export const CLASS_RULES = {
   class_manipulator:   { phase: null, passiveTurn: true, hooks: ['config', 'combat_in', 'pick_target', 'peer:manipAlt'] },
   class_bard:          { phase: null, hooks: ['share_skills'] },
   class_shaman:        { phase: 'local', local: { op: 'recover', kind: 'effect', what: 'an effect card' }, hooks: ['local'] },
-  class_necromancer:   { phase: 'post', hooks: ['ability', 'peer:revive'] },
+  class_necromancer:   { phase: 'post', hooks: ['ability', 'reanimated_strike', 'peer:revive'] },
   class_witch:         { phase: 'post', needs: 'enemy_near', handDefaults: { hand_discard: { n: 3 } }, hooks: ['ability', 'config'] },
   class_restaurateur:  { phase: null, hooks: ['destroy_result'] },
   class_warrior:       { phase: 'post', needs: 'tile', hooks: ['ability'] },
   class_ranger:        { phase: 'post', needs: 'attach_effect', hooks: ['ability'] },
   class_kensei:        { phase: 'local', local: { op: 'recover', kind: 'skill', what: 'a skill card' }, hooks: ['local'] },
   class_reaver:        { phase: null, stance: { EP: 'A', EM: 'A' }, emits: { A: true }, hooks: ['stance', 'stance_target', 'emits'] },
-  class_barbarian:     { phase: null, stance: { EP: 'B' }, hooks: ['stance'] },
+  class_barbarian:     { phase: null, stance: { EP: 'B' }, emits: { B: true }, hooks: ['stance', 'emits'] },
   class_overlord:      { phase: 'post', needs: 'ally_or_self', hooks: ['ability'] },
   class_rogue:         { phase: null, passiveTurn: true, hooks: ['config', 'step', 'dungeon_step'] },
   class_avenger:       { phase: 'post', needs: 'monster_near', hooks: ['ability', 'config', 'chase_step'] },
-  class_monk:          { phase: null, stance: { EP: 'M' }, emits: { M: true, EM: ['plan', 'manip'] }, hooks: ['stance', 'emits'] },
+  class_monk:          { phase: null, stance: { EP: 'M' }, emits: { M: true, EM: true }, hooks: ['stance', 'emits'] },
   class_noble:         { phase: null, hooks: ['lifesteal', 'lifesteal_apply'] },
   class_assassin:      { phase: null, attackBonus: 1, hooks: ['attack_out'] },
 };
@@ -102,6 +103,7 @@ const pickBySalt = (seed, list, sha) => list.length ? list[parseInt(sha(seed).sl
 const parseJsonList = (s, dflt) => { try { const v = JSON.parse(s || ''); return Array.isArray(v) ? v : dflt; } catch { return dflt; } };   // = simulate()#parseJson
 // The data of a class: the caller's data/classes.json view, else the bundled definition (a foreign class — always its definition).
 const cdOf = (ctx, id) => {
+  if (suspended.has(id)) return {};   // CH: a dormant foreign class has no data this resolution
   if (ctx && typeof ctx.classData === 'function' && !foreignIds.has(id)) return ctx.classData(id) || {};
   return defOf(id)?.data || {};
 };
@@ -150,6 +152,28 @@ function strike(_ctx, _id, { cs, cols, stat, elem, enemy, pb }) {
   const result = pb.fail ? 'retry' : pb.value >= STRIKE_DIE ? 'destroyed' : 'too weak';
   const last = result === 'destroyed' && Object.keys(cols).every(s => s === stat || (cs.down || []).includes(s));
   return { result, ok: result === 'destroyed', last };
+}
+// reanimated_strike (Necromancer "Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6",
+// user ruling 2026-11-16 "Implement them"): a unit my class raised is destroyed once an adjacent enemy has struck each
+// of its elements (data destroy_reanimated.elements, default Harmony + Concentration) with a point-buy die of
+// destroy_reanimated.die (6) — one element per emission, in any order, the emissions need not be contiguous.
+// args { down: [elements already struck on that unit], stat, elem (null = the first open one of `stat`), enemy (in
+// reach), pb {fail, value} } → null (no open element of that stat) | { result: retry|destroyed|too weak, ok, last, elem }
+export const REANIMATED_ELEMS = Object.freeze(['elem_harmony', 'elem_concentration']);
+function reanimatedCfg(cd) {
+  const d = cd?.destroy_reanimated || {};
+  return { elements: Array.isArray(d.elements) && d.elements.length ? d.elements : [...REANIMATED_ELEMS], die: Number.isInteger(d.die) ? d.die : STRIKE_DIE };
+}
+function reanimatedStrike(ctx, id, { down, stat, elem, enemy, pb }) {
+  const cfg = reanimatedCfg(cdOf(ctx, id));
+  const es = elemStatOf(ctx);
+  const dn = down || [];
+  const open = cfg.elements.filter(el => !dn.includes(el) && es(el) === stat);
+  const t = elem ? (open.includes(elem) ? elem : null) : (open[0] ?? null);
+  if (!enemy || !t) return null;
+  const result = pb.fail ? 'retry' : pb.value >= cfg.die ? 'destroyed' : 'too weak';
+  const last = result === 'destroyed' && cfg.elements.every(el => el === t || dn.includes(el));
+  return { result, ok: result === 'destroyed', last, elem: t };
 }
 // restore: may `stat` be emitted to recast (from the archive) / untap my class?  args { cs, cols, stat, kind }
 const restore = (_ctx, _id, { cs, cols, stat, kind }) => !!cs?.class_id && stat in cols && (kind === 'recast' ? !!cs.archived : (!!cs.tapped && !cs.archived)) && !(cs.progress?.mode === kind && (cs.progress.done || []).includes(stat));
@@ -345,9 +369,10 @@ const ABILITIES = {
     return done(`${ab.attach.name || ab.attach.effect_id} lies as a trap under me`, { traps: [{ by: me, q: E.here.q, r: E.here.r, effect_id: ab.attach.effect_id, elements: [...ab.attach.elements], card_id: ab.attach.card_id || null, library: false, power: TRAP_POWER, trigger: 'targeted', mode: 'damage', holder: null }] });
   },
   // Necromancer: a fallen ally creature next to me (not raised before) rises; none → an archived creature of mine (owner-judged).
+  // A corpse that was itself a reanimated unit (snapshot raised_by, ruling 2026-11-16 "destroy reanimated") stays down.
   class_necromancer: (ctx, me, _ab, E) => {
     const raised = new Set(ctx.viewValues().flatMap(p => String(p?.reanimated_csv || '').split(',').filter(Boolean)));
-    const fallen = E.ids.filter(id => id !== me && ctx.lifeOf(id) <= 0 && ctx.view(id)?.creature_id && !raised.has(id) && ctx.dist(me, id) <= 1 && ctx.sideOf(ctx.view(id).alliance) === ctx.sideOf(E.v.alliance)).sort()[0] || null;
+    const fallen = E.ids.filter(id => id !== me && ctx.lifeOf(id) <= 0 && ctx.view(id)?.creature_id && !raised.has(id) && !ctx.view(id)?.raised_by && ctx.dist(me, id) <= 1 && ctx.sideOf(ctx.view(id).alliance) === ctx.sideOf(E.v.alliance)).sort()[0] || null;
     if (fallen) return done(`${ctx.view(fallen).name || fallen.slice(0, 8)} rises again`, { revives: [{ by: me, who: fallen, creature_id: ctx.view(fallen).creature_id, name: ctx.view(fallen).name }] });
     return done('no fallen ally in reach — an archived creature of mine enters if I have one', { revives: [{ by: me, who: null }] });
   },
@@ -368,6 +393,7 @@ const HOOKS = {
   ready: (id, ctx, a) => ready(ctx, id, a),
   config: (id, ctx) => config(ctx, id),
   strike: (id, ctx, a) => strike(ctx, id, a),
+  reanimated_strike: (id, ctx, a) => reanimatedStrike(ctx, id, a),
   restore: (id, ctx, a) => restore(ctx, id, a),
   progress: (id, ctx, a) => progress(ctx, id, a),
   life_points: (id, ctx, a) => lifePoints(ctx, id, a),
@@ -401,7 +427,7 @@ function jsHook(hookName, id, ctx, args) {
 }
 export function classHook(hookName, classId, ctx, args = {}) {
   if (!HOOKS[hookName]) throw new Error(`classes.mjs: unknown hook ${hookName}`);
-  if (foreignIds.has(classId)) return dataHook(hookName, classId, ctx, args);
+  if (foreignIds.has(classId)) return suspended.has(classId) ? jsHook(hookName, classId, ctx, args) : dataHook(hookName, classId, ctx, args);   // CH: dormant → as an unknown class
   if (CLASS_ENGINE === 'js') return jsHook(hookName, classId, ctx, args);
   if (CLASS_ENGINE === 'data') return dataHook(hookName, classId, ctx, args);
   return shadowHook(hookName, classId, ctx, args);
@@ -423,7 +449,9 @@ const BUILTIN_IDS = new Set(CLASSES_IMPLEMENTED);
 let bundle = null;
 export const classBundle = () => (bundle ||= CE.loadClassDefs(undefined, { builtinIds: BUILTIN_IDS }));
 const foreignByKey = new Map(), foreignById = new Map(), foreignIds = new Set();
+const suspended = new Map();   // CH: foreign id → its CLASS_RULES entry while the class is dormant (suspendForeignClasses)
 function defOf(id) {
+  if (suspended.has(id)) return undefined;
   if (foreignById.has(id)) return foreignById.get(id);
   if (!BUILTIN_IDS.has(id)) return undefined;
   try { return classBundle().defs.get(id); } catch { return undefined; }
@@ -502,13 +530,39 @@ export function registerForeignClass(key, def0, opts = {}) {
   const errs = CE.validateClassDef(def, { libs, builtin: false });
   if (errs.length) throw new Error(`registerForeignClass ${def?.id}: ${errs.join('; ')}`);
   CE.bindClassDef(def, libs);
+  if (foreignById.has(def.id)) throw new Error(`registerForeignClass: another ${def.id} is already registered (one definition per id)`);
   foreignByKey.set(key, def); foreignById.set(def.id, def); foreignIds.add(def.id);
   CLASS_RULES[def.id] = JSON.parse(JSON.stringify(def.flags || {}));
+  sortForeignRules();
   return def;
+}
+// CH: the foreign entries of CLASS_RULES always follow the built-ins in code-unit id order, whatever order a peer
+// learned them in (clWith(h) iterates CLASS_RULES — every peer must see the same order).
+function sortForeignRules() {
+  const ids = [...foreignIds].filter(id => Object.prototype.hasOwnProperty.call(CLASS_RULES, id)).sort();
+  const saved = ids.map(id => [id, CLASS_RULES[id]]);
+  for (const [id] of saved) delete CLASS_RULES[id];
+  for (const [id, r] of saved) CLASS_RULES[id] = r;
 }
 export const isForeignClassId = (id) => foreignIds.has(id);
 export const foreignClassDef = (keyOrId) => foreignByKey.get(keyOrId) || foreignById.get(keyOrId) || null;
 export function clearForeignClasses() {
+  suspended.clear();
   for (const id of foreignIds) delete CLASS_RULES[id];
   foreignByKey.clear(); foreignById.clear(); foreignIds.clear();
 }
+// CH (classes-handshake.mjs): a foreign class some revealer could not load is DORMANT for that resolution on every
+// peer — no flags (out of CLASS_RULES), no data, every hook answers as for an unknown class (= what a peer lacking
+// it computes). suspendForeignClasses(ids) first resumes any earlier suspension; resumeForeignClasses() undoes it.
+export function suspendForeignClasses(ids = []) {
+  resumeForeignClasses();
+  for (const id of ids) if (foreignIds.has(id) && !suspended.has(id)) { suspended.set(id, CLASS_RULES[id]); delete CLASS_RULES[id]; }
+  return [...suspended.keys()].sort();
+}
+export function resumeForeignClasses() {
+  if (!suspended.size) return;
+  for (const [id, r] of suspended) CLASS_RULES[id] = r;
+  suspended.clear();
+  sortForeignRules();
+}
+export const isClassSuspended = (id) => suspended.has(id);

@@ -67,10 +67,10 @@
     "audit_worlds": 120
   },
   "fit": {
-    "a": 3.259862,
-    "b": -0.027549,
+    "a": 3.629053,
+    "b": -0.114114,
     "n": 33,
-    "n_fit": 31,
+    "n_fit": 30,
     "model": "V = a + b·C (OLS, refit without |r−1|>0.6)"
   },
   "builtins": {
@@ -78,199 +78,199 @@
       "k": 4,
       "kind": "tap",
       "value": 2.620744,
-      "ratio": 0.83207
+      "ratio": 0.826056
     },
     "class_animator": {
       "k": 3,
       "kind": "tap",
       "value": 1.5027,
-      "ratio": 0.472961
+      "ratio": 0.457205
     },
     "class_assassin": {
       "k": 5,
       "kind": "static",
       "value": 5.04,
-      "ratio": 1.614289
+      "ratio": 1.647876
     },
     "class_avenger": {
       "k": 4,
       "kind": "once_per_round",
       "value": 5.508106,
-      "ratio": 1.748791
+      "ratio": 1.736151
     },
     "class_barbarian": {
       "k": 2,
       "kind": "static",
-      "value": 2.485106,
-      "ratio": 0.775441
+      "value": 4.038298,
+      "ratio": 1.187447
     },
     "class_bard": {
       "k": 8,
       "kind": "static",
       "value": 4.32,
-      "ratio": 1.4213
+      "ratio": 1.590492
     },
     "class_cleric": {
       "k": 4,
       "kind": "tap",
       "value": 3.210041,
-      "ratio": 1.019169
+      "ratio": 1.011802
     },
     "class_druid": {
       "k": 4,
       "kind": "tap",
       "value": 1.784602,
-      "ratio": 0.5666
+      "ratio": 0.562505
     },
     "class_elementalist": {
       "k": 5,
       "kind": "passive",
       "value": 1.716,
-      "ratio": 0.549627
+      "ratio": 0.561062
     },
     "class_enchanter": {
       "k": 6,
       "kind": "once_per_round",
       "value": 2.4,
-      "ratio": 0.775553
+      "ratio": 0.815115
     },
     "class_guardian": {
       "k": 5,
       "kind": "static",
       "value": 2.16,
-      "ratio": 0.691838
+      "ratio": 0.706232
     },
     "class_healer": {
       "k": 3,
       "kind": "tap",
       "value": 2.576056,
-      "ratio": 0.810791
+      "ratio": 0.783779
     },
     "class_illusionist": {
       "k": 3,
       "kind": "tap",
       "value": 4.722769,
-      "ratio": 1.486449
+      "ratio": 1.436929
     },
     "class_kensei": {
       "k": 3,
       "kind": "tap",
       "value": 2.146713,
-      "ratio": 0.675659
+      "ratio": 0.653149
     },
     "class_manipulator": {
       "k": 4,
       "kind": "passive",
       "value": 4.70922,
-      "ratio": 1.495149
+      "ratio": 1.484342
     },
     "class_monk": {
       "k": 5,
       "kind": "static",
-      "value": 4.68,
-      "ratio": 1.498983
+      "value": 6.48,
+      "ratio": 2.118697
     },
     "class_necromancer": {
       "k": 3,
       "kind": "tap",
       "value": 3.005398,
-      "ratio": 0.945922
+      "ratio": 0.914409
     },
     "class_noble": {
       "k": 4,
       "kind": "static",
       "value": 5.785277,
-      "ratio": 1.836791
+      "ratio": 1.823515
     },
     "class_overlord": {
       "k": 4,
       "kind": "tap",
       "value": 2.620744,
-      "ratio": 0.83207
+      "ratio": 0.826056
     },
     "class_paladin": {
       "k": 3,
       "kind": "tap",
       "value": 2.146713,
-      "ratio": 0.675659
+      "ratio": 0.653149
     },
     "class_priest": {
       "k": 4,
       "kind": "once_per_round",
       "value": 4.120567,
-      "ratio": 1.308255
+      "ratio": 1.298799
     },
     "class_prophet": {
       "k": 5,
       "kind": "passive",
       "value": 2.4,
-      "ratio": 0.768709
+      "ratio": 0.784703
     },
     "class_ranger": {
       "k": 3,
       "kind": "tap",
       "value": 3.005398,
-      "ratio": 0.945922
+      "ratio": 0.914409
     },
     "class_reaver": {
       "k": 3,
       "kind": "static",
       "value": 4.314894,
-      "ratio": 1.358074
+      "ratio": 1.31283
     },
     "class_restaurateur": {
       "k": 5,
       "kind": "static",
       "value": 2.88,
-      "ratio": 0.922451
+      "ratio": 0.941643
     },
     "class_rogue": {
       "k": 3,
       "kind": "passive",
       "value": 4.978723,
-      "ratio": 1.567009
+      "ratio": 1.514804
     },
     "class_seeker": {
       "k": 7,
       "kind": "tap",
       "value": 1.546667,
-      "ratio": 0.50429
+      "ratio": 0.546476
     },
     "class_shaman": {
       "k": 6,
       "kind": "tap",
       "value": 1.464567,
-      "ratio": 0.47327
+      "ratio": 0.497413
     },
     "class_summoner": {
       "k": 5,
       "kind": "tap",
       "value": 3.947664,
-      "ratio": 1.264419
+      "ratio": 1.290726
     },
     "class_transmuter": {
       "k": 5,
       "kind": "static",
       "value": 3.6,
-      "ratio": 1.153064
+      "ratio": 1.177054
     },
     "class_warrior": {
       "k": 5,
       "kind": "static",
       "value": 2.88,
-      "ratio": 0.922451
+      "ratio": 0.941643
     },
     "class_weapon_master": {
       "k": 5,
       "kind": "once_per_round",
       "value": 4.8,
-      "ratio": 1.537418
+      "ratio": 1.569405
     },
     "class_witch": {
       "k": 3,
       "kind": "tap",
       "value": 3.606478,
-      "ratio": 1.135107
+      "ratio": 1.097291
     }
   }
 }

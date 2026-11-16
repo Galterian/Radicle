@@ -78,6 +78,7 @@ export const HOOK_SPECS = Object.freeze({
   config:          { std: true, args: [], result: 'object' },
   strike:          { std: true, args: ['cs', 'cols', 'stat', 'elem', 'enemy', 'pb'], result: 'strike' },
   restore:         { std: true, args: ['cs', 'cols', 'stat', 'kind'], result: 'bool' },
+  reanimated_strike: { args: ['down', 'stat', 'elem', 'enemy', 'pb'], result: 'reanim' },   // Necromancer, ruling 2026-11-16
   progress:        { std: true, args: ['state', 'cols', 'co'], result: 'progress' },
   life_points:     { std: true, args: ['dmg', 'illusion', 'armor', 'chaseBonus'], result: 'life_points' },
   stance:          { args: ['code'], result: 'code' },
@@ -113,7 +114,7 @@ export function neutralOf(hookName, args = {}) {
     case 'colours': case 'config': return {};
     case 'kind': return 'static';
     case 'ready': case 'restore': case 'emits': case 'plan_emits': case 'combat_in': return false;
-    case 'strike': case 'stance': case 'stance_target': case 'pick_target': case 'contact': case 'local': return null;
+    case 'strike': case 'reanimated_strike': case 'stance': case 'stance_target': case 'pick_target': case 'contact': case 'local': return null;
     case 'attack_out': return args.dmg;
     case 'lifesteal': case 'end_turn': return 0;
     case 'lifesteal_apply': return args.life;
@@ -156,6 +157,7 @@ export function resultOk(hookName, v) {
     case 'trap': return TRAP_OUTCOMES.includes(v);
     case 'step': return isObj(v) && typeof v.stealth === 'boolean' && TRAP_OUTCOMES.includes(v.trap);
     case 'strike': return v === null || (isObj(v) && ['retry', 'destroyed', 'too weak'].includes(v.result) && typeof v.ok === 'boolean' && typeof v.last === 'boolean');
+    case 'reanim': return v === null || (isObj(v) && ['retry', 'destroyed', 'too weak'].includes(v.result) && typeof v.ok === 'boolean' && typeof v.last === 'boolean' && isStr(v.elem));
     case 'progress': return isObj(v) && isObj(v.state) && strList(v.state.down) && typeof v.state.archived === 'boolean' && typeof v.state.tapped === 'boolean';
     case 'life_points': return isObj(v) && ['illusion', 'armor', 'chaseBonus', 'absorbed'].every(k => isNum(v[k]));
     case 'pre_cast': return v === null || (isObj(v) && isStr(v.stat) && typeof v.fail === 'boolean' && Array.isArray(v.dice) && isNum(v.value));

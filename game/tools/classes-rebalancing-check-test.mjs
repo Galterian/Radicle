@@ -42,7 +42,8 @@ eq('a foreign class without power is rejected', V.checkClass(copy('class_witch',
 eq('unknown power key rejected', V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3, teleport: true } })).errors.some(e => /teleport/.test(e)), true);
 eq('bad colours rejected', V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3 }, data: { ...byId.class_witch.data, colors: ['elem_fire', 'elem_fire'] } })).verdict, 'reject');
 {
-  const r = V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3 } }));
+  // discard 5 (not the Witch's 3): out of band on the curve whatever the fit (the Witch itself sits at r≈1.10 since the 2026-11-16 refit)
+  const r = V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 5 }, data: { ...byId.class_witch.data, hand_discard: { n: 5 } } }));
   eq('a Witch copy with its own power is judged on the curve', [r.mode, r.verdict, r.power.ratio], ['curve', 'nerf', r.power.ratio]);
   eq('…and gets a scale hint', r.suggestions.some(s => /scale the power/.test(s.change)), true);
   const r2 = V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3 } }), { baseline: 'class_witch' });

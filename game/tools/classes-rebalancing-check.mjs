@@ -164,7 +164,7 @@ export const BUILTIN_POWER = {
   class_animator: { build: true },
   class_assassin: { attack_bonus: 1 },
   class_avenger: { lure: { range: 10 }, chase_bonus: { life: 1, max: 1 } },
-  class_barbarian: { stance: true },
+  class_barbarian: { stance: true, emit: 1 },   // ruling 2026-11-16: may emit during Block (B)
   class_bard: { share_skills: true },
   class_cleric: { disable_traps: { range: 3 }, trap_disable: true },
   class_druid: { stone: true },
@@ -175,7 +175,7 @@ export const BUILTIN_POWER = {
   class_illusionist: { illusion: { range: 10 } },
   class_kensei: { recover: 1 },
   class_manipulator: { swap: true },
-  class_monk: { stance: true, emit: 1 },
+  class_monk: { stance: true, emit: 2 },   // ruling 2026-11-16: Move and Empty Move emit at every site
   class_necromancer: { revive: true },
   class_noble: { lifesteal: true },
   class_overlord: { armor: 1 },
@@ -204,6 +204,9 @@ export const HOOK_POWER = {
   step: ['trap_dodge', 'threat_dodge', 'trap_disable'], dungeon_step: ['trap_dodge', 'trap_disable'],
   combat_in: ['swap'], pick_target: ['swap'], chase_step: ['chase_bonus'], contact: ['reveal'],
   local: ['draw', 'recover', 'grant'], share_skills: ['share_skills'],
+  // Necromancer destroy reanimated (ruling 2026-11-16): a way for ENEMIES to destroy what the class raised — a drawback
+  // on power.revive, never a gain (the neutral answer, null, is the strongest), so it needs no price of its own.
+  reanimated_strike: null,
 };
 const STD = ['colours', 'kind', 'ready', 'config', 'strike', 'restore', 'progress', 'life_points'];
 

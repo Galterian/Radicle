@@ -27,9 +27,10 @@ Legend:
 | `const classStateForUI = () =>` (~1482) | `kind`, `colours` | all | peer (reads hooks) |
 | `hello` message `class_colours:` (~6713) | `colours` | all | peer, wire unchanged |
 | `const enchanterNow = entity.permanents.has('class_enchanter')` (~2831) | `plan_emits` | Enchanter | data |
-| `const emitsLong = … isReaver() … isMonk()` (~2832) | `emits` site `plan` | Reaver, Monk | data |
+| `const emitsLong = … classHook('emits', …, { site: 'plan' })` (~2884) | `emits` site `plan` | Reaver, Barbarian, Monk | data |
+| `clEmits(code)` (module scope, ~1164): the Rule 24 intent gate, bonus plans (`bEmits`, `effOK`), the WS plan checks, `classStateForUI().emits` (the UI's `clsEmits`) | `emits` site `plan` | Reaver, Barbarian, Monk | data (ruling 2026-11-16) |
 | planning: queued class ability / `m.kind === 'class_ability'` (~6878) | `ready`, `CLASS_NEEDS` | all | peer (WS validation) |
-| bot emission choice `const emitsNow = pick === 'P' \|\| … isReaver() … isMonk()` (~5950) | `emits` site `plan` | Reaver, Monk | peer (bot heuristics; same rule) |
+| bot emission choice `const emitsNow = pick === 'P' \|\| slot < 0 \|\| clEmits(pick)` (~6030) | `emits` site `plan` | Reaver, Barbarian, Monk | peer (bot heuristics, same rule; an adjacent reanimated enemy is aimed at first) |
 | Manipulator alt action publish (`manipAlt`, `pickAltAction`) | `config` | Manipulator | peer: `peer:manipAlt` (hand access) |
 
 ## Resolver: simulate()
@@ -43,9 +44,10 @@ Legend:
 | pre-pass Elementalist `const best = [...new Set(r.effect.elements.map(` (~3839) | `pre_cast` | Elementalist | data (`point_buy_seed`) |
 | pre-pass Illusionist `ab?.id === 'class_illusionist'` | `ability` (phase pre) | Illusionist | data |
 | Bard `for (const o of adjacentOf(r.actor, o => !enemyOf(r.actor, o) && !!byActorPre.get(o)))` (~3855) | `share_skills` | Bard | data |
-| Rule 24 `const emitsNow = ['P', 'EP'].includes(r.declared) \|\| …` (~4043) | `emits` site `destroy` | Reaver, Monk | data. Note: Monk EM does not emit here, but it does at the plan and manip sites (see open questions). |
+| Rule 24 `const emitsNow = ['P', 'EP'].includes(r.declared) \|\| …` (~4043) | `emits` site `destroy` | Reaver, Barbarian, Monk | data (ruling 2026-11-16: Barbarian B and Monk M / EM emit here too) |
 | `// --- my own class: recast from the archive / untap the ability` (~4046) | `restore` (std) | all | data |
-| `// --- an enemy's class colour (die of 6) ---` (~4061) | `strike` (std) | all | data |
+| `// --- C1 ruling 2026-11-16, Necromancer "destroy reanimated"` (~4153) | `reanimated_strike` (asked of the unit's `raised_by` class) | Necromancer | data → `destroyOutcomes` kind `reanimated`; the unit applies it itself (Rule 24 loop, then life 0 next to the Phantom line) |
+| `// --- an enemy's class colour (die of 6) ---` (~4166) | `strike` (std) | all | data |
 | Noble `hasPerm(attacker, 'class_noble') && attacker === PEER_ID_STRING` (~4145) | `lifesteal` | Noble | data |
 | Assassin `hasPerm(r.actor, 'class_assassin') && assassinScored.has(r.actor)` (~4193) | `attack_out` | Assassin | data |
 | post-pass `['class_elementalist', 'class_illusionist', 'class_rogue'].includes(ab.id)` + `switch (ab.id)` (~4386) | `ability` (phase post) | Healer, Overlord, Druid, Witch, Avenger, Alchemist, Ranger, Necromancer | data |
@@ -62,6 +64,7 @@ Legend:
 | Manipulator `combatHit(probe.damage.get(m))` (~4769) | `combat_in` | Manipulator | data (= class-manipulator.mjs `combatHit`) |
 | Manipulator `pickManipTarget(` (~4773) | `pick_target` | Manipulator | data (= `pickManipTarget`) |
 | Necromancer revive of an archived creature | `ability` → `revives: [{who: null}]` | Necromancer | peer: `peer:revive` (archive access) |
+| a class-raised unit's snapshot: `raised_by` (env `RAISED_BY` of a class companion, or a bound revive by a `class_` perm) and `reanim_down_csv` (`reanimFields()`, ~942) | – | Necromancer | peer (absent on every other unit) |
 
 ## Application: doResolution / endRound
 
@@ -93,7 +96,7 @@ Legend:
 | Animator | tap | post | config; ability = js | animatorCopy |
 | Assassin | static | – | attack_out | – |
 | Avenger | once_per_round | post | ability, config, chase_step | – |
-| Barbarian | static | – | stance | – |
+| Barbarian | static | – | stance, emits | – |
 | Bard | static | – | share_skills | – |
 | Cleric | tap | post | config, step, dungeon_step; ability = js | clericDisableNearby |
 | Druid | tap | post | ability | – |
@@ -106,7 +109,7 @@ Legend:
 | Weapon Master | once_per_round | local | local | apply (draw) |
 | Manipulator | passive | – | config, combat_in, pick_target | manipAlt publish / swap |
 | Monk | static | – | stance, emits | – |
-| Necromancer | tap | post | ability | archived-creature revive |
+| Necromancer | tap | post | ability, reanimated_strike | archived-creature revive; raised_by / reanim_down_csv snapshot fields |
 | Noble | static | – | lifesteal, lifesteal_apply | – |
 | Overlord | tap | post | ability | – |
 | Priest | once_per_round | post | config; ability = js | priestShrine |
@@ -133,7 +136,12 @@ The post-pass `switch` keeps only the five peer-resolved cases. The state hash a
 
 ## Open questions (text vs code)
 
-- Monk EM: it emits at the plan and manip sites but not at the Rule 24 destroy site or the badge site.
-- Barbarian: the text "may emit during Block" is not implemented (stance only).
-- Necromancer: "destroy reanimated" is not implemented.
+- Monk EM (was: emits at plan / manip only). User ruling 2026-11-16: Move and Empty Move emit at every site (plan, Rule 24 destroy / strike, manip, badge): `emits: { M: true, EM: true }`, power `emit: 2`; data/classes.json class_monk 1.1.0.
+- Barbarian "may emit during Block" (was: stance only). User ruling 2026-11-16: Block emits at every site: `emits: { B: true }`, power `emit: 1`; class_barbarian 1.1.0.
+- Necromancer "destroy reanimated" (was: not implemented). User ruling 2026-11-16: hook `reanimated_strike`; class_necromancer 1.1.0 data `destroy_reanimated: {elements: [elem_harmony, elem_concentration], die: 6}`. Reading: a unit the class raised (a corpse raised in place, a re-spawned summon, an archived creature) carries `raised_by: class_necromancer`. An adjacent enemy emits Will at it (`destroy: {stat: "will", reanimated: <peer>, elem}`, on any emitting action). A point-buy die of 6 strikes that element, one per emission, in any order, and the emissions need not be contiguous. When both are struck, the unit is destroyed. Ordinary damage still kills it, and a reanimated corpse is never raised again. To confirm with the user: (a) "destroy" is an extra way for enemies to kill it, not an immunity to damage; (b) the two strikes may come from different enemies.
+- Open (not covered by the rulings): a Barbarian Block, like a Reaver Attack or a Monk Move, still breaks a channel (`CHANNEL_BREAK`). Emitting during it does not keep a channel alive.
 - `classStateOf` parses `class_progress_json` with `parseJson(…, null)`, which accepts arrays only, so remote progress is always null.
+
+## World rulings that touch classes
+
+- Lava (user ruling 2026-11-16, option c): lava hexes stay walkable, and nothing is built or planted on them. This is the current code, unchanged. Units still move onto lava (resolver movement does not test the biome). Priest (Shrine), Animator (copy) and Seeker (plant) place through join-plan.mjs `hexWalkableAt` (peer.mjs `buildSiteFree`, the Seeker `isBlocked`), which refuses water / lava / mountains / cliffs (biome.js `isWalkable`). A foreign class that places a building or a trap must refuse lava hexes the same way. No hook change.

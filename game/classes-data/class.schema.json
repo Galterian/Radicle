@@ -20,6 +20,7 @@
         "config",
         "strike",
         "restore",
+        "reanimated_strike",
         "progress",
         "life_points",
         "stance",

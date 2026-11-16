@@ -1379,8 +1379,51 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_summoner", "effect_resurrect_death_ward"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_vitality", "elem_souls", "elem_harmony"],
+            "destroy_reanimated": {
+              "elements": ["elem_harmony", "elem_concentration"],
+              "die": 6
+            },
+            "text": "Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: a fallen ally creature within one hex rises at full life, held by my class card (it falls again when the class leaves the board); with no corpse in reach a creature card of my archive enters next to me instead. User ruling 2026-11-16 (destroy reanimated): a unit I raised is destroyed once an adjacent enemy has struck both Harmony and Concentration (data destroy_reanimated) with a Will point-buy die of 6 — one element per emission, any order, not necessarily contiguous; ordinary damage still kills it; a reanimated corpse cannot be raised again. Paper text: \"Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_necromancer"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, W, Wi.", "target": "caster", "unit": "colours", "value": ["vitality", "world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "revived", "description": "Fallen ally creature in reach rises; else an archived creature of mine enters.", "target": "target", "unit": "life", "value": {"var": "target.life_max"}},
+              {"id": "destroy_reanimated", "description": "Ruling 2026-11-16: an adjacent enemy emission strikes one open element of a unit I raised on a die of 6; both struck → the unit is destroyed.", "target": "target", "unit": "destroy", "value": {"and": [{">=": [{"var": "die"}, 6]}, {"in": [{"var": "cast.elem"}, ["elem_harmony", "elem_concentration"]]}]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-16 (\"Implement them\"): \"Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6\" is implemented — a unit this class raised (snapshot raised_by) is destroyed once an adjacent enemy has struck BOTH destroy_reanimated.elements (Harmony, Concentration; both Will) with a Will point-buy die of destroy_reanimated.die (6): one element per emission (Posture / Empty Posture / a class emit), any order, the emissions need not be contiguous; progress rides on the unit's snapshot (reanim_down_csv). Ordinary damage still kills it too. A reanimated corpse cannot be raised again.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_summoner", "effect_resurrect_death_ward"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1739,8 +1782,45 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_reaver", "class_monk"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_vitality", "elem_fire"],
+            "text": "Your Empty Posture is treated as a Block action. You may emit elements during your Block."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Block; I may emit elements during a Block. User ruling 2026-11-16: my Block (B) emits at every site — a cast rides on it, it carries a Rule 24 emission, it counts for the Manipulator test and badges the element. Paper text: \"Your Empty Posture is treated as a Block action. You may emit elements during your Block.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_barbarian"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, M.", "target": "caster", "unit": "colours", "value": ["vitality", "matter"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "matter"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "matter"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "stance", "description": "EP judged as Block.", "target": "caster", "unit": "action", "value": {"rule": ["class_ep_stance", {"action": {"var": "caster.action"}, "permanents": {"var": "caster.permanents"}}]}},
+              {"id": "block_emits", "description": "Ruling 2026-11-16: a Block (B) emits an element (cast, Rule 24, Manipulator, badge).", "target": "caster", "unit": "emit", "value": {"in": [{"var": "caster.action"}, ["B"]]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The stance stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_ep_stance", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-16 (\"Implement them\"): \"You may emit elements during your Block\" is implemented — a Barbarian's Block (B, and so its Empty Posture fought as a Block) emits at every site: it carries a cast, a Rule 24 emission (token / class colour / fortress), it counts for the Manipulator's emitting test and badges the element. Data unchanged; classes.mjs CLASS_RULES emits {B: true}.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_reaver", "class_monk"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -2125,8 +2205,45 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_reaver", "class_barbarian"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_time", "elem_space", "elem_souls", "elem_concentration", "elem_harmony"],
+            "text": "Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Move; I may emit elements during a Move (Rule 24 emission too). User ruling 2026-11-16: Move and Empty Move (M / EM) emit at every site — a cast continues on them, they carry a Rule 24 emission (strike), count for the Manipulator test and badge the element. Paper text: \"Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_monk"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, Wi.", "target": "caster", "unit": "colours", "value": ["world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "stance", "description": "EP judged as Move.", "target": "caster", "unit": "action", "value": {"rule": ["class_ep_stance", {"action": {"var": "caster.action"}, "permanents": {"var": "caster.permanents"}}]}},
+              {"id": "move_emits", "description": "Ruling 2026-11-16: Move and Empty Move emit an element (cast, Rule 24 strike, Manipulator, badge).", "target": "caster", "unit": "emit", "value": {"in": [{"var": "caster.action"}, ["M", "EM"]]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The stance stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_ep_stance", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-16 (\"Implement them\"): \"You may emit elements during Move\" covers the Empty Move at every site — Move and Empty Move carry a cast, a Rule 24 emission (strike) and the element badge, not just planning / the Manipulator test as in 1.0.0's implementation. Data unchanged; classes.mjs CLASS_RULES emits {M: true, EM: true}.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_reaver", "class_barbarian"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }

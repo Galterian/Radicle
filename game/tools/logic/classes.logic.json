@@ -4685,7 +4685,7 @@
       "references": []
     },
     "class_necromancer": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: a fallen ally creature within one hex rises at full life, held by my class card (it falls again when the class leaves the board); with no corpse in reach a creature card of my archive enters next to me instead. Paper text: \"Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: a fallen ally creature within one hex rises at full life, held by my class card (it falls again when the class leaves the board); with no corpse in reach a creature card of my archive enters next to me instead. User ruling 2026-11-16 (destroy reanimated): a unit I raised is destroyed once an adjacent enemy has struck both Harmony and Concentration (data destroy_reanimated) with a Will point-buy die of 6 — one element per emission, any order, not necessarily contiguous; ordinary damage still kills it; a reanimated corpse cannot be raised again. Paper text: \"Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -4838,6 +4838,35 @@
           "unit": "life",
           "value": {
             "var": "target.life_max"
+          }
+        },
+        {
+          "id": "destroy_reanimated",
+          "description": "Ruling 2026-11-16: an adjacent enemy emission strikes one open element of a unit I raised on a die of 6; both struck → the unit is destroyed.",
+          "target": "target",
+          "unit": "destroy",
+          "value": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "die"
+                  },
+                  6
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "cast.elem"
+                  },
+                  [
+                    "elem_harmony",
+                    "elem_concentration"
+                  ]
+                ]
+              }
+            ]
           }
         }
       ],
@@ -6245,7 +6274,7 @@
       "references": []
     },
     "class_barbarian": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Block; I may emit elements during a Block. Paper text: \"Your Empty Posture is treated as a Block action. You may emit elements during your Block.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Block; I may emit elements during a Block. User ruling 2026-11-16: my Block (B) emits at every site — a cast rides on it, it carries a Rule 24 emission, it counts for the Manipulator test and badges the element. Paper text: \"Your Empty Posture is treated as a Block action. You may emit elements during your Block.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6368,6 +6397,22 @@
                   "var": "caster.permanents"
                 }
               }
+            ]
+          }
+        },
+        {
+          "id": "block_emits",
+          "description": "Ruling 2026-11-16: a Block (B) emits an element (cast, Rule 24, Manipulator, badge).",
+          "target": "caster",
+          "unit": "emit",
+          "value": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "B"
+              ]
             ]
           }
         }
@@ -7294,7 +7339,7 @@
       "references": []
     },
     "class_monk": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Move; I may emit elements during a Move (Rule 24 emission too). Paper text: \"Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Move; I may emit elements during a Move (Rule 24 emission too). User ruling 2026-11-16: Move and Empty Move (M / EM) emit at every site — a cast continues on them, they carry a Rule 24 emission (strike), count for the Manipulator test and badge the element. Paper text: \"Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move.\"",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -7417,6 +7462,23 @@
                   "var": "caster.permanents"
                 }
               }
+            ]
+          }
+        },
+        {
+          "id": "move_emits",
+          "description": "Ruling 2026-11-16: Move and Empty Move emit an element (cast, Rule 24 strike, Manipulator, badge).",
+          "target": "caster",
+          "unit": "emit",
+          "value": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "M",
+                "EM"
+              ]
             ]
           }
         }

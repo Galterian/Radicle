@@ -19,7 +19,7 @@ export { canonicalJson, sha256Hex, isPlayerBranch, DEFAULT_SEED_HOST, MAIN_BRANC
 // TODO(C3): set once `rad init` has created chaosD6-Classes (game/tools/oci/classes-rad-init.sh prints
 // it; game/tools/out/_classes_rid_patch.py wires it in). Until then refs must carry `repo` or
 // CHAOSD6_CLASSES_RID must be set.
-export const CLASSES_RID = process.env.CHAOSD6_CLASSES_RID || 'rad:TODO_CLASSES_RID';
+export const CLASSES_RID = process.env.CHAOSD6_CLASSES_RID || 'rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi';
 export const CLASSES_SUBDIR = 'classes';
 export const CLASS_LIB_SUBDIR = 'lib';
 

@@ -9,7 +9,8 @@
 //   { id, name, created_at, team, locked,
 //     base_character   data/characters.json id the peer reads the rest of the data from
 //     stats            { vitality, world, matter, will } — Σ = 40, each 1..30
-//     class_id         data/classes.json id
+//     class_id         data/classes.json id, or a foreign class id with
+//     class_ref        its handshake ref {id, sha256, libs, …} (CH: a player-branch class of chaosD6-Classes)
 //     resources        { kind: 'character'|'creature', id } — the Warlords III Battlecry unit whose
 //                      sprites / portrait / sounds this character uses
 //     combo            3 letters of A/B/M/P with at least two A/B (BAM, APB, AMA …)
@@ -189,7 +190,8 @@ export function validateCharacter(c, cat) {
   const vals = STAT_KEYS.map(k => c.stats?.[k]);
   if (vals.some(v => !Number.isInteger(v) || v < STAT_MIN || v > STAT_MAX)) err.push(`each stat must be a whole number ${STAT_MIN}–${STAT_MAX}`);
   else if (vals.reduce((a, b) => a + b, 0) !== STAT_SUM) err.push(`the four stats must sum to ${STAT_SUM} (now ${vals.reduce((a, b) => a + b, 0)})`);
-  if (!cat.classes[c.class_id]) err.push(`unknown class ${c.class_id}`);
+  // CH: a foreign (player-branch) class carries its handshake ref (class_ref); the peer's classes handshake checks it.
+  if (!cat.classes[c.class_id] && !foreignRefOf({ id: c.class_id, ref: c.class_ref })) err.push(`unknown class ${c.class_id}`);
   if (!cat.units.some(u => u.kind === c.resources?.kind && u.id === c.resources?.id)) err.push('unknown unit resources');
   if (!cat.characters[c.base_character]) err.push(`unknown base character ${c.base_character}`);
   if (!comboValid(c.combo)) err.push('the combo needs 3 actions with at least two A/B');

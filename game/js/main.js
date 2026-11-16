@@ -685,10 +685,13 @@ function effectMatchesQueue(card, every = false, long = false) {
   if (!isEffect(card) || tranceActive()) return false;
   if (!long && castInstant(card, every)) return state.queued.length > 0;
   const code = effectiveQueuedCode();
-  return code === 'P' || code === 'EP' || (isReaver() && code === 'A') || (isMonk() && (code === 'M' || code === 'EM'));
+  return code === 'P' || code === 'EP' || clsEmits(code);
 }
 const isReaver = () => myPermanents().includes('class_reaver');
 const isMonk = () => myPermanents().includes('class_monk');
+// C1 ruling 2026-11-16: the action codes my class makes emit (peer classStateForUI.emits — Reaver A, Barbarian B,
+// Monk M / EM; a foreign class's own); older peers without the list fall back to the Reaver / Monk test.
+const clsEmits = (code) => (state.classState?.emits || [...(isReaver() ? ['A'] : []), ...(isMonk() ? ['M', 'EM'] : [])]).includes(code);
 // Rule 20 pc override: once a non-instant effect is picked, only the actions
 // that can carry it (Posture, Empty; Attack for a Reaver) stay selectable.
 function castLocksOut(card) {
@@ -697,7 +700,7 @@ function castLocksOut(card) {
   if (state.castBroken) return false;   // the player double-clicked another action: the cast is let go
   const eff = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
   if (!(eff && (planIsLong() || !castInstant(eff, false))) && !state.casting) return false;
-  return !(card.code === 'P' || (isReaver() && card.code === 'A') || (isMonk() && card.code === 'M'));
+  return !(card.code === 'P' || clsEmits(card.code));
 }
 // Always castable: the Empty slot is a Posture, and instants ride on anything.
 const effectUsable = (card) => isEffect(card);
@@ -1039,7 +1042,7 @@ function renderArchivePopup() {
     const creature = c.kind === 'creature', klass = c.kind === 'class';
     const nm = creature ? `🐾 ${c.name}` : klass ? `⚜ ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
     const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? `class · ${c.text || ''} · stats: ${classStatsLine(c.class_id)}` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
-    return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div>${isEffect(c) || isSkill(c) ? effectSourceBadge(c) : ''}<div class="cd">${cd}</div></div>`;
+    return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div>${isEffect(c) || isSkill(c) || klass ? effectSourceBadge(klass ? (c.source ? c : c.class_id) : c) : ''}<div class="cd">${cd}</div></div>`;   // CH: a class card's badge
   }).join('');
   // Any archived card may go back to the discard pile — including creatures
   // and class cards (user override of the "creatures stay for Summoning"
@@ -1483,7 +1486,20 @@ function renderRoster() {
       const nm = classId.replace(/^class_/, '').replace(/_/g, ' ');
       const state_ = archived ? ' · archived' : tapped ? ' · tapped' : '';
       const pillTitle = `${nm[0].toUpperCase()}${nm.slice(1)}${state_} — ${state.classTexts?.[classId] || 'class'}\nStats: ${classStatsLine(classId, colours)}`.replace(/"/g, '&quot;');
-      return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="${pillTitle}">⚜ ${nm}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;
+      return `<span class="pill cls${archived ? ' archived' : ''}" data-class="${classId}" title="${pillTitle}">⚜ ${nm}${effectSourceBadge(classId, { compact: true })}${tapped && !archived ? ' ⟳' : ''} ${chips}</span>`;   // CH: a foreign class shows its branch
+    })();
+    // C1 ruling 2026-11-16 (Necromancer "destroy reanimated"): a unit a class raised shows its Harmony / Concentration;
+    // an adjacent enemy's chip (one click) aims this action's Will emission at it — a 6 strikes it, both struck → destroyed.
+    const reanimPill = (() => {
+      if (!e.raised_by) return '';
+      const down = new Set(String(e.reanim_down_csv || '').split(',').filter(Boolean));
+      const can = isEnemyRow && hexDistanceTo(e) <= 1 && (e.life ?? 0) > 0;
+      const chips = ['elem_harmony', 'elem_concentration'].map(el => {
+        const isDown = down.has(el), queued = state.destroy?.reanimated === e.peer_id && state.destroy?.elem === el;
+        const title = isDown ? `${el.replace('elem_', '')} struck` : can ? `${el.replace('elem_', '')} — click to emit Will against it (needs a 6)` : el.replace('elem_', '');
+        return `<span class="chip will${isDown ? ' down' : ''}${can && !isDown ? ' clickable' : ''}${queued ? ' active' : ''}" data-reanim-elem="${el}" title="${title}">${queued ? '⚒' : ''}${el === 'elem_harmony' ? 'H' : 'C'}</span>`;
+      }).join('');
+      return `<span class="pill cls" title="reanimated by ${escHtml(String(e.raised_by).replace(/^class_/, ''))} — strike Harmony and Concentration with a 6 (any order, separate actions) to destroy it">☠ ${chips}</span>`;
     })();
     const team = teamLabel(e);
     const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
@@ -1494,7 +1510,7 @@ function renderRoster() {
         ${pill('w', 'world', 'World', 'stat_world')}
         ${pill('m', 'matter', 'Matter', 'stat_matter')}
         ${pill('wi', 'will', 'Will', 'stat_will')}
-        ${classPill}
+        ${classPill}${reanimPill}
         ${lost}${countered.length ? `<span class="pill perm" title="countered this turn">✨ ${countered.join(', ')}</span>` : ''}${extraPills}
       </span>
       ${permIds.length ? '<div class="perm-cards" data-count="' + permIds.length + '"></div>' : ''}
@@ -1577,6 +1593,16 @@ function renderRoster() {
       if (ev.target.closest('.skill-card') || ev.target.closest('.perm-toggle')) return;
       // An enemy class colour chip: first click arms it, the second sends the strike (destroy with class + elem).
       const chipEl = ev.target.closest('.chip.clickable');
+      if (chipEl && isEnemyRow && chipEl.dataset.reanimElem) {   // C1 ruling 2026-11-16: a reanimated unit's element
+        ev.stopPropagation();
+        if (state.locked) return;
+        const elem = chipEl.dataset.reanimElem;
+        uilog('reanim-strike', { detail: `${e.peer_id} ${elem}` });
+        send({ kind: 'destroy', stat: 'will', reanimated: e.peer_id, elem });
+        cancelPathJourney('manual pick');
+        logUI(`⚒ emit Will against ${e.name}'s ${elem.replace('elem_', '')} — a die of 6 strikes it; both struck destroy the reanimated unit`, 'phase');
+        return;
+      }
       if (chipEl && isEnemyRow && chipEl.dataset.classStat) {
         ev.stopPropagation();
         if (state.locked) return;
@@ -1675,8 +1701,7 @@ function myEmissionPreview() {
     ? ((state.target && typeof state.target === 'object' && 'q' in state.target) ? 'EM' : 'EP')
     : (typeof q0 === 'number' ? state.hand[q0]?.code : null);
   const pickEmits = pickCode === 'P' || pickCode === 'EP'
-    || (pickCode === 'A' && classId === 'class_reaver')
-    || (pickCode === 'M' && classId === 'class_monk');
+    || (!!classId && clsEmits(pickCode));   // C1 ruling 2026-11-16 (Reaver A, Barbarian B, Monk M / EM)
   if (pickEmits && !idxs.length) parts.push('✺');
   if (state.destroy?.stat) parts.push(`⚒ ${state.destroy.stat}`);
   return parts.join(' · ');
@@ -2208,7 +2233,7 @@ function renderPerms() {
       : cs.needs === 'enemy' ?'an adjacent enemy (right-click it)' : cs.needs === 'enemy_near' ? 'an enemy within 3 hexes (right-click it first, else the nearest)' : cs.needs === 'monster_near' ? 'nothing — every wild monster within 10 hexes starts chasing you' : cs.needs === 'ally_or_self' ? 'an adjacent ally (right-click it) or nobody for yourself' : cs.needs === 'tile' ? 'a tile within one hex (click it)' : cs.needs === 'attach_effect' ? 'an effect card in hand (click it as the attached card)' : cs.needs === 'attach_nonaction' ? 'a non-action card in hand (click it as the attached card)' : null;
     const title = `${cs.name} (${cs.kind === 'tap' ? 'tap' : passive ? `passive — fires by itself, once per turn` : 'once per turn'}) — ${cs.text}\nStats: ${classStatsLine(cs.class_id, cs.colours)}.${need ? ` Needs ${need}.` : ''}${cs.blocked && !mode ? ` NOT NOW: ${cs.blocked}.` : ''}${mode === 'recast' ? ' ARCHIVED: emit every colour (any successful roll) to recast it.' : mode === 'untap' ? ' TAPPED: emit every colour (any successful roll) to untap it.' : ''} (key Q)`;
     const cd = mode ? `${mode} ${done.size}/${cols.length}` : passive && ch ? `trap ${ch.trap_left}/${ch.trap_per_turn} · threat ${ch.threat_left}/${ch.threat_per_turn}` : passive ? (usedNow ? '✓ used this turn' : '◈ passive') : cs.blocked ? '⤵ no corpse' : state.queuedClassAbility ? '⚜ this action' : ready ? 'ready' : 'used this turn';
-    return `<div class="perm class-card${ready && !mode && !passive ? ' clickable' : ''}${cs.blocked && !mode ? ' blocked' : ''}${passive ? ' passive' : ''}${usedNow && !mode ? ' spent' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">⚜ ${cs.name}</div><div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
+    return `<div class="perm class-card${ready && !mode && !passive ? ' clickable' : ''}${cs.blocked && !mode ? ' blocked' : ''}${passive ? ' passive' : ''}${usedNow && !mode ? ' spent' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">⚜ ${cs.name}</div>${effectSourceBadge(cs.source ? { class_id: cs.class_id, source: cs.source } : cs.class_id, { compact: true })}<div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
   })() : '';
   const html = classHtml + perms.map((p, k) => {
     const plans = state.bonus?.plans || [];
@@ -2677,7 +2702,8 @@ function connect() {
       }
       // Vision / Super Sense: a popup with what was seen (a tile, an enemy's hand).
       // Effect provenance (chaosD6-Effects, E4 → E6): learned / shared / missing — see effectSourceNotice().
-      if (m.kind === 'effect_source' || m.kind === 'skill_source') effectSourceNotice(m);   // skills: chaosD6-Skills (S4 → S6)
+      if (m.kind === 'class_catalog') { state.classColours = { ...(state.classColours || {}), ...(m.class_colours || {}) }; state.classTexts = { ...(state.classTexts || {}), ...(m.class_texts || {}) }; renderRoster(); }   // CH: a foreign class became runnable here
+      if (m.kind === 'effect_source' || m.kind === 'skill_source' || m.kind === 'class_source') effectSourceNotice(m);   // skills: chaosD6-Skills (S4 → S6); CH: classes (chaosD6-Classes)
       if (m.kind === 'peek') showPeek(m.text || (m.what === 'hand' ? `${m.of_name}: ${(m.cards || []).map(c => c.name).join(', ')}` : `tile (${m.q},${m.r})`), m.cards || null);
       // Merge peer updates so a transient broadcast missing an entity doesn't
       // flicker it off the map / roster. The server never *removes* a peer
@@ -2992,20 +3018,21 @@ function profileBanner(text, kind = '', { sticky = false, badge = '' } = {}) {
 // ("⚠ couldn't load Dodge from … — cast postponed"). A skill_source ref without kind / skill_ prefix is a skill.
 const _fxNoticeSeen = new Map();   // text -> last banner time
 function effectSourceNotice(m) {
-  const isSkillMsg = m?.kind === 'skill_source';
+  const isSkillMsg = m?.kind === 'skill_source', isClassMsg = m?.kind === 'class_source';   // CH: class_source (foreign classes)
   const ref0 = m?.ref || {};
-  const ref = isSkillMsg && !ref0.kind ? { ...ref0, kind: 'skill' } : ref0;
+  const ref = (isSkillMsg || isClassMsg) && !ref0.kind ? { ...ref0, kind: isClassMsg ? 'class' : 'skill' } : ref0;
   const ev = m?.event;
   if (!ev) return;
   const id = refId(ref);
   const skill = ref.kind === 'skill' || /^skill_/.test(id || '');
+  const klass = ref.kind === 'class' || /^class_/.test(id || '');
   if (ev === 'learned' && id) setEffectSource(id, ref);
-  const name = ref.name || (id && skillInfo(id)?.name) || (id ? String(id).replace(/^(effect|skill)_/, '').replace(/_/g, ' ') : skill ? 'a skill' : 'an effect');
+  const name = ref.name || (id && skillInfo(id)?.name) || (id ? String(id).replace(/^(effect|skill|class)_/, '').replace(/_/g, ' ') : klass ? 'a class' : skill ? 'a skill' : 'an effect');
   const pid = typeof m.peer === 'string' ? m.peer : m.peer?.peer_id;
   const who = (typeof m.peer === 'object' && m.peer?.name) || (pid ? peerShort(pid).replace(/ - \d+❤️$/u, '') : '');
   const text = ev === 'learned' ? `📥 learned ${name} from ${refText(ref)}${who ? ` (via ${who})` : ''}`
     : ev === 'shared' ? `📤 shared ${name}${who ? ` with ${who}` : ''}`
-    : ev === 'missing' ? `⚠ couldn't load ${name} from ${refText(ref)} — cast postponed`
+    : ev === 'missing' ? `⚠ couldn't load ${name} from ${refText(ref)} — ${klass ? 'the class sits out (dormant)' : 'cast postponed'}`
     : `${ev}: ${name} (${refText(ref)})`;
   logUI(text, 'phase', pid ? { peerId: pid } : null);
   const now = Date.now();
@@ -3374,7 +3401,7 @@ function queueSlot(key) {
       setTimeout(renderDeck, 1600);
       return;
     }
-    logUI(state.lostActions > 0 ? `you sit this action out (${state.lostActions} left)` : `${(eff || state.casting)?.name || 'the effect'} is being cast — only Posture${isReaver() ? ', Attack' : ''}${isMonk() ? ', Move' : ''} or Empty Posture until it lands (moving interrupts it)`, 'phase');
+    logUI(state.lostActions > 0 ? `you sit this action out (${state.lostActions} left)` : `${(eff || state.casting)?.name || 'the effect'} is being cast — only Posture${clsEmits('A') ? ', Attack' : ''}${clsEmits('B') ? ', Block' : ''}${clsEmits('M') ? ', Move' : ''} or Empty Posture until it lands (moving interrupts it)`, 'phase');
     return;
   }
   // Armed combo: only the slot's action (unqueuing it would leave EP — also

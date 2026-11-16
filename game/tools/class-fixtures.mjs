@@ -49,6 +49,7 @@ function mutateData(R, d) {
   if (R.p(0.2)) m.distance = R.pick([undefined, [20, 30], [5, 3], [0, 4], [3, 9], [1], 'x', [2, 2.5]]);
   if (R.p(0.2)) m.vision = R.pick([undefined, null, {}, { radius: odd() }, { radius: 4 }]);
   if (R.p(0.2)) m.colors = R.pick([[], ['elem_fire'], ['elem_fire', 'elem_air', 'elem_souls'], ['elem_bogus', 'elem_will', 'elem_harmony'], [...ELEMS]]);
+  if (R.p(0.2)) m.destroy_reanimated = R.pick([undefined, null, {}, { elements: [] }, { elements: ['elem_harmony'], die: 5 }, { elements: ['elem_fire', 'elem_harmony', 'elem_concentration'] }, { die: '6' }, { die: 4 }]);   // ruling 2026-11-16
   for (const k of Object.keys(m)) if (m[k] === undefined) delete m[k];
   return m;
 }
@@ -89,6 +90,7 @@ export function genWorld(seed, { mutate = 0.25 } = {}) {
       stats: Object.fromEntries(STATS.map(s => [s, R.int(22)])),
     };
     if (v.monster_state === undefined) delete v.monster_state;
+    if (creature && parseInt(sha256Hex(`${seed}:${id}`).slice(0, 2), 16) < 64) v.raised_by = 'class_necromancer';   // a reanimated unit (no R draw: other fixtures unchanged)
     view.set(id, v);
   }
   const self = R.p(0.85) ? R.pick(ids) : 'peer:zz99';
@@ -128,6 +130,7 @@ export function argsFor(hook, classId, W, R) {
     case 'colours': case 'kind': case 'config': case 'local': return { args: {} };
     case 'ready': return { args: { cs: cs(), held: R.p(0.8), turn: ctx.turn } };
     case 'strike': { const c = cs(); const cols = colsObj(); const stat = R.p(0.9) ? R.pick(STATS) : 'luck'; return { args: { cs: c, cols, stat, elem: R.p(0.5) ? null : R.pick(ELEMS), enemy: R.p(0.75), pb: pb() } }; }
+    case 'reanimated_strike': { const pool = ['elem_harmony', 'elem_concentration', 'elem_harmony', 'elem_concentration', ...ELEMS]; return { args: { down: [...new Set(Array.from({ length: R.int(3) }, () => R.pick(pool)))], stat: R.p(0.7) ? 'will' : R.p(0.8) ? R.pick(STATS) : 'luck', elem: R.p(0.5) ? null : R.pick(pool), enemy: R.p(0.8), pb: pb() } }; }
     case 'restore': return { args: { cs: cs(), cols: colsObj(), stat: R.pick(STATS), kind: R.pick(['recast', 'untap']) } };
     case 'progress': { const cols = STATS.filter(() => R.p(0.6)); return { args: { state: { down: STATS.filter(() => R.p(0.3)), archived: R.p(0.3), tapped: R.p(0.4), progress: R.p(0.5) ? { mode: R.pick(['recast', 'untap']), done: STATS.filter(() => R.p(0.5)) } : null },
       cols: cols.length ? cols : ['will'], co: { kind: R.pick(['colour', 'class_destroyed', 'recast', 'untap', 'other']), stat: R.pick(STATS) } } }; }

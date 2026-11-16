@@ -168,7 +168,7 @@ function REF_ability(W, ctx, classId, { actor, ab: ab0, salt }) {
       }
       case 'class_necromancer': {
         const raised = reanimatedAll([...view.values()]);
-        const fallen = [...view.keys()].filter(id => id !== me && lifeOf(id) <= 0 && view.get(id)?.creature_id && !raised.has(id) && distBetween(me, id) <= 1 && sideOf(view.get(id).alliance) === sideOf(v.alliance)).sort()[0] || null;
+        const fallen = [...view.keys()].filter(id => id !== me && lifeOf(id) <= 0 && view.get(id)?.creature_id && !raised.has(id) && !view.get(id)?.raised_by /* ruling 2026-11-16 */ && distBetween(me, id) <= 1 && sideOf(view.get(id).alliance) === sideOf(v.alliance)).sort()[0] || null;
         if (fallen) { classAbilityOut.revives.push({ by: me, who: fallen, creature_id: view.get(fallen).creature_id, name: view.get(fallen).name }); useAbility(r, `${view.get(fallen).name || fallen.slice(0, 8)} rises again`); break; }
         classAbilityOut.revives.push({ by: me, who: null }); useAbility(r, 'no fallen ally in reach — an archived creature of mine enters if I have one'); break;
       }
@@ -260,12 +260,24 @@ const REF = {
   // Reaver auto-target: ".sort((a, b) => a.cost - b.cost || a.lands - b.lands || a.life - b.life || a.id.localeCompare(b.id))[0]"
   stance_target: (_W, _ctx, c, { cands }) => { if (c !== 'class_reaver') return null; const pick = [...cands].sort((a, b) => a.cost - b.cost || a.lands - b.lands || a.life - b.life || a.id.localeCompare(b.id))[0]; return pick ? pick.id : null; },
   // the four emission sites: planning emitsLong, Rule 24 emitsNow, manipulator emitsFor, element badge anyEmit
-  emits: (_W, _ctx, cls, { code: c, site }) => {
-    const reaver = cls === 'class_reaver', monk = cls === 'class_monk';
-    if (site === 'plan') return (reaver && c === 'A') || (monk && (c === 'M' || c === 'EM'));
-    if (site === 'destroy') return (c === 'A' && reaver) || (c === 'M' && monk);
-    if (site === 'manip') return (c === 'A' && reaver) || ((c === 'M' || c === 'EM') && monk);
-    return (c === 'A' && cls === 'class_reaver') || (c === 'M' && cls === 'class_monk');
+  // User rulings 2026-11-16 ("Implement them"): Barbarian "may emit during Block" and Monk Empty Move emit at EVERY
+  // site (before: Monk EM only at plan / manip, Barbarian never) — the same answer at all four sites now.
+  emits: (_W, _ctx, cls, { code: c }) => {
+    return (cls === 'class_reaver' && c === 'A') || (cls === 'class_barbarian' && c === 'B') || (cls === 'class_monk' && (c === 'M' || c === 'EM'));
+  },
+  // Necromancer "Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6" (ruling 2026-11-16):
+  // the Rule 24 branch on a unit the class raised — each element falls to a die of 6, one per emission, any order.
+  reanimated_strike: (_W, ctx, cls, { down, stat, elem, enemy, pb }) => {
+    if (cls !== 'class_necromancer') return null;
+    const dr = ctx.classData(cls)?.destroy_reanimated;
+    const els = dr && Array.isArray(dr.elements) && dr.elements.length > 0 ? dr.elements : ['elem_harmony', 'elem_concentration'];
+    const need = dr && Number.isInteger(dr.die) ? dr.die : 6;
+    const struck = new Set(down || []);
+    let target = null;
+    for (const el of els) if (!struck.has(el) && CL_E2S[el] === stat && (elem ? el === elem : true)) { target = el; break; }
+    if (!enemy || target === null) return null;
+    const result = pb.fail ? 'retry' : pb.value >= need ? 'destroyed' : 'too weak';
+    return { result, ok: result === 'destroyed', last: result === 'destroyed' && els.filter(el => el !== target).every(el => struck.has(el)), elem: target };
   },
   // "const enchanterNow = entity.permanents.has('class_enchanter') && …"
   plan_emits: (_W, ctx, cls, a) => cls === 'class_enchanter' && (a.held && !a.archived && a.usedTurn !== ctx.turn && !a.options && ['A', 'B', 'M'].includes(a.code) && a.queued),
@@ -363,6 +375,13 @@ console.log('-- 2. worked examples (user rulings)');
   eq('Cleric: a laid trap on open ground still springs', classHook('step', 'class_cleric', ctx0, { threatReady: false, ring: [], trap: true, wtrap: false, building: false, trapLeft: 0 }), { stealth: false, trap: 'spring' });
   eq('Avenger: a new chaser grants +1, cap 1 (ruling 2026-11-15)', classHook('chase_step', 'class_avenger', ctx0, { state: { chasers: [], bonus: 0 }, chasing: ['peer:m2', 'peer:m1'] }), { chasers: ['peer:m1', 'peer:m2'], bonus: 1, fresh: ['peer:m1', 'peer:m2'], grant: 1, fade: false });
   eq('Reaver EP fights as A, Barbarian EP as B, Monk EP as M; Reaver EM as A', ['class_reaver', 'class_barbarian', 'class_monk'].map(c => classHook('stance', c, ctx0, { code: 'EP' })).concat([classHook('stance', 'class_reaver', ctx0, { code: 'EM' }), classHook('stance', 'class_monk', ctx0, { code: 'EM' })]), ['A', 'B', 'M', 'A', null]);
+  // user rulings 2026-11-16
+  eq('Barbarian B and Monk M / EM emit at every site (plan, Rule 24, manipulator, badge)', ['plan', 'destroy', 'manip', 'badge'].map(site => [classHook('emits', 'class_barbarian', ctx0, { code: 'B', site }), classHook('emits', 'class_monk', ctx0, { code: 'EM', site }), classHook('emits', 'class_monk', ctx0, { code: 'M', site }), classHook('emits', 'class_barbarian', ctx0, { code: 'A', site })]), Array(4).fill([true, true, true, false]));
+  const nd = { ...ctx0, classData: (id) => CLASSES[id].data };
+  eq('Necromancer: Harmony with a 6 on a reanimated unit → struck (not last)', classHook('reanimated_strike', 'class_necromancer', nd, { down: [], stat: 'will', elem: 'elem_harmony', enemy: true, pb: { fail: false, value: 6, dice: [6] } }), { result: 'destroyed', ok: true, last: false, elem: 'elem_harmony' });
+  eq('Necromancer: then Concentration with a 6 (another action) → the reanimated unit is destroyed', classHook('reanimated_strike', 'class_necromancer', nd, { down: ['elem_harmony'], stat: 'will', elem: null, enemy: true, pb: { fail: false, value: 6, dice: [6, 1] } }), { result: 'destroyed', ok: true, last: true, elem: 'elem_concentration' });
+  eq('Necromancer: a 5 is too weak; a Matter emission has no target', [classHook('reanimated_strike', 'class_necromancer', nd, { down: [], stat: 'will', elem: null, enemy: true, pb: { fail: false, value: 5, dice: [5] } }), classHook('reanimated_strike', 'class_necromancer', nd, { down: [], stat: 'matter', elem: null, enemy: true, pb: { fail: false, value: 6, dice: [6] } })], [{ result: 'too weak', ok: false, last: false, elem: 'elem_harmony' }, null]);
+  eq('Necromancer: other classes raise nothing that this applies to', classHook('reanimated_strike', 'class_healer', nd, { down: [], stat: 'will', elem: null, enemy: true, pb: { fail: false, value: 6, dice: [6] } }), null);
   eq('kinds: Elementalist / Rogue / Manipulator / Prophet passive; Weapon Master once_per_round; Bard static', ['class_elementalist', 'class_rogue', 'class_manipulator', 'class_prophet', 'class_weapon_master', 'class_bard', 'class_healer'].map(c => classHook('kind', c, { ...ctx0, classData: (id) => CLASSES[id].data })), ['passive', 'passive', 'passive', 'passive', 'once_per_round', 'static', 'tap']);
 }
 
