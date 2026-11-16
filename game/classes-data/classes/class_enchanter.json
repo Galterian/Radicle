@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_enchanter",
+  "name": "Enchanter",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"once_per_round","colors":["elem_air","elem_water","elem_earth","elem_fire","elem_time","elem_space"],"text":"Emit an element during your non-Posture action."},
+  "flags": {"phase":null,"planEmits":["A","B","M"],"hooks":["plan_emits"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "plan_emits": {"and":[{"bool":{"var":"held"}},{"!":{"bool":{"var":"archived"}}},{"!==":[{"var":"usedTurn"},{"var":"turn"}]},{"!":{"bool":{"var":"options"}}},{"in":[{"var":"code"},{"or":[{"class_flag":[{"var":"class"},"planEmits"]},[]]}]},{"bool":{"var":"queued"}}]}
+  }
+}

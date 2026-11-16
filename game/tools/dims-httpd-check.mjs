@@ -278,13 +278,72 @@ console.log(`ok  httpd list/fetch/describe (${seen.length} requests)`);
   // One dimension at a time (ruling 2026-11-15): alive in ANY dimension → named; raw dims (doors) or listed items
   // (alive_chars) alike; the first item of a name wins (the freshly fetched target before the cached list).
   const dA = { dimension_name: 'Dim-A', doors: cloneDoors }, dB = { dimension_name: 'Dim-B', doors: later };
-  let where = jp.aliveInDimensions([dA, dB], [me, mate, ghost]);
-  assert.deepEqual(where.map(h => `${h.character.name}@${h.dimension_name}`), ['Larkin@Dim-A', 'Mira@Dim-B']);
-  assert.match(jp.aliveWhereText(where), /^Larkin \(as P-Larkin, hp 3\) is alive in Dim-A — rejoin\/restore there; Mira \(as M2, hp 2\) is alive in Dim-B/);
-  where = jp.aliveInDimensions([{ dimension_name: 'Dim-A', doors: later }, dA, jp.describeDimension(dB, NOW)], [me]);
+  // Only LIVE presence counts (user 2026-11-16): seen 60 / 30 min ago (> DOOR_LIVE_MS 25 min) → nobody blocks.
+  let where = jp.aliveInDimensions([dA, dB], [me, mate, ghost], { now: NOW });
+  assert.deepEqual(where, [], 'stale alive records (60 / 30 min old) never block');
+  // Seen while the Door was live: 20 min earlier Larkin's Door was 40 min old (stale), Mira's record 10 min old (live).
+  where = jp.aliveInDimensions([dA, dB], [me, mate, ghost], { now: NOW - 20 * 60_000 });
+  assert.deepEqual(where.map(h => `${h.character.name}@${h.dimension_name}`), ['Mira@Dim-B']);
+  assert.match(jp.aliveWhereText(where), /^Mira \(as M2, hp 2\) is alive in Dim-B — rejoin\/restore there$/);
+  where = jp.aliveInDimensions([dA], [me, mate, ghost], { now: Date.parse(OLDT) + 60_000 });
+  assert.deepEqual(where.map(h => `${h.character.name}@${h.dimension_name}`), ['Larkin@Dim-A'], 'a 1-min-old Door → alive there');
+  assert.match(jp.aliveWhereText(where), /^Larkin \(as P-Larkin, hp 3\) is alive in Dim-A — rejoin\/restore there$/);
+  // The join target (anyAgeIn): any alive record there still refuses — no second copy of me in that dimension.
+  where = jp.aliveInDimensions([dA, dB], [me, mate], { now: NOW, anyAgeIn: 'Dim-A' });
+  assert.deepEqual(where.map(h => `${h.character.name}@${h.dimension_name}`), ['Larkin@Dim-A'], 'stale record in the join target itself → rejoin/restore');
+  assert.match(jp.aliveWhereText(where), /Larkin \(as P-Larkin, hp 3\) is still alive \(not seen lately\) in Dim-A — rejoin\/restore there/);
+  where = jp.aliveInDimensions([{ dimension_name: 'Dim-A', doors: later }, dA, jp.describeDimension(dB, NOW)], [me], { now: NOW, anyAgeIn: 'Dim-A' });
   assert.deepEqual(where, [], 'dead Larkin in the fresh Dim-A wins over the stale cached copy; dead in Dim-B too');
   const dl = jp.describeDimension({ dimension_name: 'Clone-Dim', doors: later, namespaces: [], legacy_doors: [] }, NOW);
   assert.ok(dl.alive_chars.some(m => m.profile_char_id === null && m.name === 'Mira') && !dl.alive_chars.some(m => m.peer_id === 'peer:P-Larkin'), 'alive_chars: every alive character, dead ones out');
+  assert.ok(dl.alive_chars.every(m => m.live === false && typeof m.seen_at === 'string'), 'alive_chars mark stale records (live false, seen_at)');
+  // THE PHONE CASE (user 2026-11-16): old Door of a quiet dimension the phone left without dying —
+  // { peer_id: 'peer:mobile-dev', name: 'P-Kestrel', character_id: 'char_behemoth_herald', profile_char_id: null, life: 7 }, 10 h old.
+  const kestrel = { id: 'pc_kestrel1', name: 'P-Kestrel', base_character: 'char_behemoth_herald' };
+  const phoneDoor = (msAgo) => ({ peer_id: 'peer:mobile-dev', name: 'P-Kestrel', alliance: 'player', character_id: 'char_behemoth_herald', creature_id: '', profile_char_id: null,
+    tile: { q: 3, r: -2 }, life: 7, life_max: 9, pushed_at: iso(msAgo), known_members: [] });
+  const quietK = { dimension_name: 'Quiet-K', doors: [phoneDoor(10 * 3600_000)], namespaces: [], legacy_doors: [] };
+  const itemK = jp.describeDimension(quietK, NOW);
+  const kRec = itemK.alive_chars.find(m => m.peer_id === 'peer:mobile-dev');
+  assert.ok(kRec && kRec.profile_char_id === null && kRec.life === 7 && kRec.live === false, 'phone record listed as alive but stale');
+  assert.deepEqual(jp.aliveInDimensions([{ dimension_name: 'Elsewhere', doors: [] }, quietK, itemK], [kestrel], { now: NOW, anyAgeIn: 'Elsewhere' }), [],
+    'phone case: Kestrel alive (life 7) in a quiet dimension 10 h ago → joining Elsewhere is allowed (raw doors and listed item alike)');
+  assert.deepEqual(jp.aliveInDimensions([itemK], [kestrel], { now: NOW + 365 * 86400_000 }), [], 'a cached item is re-judged by seen_at, not its old `live`');
+  assert.deepEqual(jp.aliveInDimensions([{ dimension_name: 'Elsewhere', doors: [] }, { ...quietK, doors: [phoneDoor(2 * 60_000)] }], [kestrel], { now: NOW }).map(h => h.dimension_name), ['Quiet-K'],
+    'the same Door pushed 2 min ago → alive there, refused');
+  assert.equal(jp.aliveInDimensions([itemK], [kestrel], { now: NOW, anyAgeIn: 'Quiet-K' }).length, 1, 'joining Quiet-K itself → rejoin/restore there');
+  // A live SHADOW of the stale character (rule_hero_shadow) counts as alive there.
+  const shadowed = { dimension_name: 'Shadow-K', doors: [phoneDoor(10 * 3600_000), { peer_id: 'peer:Host', name: 'Host', alliance: 'player_c', tile: { q: 9, r: 9 }, life: 5, pushed_at: iso(60_000),
+    known_members: [{ peer_id: 'peer:shadow-mobile-dev', name: 'P-Kestrel', alliance: 'player', character_id: 'char_behemoth_herald', shadow_of: 'peer:mobile-dev', tile: { q: 3, r: -2 }, life: 6, last_seen: iso(60_000) }] }] };
+  where = jp.aliveInDimensions([shadowed], [kestrel], { now: NOW });
+  assert.deepEqual(where.map(h => h.unit.peer_id), ['peer:shadow-mobile-dev'], 'live shadow → alive there');
+  assert.match(jp.aliveWhereText(where), /P-Kestrel \(as shadow-mobile-dev, its shadow, hp 6\) is alive in Shadow-K/);
+  assert.ok(jp.describeDimension(shadowed, NOW).alive_chars.some(m => m.shadow_of === 'peer:mobile-dev' && m.live === true), 'alive_chars carry shadow_of + live');
+  // Unattended characters (rule_unattended_character): the unit list shows unattended / follows <leader> / leads N /
+  // combo (the Door's, else data/characters.json); an `out` record (vanished, Dimension Out) is not there at all.
+  {
+    const um = (id, extra) => ({ peer_id: id, name: id.replace('peer:', ''), alliance: 'player', character_id: 'char_oran_rief', tile: { q: 1, r: 1 }, life: 4, last_seen: iso(30_000), ...extra });
+    const uDoor = { peer_id: 'peer:P', name: 'P', alliance: 'player', character_id: 'char_pride_guardian', tile: { q: 0, r: 0 }, life: 4, pushed_at: iso(20_000), human: 1, leader: 2, ally_of: 'peer:H1', combo: ['A', 'P', 'M'],
+      known_members: [um('peer:H1-shA', { shadow_of: 'peer:H1', led_by: 'peer:P', ally_of: 'peer:H2' }), um('peer:H2-shB', { shadow_of: 'peer:H2', led_by: 'peer:P', combo: ['B', 'B', 'A'] }),
+        um('peer:H3-shC', { shadow_of: 'peer:H3' }), um('peer:H4-shD', { shadow_of: 'peer:H4', out: true }), um('peer:H4', { last_seen: iso(600_000) })] };
+    const uu = jp.dimensionUnits([uDoor], NOW).units;
+    const by = id => uu.find(u => u.peer_id === id);
+    assert.ok(by('peer:P')?.leads === 2 && !by('peer:P').unattended && by('peer:P').combo.join('') === 'APM', `master: leads 2, combo A·P·M (${JSON.stringify(by('peer:P'))})`);
+    assert.ok(by('peer:H1-shA')?.unattended && by('peer:H1-shA').led_by_name === 'P' && by('peer:H1-shA').combo?.join('') === 'MBP', 'follower: unattended, follows P, catalogue combo M·B·P (char_oran_rief)');
+    assert.ok(by('peer:H2-shB')?.combo.join('') === 'BBA', 'the Door\'s own combo wins');
+    assert.ok(by('peer:H3-shC')?.unattended && by('peer:H3-shC').led_by === null && by('peer:H3-shC').leads === 0, 'leaderless unattended');
+    assert.ok(!by('peer:H4-shD') && !by('peer:H4'), 'out: the vanished stand-in and its older hero record are both gone');
+    assert.ok(!jp.unionMembers([uDoor], 3600_000).some(m => m.peer_id === 'peer:H4-shD'), 'unionMembers drops out records');
+    const h4 = { id: 'pc_h4', name: 'H4', base_character: 'char_oran_rief' };
+    assert.equal(jp.restoreHereTarget({ dimension_name: 'U', doors: [uDoor] }, h4, NOW), null, 'out → nothing to restore there');
+    assert.equal(jp.heroShadowIn([uDoor], 'peer:H4'), null, 'out → no unattended stand-in to take over (not dead either)');
+    assert.deepEqual(jp.aliveInDimensions([{ dimension_name: 'U', doors: [uDoor] }], [h4], { now: NOW, anyAgeIn: 'U' }), [], 'out → not alive there (one dimension at a time frees it)');
+    const h1 = { id: 'pc_h1', name: 'H1-shA', base_character: 'char_oran_rief' };
+    const t1 = jp.restoreHereTarget({ dimension_name: 'U', doors: [uDoor] }, h1, NOW);
+    assert.ok(t1?.replaces === 'peer:H1-shA' && t1.label === 'H1', `owner back → takes over its unattended copy (${JSON.stringify(t1)})`);
+    const ud = jp.describeDimension({ dimension_name: 'U', doors: [uDoor], namespaces: [], legacy_doors: [] }, NOW);
+    assert.ok(ud.units.some(u => u.led_by_name === 'P') && !ud.alive_chars.some(m => m.peer_id === 'peer:H4-shD'), 'describeDimension carries the unit tags; out not alive');
+  }
   // Quiet regeneration: alive npc_b creatures without owner, newest record, valid tile; nearest `max` to the join point.
   const SEED = '0xabc12345';
   const regDoors = [{ door_version: 2, peer_id: 'peer:R-Hero', name: 'R-Hero', alliance: 'player', tile: { q: 2, r: 2 }, life: 4, life_max: 4, pushed_at: OLDT, commit: 'r1',

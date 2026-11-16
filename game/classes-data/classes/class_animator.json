@@ -1,0 +1,14 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_animator",
+  "name": "Animator",
+  "version": "1.1.0",
+  "source": {"collection":"classes","version":"1.1.0"},
+  "data": {"ability_kind":"tap","colors":["elem_souls","elem_concentration","elem_harmony"],"near":2,"place_range":1,"text":"Tap: the building nearest to you (within 2 hexes) is copied — a new building of the same kind, with the same bonus, rises on the free hex next to you that you pick; if you pick none (or it is not free), on a random free hex next to you. With no building within 2 hexes nothing happens and the ability stays ready. The copy carries the trap its source building hides (armed, even if the source's has already sprung); a copied dungeon is an unexplored dungeon.","copy_traps":"source"},
+  "flags": {"phase":"post","needs":"tile","hooks":["ability","config"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "ability": {"engine":"js","impl":"peer.mjs#animatorCopy","note":"resolved in simulate() (map geometry, occupancy, the move register) — not separable without changing behaviour"},
+    "config": {"call":["cfg_animator"]}
+  }
+}

@@ -14,7 +14,9 @@
 //                      sprites / portrait / sounds this character uses
 //     combo            3 letters of A/B/M/P with at least two A/B (BAM, APB, AMA …)
 //     actions          { A, B, M, P } — action cards in the deck (any count)
-//     cards            [{ uid, kind: 'skill'|'effect', id, where: 'deck'|'archive', from? }]
+//     cards            [{ uid, kind: 'skill'|'effect', id, where: 'deck'|'archive', from?, ref?, source? }]
+//                      ref: a FOREIGN (player-branch) card's handshake ref {id, sha256, libs, repo?, branch?, commit?,
+//                      name?, verdict?} (FXG) — the peer rebuilds it from the content cache / a fetch; source = ref (UI badge)
 //     deaths, kills }
 // Created: 4 random skills + 10 random effects; the player edits stats, class and resources
 // once, then `locked` — afterwards only the deck (actions, deck vs archive) can change.
@@ -27,17 +29,11 @@ import os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { playableEffects, EFFECT_RULES } from './effects.mjs';
 import { fancyLabel } from './js/names.js';
+import { SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE } from './skills.mjs';   // S1
 
-// Keep in sync with peer.mjs SKILLS_IMPLEMENTED (the skills the resolver plays).
-export const PROFILE_SKILLS = [
-  'skill_powerful_attack', 'skill_overrun', 'skill_grapple', 'skill_ranged_weapon',
-  'skill_taunt', 'skill_barricade', 'skill_sanctuary',
-  'skill_dodge', 'skill_bluff', 'skill_intimidation', 'skill_disruption_move',
-  'skill_battle_trance', 'skill_force_shield', 'skill_counter_spell',
-];
-// Keep in sync with peer.mjs NEGATING_SKILLS / TRANCE (shown as card flags in the editor).
-const NEGATING_SKILLS = new Set(['skill_intimidation', 'skill_bluff', 'skill_grapple', 'skill_disruption_move', 'skill_overrun', 'skill_dodge', 'skill_counter_spell']);
-const TRANCE_SKILL = 'skill_battle_trance';
+// S1: the skills the resolver plays, the negating ones and Battle Trance come from skills.mjs (SKILL_RULES).
+export const PROFILE_SKILLS = [...SKILLS_IMPLEMENTED];
+const TRANCE_SKILL = TRANCE;
 export const STAT_KEYS = ['vitality', 'world', 'matter', 'will'];
 export const STAT_SUM = 40, STAT_MIN = 1, STAT_MAX = 30;
 export const DECK_MIN = 15, ACTION_MAX = 30;
@@ -104,7 +100,7 @@ function pickActive(entry) {
   live.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   const v = live[0] ?? entry.versions?.[0];
   return { id: entry.id, name: entry.name, tags: entry.tags || [], data: v?.data || {}, resources: entry.resources || null,
-    source: entry.source || v?.data?.source || null };   // chaosD6-Effects provenance (js/effect_source.js contract)
+    source: entry.source || v?.data?.source || null };   // chaosD6-Effects / chaosD6-Skills provenance (js/effect_source.js contract)
 }
 const _catalogs = new Map();
 export function loadCatalog(dataDir) {
@@ -136,7 +132,8 @@ export function catalogForUI(cat) {
     skills: cat.skillIds.map(id => {
       const s = cat.skills[id];
       return { id, name: s.name, text: s.data.text || '', action_type: id === TRANCE_SKILL ? '*' : s.data.action_type || '', permanent: !!s.data.is_permanent,
-        negating: NEGATING_SKILLS.has(id), point_buy_stat: s.data.point_buy_stat || null, tags: s.tags || [] };
+        negating: NEGATING_SKILLS.has(id), point_buy_stat: s.data.point_buy_stat || null, tags: s.tags || [],
+        source: s.source || null };   // chaosD6-Skills provenance (js/effect_source.js contract)
     }),
     effects: cat.effectIds.map(id => {
       const e = cat.effects[id], rule = EFFECT_RULES[id] || {};
@@ -199,6 +196,7 @@ export function validateCharacter(c, cat) {
   for (const k of ACTION_CODES) { const n = c.actions?.[k]; if (!Number.isInteger(n) || n < 0 || n > ACTION_MAX) err.push(`${k} cards: 0–${ACTION_MAX}`); }
   for (const x of c.cards || []) {
     if (!['deck', 'archive'].includes(x.where)) err.push(`card ${x.uid}: deck or archive`);
+    if (foreignRefOf(x)) continue;   // FXG: a foreign card (won from a kill) is checked by the peer's handshake, not the catalogue
     if (x.kind === 'skill' ? !cat.skills[x.id] : x.kind === 'effect' ? !cat.effects[x.id] : true) err.push(`card ${x.uid}: unknown ${x.kind} ${x.id}`);
   }
   if (deckSize(c) < DECK_MIN) err.push(`the deck needs at least ${DECK_MIN} cards (now ${deckSize(c)})`);
@@ -260,6 +258,19 @@ export function deleteCharacter(p, id) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// FXG: a foreign card's ref, kept compact ({id, sha256, libs} + provenance), or null (built-in card / no valid ref).
+const SHA64 = /^[0-9a-f]{64}$/;
+export function foreignRefOf(x) {
+  const r = x?.ref;
+  if (!r || typeof r !== 'object' || r.id !== x.id || !SHA64.test(String(r.sha256 || '')) || !r.libs || typeof r.libs !== 'object') return null;
+  const o = { id: r.id, sha256: r.sha256, libs: { ...r.libs } };
+  for (const k of ['repo', 'branch', 'commit', 'name', 'verdict']) if (typeof r[k] === 'string' && r[k]) o[k] = r[k].slice(0, 200);
+  return o;
+}
+// {kind, id} (+ ref for a foreign card): what a death drop / gift / profile card says about a card.
+const cardRefOut = (x) => { const ref = foreignRefOf(x); return ref ? { kind: x.kind, id: x.id, ref } : { kind: x.kind, id: x.id }; };
+
+// ---------------------------------------------------------------------------------------------
 // Death / kill bookkeeping (called by peer.mjs; writes the profile file)
 // The dead character loses one random non-action card from its DECK; returns it ({kind,id}) or null.
 export function dropRandomDeckCard(file, charId, rnd = Math.random) {
@@ -271,7 +282,7 @@ export function dropRandomDeckCard(file, charId, rnd = Math.random) {
     if (!inDeck.length) return null;
     const lost = pick(inDeck, rnd);
     c.cards = c.cards.filter(x => x !== lost);
-    return { kind: lost.kind, id: lost.id };
+    return cardRefOut(lost);   // FXG: + ref for a foreign card
   }, file);
 }
 // A card taken from a unit I killed lands in my archive.
@@ -281,6 +292,8 @@ export function addArchivedCard(file, charId, card, from = '') {
     if (!c || !['skill', 'effect'].includes(card?.kind) || !card.id) return null;
     c.kills = (c.kills | 0) + 1;
     const x = { uid: uid(), kind: card.kind, id: card.id, where: 'archive', from: String(from).slice(0, 60), new: true, taken_at: new Date().toISOString() };
+    const ref = foreignRefOf(card);   // FXG: a foreign card keeps its ref (rebuilt next session from the cache / a fetch)
+    if (ref) { x.ref = ref; x.source = { ...ref, kind: card.kind }; }
     c.cards.push(x);
     return x;
   }, file);

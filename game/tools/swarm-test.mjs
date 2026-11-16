@@ -215,6 +215,8 @@ function startAgent(peerId, port, attempt = 0) {
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
     if (!me || (me.life ?? 1) <= 0) return;
+    // Dimension Out running (SWARM_DIMOUT): hold still with Empty Posture — a move, attack or cast would cancel it.
+    if (Number(me.dim_out_until_turn ?? -1) >= 0) { queue('EMPTY', []); send({ kind: 'target', target: null }); a.dimOutHolds = (a.dimOutHolds || 0) + 1; return; }
     a.reserved = null;
     const dist = p => hexDistance({ q: me.tile_q, r: me.tile_r }, { q: p.tile_q, r: p.tile_r });
     // A Rogue who spent the threat charge this turn (stealth_turn) is not chased unless already adjacent (user ruling 2026-11-14).
@@ -521,7 +523,34 @@ async function audit(label) {
 }
 
 const endAt = Date.now() + minutes * 60_000;
-while (Date.now() < endAt) { await sleep(30_000); await audit('live'); }
+// SWARM_SHADOW=1 (rule_hero_shadow, 2026-11-16): a third of the way in, one bot hero's game "closes" — its peer
+// process is SIGKILLed (SWARM_SHADOW_LABEL, default P-Agent4) and its agent stops. After the silence (SHADOW_MS,
+// 120 s unless the launcher env shortens it) one live hero's game starts its shadow; the log scan counts them.
+const SHADOW_KILL = process.env.SWARM_SHADOW === '1' ? (process.env.SWARM_SHADOW_LABEL || 'P-Agent4') : null;
+const shadowKillAt = Date.now() + minutes * 60_000 / 3;
+let shadowKilled = false;
+function killHeroPeer(label) {
+  for (const pid of fs.readdirSync('/proc').filter(d => /^\d+$/.test(d))) {
+    try {
+      if (!fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes('peer.mjs')) continue;
+      const env = fs.readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0');
+      if (env.includes(`PEER_LABEL=${label}`) && env.includes(`DIM_NAME=${DIM}`) && !env.some(e => e.startsWith('SHADOW_OF=') && e.length > 10)) { process.kill(Number(pid), 'SIGKILL'); return Number(pid); }
+    } catch {}
+  }
+  return null;
+}
+while (Date.now() < endAt) {
+  await sleep(30_000);
+  if (SHADOW_KILL && !shadowKilled && Date.now() >= shadowKillAt) {
+    shadowKilled = true;
+    const ag = agents.find(a => a.peerId === `peer:${SHADOW_KILL}`);
+    if (ag) { try { ag.ws.onclose = null; ag.ws.close(); } catch {} agents.splice(agents.indexOf(ag), 1); }
+    ports.delete(`peer:${SHADOW_KILL}`);
+    const pid = killHeroPeer(SHADOW_KILL);
+    log(`shadow test: ${SHADOW_KILL} ${pid ? `killed (pid ${pid})` : 'not found'} — its shadow should stand in after the silence`);
+  }
+  await audit('live');
+}
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
 log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} avenger-lures ${a.avengerLures || 0} witch-taps ${a.witchTaps || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0} cleric-taps ${a.clericTaps || 0} class-walks ${a.classWalks || 0} rogue-trap-walks ${a.rogueTrapWalks || 0} invis-casts ${a.invisCasts || 0} invis-moves ${a.invisMoves || 0} invis-breaks ${a.invisBreaks || 0} natural-strikes ${a.natStrikes || 0} tower-walks ${a.towerWalks || 0}`).join('; ')}`);
 await sleep(20_000);
@@ -535,7 +564,7 @@ for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir)
   if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
   const txt = fs.readFileSync(path.join(dir, f), 'utf8');
   const c = k => (txt.match(k) || []).length;
-  counts[f] = { divergence: c(/STATE DIVERGENCE/g), heal: c(/mesh heal:/g), relink: c(/closed — will re-dial/g), catchup: c(/clock catch-up/g), uncaught: c(/UNCAUGHT|UNHANDLED/g), died: c(/DIED at/g), mapBlocks: c(/map \+/g), mapSync: c(/map sync/g), natural: c(/\] natural /g) };
+  counts[f] = { divergence: c(/STATE DIVERGENCE/g), heal: c(/mesh heal:/g), relink: c(/closed — will re-dial/g), catchup: c(/clock catch-up/g), uncaught: c(/UNCAUGHT|UNHANDLED/g), died: c(/DIED at/g), mapBlocks: c(/map \+/g), mapSync: c(/map sync/g), natural: c(/\] natural /g), shadow: c(/\] shadow: /g) };
   const gs = [...txt.matchAll(/gossip state: topics=\d+ totalPeers=(\d+) subscribersOnStrong=(\d+)/g)].at(-1);
   counts[f].lastPubsubPeers = gs ? `${gs[2]}/${gs[1]}` : '?';
   const bus = [...txt.matchAll(/bus: (\d+)\/(\d+) relays, sent (\d+), received (\d+)/g)].at(-1);
@@ -615,7 +644,9 @@ const divergences = Object.values(counts).reduce((s, c) => s + c.divergence, 0);
 // rows after the last evt_genesis belong to this run of the dimension.
 try {
   const tape = path.join(here, '..', 'sessions', DIM, 'hashgraph.jsonl');
-  const rows = fs.readFileSync(tape, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  // swarm-run.sh caps the tape (TAPE_MAX_BYTES): the older part, if rotated, is in hashgraph.1.jsonl.
+  const older = tape.replace(/\.jsonl$/, '.1.jsonl');
+  const rows = ((fs.existsSync(older) ? fs.readFileSync(older, 'utf8') + '\n' : '') + fs.readFileSync(tape, 'utf8')).split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
   const gi = rows.map((r, i) => r.type === 'evt_genesis' ? i : -1).filter(i => i >= 0).at(-1) ?? 0;
   const run = rows.slice(gi);
   const reveals = run.filter(r => r.type === 'evt_action_reveal');

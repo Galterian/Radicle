@@ -14,14 +14,30 @@ if [[ "${FORCE_CLASS:-}" == *,* && -z "${FORCE_CLASS_LABELS:-}" ]]; then
   [ "${TEAM_D:-0}" = 1 ] && FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,D-Agent7"
   export FORCE_CLASS_LABELS="$FORCE_CLASS_LABELS,ally-1,foe-1,foe-2,M-Foe3,M-Foe4"
 fi
-# The swarm summary scans the whole hashgraph tape (swarm-test.mjs §6): keep it unbounded here (peer.mjs TAPE_MAX_BYTES).
-export TAPE_MAX_BYTES="${TAPE_MAX_BYTES:-0}"
+# The swarm summary scans the hashgraph tape (swarm-test.mjs §6 reads hashgraph.1.jsonl + hashgraph.jsonl): cap it at
+# 64 MB per file (peer.mjs TAPE_MAX_BYTES rotates past it) — an uncapped tape reached 1.2 GB (Swarm-1159). 0 = unbounded.
+export TAPE_MAX_BYTES="${TAPE_MAX_BYTES:-67108864}"
 # NOGUN=1: every peer (launcher A/C, joiners, companions) runs without Gun (P2P rework M6 step 1). Default: Gun on.
 export NOGUN="${NOGUN:-0}"
 ps -eo pid,comm,args | grep -E '^ *[0-9]+ +node +.*\.mjs' | grep -v bash | awk '{print $1}' | xargs -r kill 2>/dev/null || true
 sleep 1
 node --check peer.mjs
 setsid nohup node start-all.mjs < /dev/null > /tmp/chaos-A.log 2>&1 &
+LAUNCHER_PID=$!
+# At the end (or on failure) stop this run's launcher and every peer of its dimension: a launcher left running kept
+# 19 peers playing Swarm-1159 for 15 h. KEEP_LAUNCHER=1 leaves it up (e.g. to look at the dimension in a browser).
+stop_swarm() {
+  [ "${KEEP_LAUNCHER:-0}" = 1 ] && { echo "KEEP_LAUNCHER=1 — launcher A left running (pid $LAUNCHER_PID)"; return; }
+  local n dim p
+  n=$(grep -oE 'hosted Swarm-[0-9]+' /tmp/swarm.log 2>/dev/null | head -1 | grep -oE '[0-9]+$' || true)
+  dim="dim-swarm-${n:-none}"
+  kill -- -"$LAUNCHER_PID" 2>/dev/null || kill "$LAUNCHER_PID" 2>/dev/null || true
+  for p in $(pgrep -f 'peer\.mjs' || true); do
+    tr '\0' '\n' < /proc/$p/environ 2>/dev/null | grep -qx "DIM_ID=$dim" && kill "$p" 2>/dev/null || true
+  done
+  echo "swarm stopped: launcher A (pid $LAUNCHER_PID) and the peers of $dim"
+}
+trap stop_swarm EXIT
 # Wait for the launcher (a cold start can take more than a few seconds; with set -e a too-early grep used to end the run silently).
 A=""
 for i in $(seq 1 40); do

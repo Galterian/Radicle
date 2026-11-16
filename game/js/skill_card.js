@@ -111,7 +111,8 @@ function _ingest(entry, isPermanentDefault) {
   // entry (else on its active version's data). Built-in (main) ones carry none. Only ever SET
   // from here, so a source learned over the wire before the catalog landed is not wiped.
   const src = entry.source || data.source || null;
-  if (src && String(entry.id).startsWith('effect_')) setEffectSource(entry.id, src);
+  // Skills (chaosD6-Skills, S6) the same way: skill_* ids resolve against that repo's main.
+  if (src && /^(effect|skill)_/.test(String(entry.id))) setEffectSource(entry.id, src);
 }
 
 export function loadCatalog() {
@@ -321,7 +322,7 @@ export function makeSkillIcon(id, { size = 32, title = null, srcMark = true } = 
   canvas.width = size;
   canvas.height = size;
   wrap.appendChild(canvas);
-  // Player-branch effect (chaosD6-Effects): a tiny ⎇ in the corner; the full badge lives on cards.
+  // Player-branch effect / skill (chaosD6-Effects / -Skills): a tiny ⎇ in the corner; the full badge lives on cards.
   const src = srcMark ? effectSource(id) : null;
   if (src) {
     const mk = document.createElement('span');
@@ -396,7 +397,7 @@ export function makeSkillCard(id, { variant = 'strip', nameOverride = null, text
     nm.appendChild(b);
   }
   body.appendChild(nm);
-  // Source badge (chaosD6-Effects): only for effects NOT from the built-in main branch.
+  // Source badge (chaosD6-Effects / chaosD6-Skills): only for cards NOT from their repo's built-in main branch.
   const srcBadge = makeSourceBadge(effectSource(id), { compact: variant === 'strip' });
   if (srcBadge) body.appendChild(srcBadge);
 

@@ -10,8 +10,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -43,6 +43,43 @@
             ],
             "references": ["in_contact", "is_enemy", "rps_edge", "rule_8_instant_returns"]
           }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["skill_overrun", "skill_grapple", "skill_ranged_weapon"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Powerful Attack: implement the paper lock — after it paid off (its card did not return to hand) only Attack until the end of the round. Engine: plan_lock → [\"A\"]; applied at planning by the SKR peer hunk.",
+          "data": {
+            "action_type": "A",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "On successful attack: +1 damage; cannot perform any other action except Attack until end of round (any other action you plan is played as a bare Empty Posture — no card, no skill, no cast)."
+          },
+          "logic": {
+            "description": "Instant riding on an Attack card. If the Attack lands (resolution-matrix damage >= 1 against the defender) it deals +1 damage; a blocked or neutralised Attack gains nothing. Paper lock implemented (user ruling 2026-11-16): once it paid off (its card did not return to hand under Rule 8) the caster cannot perform any other action except Attack until the end of the round — any other action it plans is played as a bare Empty Posture (no card, no skill, no cast). game/skills.mjs plan_lock; applied at planning by peer.mjs. No-benefit casts return to hand under Rule 8 (pc override) and lock nothing.",
+            "prerequisites": [
+              {"id": "rides_on_attack", "description": "The caster's action this turn is an Attack card.", "when": {"in": [{"var": "caster.action"}, ["A"]]}},
+              {"id": "enemy_in_contact", "description": "The right-clicked target is an enemy in contact (distance <= 1).", "when": {"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}}
+            ],
+            "effects": [
+              {"id": "bonus_damage", "description": "+1 damage when the Attack's matrix damage against the defender is at least 1, else 0.", "target": "target", "unit": "damage", "value": {"if": [{">=": [{"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, 1]}, 1, 0]}},
+              {"id": "total_attack_damage", "description": "Matrix damage of the Attack plus the Powerful Attack bonus.", "target": "target", "unit": "damage", "value": {"+": [{"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, {"if": [{">=": [{"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, 1]}, 1, 0]}]}},
+              {"id": "attack_only_rest_of_round", "description": "1 when the rest of the round is locked to Attack: the Attack landed (matrix damage >= 1), so the card stays played; any other planned action becomes a bare Empty Posture.", "target": "caster", "unit": "actions", "value": {"if": [{">=": [{"rule": ["rps_edge", {"actor": {"var": "caster.action"}, "defender": {"var": "defender.action"}}]}, 1]}, 1, 0]}},
+              {"id": "rule_8_return_to_hand", "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.", "target": "caster", "unit": "cards", "value": {"rule": ["rule_8_instant_returns", {"took_with": {"var": "outcome.took_with"}, "took_without": {"var": "outcome.took_without"}, "dealt_with": {"var": "outcome.dealt_with"}, "dealt_without": {"var": "outcome.dealt_without"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays an Attack skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "is_permanent_unchanged", "description": "Remains an instant (non-permanent).", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "point_buy_stat is null, 'any' or one of the four stats.", "assert": {"or": [{"==": [{"var": "proposal.data.point_buy_stat"}, null]}, {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}]}}
+            ],
+            "references": ["in_contact", "is_enemy", "rps_edge", "rule_8_instant_returns"]
+          }
         }
       ]
     },
@@ -54,8 +91,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -77,6 +114,42 @@
             ],
             "effects": [
               {"id": "negate_target_move", "description": "True when the target's Move / Empty Move is cancelled this round (target in contact and playing M or EM).", "target": "target", "unit": "hexes", "value": {"if": [{"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"in": [{"var": "target.action"}, ["M", "EM"]]}]}, 0, 1]}},
+              {"id": "rule_8_return_to_hand", "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.", "target": "caster", "unit": "cards", "value": {"rule": ["rule_8_instant_returns", {"took_with": {"var": "outcome.took_with"}, "took_without": {"var": "outcome.took_without"}, "dealt_with": {"var": "outcome.dealt_with"}, "dealt_without": {"var": "outcome.dealt_without"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays an Attack skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "is_permanent_unchanged", "description": "Remains an instant.", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "point_buy_stat is null, 'any' or one of the four stats.", "assert": {"or": [{"==": [{"var": "proposal.data.point_buy_stat"}, null]}, {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}]}}
+            ],
+            "references": ["in_contact", "is_enemy", "rule_8_instant_returns"]
+          }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["skill_powerful_attack"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Overrun: implement the paper swap. Engine: negate_kind queues {by, on} in ctx.swaps for a character-targeted Attack on an adjacent enemy; the resolver (SKR peer hunk) trades the two hexes after the moves when neither moved. The Alt (push one tile) is still not implemented.",
+          "data": {
+            "action_type": "A",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "Swap places with the enemy you Attack (walk over them and go behind): you take their hex and they take yours. Negate the enemy's Move. Alt: the enemy or ally is moved one tile away; step over them."
+          },
+          "logic": {
+            "description": "Instant riding on an Attack card against an enemy in contact. The target's Move this round is negated (they stay on their tile) and — paper swap implemented (user ruling 2026-11-16) — when the Attack targets that adjacent enemy the attacker and the enemy swap places (walk over them and go behind): each takes the other's hex after the moves, if neither moved otherwise this action; one swap per unit and action (actor order). The Alt (push one tile away) is still not implemented. Judged by whether it did its job (negated a Move or swapped); with nothing to do it returns to hand.",
+            "prerequisites": [
+              {"id": "rides_on_attack", "description": "The caster's action this turn is an Attack card.", "when": {"in": [{"var": "caster.action"}, ["A"]]}},
+              {"id": "enemy_in_contact", "description": "The target is an enemy in contact.", "when": {"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}}
+            ],
+            "effects": [
+              {"id": "negate_target_move", "description": "True when the target's Move / Empty Move is cancelled this round (target in contact and playing M or EM).", "target": "target", "unit": "hexes", "value": {"if": [{"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"in": [{"var": "target.action"}, ["M", "EM"]]}]}, 0, 1]}},
+              {"id": "swap_places", "description": "1 when the attacker and the adjacent enemy target trade hexes this action.", "target": "target", "unit": "hexes", "value": {"if": [{"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}, 1, 0]}},
               {"id": "rule_8_return_to_hand", "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.", "target": "caster", "unit": "cards", "value": {"rule": ["rule_8_instant_returns", {"took_with": {"var": "outcome.took_with"}, "took_without": {"var": "outcome.took_without"}, "dealt_with": {"var": "outcome.dealt_with"}, "dealt_without": {"var": "outcome.dealt_without"}}]}}
             ],
             "validation": [
@@ -140,8 +213,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -174,6 +247,44 @@
             ],
             "references": ["point_buy_dice_count", "rps_edge", "using_rule_24"]
           }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["skill_disruption_move"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Ranged Weapon: \"+1 range\" — Attack opposed to the enemy's action from 2 hexes away; an enemy Block opposed to it deals no damage at range 2; Move/Postures with no contact do nothing. Addition (same day): \"when nearby enemy his block on your attack does 1 damage to you like regular\" / \"So no bonuses on nearby enemy\" — adjacent, the Attack is a plain Attack. Engine: attack_range (2 for the holder's Attack), block_in (only beyond contact), block_cost (Reaver: an adjacent Block costs a ranged attacker too).",
+          "data": {
+            "action_type": "A",
+            "is_permanent": true,
+            "point_buy_stat": "stat_matter",
+            "element": "elem_fire",
+            "text": "Permanent. +1 range: your Attack action is opposed to an enemy's action from 2 hexes away; there the enemy's Block deals you no combat damage and a Move or Posture with no contact does nothing to you. Against an adjacent enemy it gives no bonus: your Attack resolves as a plain Attack (a nearby Block deals you its regular 1 damage). Your Attack action does not trigger traps and the follow rule is not applied."
+          },
+          "logic": {
+            "description": "Permanent skill played with an Attack card; lands in the permanents holding with a point-buy die of Matter (dice_count(matter) d6, highest die = power). While held (user rulings 2026-11-16): +1 range — the holder's Attack is opposed to an enemy's action from 2 hexes away (skills.mjs attack_range); at that range the enemy's Block deals the holder no combat damage and a Move or Posture with no contact does nothing. Against an ADJACENT enemy it gives no bonus: the Attack resolves as a plain Attack and a Block deals its regular 1 damage. The holder's Attack ignores traps and the follow rule (Rule 15). Destroyable under Rule 24 by a die >= its power. Not playable while already held.",
+            "prerequisites": [
+              {"id": "rides_on_attack", "description": "The caster's action this turn is an Attack card.", "when": {"in": [{"var": "caster.action"}, ["A"]]}},
+              {"id": "not_already_held", "description": "The permanent is not already in the caster's holding.", "when": {"!": {"includes": [{"var": "caster.permanents"}, "skill_ranged_weapon"]}}}
+            ],
+            "effects": [
+              {"id": "placement_dice", "description": "Number of d6 the placement point-buy rolls against Matter.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"var": "caster.stats.matter"}}]}},
+              {"id": "attack_reach", "description": "Hexes the holder's strike reaches: 2 for an Attack (+1 range), 1 for anything else.", "target": "caster", "unit": "hexes", "value": {"if": [{"==": [{"var": "caster.action"}, "A"]}, 2, 1]}},
+              {"id": "block_damage_prevented", "description": "Damage the holder does NOT take from a blocking defender: 1 when the holder Attacks into a Block from beyond contact (distance 2), else 0 (an adjacent Block hurts as usual).", "target": "caster", "unit": "damage", "value": {"if": [{"and": [{"==": [{"var": "caster.action"}, "A"]}, {"==": [{"var": "defender.action"}, "B"]}, {">": [{"var": "dist"}, 1]}]}, {"rule": ["rps_edge", {"actor": "B", "defender": "A"}]}, 0]}},
+              {"id": "destroyed_by_rule_24", "description": "A Rule 24 point-buy die destroys the permanent when it reaches the placement power.", "target": "caster", "unit": "tokens", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"var": "caster.perm_power.skill_ranged_weapon"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays an Attack skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "stays_permanent", "description": "Remains a permanent.", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "A permanent needs a point-buy stat: 'any' or one of the four stats.", "assert": {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}}
+            ],
+            "references": ["point_buy_dice_count", "rps_edge", "using_rule_24"]
+          }
         }
       ]
     },
@@ -185,8 +296,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -218,6 +329,43 @@
             ],
             "references": ["in_contact", "is_enemy", "point_buy_dice_count", "using_rule_24"]
           }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["skill_barricade"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Taunt: affects ALL nearby enemies — they cannot Attack anything besides you (protects every ally while you are near) AND cannot Block against you. Engine: attack_target (unchanged), block_in (their Block scores 0 on the taunter), attack_vs_block (the taunter's Attack counts their Block as an Empty action: 1 damage).",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "stat_vitality",
+            "text": "Permanent. Nearby (adjacent) enemies cannot Attack anything besides you — every ally next to you is protected from their Attacks — and cannot use Block against you: their Block deals you no damage and does not stop your Attack. Weak alone, strong in a team."
+          },
+          "logic": {
+            "description": "Permanent skill played with a Block card; placed with a point-buy die of Vitality. While held (user ruling 2026-11-16): ALL nearby enemies (in contact with the taunter) cannot Attack anything besides the taunter — their Attack on anyone else deals 0, so every ally next to the taunter is protected — and cannot use Block against the taunter: their Block deals the taunter no damage and the taunter's Attack lands on them as against an Empty action (1). Weak alone, strong in a team. Destroyable under Rule 24 by a die >= its power.",
+            "prerequisites": [
+              {"id": "rides_on_block", "description": "The caster's action this turn is a Block card.", "when": {"in": [{"var": "caster.action"}, ["B"]]}},
+              {"id": "not_already_held", "description": "The permanent is not already in the caster's holding.", "when": {"!": {"includes": [{"var": "caster.permanents"}, "skill_taunt"]}}}
+            ],
+            "effects": [
+              {"id": "placement_dice", "description": "Number of d6 the placement point-buy rolls against Vitality.", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"var": "caster.stats.vitality"}}]}},
+              {"id": "enemy_attack_on_others_damage", "description": "Damage an enemy in contact with the taunter deals to a third unit with Attack: always 0 (null when the taunt does not apply).", "target": "all_enemies", "unit": "damage", "value": {"if": [{"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}, {"==": [{"var": "target.action"}, "A"]}]}, 0, null]}},
+              {"id": "enemy_block_on_taunter", "description": "Damage a nearby enemy's Block deals the taunter: always 0 (null when the taunt does not apply). The taunter's Attack on that blocker deals the matrix damage against an Empty action instead of against a Block.", "target": "all_enemies", "unit": "damage", "value": {"if": [{"and": [{"rule": ["in_contact", {"dist": {"var": "dist"}}]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}, {"==": [{"var": "target.action"}, "B"]}]}, 0, null]}},
+              {"id": "destroyed_by_rule_24", "description": "A Rule 24 point-buy die destroys the permanent when it reaches the placement power.", "target": "caster", "unit": "tokens", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"var": "caster.perm_power.skill_taunt"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays a Block skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "stays_permanent", "description": "Remains a permanent.", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "A permanent needs a point-buy stat: 'any' or one of the four stats.", "assert": {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}}
+            ],
+            "references": ["in_contact", "is_enemy", "point_buy_dice_count", "using_rule_24"]
+          }
         }
       ]
     },
@@ -229,8 +377,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -262,6 +410,44 @@
               {"id": "point_buy_stat_valid", "description": "A permanent needs a point-buy stat: 'any' or one of the four stats.", "assert": {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}}
             ],
             "references": ["point_buy_dice_count", "rule_21_delta_damage", "using_rule_24"]
+          }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_shield"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Force Shield: \"always power(6)\". Agent interpretation (to confirm with the user): no roll; the die is fixed at 6 — it absorbs 6 before rounding (Σ16 → 10 → 1) and its Rule 24 power is 6. Point-buy stat (Vitality) kept as the Rule 24 destroy stat.",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "stat_vitality",
+            "text": "Permanent, always power 6: no point-buy roll — it lands with power 6 (its Rule 24 power). Subtract the shield's 6 from effect damage before rounding (the first effect-damage hit on you that would land). Destroy this permanent if effect damage is taken.",
+            "fixed_power": 6
+          },
+          "logic": {
+            "description": "Permanent skill played with a Block card; always power 6 (user ruling 2026-11-16, agent interpretation: no point-buy roll — it lands with power 6). While held: the first effect-damage leg that would land on the holder has 6 subtracted from its stat sum BEFORE the /10 rounding (Σ16 → 10 → 1); the shield is then spent (removed from the holding) whether or not damage remained. Also destroyable under Rule 24 like any power-6 permanent (Vitality).",
+            "prerequisites": [
+              {"id": "rides_on_block", "description": "The caster's action this turn is a Block card.", "when": {"in": [{"var": "caster.action"}, ["B"]]}},
+              {"id": "not_already_held", "description": "The permanent is not already in the caster's holding.", "when": {"!": {"includes": [{"var": "caster.permanents"}, "skill_force_shield"]}}}
+            ],
+            "effects": [
+              {"id": "placement_power", "description": "The landing power: always 6 (no roll; data.fixed_power).", "target": "caster", "unit": "die", "value": 6},
+              {"id": "effect_damage_after_shield", "description": "Rule 21 damage of a cast (defender = the enemy caster, caster = the holder) after the shield's 6 is taken off the UNROUNDED summed stat delta, then /10 rounded half up.", "target": "caster", "unit": "damage", "value": {"round_div10": [{"max0": [{"-": [{"sum": [{"map": [{"var": "elements"}, {"max0": [{"-": [{"stat_of": [{"root": "defender"}, {"var": ""}]}, {"stat_of": [{"root": "caster"}, {"var": ""}]}]}]}]}]}, 6]}]}]}},
+              {"id": "shield_spent", "description": "The shield is consumed when the incoming leg would have landed without it (Rule 21 damage before the shield >= 1).", "target": "caster", "unit": "tokens", "value": {">=": [{"rule": ["rule_21_delta_damage", {"caster": {"root": "defender"}, "defender": {"root": "caster"}, "elements": {"root": "elements"}}]}, 1]}},
+              {"id": "destroyed_by_rule_24", "description": "A Rule 24 point-buy die destroys the permanent when it reaches the placement power.", "target": "caster", "unit": "tokens", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"var": "caster.perm_power.skill_force_shield"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays a Block skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "stays_permanent", "description": "Remains a permanent.", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "A permanent needs a point-buy stat: 'any' or one of the four stats.", "assert": {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}}
+            ],
+            "references": ["rule_21_delta_damage", "using_rule_24"]
           }
         }
       ]
@@ -318,8 +504,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -352,6 +538,43 @@
             ],
             "references": ["point_buy_dice_count", "using_rule_24"]
           }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["skill_force_shield", "effect_the_void"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Sanctuary: user \"you should be able to move around and prepare your hand in the next turns being invincible\". The 1.0.0 implementation fell on any declared action but Empty Posture. End condition chosen by the agent from the paper text (\"until you emit or perform any action\") minus moving (QUESTION for the user): Attack, Block, Posture (a Battle Trance option too), any skill other than a building's free one, an effect emission or a Rule 24 destroy emission ends it, unprotected in that action. Combat damage AND effect damage are stopped (effect damage once the SKR peer hunk lands). Protection of permanents / tokens is not modelled.",
+          "data": {
+            "action_type": "B",
+            "is_permanent": true,
+            "point_buy_stat": "any",
+            "text": "Permanent. While it stands you, any permanent and any token you control (besides Sanctuary) are invincible as long as you only move around or rest (Move, Empty Move, Empty Posture): you can reposition and prepare your hand over the next turns. It ends as soon as you perform any other action (Attack, Block, Posture), play a skill or emit (an effect cast or a Rule 24 destroy) — in that action you are no longer protected."
+          },
+          "logic": {
+            "description": "Permanent skill played with a Block card; point_buy_stat 'any' means the placement die is rolled against the caster's highest stat. While held (user ruling 2026-11-16: 'move around and prepare your hand in the next turns being invincible') the holder takes no combat and no effect damage as long as it only moves or rests — Move, Empty Move, Empty Posture, with no skill (a building's free skill excepted), no effect emission and no Rule 24 destroy emission. Any other action (Attack, Block, Posture, a Battle Trance option among them), a skill or an emission ends it: unprotected in that action, the permanent leaves the holding afterwards. Protection of the holder's permanents / tokens is not modelled. Destroyable under Rule 24 by a die >= its power.",
+            "prerequisites": [
+              {"id": "rides_on_block", "description": "The caster's action this turn is a Block card.", "when": {"in": [{"var": "caster.action"}, ["B"]]}},
+              {"id": "not_already_held", "description": "The permanent is not already in the caster's holding.", "when": {"!": {"includes": [{"var": "caster.permanents"}, "skill_sanctuary"]}}}
+            ],
+            "effects": [
+              {"id": "placement_dice", "description": "Number of d6 the placement point-buy rolls against the caster's highest stat ('any').", "target": "caster", "unit": "die", "value": {"rule": ["point_buy_dice_count", {"stat": {"max": [{"var": "caster.stats.vitality"}, {"var": "caster.stats.world"}, {"var": "caster.stats.matter"}, {"var": "caster.stats.will"}]}}]}},
+              {"id": "invincible_this_action", "description": "True while the holder only moves or rests: Move / Empty Move / Empty Posture, no skill, no emission.", "target": "caster", "unit": "damage", "value": {"and": [{"in": [{"var": "caster.action"}, ["M", "EM", "EP"]]}, {"!": {"var": "caster.skill_played"}}, {"!": {"var": "caster.emits"}}]}},
+              {"id": "leaves_holding", "description": "The permanent is removed after an action that does not keep it (Attack, Block, Posture, a skill, an emission).", "target": "caster", "unit": "tokens", "value": {"!": {"and": [{"in": [{"var": "caster.action"}, ["M", "EM", "EP"]]}, {"!": {"var": "caster.skill_played"}}, {"!": {"var": "caster.emits"}}]}}},
+              {"id": "destroyed_by_rule_24", "description": "A Rule 24 point-buy die destroys the permanent when it reaches the placement power.", "target": "caster", "unit": "tokens", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"var": "caster.perm_power.skill_sanctuary"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays a Block skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "stays_permanent", "description": "Remains a permanent.", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "A permanent needs a point-buy stat: 'any' or one of the four stats.", "assert": {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}}
+            ],
+            "references": ["point_buy_dice_count", "using_rule_24"]
+          }
         }
       ]
     },
@@ -363,8 +586,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -387,6 +610,42 @@
             "effects": [
               {"id": "target_action_after", "description": "Posture becomes Empty Posture; anything else unchanged.", "target": "target", "unit": "actions", "value": {"if": [{"==": [{"var": "target.action"}, "P"]}, "EP", {"var": "target.action"}]}},
               {"id": "target_may_cast_non_instant", "description": "Whether the target may still emit a non-instant effect after the disruption.", "target": "target", "unit": "actions", "value": {"rule": ["action_can_cast_non_instant", {"action": {"if": [{"==": [{"var": "target.action"}, "P"]}, "EP", {"var": "target.action"}]}}]}},
+              {"id": "rule_8_return_to_hand", "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.", "target": "caster", "unit": "cards", "value": {"rule": ["rule_8_instant_returns", {"took_with": {"var": "outcome.took_with"}, "took_without": {"var": "outcome.took_without"}, "dealt_with": {"var": "outcome.dealt_with"}, "dealt_without": {"var": "outcome.dealt_without"}}]}}
+            ],
+            "validation": [
+              {"id": "action_type_unchanged", "description": "Stays a Move skill.", "assert": {"==": [{"var": "proposal.data.action_type"}, {"var": "entry.data.action_type"}]}},
+              {"id": "is_permanent_unchanged", "description": "Remains an instant.", "assert": {"==": [{"!!": {"var": "proposal.data.is_permanent"}}, {"!!": {"var": "entry.data.is_permanent"}}]}},
+              {"id": "point_buy_stat_valid", "description": "point_buy_stat is null, 'any' or one of the four stats.", "assert": {"or": [{"==": [{"var": "proposal.data.point_buy_stat"}, null]}, {"in": [{"var": "proposal.data.point_buy_stat"}, ["any", "stat_vitality", "stat_world", "stat_matter", "stat_will", "vitality", "world", "matter", "will"]]}]}}
+            ],
+            "references": ["action_can_cast_non_instant", "is_enemy", "rule_8_instant_returns"]
+          }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "user_ruling",
+          "author_peer_id": "",
+          "created_at": "2026-11-16",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["skill_ranged_weapon"],
+          "vote_log": [],
+          "notes": "User SKILL REBALANCE rulings 2026-11-16 (memory project_rules_pc_overrides.md). Disruption Move: implement the paper text — Posture negated and Empty Posture both played as Empty Move (1.0.0: Posture → Empty Posture only). Engine: negate_kind (P / EP → EM, noMove; ctx.noEmit voids a non-instant emission once the SKR peer hunk lands).",
+          "data": {
+            "action_type": "M",
+            "is_permanent": false,
+            "point_buy_stat": null,
+            "text": "The enemy cannot use Posture; any Empty Posture is always played as Empty Move (enemy cannot emit non-instant effects): their Posture or Empty Posture becomes an Empty Move that goes nowhere and emits nothing — a cast in progress is interrupted."
+          },
+          "logic": {
+            "description": "Instant riding on a Move card (also Empty Move / Empty Posture per the pc implementation) against an enemy target. Paper text implemented (user ruling 2026-11-16): the enemy cannot use Posture — a declared Posture is negated (card and riding instants back to their hand) — and any Empty Posture is always played as Empty Move: either way the target plays an Empty Move that goes nowhere and emits nothing, so a non-instant effect it was emitting is voided and a cast in progress is interrupted (Rule 19); instants still go out. Judged by whether it did its job (negated a Posture or stopped an emission); otherwise it returns to hand.",
+            "prerequisites": [
+              {"id": "rides_on_move", "description": "The caster's action is Move (or an empty action, which carries Move skills).", "when": {"in": [{"var": "caster.action"}, ["M", "EM", "EP"]]}},
+              {"id": "enemy_target", "description": "The target is an enemy unit.", "when": {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}}
+            ],
+            "effects": [
+              {"id": "target_action_after", "description": "Posture and Empty Posture become Empty Move; anything else unchanged.", "target": "target", "unit": "actions", "value": {"if": [{"in": [{"var": "target.action"}, ["P", "EP"]]}, "EM", {"var": "target.action"}]}},
+              {"id": "target_may_cast_non_instant", "description": "Whether the target may still emit a non-instant effect after the disruption (an Empty Move emits nothing).", "target": "target", "unit": "actions", "value": {"rule": ["action_can_cast_non_instant", {"action": {"if": [{"in": [{"var": "target.action"}, ["P", "EP"]]}, "EM", {"var": "target.action"}]}}]}},
               {"id": "rule_8_return_to_hand", "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.", "target": "caster", "unit": "cards", "value": {"rule": ["rule_8_instant_returns", {"took_with": {"var": "outcome.took_with"}, "took_without": {"var": "outcome.took_without"}, "dealt_with": {"var": "outcome.dealt_with"}, "dealt_without": {"var": "outcome.dealt_without"}}]}}
             ],
             "validation": [

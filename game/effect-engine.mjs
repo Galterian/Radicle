@@ -149,19 +149,27 @@ const PURE_OPS = {
   dice_count: ([s]) => diceCount(s),
   all_elems: () => [...ALL_ELEMS],
   undefined: () => undefined,
+  bool: ([x]) => !!x,   // JS truthiness (`!!` is JsonLogic's: [] is false) — S2 skill programs mirror JS `!!` / `?.` tests
 };
 
 const SPECIAL = new Set(['var', 'quote', 'if', '?:', 'and', 'or', 'seq', 'let', 'set', 'obj', 'map', 'filter', 'reduce', 'all', 'some', 'none', 'find', 'sort_by', 'range', 'call',
   'emit', 'put', 'out', 'note', 'return', 'return_empty', 'seed', 'hash_int', 'rng', 'point_buy', 'point_buy_seed']);
 export const ALL_OPS = Object.freeze([...SPECIAL, ...Object.keys(PURE_OPS), ...Object.keys(CTX_OPS)].sort());
+// S2 (skill-engine.mjs) builds its own vocabulary from these: the control forms + pure ops, minus the outcome / dice
+// forms, plus its own ctx queries.
+export const SPECIAL_OPS = Object.freeze([...SPECIAL].sort());
+export const PURE_OP_NAMES = Object.freeze(Object.keys(PURE_OPS).sort());
 
-function run(def, lib, ctx, cast, limits) {
+// `env` (S2, skill programs): { logic, root: {register: value}, ctxOps: {name: (ctx, args) => value}, deny: Set(op) }.
+// With an env the program's VALUE is returned, `env.ctxOps` replaces CTX_OPS, and limit / program errors are thrown
+// (EffectEngineLimit / EffectProgramError) for the caller to map. Without one: the effect path, unchanged.
+function run(def, lib, ctx, cast, limits, env = null) {
   const out = newOutcome();
   let ops = 0;
   const elems = Array.isArray(cast.elements) ? cast.elements : (cast.elements || []);
   const seedOf = (tag) => `${cast.salt || ''}:${cast.effect_id}:${ctx.actionIndex}:${tag}`;
   // Registers every program may read / set (declared up front so `set` catches typos).
-  const root = new Scope(null, { cast, me: cast.actor, elems, effect_id: cast.effect_id, my_tile: null, recipients: [], failed: false, declared: null, aura: false, tmp: null });
+  const root = env ? new Scope(null, env.root) : new Scope(null, { cast, me: cast.actor, elems, effect_id: cast.effect_id, my_tile: null, recipients: [], failed: false, declared: null, aura: false, tmp: null });
   const subs = lib || new Map();
 
   const ev = (node, sc, depth) => {
@@ -173,6 +181,7 @@ function run(def, lib, ctx, cast, limits) {
     const keys = Object.keys(node);
     if (keys.length !== 1) throw new EffectProgramError(`an operation must have exactly one key (got ${keys.join(',') || 'none'}); use {"obj": …} or {"quote": …} for objects`);
     const op = keys[0];
+    if (env && env.deny.has(op)) throw new EffectProgramError(`operation ${op} is not available here`);
     const raw = node[op];
     const args = Array.isArray(raw) ? raw : [raw];
     const E = (x) => ev(x, sc, d);
@@ -283,16 +292,18 @@ function run(def, lib, ctx, cast, limits) {
       case 'point_buy_seed': { const [stat, s] = args.map(E); return pointBuy(stat, String(s), ctx.sha); }
       default: {
         if (Object.prototype.hasOwnProperty.call(PURE_OPS, op)) return PURE_OPS[op](args.map(E));
-        if (Object.prototype.hasOwnProperty.call(CTX_OPS, op)) return CTX_OPS[op](ctx, args.map(E));
+        const cops = env ? env.ctxOps : CTX_OPS;
+        if (Object.prototype.hasOwnProperty.call(cops, op)) return cops[op](ctx, args.map(E));
         throw new EffectProgramError(`unknown operation ${op}`);
       }
     }
   };
 
   try {
-    ev(def.logic, root, 0);
-    return out;
+    const v = ev(env ? env.logic : def.logic, root, 0);
+    return env ? v : out;
   } catch (e) {
+    if (env) throw e;
     if (e instanceof Halt) return e.out;
     if (e instanceof EffectEngineLimit || e instanceof EffectProgramError) {
       const o = newOutcome();
@@ -319,9 +330,8 @@ function walkOps(node, fn, pathStr = '$') {
   if (op === 'sort_by') { const a = Array.isArray(raw) ? raw : [raw]; walkOps(a[0], fn, `${pathStr}.sort_by[0]`); for (const s of a.slice(1)) if (s && typeof s === 'object') { const [m] = Object.keys(s); if (!['asc', 'desc', 'locale', 'code'].includes(m)) fn(null, pathStr, `sort_by key mode ${m}`); walkOps(s[m], fn, `${pathStr}.sort_by.${m}`); } return; }
   walkOps(raw, fn, `${pathStr}.${op}`);
 }
-export function validateLogic(logic, subs) {
+export function validateLogic(logic, subs, known = new Set(ALL_OPS)) {   // `known`: S2 passes the skill vocabulary
   const errors = [];
-  const known = new Set(ALL_OPS);
   walkOps(logic, (op, p, msg) => {
     if (msg) errors.push(`${p}: ${msg}`);
     else if (!known.has(op)) errors.push(`${p}: unknown operation ${op}`);
@@ -408,4 +418,11 @@ export function resolveEffectData(def, ctx, cast, opts = {}) {
     for (const u of def.uses || []) { const l = libs.find(x => x.id === u); if (l) for (const [n, s] of Object.entries(l.subs)) if (!subs.has(n)) subs.set(n, s); }
   }
   return run(def, subs, ctx, cast, { ...ENGINE_LIMITS, ...(opts.limits || {}) });
+}
+
+// runProgram(logic, subs, ctx, root, {ctxOps, deny, limits}) → the program's value (S2 skill programs,
+// game/skill-engine.mjs). Same evaluator, op budget and depth limit as the effects; `root` = the registers,
+// `subs` = Map(name → {params, body}). Limit / program errors are thrown (EffectEngineLimit / EffectProgramError).
+export function runProgram(logic, subs, ctx, root, { ctxOps = {}, deny = new Set(), limits = {} } = {}) {
+  return run({ id: '' }, subs || new Map(), ctx, {}, { ...ENGINE_LIMITS, ...limits }, { logic, root: root || {}, ctxOps, deny });
 }

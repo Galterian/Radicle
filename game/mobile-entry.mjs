@@ -86,6 +86,9 @@ if (typeof globalThis.WebSocket !== 'function') {
 Symbol.dispose ??= Symbol.for('nodejs.dispose');
 Symbol.asyncDispose ??= Symbol.for('nodejs.asyncDispose');
 
+// The env as the app started me (before any join / menu pick): a Dimension Out back to the start menu (below)
+// resets to it before the next pick.
+const BASE_ENV = { ...process.env };
 // Deep-link join (chaosd6://join?dim=&rid=&peer=&nid=&commit=, forwarded by
 // EmbeddedPeer.gd as JOIN_URI): read the dim's Doors from radicle-httpd and
 // spawn next to the clicked unit, on its side — what ui-server.mjs's
@@ -150,6 +153,8 @@ if (isMainThread && process.env.PROFILE_SYNC !== '0') {
     attachProfileSync(startProfileSync({ file: profilePath(), label: process.env.CHAOSD6_DEVICE_LABEL || 'phone' }));
   } catch (e) { console.error(`[mobile] profile sync not started (${e.message})`); }
 }
+// (a function: a Dimension Out on the phone comes back here for the next pick — see the loop at the end)
+async function menuToEnv() {
 if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random') && !process.env.PROFILE_CHAR_ID) {
   try {
     const { profilePath, loadProfile, topCharacter, profileEnv } = await import('./profile.mjs');
@@ -209,6 +214,8 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
     console.error(`[mobile] profile / menu failed (${e.message}); starting as a random character`);
   }
 }
+}
+await menuToEnv();
 
 // Test my team (user ruling 2026-11-13): the next count−1 profile characters fight beside me as
 // bots (alliance npc_a, like the desktop's ally-1) — ordinary peers, not companions (no
@@ -281,6 +288,7 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
     delete env.JOIN_URI;
     if (!keepMap) { delete env.MAP_BLOCKS_FILE; delete env.MAP_BLOCKS; }
     const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
+    (globalThis.__chaosWorkers ||= []).push(w);   // stopped with my peer after a Dimension Out (the loop below)
     w.stdout.pipe(relabel()).on('data', b => process.stdout.write(b));
     w.stderr.pipe(relabel()).on('data', b => process.stderr.write(b));
     w.on('error', (e) => console.error(`[team] ${tag} (${who}) failed: ${e.message}`));
@@ -303,10 +311,9 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
       ALLIANCE: 'npc_b', START_TILE: JSON.stringify(m.tile), START_LIFE: m.life ? String(m.life) : '', FORCE_CLASS: '' });
   }
 }
-if (teamAllies) startTeamAllies(teamAllies).catch(e => console.error(`[team] allies failed: ${e.message}`));
-
 // The phone starts as a random character each launch (user ruling 2026-11-12) unless one is pinned.
 // Same data/ lookup as peer.mjs (../data next to the bundle), falling back to the bundled ./data.
+async function pickRandomCharacter() {
 if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === 'random') && !process.env.CREATURE_ID) {
   const fs = await import('node:fs');
   let ids = [];
@@ -320,5 +327,46 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
   process.env.CHARACTER_ID = ids.length ? ids[Math.floor(Math.random() * ids.length)] : 'char_oran_rief';
   console.log(`[mobile] random character: ${process.env.CHARACTER_ID} (of ${ids.length})`);
 }
+}
 
-await import('./peer.mjs');
+// Run the game. A worker (summon / ally / regenerated monster) runs its peer once. The phone's main thread loops:
+// Dimension Out (rule_dimension_out, peer.mjs leaveDimension) must bring the start menu back, and nodejs-mobile
+// starts Node only once per app process — so instead of exiting, the peer calls __chaosMobileLeave; I stop it
+// (__chaosPeerStop: its sockets, libp2p, bus, Gun relay), clear the timers its module started, stop its workers,
+// reset the env to the app's and serve the menu again; the next pick loads a fresh copy of peer.mjs (?run=N).
+if (!isMainThread) {
+  await pickRandomCharacter();
+  await import('./peer.mjs');
+} else {
+  const nativeSetTimeout = globalThis.setTimeout, nativeSetInterval = globalThis.setInterval;
+  for (let run = 1; ; run++) {
+    if (run > 1) {
+      for (const k of Object.keys(process.env)) if (!(k in BASE_ENV)) delete process.env[k];
+      Object.assign(process.env, BASE_ENV);
+      delete process.env.JOIN_URI;   // the deep link was the first game's
+      teamAllies = null;
+      await menuToEnv();
+    }
+    if (teamAllies) startTeamAllies(teamAllies).catch(e => console.error(`[team] allies failed: ${e.message}`));
+    await pickRandomCharacter();
+    // Timers created by this run's peer module (its stack names peer.mjs) — cleared when it stops.
+    const mine = new Set();
+    const copyProps = (dst, src) => { for (const k of Object.keys(src)) { try { dst[k] = src[k]; } catch {} } return dst; };   // own enumerable string keys only
+    const fromPeer = () => /peer\.mjs/.test(new Error().stack || '');
+    // (Gun hangs helpers on the global setTimeout — setTimeout.each / .turn / .poll: the wrappers carry them over)
+    globalThis.setTimeout = copyProps(function (...a) { const h = nativeSetTimeout(...a); if (fromPeer()) mine.add(h); return h; }, nativeSetTimeout);
+    globalThis.setInterval = copyProps(function (...a) { const h = nativeSetInterval(...a); if (fromPeer()) mine.add(h); return h; }, nativeSetInterval);
+    const left = new Promise(res => { globalThis.__chaosMobileLeave = res; });
+    // (not awaited: a module whose top level never settles must not keep me from stopping it)
+    import(run === 1 ? './peer.mjs' : `./peer.mjs?run=${run}`).catch(e => console.error(`[mobile] peer failed: ${e.stack || e.message}`));
+    const info = await left;
+    console.log(`[mobile] ${info?.dimension || 'the dimension'}: ${info?.why || 'left'} — stopping the game, back to the start menu`);
+    try { await globalThis.__chaosPeerStop?.(); } catch (e) { console.error(`[mobile] peer stop: ${e.message}`); }
+    for (const h of mine) { clearTimeout(h); clearInterval(h); }
+    for (const w of globalThis.__chaosWorkers || []) { try { await w.terminate(); } catch {} }
+    globalThis.__chaosWorkers = [];
+    copyProps(nativeSetTimeout, globalThis.setTimeout); copyProps(nativeSetInterval, globalThis.setInterval);   // keep what Gun added
+    globalThis.setTimeout = nativeSetTimeout; globalThis.setInterval = nativeSetInterval;
+    globalThis.__chaosMobileLeave = null; globalThis.__chaosPeerStop = null;
+  }
+}

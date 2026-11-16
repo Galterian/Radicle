@@ -18,7 +18,7 @@ onFeaturesChanged(clearBuildingBonusMemo); onBigFeaturesChanged(clearBuildingBon
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf, skillInfo } from './skill_card.js';
-import { effectSourceBadge, sourceEpoch, setEffectSource, refText, DEV_FIXTURE } from './effect_source.js';
+import { effectSourceBadge, sourceEpoch, setEffectSource, refText, refId, sourceMark, DEV_FIXTURE } from './effect_source.js';
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
 // still landing. Pull it in defensively: when the module (or its export) is
@@ -368,7 +368,9 @@ function chaseStep(foe, auto) {
   let label;
   state.ui.chasePeerId = foe.peer_id;
   state.ui.destinationTile = foeTile;
-  if (hexDistance(me, foe) <= 1) {
+  // SKR-12 Ranged Weapon (+1 range, ruling 2026-11-16): from 2 hexes the holder Attacks instead of stepping in.
+  const rangedReach = hexDistance(me, foe) === 2 && usable('A') >= 0 && String(me.permanents_csv || '').split(',').includes('skill_ranged_weapon');
+  if (hexDistance(me, foe) <= 1 || rangedReach) {
     const a = usable('A'), m = usable('M');
     state.ui.pathPlan = null;
     if (a >= 0) { state.queued = [a]; state.target = foe.peer_id; label = `Attack → ${foe.name}`; }
@@ -797,8 +799,9 @@ function composeLabel({ action, declared, trance, played, skills, effects }) {
   else if (action) parts.push(action);
   const ids = (skills || []).map(String);
   const rest = ids.filter(id => id !== 'skill_battle_trance');
-  if (Array.isArray(trance) && trance.length) parts.push('✦BT');
-  for (const id of rest) parts.push(`✦${skillTag(id)}`);
+  // A player-branch skill (chaosD6-Skills) carries ⎇ after its tag: `✦Po⎇`.
+  if (Array.isArray(trance) && trance.length) parts.push(`✦BT${sourceMark('skill_battle_trance')}`);
+  for (const id of rest) parts.push(`✦${skillTag(id)}${sourceMark(id)}`);
   for (const e of effects || []) parts.push(`✺${elemGlyphs(e.elements || e.element_cost)}`);
   return parts.join(' + ');
 }
@@ -957,12 +960,12 @@ function renderDeck() {
       // glyph. slot .ds carries the short rule; the full line stays in title.
       // Only remount (new icon canvas) when the card actually changed — this runs every frame.
       if (setCardHtml(cardDiv, `
-        <div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div>
+        <div class="nm" title="${escHtml(card.name)}">✦ ${escHtml(card.name)}</div>${effectSourceBadge(card, { compact: true })}
         <div class="skill-slot-icon"></div>
         <div class="ds">${escHtml(abbreviate(text, 70))}</div>
         <div class="cd">needs ${escHtml(needs)}${card.is_permanent ? ' · perm' : ''}${isTrance(card) && skillQueued ? ' · ×2' : ''}</div>`, card.skill_id)) {
         const iconMount = cardDiv.querySelector('.skill-slot-icon');
-        if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name }));
+        if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name, srcMark: false }));   // the slot has the full badge
       }
       slot.title = text || card.name;
     } else if (card) {
@@ -1036,7 +1039,7 @@ function renderArchivePopup() {
     const creature = c.kind === 'creature', klass = c.kind === 'class';
     const nm = creature ? `🐾 ${c.name}` : klass ? `⚜ ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
     const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? `class · ${c.text || ''} · stats: ${classStatsLine(c.class_id)}` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
-    return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div>${isEffect(c) ? effectSourceBadge(c) : ''}<div class="cd">${cd}</div></div>`;
+    return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div>${isEffect(c) || isSkill(c) ? effectSourceBadge(c) : ''}<div class="cd">${cd}</div></div>`;
   }).join('');
   // Any archived card may go back to the discard pile — including creatures
   // and class cards (user override of the "creatures stay for Summoning"
@@ -1202,7 +1205,7 @@ function showPeek(text, cards = null) {
     el.addEventListener('click', () => { el.hidden = true; });
     document.body.appendChild(el);
   }
-  const cardsHtml = cards ? `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 12px">${cards.map(c => `<div style="width:96px;min-height:50px;padding:8px 6px;border-radius:6px;border:1px solid #26303f;background:linear-gradient(180deg,#1a2230,#10151e);color:#d2dae7;font-size:11px;text-align:center">${escHtml(c.name)}<div style="margin-top:4px;font-size:9px;color:#8aa0bf">${c.kind === 'effect' ? '✺ ' : c.kind === 'skill' ? '✦ ' : ''}${escHtml(c.kind || '')}${c.code ? ` · ${escHtml(c.code)}` : ''}</div>${c.kind === 'effect' ? effectSourceBadge(c, { compact: true }) : ''}${Array.isArray(c.element_cost) && c.element_cost.length ? `<div style="margin-top:3px;font-size:11px">${elemGlyphs(c.element_cost)}</div>` : ''}</div>`).join('')}</div>` : '';
+  const cardsHtml = cards ? `<div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 12px">${cards.map(c => `<div style="width:96px;min-height:50px;padding:8px 6px;border-radius:6px;border:1px solid #26303f;background:linear-gradient(180deg,#1a2230,#10151e);color:#d2dae7;font-size:11px;text-align:center">${escHtml(c.name)}<div style="margin-top:4px;font-size:9px;color:#8aa0bf">${c.kind === 'effect' ? '✺ ' : c.kind === 'skill' ? '✦ ' : ''}${escHtml(c.kind || '')}${c.code ? ` · ${escHtml(c.code)}` : ''}</div>${c.kind === 'effect' || c.kind === 'skill' ? effectSourceBadge(c, { compact: true }) : ''}${Array.isArray(c.element_cost) && c.element_cost.length ? `<div style="margin-top:3px;font-size:11px">${elemGlyphs(c.element_cost)}</div>` : ''}</div>`).join('')}</div>` : '';
   el.innerHTML = `<div style="background:#0f131b;border:1px solid #2f3f55;border-radius:8px;width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 50px -10px #000c;color:#e8ecf1">
     <header style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #1a2130;font-weight:600"><span>👁 Peek</span><span style="flex:1"></span><button style="background:transparent;border:1px solid #2f3f55;color:#c8d4e3;border-radius:4px;cursor:pointer;padding:2px 7px">✕</button></header>
     <div style="padding:12px 14px;font-size:12px;line-height:1.5">${text}</div>${cardsHtml}</div>`;
@@ -1328,6 +1331,52 @@ function isGone(e) {
 // included) from scratch — so only when what it shows changed, and at least once a second
 // for the clock-driven bits (⌛ gone, late portraits / class texts). Rebuilding 60×/s was the
 // main DOM churn of the phone HUD (2026-11-14 memory probe).
+// Dimension Out (rule_dimension_out, user 2026-11-16): the HUD button — "⇱ Dimension Out", while channelling
+// "⇱ Out in N" (rounds left; click = cancel). My snapshot's dim_out_until_turn is the truth (it survives a reload).
+function myDimOutLeft() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const until = Number(me?.dim_out_until_turn);
+  return Number.isFinite(until) && until >= 0 && typeof state.turn === 'number' ? Math.max(0, until - state.turn) : null;
+}
+function updateDimOutButton() {
+  const b = document.getElementById('dimout-btn');
+  if (!b) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const left = myDimOutLeft();
+  b.hidden = !me || !!me.owner_peer_id || me.creature_id || !(me.life > 0);
+  b.classList.toggle('active', left != null);
+  b.textContent = left != null ? `⇱ Out in ${left}` : '⇱ Dimension Out';
+}
+function dimOutDone(m) {
+  logUI(`⇱ you left ${m.dimension || 'the dimension'} — back to the menu`, 'phase');
+  const ov = document.createElement('div');
+  ov.className = 'dimout-done';
+  ov.textContent = `⇱ You left ${m.dimension || 'the dimension'}. Back to the menu…`;
+  document.body.appendChild(ov);
+  // Desktop: the launcher panel is this page without ?peer. Phone: mobile-entry.mjs stops the peer in-process and
+  // serves the start menu on this same port again — wait until the menu (not the old peer) answers, then go.
+  if (!IS_MOBILE_UI) { setTimeout(() => { location.search = ''; }, 3500); return; }
+  const tryMenu = async (n = 0) => {
+    const up = await fetch('/api/dimensions/local', { cache: 'no-store' }).then(r => r.ok && r.json()).then(j => !!j?.ok).catch(() => false);
+    if (up || n > 60) location.href = '/'; else setTimeout(() => tryMenu(n + 1), 1000);
+  };
+  setTimeout(tryMenu, 2500);
+}
+setInterval(updateDimOutButton, 1000);
+// Unattended characters (rule_unattended_character, user 2026-11-16): "make some visual leader flag and the
+// unattended characters that those player is leading a status of 'follow <this leader character>'".
+// Roster tags: ⚑ leader N on a master, "follow <leader>" on its followers, "unattended" on a leaderless one.
+function followLeaderName(e) {
+  if (!e?.led_by) return '';
+  return state.entities.find(p => p.peer_id === e.led_by)?.name || peerShort(e.led_by);
+}
+function unattendedTagsHtml(e) {
+  const out = [];
+  if (Number(e?.leader) > 0) out.push(`<span class="ros-leader" title="leads ${e.leader} unattended character${e.leader === 1 ? '' : 's'}">⚑ leader ${e.leader}</span>`);
+  if (e?.shadow_of) out.push(e.led_by ? `<span class="ros-follow" title="unattended — its player closed the game; it follows its master">follow ${escHtml(followLeaderName(e))}</span>`
+    : '<span class="ros-follow" title="unattended — its player closed the game; the computer holds its ground">unattended</span>');
+  return out.join('');
+}
 let _rosterSig = '';
 function renderRoster() {
   const el = document.getElementById('roster');
@@ -1438,7 +1487,7 @@ function renderRoster() {
     })();
     const team = teamLabel(e);
     const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
-    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}${e.team_name ? `<span class="team-name" title="profile team">${escHtml(e.team_name)} team</span>` : ''}<span class="team" title="ally"></span></span>
+    row.innerHTML = `<button type="button" class="ros-filter" title="filter the event log on this peer${activeFilter === e.peer_id ? ' (currently active)' : ''}" data-filter="1">⛬</button>${thumb}<span class="txt"><span class="nm">${escHtml(e.name)}${e.team_name ? `<span class="team-name" title="profile team">${escHtml(e.team_name)} team</span>` : ''}${unattendedTagsHtml(e)}<span class="team" title="ally"></span></span>
       <span class="st">${escHtml(srcTag)} · hp ${e.life}/${e.life_max || e.lifeMax} · ${headQR}${escHtml(tier)}</span>
       <span class="stats">
         ${pill('v', 'vitality', 'Vitality', 'stat_vitality')}
@@ -2579,7 +2628,9 @@ function connect() {
         // Profile moments (card won / lost on a kill, a teammate's gate) also get a banner over the map.
         // Hidden building / dungeon traps too: they hurt without a killer, so the banner is the only clue.
         const trapNotice = /^⚠ (A hidden trap|You explore the dungeon)/u.test(m.notice || '');
-        if (m.notice && (/^(🏆|☠|⚑)/u.test(m.notice) || trapNotice)) profileBanner(m.notice, m.notice.startsWith('☠') || trapNotice ? 'loss' : m.notice.startsWith('🏆') ? 'gain' : 'gate');
+        // A won player-branch skill / effect (🏆 You took <name> from …) carries its source badge on the banner.
+        const won = m.notice?.startsWith('🏆') ? [...state.archive].reverse().find(c => (isSkill(c) || isEffect(c)) && m.notice.includes(`took ${c.name} from`)) : null;
+        if (m.notice && (/^(🏆|☠|⚑)/u.test(m.notice) || trapNotice)) profileBanner(m.notice, m.notice.startsWith('☠') || trapNotice ? 'loss' : m.notice.startsWith('🏆') ? 'gain' : 'gate', { badge: won ? effectSourceBadge(won) : '' });
         if (Array.isArray(m.queued)) state.queued = m.queued;
         if (Array.isArray(m.queued_skills)) state.queuedSkills = m.queued_skills;
         if (m.queued_extra !== undefined) state.queuedExtra = typeof m.queued_extra === 'number' ? m.queued_extra : null;
@@ -2626,7 +2677,7 @@ function connect() {
       }
       // Vision / Super Sense: a popup with what was seen (a tile, an enemy's hand).
       // Effect provenance (chaosD6-Effects, E4 → E6): learned / shared / missing — see effectSourceNotice().
-      if (m.kind === 'effect_source') effectSourceNotice(m);
+      if (m.kind === 'effect_source' || m.kind === 'skill_source') effectSourceNotice(m);   // skills: chaosD6-Skills (S4 → S6)
       if (m.kind === 'peek') showPeek(m.text || (m.what === 'hand' ? `${m.of_name}: ${(m.cards || []).map(c => c.name).join(', ')}` : `tile (${m.q},${m.r})`), m.cards || null);
       // Merge peer updates so a transient broadcast missing an entity doesn't
       // flicker it off the map / roster. The server never *removes* a peer
@@ -2869,6 +2920,12 @@ function connect() {
           recomputeSightSet();
         }
       }
+      // Dimension Out (rule_dimension_out): started / interrupted — and done: back to the menu.
+      if (m.kind === 'dim_out') {
+        logUI(m.active ? `⇱ Dimension Out — you leave at turn ${m.until_turn}; moving, attacking or casting interrupts it` : `⇱ Dimension Out interrupted${m.why ? ` (${m.why})` : ''}`, 'phase');
+        updateDimOutButton();
+      }
+      if (m.kind === 'dim_out_done') dimOutDone(m);
       if (m.kind === 'standoff') {
         logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
       }
@@ -2893,13 +2950,14 @@ function connect() {
 // Desktop + phone: banners for the moments a player must not miss (user ruling 2026-11-13) —
 // a card won or lost to the profile, a teammate's gate, the encounter defeated. Sticky ones
 // stay until closed; a card won / lost fades after 25 s, the rest after 12 s. At most three, newest on top.
-function profileBanner(text, kind = '', { sticky = false } = {}) {
+function profileBanner(text, kind = '', { sticky = false, badge = '' } = {}) {
   let box = document.getElementById('pf-banners');
   if (!box) { box = document.createElement('div'); box.id = 'pf-banners'; document.body.appendChild(box); }
   const b = document.createElement('div');
   b.className = `pf-banner ${kind}`;
   const span = document.createElement('span');
   span.textContent = text;
+  if (badge) span.insertAdjacentHTML('beforeend', ` ${badge}`);   // source badge (effect_source.js HTML, escaped there)
   const x = document.createElement('button');
   x.type = 'button'; x.className = 'pf-banner-x'; x.textContent = '✕'; x.title = 'dismiss';
   x.onclick = () => b.remove();
@@ -2923,14 +2981,26 @@ function profileBanner(text, kind = '', { sticky = false } = {}) {
 //           missing → "⚠ couldn't load Fire Whip from players/ana/fire-whip — cast postponed".
 // Each goes to the event log and to a banner over the map (desktop + phone); a repeat of the same line within
 // 10 s only logs. Also callable as window.chaosHud.effectSourceNotice(msg) (dev / tests).
+//
+// SKILLS (chaosD6-Skills, S6 — 2026-11-16) — S4 may emit EITHER form, both give the same banners with the skill name:
+//   { kind: 'skill_source',  event: 'learned' | 'shared' | 'missing', ref, peer }
+//   { kind: 'effect_source', event: …, ref: { kind: 'skill', … }, peer }          (effects message + ref.kind)
+//   ref = { repo: 'chaosD6-Skills', branch: 'players/ana/quick-dodge', commit, sha256, id: 'skill_dodge' (or 'dodge'
+//           with kind 'skill'), author?, verdict?, name?: 'Dodge' }
+// learned → "📥 learned Dodge from players/ana/quick-dodge (commit abc1234) (via Ana)"; every Dodge card (hand, perms,
+// roster, hover, archive, peek, reveal chip `✦Do⎇`, profile editor) then shows its badge. shared / missing as above
+// ("⚠ couldn't load Dodge from … — cast postponed"). A skill_source ref without kind / skill_ prefix is a skill.
 const _fxNoticeSeen = new Map();   // text -> last banner time
 function effectSourceNotice(m) {
-  const ref = m?.ref || {};
+  const isSkillMsg = m?.kind === 'skill_source';
+  const ref0 = m?.ref || {};
+  const ref = isSkillMsg && !ref0.kind ? { ...ref0, kind: 'skill' } : ref0;
   const ev = m?.event;
   if (!ev) return;
-  const id = ref.id || ref.effect_id || null;
+  const id = refId(ref);
+  const skill = ref.kind === 'skill' || /^skill_/.test(id || '');
   if (ev === 'learned' && id) setEffectSource(id, ref);
-  const name = ref.name || (id && skillInfo(id)?.name) || (id ? String(id).replace(/^effect_/, '').replace(/_/g, ' ') : 'an effect');
+  const name = ref.name || (id && skillInfo(id)?.name) || (id ? String(id).replace(/^(effect|skill)_/, '').replace(/_/g, ' ') : skill ? 'a skill' : 'an effect');
   const pid = typeof m.peer === 'string' ? m.peer : m.peer?.peer_id;
   const who = (typeof m.peer === 'object' && m.peer?.name) || (pid ? peerShort(pid).replace(/ - \d+❤️$/u, '') : '');
   const text = ev === 'learned' ? `📥 learned ${name} from ${refText(ref)}${who ? ` (via ${who})` : ''}`
@@ -2953,6 +3023,15 @@ if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === '1') 
     effectSourceNotice({ kind: 'effect_source', event: 'learned', ref, peer: { peer_id: 'dev-ana', name: 'Ana' } });
     effectSourceNotice({ kind: 'effect_source', event: 'shared', ref, peer: { peer_id: 'dev-larkin', name: 'P-Larkin' } });
     effectSourceNotice({ kind: 'effect_source', event: 'missing', ref: { ...ref, branch: 'players/oran/frost-lance', id: 'effect_frost_lance', name: 'Frost Lance', commit: 'def9876' } });
+  }, 3000);
+}
+// Dev (S6): …&fxnotice=skill — the same three for skills, in both wire forms S4 may emit (names come from the catalog).
+if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === 'skill') {
+  setTimeout(() => {
+    const ref = { repo: 'chaosD6-Skills', branch: 'players/ana/quick-dodge', commit: 'abc1234def567890', id: 'dodge', author: 'ana', verdict: 'ok' };
+    effectSourceNotice({ kind: 'skill_source', event: 'learned', ref, peer: { peer_id: 'dev-ana', name: 'Ana' } });
+    effectSourceNotice({ kind: 'effect_source', event: 'shared', ref: { ...ref, kind: 'skill' }, peer: { peer_id: 'dev-larkin', name: 'P-Larkin' } });
+    effectSourceNotice({ kind: 'skill_source', event: 'missing', ref: { repo: 'chaosD6-Skills', branch: 'players/oran/iron-grip', id: 'skill_grapple', commit: 'def9876' } });
   }, 3000);
 }
 
@@ -3445,6 +3524,7 @@ function wireInput() {
   if (chipBtn) chipBtn.addEventListener('click', () => setLogFilter(null));
   // Combo marker: click / tap toggles the combo (lit when it can start).
   document.getElementById('combo-marker')?.addEventListener('click', (e) => { e.stopPropagation(); toggleCombo(); });
+  document.getElementById('dimout-btn')?.addEventListener('click', (e) => { e.stopPropagation(); send({ kind: 'dim_out', active: myDimOutLeft() == null }); });
   document.querySelectorAll('#slots .slot').forEach(slotEl => {
     const key = slotEl.dataset.slot;
     const slotKey = key === 'EMPTY' ? 'EMPTY' : Number(key);
@@ -3528,6 +3608,11 @@ function wireInput() {
           gone: isGone(p),
           armor: Number(p.armor) || 0, illusion: Number(p.illusion) || 0,
           invisible: hasInvis(p),
+          shadow: !!p.shadow_of,   // unattended (rule_unattended_character): drawn dimmed, "follow <leader>" / "unattended" tag
+          leader: Number(p.leader) || 0,   // ⚑ flag: a master of unattended characters
+          followName: p.shadow_of ? followLeaderName(p) : '',
+          // Dimension Out countdown (rule_dimension_out): rounds left before it leaves, null = not channelling.
+          dimOutLeft: Number(p.dim_out_until_turn) >= 0 && typeof state.turn === 'number' ? Math.max(0, Number(p.dim_out_until_turn) - state.turn) : null,
         };
       });
     },

@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.skill/1",
+  "id": "skill_force_shield",
+  "name": "Force Shield",
+  "version": "1.1.0",
+  "source": {"collection":"skills","version":"1.1.0"},
+  "action_type": "B",
+  "is_permanent": true,
+  "point_buy_stat": "stat_vitality",
+  "fixed_power": 6,
+  "text": "Permanent, always power 6: no point-buy roll — it lands with power 6 (its Rule 24 power). Subtract the shield's 6 from effect damage before rounding (the first effect-damage hit on you that would land). Destroy this permanent if effect damage is taken.",
+  "flags": {"action":"B","permanent":true,"pointBuyStat":"vitality","negating":false,"hooks":["effect_in","effect_leg","end_round","perm_landing","perm_stats"],"effectShield":true},
+  "uses": ["skills_std"],
+  "hooks": {
+    "effect_in": {"if":[{"bool":{"has_perm":[{"var":"defender"},{"var":"skill"}]}},{"or":[{"get":[{"perm_power":{"var":"defender"}},{"var":"skill"}]},0]},0]},
+    "effect_leg": {"if":[{"and":[{"bool":{"var":"shield"}},{">":[{"round_div10":{"var":"sum"}},0]}]},{"obj":{"shield":0,"sum":{"max":[0,{"-":[{"var":"sum"},{"var":"shield"}]}]},"spent":{"var":"shield"}}},{"obj":{"shield":{"var":"shield"},"sum":{"var":"sum"},"spent":0}}]},
+    "end_round": {"engine":"js","impl":"peer.mjs#endRound","note":"the die spent by effect_leg (spent → brokenShield) drops the permanent at the end of the round — peer bookkeeping, no rule left to run"},
+    "perm_landing": {"let":[{"l":{"call":["perm_landing"]},"fp":{"get":[{"skill_data":{"var":"skill"}},"fixed_power"]}},{"if":[{"and":[{"var":"l"},{"===":[{"floor":{"var":"fp"}},{"var":"fp"}]}]},{"obj":{"id":{"var":"l.id"},"stat":{"var":"l.stat"},"power":{"var":"fp"}}},{"var":"l"}]}]},
+    "perm_stats": {"call":["perm_stats"]}
+  }
+}

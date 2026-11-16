@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_healer",
+  "name": "Healer",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_souls","elem_water"],"text":"Restore one life token to a nearby creature or yourself."},
+  "flags": {"phase":"post","needs":"ally_or_self","hooks":["ability"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "ability": {"let":[{"who":{"or":[{"call":["near_ally",{"var":"actor"},{"call":["ab_peer"]}]},{"var":"actor"}]}},{"call":["done",{"cat":["one life token restored to ",{"if":[{"===":[{"var":"who"},{"var":"actor"}]},"me",{"slice":[{"var":"who"},0,8]}]}]},{"obj":{"heals":[{"obj":{"on":{"var":"who"},"amount":1,"by":{"var":"actor"}}}]}},[]]}]}
+  }
+}

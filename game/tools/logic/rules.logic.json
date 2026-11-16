@@ -1230,6 +1230,248 @@
         "natural_damage_blocked",
         "creation_ward_bars"
       ]
+    },
+    "rule_unattended_character": {
+      "description": "User ruling 2026-11-16 (revised): heroes without owner (character_id, no owner_peer_id) silent for data.unattended.silence_ms (120000; env SHADOW_MS shortens it for tests) become unattended: peer.mjs - run by the live hero with the smallest peer id, never by an unattended one - spawns an ordinary peer process (spawnCompanion wild, no owner) with SHADOW_OF = the hero's peer id, REPLACES_PEER_ID = the silent peer, ALLY_OF = its ally-join link, CHARACTER_ID / ENTITY_NAME / ALLIANCE / FORCE_CLASS / START_LIFE / SHADOW_STATS_JSON from its last snapshot, on its tile. It is not HUMAN: npcPlan plays it as an allied bot. Master (unattendedLeader): a group mate's live master is kept (sticky), else the live, alive human character of its link group (ally_of edges, same side) with the earliest joined_at (tie: peer id); published as led_by (followers) and leader (master). With a master npcPlan uses the summon owner-follow branch (walk next to it, fight what is in contact); without one it holds: npcCast / fight in contact, else Posture / Block. Takeover: the returning player (restore-here / restore / rejoin / a unit-list join of that profile character) boots with REPLACES_PEER_ID = the unattended peer and its life, ALLY_OF empty (it leaves the group); killed = dead there (death card: shadow_death, game/shadow-settle.mjs). Vanish: no living attended character (or its master) within data.unattended.vanish_radius for data.unattended.vanish_after_ms (env UNATTENDED_VANISH_MS for tests) -> it publishes out, pushes its Door and exits; receivers drop it, join-plan.mjs doorRecords drops out records (no longer alive there).",
+      "prerequisites": [
+        {
+          "id": "hero_silent",
+          "description": "The hero's last snapshot is older than silence_ms and it is alive.",
+          "when": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "silent_ms"
+                  },
+                  {
+                    "var": "entry.data.unattended.silence_ms"
+                  }
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "unattended_life",
+          "description": "The unattended character starts with the hero's current life.",
+          "target": "target",
+          "unit": "life",
+          "value": {
+            "var": "target.life"
+          }
+        },
+        {
+          "id": "silence_ms",
+          "description": "Silence before the character becomes unattended.",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.unattended.silence_ms"
+          }
+        },
+        {
+          "id": "vanish_after_ms",
+          "description": "Time alone (nobody within vanish_radius) before it leaves the dimension.",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.unattended.vanish_after_ms"
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "keeps-scope",
+          "description": "A new version keeps the scope.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.scope"
+              },
+              {
+                "var": "entry.data.scope"
+              }
+            ]
+          }
+        },
+        {
+          "id": "text-long-enough",
+          "description": "The rule text is longer than 40 characters.",
+          "assert": {
+            ">": [
+              {
+                "len": [
+                  {
+                    "var": "proposal.data.text"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "silence-sane",
+          "description": "silence_ms between 10 s and 1 h.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.unattended.silence_ms"
+                  },
+                  10000
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.unattended.silence_ms"
+                  },
+                  3600000
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "vanish-sane",
+          "description": "vanish_after_ms between 1 min and 1 day, vanish_radius 1-30.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.unattended.vanish_after_ms"
+                  },
+                  60000
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.unattended.vanish_after_ms"
+                  },
+                  86400000
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.unattended.vanish_radius"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.unattended.vanish_radius"
+                  },
+                  30
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": []
+    },
+    "rule_dimension_out": {
+      "description": "User request 2026-11-16: peer.mjs dimOutStart (HUD 'dim_out' message, DIM_OUT_ON_START=1 from the start screen's restore-here + Dimension Out, bots only with SWARM_DIMOUT=1) sets dim_out_until_turn = turn + data.dimension_out.rounds (env DIM_OUT_ROUNDS for tests), published in the snapshot (every UI counts it down on the unit). doPlanningEnd cancels it when the action played is a move off the hex (M / EM), an attack (A) or an effect cast (data.dimension_out.interrupted_by); damage does not; death ends it. At turn >= dim_out_until_turn: leaveDimension — snapshot + Door `out`, the process exits; join-plan.mjs drops out records (not alive there, free for another dimension), no unattended copy, no death card.",
+      "prerequisites": [
+        {
+          "id": "alive_own_character",
+          "description": "My own character, alive, not a summon.",
+          "when": {
+            ">": [
+              {
+                "var": "actor.life"
+              },
+              0
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "channel_rounds",
+          "description": "Rounds (engine turns) the channel takes.",
+          "target": "actor",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.dimension_out.rounds"
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "keeps-scope",
+          "description": "A new version keeps the scope.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.scope"
+              },
+              {
+                "var": "entry.data.scope"
+              }
+            ]
+          }
+        },
+        {
+          "id": "text-long-enough",
+          "description": "The rule text is longer than 40 characters.",
+          "assert": {
+            ">": [
+              {
+                "len": [
+                  {
+                    "var": "proposal.data.text"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "rounds-sane",
+          "description": "rounds between 1 and 50.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.dimension_out.rounds"
+                  },
+                  1
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.dimension_out.rounds"
+                  },
+                  50
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": []
     }
   }
 }

@@ -8,6 +8,8 @@
 // branch of chaosD6-Effects that is not in the caster's bundled set — travels by REF, and every peer runs
 // the very same bytes for it (content addressed: sha256 of the canonical JSON, libraries included).
 // Design note with the reasoning: game/effects-data/HANDSHAKE.md.
+// Kind-generic pieces reused by the skills handshake (S4, game/skills-handshake.mjs): createFxSync({kind, parseRef,
+// getByRef, keyOf}), attachDefsRpc, parseLibbedRef, blobFrames/assembleBlob, createMemoryCache, libShaMap, compactRef.
 //
 //   ref (E3 + E4)  { id, sha256, libs: { <lib id>: <sha256> }, repo?, branch?, commit?, name?, verdict? }
 //     libs     exactly the libraries the definition `uses`, pinned by hash (a std change = a new pin)
@@ -95,16 +97,18 @@ export function makeFxRef(def, libs, { repo = '', branch = '', commit = '', verd
   return parseFxRef(ref);
 }
 /** Validate a ref received from the network → normalised copy (throws EffectRefError). */
-export function parseFxRef(ref) {
-  const base = parseEffectRef(ref);
+export function parseFxRef(ref) { return parseLibbedRef(ref, parseEffectRef, EffectRefError); }
+/** Kind-generic form (S4: skills reuse it with parseSkillRef / SkillRefError): base ref fields + `libs` pins. */
+export function parseLibbedRef(ref, parseBase, RefError) {
+  const base = parseBase(ref);
   const libs = {};
   const raw = ref.libs;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new EffectRefError('bad-ref', `ref ${base.id}: libs must be an object {name: sha256}`);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new RefError('bad-ref', `ref ${base.id}: libs must be an object {name: sha256}`);
   const names = Object.keys(raw).sort();
-  if (names.length > 16) throw new EffectRefError('bad-ref', `ref ${base.id}: too many libs`);
+  if (names.length > 16) throw new RefError('bad-ref', `ref ${base.id}: too many libs`);
   for (const n of names) {
     const s = String(raw[n] || '').toLowerCase();
-    if (!LIB_RE.test(n) || !SHA_RE.test(s)) throw new EffectRefError('bad-ref', `ref ${base.id}: bad lib pin ${n}`);
+    if (!LIB_RE.test(n) || !SHA_RE.test(s)) throw new RefError('bad-ref', `ref ${base.id}: bad lib pin ${n}`);
     libs[n] = s;
   }
   const out = { id: base.id, sha256: base.sha256, libs, repo: base.repo, branch: base.branch, commit: base.commit };
@@ -215,9 +219,11 @@ export function assembleBlob(msgs, sha) {
 
 // ------------------------------------------------------------------ sync: fetch / serve / have
 // request(peerId, msg) → Promise<{ msgs, via }> (throws {code:'NO_ROUTE'} when there is no transport).
+// Kind-generic (S4): `kind` is the wire kind of a definition ('effect' | 'skill'; libraries are always 'lib'),
+// `parseRef` / `getByRef` / `keyOf` the kind's ref parser, loader and pin key. The defaults are the E4 effect behaviour, unchanged.
 export const FX_DEFAULTS = { prefetchGapMs: 10_000, serveBurst: 30, serveRefillMs: 300, prefetch: true };
 export function createFxSync({ selfId, store, cache = createMemoryCache(), request = null, fallbackFetchers = [], now = () => Date.now(),
-  log = () => {}, onLearned = null, onShared = null, opts = {} }) {
+  log = () => {}, onLearned = null, onShared = null, opts = {}, kind: DEF = 'effect', parseRef = parseFxRef, getByRef = getEffectByRef, keyOf = fxKey }) {
   const o = { ...FX_DEFAULTS, ...opts };
   const holders = new Map();      // sha16 -> Map(peerId -> at)
   const inflight = new Map();     // fxKey -> Promise<status>
@@ -252,21 +258,21 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
           const text = assembleBlob(res.msgs, r.sha256);
           if (text == null) continue;
           const obj = JSON.parse(text);
-          if (effectHash(obj) !== r.sha256 || obj?.id !== r.id) { stats.tampered++; log(`effect ${kind} ${r.id} from ${p} via ${res.via}: content does not match ${prefixOf(r.sha256)} — ignored`); continue; }
+          if (effectHash(obj) !== r.sha256 || obj?.id !== r.id) { stats.tampered++; log(`${DEF} ${kind} ${r.id} from ${p} via ${res.via}: content does not match ${prefixOf(r.sha256)} — ignored`); continue; }
           box.peer = p; box.via = res.via;
           return obj;
-        } catch (e) { if (e?.code !== 'NO_ROUTE') log(`effect ${kind} ${r.id} from ${p} failed: ${e.message}`); }
+        } catch (e) { if (e?.code !== 'NO_ROUTE') log(`${DEF} ${kind} ${r.id} from ${p} failed: ${e.message}`); }
       }
       return null;
     };
   }
   async function obtain(kind, id, sha, ref, cands) {
-    if (kind === 'effect' ? store.hasDef(sha) : store.hasLib(sha)) return 'have';
+    if (kind === DEF ? store.hasDef(sha) : store.hasLib(sha)) return 'have';
     const box = {};
-    const fetchers = [peerFetcher(kind, cands, box), ...(kind === 'effect' ? fallbackFetchers.map(f => async (r) => { const v = await f(r); if (v != null) box.peer = box.peer || 'fallback'; return v; }) : [])];
+    const fetchers = [peerFetcher(kind, cands, box), ...(kind === DEF ? fallbackFetchers.map(f => async (r) => { const v = await f(r); if (v != null) box.peer = box.peer || 'fallback'; return v; }) : [])];
     const hitsBefore = cache.stats?.hits ?? 0;
-    const obj = await getEffectByRef({ id, sha256: sha, repo: kind === 'effect' ? ref.repo : '', branch: '', commit: kind === 'effect' ? ref.commit : '' }, { cache, fetch: fetchers });
-    if (kind === 'effect') store.addDef(obj); else store.addLib(obj);
+    const obj = await getByRef({ id, sha256: sha, repo: kind === DEF ? ref.repo : '', branch: '', commit: kind === DEF ? ref.commit : '' }, { cache, fetch: fetchers });
+    if (kind === DEF) store.addDef(obj); else store.addLib(obj);
     const src = box.peer || ((cache.stats?.hits ?? 0) > hitsBefore ? 'cache' : 'fallback');
     source.set(sha, src);
     if (src === 'cache') stats.from_cache++; else stats.fetched++;
@@ -275,8 +281,8 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
   /** Make `ref` runnable here. → 'ready' | 'rejected' | 'missing'. Concurrent calls share one attempt. */
   function ensure(refIn, { from = null } = {}) {
     let ref;
-    try { ref = parseFxRef(refIn); } catch (e) { return Promise.resolve('rejected'); }
-    const key = fxKey(ref);
+    try { ref = parseRef(refIn); } catch (e) { return Promise.resolve('rejected'); }
+    const key = keyOf(ref);
     noteHolder(prefixOf(ref.sha256), from);
     const st = store.status(ref);
     if (st !== 'missing') return Promise.resolve(st);
@@ -284,7 +290,7 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
     const p = (async () => {
       const cands = candidates(prefixOf(ref.sha256), from);
       try {
-        const src = await obtain('effect', ref.id, ref.sha256, ref, cands);
+        const src = await obtain(DEF, ref.id, ref.sha256, ref, cands);
         for (const [name, s] of Object.entries(ref.libs)) await obtain('lib', name, s, ref, cands);
         const prep = store.prepare(ref);
         if (prep.status === 'ready' && !own.has(key)) {
@@ -294,7 +300,7 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
         return prep.status;
       } catch (e) {
         stats.failed++;
-        log(`effect ${ref.id} (${prefixOf(ref.sha256)}) not obtained: ${e.message}`);
+        log(`${DEF} ${ref.id} (${prefixOf(ref.sha256)}) not obtained: ${e.message}`);
         return e?.code === 'sha-mismatch' || e?.code === 'id-mismatch' ? 'missing' : 'missing';
       }
     })().finally(() => inflight.delete(key));
@@ -331,10 +337,10 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
           const res = await request(peerId, { t: 'ref', v: FX_PROTOCOL_VERSION, from: selfId, prefix: sha16 });
           const m = res.msgs.find(x => x?.t === 'ref');
           if (!m) return 'missing';
-          const ref = parseFxRef(m.ref);
+          const ref = parseRef(m.ref);
           if (prefixOf(ref.sha256) !== sha16 || ref.id !== id) return 'missing';
           return await ensure(ref, { from: peerId });
-        } catch (e) { if (e?.code !== 'NO_ROUTE') log(`effect prefetch ${id}@${sha16} from ${peerId}: ${e.message}`); return 'missing'; }
+        } catch (e) { if (e?.code !== 'NO_ROUTE') log(`${DEF} prefetch ${id}@${sha16} from ${peerId}: ${e.message}`); return 'missing'; }
       })());
     }
     return started;
@@ -366,11 +372,35 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
         const p = store.ready().find(x => own.has(x.key) && x.ref.sha256 === sha);
         if (p && !sharedWith.has(`${p.key}|${from}`)) { sharedWith.add(`${p.key}|${from}`); onShared?.(p, from); }
       }
-      return blobFrames(msg.kind === 'lib' ? 'lib' : 'effect', obj, maxBytes);
+      return blobFrames(msg.kind === 'lib' ? 'lib' : DEF, obj, maxBytes);
     }
     return [{ t: 'error', error: `unknown request ${String(msg.t).slice(0, 20)}` }];
   }
   return { ensure, adopt, noteHave, noteHolder, handle, haveCsv, candidates, stats: () => ({ ...stats }), source: (s) => source.get(s) || null };
+}
+
+// ------------------------------------------------------------------ FXG: foreign cards handed over outside play
+// A death-card gift / a won card saved in a profile travels as { kind, id, ref } (ref = compactRef, the ref the
+// card carried: card.fx for effects, card.sk for skills). Kind-generic (effects and skills): the def already held
+// (store ready) → the card at once; otherwise the same sync.ensure as learning (cache first — getByRef checks the
+// content cache before any fetcher — then the giving peer `from`, announced holders, git / httpd), validator gate
+// included. Private deck state only: nothing here reaches the resolver or the state hash.
+//   → { status: 'ready' | 'rejected' | 'missing' | 'bad', card?, ref?, prep?, src?, reason? }
+export async function foreignCardFromRef(x, { store, sync, parseRef = parseFxRef, cardFor, from = null, holders = [], timeoutMs = 0 } = {}) {
+  let ref;
+  try { ref = parseRef(x?.ref); } catch (e) { return { status: 'bad', reason: e.message }; }
+  if (!x?.id || ref.id !== x.id) return { status: 'bad', ref, reason: `ref id ${ref.id} ≠ card id ${x?.id}` };
+  const mkCard = (prep) => cardFor(prep, compactRef({ ...prep.ref, verdict: prep.verdict }));
+  const st0 = store.status(ref);
+  if (st0 === 'ready') { const prep = store.prepare(ref); return { status: 'ready', card: mkCard(prep), ref, prep, held: true, src: sync.source(ref.sha256) || 'held' }; }
+  if (st0 === 'rejected') { const prep = store.prepare(ref); return { status: 'rejected', ref, reason: prep.reason || 'refused' }; }
+  for (const h of holders || []) if (h) sync.noteHolder(prefixOf(ref.sha256), h);
+  let p = sync.ensure(ref, { from });
+  if (timeoutMs > 0) p = Promise.race([p, new Promise(r => { const t = setTimeout(() => r('missing'), timeoutMs); t.unref?.(); })]);
+  const st = await p;
+  if (st !== 'ready') return { status: st === 'rejected' ? 'rejected' : 'missing', ref, reason: st === 'rejected' ? (store.prepare(ref).reason || 'refused') : 'not obtained' };
+  const prep = store.prepare(ref);
+  return { status: 'ready', card: mkCard(prep), ref, prep, src: sync.source(ref.sha256) || from || 'store' };
 }
 
 // ------------------------------------------------------------------ resolver gate (pure, testable)
@@ -415,6 +445,58 @@ export function gateReveals(reveals, missing, statusOf) {
   return { tags, abstain, postponed, missing: missingRefs };
 }
 
+// ------------------------------------------------------------------ transport (kind-generic, S4)
+// One request per libp2p stream on `proto` (map-sync framing), else a createBusRpc exchange over bus events of
+// type `busKind` ('fx' for effects, 'sk' for skills). `handle(msg, {maxBytes})` answers requests. onTransport is
+// called with { request, busRpc } before the libp2p handler is registered (request may be used at once).
+export async function attachDefsRpc({ proto, busKind, selfId, handle, log = () => {}, libp2p, openConnTo, getBus, netStat = () => {}, forceBus = false,
+  frameBytes = FX_FRAME_BYTES, busFrameBytes = FX_BUS_FRAME_BYTES, timeoutMs = 10_000, onTransport = null }) {
+  const PROTO = proto, TIMEOUT = timeoutMs;
+  const fb = (m) => Buffer.byteLength(JSON.stringify(m), 'utf8') + 4;
+  const busRpc = createBusRpc({ selfId, publish: (ev) => { const b = getBus(); return b ? b.publish(busKind, ev) > 0 : false; }, handle: (m, o) => handle(m, o), maxBytes: busFrameBytes });
+  async function viaLibp2p(conn, msg) {
+    const req = encodeFrame(msg);
+    const stream = await conn.newStream(PROTO, { signal: AbortSignal.timeout(TIMEOUT) });
+    const timer = setTimeout(() => stream.abort(new Error(`${busKind} rpc timeout`)), TIMEOUT);
+    try {
+      netStat('libp2p', 'out', busKind, req.length);
+      if (!stream.send(req)) await stream.onDrain();
+      await stream.close();
+      const dec = createFrameDecoder(), msgs = [];
+      for await (const chunk of stream) for (const m of dec.push(chunk instanceof Uint8Array ? chunk : chunk.subarray())) { msgs.push(m); netStat('libp2p', 'in', busKind, fb(m)); }
+      return { msgs, via: 'libp2p' };
+    } finally { clearTimeout(timer); }
+  }
+  const request = async (peerId, msg) => {
+    const conn = forceBus ? null : openConnTo(peerId);
+    if (conn) {
+      try { return await viaLibp2p(conn, msg); }
+      catch (e) { if (!getBus()?.stats().open) throw e; log(`rpc to ${peerId} over libp2p failed (${e.message}) — trying the bus`); }
+    }
+    if (!getBus()?.stats().open) throw Object.assign(new Error('no direct link and no bus'), { code: 'NO_ROUTE' });
+    return busRpc.request(peerId, msg);
+  };
+  onTransport?.({ request, busRpc });
+  await libp2p.handle(PROTO, async (stream) => {
+    const timer = setTimeout(() => stream.abort(new Error(`${busKind} rpc timeout`)), TIMEOUT);
+    try {
+      const dec = createFrameDecoder(64 * 1024);
+      let req = null;
+      for await (const chunk of stream) for (const m of dec.push(chunk instanceof Uint8Array ? chunk : chunk.subarray())) req ??= m;
+      if (!req) throw new Error(`empty ${busKind} request`);
+      netStat('libp2p', 'in', busKind, fb(req));
+      for (const m of handle(req, { maxBytes: frameBytes })) {
+        const f = encodeFrame(m);
+        netStat('libp2p', 'out', busKind, f.length);
+        if (!stream.send(f)) await stream.onDrain();
+      }
+      await stream.close();
+    } catch (e) { try { stream.abort(e); } catch {} }
+    finally { clearTimeout(timer); }
+  }, { maxInboundStreams: 8 });
+  return { request, busRpc };
+}
+
 // ------------------------------------------------------------------ the peer adapter (peer.mjs glue)
 const envMs = (name, dflt) => { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; };
 export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null } = {}) {
@@ -447,7 +529,7 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   let request = null, busRpc = null;
   let active = false;
   const sync = createFxSync({
-    selfId, store, cache, fallbackFetchers, log,
+    selfId, store, cache, fallbackFetchers, log, opts: process.env.FX_PREFETCH === '0' ? { prefetch: false } : {},   // FXG: FX_PREFETCH=0 (tests) — no fx_have prefetch
     request: (peerId, msg) => (request ? request(peerId, msg) : Promise.reject(Object.assign(new Error('no transport yet'), { code: 'NO_ROUTE' }))),
     onLearned: (p, src) => { active = true; log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && src.startsWith('peer:') ? src : null); },
     onShared: (p, peer) => { log(`shared ${p.ref.id} (${prefixOf(p.ref.sha256)}) with ${peer}`); notice('shared', p, peer); },
@@ -487,6 +569,16 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
         text: d.text || '', tags: ['foreign'], summon: null,
         fx: ref, source: { ...ref },
       };
+    },
+    /** FXG: a {kind:'effect', id, ref} gift / profile card → foreignCardFromRef result (refused / missing → log + UI notice). */
+    async cardFromRef(x, { from = null, holders = [], timeoutMs = 0, why = 'card', quiet = false } = {}) {
+      const res = await foreignCardFromRef(x, { store, sync, parseRef: parseFxRef, cardFor: api.cardFor, from, holders, timeoutMs });
+      if (res.status === 'ready') active = true;
+      else {
+        log(`${why}: foreign ${x?.id} ${res.status}${res.reason ? ` (${res.reason})` : ''}`);
+        if (res.ref && !quiet) ui({ kind: 'effect_source', event: 'missing', ref: compactRef(res.ref), peer: from ? { peer_id: from, name: nameOf(from) || undefined } : null });
+      }
+      return res;
     },
     /** Slim snapshot fields (absent with no foreign effect held). */
     snapshotFields() { const h = sync.haveCsv(); return h ? { fx_have: h } : {}; },
@@ -551,50 +643,10 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
       for (const [actor, tag] of res.tags) if (actor !== self) log(`T${turn}.R${round + 1} ${actor}: ${tag}`);
       return res;
     },
-    /** Transport: libp2p protocol + Nostr bus fallback. */
+    /** Transport: libp2p protocol + Nostr bus fallback (attachDefsRpc, shared with the skills handshake). */
     async attach({ libp2p, openConnTo, getBus, netStat = () => {}, forceBus = false }) {
-      const PROTO = fxProtocol(dimId), TIMEOUT = 10_000;
-      const fb = (m) => Buffer.byteLength(JSON.stringify(m), 'utf8') + 4;
-      busRpc = createBusRpc({ selfId, publish: (ev) => { const b = getBus(); return b ? b.publish('fx', ev) > 0 : false; }, handle: (m, o) => sync.handle(m, o), maxBytes: FX_BUS_FRAME_BYTES });
-      async function viaLibp2p(conn, msg) {
-        const req = encodeFrame(msg);
-        const stream = await conn.newStream(PROTO, { signal: AbortSignal.timeout(TIMEOUT) });
-        const timer = setTimeout(() => stream.abort(new Error('fx rpc timeout')), TIMEOUT);
-        try {
-          netStat('libp2p', 'out', 'fx', req.length);
-          if (!stream.send(req)) await stream.onDrain();
-          await stream.close();
-          const dec = createFrameDecoder(), msgs = [];
-          for await (const chunk of stream) for (const m of dec.push(chunk instanceof Uint8Array ? chunk : chunk.subarray())) { msgs.push(m); netStat('libp2p', 'in', 'fx', fb(m)); }
-          return { msgs, via: 'libp2p' };
-        } finally { clearTimeout(timer); }
-      }
-      request = async (peerId, msg) => {
-        const conn = forceBus ? null : openConnTo(peerId);
-        if (conn) {
-          try { return await viaLibp2p(conn, msg); }
-          catch (e) { if (!getBus()?.stats().open) throw e; log(`rpc to ${peerId} over libp2p failed (${e.message}) — trying the bus`); }
-        }
-        if (!getBus()?.stats().open) throw Object.assign(new Error('no direct link and no bus'), { code: 'NO_ROUTE' });
-        return busRpc.request(peerId, msg);
-      };
-      await libp2p.handle(PROTO, async (stream) => {
-        const timer = setTimeout(() => stream.abort(new Error('fx rpc timeout')), TIMEOUT);
-        try {
-          const dec = createFrameDecoder(64 * 1024);
-          let req = null;
-          for await (const chunk of stream) for (const m of dec.push(chunk instanceof Uint8Array ? chunk : chunk.subarray())) req ??= m;
-          if (!req) throw new Error('empty fx request');
-          netStat('libp2p', 'in', 'fx', fb(req));
-          for (const m of sync.handle(req, { maxBytes: FX_FRAME_BYTES })) {
-            const f = encodeFrame(m);
-            netStat('libp2p', 'out', 'fx', f.length);
-            if (!stream.send(f)) await stream.onDrain();
-          }
-          await stream.close();
-        } catch (e) { try { stream.abort(e); } catch {} }
-        finally { clearTimeout(timer); }
-      }, { maxInboundStreams: 8 });
+      await attachDefsRpc({ proto: fxProtocol(dimId), busKind: 'fx', selfId, handle: (m, o) => sync.handle(m, o), log, libp2p, openConnTo, getBus, netStat, forceBus,
+        frameBytes: FX_FRAME_BYTES, busFrameBytes: FX_BUS_FRAME_BYTES, onTransport: (t) => { request = t.request; busRpc = t.busRpc; } });
     },
     /** Bus `fx` events addressed to us. */
     onBus(ev) { if (busRpc && ev?.to === selfId) busRpc.deliver(ev); },

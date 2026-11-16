@@ -25,7 +25,8 @@
 //                                                                                        (a new team: join-plan.mjs newTeamSide)
 // `monsters` = Door-known monsters a quiet join regenerates at their last tiles (mobile-entry.mjs starts them as workers).
 // A profile character the Doors know alive in ANY known dimension is refused with 409 (no cloning, one dimension at a
-// time — user rulings 2026-11-15).
+// time — user rulings 2026-11-15) — except for the test modes, which are local and private (user 2026-11-16): their
+// plans carry { private: true, dimName, dimId (unguessable), env (join-plan.mjs PRIVATE_TEST_ENV) } and never refuse.
 // `join` = prepareJoin() output: { env (peer.mjs env vars, incl. the map-blocks file), relays, summary } —
 // mobile-entry.mjs applies it with applyJoinEnv(), the same path its chaosd6:// deep link takes.
 //
@@ -53,9 +54,9 @@ export const JOIN_SIDES = ['player', 'player_c', 'player_d', 'npc_a', 'npc_b', '
 // `nearTile` {q,r}: next to that unit (the menu's unit list). Stale Doors work: no live Door → the joiner
 // starts the dimension from the Doors' map (JOIN_SYNC_WAIT_MS 500, nobody to sync with).
 // `regen` (quiet dimensions): plan the Door-known monsters' return (join-plan.mjs planJoin) — `regen` in the result.
-export async function prepareJoin(dim, { doorId = null, side = 'player', placement = 'nearby', label = '', nearTile = null, tmpDir = os.tmpdir(), regen = false, regenMax = undefined } = {}) {
+export async function prepareJoin(dim, { doorId = null, side = 'player', placement = 'nearby', label = '', nearTile = null, preferredTile = null, tmpDir = os.tmpdir(), regen = false, regenMax = undefined } = {}) {
   const { planJoin, dimIdOf } = await import('./join-plan.mjs');
-  const plan = planJoin(dim, { doorId, side, placement, label, nearTile, regen, ...(regenMax != null ? { regenMax } : {}) });
+  const plan = planJoin(dim, { doorId, side, placement, label, nearTile, preferredTile, regen, ...(regenMax != null ? { regenMax } : {}) });
   const blocksFile = path.join(tmpDir, `map-blocks.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.json`);
   await fs.mkdir(tmpDir, { recursive: true });
   await fs.writeFile(blocksFile, JSON.stringify(plan.knownMap.blocks()));
@@ -114,11 +115,11 @@ function describeLocal(jp, d, now = Date.now()) {
 }
 // `mines` = Map<dim id, Set "q,r"> of my saves (dims-local.mjs mineMapsOf): shares + units are computed here,
 // once per seed fetch, so the cached items the menu serves carry no block lists.
-async function listDimensionsDefault({ limit = 30, mines = null } = {}) {
+async function listDimensionsDefault({ limit = 30, mines = null, include = [] } = {}) {
   const jp = await import('./join-plan.mjs');
   const seedHost = SEED_HOST(), rid = DIMS_RID();
   let raw;
-  if (typeof jp.listDimensionsFromHttpd === 'function') raw = await jp.listDimensionsFromHttpd({ seedHost, rid, limit });
+  if (typeof jp.listDimensionsFromHttpd === 'function') raw = await jp.listDimensionsFromHttpd({ seedHost, rid, limit, include });
   else {
     const origin = /^https?:\/\//.test(seedHost) ? seedHost : `https://${seedHost}`;
     const r = await fetch(`${origin}/api/v1/repos/${rid.startsWith('rad:') ? rid : `rad:${rid}`}/remotes`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
@@ -211,7 +212,15 @@ async function readBody(req) {
 export async function planOf(body, file, deps = {}) {
   const fail = (status, message) => { const e = new Error(message); e.status = status; throw e; };
   const mode = String(body?.mode || '');
-  if (mode === 'test-random') return { mode };
+  // Test games are LOCAL and PRIVATE (user 2026-11-16): a fresh unguessable dimension id, no Door, no Nostr bus,
+  // loopback, never unattended (join-plan.mjs PRIVATE_TEST_ENV; mobile-entry applies `env`) — and so no
+  // one-dimension refusal (supersedes the 2026-11-15 ruling for tests).
+  const privateOf = async () => {
+    const jp = await import('./join-plan.mjs');
+    const dimName = String(body?.dimensionName || '').trim().slice(0, 40) || 'Ashfall-Micro';
+    return { private: true, dimName, dimId: jp.privateDimId(dimName), env: { ...jp.PRIVATE_TEST_ENV, TEST_MODE: mode } };
+  };
+  if (mode === 'test-random') return { mode, ...(await privateOf()) };
   const p = loadProfile(file);
   // One dimension at a time (user ruling 2026-11-15) for Create Dimension / Restore / Test launches: a profile
   // character (or team member) alive in ANOTHER dimension the menu knows (the list cache) → 409 naming it. `except`
@@ -242,11 +251,29 @@ export async function planOf(body, file, deps = {}) {
     const match = saved.hero && p.characters.find(c => c.base_character === saved.hero.characterId && c.name === saved.hero.name);
     const character = match || (saved.hero ? null : topCharacter(p));
     const dimName = String(saved.props.dim_name || it.dim_name || 'Restored-Dimension');
+    // A private test game's save (private.json, listSaves → it.private) comes back private: no one-dimension check,
+    // no Door lookup, the private env again.
+    if (it.private) {
+      const jp = await import('./join-plan.mjs');
+      return { mode, tmjPath: it.path, dimName, dimId: String(saved.props.dim_id || it.dim_id), seed: String(saved.props.seed || it.seed || ''), character, savedHero: match ? null : saved.hero,
+        alliance: saved.hero?.alliance || null, private: true, env: { ...jp.PRIVATE_TEST_ENV, TEST_MODE: String(it.test_mode || 'test') } };
+    }
     await refuseElsewhere([character], dimName);
+    // Hero shadows (rule_hero_shadow): a shadow of the saved hero stood in after the save → take it over (its tile,
+    // its life, REPLACES_PEER_ID — applied to the env by runMenu); killed → the hero died there: refused.
+    let extraEnv = null;
+    const heroId = String(saved.props.peer_id || (saved.props.peer_label ? `peer:${saved.props.peer_label}` : ''));
+    if (heroId) {
+      const sdim = await (deps.fetchDimension || fetchDimensionDefault)(dimName).catch(() => null);
+      const jp = await import('./join-plan.mjs');
+      const sh = sdim?.doors?.length ? jp.heroShadowIn(sdim.doors, heroId, Date.parse(saved.props.saved_at || 0) || 0) : null;
+      if (sh?.dead) fail(409, `${saved.hero?.name || heroId} died in ${dimName} as its shadow${sh.killer_name ? ` (killed by ${sh.killer_name})` : ''} — it cannot come back there`);
+      if (sh) extraEnv = { REPLACES_PEER_ID: sh.peer_id, START_LIFE: String(sh.life), PEER_LABEL: heroId.replace(/^peer:/, ''), ...(sh.tile ? { START_TILE: JSON.stringify(sh.tile) } : {}) };
+    }
     return { mode, tmjPath: it.path, dimName, dimId: String(saved.props.dim_id || it.dim_id || dimIdFor(dimName)), seed: String(saved.props.seed || it.seed || ''), character, savedHero: match ? null : saved.hero,
-      alliance: saved.hero?.alliance || null };
+      alliance: saved.hero?.alliance || null, ...(extraEnv ? { extraEnv } : {}) };
   }
-  if (mode === 'join' || mode === 'join-team') {
+  if (mode === 'join' || mode === 'join-team' || mode === 'restore-here' || mode === 'dim-out') {
     const dimensionName = String(body.dimensionName || '').trim();
     if (!dimensionName) fail(400, 'dimensionName is required');
     const doorId = body.doorId ? String(body.doorId) : null;
@@ -266,14 +293,16 @@ export async function planOf(body, file, deps = {}) {
     // No cloning (user ruling 2026-11-15): a profile character the Doors know alive in this dimension → 409.
     // One dimension at a time (ruling 2): alive in ANY dimension the menu knows (this one, freshly read, first; then
     // the list cache — the newest MENU_DIMS_LIMIT dimensions of the seed) → 409 naming that dimension.
+    // Only LIVE presence counts elsewhere (user 2026-11-16: old Doors of quiet dimensions the phone left alive
+    // blocked every join); in this dimension a record of any age still refuses (no second copy of me here).
     const refuseAlive = (chars) => {
-      const hits = jp.aliveInDimensions([dim, ...((deps.knownDims && deps.knownDims()) || [])], chars.filter(Boolean));
+      const hits = jp.aliveInDimensions([dim, ...((deps.knownDims && deps.knownDims()) || [])], chars.filter(Boolean), { anyAgeIn: dim.dimension_name });
       if (hits.length) fail(409, jp.aliveWhereText(hits));
     };
     // Quiet dimension: the Door-known monsters come back (≤ MOBILE_REGEN_MAX nearest, in-process workers — the phone).
     const regenMax = deps.regenMax ?? Number(process.env.MOBILE_REGEN_MAX || 4);
-    const prep = async (side, placement, label = '') => {
-      const join = await prepareJoin(dim, { doorId, side, placement, label, nearTile: placement === 'nearby' && nt ? { q: nt.q, r: nt.r } : null, tmpDir: deps.tmpDir || os.tmpdir(), regen: true, regenMax })
+    const prep = async (side, placement, label = '', preferredTile = null) => {
+      const join = await prepareJoin(dim, { doorId, side, placement, label, nearTile: placement === 'nearby' && nt ? { q: nt.q, r: nt.r } : null, preferredTile, tmpDir: deps.tmpDir || os.tmpdir(), regen: true, regenMax })
         .catch(e => fail(400, e.message));
       if (join.regen.length) {
         // No live Door (DOOR_LIVE_MS 25 min) is not enough: anybody on the bus → it runs, nothing is regenerated.
@@ -282,6 +311,39 @@ export async function planOf(body, file, deps = {}) {
       }
       return join;
     };
+    if (mode === 'restore-here') {
+      // "↻ Restore <name> here" (user 2026-11-16) — ui-server.mjs restoreHere's rule: the profile character's newest
+      // alive record there (join-plan.mjs restoreHereTarget; its live shadow is taken over), under its own peer id, at
+      // its last tile with its last life, from the Doors' map (quiet → Door-known monsters come back), first Door
+      // pushed at once (the announcement). LIVE presence in another dimension refuses; stale records don't.
+      // Planned as a 'join' so mobile-entry.mjs applies it like any Door join (env + profileEnv(character)).
+      const c = characterOf(p, String(body.profileCharId || ''));
+      if (!c) fail(400, `no profile character ${body.profileCharId || '(none given)'}`);
+      return restoreHerePlan(c);
+    }
+    if (mode === 'dim-out') {
+      // "⇱ Dimension Out" from the start screen (rule_dimension_out): the same restore-here / takeover, and the peer
+      // starts its 10-round Dimension Out at once (DIM_OUT_ON_START) — the game opens so the countdown shows.
+      const c = characterOf(p, String(body.profileCharId || ''));
+      if (!c) fail(400, `no profile character ${body.profileCharId || '(none given)'}`);
+      const plan = await restoreHerePlan(c);
+      plan.join.env.DIM_OUT_ON_START = '1';
+      plan.join.summary += ' — Dimension Out at once';
+      return { ...plan, dimOut: true };
+    }
+    async function restoreHerePlan(c) {
+      const t = jp.restoreHereTarget(dim, c);
+      if (!t) fail(409, `${c.name} is not alive in ${dim.dimension_name} (dead there, or never there)`);
+      await refuseElsewhere([c], dim.dimension_name);
+      const side = ['player', 'player_c', 'player_d', 'npc_b'].includes(t.alliance) ? t.alliance : 'player';
+      const join = await prep(side, 'nearby', t.label, t.tile);
+      const taken = t.tile && jp.unionMembers(dim.doors).some(m => m.peer_id !== t.peer_id && m.peer_id !== t.replaces && (m.life ?? 1) > 0 && m.tile?.q === t.tile.q && m.tile?.r === t.tile.r);
+      if (t.tile && !taken) { join.env.START_TILE = JSON.stringify(t.tile); join.startTile = t.tile; }
+      Object.assign(join.env, { HUMAN: '1', RADICLE_PUSH_FIRST_SEC: process.env.RESTORE_PUSH_FIRST_SEC || '1', ALLY_OF: '',   // back in my hands: no group
+        ...(t.life > 0 ? { START_LIFE: String(t.life) } : {}), ...(t.replaces ? { REPLACES_PEER_ID: t.replaces } : {}) });
+      join.summary += ` — restoring ${c.name} as ${t.label} hp ${t.life ?? '?'}${t.replaces ? `, taking over its shadow ${t.replaces}` : ''}`;
+      return { mode: 'join', restoreHere: true, dimName: dim.dimension_name, side, character: c, join, monsters: join.regen, target: t };
+    }
     if (mode === 'join-team') {
       // The top character opens a gate 30–50 hexes from the Door; count−1 more arrive beside it (tier ring).
       // A NEW team (user rulings 2026-11-15); the allies are its bots.
@@ -306,17 +368,23 @@ export async function planOf(body, file, deps = {}) {
     else if (!body.characterId || body.characterId === 'profile:top') character = topCharacter(p);   // null → random below
     else characterId = String(body.characterId);
     if (!creatureId && !character && !characterId) characterId = randomEntryId(deps.dataDir || '', 'characters.json', 'char_oran_rief');
+    // The owner comes back (rule_unattended_character): my profile character unattended there → this join is its
+    // restore-here takeover; its own record (live, or left alive while quiet) still refuses (rejoin/restore there).
+    const back = character ? jp.restoreHereTarget(dim, character) : null;
+    if (back?.replaces) return restoreHerePlan(character);
     if (character) refuseAlive([character]);
     const join = await prep(side, placement, body.label || '');
     // I play it (user ruling 2026-11-15): a character joining next to a monster is a human npc_b, not a bot.
     if (!creatureId) join.env.HUMAN = '1';
+    // The ally-join link (rule_unattended_character): joined next to `nearPeer` as its ally → published ally_of.
+    const nearPeer = typeof body.nearPeer === 'string' && /^peer:[A-Za-z0-9_.:-]{1,80}$/.test(body.nearPeer) ? body.nearPeer : '';
+    join.env.ALLY_OF = nearPeer && !creatureId ? nearPeer : '';
     return { mode, dimName: dim.dimension_name, side, character, characterId, creatureId, join, monsters: join.regen };
   }
   if (mode === 'test-character') {
     const c = characterOf(p, String(body.profileCharId || ''));
     if (!c) fail(400, `no profile character ${body.profileCharId || '(none given)'}`);
-    await refuseElsewhere([c]);
-    return { mode, character: c };
+    return { mode, character: c, ...(await privateOf()) };
   }
   if (mode === 'test-team') {
     const team = teamCharacters(p);
@@ -324,8 +392,7 @@ export async function planOf(body, file, deps = {}) {
     // Asking for more characters than the team has plays the whole team.
     const count = Math.max(1, Math.min(team.length, Math.floor(Number(body.count) || 1)));
     const tier = body.tier === 'strong' ? 'strong' : 'reachable';
-    await refuseElsewhere(team.slice(0, count));
-    return { mode, hero: team[0], allies: team.slice(1, count), tier };
+    return { mode, hero: team[0], allies: team.slice(1, count), tier, ...(await privateOf()) };
   }
   fail(400, `unknown launch mode "${mode}"`);
 }
@@ -336,6 +403,7 @@ const planText = (plan) => [
   plan.allies ? ` + ${plan.allies.length} allies (${plan.tier})` : '',
   plan.side ? ` (${plan.side})` : '',
   plan.monsters?.length ? ` + ${plan.monsters.length} regenerated monsters` : '',
+  plan.private ? ` [private test ${plan.dimId}]` : '',
 ].join('');
 
 // Saves + the Radicle list (the menu's cache) → both lists with the launcher stats, tombstoned ones dropped.
@@ -360,10 +428,18 @@ export async function runMenu({ port, dataDir, assetsDir = '', gameDir, userData
   const loadDims = () => (dimsLoading ??= Promise.resolve()
     .then(async () => {
       const { mineMapsOf } = await import('./dims-local.mjs');
-      const mines = await listSaves(dimensionsDir).then(({ items }) => mineMapsOf(items)).catch(() => new Map());
-      return (listDimensions || listDimensionsDefault)({ limit: Number(process.env.MENU_DIMS_LIMIT || 6), mines });
+      // + every dimension I have a save of, however old: where my character may still be alive ("You are here").
+      const saved = await listSaves(dimensionsDir).then(({ items }) => items).catch(() => []);
+      const mines = await mineMapsOf(saved).catch(() => new Map());
+      return (listDimensions || listDimensionsDefault)({ limit: Number(process.env.MENU_DIMS_LIMIT || 6), mines, include: saved.map(x => x.dim_name).filter(Boolean) });
     })
     .then(items => { dimsCache = { at: Date.now(), items }; return items; })
+    // Hero shadows (rule_hero_shadow): a fallen shadow of my profile character → its death card leaves my profile.
+    .then(async items => {
+      try { for (const s of await (await import('./shadow-settle.mjs')).settleFromDimensions(file, items)) console.log(`[menu] shadow: ${s.text}`); }
+      catch (e) { console.error(`[menu] shadow settle: ${e.message}`); }
+      return items;
+    })
     .finally(() => { dimsLoading = null; }));
   loadDims().catch(e => console.error(`[menu] dimensions prefetch: ${e.message}`));
   let pending = false;    // a launch is being planned (join: the seed is being read)
@@ -427,6 +503,11 @@ export async function runMenu({ port, dataDir, assetsDir = '', gameDir, userData
           let plan;
           try { plan = await planOf(await readBody(req), file, deps); } finally { pending = false; }
           done = plan;
+          // Plain env additions of a plan (a Restore taking over its hero's shadow): peer.mjs loads after the menu.
+          if (plan.extraEnv) Object.assign(process.env, plan.extraEnv);
+          // A private test game (user 2026-11-16): its unguessable dimension + the private env (no Door, no bus,
+          // loopback); the peer's autosave writes private.json beside its saves ("test" in Load old Dimension).
+          if (plan.private) Object.assign(process.env, plan.env, { DIM_NAME: plan.dimName, DIM_ID: plan.dimId });
           console.log(`[menu] launch ${planText(plan)}${plan.join ? ` — ${plan.join.summary}` : ''}`);
           res.setHeader('connection', 'close');
           json(200, { peerPort: port, mode: plan.mode });

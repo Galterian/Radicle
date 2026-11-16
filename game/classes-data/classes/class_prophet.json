@@ -1,0 +1,14 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_prophet",
+  "name": "Prophet",
+  "version": "1.1.0",
+  "source": {"collection":"classes","version":"1.1.0"},
+  "data": {"ability_kind":"once_per_round","colors":["elem_time","elem_space","elem_souls","elem_harmony","elem_concentration"],"passive":true,"range":1,"contact":1,"hand_reveal":{"n":"all"},"text":"Passive, once per turn: the first time in a turn a resolution leaves you in contact (adjacent) with an enemy — hero or monster — its whole hand opens for you as a popup."},
+  "flags": {"phase":null,"handDefaults":{"hand_reveal":{"n":"all"},"passive":true},"hooks":["config","contact","peer:requestHand"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "config": {"call":["cfg_prophet"]},
+    "contact": {"or":[{"get":[{"at":[{"sort_by":[{"filter":[{"or":[{"var":"foes"},[]]},{"bool":{"var":"f"}},"f"]},{"desc":{"+":[{"bool":{"var":"f.fought"}}]}},{"locale":{"str":{"var":"f.id"}}},"f"]},0]},"id"]},null]}
+  }
+}

@@ -2,7 +2,7 @@
 // phase clock reference. Oracles are the two Swarm-0407 divergences.
 // Run from game/: node tools/merge-order-check.mjs  → "all merge-order checks passed"
 import assert from 'node:assert/strict';
-import { orderedMerge, pickClockRef, cohortDeadline, snapAction, meshZones, resolverPeers, clockFrame } from '../merge-order.mjs';
+import { orderedMerge, pickClockRef, cohortDeadline, snapAction, meshZones, resolverPeers, clockFrame, notePrior, resolverBase, resolvedThrough } from '../merge-order.mjs';
 import { gunMergeable, GUN_MEMBER_CORE } from '../gun-member.mjs';
 
 const iso = (ms) => new Date(ms).toISOString();
@@ -154,6 +154,35 @@ assert.equal(snapAction({ action: 9, turn: 99 }), 9);
   assert.equal(held.action, 11, 'clock not rolled back by a late older statement');
   assert.equal(clockFrame(plan, keys).sig, sig, 'same clock → same sig (deduped)');
   console.log('ok  clock frame: planning deadline reaches waitingOnBusyMember / cohortDeadline without Gun (Swarm-0226 oracle)');
+}
+
+// --- (f) Swarm-0559 T4.R1: dead ally-1 (no reveal) holds a shield token on (2,3); foe-2 is swapped onto (2,3) and
+// takes Frost Lance during action 12. ally-1 resolves first, spends the token, publishes at 20.101 (resolved_action 12).
+// P-Agent2 resolved before that frame arrived, P-Agent3 after: both must read the token-bearing statement.
+{
+  const shield = { id: 'r:ally-1#8#1', kind: 'shield', elem: 'elem_earth', value: 6, q: 2, r: 3 };
+  const bonus = { id: 'r:ally-1#8#0', kind: 'bonus', elem: 'elem_earth', value: 2, q: 2, r: 3 };
+  const base = { peer_id: 'peer:ally-1', life: 0, tile_q: 2, tile_r: 3, turn: 4, round: 0, action: 12 };
+  const afterT3R2 = { ...base, phase: 'resolution', resolved_action: 11, tile_tokens_json: JSON.stringify([bonus, shield]), last_seen: iso(T + 13_585) };   // turn_commit T4.R0
+  const afterT4R0 = { ...base, phase: 'resolution', resolved_action: 12, tile_tokens_json: JSON.stringify([bonus]), last_seen: iso(T + 20_101) };          // state_hash T4.R0
+  const absorbs = (view) => JSON.parse(view.get('peer:ally-1')?.tile_tokens_json || '[]').some(t => t.kind === 'shield' && t.q === 2 && t.r === 3);
+  // what mergePeerState does on each peer: fold + notePrior into peersPublic
+  const mergeInto = (held, prior, p) => { const prev = held.get(p.peer_id) || {}; const take = orderedMerge(prev, p); if (!take) return; const m = { ...prev, ...take }; notePrior(prior, prev, m); held.set(p.peer_id, m); };
+  const resolveAt = (frames) => { const held = new Map(), prior = new Map(); for (const f of frames) mergeInto(held, prior, f); return absorbs(resolverBase(held, prior, 12)); };
+  assert.equal(resolveAt([afterT3R2]), true, 'fast peer (P-Agent2, 20.094): token there');
+  assert.equal(resolveAt([afterT3R2, afterT4R0]), true, 'slow peer (P-Agent3, 20.129): still the pre-resolution statement → same outcome');
+  // the old view (held snapshots as they are) split the two — the divergence this guards against
+  { const held = new Map(), prior = new Map(); for (const f of [afterT3R2, afterT4R0]) mergeInto(held, prior, f); assert.equal(absorbs(held), false, 'raw peersPublic lost the token'); }
+  // the next action (13) reads the post-resolution statement: the spent token is gone for everyone
+  { const held = new Map(), prior = new Map(); for (const f of [afterT3R2, afterT4R0]) mergeInto(held, prior, f); assert.equal(absorbs(resolverBase(held, prior, 13)), false, 'action 13 sees the token spent'); }
+  // a late, older bus copy (fill-only) does not disturb it; a slim clock frame keeps resolved_action from the full one
+  assert.equal(resolveAt([afterT3R2, afterT4R0, afterT3R2]), true);
+  assert.equal(resolveAt([afterT3R2, afterT4R0, { peer_id: 'peer:ally-1', action: 13, phase: 'planning', last_seen: iso(T + 26_000) }]), true);
+  // an older build (no resolved_action) is read as before; a joiner that only ever heard the post-resolution frame too
+  assert.equal(resolvedThrough({}), -1);
+  assert.equal(resolveAt([{ ...afterT4R0, resolved_action: undefined }]), false, 'no stamp → held snapshot (old behaviour)');
+  assert.equal(resolveAt([afterT4R0]), false, 'no earlier statement → held snapshot');
+  console.log('ok  non-revealer read from its pre-resolution statement: dead ally-1 shield token, fast vs slow resolver (Swarm-0559 oracle)');
 }
 
 console.log('all merge-order checks passed');

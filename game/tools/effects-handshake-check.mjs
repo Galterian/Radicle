@@ -11,7 +11,9 @@ import { resolveEffect, resolveEffectJs, isForeignEffectId, EFFECT_RULES } from 
 import {
   effectSetId, libShaMap, bundledEffectSet, makeFxRef, parseFxRef, compactRef, fxKey, prefixOf,
   createFxStore, createFxSync, createMemoryCache, blobFrames, assembleBlob, gateReveals, missingUnion, createFxPeer,
+  foreignCardFromRef,   // FXG
 } from '../effects-handshake.mjs';
+import { addArchivedCard, dropRandomDeckCard, loadProfile, validateCharacter, foreignRefOf } from '../profile.mjs';   // FXG
 
 let fails = 0;
 const eq = (label, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fails++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}: ${JSON.stringify(got)?.slice(0, 160)}${ok ? '' : ` (want ${JSON.stringify(want)?.slice(0, 160)})`}`); };
@@ -274,6 +276,80 @@ function world(stats, tiles, sides) {
   const pr2 = await reg.prepareResolution(rv2, [], { turn: 2, round: 2, self: 'peer:T', myReveal });
   eq('…and runs once nobody lacks it', [pr2.mine, !!rv2[0].effect?.fx, pr2.abstain], [null, true, false]);
   eq('no foreign ref → no tags', (await reg.prepareResolution([{ actor: 'x', effect: { effect_id: 'effect_lightning' } }], [], { turn: 0, round: 0, self: 'peer:T', myReveal: null })).tags.size, 0);
+}
+
+// ---------------------------------------------------------------- 7. FXG: foreign death-card gifts / profile cards {kind, id, ref}
+{
+  const net = makeNet();
+  const A = net.add('A'), B = net.add('B'), C = net.add('C');
+  const R = net.add('R', { validate: () => ({ verdict: 'reject', reasons: ['too strong'] }) });
+  A.sync.adopt(FROST_LANCE, REF, libsBy(['std']));
+  await B.sync.ensure(REF, { from: 'A' });
+  const tool = await createFxPeer({ selfId: 'peer:G', dimId: 'dim-fxg', log: () => {} });
+  const cardFor = tool.cardFor;
+  const gift = { kind: 'effect', id: 'effect_frost_lance', ref: compactRef(REF) };
+  // (a) in store: B already holds it → the card at once, no fetch.
+  const before = B.sync.stats().fetched;
+  const ra = await foreignCardFromRef(gift, { store: B.store, sync: B.sync, cardFor, from: 'A' });
+  eq('gift in store → ready, held (src = where it came from)', [ra.status, ra.held, ra.src], ['ready', true, 'A']);
+  eq('gift in store → no fetch', B.sync.stats().fetched, before);
+  yes('gift card is the foreign effect card (fx ref, sha pinned)', ra.card?.kind === 'effect' && ra.card.effect_id === 'effect_frost_lance' && ra.card.fx?.sha256 === REF.sha256 && ra.card.tags.includes('foreign'));
+  // (b) needs fetch: C lacks it → fetched from the giver A, learned, announced.
+  const rb = await foreignCardFromRef(gift, { store: C.store, sync: C.sync, cardFor, from: 'A' });
+  eq('gift needs fetch → ready from the giver', [rb.status, rb.src], ['ready', 'A']);
+  eq('C learned from A', C.learned, ['A']);
+  eq('C now announces it', C.sync.haveCsv(), `effect_frost_lance@${prefixOf(REF.sha256)}`);
+  // (c) refused: R's validator rejects → no card (the card is lost).
+  const rc = await foreignCardFromRef(gift, { store: R.store, sync: R.sync, cardFor, from: 'A' });
+  eq('gift refused by the validator → rejected, no card', [rc.status, !!rc.card], ['rejected', false]);
+  eq('…and refused again at once (cached verdict)', (await foreignCardFromRef(gift, { store: R.store, sync: R.sync, cardFor, from: 'A' })).status, 'rejected');
+  // (d) not obtainable: the giver is unreachable, no holder → missing.
+  const D = net.add('D'); net.blocked.add('D>A');
+  eq('gift from an unreachable giver → missing', (await foreignCardFromRef(gift, { store: D.store, sync: D.sync, cardFor, from: 'A' })).status, 'missing');
+  // …a holder named in the gift (holders) is asked too.
+  eq('…a second holder serves it', (await foreignCardFromRef(gift, { store: D.store, sync: D.sync, cardFor, from: 'A', holders: ['B'] })).src, 'B');
+  // (e) bad: a ref for another id / no ref at all.
+  eq('ref id ≠ card id → bad', (await foreignCardFromRef({ ...gift, id: 'effect_fireball' }, { store: C.store, sync: C.sync, cardFor })).status, 'bad');
+  eq('no ref → bad', (await foreignCardFromRef({ kind: 'effect', id: 'effect_frost_lance' }, { store: C.store, sync: C.sync, cardFor })).status, 'bad');
+  // (f) cache first (profile load next session): the content cache holds def → ready with no transport at all.
+  const cache = createMemoryCache(); cache.put(FROST_LANCE);
+  const st = createFxStore({ bundled });
+  const sy = createFxSync({ selfId: 'P', store: st, cache, request: null });
+  const rf = await foreignCardFromRef(gift, { store: st, sync: sy, cardFor, timeoutMs: 500 });
+  eq('profile card from the cache (no transport) → ready, src cache', [rf.status, rf.src], ['ready', 'cache']);
+  // (g) the peer adapter: held (forced) → ready; a refused gift posts a `missing` effect_source notice.
+  const uiSeen = [];
+  // FX_VALIDATOR=0 here: a second adapter in one process sees Frost Lance already registered in EFFECT_RULES by
+  // section 6, which skews the E5 audit; live peers are one process each (the validator gate is covered in (c)).
+  const vSave = process.env.FX_VALIDATOR; process.env.FX_VALIDATOR = '0';
+  const pe = await createFxPeer({ selfId: 'peer:H', dimId: 'dim-fxg', log: () => {}, ui: (m) => uiSeen.push(m) });
+  if (vSave === undefined) delete process.env.FX_VALIDATOR; else process.env.FX_VALIDATOR = vSave;
+  const tmp = `${process.env.TMPDIR || '/tmp'}/_fxg_fl_${process.pid}.json`;
+  fs.writeFileSync(tmp, JSON.stringify(FROST_LANCE)); pe.forcedCard(tmp); fs.unlinkSync(tmp);
+  eq('adapter: held gift → ready', (await pe.cardFromRef(gift, { from: 'peer:X' })).status, 'ready');
+  const odd = { ...gift, id: 'effect_nope', ref: { ...gift.ref, id: 'effect_nope', sha256: 'e'.repeat(64) } };
+  eq('adapter: unobtainable gift → missing', (await pe.cardFromRef(odd, { from: 'peer:X', timeoutMs: 300 })).status, 'missing');
+  eq('adapter: missing → UI notice', uiSeen.map(m => [m.kind, m.event, m.ref?.id]), [['effect_source', 'missing', 'effect_nope']]);
+  // (h) profile: a won foreign card keeps its ref; a built-in one is byte-identical to before (no ref / source keys).
+  const pf = `${process.env.TMPDIR || '/tmp'}/_fxg_profile_${process.pid}.json`;
+  fs.writeFileSync(pf, JSON.stringify({ version: 1, team_name: '', team_order: ['pc_t'], characters: [{ id: 'pc_t', name: 'T', cards: [], actions: { A: 4, B: 4, M: 4, P: 4 } }] }));
+  const xf = addArchivedCard(pf, 'pc_t', { kind: 'effect', id: 'effect_frost_lance', ref: rb.card.fx }, 'Foe');
+  const xb = addArchivedCard(pf, 'pc_t', { kind: 'effect', id: 'effect_lightning' }, 'Foe');
+  eq('profile: foreign card keeps its ref', foreignRefOf(xf), compactRef({ ...REF, verdict: rb.card.fx.verdict }));
+  eq('profile: built-in card has no ref / source', Object.keys(xb).sort(), ['from', 'id', 'kind', 'new', 'taken_at', 'uid', 'where']);
+  const saved = loadProfile(pf).characters[0].cards.find(x => x.id === 'effect_frost_lance');
+  eq('profile: ref survives save / load', saved.ref.sha256, REF.sha256);
+  const rl = await foreignCardFromRef(saved, { store: st, sync: sy, cardFor });
+  eq('profile: saved card rebuilds (cache-first)', [rl.status, rl.card?.effect_id], ['ready', 'effect_frost_lance']);
+  // A death drop of the foreign profile card hands {kind, id, ref} on.
+  const p2 = loadProfile(pf); for (const x of p2.characters[0].cards) x.where = x.id === 'effect_frost_lance' ? 'deck' : 'archive';
+  fs.writeFileSync(pf, JSON.stringify(p2));
+  const dropped = dropRandomDeckCard(pf, 'pc_t');
+  eq('profile: death drop of a foreign card carries its ref', [dropped.kind, dropped.id, dropped.ref?.sha256], ['effect', 'effect_frost_lance', REF.sha256]);
+  const cat = { skills: {}, effects: { effect_lightning: {} }, classes: {}, units: [], characters: {} };
+  const ve = validateCharacter({ cards: [{ uid: 'u1', kind: 'effect', id: 'effect_frost_lance', where: 'deck', ref: compactRef(REF) }, { uid: 'u2', kind: 'effect', id: 'effect_unknown', where: 'deck' }] }, cat).filter(e => e.startsWith('card '));
+  eq('profile validation: foreign card accepted, unknown built-in still refused', ve, ['card u2: unknown effect effect_unknown']);
+  fs.unlinkSync(pf);
 }
 
 console.log(fails ? `${fails} handshake check(s) FAILED` : 'all handshake checks passed');

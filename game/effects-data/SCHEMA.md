@@ -28,6 +28,9 @@ hash of an effect must cover the effect file AND every library it `uses`.
 API: `loadEffectDefs(dir | {effects, libs} | [defs]) → Map(id → def)` (validates, throws on a bad file),
 `resolveEffectData(def, ctx, cast[, {limits, libs}]) → outcome`, `validateEffectDef(def, subs)`,
 `validateLib(lib)`, `ALL_OPS`, `OUTCOME_ARRAYS`, `OUTCOME_SCALARS`, `ENGINE_LIMITS`.
+S2 (skills, `game/skill-engine.mjs`) reuses the evaluator through `runProgram(logic, subs, ctx, root, {ctxOps, deny, limits})`
+(returns the program's value, throws on limits) and `validateLogic(logic, subs, known)`; `SPECIAL_OPS` / `PURE_OP_NAMES` are
+exported for its vocabulary. Effect behaviour is unchanged (effect-engine-check identical).
 
 ## Foreign effects (E4)
 
@@ -74,13 +77,13 @@ any, or a program error (unknown variable in `set`, bad outcome key/status, unkn
 the deterministic outcome `{status: 'error', notes: ['effect engine: <id>: <reason>'], …empty}`. An
 exception thrown by a `ctx` query propagates (same as the JS engine).
 
-### Operations (102, `ALL_OPS`)
+### Operations (103, `ALL_OPS`)
 
 | group | ops |
 |---|---|
 | control (lazy) | `if` / `?:` (chained), `and`, `or`, `seq`, `let [{name: expr…}, body]` (sequential), `set [name, expr]`, `call [sub, args…]`, `return [status?]` (stop; outcome as built), `return_empty [status]` (stop; nothing lands — effects.mjs `emptied`) |
 | values | `var`, `quote`, `obj`, `undefined`, `all_elems` |
-| compare / logic | `== === != !== < <= > >= ! !!`, `??` (first non-null), `is_null`, `is_array` |
+| compare / logic | `== === != !== < <= > >= ! !!`, `bool` (JS `!!`: `[]` is true — S2), `??` (first non-null), `is_null`, `is_array` |
 | maths | `+ - * / %`, `min max` (varargs), `min_of max_of sum` (lists), `round floor ceil abs round_div10`, `dice_count`, `hex_dist [a, b]` |
 | strings | `cat`, `join [list, sep]`, `str`, `starts_with`, `in` |
 | lists | `map filter find all some none reduce` (lazy bodies), `sort_by [list, {asc\|desc\|locale\|code: key}…, name?]` (stable; `locale` = `String#localeCompare`), `sort` (JS default order), `uniq`, `concat`, `merge`, `slice`, `at` (undefined out of range), `last`, `len`, `includes [list, x]`, `get [obj, key, default?]`, `set_at [list, i, v]` (copy), `range [a?, b]` |

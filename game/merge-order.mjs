@@ -104,6 +104,26 @@ export function resolverPeers(held, selfId, wireHeard) {
   return new Map([...held].filter(([id]) => id === selfId || wireHeard.has(id)));
 }
 
+// (5) resolverBase — a peer that does not reveal the action being resolved (a corpse, an abstaining joiner) is
+//     read from its held snapshot, and its owner may already have published what THIS action did to it (Swarm-0559
+//     T4.R1: dead ally-1 spent its shield token on (2,3) and published at once; the 3 peers that resolved before
+//     that frame arrived absorbed Frost Lance with the token, the 7 after it did not → foe-2 hp4 vs hp3).
+//     Every snapshot says which action its owner last resolved (`resolved_action`, -1 / absent = none or an older
+//     build). notePrior keeps, per peer, the held snapshot from before the last merge that moved resolved_action
+//     forward; resolverBase hands the resolver of `action` that earlier statement instead of one that already
+//     reflects `action` (resolved_action >= action). No clean earlier statement: the held one (old behaviour).
+export const resolvedThrough = (s) => Number.isInteger(s?.resolved_action) ? s.resolved_action : -1;
+export function notePrior(prior, prev, merged) {
+  if (merged?.peer_id && prev && Object.keys(prev).length && resolvedThrough(merged) > resolvedThrough(prev)) prior.set(merged.peer_id, prev);
+}
+export function resolverBase(held, prior, action) {
+  return new Map([...held].map(([id, s]) => {
+    if (resolvedThrough(s) < action) return [id, s];
+    const p = prior.get(id);
+    return [id, p && resolvedThrough(p) < action ? p : s];
+  }));
+}
+
 // clockFrame — what a clock change puts on the wire at once (the Swarm-0226 duty Gun's GUN_URGENT put
 // had): the slim core record (`keys`), and the dedupe signature action|phase|deadline. Partial by design:
 // mergePeerState spreads it over the held snapshot under the same orderedMerge rule as everything else.

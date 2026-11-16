@@ -1,0 +1,10 @@
+{
+  "_comment": "Placeholder until the classes validator (program C5) writes its pin here. tools/check.mjs reads `accept`; the validator's files and sha256 are in tools/pins.json.",
+  "format": "chaosd6-classes-validator-pin/1",
+  "validator": "",
+  "validator_version": null,
+  "source_path": "",
+  "source_sha256": "",
+  "pin_id": "",
+  "accept": ["ok"]
+}

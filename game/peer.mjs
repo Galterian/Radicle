@@ -56,8 +56,11 @@ import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { netStat, netAttachGun, netSnapshot, netStart } from './net-stats.mjs';   // telemetry only (P2P rework M1)
 import { createDigest, createMapSync, createBusRpc, encodeFrame, createFrameDecoder, MAX_FRAME_BYTES } from './map-sync.mjs';   // map compare-then-pull (P2P rework M3)
 import { createFxPeer } from './effects-handshake.mjs';   // foreign (player-branch) effects by ref (chaosD6-Effects E4)
+import { createSkPeer } from './skills-handshake.mjs';   // S4: foreign (player-branch) skills by ref (chaosD6-Skills)
+import { SKILLS_IMPLEMENTED, TRANCE, NEGATING_SKILLS, skillHook, ridesOn as skillRidesOn } from './skills.mjs';   // S1: pure skill rules (skills-data/HOOKS.md)
+import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md)
 import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP, GUN_MEMBER_CORE } from './gun-member.mjs';
-import { orderedMerge, pickClockRef, cohortDeadline, meshZones, resolverPeers, clockFrame } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
+import { orderedMerge, pickClockRef, cohortDeadline, meshZones, resolverPeers, clockFrame, notePrior, resolverBase } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
 import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor } from './js/features.js';
@@ -141,7 +144,19 @@ const isHumanAlliance = (a) => a === 'player' || a === 'player_c' || a === 'play
 // side — my profile hero joined next to a monster plays as npc_b (friend of the monsters, foe of the players).
 // Local only: hostility stays sideOf(alliance) on every peer; only who plans my cards (me, not npcPlan) and
 // what I am not (no sleeping monster_state, no monster deck, never isWildMonster) change.
-const IS_HUMAN = isHumanAlliance(ALLIANCE) || (process.env.HUMAN === '1' && !process.env.OWNER_PEER_ID);
+// Unattended character (rule_unattended_character, user ruling 2026-11-16): the computer-operated stand-in for a
+// hero whose game fell silent — SHADOW_OF = that hero's peer id. Never a human hand (npcPlan plays it as an allied
+// bot that follows its master, unattendedLeader), on the hero's side.
+const SHADOW_OF = process.env.SHADOW_OF || '';
+const IS_HUMAN = !SHADOW_OF && (isHumanAlliance(ALLIANCE) || (process.env.HUMAN === '1' && !process.env.OWNER_PEER_ID));
+// The ally-join link (user ruling 2026-11-16): the peer id of the unit I joined next to as its ally (launcher unit
+// list → ALLY_OF), published as ally_of — unattended characters linked this way form one group under one master.
+// A returning owner that takes its unattended character over leaves the group (heroShadowSeen clears it).
+let allyOfNow = String(process.env.ALLY_OF || '').startsWith('peer:') ? String(process.env.ALLY_OF) : '';
+const JOINED_AT = new Date().toISOString();   // published joined_at: the earliest join of a group is its master
+// A private test game (user 2026-11-16, "test games to be local and private"): no Door push (publishDoor), no
+// unattended characters; the launcher also turns the Nostr bus off, binds loopback and picks an unguessable DIM_ID.
+const DIM_PRIVATE = process.env.DIM_PRIVATE === '1';
 // Summoning: a companion process is spawned by its summoner with OWNER_PEER_ID
 // set; it follows that peer and vanishes when their Summoning permanent falls.
 // A ∀ Summoning binds an existing creature instead — it learns its owner at
@@ -281,6 +296,9 @@ function broadcastUI(msg) {
 // Foreign effects (chaosD6-Effects E4, effects-handshake.mjs): refs on commit / reveal, fetch + serve over
 // /chaos/<dim>/effects/1 (bus `fx` fallback), `fx_have` on the slim snapshot. Inert with no foreign effect.
 const fxPeer = await createFxPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } } });
+// S4 foreign skills (skills-handshake.mjs, skills-data/HANDSHAKE.md): sk_ref on commit / reveal, sk_missing, sk_have;
+// /chaos/<dim>/skills/1 + bus `sk`. Inert with no foreign skill.
+const skPeer = await createSkPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } } });
 
 // -------- data layer (loaded directly from the shared folder) --------
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -319,6 +337,19 @@ try { const me = (await loadJson('rules.json')).entries.find(e => e.id === 'rule
 // Monster natural permanents (user rulings 2026-11-15): data/rules.json rule_monster_natural_permanents → game/natural-perms.mjs config.
 let NATURAL_CFG = naturalConfig(null);
 try { const ne = (await loadJson('rules.json')).entries.find(e => e.id === 'rule_monster_natural_permanents'); if (ne) NATURAL_CFG = naturalConfig(pickActive(ne).data?.natural_permanents); } catch (e) { console.warn(`natural permanents rule not loaded (${e.message}) — natural-perms.mjs defaults`); }
+// Unattended characters (user ruling 2026-11-16, revised): data/rules.json rule_unattended_character → silence before
+// a silent hero becomes unattended (120 s, the monster Shadows' GHOST_MS), how long it may stand alone (nobody within
+// vanish_radius) before it leaves the dimension. Env SHADOW_MS / UNATTENDED_VANISH_MS override them (tests).
+let SHADOW_CFG = { silence_ms: 120_000, vanish_after_ms: 3_600_000, vanish_radius: 10 };
+try { const he = (await loadJson('rules.json')).entries.find(e => e.id === 'rule_unattended_character'); const hs = he && pickActive(he).data?.unattended; if (hs) SHADOW_CFG = { ...SHADOW_CFG, ...hs }; } catch (e) { console.warn(`unattended character rule not loaded (${e.message}) — defaults`); }
+const SHADOW_MS = Number(process.env.SHADOW_MS) > 0 ? Number(process.env.SHADOW_MS) : Number(SHADOW_CFG.silence_ms) || 120_000;
+const VANISH_MS = Number(process.env.UNATTENDED_VANISH_MS) > 0 ? Number(process.env.UNATTENDED_VANISH_MS) : Number(SHADOW_CFG.vanish_after_ms) || 3_600_000;
+const VANISH_RADIUS = Number(SHADOW_CFG.vanish_radius) || 10;
+// Dimension Out (user 2026-11-16): data/rules.json rule_dimension_out → how many paper rounds (engine turns) the
+// channel takes and what interrupts it. Env DIM_OUT_ROUNDS shortens it (tests only). See dimOutStart.
+let DIM_OUT_CFG = { rounds: 10, interrupted_by: ['move', 'attack', 'cast'] };
+try { const de = (await loadJson('rules.json')).entries.find(e => e.id === 'rule_dimension_out'); const dd = de && pickActive(de).data?.dimension_out; if (dd) DIM_OUT_CFG = { ...DIM_OUT_CFG, ...dd }; } catch (e) { console.warn(`dimension out rule not loaded (${e.message}) — defaults`); }
+const DIM_OUT_ROUNDS = Math.max(1, Number(process.env.DIM_OUT_ROUNDS) || Number(DIM_OUT_CFG.rounds) || 10);
 // Combos (user ruling 2026-11-05): each character carries its own 3-slot
 // `combo` array directly in data/characters.json versions[].data.combo (see
 // char_oran_rief [M,B,P], char_pride_guardian [A,P,M], etc). `entity.combo`
@@ -629,6 +660,17 @@ if (CHARACTER_ID) {
   };
 }
 entity.lifeMaxBase = entity.lifeMax;   // before token / tile bonuses (general_ux_hitpoints_calculations)
+// A hero shadow fights with its hero's stats (a profile character's, as its last snapshot told them).
+if (SHADOW_OF && entity.kind === 'character' && process.env.SHADOW_STATS_JSON) {
+  try {
+    const ss = JSON.parse(process.env.SHADOW_STATS_JSON);
+    if (['vitality', 'world', 'matter', 'will'].every(k => Number.isInteger(ss[k]))) {
+      entity.stats = { vitality: ss.vitality, world: ss.world, matter: ss.matter, will: ss.will };
+      entity.lifeMax = entity.lifeMaxBase = Math.max(1, Math.round((ss.vitality + ss.world + ss.matter + ss.will) / 10));
+      entity.life = entity.lifeMax;
+    }
+  } catch (e) { console.warn(`[${PEER_LABEL}] shadow: bad SHADOW_STATS_JSON (${e.message})`); }
+}
 // Fortress stat buy (user ruling 2026-11-14): my running bank against one fortress. The break bonus is a
 // plain stat bonus token in entity.statTokens (effect_id FORTRESS_TOKEN_EFFECT), the same kind Artifice makes.
 entity.fortressBank = null;     // { id: 'bld:q,r', stat, value, bank, turn, action }
@@ -825,6 +867,7 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv, at = n
     MAP_SEED, MAP_BLOCKS_FILE: blocksFile, BOOTSTRAP: [...myMaddrs, ...BOOTSTRAP_MADDRS].join(','), PEER_GUN_URLS: [myGunUrl, ...PEER_GUN_URLS].join(','),
     JOIN_SYNC_WAIT_MS: '4000', OWNER_PEER_ID: wild ? '' : PEER_ID_STRING, FORCE_EFFECTS: '', FORCE_SKILLS: '', FORCE_OPENING: '', FORCE_CLASS: wild && process.env.FORCE_CLASS_MONSTERS === '1' ? (process.env.FORCE_CLASS || '') : '', REPLACES_PEER_ID: '', START_LIFE: '',
     PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', TEAM_GATE: '', TEAM_GATE_DOOR: '', HUMAN: '',
+    SHADOW_OF: '', SHADOW_STATS_JSON: '', SHADOW_DEATH_CARD: '', SHADOW_PROFILE_CHAR_ID: '', ALLY_OF: '', DIM_OUT_ON_START: '',
     ...extraEnv,
   };
   delete env.MAP_BLOCKS;
@@ -851,6 +894,7 @@ async function spawnCompanionWorker(env) {
   const { Transform } = await import('node:stream');
   delete env.JOIN_URI;
   const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
+  (globalThis.__chaosWorkers ||= []).push(w);   // the phone's Dimension Out stops them with me (mobile-entry.mjs)
   const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'companion UI socket at ').replace(/peer listening on/g, 'companion listening at');
   const relabel = () => {
     let tail = '';
@@ -989,24 +1033,25 @@ const joinableNow = () => {
 // every colour with any successful roll (power 1), and untaps a tapped ability the same way.
 const CLASSES_IMPLEMENTED = new Set(Object.keys(data.classes));
 // Colours of a class = its elements grouped by the stat they belong to: { vitality: [...], matter: [...] }.
-const classColours = (classId) => { const cols = {}; for (const el of data.classes[classId]?.data?.colors || []) { const st = ELEM_TO_STAT[el]; if (st) (cols[st] ||= []).push(el); } return cols; };
+// C1: the class rules are classes.mjs hooks; CL_BASE is the ctx of the hooks that only read class data.
+const CL_BASE = { classData: (id) => data.classes[id]?.data, elemStat: (el) => ELEM_TO_STAT[el], sha: (s) => sha256Hex(s) };
+const clWith = (h) => Object.keys(CLASS_RULES).filter(id => (CLASS_RULES[id].hooks || []).includes(h));   // C1: the classes answering hook h
+const classColours = (classId) => classHook('colours', classId, CL_BASE);   // C1 colours
 // Elementalist and Rogue are passive (user ruling 2026-11-12): they fire by themselves, once per turn.
-const PASSIVE_TURN_CLASSES = new Set(['class_elementalist', 'class_rogue', 'class_manipulator']);   // Manipulator: passive since 2026-11-14 (class-manipulator.mjs)
+const PASSIVE_TURN_CLASSES = CL_PASSIVE;   // C1 (CLASS_RULES passiveTurn: Elementalist, Rogue, Manipulator)
 // Hand classes (user rework 2026-11-14), read from the class data with these fallbacks:
 //   hand_reveal  {n: 3|'all'}                    Prophet: the whole hand of the first enemy in contact (passive, once per turn, a popup)
 //   (Avenger, user rework #2 2026-11-14: lure_range / chase_bonus — class-chase.mjs, no hand look any more)
 //   hand_discard {n, every?: 'action'|'turn'}    Witch 3 random cards (tap)   (Priest raises a Shrine since the 2026-11-14 rework)
 //   range        "nearby" in hexes (default 3); passive: true → fires by itself (no click)
 const classDataOf = (classId) => data.classes[classId]?.data || {};
-const HAND_CLASS_DEFAULTS = {
-  class_prophet: { hand_reveal: { n: 'all' }, passive: true },
-  class_witch: { hand_discard: { n: 3 } },
-};
+// C1: CLASS_RULES handDefaults (Prophet: hand_reveal all + passive; Witch: hand_discard 3).
+const HAND_CLASS_DEFAULTS = Object.fromEntries(Object.entries(CLASS_RULES).filter(([, r]) => r.handDefaults).map(([id, r]) => [id, r.handDefaults]));
 const classRangeOf = (classId) => Number.isInteger(classDataOf(classId).range) ? classDataOf(classId).range : 3;
 const handRevealOf = (classId) => classDataOf(classId).hand_reveal || HAND_CLASS_DEFAULTS[classId]?.hand_reveal || null;
 const handDiscardOf = (classId) => classDataOf(classId).hand_discard || HAND_CLASS_DEFAULTS[classId]?.hand_discard || null;
 const classPassive = (classId) => PASSIVE_TURN_CLASSES.has(classId) || !!(classDataOf(classId).passive ?? HAND_CLASS_DEFAULTS[classId]?.passive);
-const classKindOf = (classId) => classPassive(classId) ? 'passive' : (data.classes[classId]?.data?.ability_kind || 'static');
+const classKindOf = (classId) => classHook('kind', classId, CL_BASE);   // C1 kind (= classPassive ? 'passive' : ability_kind || 'static')
 {
   // FORCE_CLASS may list several (test runs): a peer named in FORCE_CLASS_LABELS (swarm-run.sh: every hero
   // label in order) takes the list round-robin by its position there, so each listed class is held; any other
@@ -1049,23 +1094,19 @@ const classKindOf = (classId) => classPassive(classId) ? 'passive' : (data.class
 const classCard = () => ({ card_id: `${entity.classId}#class`, kind: 'class', class_id: entity.classId, name: entity.className, text: data.classes[entity.classId]?.data?.text || '' });
 let queuedClassAbility = false;   // the class card was clicked for this action (WS `class_ability`)
 // What a class ability needs picked before it goes out: an enemy / ally / tile target, or a hand card (queuedAttach).
-const CLASS_NEEDS = {
-  class_animator: 'tile', class_priest: 'tile', class_alchemist: 'tile', class_warrior: 'tile',
-  class_healer: 'ally_or_self', class_overlord: 'ally_or_self',
-  // (class_manipulator is passive since 2026-11-14 — nothing to pick)
-  // 'enemy_near': the enemy right-clicked within the class range (default 3), else the nearest one there.
-  // 'monster_near': nothing to pick — every wild monster within lure_range (Avenger). Prophet is passive.
-  class_witch: 'enemy_near', class_avenger: 'monster_near',
-  class_ranger: 'attach_effect', class_seeker: 'attach_effect',
-};
+// C1: CLASS_RULES needs — tile (Animator, Priest, Alchemist, Warrior), ally_or_self (Healer, Overlord),
+// enemy_near (Witch: the right-clicked enemy within range, else the nearest), monster_near (Avenger: nothing to
+// pick), attach_effect (Ranger, Seeker). Manipulator and Prophet are passive.
+const CLASS_NEEDS = CL_NEEDS;
 // Abilities settled on this peer alone (hand / deck / discard are private). Return a note when it fired.
-const CLASS_LOCAL = {
-  class_paladin: () => recoverFromDiscard(c => c.kind === 'action', 'an action card'),
-  class_shaman: () => recoverFromDiscard(c => c.kind === 'effect', 'an effect card'),
-  class_kensei: () => recoverFromDiscard(c => c.kind === 'skill', 'a skill card'),
-  class_weapon_master: () => { reshuffleIfEmpty(); if (!deck.length) return null; hand.push(deck.shift()); return `an extra card drawn (${hand.length} in hand)`; },
-  class_summoner: () => { if (!data.effects.effect_summoning) return null; const c = makeEffectCard('effect_summoning'); c.from_class = 'class_summoner'; hand.push(c); return 'a Summoning rides into my hand — cast it (stat buy) to call a Library creature'; },
-};
+// C1: the `local` hook gives the descriptor ({op: recover|draw|grant}); applying it stays here (private hand).
+const CLASS_LOCAL = Object.fromEntries(Object.keys(CLASS_RULES).filter(id => CLASS_RULES[id].phase === 'local').map(id => [id, () => {
+  const d = classHook('local', id, CL_BASE);
+  if (d?.op === 'recover') return recoverFromDiscard(c => c.kind === d.kind, d.what);
+  if (d?.op === 'draw') { reshuffleIfEmpty(); if (!deck.length) return null; hand.push(deck.shift()); return `an extra card drawn (${hand.length} in hand)`; }
+  if (d?.op === 'grant') { if (!data.effects[d.effect_id]) return null; const c = makeEffectCard(d.effect_id); c.from_class = id; hand.push(c); return 'a Summoning rides into my hand — cast it (stat buy) to call a Library creature'; }
+  return null;
+}]));
 // Rogue trap charge (user ruling 2026-11-14): `n` uses landed this action → snapshot rogue_trap_turn / rogue_trap_n.
 function applyRogueTrapCharge(n) {
   if (!n) return;
@@ -1112,15 +1153,7 @@ const worldFeatureValueAt = (view, q, r) => worldLens(view).tokensAt(q, r).reduc
 const classProgressJson = () => JSON.stringify(entity.classProgress || null);
 
 // Deck + hand.
-const SKILLS_IMPLEMENTED = [
-  'skill_powerful_attack', 'skill_overrun', 'skill_grapple', 'skill_ranged_weapon',
-  'skill_taunt', 'skill_barricade', 'skill_sanctuary',
-  'skill_dodge', 'skill_bluff', 'skill_intimidation', 'skill_disruption_move',
-  'skill_battle_trance', 'skill_force_shield', 'skill_counter_spell',
-];
-const TRANCE = 'skill_battle_trance';
-// Instants judged by what they did, not by the damage counterfactual (user ruling 2026-11-12).
-const NEGATING_SKILLS = new Set(['skill_intimidation', 'skill_bluff', 'skill_grapple', 'skill_disruption_move', 'skill_overrun', 'skill_dodge', 'skill_counter_spell']);
+// S1: SKILLS_IMPLEMENTED (deal order), TRANCE and NEGATING_SKILLS come from skills.mjs (SKILL_RULES).
 // Reaver (Rule 9 + Rule 20 pc override): Empty Posture / Empty Move count as
 // an Attack, and non-instant effects may ride on the Attack itself.
 const isReaver = () => entity.permanents.has('class_reaver');
@@ -1185,14 +1218,27 @@ function makeSkillCard(id) {
   return { card_id: `${id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: id, name: s.name, requires: trance ? '*' : s.data.action_type, is_trance: trance, text: s.data.text, tags: s.tags, is_permanent: !!s.data.is_permanent };
 }
 // A {kind, id} profile / gift card as an in-game card, or null when this build doesn't know it.
-const cardFromRef = (x) => x?.kind === 'skill' && data.skills[x.id] ? makeSkillCard(x.id) : x?.kind === 'effect' && data.effects[x.id] ? makeEffectCard(x.id) : null;
+// FXG: a {kind, id, ref} card is FOREIGN (player branch) — never built by name; foreignCardFromRef below.
+const cardFromRef = (x) => x?.ref ? null : x?.kind === 'skill' && data.skills[x.id] ? makeSkillCard(x.id) : x?.kind === 'effect' && data.effects[x.id] ? makeEffectCard(x.id) : null;
+// FXG: in-game card → {kind, id} (+ ref when foreign: card.fx / card.sk, the handshake ref cardFor puts on it).
+const cardRefOf = (c) => c.kind === 'skill' ? { kind: 'skill', id: c.skill_id, ...(c.sk ? { ref: c.sk } : {}) } : { kind: 'effect', id: c.effect_id, ...(c.fx ? { ref: c.fx } : {}) };
+// FXG: a foreign {kind, id, ref} → { status, card } through the effects / skills handshake (held → at once; else cache
+// first, then a fetch from `from` / holders, validator gate). Private deck state: never the resolver, never the hash.
+const foreignCardFromRef = (x, o = {}) => (x?.kind === 'skill' ? skPeer : x?.kind === 'effect' ? fxPeer : null)?.cardFromRef(x, o) ?? Promise.resolve({ status: 'bad', reason: `kind ${x?.kind}` });
+const profileForeignPending = [];   // FXG: foreign profile cards not in the cache at boot — retried once the transports are up
 // Profile deck (user ruling 2026-11-13): the character's action cards + the cards it keeps in the deck;
 // its archive cards start in the in-game archive. Topped up with Postures to DECK_MIN if short.
 const profileArchived = [];
 if (profileChar) {
   for (const code of ['A', 'B', 'M', 'P']) for (let i = 0; i < (profileChar.actions?.[code] | 0); i++) pushAction(code);
   for (const x of profileChar.cards || []) {
-    const c = cardFromRef(x);
+    let c = cardFromRef(x);
+    if (!c && x.ref) {   // FXG: a foreign card won earlier — rebuilt from the content cache (no transport yet)
+      const fr = await foreignCardFromRef(x, { timeoutMs: 2000, why: 'profile', quiet: true });
+      if (fr.status === 'ready') { c = fr.card; console.log(`[${PEER_LABEL}] profile: foreign ${x.kind} ${x.id} rebuilt (${fr.src})`); }
+      else if (fr.status === 'missing') { profileForeignPending.push(x); console.log(`[${PEER_LABEL}] profile: foreign ${x.kind} ${x.id} not cached — fetching once connected`); continue; }
+      else { console.warn(`[${PEER_LABEL}] profile: foreign ${x.kind} ${x.id} ${fr.status} (${fr.reason || ''}) skipped`); continue; }
+    }
     if (!c) { console.warn(`[${PEER_LABEL}] profile: unknown ${x.kind} ${x.id} skipped`); continue; }
     if (x.from) c.from = x.from;
     (x.where === 'archive' ? profileArchived : deck).push(c);
@@ -1301,6 +1347,8 @@ function makeEffectCard(id) {
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
 // FORCE_FOREIGN_EFFECT=<def.json> (dev/test only): a player-branch effect on top of my deck (E4 handshake).
 if (process.env.FORCE_FOREIGN_EFFECT) { const fc = fxPeer.forcedCard(process.env.FORCE_FOREIGN_EFFECT); if (fc) deck.unshift(fc); }
+// FORCE_FOREIGN_SKILL=<def.json> (dev/test only): a player-branch skill on top of my deck (S4 handshake).
+if (process.env.FORCE_FOREIGN_SKILL) { const sc = skPeer.forcedCard(process.env.FORCE_FOREIGN_SKILL); if (sc) deck.unshift(sc); }
 // FORCE_OPENING=skill_sanctuary,B,A (dev/test only): move one card per entry
 // to the top of the deck so the opening hand is predictable. Only characters —
 // monsters keep their shuffle so a pinned hero test is not mirrored by the foe.
@@ -1603,16 +1651,53 @@ setInterval(() => {
 // map and lets the one ahead push its blocks (see mergePeerState).
 // A replacement for a vanished monster / summon names the one it replaces; receivers drop that ghost.
 const REPLACES_PEER_ID = process.env.REPLACES_PEER_ID || '';
+// Whom my snapshots say I replace: REPLACES_PEER_ID at boot; a hero that is heard again after a shadow of it stood
+// in takes that shadow's place back (heroShadowSeen) — receivers then drop the shadow, never two copies.
+let replacesNow = REPLACES_PEER_ID;
+const supersededBy = new Map();   // peer id → the peer id that took its place (hero ↔ shadow swaps; mergePeerState)
+let _shadowLeaving = false;       // a shadow stepping down (shadowStepDown)
+// Hero shadows (rule_hero_shadow): the card a hero would lose on death, published so its shadow can hand exactly
+// that card to its killer (the shadow cannot see the player's deck); the player's device then removes it from the
+// profile (game/shadow-settle.mjs). One random non-action card, kept while it is still mine. Display / gift only,
+// outside the state hash.
+let _deathCard = null;
+function deathCardRef() {
+  if (SHADOW_OF) { try { return process.env.SHADOW_DEATH_CARD ? JSON.parse(process.env.SHADOW_DEATH_CARD) : null; } catch { return null; } }
+  if (entity?.kind !== 'character' || ownerPeerId) return null;
+  try {
+    if (profileChar) {
+      if (_deathCard) return _deathCard;
+      const inDeck = (profileChar.cards || []).filter(x => x.where === 'deck' && (x.kind === 'skill' || x.kind === 'effect'));
+      const x = inDeck.length ? inDeck[Math.floor(Math.random() * inDeck.length)] : null;
+      return (_deathCard = x ? { kind: x.kind, id: x.id, ...(x.ref ? { ref: x.ref } : {}) } : null);   // FXG: a foreign card keeps its ref
+    }
+    const pool = [...deck, ...discard, ...hand].filter(c => c.kind === 'skill' || c.kind === 'effect').map(cardRefOf);   // FXG: + ref for a foreign card
+    if (_deathCard && pool.some(c => c.kind === _deathCard.kind && c.id === _deathCard.id)) return _deathCard;
+    return (_deathCard = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null);
+  } catch { return null; }   // deck / hand not dealt yet (the very first snapshot)
+}
+let shadowDeath = null;   // a shadow's death: { killer, killer_name, card, gift_id, at } (snapshot shadow_death_json, Doors)
+// Unattended characters (rule_unattended_character): my master (I am unattended — unattendedLeader), and `out` once I
+// left the dimension (alone for VANISH_MS, or Dimension Out) — receivers drop me, the Doors stop counting me alive.
+let ledBy = '';
+let outNow = false;
+let dimOut = null;   // Dimension Out in progress: { start_turn, until_turn } (dimOutStart; snapshot dim_out_until_turn)
+const outPeers = new Map();   // peer id → its last (out) record: ignored from now on, kept as a tombstone in my Door
+// How many unattended characters follow me (my snapshot's `leader`; the map / roster flag).
+const followersOf = (id) => livePeers().filter(p => p && p.shadow_of && p.led_by === id && (p.life ?? 0) > 0).length;
+// The last action whose resolution my entity already shows (snapshot `resolved_action`; merge-order.mjs resolverBase).
+let resolvedAction = -1;
 function currentStateSnapshot(slim = false) {
   const s = {
     peer_id: PEER_ID_STRING, character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: entity.alliance, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
     owner_peer_id: ownerPeerId || '', summoned_csv: entity.summons.map(x => x.peer_id).join(','), wards_csv: entity.wards.join(','), entry_q: START_TILE.q, entry_r: START_TILE.r,
-    turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt,
+    turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt, resolved_action: resolvedAction,
     map_blocks: dimMap ? dimMap.blockCount() : 0,
     ...(mapSync ? { map_root: mapSync.myRoot() } : {}),   // map-sync.mjs digest root (~12 B); absent = pre-M3 build / legacy sim
     ...fxPeer.snapshotFields(),   // E4: fx_have "id@sha16,…" — foreign effects I hold and serve; absent without any
+    ...skPeer.snapshotFields(),   // S4: sk_have "id@sha16,…" — foreign skills I hold and serve; absent without any
     stat_vitality: entity.stats.vitality, stat_world: entity.stats.world, stat_matter: entity.stats.matter, stat_will: entity.stats.will,
     permanents_csv: permanentsCsv(),
     stat_tokens_json: statTokensJson(), tile_tokens_json: tileTokensJson(), lost_actions: entity.lostActions,
@@ -1625,7 +1710,14 @@ function currentStateSnapshot(slim = false) {
     possessed_by: entity.possessedBy || null,
     class_id: entity.classId || null, class_down_csv: (entity.classDown || []).join(','), class_archived: entity.classArchived ? 1 : 0, class_tapped: entity.classTapped ? 1 : 0,
     class_progress_json: classProgressJson(), class_used_turn: entity.classUsedTurn ?? -1, armor: entity.armor || 0,
-    illusion: entity.illusion || 0, stealth_turn: entity.stealthTurn ?? -1, rogue_trap_turn: entity.rogueTrapTurn ?? -1, rogue_trap_n: entity.rogueTrapN || 0, reanimated_csv: (entity.reanimated || []).join(','), replaces: REPLACES_PEER_ID,
+    illusion: entity.illusion || 0, stealth_turn: entity.stealthTurn ?? -1, rogue_trap_turn: entity.rogueTrapTurn ?? -1, rogue_trap_n: entity.rogueTrapN || 0, reanimated_csv: (entity.reanimated || []).join(','), replaces: replacesNow,
+    // Hero shadows (rule_hero_shadow): whose shadow I am, my death card, and (dead shadow) who killed it.
+    shadow_of: SHADOW_OF, death_card_json: JSON.stringify(deathCardRef()), shadow_death_json: shadowDeath ? JSON.stringify(shadowDeath) : '',
+    // Unattended characters (rule_unattended_character): a human hand?, my ally-join link and join time (the group's
+    // master is its earliest human join), my master (unattended), how many follow me, and `out` (left the dimension).
+    human: IS_HUMAN ? 1 : 0, ally_of: allyOfNow, joined_at: JOINED_AT, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), out: outNow ? 1 : 0,
+    // Dimension Out (rule_dimension_out): the turn I leave at (-1 = none) — every UI counts it down on my unit.
+    dim_out_until_turn: dimOut ? dimOut.until_turn : -1, dim_out_start_turn: dimOut ? dimOut.start_turn : -1,
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     fortress_bank_json: JSON.stringify(entity.fortressBank || null),
     monster_state: entity.monsterState || null,
@@ -1634,7 +1726,7 @@ function currentStateSnapshot(slim = false) {
     combo_slot: entity.comboState?.slot || 0,
     combo_seq_csv: Array.isArray(entity.combo) ? entity.combo.join(',') : '',
     // Profile (user ruling 2026-11-13) — display only, outside the per-action state hash (id / tile / life).
-    team_name: PROFILE_TEAM, profile_char_id: profileChar ? PROFILE_CHAR_ID : '', resources_id: profileChar?.resources?.id || '',
+    team_name: PROFILE_TEAM, profile_char_id: profileChar ? PROFILE_CHAR_ID : (process.env.SHADOW_PROFILE_CHAR_ID || ''), resources_id: profileChar?.resources?.id || '',
   };
   if (slim) return s;
   // Live clock + network hints so a joining peer can align its turn counter
@@ -1645,6 +1737,7 @@ function currentStateSnapshot(slim = false) {
   // map_sketch travels on the bus `state` event, the discovery mirror and the Door — not Gun (gun-member.mjs).
   s.map_tiles = dimMap ? dimMap.size() : 0; s.map_sketch = dimMap ? mapSketchCsv() : '';
   s.fx_set = fxPeer.setId.slice(0, 16);   // E4: my bundled effect set (effects + libs) — a mismatch is logged, never resolved on
+  s.sk_set = skPeer.setId.slice(0, 16);   // S4: my built-in skill set — a mismatch is logged, never resolved on
   return s;
 }
 
@@ -1708,6 +1801,8 @@ function noteTile(q, r) { if (typeof q === 'number' && typeof r === 'number') kn
 // (GunLive85 run 3, T8.R3: gX, cut from libp2p + bus and visible only via Gun, sat on (15,-16) in some
 // resolvers' views and not in others', so gA's move there was vetoed on gA / gD only → divergence).
 const wireHeard = new Set();
+// Per peer: its held snapshot from before the merge that moved its resolved_action forward (merge-order.mjs notePrior).
+const snapPrior = new Map();
 function mergePeerState(p, via = 'wire') {
   if (!p || typeof p !== 'object' || !p.peer_id || p.peer_id === PEER_ID_STRING) return false;
   if (!isFresh(p)) return false;
@@ -1722,8 +1817,29 @@ function mergePeerState(p, via = 'wire') {
   }
   if (!take) return false;
   p = take;
-  peersPublic.set(p.peer_id, { ...prev, ...p });
+  // Hero shadows (rule_hero_shadow): one side of a hero ↔ shadow swap stays out once the other took its place —
+  // unless it takes that place back (its snapshot names the one that replaced it). Never two copies.
+  if (supersededBy.has(p.peer_id) && p.replaces !== supersededBy.get(p.peer_id)) return false;
+  if (SHADOW_OF && p.replaces === PEER_ID_STRING) { shadowStepDown(p); return false; }
+  // Left the dimension (`out`: an unattended character alone too long, a Dimension Out): dropped, no corpse, and
+  // ignored from then on — unless the same peer id joins again (a fresh joined_at, not out).
+  const tomb = outPeers.get(p.peer_id);
+  if (tomb && (p.out || !p.joined_at || p.joined_at === tomb.joined_at)) return false;
+  if (tomb) outPeers.delete(p.peer_id);
+  if (p.out) {
+    outPeers.set(p.peer_id, { ...prev, ...p });
+    if (peersPublic.delete(p.peer_id)) {
+      console.log(`[${PEER_LABEL}] out: ${p.name || p.peer_id} (${p.peer_id}) left the dimension`);
+      setTimeout(() => broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true }), 0);
+    }
+    return false;
+  }
+  if (p.shadow_of === PEER_ID_STRING && p.peer_id !== replacesNow && !SHADOW_OF) heroShadowSeen(p);
+  const merged = { ...prev, ...p };
+  notePrior(snapPrior, prev, merged);   // Swarm-0559: the statement from before its owner resolved its newest action
+  peersPublic.set(p.peer_id, merged);
   if (p.replaces && p.replaces !== p.peer_id && peersPublic.has(p.replaces)) {
+    if (p.shadow_of || peersPublic.get(p.replaces)?.shadow_of) { supersededBy.set(p.replaces, p.peer_id); supersededBy.delete(p.peer_id); }
     peersPublic.delete(p.replaces);
     console.log(`[${PEER_LABEL}] ${p.name || p.peer_id} takes the place of ${p.replaces}`);
     setTimeout(() => broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true }), 0);
@@ -1735,8 +1851,9 @@ function mergePeerState(p, via = 'wire') {
   // Judged on the MERGED record: a slim Gun echo (gun-member.mjs) carries map_blocks but no map_root.
   const seenRoot = typeof peersPublic.get(p.peer_id)?.map_root === 'string';
   if (seenRoot && mapSync) { if (typeof p.map_root === 'string') mapSync.noteRemote(p.peer_id, p.map_root); }
-  if (p.fx_have || p.fx_set) fxPeer.onPeerState(p);   // E4: who serves which foreign effect (prefetch what I lack)
   else if (typeof p.map_blocks === 'number') offerMapSync(p.peer_id, p.map_blocks);   // pre-M3 peer (or we are the legacy sim)
+  if (p.sk_have || p.sk_set) skPeer.onPeerState(p);   // S4: who serves which foreign skill (prefetch what I lack)
+  if (p.fx_have || p.fx_set) fxPeer.onPeerState(p);   // E4: who serves which foreign effect (prefetch what I lack) — E4-fix: after the map if/else, not inside it
   return true;
 }
 
@@ -1870,6 +1987,21 @@ if (!MAP_SYNC_LEGACY) {
 }
 // E4: foreign-effect fetch/serve — libp2p /chaos/<dim>/effects/1 (same framing as map sync), bus `fx` fallback.
 await fxPeer.attach({ libp2p, openConnTo, getBus: () => bus, netStat, forceBus: process.env.FX_FORCE_BUS === '1' });
+// S4: foreign-skill fetch/serve — libp2p /chaos/<dim>/skills/1 (same framing), bus `sk` fallback.
+await skPeer.attach({ libp2p, openConnTo, getBus: () => bus, netStat, forceBus: process.env.SK_FORCE_BUS === '1' });
+// FXG: foreign profile cards that were not in the content cache at boot — fetched from the peers that announce
+// them (fx_have / sk_have) or git / httpd; a card that arrives joins my deck (random spot) or archive. Private state.
+if (profileForeignPending.length) for (const ms of [8_000, 30_000, 90_000]) setTimeout(async () => {
+  for (const x of [...profileForeignPending]) {
+    const fr = await foreignCardFromRef(x, { why: 'profile', quiet: ms < 90_000 }).catch(e => ({ status: 'missing', reason: e.message }));
+    if (fr.status === 'missing' && ms < 90_000) continue;
+    profileForeignPending.splice(profileForeignPending.indexOf(x), 1);
+    if (fr.status !== 'ready') { console.warn(`[${PEER_LABEL}] profile: foreign ${x.kind} ${x.id} ${fr.status} (${fr.reason || ''}) — not in this game`); continue; }
+    if (x.from) fr.card.from = x.from;
+    if (x.where === 'archive') archive.push(fr.card); else deck.splice(Math.floor(Math.random() * (deck.length + 1)), 0, fr.card);
+    console.log(`[${PEER_LABEL}] profile: foreign ${x.kind} ${x.id} learned (${fr.src}) → my ${x.where === 'archive' ? 'archive' : 'deck'}`);
+  }
+}, ms).unref?.();
 // LEGACY ONLY (MAP_SYNC_LEGACY=1 simulates a pre-M3 build; remove in M6). Pre-M3 builds re-put their newest
 // blocks into Gun once a minute — that is what drove the phone's Node heap to OOM (below).
 // Re-put once a minute: Gun relays that came up after a block was first
@@ -2020,9 +2152,9 @@ function discoverTrapMonsters(cq, cr) {
 const GHOST_MS = 120_000;
 const replacedGhosts = new Set();
 setInterval(() => {
-  if (IS_COMPANION || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
+  if (IS_COMPANION || SHADOW_OF || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
   const now = Date.now();
-  const heroes = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && (p.life ?? 0) > 0 && (p.peer_id === PEER_ID_STRING || isFresh(p))).map(p => p.peer_id).sort();
+  const heroes = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && !p.shadow_of && (p.life ?? 0) > 0 && (p.peer_id === PEER_ID_STRING || isFresh(p))).map(p => p.peer_id).sort();
   const summonedByAnyone = new Set(livePeers().flatMap(p => String(p?.summoned_csv || '').split(',').filter(Boolean)));
   for (const p of livePeers()) {
     if (!p || p.peer_id === PEER_ID_STRING || replacedGhosts.has(p.peer_id) || !p.creature_id || (p.life ?? 0) <= 0 || !Number.isInteger(p.tile_q)) continue;
@@ -2040,6 +2172,169 @@ setInterval(() => {
       .catch(e => console.warn(`[${PEER_LABEL}] replacement failed: ${e.message}`));
   }
 }, 20_000);
+// Unattended characters (rule_unattended_character, user ruling 2026-11-16, revised): "after 2 minutes the character
+// should be PC operated" — a hero (a character with no owner: a player's hero, a HUMAN profile hero, a team ally
+// whose device vanished; never a summon) silent for SHADOW_MS (120 s, the same as GHOST_MS; always, not only in
+// combat) becomes unattended: the live hero with the smallest peer id (never an unattended one) starts an ordinary
+// peer with the same character, name, side, class, stats, tile, current life and ally-join link (SHADOW_OF = the
+// hero, REPLACES_PEER_ID = the silent peer, ALLY_OF). npcPlan plays it as an allied bot that follows its master
+// (unattendedLeader); it can be killed like the hero — its death hands the hero's published death card to the killer
+// (dropDeathCard). The returning player takes it over (REPLACES_PEER_ID = it, its life — ui-server / mobile-menu
+// restore-here / rejoin / unit-list join) or, if its game was only cut off, takes the place back when it hears it
+// (heroShadowSeen). Never two copies. Keyed by peer id + joined_at: a hero that came back and closes again is
+// left unattended again.
+const shadowedHeroes = new Set();
+setInterval(() => {
+  if (DIM_PRIVATE || IS_COMPANION || SHADOW_OF || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
+  const now = Date.now();
+  const heard = p => p.peer_id === PEER_ID_STRING || now - Date.parse(p.last_seen || 0) < Math.min(PEER_STALE_MS, SHADOW_MS);
+  const spawners = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && !p.shadow_of && (p.life ?? 0) > 0 && heard(p)).map(p => p.peer_id).sort();
+  if (spawners[0] !== PEER_ID_STRING) return;
+  for (const p of livePeers()) {
+    const key = `${p?.peer_id}|${p?.joined_at || ''}`;
+    if (!p || p.peer_id === PEER_ID_STRING || p.out || shadowedHeroes.has(key) || supersededBy.has(p.peer_id)) continue;
+    if (!p.character_id || p.creature_id || p.owner_peer_id || (p.life ?? 0) <= 0 || !Number.isInteger(p.tile_q)) continue;
+    const silent = now - Date.parse(p.last_seen || 0);
+    if (silent < SHADOW_MS) continue;
+    shadowedHeroes.add(key);
+    const hero = p.shadow_of || p.peer_id;   // a shadow whose host vanished gets a shadow of the same hero
+    const label = `${String(hero).replace(/^peer:/, '')}-sh${Date.now().toString(36).slice(-5)}`;
+    supersededBy.set(p.peer_id, `peer:${label}`);
+    peersPublic.delete(p.peer_id);
+    broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true });
+    console.log(`[${PEER_LABEL}] shadow: ${p.name || hero} (${p.peer_id}) silent ${Math.round(silent / 1000)}s — it stands unattended at (${p.tile_q},${p.tile_r}) hp ${p.life}, computer-operated${p.ally_of ? ` (ally-join link ${p.ally_of})` : ''}`);
+    const stats = { vitality: p.stat_vitality, world: p.stat_world, matter: p.stat_matter, will: p.stat_will };
+    spawnCompanion(null, { creature_id: null, name: `${p.name || hero} (unattended)`, at: { q: p.tile_q, r: p.tile_r }, wild: true, label, ignore: p.peer_id,
+      env: { CHARACTER_ID: p.character_id, CREATURE_ID: '', ENTITY_NAME: String(p.name || hero), ALLIANCE: String(p.alliance || 'player'), SHADOW_OF: hero, REPLACES_PEER_ID: p.peer_id, ALLY_OF: p.ally_of || '',
+        START_LIFE: String(p.life), FORCE_CLASS: p.class_id || '', SHADOW_STATS_JSON: JSON.stringify(stats), SHADOW_DEATH_CARD: p.death_card_json && p.death_card_json !== 'null' ? p.death_card_json : '',
+        SHADOW_PROFILE_CHAR_ID: p.profile_char_id || '', PROFILE_TEAM: p.team_name || '' } })
+      .catch(e => console.warn(`[${PEER_LABEL}] shadow of ${p.peer_id} failed: ${e.message}`));
+  }
+}, Math.min(20_000, Math.max(5_000, Math.round(SHADOW_MS / 4))));
+// I am a shadow and something took my place (my hero came back, or a newer shadow of it): I step down.
+function shadowStepDown(p) {
+  if (_shadowLeaving) return;
+  _shadowLeaving = true;
+  console.log(`[${PEER_LABEL}] shadow: ${p.name || p.peer_id} (${p.peer_id}) takes my place${p.peer_id === SHADOW_OF ? ' — my hero is back' : ''} (hp ${p.life}); the shadow steps down`);
+  setTimeout(() => process.exit(0), 300);
+}
+// I am a hero and I hear a shadow of me (my game was cut off long enough for one to stand in): I take its place
+// back — its life when lower (it may have been hurt), dead if it was killed (its killer already has my death card;
+// my profile loses it here). Never two copies: my snapshots now name it in `replaces`.
+function heroShadowSeen(s) {
+  replacesNow = s.peer_id;
+  const before = entity.life;
+  if ((s.life ?? 0) <= 0) entity.life = 0;
+  else if (Number.isFinite(s.life) && s.life < entity.life) entity.life = s.life;
+  allyOfNow = '';   // back in my own hands: I leave my master's group
+  console.log(`[${PEER_LABEL}] shadow: my shadow ${s.peer_id} stood in for me (hp ${s.life}) — I take its place back (hp ${before} → ${entity.life})`);
+  if (entity.life <= 0 && profileChar && s.shadow_death_json) {
+    import('./shadow-settle.mjs').then(m => m.settleShadowDeaths(PROFILE_FILE, [{ ...s, profile_char_id: PROFILE_CHAR_ID }])).then(r => r?.length && console.log(`[${PEER_LABEL}] shadow: ${r.map(x => x.text).join('; ')}`)).catch(e => console.warn(`[${PEER_LABEL}] shadow settle failed: ${e.message}`));
+  }
+  publishPublicState().catch(() => {});
+}
+// Unattended characters — the master (user ruling 2026-11-16): "any player who joins him will become his master,
+// deriving all other characters (whose players close the game) that join one of those players by its link … Once an
+// alive player is leading those unattended characters the new player join should not gain the leadership of them."
+// My LINK GROUP = the characters of my side connected to me through ally-join links (ally_of, either direction; a
+// link naming a hero also reaches its unattended copy). Its master: the one a group mate (or I) already follows
+// while it is alive and live (sticky — the earliest of those if two were claimed at once), else the live, alive
+// human character of the group with the earliest joined_at (tie: peer id). null = leaderless (I hold my ground).
+// Decided by each unattended character for itself from the shared snapshots and published as led_by.
+const liveSnap = (p, now) => !!p && (p.life ?? 0) > 0 && !p.out && now - Date.parse(p.last_seen || 0) < Math.min(PEER_STALE_MS, SHADOW_MS);
+function unattendedLeader(now = Date.now()) {
+  if (!SHADOW_OF) return null;
+  const me = { peer_id: PEER_ID_STRING, shadow_of: SHADOW_OF, ally_of: allyOfNow, led_by: ledBy };
+  const nodes = [me, ...livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.character_id && !p.creature_id && !p.owner_peer_id && !p.out && sideOf(p.alliance) === MY_SIDE)];
+  const keys = n => [n.peer_id, n.shadow_of].filter(Boolean);
+  const group = new Set([me]); const queue = [me];
+  while (queue.length) {
+    const n = queue.shift(), kn = keys(n);
+    for (const o of nodes) if (!group.has(o) && ((n.ally_of && keys(o).includes(n.ally_of)) || (o.ally_of && kn.includes(o.ally_of)))) { group.add(o); queue.push(o); }
+  }
+  const canLead = p => !!p && !!p.human && !p.shadow_of && sideOf(p.alliance) === MY_SIDE && liveSnap(p, now);
+  const rank = (a, b) => ((Date.parse(a.joined_at || 0) || 0) - (Date.parse(b.joined_at || 0) || 0)) || String(a.peer_id).localeCompare(String(b.peer_id));
+  const claimed = [...new Set([...group].filter(n => n.shadow_of && n.led_by).map(n => n.led_by))].map(id => peersPublic.get(id)).filter(canLead).sort(rank);
+  if (claimed.length) return claimed[0];
+  return [...group].filter(canLead).sort(rank)[0] || null;
+}
+// Leaving the dimension cleanly (an unattended character alone for VANISH_MS; Dimension Out): no death, no card —
+// my snapshots say `out` (receivers drop me, mergePeerState) and so does my Door (join-plan.mjs: not alive here),
+// then the process ends.
+function leaveDimension(why) {
+  if (outNow) return;
+  outNow = true;
+  console.log(`[${PEER_LABEL}] out: ${why} — I leave the dimension (no death, no card)`);
+  broadcastUI({ kind: 'dim_out_done', why, dimension: DIM_NAME });   // the UI goes back to the menu
+  // The phone (nodejs-mobile starts Node once per app process): never exit — mobile-entry.mjs stops this peer
+  // (__chaosPeerStop) and serves the start menu again. Desktop / worker peers: the process ends.
+  const inProcess = IS_MOBILE && typeof globalThis.__chaosMobileLeave === 'function';   // (a worker has its own globalThis: it exits)
+  const exitSoon = () => setTimeout(() => { if (inProcess) globalThis.__chaosMobileLeave({ why, dimension: DIM_NAME }); else process.exit(0); }, 1500);
+  publishPublicState().catch(() => {}).finally(() => setTimeout(() => publishPublicState().catch(() => {}).finally(() => Promise.resolve().then(() => publishDoor()).catch(() => {}).finally(exitSoon)), 1500));
+}
+// Dimension Out (rule_dimension_out, user 2026-11-16): my own character leaves the dimension cleanly through a
+// pseudo-cast of DIM_OUT_ROUNDS paper rounds (= engine turns, 3 actions each), counted down on my unit for everyone
+// (snapshot dim_out_until_turn). Moving, attacking or casting another effect cancels it (Rule 19, like a cast;
+// doPlanningEnd); damage does not, and I can be killed meanwhile (dead → it ends, nothing else). Done → out
+// (leaveDimension): no death, no card, no unattended copy, free for another dimension. Started by the HUD button
+// (UI 'dim_out'), DIM_OUT_ON_START=1 (the start screen's "⇱ Dimension Out": restore-here + this), never by bots
+// unless SWARM_DIMOUT=1. (DIM_OUT_CFG / DIM_OUT_ROUNDS load with the other rules; `dimOut` sits by `outNow`.)
+function dimOutStart(why) {
+  if (dimOut || outNow || entity.life <= 0 || entity.kind !== 'character' || ownerPeerId) return false;
+  dimOut = { start_turn: hg.turn, until_turn: hg.turn + DIM_OUT_ROUNDS };
+  console.log(`[${PEER_LABEL}] dimension out: started by ${why} at T${hg.turn} — I leave at T${dimOut.until_turn} (${DIM_OUT_ROUNDS} rounds) unless I move, attack or cast`);
+  broadcastUI({ kind: 'dim_out', active: true, until_turn: dimOut.until_turn, turn: hg.turn });
+  publishPublicState().catch(() => {});
+  return true;
+}
+function dimOutCancel(why) {
+  if (!dimOut) return;
+  console.log(`[${PEER_LABEL}] dimension out: interrupted (${why}) at T${hg.turn} — ${Math.max(0, dimOut.until_turn - hg.turn)} rounds were left`);
+  dimOut = null;
+  broadcastUI({ kind: 'dim_out', active: false, why });
+  publishPublicState().catch(() => {});
+}
+setInterval(() => {
+  if (outNow) return;
+  if (!dimOut && process.env.DIM_OUT_ON_START === '1' && !dimOutCancel.started && hg.turn > 0 && entity.life > 0 && currentPhase === 'planning') {
+    dimOutCancel.started = true;   // once per process
+    dimOutStart('the start screen (DIM_OUT_ON_START)');
+  }
+  // Swarm bot heroes are player-alliance peers (IS_HUMAN), so SWARM_DIMOUT must not exclude them (Swarm combo run 2: 0 casts).
+  // …but never the hero SWARM_SHADOW kills (swarm-0710: P-Agent4 dimensioned out before its kill → no shadow to test).
+  if (!dimOut && process.env.SWARM_DIMOUT === '1' && !SHADOW_OF && !IS_COMPANION
+    && !(process.env.SWARM_SHADOW === '1' && PEER_LABEL === (process.env.SWARM_SHADOW_LABEL || 'P-Agent4')) && entity.kind === 'character' && entity.life > 0 && hg.turn >= 3
+    && currentPhase === 'planning' && dimOutCancel.botTurn !== hg.turn) { dimOutCancel.botTurn = hg.turn; if (Math.random() < 0.15) dimOutStart('the swarm bot (SWARM_DIMOUT)'); }
+  if (!dimOut) return;
+  if (entity.life <= 0) { console.log(`[${PEER_LABEL}] dimension out: I fell before it was done`); dimOut = null; return; }
+  if (hg.turn >= dimOut.until_turn) leaveDimension(`Dimension Out complete (${DIM_OUT_ROUNDS} rounds, T${dimOut.start_turn}→T${hg.turn})`);
+}, 1000);
+// Unattended: follow / hold, and vanish — "If there is no close character to your unattended character he vanishes
+// from the dimension after 1 hour": no living attended character (other unattended ones don't count; my master
+// does) within VANISH_RADIUS (rule data, 10 = the reveal radius) for VANISH_MS → leaveDimension.
+let aloneSince = Date.now(), wasClose = null;
+setInterval(() => {
+  if (!SHADOW_OF || _shadowLeaving || outNow || entity.life <= 0 || !dimMap) return;
+  const now = Date.now();
+  const L = unattendedLeader(now);
+  const id = L?.peer_id || '';
+  if (id !== ledBy) {
+    console.log(`[${PEER_LABEL}] unattended: ${id ? `I follow ${L.name || id} (${id}) — my master` : `my master ${ledBy} is gone — I hold my ground`}`);
+    ledBy = id;
+    publishPublicState().catch(() => {});
+  }
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  // (my own silent hero's last record — the one I replaced — never counts; nor anybody silent itself)
+  const near = livePeers().find(p => p && p.peer_id !== PEER_ID_STRING && p.peer_id !== SHADOW_OF && p.peer_id !== REPLACES_PEER_ID && !supersededBy.has(p.peer_id) && liveSnap(p, now)
+    && Number.isInteger(p.tile_q) && ((p.character_id && !p.creature_id && !p.shadow_of) || p.peer_id === ledBy) && hexDistance(here, p) <= VANISH_RADIUS);
+  const close = !!near;
+  if (close !== wasClose) {
+    console.log(`[${PEER_LABEL}] unattended: ${close ? `${near.name || near.peer_id} (${near.peer_id}) is close — no vanish` : `nobody within ${VANISH_RADIUS} hexes — I leave the dimension in ${Math.round(VANISH_MS / 1000)}s unless somebody comes`}`);
+    wasClose = close;
+  }
+  if (close) aloneSince = now;
+  else if (now - aloneSince >= VANISH_MS) leaveDimension(`unattended and alone (nobody within ${VANISH_RADIUS} hexes) for ${Math.round((now - aloneSince) / 1000)}s`);
+}, 3000);
 // `boot`: a bot that enters OFF the known map (a "Join my team" gate 30–50 hexes out, a test-team ally
 // 9–10 hexes from player-1) reveals the disc around its entry like a human does (user ruling 2026-11-13).
 // Profile bots only (monsters keep today's fog). The block is shared like any other, so every peer resolves
@@ -2163,6 +2458,7 @@ if (NOSTR_ENABLED) {
       else if (type === 'who' && payload?.peer_id && payload.peer_id !== PEER_ID_STRING) whoReply('bus');
       else if (type === 'map' && busRpc && payload?.to === PEER_ID_STRING) busRpc.deliver(payload);   // map-sync request/response addressed to us (M3; metered by the bus as kind `map`)
       else if (type === 'fx' && payload?.to === PEER_ID_STRING) fxPeer.onBus(payload);   // E4 foreign-effect fetch addressed to us
+      else if (type === 'sk' && payload?.to === PEER_ID_STRING) skPeer.onBus(payload);   // S4 foreign-skill fetch addressed to us
     },
   });
   setInterval(() => {
@@ -2338,7 +2634,10 @@ function computeStrongMembers() {
   ).map(p => p.peer_id);
 }
 let roundMembers = { action: -1, ids: [] };
-function freezeRoundMembers() { roundMembers = { action: hg.action, ids: computeStrongMembers() }; return roundMembers.ids; }
+// The held snapshots as of planning end (Swarm-0559): doResolution reads non-revealers from these, not from a
+// peersPublic that their owners' post-resolution frames reach on some peers before they resolve and not on others.
+let roundBase = { action: -1, peers: null };
+function freezeRoundMembers() { roundMembers = { action: hg.action, ids: computeStrongMembers() }; roundBase = { action: hg.action, peers: new Map(peersPublic) }; return roundMembers.ids; }
 // Who we wait for. Commits: the strong region. Reveals: the strong region plus
 // EVERY peer whose commit for this action we have seen — a committer is alive,
 // at our action and about to reveal, and its reveal may well affect an entity
@@ -2507,6 +2806,30 @@ async function doPlanningEnd() {
     if (typeof queuedEffect === 'number' && bonusIds.has(hand[queuedEffect]?.card_id)) { queuedEffect = null; queuedEffect2 = null; queuedChain = []; }
   }
   if (skipping) { card = null; code = 'EP'; queued = []; queuedSkills = []; queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; casting = null; }
+  // SKR-11 Powerful Attack (paper text, ruling 2026-11-16): after it paid off only Attack until the end of the round. Any
+  // other plan is a bare Empty Posture (no card, no skill, no cast, no destroy); an Attack keeps its skills but no Battle
+  // Trance second option; bonus plans must be Attacks too.
+  if (entity.planOnly && entity.planOnly.turn !== hg.turn) entity.planOnly = null;
+  if (entity.planOnly && !skipping) {
+    const allowed = entity.planOnly.codes;
+    if (!allowed.includes(code)) {
+      console.log(`[${PEER_LABEL}] ${entity.planOnly.by}: only ${allowed.join('/')} this round — my ${code} is played as an Empty Posture`);
+      card = null; code = 'EP'; queued = []; queuedSkills = []; queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; casting = null; queuedBonus = []; queuedDestroy = null;
+    } else {
+      queuedExtra = null; queuedSkills = queuedSkills.filter(i => !hand[i]?.is_trance);
+      queuedBonus = queuedBonus.filter(b => allowed.includes(hand.find(c => c.card_id === b.actionCardId)?.code));
+    }
+  }
+  // Dimension Out (rule_dimension_out, interrupted_by move / attack / cast): playing a move off my hex, an attack or
+  // an effect cast ends the channel, like any cast (Rule 19). Postures, Blocks and Empty Postures keep it going.
+  if (dimOut) {
+    const moved = code === 'M' || (code === 'EM' && target && typeof target === 'object' && (target.q !== entity.tile.q || target.r !== entity.tile.r));
+    const cast = typeof queuedEffect === 'number';
+    const by = DIM_OUT_CFG.interrupted_by || [];
+    if (code === 'A' && by.includes('attack')) dimOutCancel('I attacked');
+    else if (moved && by.includes('move')) dimOutCancel('I moved');
+    else if (cast && by.includes('cast')) dimOutCancel('I cast an effect');
+  }
   // Possess (user spec 2026-10-29): while my permanent holds an enemy, my own hero only Empty-Moves /
   // Empty-Postures — the possessed one fights for me. (The Phylactery leg below is the exception.)
   // (user ruling 2026-10-30: the Possess permanent sits in the POSSESSED unit's holding; while it stands I
@@ -2540,7 +2863,7 @@ async function doPlanningEnd() {
   const optionCodes = options || [code];
   const wants = c => optionCodes.includes(c);
   // A skill rides on its action, or — for Move / Posture skills — on an Empty option.
-  const ridesOn = req => wants(req) || ((req === 'M' || req === 'P') && (wants('EP') || wants('EM')));
+  const ridesOn = req => skillRidesOn(optionCodes, req);   // S1 rides
 
   // Normalise target against the action's actual needs. Block / Posture / EP
   // never target; Attack keeps either an enemy peer or a tile (a tile target
@@ -2555,8 +2878,10 @@ async function doPlanningEnd() {
   let effectCard2 = null;   // Rule 23 ∀: the second copy cast together with effectCard
   // What emits an element: Posture / Empty Posture; a Reaver's Attack; a Monk's Move. Moving otherwise interrupts a cast (Rule 19).
   // Enchanter (class, once per turn — R2, 2026-10-30): a non-Posture action (A / B / M) emits once — the queued cast goes on.
-  const enchanterNow = entity.permanents.has('class_enchanter') && !entity.classArchived && entity.classUsedTurn !== hg.turn && !options && ['A', 'B', 'M'].includes(code) && (typeof queuedEffect === 'number' || !!casting);
-  const emitsLong = wants('P') || wants('EP') || (!options && code === 'EP') || (isReaver() && wants('A')) || (isMonk() && (wants('M') || wants('EM'))) || enchanterNow;
+  // C1 plan_emits (Enchanter) / emits site plan (Reaver A, Monk M / EM), over the class permanents I hold.
+  const clHeld = (h) => Object.keys(CLASS_RULES).filter(id => (CLASS_RULES[id].hooks || []).includes(h) && entity.permanents.has(id));
+  const enchanterNow = clHeld('plan_emits').some(c => classHook('plan_emits', c, CL_BASE, { held: true, archived: entity.classArchived, usedTurn: entity.classUsedTurn, turn: hg.turn, options: !!options, code, queued: typeof queuedEffect === 'number' || !!casting }));
+  const emitsLong = wants('P') || wants('EP') || (!options && code === 'EP') || clHeld('emits').some(c => ['A', 'B', 'M', 'EM'].some(x => wants(x) && classHook('emits', c, CL_BASE, { code: x, site: 'plan' }))) || enchanterNow;
   const emits = (c, every) => castInstant(c, every) || emitsLong;
   if (enchanterNow) { entity.classUsedTurn = hg.turn; console.log(`[${PEER_LABEL}] enchanter: this ${code} emits an element too (once per turn)`); }
   const auraEvery = entity.permanents.has('effect_aura') && entity.everyPerms.has('effect_aura');
@@ -2677,7 +3002,7 @@ async function doPlanningEnd() {
   mySkills.sort((a, b) => a.skill_id.localeCompare(b.skill_id));
   const skillIds = mySkills.map(c => c.skill_id);
   // A targeted effect, or Counter Spell, is what lets a Posture keep a character target.
-  const effectNeedsTarget = (!!effectCard && effectCard.scope === 'target') || skillIds.includes('skill_counter_spell');
+  const effectNeedsTarget = (!!effectCard && effectCard.scope === 'target') || skillHook('plan_target', null, null, { skillIds });   // S1 plan_target
 
   let normTarget = options
     ? (wants('A') || wants('M') ? stripTargetFor('A', target) : wants('EM') ? stripTargetFor('EM', target) : null)
@@ -2743,7 +3068,7 @@ async function doPlanningEnd() {
       if (bExtra) used.add(bExtra.card_id);
       const ridesCode = (req, code) => req === code || (code === 'EP' && req === 'P') || (code === 'EM' && req === 'M');
       const rides = (req) => bOptions ? bOptions.some(c => ridesCode(req, c)) : ridesCode(req, bCode);
-      const bSkills = q.skillCardIds.filter(id => !used.has(id)).map(id => hand.find(c => c.card_id === id)).filter(c => c?.kind === 'skill' && !c.is_trance && rides(c.requires)).sort((a, b) => a.skill_id.localeCompare(b.skill_id));
+      const bSkills = q.skillCardIds.filter(id => !used.has(id)).map(id => hand.find(c => c.card_id === id)).filter(c => c?.kind === 'skill' && !c.is_trance && !c.sk /* S4: foreign skills ride the main plan only */ && rides(c.requires)).sort((a, b) => a.skill_id.localeCompare(b.skill_id));
       for (const c of bSkills) used.add(c.card_id);
       if (bTranceCard) bSkills.unshift(bTranceCard);
       const bEff = !bTranceCard && q.effectCardId ? hand.find(c => c.card_id === q.effectCardId && c.kind === 'effect' && !c.fx) || null : null;   // E4: foreign effects ride the main plan only (bonus wire carries no ref)
@@ -2802,6 +3127,7 @@ async function doPlanningEnd() {
     code: revealCode, trance: options, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null,
     optionCardIds: [card ? card.card_id : null, extraCard ? extraCard.card_id : null],
     skillIds, skillNames: mySkills.map(c => c.name), skillCardIds: mySkills.map(c => c.card_id),
+    skillRefs: mySkills.filter(c => c.sk).map(c => c.sk),   // S4: refs of my foreign (player-branch) skill cards; [] with built-ins only
     effectId: effectCard?.effect_id || null,
     effectCardId: effectCard?.card_id || null,
     effectCardId2: effectCard2?.card_id || null,
@@ -2828,7 +3154,7 @@ async function doPlanningEnd() {
   };
   await emitEnvelope({
     type: 'evt_action_commit',
-    payload: { commitment: commitHash, empty_move_announced: code === 'EM', ...(myLastReveal.effectFx ? { fx_ref: myLastReveal.effectFx } : {}) },
+    payload: { commitment: commitHash, empty_move_announced: code === 'EM', ...(myLastReveal.effectFx ? { fx_ref: myLastReveal.effectFx } : {}), ...(myLastReveal.skillRefs?.length ? { sk_ref: myLastReveal.skillRefs } : {}) },   // S4 sk_ref
   });
   if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/commit`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action, commitment: commitHash });
 }
@@ -2841,10 +3167,15 @@ async function doReveal() {
   const fxMissing = fxPeer.active ? await fxPeer.missingForReveal(hg.tape, hg.turn, hg.round) : [];
   if (!myLastReveal) return;
   myLastReveal.fxMissing = fxMissing;
+  // S4: foreign skills committed this action that I cannot run — every peer strips them (skills-handshake.mjs gateSkills).
+  const skMissing = skPeer.active ? await skPeer.missingForReveal(hg.tape, hg.turn, hg.round) : [];
+  if (!myLastReveal) return;
+  myLastReveal.skMissing = skMissing;
   await emitEnvelope({
     type: 'evt_action_reveal',
     payload: {
       ...(fxMissing.length ? { fx_missing: fxMissing } : {}),
+      ...(skMissing.length ? { sk_missing: skMissing } : {}), ...(myLastReveal.skillRefs?.length ? { sk_ref: myLastReveal.skillRefs } : {}),   // S4: a foreign skill resolves from sk_ref only
       action: myLastReveal.code,
       trance: myLastReveal.trance || null,
       effects: myLastReveal.effectId ? [{
@@ -2902,7 +3233,9 @@ async function doResolution() {
   // Only peers heard on a wire transport (wireHeard): a member known solely through a side channel
   // (Gun) is not in every resolver's view, so it must not block moves, be targeted or count anywhere
   // (GunLive85 T8.R3). The reveal loop below re-adds any revealer from its envelope's own snapshot.
-  const view = resolverPeers(peersPublic, PEER_ID_STRING, wireHeard);
+  // Non-revealers (a corpse, an abstaining joiner): the planning-end copy, and never a statement that already
+  // shows this action's resolution (merge-order.mjs resolverBase — Swarm-0559 T4.R1, a dead ally's shield token).
+  const view = resolverPeers(resolverBase(roundBase.action === hg.action ? roundBase.peers : peersPublic, snapPrior, hg.action), PEER_ID_STRING, wireHeard);
   const revealsThisTurn = [];
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
@@ -2952,6 +3285,11 @@ async function doResolution() {
   // wait is dropped and I publish no state hash for this action. Skipped entirely while no foreign ref exists.
   const fxRes = fxPeer.active ? await fxPeer.prepareResolution(revealsThisTurn, hg.tape, { turn: hg.turn, round: hg.round, self: PEER_ID_STRING, myReveal: myLastReveal }) : null;
   if (fxRes?.mine && myLastReveal) { myLastReveal.castStatus = fxRes.giveUp ? 'fizzled' : 'retry'; if (fxRes.giveUp) myLastReveal.effectStep = myLastReveal.effectOf; }   // give up = the cast ends, card spent
+  // S4 foreign skills (skills-handshake.mjs, skills-data/HANDSHAKE.md): a foreign skill whose sha any revealer listed in
+  // sk_missing is STRIPPED from its reveal on every peer (the action resolves bare; my card returns to my hand); a held
+  // one rides; one I still lack after a short wait is stripped and I publish no state hash. Skipped while nothing foreign.
+  const skRes = skPeer.needsGate(revealsThisTurn, hg.tape, { turn: hg.turn, round: hg.round, myReveal: myLastReveal }) ? await skPeer.prepareResolution(revealsThisTurn, hg.tape, { turn: hg.turn, round: hg.round, self: PEER_ID_STRING, myReveal: myLastReveal }) : null;
+  if (myLastReveal) myLastReveal.skStripped = skRes?.mine || [];
   // A building's skill rides free on the action of whoever stands there (user ruling 2026-11-12); the
   // skill pass below only uses it when the action fits (ridesFor), like a card from the hand.
   for (const r of revealsThisTurn) {
@@ -2996,8 +3334,7 @@ async function doResolution() {
   // has had its say; everything below resolves against it, never `r.action`.
   // Read live off the reveal (not a frozen copy): the Counter Spell pre-pass
   // strips skills from a reveal and everything after must see them gone.
-  const byActorPre = new Map(revealsThisTurn.map(r => [r.actor, r]));
-  const has = (id, skill) => (byActorPre.get(id)?.skills || []).includes(skill);
+  const byActorPre = new Map(revealsThisTurn.map(r => [r.actor, r]));   // S1: skills.mjs reads r.skills live through it
   const permsOfRaw = (id) => id === PEER_ID_STRING
     ? [...entity.permanents]
     : String(view.get(id)?.permanents_csv || '').split(',').filter(Boolean);
@@ -3012,7 +3349,7 @@ async function doResolution() {
     return { class_id: v.class_id || permsOfRaw(id).find(p => p.startsWith('class_')) || null, down: String(v.class_down_csv || '').split(',').filter(Boolean), archived: !!v.class_archived, tapped: !!v.class_tapped, progress: parseJson(v.class_progress_json, null), usedTurn: typeof v.class_used_turn === 'number' ? v.class_used_turn : -1 };
   };
   // A class ability may be used when the class stands on the board and (tap) is not tapped / (once per action) not yet used this action.
-  const classReady = (id, classId) => { const cs = classStateOf(id); return cs.class_id === classId && !cs.archived && hasPerm(id, classId) && (classKindOf(classId) === 'tap' ? !cs.tapped : cs.usedTurn !== hg.turn); };
+  const classReady = (id, classId) => classHook('ready', classId, CL_BASE, { cs: classStateOf(id), held: hasPerm(id, classId), turn: hg.turn });   // C1 ready
   const distBetween = (a, b) => {
     const pa = view.get(a), pb = view.get(b);
     return pa && pb ? hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r }) : Infinity;
@@ -3060,11 +3397,8 @@ async function doResolution() {
     if (o) { for (let i = 0; i < o.length; i++) if (o[i] === from) o[i] = to; }
     else if (effAction.get(id) === from) effAction.set(id, to);
   };
-  const noMove = new Set();
-  const ridesFor = (r) => {
-    const codes = r.trance || [r.action];
-    return c => codes.includes(c) || ((c === 'M' || c === 'P') && (codes.includes('EP') || codes.includes('EM')));
-  };
+  const noMove = new Set();   // S1: Overrun (skills.mjs negate_kind) and Confusion
+  const noEmit = new Set(), swaps = [];   // SKR-01 (skill rulings 2026-11-16): Disruption voids an emission, Overrun swaps hexes (skills.mjs negate_kind)
   // Effect engine context (effects.mjs). Stats are read off the resolver's
   // view: base stat + Rule 12 stat tokens on the entity + bonus tile tokens on
   // the tile it stands on − what Counter Spell took off that caster for one
@@ -3191,24 +3525,15 @@ async function doResolution() {
   // purpose is discarded; a negated action's card — and the instants riding on it, which never execute —
   // goes back to its owner's hand; a countered instant is discarded. Read by the card disposition below.
   const skillFx = [];
-  const nonPerm = (id) => id !== TRANCE && !data.skills[id]?.data?.is_permanent;
   const fromBuilding = (by, skill) => byActorPre.get(by)?.buildingSkill === skill;
-  const negate = (by, skill, o, what) => {
-    const ridden = (o.skills || []).filter(nonPerm);
-    o.skills = (o.skills || []).filter(id => !nonPerm(id));
-    skillFx.push({ by, skill, on: o.actor, what, negated: true, ridden, building: fromBuilding(by, skill) });
-  };
-  const counterSkills = (by, skill, o) => {
-    const countered = (o.skills || []).filter(nonPerm);
-    o.skills = (o.skills || []).filter(id => !nonPerm(id));
-    skillFx.push({ by, skill, on: o.actor, what: 'skills', countered, building: fromBuilding(by, skill) });
-  };
-  const adjacentFoes = (id) => revealsThisTurn.filter(o => o.actor !== id && enemyOf(id, o.actor) && !hiddenFrom(id, o.actor) && distBetween(id, o.actor) <= 1).map(o => o.actor);
-  // A targeted skill without a right-clicked enemy picks the adjacent one: attackers first, then lowest id.
-  const foeFor = (r) => {
-    const t = r.target?.kind === 'character' ? r.target.ref : null;
-    if (t && effAction.has(t) && !hiddenFrom(r.actor, t)) return t;
-    return adjacentFoes(r.actor).sort((a, b) => (Number(codeIs(b, 'A')) - Number(codeIs(a, 'A'))) || a.localeCompare(b))[0] || null;
+  // S1: the skill rules live in skills.mjs; this is everything they may read / write this action (HOOKS.md).
+  const skCtx = {
+    self: PEER_ID_STRING, label: PEER_LABEL, log, reveals: revealsThisTurn, byActorPre,
+    effAction, tranceOpts, noMove, counterPen, skillFx, codeIs, replace, noEmit, swaps,   // SKR-02
+    enemyOf, hiddenFrom, dist: distBetween, lifeOf,
+    view: (id) => view.get(id), viewValues: () => view.values(),
+    elemStat: (el) => ELEM_TO_STAT[el], hasPerm, permPower: (id) => permPowerOf(id),
+    castsDamage, effectDmgNoShield, skillData: (id) => data.skills[id]?.data, edgeDmg: (a, d) => edgeDmg(a, d),
   };
   // Counter Spell pre-pass (Rule 8: no stack, but a counter is a prohibition
   // and prohibitions apply "finally as a replacement" — so it runs before any
@@ -3224,88 +3549,18 @@ async function doResolution() {
   // vs my 8, counter fire → (16−8−8) + (16−8) = 8 → 1). Caster-side only.
   // Two Counter Spells aimed at each other cancel in actor order — the
   // lexically first actor's counter lands first and strips the other's.
-  for (const r of [...revealsThisTurn].sort((a, b) => a.actor.localeCompare(b.actor))) {
-    if (!(r.skills || []).includes('skill_counter_spell')) continue;
-    if (!ridesFor(r)('P')) continue;
-    const casterV = view.get(r.actor);
-    if (!casterV) continue;
-    const declared = r.target?.kind === 'character' ? r.target.ref : null;
-    const cands = revealsThisTurn.filter(o => o.actor !== r.actor && enemyOf(r.actor, o.actor) && !hiddenFrom(r.actor, o.actor) && distBetween(r.actor, o.actor) <= 1);
-    if (!cands.length) continue;
-    // Best element against one caster: how much of their damage to me it removes.
-    const bestElem = (o) => {
-      if (!castsDamage(o)) return null;
-      const before = effectDmgNoShield(o, r.actor);
-      const prev = counterPen.get(o.actor);
-      let best = null;
-      for (const el of [...new Set(o.effect.elements)].sort()) {
-        const amount = statRaw(casterV, ELEM_TO_STAT[el]);
-        if (!amount) continue;
-        counterPen.set(o.actor, { ...(prev || {}), [el]: (prev?.[el] || 0) + amount });
-        const saved = before - effectDmgNoShield(o, r.actor);
-        if (!best || saved > best.saved) best = { el, amount, saved };
-      }
-      if (prev) counterPen.set(o.actor, prev); else counterPen.delete(o.actor);
-      return best;
-    };
-    const casters = cands.filter(castsDamage);
-    let o = cands.find(c => c.actor === declared && castsDamage(c)) || null;
-    if (!o && casters.length) {
-      o = casters.map(c => ({ c, b: bestElem(c) }))
-        .sort((x, y) => (y.b?.saved ?? -1) - (x.b?.saved ?? -1) || lifeOf(x.c.actor) - lifeOf(y.c.actor) || x.c.actor.localeCompare(y.c.actor))[0].c;
-    }
-    if (!o) o = cands.find(c => c.actor === declared) || null;
-    if (!o) continue;
-    const tgt = o.actor;
-    const kept = (o.skills || []).filter(id => !!data.skills[id]?.data?.is_permanent);
-    const stripped = (o.skills || []).filter(id => !kept.includes(id));
-    o.skills = kept;
-    const bCs = bestElem(o);
-    if (stripped.length || bCs) skillFx.push({ by: r.actor, skill: 'skill_counter_spell', on: tgt, what: 'skills', countered: stripped.filter(id => id !== TRANCE), building: fromBuilding(r.actor, 'skill_counter_spell') });
-    if (stripped.includes(TRANCE) && o.trance) { effAction.set(tgt, o.trance[0]); tranceOpts.delete(tgt); o.trance = null; }
-    const b = bestElem(o);
-    if (b) {
-      const pen = counterPen.get(tgt) || {};
-      pen[b.el] = (pen[b.el] || 0) + b.amount;
-      counterPen.set(tgt, pen);
-    }
-    if (r.actor === PEER_ID_STRING || tgt === PEER_ID_STRING) log(`[${PEER_LABEL}] counter spell ${r.actor.slice(0, 8)} → ${tgt.slice(0, 8)}: stripped [${stripped.join(',')}]${b ? `, −${b.amount} on ${b.el} (saves ${b.saved})` : ', nothing to counter'}`);
-  }
+  skillHook('counter_pre', 'skill_counter_spell', skCtx);   // S1 counter_pre
   // Pass 1 — prohibitions on a whole action (they go first: an Attack Intimidation negates never gets to
   // Grapple). Move / Posture skills also ride on Empty Move / Empty Posture.
-  for (const r of revealsThisTurn) {
-    if (!(r.skills || []).length) continue;
-    const me = r.actor, rides = ridesFor(r);
-    // Bluff: the enemy's action is negated and played as Empty Posture.
-    if (rides('M') && has(me, 'skill_bluff')) {
-      const t = foeFor(r), o = t && byActorPre.get(t);
-      if (o && distBetween(me, t) <= 1 && (tranceOpts.has(t) || effAction.get(t) !== 'EP')) {
-        const what = tranceOpts.has(t) ? tranceOpts.get(t).join('+') : effAction.get(t);
-        effAction.set(t, 'EP'); tranceOpts.delete(t); negate(me, 'skill_bluff', o, what);
-      }
-    }
-    // Intimidation: an adjacent enemy's Attack is negated (no combat damage, the card back to their hand);
-    // with nobody attacking, it counters a non-permanent skill of an adjacent enemy instead.
-    if (rides('P') && has(me, 'skill_intimidation')) {
-      const atk = adjacentFoes(me).filter(id => codeIs(id, 'A'));
-      for (const id of atk) { replace(id, 'A', 'EP'); negate(me, 'skill_intimidation', byActorPre.get(id), 'A'); }
-      if (!atk.length) {
-        const o = [foeFor(r), ...adjacentFoes(me)].filter(Boolean).map(id => byActorPre.get(id))
-          .find(x => x && distBetween(me, x.actor) <= 1 && (x.skills || []).some(nonPerm));
-        if (o) counterSkills(me, 'skill_intimidation', o);
-      }
-    }
-  }
+  skillHook('negate_action', null, skCtx);   // S1 negate_action (Bluff, Intimidation)
   // Pass 2 — prohibitions on one kind of action.
+  skillHook('negate_kind', null, skCtx);   // S1 negate_kind (Grapple, Disruption Move, Overrun)
+  // SKR-03 Disruption Move (paper text, ruling 2026-11-16): the target plays an Empty Move that emits nothing — its non-instant
+  // effect is voided on every peer (instants still go out); the target's own peer interrupts its cast after the run (doResolution).
   for (const r of revealsThisTurn) {
-    if (!(r.skills || []).length) continue;
-    const me = r.actor, rides = ridesFor(r);
-    if (rides('A') && has(me, 'skill_grapple')) { const t = foeFor(r); if (t && codeIs(t, 'P')) { replace(t, 'P', 'EP'); negate(me, 'skill_grapple', byActorPre.get(t), 'P'); } }
-    if (rides('M') && has(me, 'skill_disruption_move')) { const t = foeFor(r); if (t && codeIs(t, 'P')) { replace(t, 'P', 'EP'); negate(me, 'skill_disruption_move', byActorPre.get(t), 'P'); } }
-    if (rides('A') && has(me, 'skill_overrun')) {
-      const t = foeFor(r);
-      if (t && distBetween(me, t) <= 1) { const mv = codeIs(t, 'M') ? 'M' : codeIs(t, 'EM') ? 'EM' : null; noMove.add(t); if (mv) negate(me, 'skill_overrun', byActorPre.get(t), mv); }
-    }
+    if (!noEmit.has(r.actor) || !r.effect || r.effect.is_instant) continue;
+    if (r.actor === PEER_ID_STRING || skillFx.some(f => f.on === r.actor && f.by === PEER_ID_STRING)) log(`[${PEER_LABEL}] disruption: ${r.actor.slice(0, 8)}'s ${r.effect.effect_id} emits nothing (Empty Move)`);
+    r.effect = null; r.noEmit = true;
   }
   // Afflictions from sprung perm-traps hold while the holder keeps the permanent.
   const afflictedBy = (id, effectId) => parseJson(view.get(id)?.afflictions_json, []).filter(a => a.effect_id === effectId && a.by !== id && hasPerm(a.by, effectId)).map(a => a.by);
@@ -3372,6 +3627,17 @@ async function doResolution() {
     for (const p of perms) if (p.startsWith('class_') && CLASSES_IMPLEMENTED.has(p)) return p;
     return null;
   };
+  // C1: what the class hooks (classes.mjs#classHook) see of this resolution — read-only queries.
+  const clCtx = {
+    self: PEER_ID_STRING, label: PEER_LABEL,
+    view: (id) => view.get(id), viewIds: () => [...view.keys()], viewValues: () => [...view.values()],
+    lifeOf, dist: distBetween, enemyOf, hasPerm, statOf, sideOf,
+    classData: (id) => data.classes[id]?.data, skillAction: (sk) => data.skills[sk]?.data?.action_type,
+    library: () => effCtx.library(), elemStat: (el) => ELEM_TO_STAT[el],
+    get turn() { return hg.turn; }, get action() { return hg.action; }, sha: (s) => sha256Hex(s),
+  };
+  const CL_LIFESTEAL = clWith('lifesteal'), CL_ATTACK_OUT = clWith('attack_out');   // Noble; Assassin
+  const CL_STEPPERS = clWith('step'), CL_TRANSMUTERS = clWith('transmute');   // Cleric, Rogue; Transmuter
   // `r.declared` keeps what the player actually put down (after skill
   // prohibitions); `r.action` is the code combat is judged on. They only differ
   // for a class stance on EP — Sanctuary, the reveal chip and the hand
@@ -3384,23 +3650,23 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     const cur = effAction.get(r.actor);
     const c = classOf(r.actor);
-    if (c === 'class_reaver' && (cur === 'EP' || cur === 'EM')) {
-      // Both empty actions fight as an Attack. An Empty Move with nobody adjacent
+    // C1 stance: Reaver EP / EM → A, Barbarian EP → B, Monk EP → M (null: no stance).
+    const stance = classHook('stance', c, clCtx, { code: cur });
+    if (!stance) continue;
+    effAction.set(r.actor, stance);
+    if ((CLASS_RULES[c]?.hooks || []).includes('stance_target')) {
+      // Reaver: both empty actions fight as an Attack. An Empty Move with nobody adjacent
       // still walks its half journey (`moveAs`), it just defends as an Attack.
-      effAction.set(r.actor, 'A');
       if (r.target?.kind !== 'character') {
-        const pick = revealsThisTurn
+        const cands = revealsThisTurn
           .filter(o => o.actor !== r.actor && enemyOf(r.actor, o.actor) && !hiddenFrom(r.actor, o.actor) && distBetween(r.actor, o.actor) <= 1)
-          .map(o => ({ id: o.actor, cost: codeIs(o.actor, 'B') && !hasPerm(r.actor, 'skill_ranged_weapon') ? 1 : 0, lands: hitDmg(codeNow(o.actor)) > 0 ? 0 : 1, life: lifeOf(o.actor) }))
-          .sort((a, b) => a.cost - b.cost || a.lands - b.lands || a.life - b.life || a.id.localeCompare(b.id))[0];
-        if (pick) r.target = { kind: 'character', ref: pick.id };
+          .map(o => ({ id: o.actor, cost: skillHook('block_cost', 'skill_ranged_weapon', skCtx, { attacker: r.actor, defender: o.actor }),   /* S1 block_cost */ lands: hitDmg(codeNow(o.actor)) > 0 ? 0 : 1, life: lifeOf(o.actor) }));
+        const pick = classHook('stance_target', c, clCtx, { cands });   // C1 stance_target (cost, lands, life, id)
+        if (pick) r.target = { kind: 'character', ref: pick };
         else if (cur === 'EM') r.moveAs = 'EM';
-        if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] reaver ${cur} fights as Attack${pick ? ` → ${pick.id.slice(0, 8)}` : ' (nobody adjacent)'}`);
+        if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] reaver ${cur} fights as Attack${pick ? ` → ${pick.slice(0, 8)}` : ' (nobody adjacent)'}`);
       }
     }
-    else if (cur !== 'EP') continue;
-    else if (c === 'class_barbarian') effAction.set(r.actor, 'B');
-    else if (c === 'class_monk') effAction.set(r.actor, 'M');
   }
   // Stance buildings (user ruling 2026-11-12): an Empty Posture played there is the building's action
   // ("always on Posture once in there") — after the class stances, which keep their own.
@@ -3447,40 +3713,7 @@ async function doResolution() {
     if (idx !== undefined) return r.trance[idx] === 'A';
     return !r.vs && declared && r.trance.includes('A');
   };
-  for (const r of revealsThisTurn) {
-    if (!r.trance) continue;
-    const me = view.get(r.actor);
-    if (!me) { r.vs = new Map(); r.played = new Set([0, 1]); continue; }
-    const declared = r.target?.kind === 'character' ? r.target.ref : null;
-    // Revealers only — their snapshots ride in the reveal, so every peer sees the same set.
-    const adj = [...view.values()]
-      .filter(p => p && p.peer_id !== r.actor && byActor.has(p.peer_id) && p.life > 0 && enemyOf(r.actor, p.peer_id) && !hiddenFrom(r.actor, p.peer_id) && distBetween(r.actor, p.peer_id) <= 1)
-      .map(p => p.peer_id)
-      .sort((a, b) => (a === declared ? -1 : b === declared ? 1 : a.localeCompare(b)));
-    r.vs = new Map();
-    r.played = new Set();
-    const usedA = new Set();
-    for (const e of adj) {
-      const er = byActor.get(e);
-      const eCode = er ? codeVs(e, r.actor) : 'EP';
-      const eHits = attacksOn(er, r.actor);
-      // The enemy's Attack / Move only hurt me if aimed at me; Posture / Block hit anyone adjacent.
-      const eAims = eCode === 'A' ? eHits : eCode === 'M' ? er?.target?.kind === 'character' && er.target.ref === r.actor : true;
-      let best = -1, bestScore = -Infinity;
-      r.trance.forEach((opt, i) => {
-        if (opt === 'A' && usedA.has(i)) return;
-        const taken = eAims ? edgeDmg(eCode, opt) : 0;
-        const dealt = opt === 'B' && !eHits ? 0 : edgeDmg(opt, eCode);
-        const score = dealt - taken;
-        if (score > bestScore) { bestScore = score; best = i; }
-      });
-      if (best < 0) continue;
-      r.vs.set(e, best);
-      r.played.add(best);
-      if (r.trance[best] === 'A') usedA.add(best);
-    }
-    if (!adj.length) r.played = new Set([0, 1]);
-  }
+  skillHook('trance_assign', TRANCE, skCtx, { byActor, codeVs, attacksOn });   // S1 trance_assign (Battle Trance)
 
   // Movement intents. Rule 8:
   //  - EM ("Empty journey") moves halfway toward the target tile — round(d/2)
@@ -3644,6 +3877,16 @@ async function doResolution() {
     }
   }
 
+  // SKR-04 Overrun swap (paper text, ruling 2026-11-16): the attacker and its adjacent target trade hexes after the moves —
+  // both alive and neither moved this action (the target's own move is negated by noMove). Effect moves below see them.
+  for (const sw of [...swaps].sort((a, b) => a.by.localeCompare(b.by) || a.on.localeCompare(b.on))) {
+    const va = view.get(sw.by), vb = view.get(sw.on);
+    if (!va || !vb || va.life <= 0 || vb.life <= 0 || nextTiles.has(sw.by) || nextTiles.has(sw.on)) continue;
+    nextTiles.set(sw.by, { q: vb.tile_q, r: vb.tile_r }); nextTiles.set(sw.on, { q: va.tile_q, r: va.tile_r });
+    journeyResults.set(sw.by, { outcome: 'complete', q: vb.tile_q, r: vb.tile_r, action: 'overrun' });
+    journeyResults.set(sw.on, { outcome: 'complete', q: va.tile_q, r: va.tile_r, action: 'overrun' });
+    if (sw.by === PEER_ID_STRING || sw.on === PEER_ID_STRING) log(`[${PEER_LABEL}] overrun: ${sw.by.slice(0, 8)} and ${sw.on.slice(0, 8)} swap places`);
+  }
   // Effect outcomes first (Rule 8 order: effects are declared before skills
   // and their prohibitions shape the rest). Only complete casts resolve — a
   // cast still emitting elements does nothing yet. Relocations land in
@@ -3669,37 +3912,41 @@ async function doResolution() {
   // Hand classes (2026-11-14): living, visible (no Invisibility) enemies within `range` hexes, sorted by id.
   const foesNearby = (id, range) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && enemyOf(id, o) && distBetween(id, o) <= range && !hasPerm(o, 'effect_invisibility')).sort();
   const useAbility = (r, note) => { classAbilityOut.used.push({ actor: r.actor, class_id: r.classAbility.id }); if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${r.classAbility.id}: ${note}`); };
-  const ILLUSION_RANGE = 10;
+  // C1 ability: the hook's {used, note, log, mine, out} → classAbilityOut + log (null = resolved here in peer.mjs).
+  const classAbility = (r, ab) => {
+    const res = classHook('ability', ab.id, clCtx, { actor: r.actor, ab, salt: r.salt });
+    if (!res) return false;
+    for (const [k, l] of Object.entries(res.out)) classAbilityOut[k].push(...l);
+    for (const s of res.log) log(s);
+    if (r.actor === PEER_ID_STRING) for (const s of res.mine) log(s);
+    if (res.used) useAbility(r, res.note);
+    return true;
+  };
   const rogueMove = new Set();          // Rogue: movers that trigger no trap / reveal nothing this action
   for (const r of revealsThisTurn) {
     const ab = abilityOf(r);
     // Elementalist (passive, user ruling 2026-11-12): once per turn, by itself — the emission that completes
     // a damage cast carries an extra point-buy die of the cast's best element (my highest stat among them).
-    if (classOf(r.actor) === 'class_elementalist' && classReady(r.actor, 'class_elementalist') && lifeOf(r.actor) > 0 && castsDamage(r)) {
-      const best = [...new Set(r.effect.elements.map(el => ELEM_TO_STAT[el]).filter(Boolean))].sort((a, b) => statOf(r.actor, b) - statOf(r.actor, a) || a.localeCompare(b))[0] || 'matter';
-      const pb = pointBuy(statOf(r.actor, best), `${r.salt || ''}:elementalist:${hg.action}`, sha256Hex);
+    const ec = classOf(r.actor);
+    if ((CLASS_RULES[ec]?.hooks || []).includes('pre_cast') && classReady(r.actor, ec) && lifeOf(r.actor) > 0 && castsDamage(r)) {
+      const pb = classHook('pre_cast', ec, clCtx, { actor: r.actor, elements: r.effect.elements, salt: r.salt });   // C1 pre_cast: point-buy of my best stat among the cast's elements
+      const best = pb.stat;
       if (!pb.fail) { castBoost.set(r.actor, pb.value); elementalistPending.push({ actor: r.actor, value: pb.value, stat: best, dice: pb.dice }); }
       else if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class elementalist: the extra ${best} die failed [${pb.dice.join(',')}] — nothing added, it stays ready this turn`);
     }
     // Illusionist (user ruling 2026-11-12): me and every ally within ILLUSION_RANGE get one illusion life
     // point (lost first, like the Overlord's armor); it fades after the turn's 3rd action.
-    if (ab?.id === 'class_illusionist') {
-      const allies = [...view.keys()].filter(o => o !== r.actor && lifeOf(o) > 0 && !enemyOf(r.actor, o) && distBetween(r.actor, o) <= ILLUSION_RANGE).sort();
-      for (const o of [r.actor, ...allies]) classAbilityOut.illusion.push({ on: o, by: r.actor });
-      useAbility(r, `an illusion life point for me and ${allies.length} all${allies.length === 1 ? 'y' : 'ies'} until the turn's 3rd action`);
-    }
+    if (ab && CLASS_RULES[ab.id]?.phase === 'pre') classAbility(r, ab);   // C1 ability (phase pre: Illusionist, allies within 10)
   }
   // Bard (static): every player in contact with a Bard who plays a skill plays it too, when their action allows.
+  const CL_SHARERS = Object.keys(CLASS_RULES).filter(id => (CLASS_RULES[id].hooks || []).includes('share_skills'));   // C1: Bard
   for (const r of revealsThisTurn) {
-    if (!hasPerm(r.actor, 'class_bard') || !(r.skills || []).length) continue;
-    for (const o of adjacentOf(r.actor, o => !enemyOf(r.actor, o) && !!byActorPre.get(o))) {
-      const rev = byActorPre.get(o);
-      for (const sk of r.skills) {
-        const req = data.skills[sk]?.data?.action_type; if (!req || sk === TRANCE || rev.skills.includes(sk)) continue;
-        const codes = rev.trance || [rev.action];
-        if (codes.includes(req) || ((req === 'M' || req === 'P') && (codes.includes('EP') || codes.includes('EM')))) { rev.skills = [...rev.skills, sk]; if (o === PEER_ID_STRING || r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] bard ${r.actor.slice(0, 8)}: ${o.slice(0, 8)} plays ${sk} too`); }
-      }
-    }
+    const sharer = CL_SHARERS.find(c => hasPerm(r.actor, c));
+    if (!sharer || !(r.skills || []).length) continue;
+    const adj = adjacentOf(r.actor, o => !enemyOf(r.actor, o) && !!byActorPre.get(o)).map(o => { const rev = byActorPre.get(o); return { id: o, codes: rev.trance || [rev.action], skills: rev.skills }; });
+    const sh = classHook('share_skills', sharer, clCtx, { actor: r.actor, skills: r.skills, adj });   // C1 share_skills (S1 rides inside)
+    for (const a of sh.adds) { const rev = byActorPre.get(a.on); rev.skills = [...rev.skills, a.skill]; }
+    for (const s of sh.log) log(s);
   }
   const casts = revealsThisTurn.filter(r => r.effect && Array.isArray(r.effect.elements) && r.effect.elements.length && view.get(r.actor));
   // Blessing / Curse ∀ (user ruling 2026-10-30): a holder of TWO Blessings loses the second one the moment
@@ -3847,7 +4094,7 @@ async function doResolution() {
   const destroyOutcomes = [];           // { actor, owner, kind: 'perm'|'stat'|'tile', id, power, die, result }
   const permPowerOf = (id) => { try { const v = JSON.parse(view.get(id)?.perm_power_json || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
   const permStats = (permId) => {
-    if (permId.startsWith('skill_')) { const st = data.skills[permId]?.data?.point_buy_stat; return st === 'any' ? ['vitality', 'world', 'matter', 'will'] : st ? [st.replace(/^stat_/, '')] : ['vitality']; }
+    if (permId.startsWith('skill_')) return skillHook('perm_stats', permId, skCtx);   // S1 perm_stats
     if (permId.startsWith('effect_')) return [...new Set((data.effects[permId]?.data?.element_cost || []).map(el => ELEM_TO_STAT[el]).filter(Boolean))];
     return [];
   };
@@ -3880,7 +4127,7 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     const stat = r.destroy?.stat;
     if (!stat || !['vitality', 'world', 'matter', 'will'].includes(stat) || !view.get(r.actor)) continue;
-    const emitsNow = ['P', 'EP'].includes(r.declared) || (r.action === 'A' && classOf(r.actor) === 'class_reaver') || (r.action === 'M' && classOf(r.actor) === 'class_monk');
+    const emitsNow = ['P', 'EP'].includes(r.declared) || classHook('emits', classOf(r.actor), clCtx, { code: r.action, site: 'destroy' });   // C1 emits (Reaver A, Monk M)
     if (!emitsNow) continue;
     const pb = pointBuy(statOf(r.actor, stat), `${r.salt || ''}:destroy:${hg.action}:${stat}`, sha256Hex);
     // --- my own class: recast from the archive / untap the ability (power 1 = any successful roll) ---
@@ -3888,7 +4135,7 @@ async function doResolution() {
       const cs = classStateOf(r.actor);
       const kind = r.destroy.recast ? 'recast' : 'untap';
       const cols = cs.class_id ? classColours(cs.class_id) : {};
-      const valid = !!cs.class_id && stat in cols && (kind === 'recast' ? cs.archived : (cs.tapped && !cs.archived)) && !(cs.progress?.mode === kind && (cs.progress.done || []).includes(stat));
+      const valid = classHook('restore', cs.class_id, clCtx, { cs, cols, stat, kind });   // C1 restore (a colour still owed)
       if (!valid) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${kind}: ${stat} is not a colour still owed`); continue; }
       const ok = !pb.fail;
       classOutcomes.push({ actor: r.actor, owner: r.actor, class_id: cs.class_id, kind, stat, ok, die: pb.value, dice: pb.dice });
@@ -3903,10 +4150,9 @@ async function doResolution() {
       const e = r.destroy.class;
       const cs = classStateOf(e);
       const cols = cs.class_id ? classColours(cs.class_id) : {};
-      const okTarget = enemies.includes(e) && cs.class_id && !cs.archived && stat in cols && !cs.down.includes(stat) && (!r.destroy.elem || cols[stat].includes(r.destroy.elem));
-      if (!okTarget) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class strike: ${e.slice(0, 8)} has no standing ${stat} colour in reach`); continue; }
-      const result = pb.fail ? 'retry' : pb.value >= 6 ? 'destroyed' : 'too weak';
-      const last = result === 'destroyed' && Object.keys(cols).every(s => s === stat || cs.down.includes(s));
+      const strike = classHook('strike', cs.class_id, clCtx, { cs, cols, stat, elem: r.destroy.elem, enemy: enemies.includes(e), pb });   // C1 strike (die of 6)
+      if (!strike) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class strike: ${e.slice(0, 8)} has no standing ${stat} colour in reach`); continue; }
+      const { result, last } = strike;
       classOutcomes.push({ actor: r.actor, owner: e, class_id: cs.class_id, kind: last ? 'class_destroyed' : 'colour', stat, ok: result === 'destroyed', die: pb.value, dice: pb.dice, result });
       if (r.actor === PEER_ID_STRING || e === PEER_ID_STRING) log(`[${PEER_LABEL}] ${r.actor.slice(0, 8)} emits ${stat} against ${e.slice(0, 8)}'s ${cs.class_id} colour: dice [${pb.dice.join(',')}] → ${result}${last ? ' — the class leaves the board' : ''}`);
       continue;
@@ -3982,7 +4228,7 @@ async function doResolution() {
     }
     list.push({ attacker, amount, source, ...(why ? { why } : {}) });
     damage.set(victim, list);
-    if (amount > 0 && hasPerm(attacker, 'class_noble') && attacker === PEER_ID_STRING) lifestealForMe.amount += amount;
+    for (const c of CL_LIFESTEAL) lifestealForMe.amount += classHook('lifesteal', c, clCtx, { attacker, amount });   // C1 lifesteal (Noble, mine only)
     if (amount > 0) assassinScored.add(attacker);
   };
   const postTile = (id) => nextTiles.get(id) ? { tile_q: nextTiles.get(id).q, tile_r: nextTiles.get(id).r } : view.get(id);
@@ -3999,7 +4245,6 @@ async function doResolution() {
     spentIds.add(tok.id); tokensSpent.push({ owner: tok.owner, id: tok.id });
     return true;
   };
-  const restingInSanctuary = (id) => hasPerm(id, 'skill_sanctuary') && (byActor.get(id)?.declared ?? 'EP') === 'EP';
   // Buildings / landmarks where a unit stands after the moves (user ruling 2026-11-12).
   const buildingOf = (id) => { const t = postTile(id); return t && Number.isInteger(t.tile_q) ? buildingBonusAt(MAP_SEED, t.tile_q, t.tile_r) : null; };
   const guardUsed = new Map();   // victim → combat damage its stronghold already turned aside this action
@@ -4018,25 +4263,26 @@ async function doResolution() {
   const strike = (r, code, defId) => {
     const atk = view.get(r.actor), def = view.get(defId);
     if (!atk || !def || !enemyOf(r.actor, defId)) return;
-    if (hexDistance(postTile(r.actor), postTile(defId)) > 1) return;
-    const defCode = codeVs(defId, r.actor);
+    // SKR-05 Ranged Weapon "+1 range" (ruling 2026-11-16): the holder's Attack reaches 2 hexes; every other strike needs contact.
+    if (hexDistance(postTile(r.actor), postTile(defId)) > skillHook('attack_range', null, skCtx, { attacker: r.actor, code })) return;
+    let defCode = codeVs(defId, r.actor);
     if (code === 'B') {
-      // Block scores against Attacks aimed at the blocker; a ranged attacker is out of reach.
+      // Block scores against Attacks aimed at the blocker — not on a Ranged Weapon holder from beyond contact, nor on a taunter.
       if (defCode !== 'A' || !attacksOn(byActor.get(defId), r.actor)) return;
-      if (hasPerm(defId, 'skill_ranged_weapon')) return;
+      if (skillHook('block_in', null, skCtx, { defender: defId, blocker: r.actor })) return;   // S1 block_in (SKR: Ranged Weapon, Taunt)
     }
+    // Taunt "nearby enemies cannot use Block against you": the taunter's Attack meets that Block as an Empty action.
+    if (code === 'A' && defCode === 'B' && skillHook('attack_vs_block', null, skCtx, { attacker: r.actor, defender: defId })) defCode = 'EP';
     let dmg = bonusRound ? (code === 'A' ? 1 : 0) : edgeDmg(code, defCode);
     if (code === 'A') {
-      if (dmg >= 1 && has(r.actor, 'skill_powerful_attack')) dmg += 1;
+      dmg = skillHook('attack_out', 'skill_powerful_attack', skCtx, { attacker: r.actor, dmg });   // S1 attack_out
       // Assassin: +1 if the attacker has already connected this round. The flag
       // is set when a previous addDmg(..., attacker, >0) landed — so same-round
       // "first hit then rider" scales up for them. Resolver-local; no state leak.
-      if (dmg >= 1 && hasPerm(r.actor, 'class_assassin') && assassinScored.has(r.actor)) dmg += 1;
+      for (const c of CL_ATTACK_OUT) dmg = classHook('attack_out', c, clCtx, { attacker: r.actor, dmg, scored: [...assassinScored] });   // C1 attack_out (Assassin +1)
       // Taunt: a nearby taunter is the only legal Attack target. Only revealers
       // count — their snapshots ride in the reveal, so every peer sees the same set.
-      const taunter = revealsThisTurn.some(t => t.actor !== defId && t.actor !== r.actor
-        && enemyOf(r.actor, t.actor) && hasPerm(t.actor, 'skill_taunt') && distBetween(r.actor, t.actor) <= 1);
-      if (taunter) dmg = 0;
+      if (skillHook('attack_target', 'skill_taunt', skCtx, { attacker: r.actor, defender: defId })) dmg = 0;   // S1 attack_target
     }
     // Inner Fire: one point of non-effect damage becomes two.
     if (dmg === 1 && hasPerm(r.actor, 'effect_inner_fire')) dmg = 2;
@@ -4051,8 +4297,7 @@ async function doResolution() {
       if (dmg > 0 && db?.bonus?.guard) { const used = guardUsed.get(defId) || 0; const g = Math.min(dmg, db.bonus.guard - used); if (g > 0) { dmg -= g; guardUsed.set(defId, used + g); } }
       if (dmg !== was && (defId === PEER_ID_STRING || r.actor === PEER_ID_STRING)) log(`[${PEER_LABEL}] building: ${r.actor.slice(0, 8)} ${code} → ${defId.slice(0, 8)} ${was} → ${dmg} (${dmg > was ? ab.source : db.source})`);
     }
-    if ((code === 'A' || code === 'B') && hasPerm(defId, 'skill_barricade')) dmg = 0;
-    if (restingInSanctuary(defId)) dmg = 0;
+    dmg = skillHook('defend_in', null, skCtx, { code, defender: defId, dmg, byActor });   // S1 defend_in (Barricade, Sanctuary)
     if (untouchable(defId, r.actor)) dmg = 0;
     if (dmg > 0 && absorbedByShieldToken(defId)) dmg = 0;
     addDmg(defId, r.actor, dmg, 'action', code === 'A' ? 'Attack' : code === 'B' ? 'Block' : code);
@@ -4072,11 +4317,7 @@ async function doResolution() {
   }
   // Dodge: "one less damage done to you this action" — one point off the
   // combat damage I take this round, not one per attacker.
-  for (const [victim, list] of damage) {
-    if (!has(victim, 'skill_dodge')) continue;
-    const hit = list.find(d => d.source === 'action' && d.amount > 0);
-    if (hit) { hit.amount -= 1; skillFx.push({ by: victim, skill: 'skill_dodge', on: hit.attacker, what: 'damage', building: fromBuilding(victim, 'skill_dodge') }); }
-  }
+  skillHook('damage_in', 'skill_dodge', skCtx, { damage });   // S1 damage_in
 
   // Effect damage (Rule 21): each leg rounded half-up / 10 on its own. Before
   // rounding, Force Shield's die comes off the first leg that would otherwise
@@ -4232,6 +4473,9 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     const ab = abilityOf(r);
     if (!ab || ['class_elementalist', 'class_illusionist', 'class_rogue'].includes(ab.id)) continue;
+    // C1 ability (phase post): Healer, Overlord, Druid, Witch, Avenger, Alchemist, Ranger, Necromancer resolve in
+    // classes.mjs; the hook answers null for the map-bound ones below (Animator, Priest, Cleric, Seeker, Warrior).
+    if (CLASS_RULES[ab.id]?.phase === 'post' && classAbility(r, ab)) continue;
     const me = r.actor, v = view.get(me);
     const tile = abilityTile(ab), peer = abilityPeer(ab);
     const nearAlly = peer && peer !== me && lifeOf(peer) > 0 && distBetween(me, peer) <= 1 && !enemyOf(me, peer) ? peer : null;
@@ -4239,55 +4483,8 @@ async function doResolution() {
     const stat = ['vitality', 'world', 'matter', 'will'].includes(ab.stat) ? ab.stat : 'vitality';
     const here = { q: v.tile_q, r: v.tile_r };
     const spot = tile && tileNear(me, tile) ? { q: tile.q, r: tile.r } : here;
+    // (Healer, Overlord, Druid, Witch, Avenger: classes.mjs ability hook, C1 — see classes-data/HOOKS.md)
     switch (ab.id) {
-      case 'class_healer': { const who = nearAlly || me; classAbilityOut.heals.push({ on: who, amount: 1, by: me }); useAbility(r, `one life token restored to ${who === me ? 'me' : who.slice(0, 8)}`); break; }
-      case 'class_overlord': {
-        // User ruling 2026-11-12: one armor life point (never two on a unit) — mine, or if I already wear
-        // one, the ally I picked / the first adjacent ally without one.
-        const bare = (id) => !Number(view.get(id)?.armor);
-        const who = bare(me) ? me : nearAlly && bare(nearAlly) ? nearAlly : adjacentOf(me, o => !enemyOf(me, o) && bare(o))[0] || null;
-        if (!who) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class overlord: I and every ally next to me already wear an armor point`); break; }
-        classAbilityOut.armor.push({ on: who, by: me }); useAbility(r, `${who === me ? 'I wear' : `${who.slice(0, 8)} wears`} an armor life point`); break;
-      }
-      case 'class_druid': {
-        // User ruling 2026-11-12: a Druid stone (mapped as a building) on my tile that is a tile bonus of a
-        // stat — whoever stands there adds it (stats and life). One stone per stat: the stat not there yet
-        // that I am best at; with all four there, it tries to beat the lowest one.
-        const stones = parseJson(v.tile_tokens_json, []).filter(t => t.kind === 'bonus' && t.druid && t.q === here.q && t.r === here.r);
-        const have = new Map(stones.map(t => [ELEM_TO_STAT[t.elem], t]));
-        const STATS4 = ['vitality', 'world', 'matter', 'will'];
-        const st = [...STATS4].sort((a, b) => statOf(me, b) - statOf(me, a) || a.localeCompare(b)).find(x => !have.has(x))
-          || [...have.values()].sort((a, b) => a.value - b.value || String(a.id).localeCompare(String(b.id))).map(t => ELEM_TO_STAT[t.elem])[0] || stat;
-        const elem = (classColours('class_druid')[st] || [])[0] || elemsOfStat(st)[0] || 'elem_vitality';
-        const pb = pointBuy(statOf(me, st), `${r.salt || ''}:druid:${hg.action}`, sha256Hex);
-        if (pb.fail) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class druid: the ${st} point-buy failed [${pb.dice.join(',')}] — no stone, the ability stays ready`); break; }
-        if (have.has(st) && have.get(st).value >= pb.value) { useAbility(r, `all four stones stand; the ${pb.value} does not beat the lowest (${st} ${have.get(st).value})`); break; }
-        classAbilityOut.tokens.push({ by: me, kind: 'bonus', druid: true, elem, value: pb.value, q: here.q, r: here.r });
-        useAbility(r, `a Druid stone of ${st} +${pb.value} rises on my tile`); break;
-      }
-      case 'class_witch': {
-        // User rework 2026-11-14 (tap): the enemy picked within range (default 3), else one of the enemies there
-        // by the reveal salt, puts N random cards of its hand onto its discard pile. Which cards: the victim's
-        // own deterministic pick (pickHandDiscards over its hand ids, same seed) — its hand is private.
-        const foes = foesNearby(me, classRangeOf('class_witch'));
-        const seed = `${r.salt || ''}:witch:${hg.action}:${me}`;
-        const on = foes.includes(peer) ? peer : pickBySalt(`${seed}:who`, foes, sha256Hex);
-        if (!on) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class witch: no enemy within ${classRangeOf('class_witch')} hexes — the card stays untapped`); break; }
-        const n = Number(handDiscardOf('class_witch')?.n) || 3;
-        classAbilityOut.discards.push({ on, by: me, n, seed, why: 'witch' });
-        log(`[${PEER_LABEL}] witch: ${me.slice(0, 14)} makes ${on.slice(0, 14)} discard ${n} (seed ${sha256Hex(seed).slice(0, 8)})`);
-        useAbility(r, `${on.slice(0, 8)} puts ${n} random hand cards onto its discard pile`); break;
-      }
-      case 'class_avenger': {
-        // User rework #2 2026-11-14 (once per turn, clicked): every living wild monster within lure_range (10)
-        // wakes and chases me. No monster in reach → the ability stays ready. The chase bonus is mine to apply.
-        const R = avengerConfig(data.classes.class_avenger?.data).range;
-        const lured = lureTargets([...view.keys()].filter(o => o !== me).map(o => ({ id: o, wild: isWildMonster(view.get(o)), enemy: enemyOf(me, o), alive: lifeOf(o) > 0, d: distBetween(me, o) })), R);
-        if (!lured.length) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class avenger: no wild monster within ${R} hexes — the ability stays ready`); break; }
-        for (const on of lured) classAbilityOut.lures.push({ on, by: me });
-        log(`[${PEER_LABEL}] avenger: ${me.slice(0, 14)} lures ${lured.length} monster(s) within ${R} hexes: ${lured.map(o => o.slice(0, 14)).join(', ')}`);
-        useAbility(r, `${lured.length} monster(s) within ${R} hexes start chasing me`); break;
-      }
       case 'class_animator': { animatorCopy(r, me, tile); break; }
       case 'class_priest': { priestShrine(r, me, tile); break; }
       case 'class_cleric': {
@@ -4297,17 +4494,7 @@ async function doResolution() {
         if (!got.length) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class cleric: no trap within ${clericConfig(data.classes.class_cleric?.data).range} hexes — the ability stays ready`); break; }
         useAbility(r, `${got.length} trap(s) disabled: ${got.join(', ')}`); break;
       }
-      case 'class_alchemist': {
-        const card = libraryCardFor(`${r.salt || ''}:alchemist:${hg.action}`);
-        if (!card) break;
-        classAbilityOut.traps.push({ by: me, q: spot.q, r: spot.r, effect_id: card.effect_id, elements: [...card.elements], card_id: null, library: true, power: TRAP_POWER, trigger: 'enter', mode: 'damage', holder: null });
-        useAbility(r, `a ${card.effect_id} from the Library lies as a trap at (${spot.q},${spot.r})`); break;
-      }
-      case 'class_ranger': {
-        if (!ab.attach?.effect_id || !Array.isArray(ab.attach.elements) || !ab.attach.elements.length) break;
-        classAbilityOut.traps.push({ by: me, q: here.q, r: here.r, effect_id: ab.attach.effect_id, elements: [...ab.attach.elements], card_id: ab.attach.card_id || null, library: false, power: TRAP_POWER, trigger: 'targeted', mode: 'damage', holder: null });
-        useAbility(r, `${ab.attach.name || ab.attach.effect_id} lies as a trap under me`); break;
-      }
+      // (Alchemist, Ranger: classes.mjs ability hook, C1)
       case 'class_seeker': {
         seekerPlant(r, me, ab, here); break;
       }
@@ -4322,13 +4509,7 @@ async function doResolution() {
         classAbilityOut.moves.push({ who, by: me, q: dest.q, r: dest.r });
         useAbility(r, `${who === me ? 'I step' : `${who.slice(0, 8)} steps`} to (${dest.q},${dest.r})`); break;
       }
-      case 'class_necromancer': {
-        const raised = reanimatedAll([...view.values()]);
-        const fallen = [...view.keys()].filter(id => id !== me && lifeOf(id) <= 0 && view.get(id)?.creature_id && !raised.has(id) && distBetween(me, id) <= 1 && sideOf(view.get(id).alliance) === sideOf(v.alliance)).sort()[0] || null;
-        if (fallen) { classAbilityOut.revives.push({ by: me, who: fallen, creature_id: view.get(fallen).creature_id, name: view.get(fallen).name }); useAbility(r, `${view.get(fallen).name || fallen.slice(0, 8)} rises again`); break; }
-        // No corpse in reach: my archived creature (the owner alone knows the archive — judged when applying).
-        classAbilityOut.revives.push({ by: me, who: null }); useAbility(r, 'no fallen ally in reach — an archived creature of mine enters if I have one'); break;
-      }
+      // (Necromancer: classes.mjs ability hook, C1; no corpse in reach → revives {who: null}, the archived creature is judged when applying)
       default: break;
     }
   }
@@ -4339,16 +4520,19 @@ async function doResolution() {
   }
   // Transmuter (static): a nearby ally's completed cast of stat tokens / heals works on the Transmuter too.
   for (const id of [...view.keys()].sort()) {
-    if (lifeOf(id) <= 0 || classOf(id) !== 'class_transmuter') continue;
-    for (const { actor, oc } of effectOutcomes) {
-      if (actor === id || oc.status !== 'done' || enemyOf(id, actor) || distBetween(id, actor) > 1) continue;
-      const dup = oc.statTokens.filter(t => t.on === actor && t.value > 0).map(t => ({ ...t, on: id }));
-      const heals = oc.heals.filter(h => h.on === actor).map(h => ({ ...h, on: id }));
-      if (dup.length || heals.length) { oc.statTokens.push(...dup); oc.heals.push(...heals); if (id === PEER_ID_STRING || actor === PEER_ID_STRING) log(`[${PEER_LABEL}] transmuter ${id.slice(0, 8)} shares ${actor.slice(0, 8)}'s cast (${dup.length} token(s), ${heals.length} heal(s))`); }
-    }
+    const tc = classOf(id);
+    if (lifeOf(id) <= 0 || !CL_TRANSMUTERS.includes(tc)) continue;
+    // C1 transmute: edits by outcome index (the hook never mutates; the copies are pushed here).
+    const tr = classHook('transmute', tc, clCtx, { id, outcomes: effectOutcomes.map(({ actor, oc }) => ({ actor, status: oc.status, statTokens: oc.statTokens, heals: oc.heals })) });
+    for (const e of tr.edits) { const { oc } = effectOutcomes[e.i]; oc.statTokens.push(...e.statTokens); oc.heals.push(...e.heals); }
+    for (const s of tr.log) log(s);
   }
   // Restaurateur (static): a token destroyed by a Restaurateur is taken instead (same tile / into their holding).
-  for (const d of destroyOutcomes) if (d.result === 'destroyed' && !d.phylactery && d.tok && classOf(d.actor) === 'class_restaurateur') { d.result = 'taken'; if (d.actor === PEER_ID_STRING || d.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] restaurateur ${d.actor.slice(0, 8)} takes the ${d.kind} token instead of destroying it`); }
+  for (const d of destroyOutcomes) {
+    const res = classHook('destroy_result', classOf(d.actor), clCtx, { d });   // C1 destroy_result (Restaurateur: destroyed → taken)
+    if (res === d.result) continue;
+    d.result = res; if (d.actor === PEER_ID_STRING || d.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] restaurateur ${d.actor.slice(0, 8)} takes the ${d.kind} token instead of destroying it`);
+  }
   // Prophet (user rework #2 2026-11-14) is a look, not an outcome: requestHand() at its first contact of the turn,
   // on the Prophet's peer after the resolution (doResolution), outside the state hash. Avenger: the lure case above.
   // Priest (user rework 2026-11-14 #2): a Shrine, an active once-per-turn ability (case 'class_priest' above).
@@ -4379,14 +4563,14 @@ async function doResolution() {
     const laid = allTraps.filter(tp => tp.trigger === 'enter' && tp.q === t.q && tp.r === t.r && tp.owner !== who && enemyOf(tp.owner, who) && !trapGone.has(tp.id) && !spentIds.has(`trap:${tp.id}`));
     const wt = before.character_id ? worldTrapAt(t.q, t.r) : null;
     const wtrap = wt && !worldEditsNow.has(wt.id) && !spentIds.has(`trap:${wt.id}`) ? wt : null;
-    const rogue = classStanding(who, 'class_rogue');
-    if (rogue && rogueThreatReady(who)) {
-      const ring = foesInRing(who, t);
-      if (ring.length) { classAbilityOut.stealth.push(who); if (who === PEER_ID_STRING) log(`[${PEER_LABEL}] class rogue: threat charge — unseen inside the threat ring of ${ring.map(o => o.slice(0, 8)).join(', ')} at (${t.q},${t.r}); no monster wakes or chases me this turn`); }
-    }
-    if (!laid.length && !wtrap) continue;
-    if (rogue && rogueTrapLeft(who) > 0) { rogueSpendTrap(who, wtrap ? `the hidden trap in ${wtrap.building || 'the building'}` : `${laid.length} trap(s)`, t.q, t.r); continue; }
-    if (classStanding(who, 'class_cleric') && (wtrap || buildingTileAt(t.q, t.r))) {
+    // C1 step: the mover's standing class (Rogue: threat + trap charges; Cleric: building traps disabled).
+    const sc = CL_STEPPERS.find(c => classStanding(who, c)) || null;
+    const ring = sc ? foesInRing(who, t) : [];
+    const st = classHook('step', sc, clCtx, { threatReady: !!sc && rogueThreatReady(who), ring, trap: laid.length > 0 || !!wtrap, wtrap: !!wtrap, building: !!buildingTileAt(t.q, t.r), trapLeft: sc ? rogueTrapLeft(who) : 0 });
+    if (st.stealth) { classAbilityOut.stealth.push(who); if (who === PEER_ID_STRING) log(`[${PEER_LABEL}] class rogue: threat charge — unseen inside the threat ring of ${ring.map(o => o.slice(0, 8)).join(', ')} at (${t.q},${t.r}); no monster wakes or chases me this turn`); }
+    if (st.trap === 'none') continue;
+    if (st.trap === 'dodge') { rogueSpendTrap(who, wtrap ? `the hidden trap in ${wtrap.building || 'the building'}` : `${laid.length} trap(s)`, t.q, t.r); continue; }
+    if (st.trap === 'disable') {
       for (const tp of [...laid, ...(wtrap ? [{ ...wtrap, owner: 'world' }] : [])]) disableTrap(tp, who, 'passive');
       continue;
     }
@@ -4407,10 +4591,12 @@ async function doResolution() {
       if (dungeonExplored(ed, hg.turn) || spentIds.has(`trap:${dg.id}`)) continue;
       const tp = dungeonTrap(dg, Number.isInteger(ed?.explored) ? ed.explored : 'first');
       // Rogue trap charge: the dungeon's trap stays shut (the dungeon stays unexplored; the next hero there still springs it).
-      if (tp && classStanding(id, 'class_rogue') && rogueTrapLeft(id) > 0) { rogueSpendTrap(id, `the ${dg.source || 'dungeon'}'s trap`, dg.q, dg.r); continue; }
+      const dc = CL_STEPPERS.find(c => classStanding(id, c)) || null;   // C1 dungeon_step (Rogue dodge / Cleric disable)
+      const how = classHook('dungeon_step', dc, clCtx, { trap: !!tp, trapLeft: dc ? rogueTrapLeft(id) : 0 });
+      if (how === 'dodge') { rogueSpendTrap(id, `the ${dg.source || 'dungeon'}'s trap`, dg.q, dg.r); continue; }
       done.add(dg.id);
       // Cleric passive: the dungeon is explored without the trap springing — its card joins the Cleric's discard pile.
-      if (tp && classStanding(id, 'class_cleric')) { disableTrap({ ...tp, owner: 'world' }, id, 'passive'); continue; }
+      if (how === 'disable') { disableTrap({ ...tp, owner: 'world' }, id, 'passive'); continue; }
       if (tp) springTrap({ ...tp, owner: 'world' }, id);
     }
   }
@@ -4468,7 +4654,7 @@ async function doResolution() {
       const defId = hit.victim;
       const defV = view.get(defId);
       if (!defV) continue;
-      let shield = hasPerm(defId, 'skill_force_shield') ? (permPowerOf(defId).skill_force_shield || 0) : 0;
+      let shield = skillHook('effect_in', 'skill_force_shield', skCtx, { defender: defId });   // S1 effect_in
       let spent = 0;
       const legs = hit.legs.map(l => ({ ...l }));
       let dmg = 0;
@@ -4482,7 +4668,7 @@ async function doResolution() {
       for (const leg of legs) {
         if (leg.kind === 'token' && movedOff) { leg.dealt = 0; continue; }
         let sum = leg.sum;
-        if (shield && roundHalfUp10(sum) > 0) { spent = shield; sum = Math.max(0, sum - shield); shield = 0; }
+        if (shield) { const fs = skillHook('effect_leg', 'skill_force_shield', skCtx, { shield, sum }); if (fs.spent) spent = fs.spent; shield = fs.shield; sum = fs.sum; }   // S1 effect_leg
         let d = roundHalfUp10(sum);
         if (d > 0 && zoned) d = 0;
         if (d > 0 && absorbedByShieldToken(defId)) d = 0;
@@ -4491,6 +4677,7 @@ async function doResolution() {
       }
       const effName = data.effects[eff.effect_id]?.name || eff.effect_id;
       if (dmg > 0 && natBlocked(actor, defId)) dmg = 0;
+      if (dmg > 0) dmg = skillHook('defend_in', 'skill_sanctuary', skCtx, { code: 'effect', defender: defId, dmg, byActor });   // SKR-06 Sanctuary: no effect damage either
       if (dmg > 0) addDmg(defId, actor, dmg, 'effect', effName);
       if (dmg > 0 && hit.selfDamageEqual) addDmg(actor, actor, dmg, 'effect', `${effName} (it hurts its caster too)`);
       if (dmg > 0 && hit.healDealt) oc.heals.push({ on: actor, amount: dmg });
@@ -4608,17 +4795,18 @@ async function doResolution() {
     };
     const sideId = (id) => { const v = view.get(id); return v ? sideOf(v.alliance) : null; };
     const distId = (a, b) => { const pa = view.get(a), pb = view.get(b); return pa && pb ? hexDistance({ tile_q: pa.tile_q, tile_r: pa.tile_r }, { tile_q: pb.tile_q, tile_r: pb.tile_r }) : Infinity; };
-    const emitsFor = (id) => (c) => c === 'P' || c === 'EP' || (c === 'A' && permsCsv(id).includes('class_reaver')) || ((c === 'M' || c === 'EM') && permsCsv(id).includes('class_monk'));
+    const CL_EMITTERS = clWith('emits');   // C1 emits site manip: Reaver A, Monk M / EM (held permanents)
+    const emitsFor = (id) => (c) => c === 'P' || c === 'EP' || CL_EMITTERS.some(k => permsCsv(id).includes(k) && classHook('emits', k, CL_BASE, { code: c, site: 'manip' }));
     const proxied = new Set(revealsThisTurn.map(r => r.proxy?.for).filter(Boolean));
     const manips = revealsThisTurn.filter(r => manipReady(r.actor) && lifeOf(r.actor) > 0).map(r => r.actor).sort();
     if (manips.length && revealsThisTurn.some(r => r.manipAlt)) {
       for (const m of manips) {
         const probe = runRound(structuredClone(revealsThisTurn), true);
-        if (!combatHit(probe.damage.get(m))) continue;
+        if (!classHook('combat_in', 'class_manipulator', CL_BASE, { list: probe.damage.get(m) })) continue;   // C1 combat_in
         const cands = revealsThisTurn.filter(r => r.manipAlt && r.actor !== m && !r.manipulated && !r.proxy && !proxied.has(r.actor)
           && sideId(r.actor) !== null && sideId(m) !== null && sideId(r.actor) !== sideId(m) && distId(m, r.actor) <= mcfg.range).map(r => r.actor);
         const mSalt = revealsThisTurn.find(r => r.actor === m)?.salt || '';
-        const on = pickManipTarget(`${mSalt}:manipulator:${hg.turn}.${hg.round}`, cands, sha256Hex);
+        const on = classHook('pick_target', 'class_manipulator', CL_BASE, { seed: `${mSalt}:manipulator:${hg.turn}.${hg.round}`, cands });   // C1 pick_target
         if (!on) continue;
         let sw = null;
         for (const list of [revealsThisTurn, pristineReveals]) { const r = list.find(x => x.actor === on); if (r) { const s = applyManipSwap(r, r.manipAlt, emitsFor(on)); if (list === revealsThisTurn) sw = s; } }
@@ -4629,6 +4817,15 @@ async function doResolution() {
   }
   const real = runRound(revealsThisTurn, false);
   const viewReal = viewSnap(), bonusDmgReal = bonusDmgToMe;
+  // SKR-07 Disruption Move: my emission was voided (I played an Empty Move) — nothing went out; my cast is interrupted
+  // (Rule 19, as when the Manipulator swaps a cast away below).
+  {
+    const mine = revealsThisTurn.find(r => r.actor === PEER_ID_STRING);
+    if (myLastReveal?.effectCardId && mine?.noEmit && !mine.effect) {
+      console.log(`[${PEER_LABEL}] disrupted: my ${myLastReveal.effectId} emitted nothing — the cast is interrupted`);
+      myLastReveal.effectId = null; myLastReveal.effectCardId = null; myLastReveal.effectCardId2 = null; myLastReveal.chain = null;
+    }
+  }
   // Manipulator bookkeeping on the two peers concerned: mine is spent for the turn; a swapped action of mine
   // goes back to my hand (with its riding skills) and the alt card is the one played.
   for (const ms of manipSwaps) {
@@ -4645,6 +4842,7 @@ async function doResolution() {
     }
   }
   const { damage, nextTiles, journeyResults, vetoed, brokenShield, permanentsToAdd, lifestealForMe, byActor, codeVs, effectOutcomes, tokensSpent, counterPen, roundZones, destroyOutcomes, disableTriggers, bonusRuns, wardFired, trapsSpent, afflictionsOut, obstacleHits, channelsBroken, relocations, blessFired, classOutcomes, classAbilityOut } = real;
+  resolvedAction = hg.action;   // from here my entity shows this action — every snapshot I publish says so (resolverBase)
   // Combo damage emission (user ruling 2026-11-05): for every actor whose
   // pre-reveal snapshot shows an active combo on its FINAL slot AND whose
   // revealed action matches the required slot code (M-slot accepts M/EM/EP/P),
@@ -4743,24 +4941,23 @@ async function doResolution() {
   for (const co of classOutcomes) {
     if (co.owner !== PEER_ID_STRING || !co.ok) continue;
     const cols = Object.keys(classColours(entity.classId));
-    if (co.kind === 'colour') { if (!entity.classDown.includes(co.stat)) entity.classDown.push(co.stat); console.log(`[${PEER_LABEL}] my class ${entity.className} lost its ${co.stat} colour to ${co.actor.slice(0, 8)} (${entity.classDown.length}/${cols.length} down)`); }
-    if (co.kind === 'class_destroyed') {
-      entity.classDown = [...cols]; entity.permanents.delete(entity.classId); delete entity.permPower[entity.classId];
-      entity.classArchived = true; entity.classTapped = false; entity.classProgress = null;
+    // C1 progress: the class card's next state + what happened (colour | destroyed | recast | untap | step).
+    const pr = classHook('progress', entity.classId, CL_BASE, { state: { down: entity.classDown, archived: entity.classArchived, tapped: entity.classTapped, progress: entity.classProgress }, cols, co });
+    if (!pr.event) continue;
+    entity.classDown = pr.state.down; entity.classArchived = pr.state.archived; entity.classTapped = pr.state.tapped; entity.classProgress = pr.state.progress;
+    if (pr.event === 'colour') console.log(`[${PEER_LABEL}] my class ${entity.className} lost its ${co.stat} colour to ${co.actor.slice(0, 8)} (${entity.classDown.length}/${cols.length} down)`);
+    if (pr.event === 'destroyed') {
+      entity.permanents.delete(entity.classId); delete entity.permPower[entity.classId];
       if (!archive.some(c => c.kind === 'class')) archive.push(classCard());
       console.log(`[${PEER_LABEL}] my class ${entity.className} is destroyed by ${co.actor.slice(0, 8)} — the card goes to my archive; emit every colour (any successful roll) to recast it`);
     }
-    if (co.kind === 'recast' || co.kind === 'untap') {
-      if (!entity.classProgress || entity.classProgress.mode !== co.kind) entity.classProgress = { mode: co.kind, done: [] };
-      if (!entity.classProgress.done.includes(co.stat)) entity.classProgress.done.push(co.stat);
-      const complete = cols.every(s => entity.classProgress.done.includes(s));
-      if (complete && co.kind === 'recast') {
-        entity.classArchived = false; entity.classDown = []; entity.permanents.add(entity.classId); entity.classProgress = null;
-        for (let i = archive.length - 1; i >= 0; i--) if (archive[i].kind === 'class') archive.splice(i, 1);
-        console.log(`[${PEER_LABEL}] my class ${entity.className} is back on the board (every colour recast)`);
-      } else if (complete) { entity.classTapped = false; entity.classProgress = null; console.log(`[${PEER_LABEL}] my class ${entity.className} is untapped — the ability is ready again`); }
-      else console.log(`[${PEER_LABEL}] class ${co.kind}: ${entity.classProgress.done.length}/${cols.length} colours (${co.stat} done)`);
+    if (pr.event === 'recast') {
+      entity.permanents.add(entity.classId);
+      for (let i = archive.length - 1; i >= 0; i--) if (archive[i].kind === 'class') archive.splice(i, 1);
+      console.log(`[${PEER_LABEL}] my class ${entity.className} is back on the board (every colour recast)`);
     }
+    if (pr.event === 'untap') console.log(`[${PEER_LABEL}] my class ${entity.className} is untapped — the ability is ready again`);
+    if (pr.event === 'step') console.log(`[${PEER_LABEL}] class ${co.kind}: ${entity.classProgress.done.length}/${cols.length} colours (${co.stat} done)`);
   }
   // Class abilities that fired this turn (user rulings 2026-10-30, R1–R3) — each peer applies what is theirs.
   for (const u of classAbilityOut.used) {
@@ -4785,7 +4982,7 @@ async function doResolution() {
       ...classAbilityOut.lures.filter(l => l.by === PEER_ID_STRING).map(l => l.on),
       ...[...view.keys()].filter(o => o !== PEER_ID_STRING && isWildMonster(view.get(o)) && (view.get(o)?.life ?? 0) > 0 && view.get(o)?.chase_target === PEER_ID_STRING),
     ])];
-    const st = chaseBonusStep({ chasers: entity.chasers, bonus: entity.chaseBonus }, chasing, avengerConfig(data.classes.class_avenger?.data));
+    const st = classHook('chase_step', 'class_avenger', CL_BASE, { state: { chasers: entity.chasers, bonus: entity.chaseBonus }, chasing });   // C1 chase_step
     if (st.fresh.length) console.log(`[${PEER_LABEL}] avenger: ${st.fresh.length} new monster(s) chasing me (${st.fresh.map(o => o.slice(0, 14)).join(', ')}) — ${st.chasers.length} in all`);
     if (st.grant > 0) { entity.chaseBonus = st.bonus; entity.lifeMax += st.grant; entity.life += st.grant; console.log(`[${PEER_LABEL}] avenger: +${st.grant} temporary life max (chase bonus ${st.bonus}) — life ${entity.life}/${entity.lifeMax}`); broadcastUI(handMsg({ notice: `Avenger: a new monster chases you — +1 temporary life (${entity.life}/${entity.lifeMax})` })); }
     if (st.fade) { entity.chaseBonus = 0; console.log(`[${PEER_LABEL}] avenger: no monster chases me any more — the chase bonus fades`); }
@@ -4800,7 +4997,7 @@ async function doResolution() {
     const foes = !me ? [] : [...view.keys()].filter(o => o !== PEER_ID_STRING).map(o => ({ o, v: view.get(o), t: at(o) }))
       .filter(x => x.v && x.t && (x.v.life ?? 0) > 0 && sideOf(x.v.alliance) !== MY_SIDE && !snapInvisible(x.v) && hexDistance(me, x.t) <= C)
       .map(x => ({ id: x.o, fought: mine?.target?.ref === x.o || revealsThisTurn.some(r => r.actor === x.o && r.target?.ref === PEER_ID_STRING) }));
-    const foe = prophetPick(foes);
+    const foe = classHook('contact', 'class_prophet', CL_BASE, { foes });   // C1 contact (prophetPick)
     if (foe) {
       entity.classUsedTurn = hg.turn;
       const nm = view.get(foe)?.name || foe.slice(0, 12);
@@ -5037,14 +5234,15 @@ async function doResolution() {
     const onMe = fx.filter(f => f.on === PEER_ID_STRING);
     myLastReveal.actionNegated = onMe.some(f => f.negated);
     for (const id of myLastReveal.skillIds || []) {
-      if (data.skills[id]?.data?.is_permanent) continue;
+      if (myLastReveal.skStripped?.includes(id)) { returned.push(`${id} (a peer lacks it)`); myLastReveal.returnedCardIds.push(myLastReveal.skillCardIds[myLastReveal.skillIds.indexOf(id)]); continue; }   // S4: stripped, never executed → back to my hand
+      const disp = skillHook('disposition', id, { skillData: (s) => data.skills[s]?.data }, { fx, self: PEER_ID_STRING });   // S1 disposition
+      if (disp === 'permanent') continue;
       const cid = myLastReveal.skillCardIds[myLastReveal.skillIds.indexOf(id)];
       // Riding on an action that was negated: it never executed — back to my hand with the action card.
-      if (onMe.some(f => (f.ridden || []).includes(id))) { returned.push(`${id} (its action was negated)`); myLastReveal.returnedCardIds.push(cid); continue; }
-      // Countered: discarded.
-      if (onMe.some(f => (f.countered || []).includes(id))) continue;
-      // The negating instants: discarded when they did their job, back to hand when they found nothing to do.
-      if (NEGATING_SKILLS.has(id)) { if (!fx.some(f => f.by === PEER_ID_STRING && f.skill === id && !f.building)) { returned.push(id); myLastReveal.returnedCardIds.push(cid); } continue; }
+      if (disp === 'negated') { returned.push(`${id} (its action was negated)`); myLastReveal.returnedCardIds.push(cid); continue; }
+      // Countered: discarded. A negating instant that did its job: discarded; found nothing to do: back to hand.
+      if (disp === 'countered' || disp === 'spent') continue;
+      if (disp === 'unused') { returned.push(id); myLastReveal.returnedCardIds.push(cid); continue; }
       const without = roundWithout(mine => stripSkill(mine, id));
       if (!without) break;
       if (!paysOff(without)) { returned.push(id); myLastReveal.returnedCardIds.push(myLastReveal.skillCardIds[myLastReveal.skillIds.indexOf(id)]); }
@@ -5076,6 +5274,18 @@ async function doResolution() {
       }
     }
     myLastReveal.returnedCardIds = myLastReveal.returnedCardIds.filter(Boolean);
+    // SKR-08 plan_lock (Powerful Attack, ruling 2026-11-16): a skill that paid off (not back in my hand, not countered /
+    // negated) may limit what I play for the rest of the round — applied in doPlanningEnd.
+    for (const id of myLastReveal.skillIds || []) {
+      const cid = myLastReveal.skillCardIds[myLastReveal.skillIds.indexOf(id)];
+      if (myLastReveal.skStripped?.includes(id) || myLastReveal.returnedCardIds.includes(cid)) continue;
+      const disp = skillHook('disposition', id, { skillData: (s) => data.skills[s]?.data }, { fx, self: PEER_ID_STRING });
+      const only = skillHook('plan_lock', id, { skillData: (s) => data.skills[s]?.data }, { paid: disp === 'judge' || disp === 'spent' });
+      if (!only) continue;
+      entity.planOnly = { codes: only, turn: hg.turn, by: id };
+      console.log(`[${PEER_LABEL}] ${id}: only ${only.join('/')} until the end of turn ${hg.turn}`);
+      broadcastUI(handMsg({ notice: `${data.skills[id]?.name || id}: you can only Attack until the end of the round` }));
+    }
     if (returned.length) console.log(`[${PEER_LABEL}] instants without benefit return to hand: ${returned.join(', ')}`);
     // Tell the UI what my instants did (it burns the spent cards) and what was done to me.
     const nm = (id) => id === PEER_ID_STRING ? 'you' : (view.get(id)?.name || id.slice(5, 13));
@@ -5088,7 +5298,9 @@ async function doResolution() {
       if (f.by !== PEER_ID_STRING && f.on !== PEER_ID_STRING) continue;
       const who = f.building ? `the building's ${skName(f.skill)}` : f.by === PEER_ID_STRING ? `your ${skName(f.skill)}` : `${poss(f.by)} ${skName(f.skill)}`;
       const extra = (f.ridden || []).length ? ` (and ${f.ridden.map(skName).join(', ')} riding on it)` : '';
-      const line = f.skill === 'skill_dodge' ? `✦ ${who}: one less combat damage to ${nm(f.by)}`
+      const line = f.what === 'damage' ? `✦ ${who}: one less combat damage to ${nm(f.by)}`   // any Dodge-like damage_in skill (foreign Quick Dodge too)
+        : f.what === 'swap' ? `✦ ${who}: swapped places with ${nm(f.on)}`   // SKR-09 (Overrun)
+        : (!f.negated && f.what === 'EP') ? `✦ ${who} turned ${f.on === PEER_ID_STRING ? 'your' : poss(f.on)} Empty Posture into an Empty Move — no element goes out`
         : f.negated ? `✦ ${who} negated ${f.on === PEER_ID_STRING ? 'your' : poss(f.on)} ${actName(f.what)}${extra} — ${f.on === PEER_ID_STRING ? 'the card returns to your hand' : 'their card returns to their hand'}`
         : `✦ ${who} countered ${f.on === PEER_ID_STRING ? 'your' : poss(f.on)} ${(f.countered || []).map(skName).join(', ') || 'cast'}${(f.countered || []).length ? ' — discarded' : ''}`;
       notices.push(line);
@@ -5174,18 +5386,18 @@ async function doResolution() {
   if (myDmg > 0 && IS_PHANTOM && entity.life > 0) { console.log(`[${PEER_LABEL}] phantom: struck for ${myDmg} — the mirror shatters`); entity.life = 0; }
   // Shield life points are the first life lost — the illusion, then the armor. They sit on top of life and
   // maximum, so the recalculation below drops the maximum back and refunds the life it would take twice.
-  let shieldHit = 0;
-  if (myDmg > 0 && entity.illusion) { entity.illusion = 0; shieldHit++; console.log(`[${PEER_LABEL}] the illusion takes the first point of damage`); }
-  if (myDmg > shieldHit && entity.armor) { entity.armor = 0; shieldHit++; console.log(`[${PEER_LABEL}] the armor point is gone`); }
-  if (myDmg > shieldHit && entity.chaseBonus) { entity.chaseBonus = 0; shieldHit++; console.log(`[${PEER_LABEL}] avenger: the chase bonus point is lost (a new chasing monster grants it again)`); }
+  // C1 life_points: illusion → armor → chase bonus, one point each.
+  const lp = classHook('life_points', entity.classId, CL_BASE, { dmg: myDmg, illusion: entity.illusion, armor: entity.armor, chaseBonus: entity.chaseBonus });
+  let shieldHit = lp.absorbed;
+  if (entity.illusion && !lp.illusion) { entity.illusion = lp.illusion; console.log(`[${PEER_LABEL}] the illusion takes the first point of damage`); }
+  if (entity.armor && !lp.armor) { entity.armor = lp.armor; console.log(`[${PEER_LABEL}] the armor point is gone`); }
+  if (entity.chaseBonus && !lp.chaseBonus) { entity.chaseBonus = lp.chaseBonus; console.log(`[${PEER_LABEL}] avenger: the chase bonus point is lost (a new chasing monster grants it again)`); }
   // The illusion fades after the turn's 3rd action (or if it is somehow left over from an earlier turn).
   if (entity.illusion && (hg.round === ROUNDS_PER_TURN - 1 || entity.illusionTurn !== hg.turn)) { entity.illusion = 0; console.log(`[${PEER_LABEL}] the illusion fades`); }
   // Noble lifesteal: the per-attacker amount I dealt this resolve, now applied
   // as healing after my own damage lands (so a lethal attack that finishes an
   // enemy also carries the heal). Cap at my life maximum.
-  if (lifestealForMe.amount > 0 && entity.life > 0 && entity.permanents.has('class_noble')) {
-    entity.life = Math.min(entity.lifeMax, entity.life + lifestealForMe.amount);
-  }
+  for (const c of clWith('lifesteal_apply')) entity.life = classHook('lifesteal_apply', c, CL_BASE, { amount: lifestealForMe.amount, life: entity.life, lifeMax: entity.lifeMax, held: entity.permanents.has(c) });   // C1 lifesteal_apply
   // Effect heals (Drain, Turn Life) land the same way: after my damage, capped, never on a corpse.
   // Resting on a healing building (user ruling 2026-11-12): an Empty Posture with
   // no skill, effect or bonus round, unhurt this action, heals once per turn.
@@ -5272,21 +5484,18 @@ async function doResolution() {
   // Sanctuary lasts while I rest: declaring anything but the plain Empty
   // Posture — another action, a trance, or a skill riding on the EP — ends it
   // from the next round (damage this round was already judged on the EP).
-  const leftSanctuary = myR && ((myR.declared ?? myR.action) !== 'EP' || (myR.skills || []).filter(id => id !== myR.buildingSkill).length > 0 || !!myR.effect);
+  const leftSanctuary = skillHook('end_round', 'skill_sanctuary', null, { reveal: myR });   // S1 end_round
   if (leftSanctuary) entity.permanents.delete('skill_sanctuary');
   if (brokenShield) { entity.permanents.delete('skill_force_shield'); delete entity.permPower.skill_force_shield; console.log(`[${PEER_LABEL}] force shield spent`); }
   const playedCodes = myR?.trance ? new Set([...myR.played].map(i => myR.trance[i])) : null;
-  for (const id of myLastReveal?.skillIds || []) {
-    const sd = data.skills[id]?.data;
-    if (sd?.is_permanent && (!playedCodes || playedCodes.has(sd.action_type))) {
+  for (const { id, stat: st, power /* SKR-10 fixed power */ } of skillHook('perm_landing', null, { skillData: (s) => data.skills[s]?.data }, { skillIds: (myLastReveal?.skillIds || []).filter(id => !myLastReveal.skStripped?.includes(id)) /* S4 */, playedCodes, stats: entity.stats })) {   // S1 perm_landing
+    {
       entity.permanents.add(id);
       // Rule 12: a permanent is placed with a point-buy of its stat; the highest
       // die is its power (what Rule 24 must beat; what Force Shield spends).
-      const st = sd.point_buy_stat === 'any'
-        ? ['vitality', 'world', 'matter', 'will'].sort((a, b) => entity.stats[b] - entity.stats[a])[0]
-        : (sd.point_buy_stat || 'stat_vitality').replace(/^stat_/, '');
-      entity.permPower[id] = pointBuyPermanent(entity.stats[st] ?? 0, `${myLastReveal.salt}:perm:${id}:${hg.action}`, sha256Hex);
-      console.log(`[${PEER_LABEL}] permanent ${id} up: die ${entity.permPower[id]} (${st} ${entity.stats[st]})`);
+      // SKR-13 Force Shield "always power 6" (ruling 2026-11-16): a fixed landing power, no roll.
+      entity.permPower[id] = Number.isInteger(power) ? power : pointBuyPermanent(entity.stats[st] ?? 0, `${myLastReveal.salt}:perm:${id}:${hg.action}`, sha256Hex);
+      console.log(`[${PEER_LABEL}] permanent ${id} up: die ${entity.permPower[id]} (${Number.isInteger(power) ? 'fixed power' : `${st} ${entity.stats[st]}`})`);
     }
   }
   // Publish immediately so the browser UI sees damage / movement at reveal
@@ -5304,11 +5513,11 @@ async function doResolution() {
     .filter(Boolean)
     .map(p => {
       const t = nextTiles.get(p.peer_id) || { q: p.tile_q, r: p.tile_r };
-      return { id: p.peer_id, tile: [t.q, t.r], life: Math.max(0, (p.life ?? 0) - sumDmg(damage.get(p.peer_id))), ...(fxRes?.tags.get(p.peer_id) ? { fx: fxRes.tags.get(p.peer_id) } : {}) };   // E4: foreign casts only
+      return { id: p.peer_id, tile: [t.q, t.r], life: Math.max(0, (p.life ?? 0) - sumDmg(damage.get(p.peer_id))), ...(fxRes?.tags.get(p.peer_id) ? { fx: fxRes.tags.get(p.peer_id) } : {}), ...(skRes?.tags.get(p.peer_id) ? { sk: skRes.tags.get(p.peer_id) } : {}) };   /* S4: foreign skills only */   // E4: foreign casts only
     })
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
-  if (!fxRes?.abstain) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
+  if (!fxRes?.abstain && !skRes?.abstain /* S4 */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
   if (lastStateHashes.size > 8) lastStateHashes.delete(Math.min(...lastStateHashes.keys()));
   // Per-actor action summary so the UI can float an action icon (⚔️ / 🛡 / 🤺
   // / 👁 / ➙) for every revealer this round, mirroring the damage-float path.
@@ -5345,7 +5554,7 @@ async function doResolution() {
     // the same permanents it does: mine from the entity, others' from the view.)
     const perms = actorId === PEER_ID_STRING ? [...entity.permanents] : String(view.get(actorId)?.permanents_csv || '').split(',');
     const cls = perms.find(p => p.startsWith('class_') && CLASSES_IMPLEMENTED.has(p)) || null;
-    const anyEmit = (trance ? trance : [act]).some(c => (c === 'A' && cls === 'class_reaver') || (c === 'M' && cls === 'class_monk'));
+    const anyEmit = (trance ? trance : [act]).some(c => classHook('emits', cls, CL_BASE, { code: c, site: 'badge' }));   // C1 emits site badge (Reaver A, Monk M)
     if (!anyEmit) return null;
     const a = view.get(actorId);
     const srcId = a?.source_id || a?.character_id || a?.creature_id;
@@ -5397,7 +5606,7 @@ async function doResolution() {
     });
   }
   await emitEnvelope({ type: 'evt_state_hash', payload: {
-    state_hash: fxRes?.abstain ? '' : stateHash,
+    state_hash: fxRes?.abstain || skRes?.abstain ? '' : stateHash,   // S4: abstain also = a foreign skill I could not load
     region: regionState,
     damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: d.source || 'action', bonus: !!d.bonus }))),
     bonus_rounds: bonusRuns.length,
@@ -5588,10 +5797,12 @@ async function endTurn() {
   // movedThisRound is set true by the resolver whenever my own tile changed;
   // reset after the check so the next turn's bookkeeping is clean. Dead
   // characters do not regen.
-  if (entity.classFlags && entity.permanents.has('class_guardian') && !entity.classFlags.movedThisRound && entity.life > 0) {
+  // C1 end_turn: +1 life for a held Guardian that never moved this turn.
+  for (const gc of Object.keys(CLASS_RULES).filter(id => (CLASS_RULES[id].hooks || []).includes('end_turn'))) if (entity.classFlags) {
     // Once per TURN, at its end (user ruling 2026-11-12, classes.json 1.1.0) — never at an action's end.
-    if (entity.life < entity.lifeMax) {
-      entity.life += 1;
+    const heal = classHook('end_turn', gc, CL_BASE, { held: entity.permanents.has(gc), moved: !!entity.classFlags.movedThisRound, life: entity.life, lifeMax: entity.lifeMax });
+    if (heal > 0) {
+      entity.life += heal;
       console.log(`[${PEER_LABEL}] guardian: stayed on my tile all turn — +1 life (${entity.life}/${entity.lifeMax})`);
       broadcastUI(handMsg({ notice: `🛡 Guardian: you stayed on your tile the whole turn — +1 life (${entity.life}/${entity.lifeMax})` }));
     }
@@ -5628,11 +5839,7 @@ async function endTurn() {
 const _ELEM_TO_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
 function _npcPermStats(permId) {
   if (!permId) return [];
-  if (permId.startsWith('skill_')) {
-    const pb = data.skills[permId]?.data?.point_buy_stat || '';
-    if (pb === 'any') return ['vitality', 'world', 'matter', 'will'];
-    return pb ? [pb.replace(/^stat_/, '')] : ['vitality'];
-  }
+  if (permId.startsWith('skill_')) return skillHook('perm_stats', permId, { skillData: (s) => data.skills[s]?.data });   // S1 perm_stats
   const out = new Set();
   for (const el of data.effects[permId]?.data?.element_cost || []) if (_ELEM_TO_STAT[el]) out.add(_ELEM_TO_STAT[el]);
   return [...out];
@@ -5723,8 +5930,22 @@ async function npcPlan() {
     && !(snapInvisible(p) && !entity.permanents.has('effect_invisibility'))   // Invisibility: monsters / companions neither see nor chase it
     && !(p.stealth_turn === hg.turn && hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) > 1));
   // Summoned / bound: follow the owner — close the gap first, fight only what is in reach.
-  const ownerSnap = ownerPeerId ? peersPublic.get(ownerPeerId) : null;
-  const owner = ownerHint && Date.now() - ownerHint.at < 10_000 ? { ...(ownerSnap || {}), ...ownerHint } : ownerSnap;
+  // Unattended (rule_unattended_character, follow 'summon'): my master is my owner here — "they will gather next to
+  // you even if they are far away" — by walking (the Empty Move / Move below), never a teleport.
+  const ownerSnap = SHADOW_OF ? (ledBy && liveSnap(peersPublic.get(ledBy), Date.now()) ? peersPublic.get(ledBy) : null) : ownerPeerId ? peersPublic.get(ownerPeerId) : null;
+  const owner = !SHADOW_OF && ownerHint && Date.now() - ownerHint.at < 10_000 ? { ...(ownerSnap || {}), ...ownerHint } : ownerSnap;
+  // Unattended with no master: hold my ground — fight what is in contact, cast at what is in reach, never roam.
+  if (SHADOW_OF && !(owner && Number.isInteger(owner.tile_q))) {
+    const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+    const near = enemies.filter(p => hexDistance(here, p) <= 1);
+    if (!near.length) {
+      const nearestE = [...enemies].sort((a, b) => hexDistance(here, a) - hexDistance(here, b))[0] || null;
+      if (NPC_CASTS && npcCast(enemies, nearestE)) return;
+      const pi = hand.findIndex(c => c.code === 'P' || c.code === 'B');
+      queued = pi >= 0 ? [pi] : ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null;
+      return;
+    }
+  }
   if (owner && Number.isInteger(owner.tile_q) && (owner.life ?? 1) > 0) {
     const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
     const dOwner = hexDistance(here, owner);
@@ -5814,6 +6035,7 @@ function checkStateHash(env) {
     if (!t) continue;
     if (t.tile[0] !== e.tile[0] || t.tile[1] !== e.tile[1] || t.life !== e.life) diffs.push(`${e.id}: ours (${e.tile}) hp${e.life} vs theirs (${t.tile}) hp${t.life}`);
     else if ((t.fx || e.fx) && t.fx !== e.fx) diffs.push(`${e.id}: foreign effect ours ${e.fx || 'none'} vs theirs ${t.fx || 'none'}`);   // E4
+    else if ((t.sk || e.sk) && t.sk !== e.sk) diffs.push(`${e.id}: foreign skill ours ${e.sk || 'none'} vs theirs ${t.sk || 'none'}`);   // S4
   }
   if (!diffs.length) return;
   divergenceCount++;
@@ -5830,7 +6052,8 @@ function inboxApply(env) {
   if (env.type === 'evt_action_commit') noteSeen(commitsSeen, env);
   if (env.type === 'evt_action_reveal') { noteSeen(revealsSeen, env); noteLateReveal(env); }
   if (env.payload?.fx_ref || env.payload?.effects?.[0]?.ref) fxPeer.onEnvelope(env);   // E4: start loading a foreign effect the moment it is committed
-  if (env.type === 'evt_card_gift') receiveCardGift(env.payload);
+  if (env.payload?.sk_ref) skPeer.onEnvelope(env);   // S4: start loading a foreign skill the moment it is committed
+  if (env.type === 'evt_card_gift') receiveCardGift(env.payload, env.actor_peer_id);   // FXG: the sender = first fetch source of a foreign card
   if (env.type === 'evt_team_gate') receiveTeamGate(env);
   // Vision (hand): the enemy I looked at shows me their cards — a popup for my UI only.
   if (env.type === 'evt_peek' && env.payload?.for_peer === PEER_ID_STRING && Array.isArray(env.payload.cards)) {
@@ -5906,7 +6129,7 @@ async function publishPeek(to, { what = 'hand', n = null, why = null, req_id = n
 // The card goes to the killer's archive — the peer that dealt me the most damage this action (ties → the
 // lexically smallest id; the world, traps and myself don't count). Local bookkeeping only: the resolver never
 // sees it, and the gift travels as evt_card_gift on the bus (deduped by gift id).
-const cardRefName = (x) => (x?.kind === 'skill' ? data.skills[x.id]?.name : data.effects[x?.id]?.name) || x?.id || 'a card';
+const cardRefName = (x) => (x?.kind === 'skill' ? data.skills[x.id]?.name : data.effects[x?.id]?.name) || x?.ref?.name /* FXG */ || x?.id || 'a card';
 function dropDeathCard(myDamage) {
   const by = new Map();
   for (const d of myDamage || []) {
@@ -5915,6 +6138,23 @@ function dropDeathCard(myDamage) {
   }
   const killer = [...by].sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))[0]?.[0] || null;
   const killerName = killer ? (peersPublic.get(killer)?.name || killer) : null;
+  // A hero shadow (rule_hero_shadow) holds no real deck: its killer gets the hero's PUBLISHED death card
+  // (SHADOW_DEATH_CARD), and the death is published (shadow_death_json → snapshots, Doors) so the player's own
+  // device removes that card from the profile character (game/shadow-settle.mjs, once per gift id).
+  if (SHADOW_OF) {
+    const sc = deathCardRef();
+    const gid = `${SHADOW_OF}:shadow:${PEER_ID_STRING}:${hg.turn}:${hg.action}`;
+    shadowDeath = { killer: killer || '', killer_name: killerName || '', card: sc, gift_id: gid, at: new Date().toISOString(), dim: DIM_NAME };
+    console.log(`[${PEER_LABEL}] shadow: the shadow of ${SHADOW_OF} falls${killer ? ` — killer ${killerName} (${killer})` : ' — no killer'}; death card ${sc ? `${sc.kind} ${sc.id}` : 'none'}${sc && killer ? ' goes to the killer' : ''} (the player's profile loses it when its device next sees this)`);
+    if (sc && killer) {
+      const gift = { gift_id: gid, for_peer: killer, card: sc, from_name: `${entity.name} (shadow)`, ...(sc.ref ? { from_peer: SHADOW_OF } : {}) };   // FXG: the hero (not its shadow) holds a foreign def
+      const send = () => emitEnvelope({ type: 'evt_card_gift', payload: gift, viaBus: true }).catch(e => console.warn(`[${PEER_LABEL}] card gift failed: ${e.message}`));
+      setTimeout(send, 0); setTimeout(send, 4000);
+    }
+    publishPublicState().catch(() => {});
+    setTimeout(() => publishDoor().catch(() => {}), 2000);   // the death reaches Radicle now, not in 10 min
+    return;
+  }
   let card = null;
   if (profileChar) card = dropRandomDeckCard(PROFILE_FILE, PROFILE_CHAR_ID);
   else {
@@ -5922,7 +6162,7 @@ function dropDeathCard(myDamage) {
     if (pool.length) {
       const [pile, c] = pool[Math.floor(Math.random() * pool.length)];
       pile.splice(pile.indexOf(c), 1);
-      card = c.kind === 'skill' ? { kind: 'skill', id: c.skill_id } : { kind: 'effect', id: c.effect_id };
+      card = cardRefOf(c);   // FXG: {kind, id} (+ ref when the card is foreign)
     }
   }
   const nm = card ? cardRefName(card) : null;
@@ -5941,12 +6181,12 @@ function dropDeathCard(myDamage) {
   const byTxt = cause ? ` (${cause})` : '';
   broadcastUI(handMsg({ notice: card ? (killer ? `☠ You died${byTxt} — ${nm} leaves your deck for ${killerName}'s archive` : `☠ You died${byTxt} — ${nm} leaves your deck`) : `☠ You died${byTxt}` }));
   if (!card || !killer) return;
-  const gift = { gift_id: `${PEER_ID_STRING}:${hg.turn}:${hg.action}`, for_peer: killer, card, from_name: entity.name };
+  const gift = { gift_id: `${PEER_ID_STRING}:${hg.turn}:${hg.action}`, for_peer: killer, card, from_name: entity.name, ...(card.ref ? { from_peer: PEER_ID_STRING } : {}) };   // FXG: from_peer = who holds the foreign def (fetch source)
   // Twice, a few seconds apart: the bus may drop one; the receiver dedupes on gift_id.
   const send = () => emitEnvelope({ type: 'evt_card_gift', payload: gift, viaBus: true }).catch(e => console.warn(`[${PEER_LABEL}] card gift failed: ${e.message}`));
   setTimeout(send, 0); setTimeout(send, 4000);
 }
-function receiveCardGift(g) {
+function receiveCardGift(g, sender = null) {
   if (!g?.gift_id || g.for_peer !== PEER_ID_STRING || giftsSeen.has(g.gift_id)) return;
   giftsSeen.add(g.gift_id);
   // A summon's kill belongs to its owner.
@@ -5957,12 +6197,32 @@ function receiveCardGift(g) {
     setTimeout(() => emitEnvelope({ type: 'evt_card_gift', payload: fwd, viaBus: true }).catch(() => {}), 4000);
     return;
   }
+  if (g.card?.ref) { receiveForeignGift(g, sender); return; }   // FXG: a player-branch card — loaded through the handshake
   const c = cardFromRef(g.card);
   if (!c) { console.warn(`[${PEER_LABEL}] card gift: unknown ${g.card?.kind} ${g.card?.id} from ${g.from_name}`); return; }
   c.from = String(g.from_name || '').slice(0, 60);
   archive.push(c);
   if (profileChar) { try { addArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, g.card, g.from_name || ''); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive write failed: ${e.message}`); } }
   console.log(`[${PEER_LABEL}] card gift: ${g.card.kind} ${g.card.id} from ${g.from_name} → my archive${profileChar ? ' (profile too)' : ''}`);
+  broadcastUI(handMsg({ notice: `🏆 You took ${c.name} from ${g.from_name || 'your victim'} — it is in your archive` }));
+}
+// FXG: a foreign gift {kind, id, ref}: held → at once; else cache, then the giver (from_peer, else the envelope's
+// sender), announced holders, git / httpd; validator gate. Refused / not obtained → log + `missing` notice, the card
+// is lost (as an unknown card always was). Async arrival is fine: the archive is private, outside the state hash.
+async function receiveForeignGift(g, sender) {
+  const from = typeof g.from_peer === 'string' && g.from_peer ? g.from_peer : sender;
+  const fr = await foreignCardFromRef(g.card, { from, holders: [sender].filter(p => p && p !== from), timeoutMs: 30_000, why: 'card gift' }).catch(e => ({ status: 'missing', reason: e.message }));
+  if (fr.status !== 'ready') {
+    console.warn(`[${PEER_LABEL}] card gift: foreign ${g.card.kind} ${g.card.id} from ${g.from_name} ${fr.status}${fr.reason ? ` (${fr.reason})` : ''} — the card is lost`);
+    broadcastUI(handMsg({ notice: `⚠ ${g.from_name || 'Your victim'}'s ${g.card.ref?.name || g.card.id} could not be loaded (${fr.status}) — the card is lost` }));
+    return;
+  }
+  const c = fr.card;
+  c.from = String(g.from_name || '').slice(0, 60);
+  archive.push(c);
+  const kept = cardRefOf(c);   // the ref I verified (my verdict) — what the profile keeps
+  if (profileChar) { try { addArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, kept, g.from_name || ''); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive write failed: ${e.message}`); } }
+  console.log(`[${PEER_LABEL}] card gift: foreign ${g.card.id} learned from ${fr.src}${fr.held ? ' (already held)' : ''} — ${g.card.kind} from ${g.from_name} → my archive${profileChar ? ' (profile too)' : ''}`);
   broadcastUI(handMsg({ notice: `🏆 You took ${c.name} from ${g.from_name || 'your victim'} — it is in your archive` }));
 }
 
@@ -6279,6 +6539,13 @@ function catchUpClock() {
 // with deterministic content so every Door carries an identical copy.
 const DOOR_FILE = PEER_LABEL.replace(/[^A-Za-z0-9_.-]/g, '-');
 let doorCount = 0;
+// A unit's unattended-character fields as the Doors carry them (only the set ones): ally_of, led_by, leader (how many
+// follow it), human, joined_at, combo ("M,B,P" → ['M','B','P']), out.
+function doorUnitFields(p) {
+  const combo = String(p?.combo_seq_csv || '').split(',').filter(Boolean);
+  return { ...(p?.ally_of ? { ally_of: p.ally_of } : {}), ...(p?.led_by ? { led_by: p.led_by } : {}), ...(Number(p?.leader) > 0 ? { leader: Number(p.leader) } : {}),
+    ...(p?.human ? { human: 1 } : {}), ...(p?.joined_at ? { joined_at: p.joined_at } : {}), ...(combo.length ? { combo } : {}), ...(p?.out ? { out: true } : {}) };
+}
 function buildDoor(now) {
   // The dim branch (ActiveDimensions/<Name>) is pushed to the dims repo, so
   // that's the RID we advertise to joiners. On a legacy single-RID setup
@@ -6320,9 +6587,19 @@ function buildDoor(now) {
     clock: { turn: hg.turn, round: hg.round, action: hg.action, rounds_per_turn: ROUNDS_PER_TURN, round_seconds: ROUND_SEC, phase: currentPhase, phase_ends_at: phaseEndsAt, at: now },
     // profile_char_id (+ team) let a launcher refuse to clone a profile character that is still alive here;
     // owner_peer_id keeps summons out of a quiet join's regenerated monsters (user rulings 2026-11-15).
-    profile_char_id: profileChar ? PROFILE_CHAR_ID : '', team_name: PROFILE_TEAM,
-    known_members: members.map(p => ({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, life: p.life, life_max: p.life_max, last_seen: p.last_seen,
-      profile_char_id: p.profile_char_id || '', team_name: p.team_name || '', owner_peer_id: p.owner_peer_id || '' })),
+    profile_char_id: profileChar ? PROFILE_CHAR_ID : (process.env.SHADOW_PROFILE_CHAR_ID || ''), team_name: PROFILE_TEAM,
+    // Hero shadows (rule_hero_shadow): a shadow's hero and, once it fell, who killed it with which card — the
+    // player's device settles its profile from these (join-plan.mjs resolveShadows, game/shadow-settle.mjs).
+    shadow_of: SHADOW_OF, ...(shadowDeath ? { shadow_death: shadowDeath } : {}),
+    // Unattended characters (rule_unattended_character): link, master, followers, combo (the launcher's unit list)
+    // and `out` (I left the dimension — not alive here any more).
+    ...doorUnitFields({ ally_of: allyOfNow, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), human: IS_HUMAN ? 1 : 0, joined_at: JOINED_AT,
+      combo_seq_csv: Array.isArray(entity.combo) ? entity.combo.join(',') : '', out: outNow ? 1 : 0 }),
+    // Members I saw leave (`out`) stay listed as such, so an older Door's "alive" sighting of them is outdated.
+    known_members: [...members, ...[...outPeers.values()].filter(t => !peersPublic.has(t.peer_id))].map(p => ({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: { q: p.tile_q, r: p.tile_r }, life: p.life, life_max: p.life_max, last_seen: p.last_seen,
+      profile_char_id: p.profile_char_id || '', team_name: p.team_name || '', owner_peer_id: p.owner_peer_id || '',
+      ...(p.shadow_of ? { shadow_of: p.shadow_of } : {}), ...(p.shadow_death_json ? { shadow_death: (() => { try { return JSON.parse(p.shadow_death_json); } catch { return null; } })() } : {}),
+      ...doorUnitFields(p) })),
     known_tiles: tiles,
     // The map as this peer holds it: joiners union every Door's blocks and
     // start with the whole revealed world instead of just the initial block.
@@ -6341,6 +6618,9 @@ function buildDoor(now) {
   return { dimensionDoc, door };
 }
 async function publishDoor() {
+  // Test games are local and private (user 2026-11-16): no Door ever leaves this box (DIM_PRIVATE, set by the
+  // launcher / phone menu for Test my character / team / random).
+  if (DIM_PRIVATE) return;
   doorCount++;
   try {
     const now = new Date().toISOString();
@@ -6498,6 +6778,18 @@ function fetchPackAsset(root, rel) {
   return p;
 }
 const wss = new WebSocketServer({ server: uiHttp });
+// The phone's way back to the start menu after a Dimension Out (leaveDimension; nodejs-mobile can't restart Node):
+// close everything this peer listens on / dials so mobile-entry.mjs can clear my timers and run the menu again on
+// the same port. Desktop never calls it (the process exits).
+globalThis.__chaosPeerStop = async () => {
+  try { for (const c of wss.clients) c.terminate(); wss.close(); } catch {}
+  try { uiHttp.closeAllConnections?.(); await new Promise(r => uiHttp.close(() => r())); } catch {}
+  try { gunHttp?.closeAllConnections?.(); gunHttp?.close(); } catch {}
+  try { bus?.close?.(); } catch {}
+  try { await _autosave?.stop?.(); } catch {}
+  try { await libp2p.stop(); } catch {}
+  console.log(`[${PEER_LABEL}] stopped in-process (Dimension Out) — the menu takes the port back`);
+};
 wss.on('connection', (ws) => {
   uiClients.add(ws);
   ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary(), class_texts: Object.fromEntries(Object.keys(data.classes).map(id => [id, data.classes[id]?.data?.text || ''])), class_colours: Object.fromEntries(Object.keys(data.classes).map(id => [id, classColours(id)])), class_state: classStateForUI(), queued_class_ability: queuedClassAbility }));
@@ -6721,6 +7013,11 @@ wss.on('connection', (ws) => {
           console.log(`[${PEER_LABEL}] combo disarmed`);
         }
       }
+      // Dimension Out (rule_dimension_out): the HUD button starts the 10-turn channel, a second click cancels it.
+      if (m.kind === 'dim_out') {
+        if (m.active === false || dimOut) dimOutCancel('cancelled by its player');
+        else dimOutStart('the Dimension Out button');
+      }
       if (m.kind === 'uilog') {
         // Browser-side user input echo. Goes ONLY to the per-peer UI log
         // file (never to stdout / the console / the browser's event log) so
@@ -6803,7 +7100,8 @@ const getSnapshot = () => ({
 // the launcher's "Load a saved dimension" rejoins as the save's author — a
 // summon or a monster writing last made "me" a creature.
 if (IS_HUMAN && !IS_COMPANION) try {
-  _autosave = autosaveStart({ dimensionId: DIM_ID, dimensionName: DIM_NAME, mapSeed: MAP_SEED, intervalMs: AUTOSAVE_INTERVAL_MS, getSnapshot });
+  _autosave = autosaveStart({ dimensionId: DIM_ID, dimensionName: DIM_NAME, mapSeed: MAP_SEED, intervalMs: AUTOSAVE_INTERVAL_MS, getSnapshot,
+    privateGame: DIM_PRIVATE ? { mode: process.env.TEST_MODE || 'test' } : null });   // private.json: "test" in Load old Dimension
   console.log(`[${PEER_LABEL}] autosave: every ${AUTOSAVE_INTERVAL_MS}ms → ${_autosave.path}`);
 } catch (e) { console.warn(`[${PEER_LABEL}] autosave disabled: ${e.message}`); }
 

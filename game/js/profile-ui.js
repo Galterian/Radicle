@@ -92,6 +92,11 @@ export const launchBody = {
   // Create Dimension: the top profile character is the hero when there is one (the server falls back to random).
   host: (dimensionName) => ({ mode: 'host', dimensionName: String(dimensionName || '').trim().slice(0, 40) || 'Ashfall-Micro', characterId: 'profile:top' }),
   restore: (tmjPath) => ({ mode: 'restore', tmjPath }),
+  // "↻ Restore <name> here": that profile character comes back where its alive record stands (servers: restoreHere).
+  restoreHere: (dimensionName, profileCharId) => ({ mode: 'restore-here', dimensionName, profileCharId }),
+  // "⇱ Dimension Out" (rule_dimension_out): restore-here / take over that character there and start the 10-round
+  // Dimension Out at once (DIM_OUT_ON_START) — the game opens so the countdown shows, then back to this menu.
+  dimOut: (dimensionName, profileCharId) => ({ mode: 'dim-out', dimensionName, profileCharId }),
   // Join next to a node (Door) / unit (unitJoinBody adds nearTile).
   join: (dimensionName, doorId, side, { characterId = null, creatureId = null } = {}) => ({
     mode: 'join', dimensionName, doorId, placement: 'nearby', side, characterId, creatureId,
@@ -141,7 +146,20 @@ export function unitJoinBody(dimensionName, unit) {
   const side = allySideOf(unit?.alliance);
   const t = unit?.tile;
   return { ...launchBody.join(dimensionName, unit?.via || unit?.peer_id, side, { characterId: 'profile:top' }),
-    ...(t && Number.isInteger(t.q) && Number.isInteger(t.r) ? { nearTile: { q: t.q, r: t.r } } : {}) };
+    ...(t && Number.isInteger(t.q) && Number.isInteger(t.r) ? { nearTile: { q: t.q, r: t.r } } : {}),
+    // The ally-join link (rule_unattended_character): the joiner publishes ally_of = this unit — a player joining an
+    // unattended character (or a unit of its link group) becomes the group's master.
+    ...(unit?.peer_id && unit?.group !== 'monster' ? { nearPeer: String(unit.peer_id) } : {}) };
+}
+// A unit's unattended-character / combo tags in the Dimensions list (user 2026-11-16): "unattended", "follows
+// <leader>", "leads N", and its combo (M·B·P).
+export function unitTags(u) {
+  const tags = [];
+  if (u?.unattended) tags.push({ cls: 'pp-unit-unatt', text: 'unattended', title: "its player closed the game — the computer plays it; its player takes it back by joining again" });
+  if (u?.led_by) tags.push({ cls: 'pp-unit-follow', text: `follows ${u.led_by_name || String(u.led_by).replace(/^peer:/, '')}`, title: 'it follows its master like a summon' });
+  if (Number(u?.leads) > 0) tags.push({ cls: 'pp-unit-leads', text: `⚑ leads ${u.leads}`, title: `${u.leads} unattended character${u.leads === 1 ? '' : 's'} follow${u.leads === 1 ? 's' : ''} it` });
+  if (Array.isArray(u?.combo) && u.combo.length) tags.push({ cls: 'pp-unit-combo', text: u.combo.join('·'), title: `combo ${u.combo.join(' → ')}` });
+  return tags;
 }
 // "⚑ New Door · Join top character" / "⚑ Join my team" join as a NEW team (user rulings 2026-11-15: "Fourth team
 // is joining at 4th side on a door that is distant to them") — mirrors join-plan.mjs newTeamSide: the first side
@@ -167,10 +185,45 @@ export function aliveWhere(items, chars) {
 }
 export const aliveWhereText = (list, where) => list.map(c => `${c.name} alive in ${where.get(c.id)}`).join(', ') + (list.length ? ' — rejoin/restore there' : '');
 // Which of `chars` are alive in dimension `d` (describeDimension alive_chars, else its character units).
-export function aliveMine(d, chars) {
-  const recs = d?.alive_chars || (d?.units || []).filter(u => u.kind !== 'creature');
+// Only LIVE records (`live`, set by join-plan.mjs isLiveRecord: fresh sighting or a live shadow — user 2026-11-16)
+// unless `anyAge` (the dimension a join targets: there any alive record still means "rejoin/restore instead").
+export function aliveMine(d, chars, { anyAge = false } = {}) {
+  const recs = (d?.alive_chars || (d?.units || []).filter(u => u.kind !== 'creature')).filter(m => anyAge || m.live === true);
   return (chars || []).filter(c => recs.some(m => recordIsCharacter(m, c)));
 }
+// "You are here" (user 2026-11-16: "I don't know on which old dimension I am alive. I should see it in the list below
+// as a restore one"): my profile characters (any, team members too) with an ALIVE record in `d`, live or stale —
+// the newest per character → [{ character, rec }]. Dead records give nothing (no Restore button).
+const _seenMs = (m) => Date.parse(m?.seen_at || 0) || 0;
+export function myAliveRecords(d, chars) {
+  const out = [];
+  for (const c of chars || []) {
+    const mine = (d?.alive_chars || []).filter(m => recordIsCharacter(m, c) && (Number(m.life ?? 1) || 0) > 0).sort((a, b) => _seenMs(b) - _seenMs(a));
+    if (mine.length) out.push({ character: c, rec: mine[0] });
+  }
+  return out;
+}
+// "⇱ Dimension Out" (rule_dimension_out, user 2026-11-16): for my character alive in a dimension (live or unattended
+// record, any age, life > 0) — takes it over there and starts the Dimension Out; the dimension is in the tooltip.
+export const dimOutTitle = (dimName, c, m) => `Dimension Out of ${dimName}: ${c.name} comes back there${m?.shadow_of ? ' (taking over its unattended copy)' : ''} and channels 10 rounds — you watch the countdown in the game, then you are back here, free to join another dimension. Moving, attacking or casting interrupts it; you can still be hit.`;
+function dimOutButton(dimName, c, m, block = '') {
+  return h('button', { type: 'button', class: 'pp-btn pp-dimout', text: '⇱ Dimension Out', disabled: !!block || !!S.busy, title: block || dimOutTitle(dimName, c, m),
+    onclick: () => launchProfile(launchBody.dimOut(dimName, c.id), `${dimName}: ${c.name} leaves the dimension (Dimension Out)`) });
+}
+// Every dimension my characters are in (the start screen's "⇱ Dimension Out" list): [{ character, dimension_name, rec }].
+export function myPresence(items, chars) {
+  const out = [];
+  for (const d of items || []) for (const x of myAliveRecords(d, chars)) out.push({ ...x, dimension_name: d.dimension_name });
+  return out;
+}
+export const hereAgeSec = (m, now = Date.now()) => m?.seen_at ? Math.max(0, Math.round((now - _seenMs(m)) / 1000)) : (m?.age_sec ?? null);
+export const hereLineText = (c, m, now = Date.now()) => `${c.name} alive here${m.shadow_of ? ' (as its shadow)' : ''} · hp ${m.life ?? '?'}${m.life_max ? `/${m.life_max}` : ''}`
+  + ` · last seen ${agoText(hereAgeSec(m, now))}${m.tile ? ` at (${m.tile.q},${m.tile.r})` : ''}`;
+// The dimensions where I am alive first (stable: the usual order inside each group).
+export const sortDimsMineFirst = (items, chars) => {
+  const mine = new Set((items || []).filter(d => myAliveRecords(d, chars).length).map(d => d.dimension_name));
+  return [...(items || [])].sort((a, b) => (mine.has(b.dimension_name) ? 1 : 0) - (mine.has(a.dimension_name) ? 1 : 0));
+};
 // Map shares (exact, from the Doors' blocks): "⬡ 62%" = that Door holds 62 % of the dimension's known hexes;
 // "mine 40%" = it holds 40 % of my saved copy. The dimension summary shows the MEDIAN Door (user ruling 2026-11-15).
 export const pctText = (x) => x == null || !Number.isFinite(Number(x)) ? null : `${Math.round(Number(x) * 100)}%`;
@@ -200,6 +253,7 @@ export function mergeDims(dims, local, now = Date.now()) {
     byName.set(d.dimension_name, r);
   }
   for (const s of local || []) {
+    if (s.private) continue;   // a private test game's save: Load old Dimension only ("test"), never a Dimensions row
     let r = (s.dim_id && byId.get(s.dim_id)) || byName.get(s.dim_name);
     if (!r) {
       r = { dimension_name: s.dim_name || s.dim_id, dimension_id: s.dim_id, doors: [], live_doors: 0, on_radicle: false, local_only: true, saves: [],
@@ -385,11 +439,12 @@ export function refreshOneDim() {
     if (b.dataset.baseTitle == null) b.dataset.baseTitle = b.title || '';
     b.disabled = !!base || !!why; b.title = why || b.dataset.baseTitle;
   };
-  set(o.test, !chars.length, oneDimWhy(items, chars, [chars.find(c => c.id === o.testSel?.value)]));
-  set(o.team, o.countSel?.disabled, oneDimWhy(items, chars, chars.slice(0, Number(o.countSel?.value) || 0)));
+  // Test games are local and private (user 2026-11-16): they never count for one dimension at a time — no greying.
+  set(o.test, !chars.length, '');
+  set(o.team, o.countSel?.disabled, '');
   set(o.create, false, oneDimWhy(items, chars, [chars[0]]));
   const it = local.find(x => x.path === o.loadSel?.value);
-  set(o.load, !local.length, it ? oneDimWhy(items, chars, [savedHeroChar(it, chars)], it.dim_name) : '');
+  set(o.load, !local.length, it && !it.private ? oneDimWhy(items, chars, [savedHeroChar(it, chars)], it.dim_name) : '');
 }
 export function refreshJoinTeamButtons() {
   const has = !!S.profile?.characters?.length;
@@ -491,7 +546,7 @@ function renderPanel() {
   nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') create(); });
   const saved = S.local || [];
   const loadSel = sel(saved.length
-    ? saved.map(it => ({ value: it.path, text: `${it.dim_name || it.dim_id} (${it.kind}, ${agoText(it.saved_at ? Math.max(0, Math.round((Date.now() - Date.parse(it.saved_at)) / 1000)) : null)})` }))
+    ? saved.map(it => ({ value: it.path, text: `${it.dim_name || it.dim_id}${it.private ? ' [test]' : ''} (${it.kind}, ${agoText(it.saved_at ? Math.max(0, Math.round((Date.now() - Date.parse(it.saved_at)) / 1000)) : null)})` }))
     : [{ value: '', text: 'no saved dimensions' }], saved[0]?.path ?? '', { class: 'pp-select pp-load', disabled: !saved.length, title: 'a dimension saved on this device (autosave / hard save)' });
   od.loadSel = loadSel;
   for (const s of [testSel, countSel, loadSel]) s.addEventListener('change', refreshOneDim);
@@ -561,7 +616,8 @@ function renderDims() {
   const chars = orderedCharacters(S.profile);
   const has = chars.length > 0;
   // One row per dimension: published on Radicle, saved on this device, or both.
-  const items = sortDims(mergeDims(S.dims || [], S.local || []));
+  // Where I am alive goes first ("You are here", user 2026-11-16).
+  const items = sortDimsMineFirst(sortDims(mergeDims(S.dims || [], S.local || [])), chars);
   const status = S.dims == null ? `loading…${items.length ? ` (${items.length} saved here)` : ''}`
     : S.dimsError ? `${items.length ? `${items.length} known · ` : ''}Radicle not reachable (${shortText(S.dimsError, 80)})`
     : !items.length ? 'nothing published yet — create one above'
@@ -570,6 +626,12 @@ function renderDims() {
     h('b', { text: 'Dimensions' }),
     h('span', { class: `pp-hint${S.dimsError ? ' bad' : ''}`, text: status }),
     h('button', { type: 'button', class: 'pp-btn pp-small', text: S.dimsLoading ? '…' : '↻', disabled: S.dimsLoading, title: 'check the seeds for fresh Doors', onclick: () => loadDims(true) })));
+  // My characters out there (rule_dimension_out): each one alive in a dimension, with "⇱ Dimension Out" (desktop + phone).
+  const presence = has ? myPresence(items, chars) : [];
+  if (presence.length) box.append(h('div', { class: 'pp-presence' }, h('b', { class: 'pp-here-head', text: 'My characters in dimensions' }),
+    ...presence.map(({ character: c, rec: m, dimension_name: dn }) => h('div', { class: 'pp-here-row' },
+      h('span', { class: 'pp-here-line', text: `${c.name} in ${dn}${m.shadow_of ? ' (unattended)' : ''} · hp ${m.life ?? '?'}${m.life_max ? `/${m.life_max}` : ''} · ${m.live ? 'live' : `last seen ${agoText(hereAgeSec(m))}`}` }),
+      dimOutButton(dn, c, m)))));
   const shown = S.dimsAll ? items : items.slice(0, DIMS_SHOWN);
   const count = Number(document.getElementById('pp-team-count')?.value) || 0;
   // One dimension at a time: where each of my characters is alive (any listed dimension).
@@ -594,9 +656,11 @@ function renderDims() {
     const doorWho = door ? (door.name || String(door.peer_id || '').replace(/^peer:/, '')) : '';
     // No cloning, one dimension at a time: my top character (unit clicks + New Door) / any of the top `count`
     // (Join my team) alive in ANY dimension → disabled, the tooltip names where.
-    const topAlive = has ? [chars[0]].filter(c => aliveAt.has(c.id)) : [];
-    const teamAlive = has ? chars.slice(0, Math.max(1, count)).filter(c => aliveAt.has(c.id)) : [];
-    const aliveWhy = (list) => list.length ? aliveWhereText(list, aliveAt) : '';
+    // Live presence anywhere (aliveAt), plus any alive record of THIS dimension (no second copy of me in it).
+    const here = has ? new Map([...aliveMine(d, chars, { anyAge: true }).map(c => [c.id, d.dimension_name]), ...aliveAt]) : aliveAt;
+    const topAlive = has ? [chars[0]].filter(c => here.has(c.id)) : [];
+    const teamAlive = has ? chars.slice(0, Math.max(1, count)).filter(c => here.has(c.id)) : [];
+    const aliveWhy = (list) => list.length ? aliveWhereText(list, here) : '';
     const why = !has ? 'create a character first' : !door ? (d.legacy ? 'older format — cannot join' : 'no Door in this dimension') : aliveWhy(topAlive);
     const teamWhy = (!has || !door ? why : '') || (count < 2 ? 'needs 2+ characters (see Test my team)' : '') || aliveWhy(teamAlive);
     const third = dimNewSide(d);
@@ -663,13 +727,29 @@ function renderDims() {
           onclick: () => launchProfile(body, `${d.dimension_name}: next to ${u.name} as ${body.side === 'npc_b' ? 'an ally of the monsters' : sideLabel(body.side)}${u.via_live ? '' : ' (quiet — starting it from its Doors)'}`) },
           h('span', { class: 'pp-unit-name', text: u.name }),
           u.life != null ? h('span', { class: 'pp-door-hp', text: u.life_max != null ? `${u.life}/${u.life_max}` : String(u.life) }) : null,
+          ...unitTags(u).map(t => h('span', { class: `pp-unit-tag ${t.cls}`, text: t.text, title: t.title })),
           (u.age_sec ?? 0) >= 90 ? h('span', { class: 'pp-door-age', text: agoText(u.age_sec) }) : null));
       }
       if (total > Math.min(list.length, UNITS_SHOWN)) row.append(h('span', { class: 'pp-hint', text: `+${total - Math.min(list.length, UNITS_SHOWN)} more` }));
       unitsBox.append(row);
     }
     if (!unitsBox.childNodes.length && ordered.length) unitsBox.append(h('span', { class: 'pp-hint', text: `no alive units known${d.units_dead ? ` (${d.units_dead} dead)` : ''}` }));
-    box.append(h('div', { class: `pp-dim${d.live_doors > 0 ? ' is-live' : ''}${d.legacy ? ' is-legacy' : ''}${quiet ? ' is-quiet' : ''}` }, head, acts, ordered.length ? doorsBox : null, ordered.length ? unitsBox : null));
+    // "You are here": each of my characters alive in this dimension (live or stale record) + "↻ Restore <name> here"
+    // — it comes back at its last tile with its last life (a live shadow of it is taken over) and the dimension's
+    // Door is pushed at once, so other nodes list it LIVE. Greyed while it is LIVE in another dimension.
+    const hereRecs = has ? myAliveRecords(d, chars) : [];
+    const hereBox = hereRecs.length ? h('div', { class: 'pp-here' }, h('b', { class: 'pp-here-head', text: 'You are here' }),
+      ...hereRecs.map(({ character: c, rec: m }) => {
+        const elsewhere = aliveWhere((items || []).filter(x => x.dimension_name !== d.dimension_name), [c]);
+        const block = elsewhere.has(c.id) ? aliveWhereText([c], elsewhere) : '';
+        return h('div', { class: 'pp-here-row' },
+          h('span', { class: 'pp-here-line', text: hereLineText(c, m) }),
+          h('button', { type: 'button', class: 'pp-btn pp-restore-here', text: `↻ Restore ${c.name} here`, disabled: !!block || !!S.busy,
+            title: block || `${c.name} comes back here under its own id at its last tile with ${m.life ?? 'its'} life${m.shadow_of ? ', taking over its shadow' : ''}; the dimension's Door is published at once, so the other nodes see it LIVE${m.live && !m.shadow_of ? '\nits record is fresh — if another device plays it, that copy is replaced' : ''}`,
+            onclick: () => launchProfile(launchBody.restoreHere(d.dimension_name, c.id), `${d.dimension_name}: restoring ${c.name} at its last tile`) }),
+          dimOutButton(d.dimension_name, c, m, block));
+      })) : null;
+    box.append(h('div', { class: `pp-dim${d.live_doors > 0 ? ' is-live' : ''}${d.legacy ? ' is-legacy' : ''}${quiet ? ' is-quiet' : ''}${hereRecs.length ? ' is-mine' : ''}` }, head, hereBox, acts, ordered.length ? doorsBox : null, ordered.length ? unitsBox : null));
   }
   if (items.length > DIMS_SHOWN) {
     box.append(h('button', { type: 'button', class: 'pp-btn pp-small pp-more', text: S.dimsAll ? 'show fewer' : `show ${items.length - DIMS_SHOWN} more`,
@@ -927,11 +1007,11 @@ async function openCharacterEditor(mode, charId) {
       const inDeck = x.where === 'deck';
       const elems = (info?.elements || []).map(e => prettyId(e)).join(' ');
       const flags = cardFlags(x.kind, info);
-      // Player-branch effect (chaosD6-Effects): source badge; built-in (main) ones show nothing.
-      const src = x.kind === 'effect' ? (effectSource(x.source ? x : null) || effectSource(info?.source ? info : null) || effectSource(x.id)) : null;
+      // Player-branch effect / skill (chaosD6-Effects / -Skills): source badge; built-in (main) ones show nothing.
+      const src = effectSource(x.source ? x : null) || effectSource(info?.source ? info : null) || effectSource(x.id);
       cardsBox.append(h('button', {
         type: 'button', class: `pe-card kind-${x.kind}${inDeck ? ' in-deck' : ' in-archive'}${x.new ? ' is-new' : ''}`,
-        title: `${info?.name || prettyId(x.id)} — ${info?.text || ''}${x.from ? `\n(taken from ${x.from})` : ''}\n\ntap: move to the ${inDeck ? 'archive' : 'deck'}`,
+        title: `${info?.name || x.ref?.name || prettyId(x.id)} — ${info?.text || ''}${x.from ? `\n(taken from ${x.from})` : ''}\n\ntap: move to the ${inDeck ? 'archive' : 'deck'}`,
         onclick: () => {
           // The first tap on a new card acknowledges it (stops the glow, saved at once) and takes it from
           // the archive into the deck; further taps move it between the deck and the archive.
@@ -947,7 +1027,7 @@ async function openCharacterEditor(mode, charId) {
       h('span', { class: 'pe-card-head' },
         x.new ? h('span', { class: 'pe-card-new', text: '✨ new' }) : null,
         h('span', { class: 'pe-card-kind', text: x.kind === 'skill' ? 'skill' : 'effect' }),
-        h('b', { class: 'pe-card-name', text: info?.name || prettyId(x.id) }),
+        h('b', { class: 'pe-card-name', text: info?.name || x.ref?.name || prettyId(x.id) }),
         elems ? h('span', { class: 'pe-card-elems', text: elems }) : null),
       flags.length ? h('span', { class: 'pe-card-flags' }, ...flags.map(t => h('span', { class: `pe-flag${t === 'perm' ? ' perm' : ''}`, text: t }))) : null,
       h('span', { class: 'pe-card-text', text: shortText(info?.text, 120) }),

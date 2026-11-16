@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_ranger",
+  "name": "Ranger",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_space","elem_earth"],"text":"Put any effect from your hand as a trap on your location."},
+  "flags": {"phase":"post","needs":"attach_effect","hooks":["ability"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "ability": {"let":[{"v":{"call":["me_view"]}},{"if":[{"!":{"and":[{"bool":{"var":"ab.attach.effect_id"}},{"is_array":{"var":"ab.attach.elements"}},{"len":{"var":"ab.attach.elements"}}]}},{"call":["not_done",[]]},{"call":["done",{"cat":[{"or":[{"var":"ab.attach.name"},{"var":"ab.attach.effect_id"}]}," lies as a trap under me"]},{"obj":{"traps":[{"obj":{"by":{"var":"actor"},"q":{"var":"v.tile_q"},"r":{"var":"v.tile_r"},"effect_id":{"var":"ab.attach.effect_id"},"elements":{"var":"ab.attach.elements"},"card_id":{"or":[{"var":"ab.attach.card_id"},null]},"library":false,"power":{"call":["trap_power"]},"trigger":"targeted","mode":"damage","holder":null}}]}},[]]}]}]}
+  }
+}

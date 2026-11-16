@@ -1,0 +1,21 @@
+{
+  "schema": "chaosd6.skill/1",
+  "id": "skill_ranged_weapon",
+  "name": "Ranged weapon",
+  "version": "1.1.0",
+  "source": {"collection":"skills","version":"1.1.0"},
+  "action_type": "A",
+  "is_permanent": true,
+  "point_buy_stat": "stat_matter",
+  "element": "elem_fire",
+  "text": "Permanent. +1 range: your Attack action is opposed to an enemy's action from 2 hexes away; there the enemy's Block deals you no combat damage and a Move or Posture with no contact does nothing to you. Against an adjacent enemy it gives no bonus: your Attack resolves as a plain Attack (a nearby Block deals you its regular 1 damage). Your Attack action does not trigger traps and the follow rule is not applied.",
+  "flags": {"action":"A","permanent":true,"pointBuyStat":"matter","negating":false,"hooks":["block_in","block_cost","attack_range","perm_landing","perm_stats"],"range":2,"reach":2,"trapImmune":true},
+  "uses": ["skills_std"],
+  "hooks": {
+    "block_in": {"bool":{"and":[{"has_perm":[{"var":"defender"},{"var":"skill"}]},{">":[{"dist":[{"var":"blocker"},{"var":"defender"}]},1]}]}},
+    "block_cost": {"if":[{"and":[{"code_is":[{"var":"defender"},"B"]},{"!":{"bool":{"and":[{"has_perm":[{"var":"attacker"},{"var":"skill"}]},{">":[{"dist":[{"var":"attacker"},{"var":"defender"}]},1]}]}}}]},1,0]},
+    "attack_range": {"if":[{"and":[{"===":[{"var":"code"},"A"]},{"bool":{"has_perm":[{"var":"attacker"},{"var":"skill"}]}}]},{"skill_flag":[{"var":"skill"},"range"]},1]},
+    "perm_landing": {"call":["perm_landing"]},
+    "perm_stats": {"call":["perm_stats"]}
+  }
+}

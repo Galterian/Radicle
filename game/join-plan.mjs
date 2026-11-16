@@ -32,6 +32,19 @@ export const sideOfAlliance = a => (a === 'player' || a === 'npc_a') ? 'A' : a =
 export const TEAM_SIDES = [['A', 'player'], ['C', 'player_c'], ['D', 'player_d']];
 export const isLiveDoor = p => Date.now() - Date.parse(p.pushed_at || 0) < DOOR_LIVE_MS;
 
+// Test games are LOCAL and PRIVATE (user 2026-11-16: "test games to be (a) local and private"): Test my character /
+// Test my team / Test Random character never publish a Door (peer.mjs DIM_PRIVATE), never announce on the Nostr bus or
+// a discovery server, bind loopback only, never leave unattended characters, and run under an unguessable dimension
+// id (their libp2p / Gun topics are private). They never count for "one dimension at a time" (nobody else sees them,
+// and the launchers skip their peers). Create Dimension (named) stays public.
+export const TEST_MODES = ['test-character', 'test-team', 'test-random'];
+export const isTestMode = mode => TEST_MODES.includes(mode);
+// (DIM_PRIVATE alone stops the Door push and the unattended spawner in peer.mjs; RADICLE_SEED=localhost skips
+// radicle-adapter's boot-time `rad node connect` to the OCI seed — a private game has nothing to gossip.)
+export const PRIVATE_TEST_ENV = Object.freeze({ DIM_PRIVATE: '1', NOSTR_ENABLED: '0', DISCOVERY_URL: '', PEER_PUBLIC_IP: '127.0.0.1', BIND_HOST: '127.0.0.1', RADICLE_SEED: 'localhost' });
+// dim-<slug>-t<8 hex>: a fresh private id per test game (random, so nobody can guess its topic).
+export const privateDimId = (name, rnd = Math.random) => `dim-${slug(String(name || 'test'))}-t${Array.from({ length: 8 }, () => Math.floor(rnd() * 16).toString(16)).join('')}`;
+
 // Union the members every Door knows about into one roster: newest sighting
 // of each peer wins, stale ones (nobody has seen them in a while) drop out.
 export function unionMembers(doors, maxAgeMs = DOOR_LIVE_MS) {
@@ -43,11 +56,12 @@ export function unionMembers(doors, maxAgeMs = DOOR_LIVE_MS) {
     if (!prev || seen > prev._seen) byId.set(m.peer_id, { ...m, _seen: seen });
   };
   for (const p of doors) {
-    consider({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: p.tile, life: p.life, life_max: p.life_max, last_seen: p.pushed_at }, p.pushed_at);
+    consider({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: p.tile, life: p.life, life_max: p.life_max, last_seen: p.pushed_at, ...(p.out ? { out: true } : {}) }, p.pushed_at);
     for (const m of p.known_members || []) consider(m, p.pushed_at);
   }
   const cutoff = Date.now() - maxAgeMs;
-  return [...byId.values()].filter(m => m._seen > cutoff).map(({ _seen, ...m }) => m);
+  // `out` (rule_unattended_character / Dimension Out): it left the dimension — not a member any more.
+  return [...byId.values()].filter(m => m._seen > cutoff && !m.out).map(({ _seen, ...m }) => m);
 }
 
 // The dimension's known map as the union of every Door's blocks. Each Door
@@ -70,6 +84,27 @@ function ensureBuildingCatalogs() {
     const hit = tries.find(f => fsSync.existsSync(f));
     if (hit) { try { set(JSON.parse(fsSync.readFileSync(hit, 'utf8'))); } catch {} }
   }
+}
+
+// Each character's / creature's catalogue combo (data/characters.json, creatures.json versions[].data.combo), for
+// the unit list of Doors that don't publish one. Loaded once, lazily; empty when the data dir isn't found.
+let _combos = null;
+export function comboCatalog() {
+  if (_combos) return _combos;
+  _combos = new Map();
+  const dirs = [process.env.CHAOSD6_DATA_DIR, path.resolve(__dirname, '..', 'data'), path.resolve(__dirname, 'data')].filter(Boolean);
+  for (const file of ['characters.json', 'creatures.json']) {
+    const hit = dirs.map(d => path.join(d, file)).find(f => fsSync.existsSync(f));
+    if (!hit) continue;
+    try {
+      for (const e of JSON.parse(fsSync.readFileSync(hit, 'utf8')).entries || []) {
+        const vs = e.versions || [];   // peer.mjs pickActive: the heaviest version not rejected / superseded
+        const v = vs.filter(x => x.status !== 'rejected' && x.status !== 'superseded').sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0] ?? vs[0];
+        if (Array.isArray(v?.data?.combo) && v.data.combo.length) _combos.set(e.id, v.data.combo.slice(0, 3));
+      }
+    } catch {}
+  }
+  return _combos;
 }
 
 // Can a unit stand on (q, r) of the dimension with map seed `seed`? Pure
@@ -324,7 +359,9 @@ export async function fetchDimensionFromHttpd({ seedHost, rid, dimensionName, ti
 // lastCommit.committer.time ranks the dimensions — then the blobs of only the
 // `limit` freshest are read (backfilling from the rank order if one is
 // unreadable). `maxScan` bounds the phase-1 fan-out.
-export async function listDimensionsFromHttpd({ seedHost = DEFAULT_SEED_HOST, rid = DEFAULT_DIMS_RID, limit = 30, timeoutMs = 8000, concurrency = 6, maxScan = 200, fetchImpl = fetch } = {}) {
+// `include` = dimension names read even when they are not among the `limit` newest (the phone: the ones it has
+// saves of — an old quiet dimension where my character is still alive must show up as "You are here").
+export async function listDimensionsFromHttpd({ seedHost = DEFAULT_SEED_HOST, rid = DEFAULT_DIMS_RID, limit = 30, timeoutMs = 8000, concurrency = 6, maxScan = 200, fetchImpl = fetch, include = [] } = {}) {
   const client = httpdClient({ seedHost, rid, timeoutMs, concurrency, fetchImpl });
   const byName = headsByDimension(await client.get('remotes'));
   const ranked = await Promise.all([...byName.keys()].slice(0, maxScan).map(async name => {
@@ -339,6 +376,8 @@ export async function listDimensionsFromHttpd({ seedHost = DEFAULT_SEED_HOST, ri
     const dims = await Promise.all(batch.map(({ name }) => readDimensionAt(client, name, byName.get(name)).catch(() => null)));
     out.push(...dims.filter(d => d && d.dimension));
   }
+  const extra = [...new Set(include || [])].filter(n => byName.has(n) && !out.some(d => d.dimension_name === n)).slice(0, limit);
+  if (extra.length) out.push(...(await Promise.all(extra.map(n => readDimensionAt(client, n, byName.get(n)).catch(() => null)))).filter(d => d && d.dimension));
   out.sort((a, b) => newestOf(b) - newestOf(a));
   return out;
 }
@@ -434,15 +473,74 @@ export function doorRecords(doors) {
   for (const p of doors || []) {
     if (!p?.peer_id) continue;
     consider({ peer_id: p.peer_id, name: p.name, alliance: p.alliance, character_id: p.character_id, creature_id: p.creature_id, tile: p.tile, life: p.life, life_max: p.life_max,
-      profile_char_id: p.profile_char_id || '', team_name: p.team_name || '', last_seen: p.pushed_at }, p, p.pushed_at, true);
+      profile_char_id: p.profile_char_id || '', team_name: p.team_name || '', shadow_of: p.shadow_of || '', ...(p.shadow_death ? { shadow_death: p.shadow_death } : {}), last_seen: p.pushed_at,
+      ...unitFieldsOf(p) }, p, p.pushed_at, true);
     for (const m of p.known_members || []) if (m?.peer_id !== p.peer_id) consider(m, p, p.pushed_at, false);   // the Door's own fields describe its owner
   }
-  return [...byId.values()];
+  // `out` (rule_unattended_character vanish / Dimension Out): the unit left the dimension — after the hero ↔
+  // unattended pairing (an out stand-in, newer, also retires its hero's older record), it is simply not there.
+  return resolveShadows([...byId.values()]).filter(m => !m.out);
+}
+// The unattended-character fields of a Door (peer.mjs doorUnitFields) — only the set ones.
+const unitFieldsOf = p => ({ ...(p.ally_of ? { ally_of: p.ally_of } : {}), ...(p.led_by ? { led_by: p.led_by } : {}), ...(Number(p.leader) > 0 ? { leader: Number(p.leader) } : {}),
+  ...(p.human ? { human: 1 } : {}), ...(p.joined_at ? { joined_at: p.joined_at } : {}), ...(Array.isArray(p.combo) && p.combo.length ? { combo: p.combo } : {}), ...(p.out ? { out: true } : {}) });
+// Every fallen hero shadow these Doors report (rule_hero_shadow): [{ peer_id, name, character_id, profile_char_id,
+// shadow_of, shadow_death: { killer, killer_name, card, gift_id, at } }], one per gift id — the player's device
+// settles its profile from them (game/shadow-settle.mjs).
+export function shadowDeathsOf(doors) {
+  const out = new Map();
+  const consider = (m) => { const sd = m?.shadow_death; if (!m?.shadow_of || !sd?.gift_id || out.has(sd.gift_id)) return;
+    out.set(sd.gift_id, { peer_id: m.peer_id, name: m.name || null, character_id: m.character_id || null, profile_char_id: m.profile_char_id || null, shadow_of: m.shadow_of, shadow_death: sd }); };
+  for (const p of doors || []) { consider(p); for (const m of p.known_members || []) consider(m); }
+  return [...out.values()];
+}
+// The newest shadow record of hero `heroPeerId` in these Doors, if it is newer than `sinceMs` (e.g. the save):
+// { peer_id, life, tile, dead, killer_name, rec } — a Restore takes it over (alive) or must not revive the hero
+// (dead: "its shadow was killed there"). null = no shadow of it stood in since.
+export function heroShadowIn(doors, heroPeerId, sinceMs = 0) {
+  const raw = new Map();
+  const consider = (m, at) => { if (m?.shadow_of !== heroPeerId) return; const seen = Date.parse(m.last_seen || at || 0) || 0; if (seen > sinceMs && (!raw.has(m.peer_id) || raw.get(m.peer_id)._seen < seen)) raw.set(m.peer_id, { ...m, _seen: seen }); };
+  for (const p of doors || []) { consider({ ...p, last_seen: p.pushed_at }, p.pushed_at); for (const m of p.known_members || []) consider(m, p.pushed_at); }
+  const s = [...raw.values()].sort((a, b) => b._seen - a._seen)[0];
+  if (!s || s.out) return null;   // out: the unattended character left the dimension (not dead, not there)
+  const own = doorRecords(doors).find(m => m.peer_id === heroPeerId);   // the hero heard after its shadow → it took over
+  if (own && (own._seen ?? 0) > s._seen) return null;
+  return { peer_id: s.peer_id, life: Number(s.life) || 0, tile: validTile(s.tile), dead: !((Number(s.life) || 0) > 0), killer_name: s.shadow_death?.killer_name || null, seen_ms: s._seen, rec: s };
+}
+// Hero shadows (rule_hero_shadow, user ruling 2026-11-16): a shadow record S (shadow_of = P) and the record of its
+// original P describe ONE character — the newer sighting wins: S newer → P's record is superseded (S alive = the
+// character is alive there as its shadow; S dead = the character died there); P newer → the player came back and
+// took the shadow over, S drops. Never two alive copies of one character in the list.
+export function resolveShadows(recs) {
+  const byId = new Map(recs.map(m => [m.peer_id, m]));
+  const drop = new Set();
+  for (const s of recs) {
+    if (!s.shadow_of) continue;
+    const p = byId.get(s.shadow_of);
+    if (!p) continue;
+    if ((s._seen ?? 0) >= (p._seen ?? 0)) drop.add(p.peer_id); else drop.add(s.peer_id);
+  }
+  return drop.size ? recs.filter(m => !drop.has(m.peer_id)) : recs;
 }
 const isAliveRec = m => (Number(m.life ?? 1) || 0) > 0;
+// LIVE presence (user 2026-11-16: "I cannot join another dimension from my phone, while I am not alive anywhere"):
+// a record only says "this character is in that dimension NOW" while its sighting is fresh — the unit's own Door /
+// a known_members last_seen within DOOR_LIVE_MS. A player who closed the game without dying leaves an alive
+// record behind in a dimension that goes quiet; that record must not block joining elsewhere. While the player is
+// away its SHADOW (rule_hero_shadow) is a live record of the same character there, so it still counts.
+// Raw records carry `_seen` (ms); launcher items (describeDimension alive_chars) carry `seen_at` (ISO) and `live`
+// (as of the describe) — `seen_at` is re-judged against `now`, an item without either is stale.
+export function isLiveRecord(m, now = Date.now()) {
+  if (!m) return false;
+  const seen = m._seen != null ? Number(m._seen) : m.seen_at ? Date.parse(m.seen_at) : NaN;
+  if (Number.isFinite(seen) && seen > 0) return now - seen < DOOR_LIVE_MS;
+  return m.live === true;
+}
 export function dimensionUnits(doors, now = Date.now(), { max = 36 } = {}) {
   const all = doorRecords(doors);
   const alive = all.filter(isAliveRec);
+  const byId = new Map(alive.map(m => [m.peer_id, m]));
+  const combos = comboCatalog();
   const count = { ally: 0, enemy: 0, monster: 0 };
   const sides = { A: 0, B: 0, C: 0, D: 0 };   // alive units per engine side (newTeamSide)
   const units = alive.map(m => {
@@ -455,6 +553,14 @@ export function dimensionUnits(doors, now = Date.now(), { max = 36 } = {}) {
       character_id: m.character_id || null, creature_id: m.creature_id || null, profile_char_id: m.profile_char_id || null,
       tile: validTile(m.tile), age_sec: m._seen ? ageSecAt(new Date(m._seen).toISOString(), now) : null,
       via: m._via.peer_id, via_live: now - Date.parse(m._via.pushed_at || 0) < DOOR_LIVE_MS,
+      live: isLiveRecord(m, now), shadow_of: m.shadow_of || null,
+      // Unattended characters (rule_unattended_character): unattended = a computer-operated stand-in for its silent
+      // player; led_by / led_by_name = the master it follows; leads = how many unattended characters follow this unit.
+      // combo (user 2026-11-16 "On the list we should see the combo of each unit"): its published combo, else the
+      // character's catalogue combo (data/characters.json); null for units without one.
+      unattended: !!m.shadow_of, led_by: m.led_by || null, led_by_name: m.led_by ? (byId.get(m.led_by)?.name || String(m.led_by).replace(/^peer:/, '')) : null,
+      leads: alive.filter(o => o.shadow_of && o.led_by === m.peer_id).length,
+      combo: (Array.isArray(m.combo) && m.combo.length ? m.combo : combos.get(m.character_id || m.creature_id)) || null,
     };
   }).sort((a, b) => (GROUP_ORDER[a.group] - GROUP_ORDER[b.group]) || ((a.age_sec ?? 1e12) - (b.age_sec ?? 1e12)) || String(a.name).localeCompare(String(b.name)));
   return { units: units.slice(0, max), alive: count, sides, dead: all.length - alive.length };
@@ -492,20 +598,41 @@ export const aliveText = (hits) => `${hits.map(h => `${h.character.name} (as ${S
 // One dimension at a time (user ruling 2026-11-15): where my characters are alive over EVERY known dimension.
 // `dims` = raw dimensions ({ dimension_name, doors }) or launcher items ({ dimension_name, alive_chars }); the first
 // item of a name wins (pass the freshly read target dimension first). → [{ character, dimension_name, unit }]
-export function aliveInDimensions(dims, chars) {
+// Only LIVE presence counts (isLiveRecord, user 2026-11-16): a fresh record of the character or of its shadow
+// (same profile id / base character + name). Alive-but-stale records of a quiet dimension never block joining
+// ELSEWHERE. `anyAgeIn` = the join target's name: there a record of any age still counts (no cloning, ruling
+// 2026-11-15 — rejoin / restore that dimension instead of a second copy of me in it).
+export function aliveInDimensions(dims, chars, { now = Date.now(), anyAgeIn = null } = {}) {
   const out = [], seen = new Set();
   for (const d of dims || []) {
     if (!d?.dimension_name || seen.has(d.dimension_name)) continue;
     seen.add(d.dimension_name);
     const recs = Array.isArray(d.alive_chars) ? d.alive_chars : doorRecords(d.doors || []).filter(isAliveRec);
+    const anyAge = anyAgeIn != null && d.dimension_name === anyAgeIn;
     for (const c of chars || []) {
-      const u = recs.find(m => isAliveRec(m) && recordIsCharacter(m, c));
-      if (u) out.push({ character: c, dimension_name: d.dimension_name, unit: { peer_id: u.peer_id, name: u.name, life: u.life ?? null } });
+      const mine = recs.filter(m => isAliveRec(m) && recordIsCharacter(m, c));
+      const u = mine.find(m => isLiveRecord(m, now)) || (anyAge ? mine[0] : null);
+      if (u) out.push({ character: c, dimension_name: d.dimension_name, unit: { peer_id: u.peer_id, name: u.name, life: u.life ?? null, shadow_of: u.shadow_of || null,
+        stale: !isLiveRecord(u, now) } });
     }
   }
   return out;
 }
-export const aliveWhereText = (hits) => hits.map(h => `${h.character.name} (as ${String(h.unit.peer_id || '?').replace(/^peer:/, '')}, hp ${h.unit.life ?? '?'}) is alive in ${h.dimension_name} — rejoin/restore there`).join('; ');
+// "↻ Restore <name> here" (user 2026-11-16: "I don't know on which old dimension I am alive. I should see it in the
+// list as a restore one, so I announce to the other nodes that I activated it again"): profile character `c`'s
+// newest ALIVE record in raw dimension `dim` (any age; shadows resolved by doorRecords), as the env of its return:
+// its own peer label (the original's when the record is its shadow — the player takes the shadow over:
+// `replaces` = the shadow's peer id, life = the shadow's), last tile, life, side. null = dead / never there.
+export function restoreHereTarget(dim, c, now = Date.now()) {
+  const recs = doorRecords(dim?.doors || []).filter(m => !m.creature_id && recordIsCharacter(m, c)).sort((a, b) => (b._seen ?? 0) - (a._seen ?? 0));
+  const u = recs.find(isAliveRec);
+  if (!u) return null;
+  const own = u.shadow_of || u.peer_id;
+  return { label: String(own).replace(/^peer:/, ''), peer_id: own, replaces: u.shadow_of ? u.peer_id : '', life: Number(u.life) || null, life_max: Number(u.life_max) || null,
+    tile: validTile(u.tile), alliance: u.alliance || 'player', live: isLiveRecord(u, now), seen_at: u._seen ? new Date(u._seen).toISOString() : null,
+    doorId: u._via?.peer_id || null, unit: { peer_id: u.peer_id, name: u.name, life: u.life ?? null, shadow_of: u.shadow_of || null } };
+}
+export const aliveWhereText = (hits) => hits.map(h => `${h.character.name} (as ${String(h.unit.peer_id || '?').replace(/^peer:/, '')}${h.unit.shadow_of ? ', its shadow' : ''}, hp ${h.unit.life ?? '?'}) is ${h.unit.stale ? 'still alive (not seen lately)' : 'alive'} in ${h.dimension_name} — rejoin/restore there`).join('; ');
 
 // The 'Monster' join (user ruling 2026-11-15: "We know its type, so the same type of monster should be joined and
 // the computer should control it"): the creature type of the Door / unit it joins next to when that is a monster,
@@ -593,8 +720,15 @@ export function describeDimension(d, now = Date.now(), { mine = null, sketch = t
     // engine side, and every alive character the Doors know (not capped like `units`) so the launcher can grey
     // out joins of a profile character that is alive (here or in another dimension).
     new_team_side: newTeamSide(u.sides), units_sides: u.sides,
+    // `live` / `seen_at` (user 2026-11-16): only a live record (fresh sighting, or a live shadow) means "alive
+    // there now" — aliveInDimensions re-judges `seen_at`, the UI tooltip uses `live`.
     alive_chars: doorRecords(d.doors || []).filter(m => isAliveRec(m) && !m.creature_id)
-      .map(m => ({ peer_id: m.peer_id, name: m.name || null, character_id: m.character_id || null, profile_char_id: m.profile_char_id || null, life: m.life ?? null })),
+      .map(m => ({ peer_id: m.peer_id, name: m.name || null, character_id: m.character_id || null, profile_char_id: m.profile_char_id || null, life: m.life ?? null,
+        life_max: m.life_max ?? null, alliance: m.alliance ?? null, tile: validTile(m.tile),
+        seen_at: m._seen ? new Date(m._seen).toISOString() : null, age_sec: m._seen ? ageSecAt(new Date(m._seen).toISOString(), now) : null,
+        live: isLiveRecord(m, now), shadow_of: m.shadow_of || null })),
+    // Fallen hero shadows (rule_hero_shadow): the player's device takes their death card out of its profile.
+    shadow_deaths: shadowDeathsOf(d.doors || []),
   };
 }
 

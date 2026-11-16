@@ -239,6 +239,7 @@ export async function listSavedDimensions(baseDir = DIMENSIONS_DIR) {
   catch { return out; }
   for (const d of entries) {
     if (!d.isDirectory()) continue;
+    const priv = await readPrivateMark(path.join(baseDir, d.name));
     for (const kind of ['autosave', 'hard']) {
       const fp = path.join(baseDir, d.name, `map_${kind}.tmj`);
       let raw; try { raw = await fs.readFile(fp, 'utf8'); } catch { continue; }
@@ -270,6 +271,7 @@ export async function listSavedDimensions(baseDir = DIMENSIONS_DIR) {
         hexes,
         file_bytes: Buffer.byteLength(raw),
         mtime,
+        ...(priv ? { private: true, test: true, test_mode: String(priv.mode || 'test') } : {}),
       });
     }
   }
@@ -279,7 +281,21 @@ export async function listSavedDimensions(baseDir = DIMENSIONS_DIR) {
 }
 
 // Tiny controller: owns the dirty flag, the timer and the write lock.
-export function start({ dimensionId, dimensionName, mapSeed, intervalMs = 60_000, getSnapshot, baseDir }) {
+// Private test games (user 2026-11-16, "test games to be local and private"): `<dir>/private.json` marks the
+// dimension local-only — Load old Dimension tags it "test"; it never joins the published Dimensions list.
+export const PRIVATE_FILE = 'private.json';
+export async function markPrivateDimension(dimensionId, info = {}, baseDir = DIMENSIONS_DIR) {
+  const dir = path.join(baseDir, dimensionId);
+  await fs.mkdir(dir, { recursive: true });
+  const doc = { private: true, test: true, mode: String(info.mode || 'test'), dim_name: String(info.dimensionName || ''), at: new Date().toISOString() };
+  await fs.writeFile(path.join(dir, PRIVATE_FILE), JSON.stringify(doc));
+  return doc;
+}
+export async function readPrivateMark(dir) {
+  try { const j = JSON.parse(await fs.readFile(path.join(dir, PRIVATE_FILE), 'utf8')); return j?.private === true ? j : null; } catch { return null; }
+}
+
+export function start({ dimensionId, dimensionName, mapSeed, intervalMs = 60_000, getSnapshot, baseDir, privateGame = null }) {
   if (!dimensionId) throw new Error('autosave.start: dimensionId required');
   if (typeof getSnapshot !== 'function') throw new Error('autosave.start: getSnapshot callback required');
   const dir = path.join(baseDir || DIMENSIONS_DIR, dimensionId);
@@ -297,6 +313,7 @@ export function start({ dimensionId, dimensionName, mapSeed, intervalMs = 60_000
   async function ensureDir() {
     if (_ensured) return;
     await fs.mkdir(dir, { recursive: true });
+    if (privateGame) { try { await markPrivateDimension(dimensionId, { dimensionName, ...privateGame }, baseDir || DIMENSIONS_DIR); } catch {} }
     _ensured = true;
   }
   async function writeAtomic(target, obj) {

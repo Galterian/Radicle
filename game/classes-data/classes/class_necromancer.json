@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_necromancer",
+  "name": "Necromancer",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_souls","elem_harmony"],"text":"Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6."},
+  "flags": {"phase":"post","hooks":["ability","peer:revive"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "ability": {"let":[{"v":{"call":["me_view"]},"raised":{"reduce":[{"map":[{"views":[]},{"csv":[{"get":[{"var":"p"},"reanimated_csv"]}]},"p"]},{"concat":[{"var":"acc"},{"var":"current"}]},[]]}},{"let":[{"fallen":{"or":[{"at":[{"sort":{"filter":[{"view_ids":[]},{"and":[{"!==":[{"var":"id"},{"var":"actor"}]},{"<=":[{"life_of":[{"var":"id"}]},0]},{"bool":{"get":[{"view":[{"var":"id"}]},"creature_id"]}},{"!":{"in":[{"var":"id"},{"var":"raised"}]}},{"<=":[{"dist":[{"var":"actor"},{"var":"id"}]},1]},{"===":[{"side_of":[{"get":[{"view":[{"var":"id"}]},"alliance"]}]},{"side_of":[{"var":"v.alliance"}]}]}]},"id"]}},0]},null]}},{"if":[{"var":"fallen"},{"let":[{"fv":{"view":[{"var":"fallen"}]}},{"call":["done",{"cat":[{"or":[{"var":"fv.name"},{"slice":[{"var":"fallen"},0,8]}]}," rises again"]},{"obj":{"revives":[{"obj":{"by":{"var":"actor"},"who":{"var":"fallen"},"creature_id":{"var":"fv.creature_id"},"name":{"var":"fv.name"}}}]}},[]]}]},{"call":["done","no fallen ally in reach — an archived creature of mine enters if I have one",{"obj":{"revives":[{"obj":{"by":{"var":"actor"},"who":null}}]}},[]]}]}]}]}
+  }
+}

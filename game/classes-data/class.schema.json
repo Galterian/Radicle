@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chaosd6/classes-data/class.schema.json",
+  "title": "chaosD6 class definition (chaosd6.class/1) and class library (chaosd6.class-lib/1)",
+  "description": "Structural schema. Semantic checks (known hooks, known operations of the class vocabulary, known subroutines, JS markers only on built-ins, std defaults only for std hooks) are done by class-engine.mjs#validateClassDef / validateClassLib (classes.mjs#validateClassDef); see SCHEMA.md.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/class"
+    },
+    {
+      "$ref": "#/$defs/lib"
+    }
+  ],
+  "$defs": {
+    "hookName": {
+      "enum": [
+        "colours",
+        "kind",
+        "ready",
+        "config",
+        "strike",
+        "restore",
+        "progress",
+        "life_points",
+        "stance",
+        "stance_target",
+        "emits",
+        "plan_emits",
+        "attack_out",
+        "lifesteal",
+        "lifesteal_apply",
+        "pre_cast",
+        "ability",
+        "transmute",
+        "destroy_result",
+        "end_turn",
+        "step",
+        "dungeon_step",
+        "combat_in",
+        "pick_target",
+        "chase_step",
+        "contact",
+        "local",
+        "share_skills"
+      ]
+    },
+    "stdHookName": {
+      "enum": [
+        "colours",
+        "kind",
+        "ready",
+        "config",
+        "strike",
+        "restore",
+        "progress",
+        "life_points"
+      ]
+    },
+    "element": {
+      "enum": [
+        "elem_vitality",
+        "elem_souls",
+        "elem_time",
+        "elem_space",
+        "elem_air",
+        "elem_water",
+        "elem_earth",
+        "elem_fire",
+        "elem_concentration",
+        "elem_harmony"
+      ]
+    },
+    "logic": {
+      "description": "A program in the effects' JsonLogic dialect (effects-data/SCHEMA.md): a primitive, an array (evaluated element-wise) or an object with exactly ONE key (the operation).",
+      "anyOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/logic"
+          }
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1
+        }
+      ]
+    },
+    "jsMarker": {
+      "type": "object",
+      "description": "The hook stays in JS (built-in classes only): impl names the function (peer.mjs#… or classes.mjs#…).",
+      "required": [
+        "engine",
+        "impl"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "const": "js"
+        },
+        "impl": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "class": {
+      "type": "object",
+      "required": [
+        "schema",
+        "id",
+        "name",
+        "version",
+        "data",
+        "flags",
+        "hooks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "chaosd6.class/1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^class_[a-z0-9_]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^d+.d+.d+"
+        },
+        "source": {
+          "type": "object",
+          "description": "Provenance (data/classes.json active version; a player branch for a foreign class).",
+          "properties": {
+            "collection": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "branch": {
+              "type": "string"
+            }
+          }
+        },
+        "data": {
+          "type": "object",
+          "description": "The class data = data/classes.json `data` of that version: what ctx.classData(id) / the class_data op return. Knobs (range, contact, chase_bonus, building, …) are read by the config hook.",
+          "required": [
+            "ability_kind",
+            "colors",
+            "text"
+          ],
+          "properties": {
+            "ability_kind": {
+              "enum": [
+                "tap",
+                "once_per_round",
+                "static",
+                "passive"
+              ]
+            },
+            "colors": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/element"
+              },
+              "description": "The class colours: one per element; a stat is a colour of the class while one of its elements is listed (Rule 24 strike / recast / untap)."
+            },
+            "text": {
+              "type": "string"
+            },
+            "passive": {
+              "type": "boolean"
+            },
+            "range": {
+              "type": "integer"
+            }
+          }
+        },
+        "flags": {
+          "type": "object",
+          "description": "Resolver flags = classes.mjs CLASS_RULES[id] (SCHEMA.md): phase (pre|post|local), needs, local, passiveTurn, handDefaults, stance, emits, planEmits, attackBonus, illusionRange, hooks.",
+          "properties": {
+            "phase": {
+              "enum": [
+                "pre",
+                "post",
+                "local"
+              ]
+            },
+            "needs": {
+              "enum": [
+                "tile",
+                "ally_or_self",
+                "enemy_near",
+                "monster_near",
+                "attach_effect"
+              ]
+            },
+            "passiveTurn": {
+              "type": "boolean"
+            },
+            "hooks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "The hooks the class answers (hook names; `peer:<site>` = a site that stays in peer.mjs, documentation)."
+            }
+          }
+        },
+        "uses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Library ids whose subroutines `call` may use (searched in order)."
+        },
+        "extends": {
+          "type": "string",
+          "pattern": "^class_[a-z0-9_]+$",
+          "description": "A foreign class that refines a built-in: the validator judges it against that baseline and prices it by its power."
+        },
+        "power": {
+          "type": "object",
+          "description": "Validator vocabulary (tools/classes-rebalancing-check.mjs POWER_KEYS): what the class does — required for a foreign class without extends."
+        },
+        "hooks": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/hookName"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/jsMarker"
+              },
+              {
+                "$ref": "#/$defs/logic"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "lib": {
+      "type": "object",
+      "required": [
+        "schema",
+        "id",
+        "version",
+        "subs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "chaosd6.class-lib/1"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^d+.d+.d+"
+        },
+        "description": {
+          "type": "string"
+        },
+        "defaults": {
+          "type": "object",
+          "description": "std hook → sub: the program of a class without its own (lib classes_std).",
+          "propertyNames": {
+            "$ref": "#/$defs/stdHookName"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "subs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "params",
+              "body"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "params": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "body": {
+                "$ref": "#/$defs/logic"
+              },
+              "doc": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

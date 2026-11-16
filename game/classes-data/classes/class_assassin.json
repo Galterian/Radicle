@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_assassin",
+  "name": "Assassin",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"static","colors":["elem_time","elem_space","elem_fire","elem_concentration","elem_harmony"],"text":"If you have dealt combat damage this round, you deal +1 extra damage."},
+  "flags": {"phase":null,"attackBonus":1,"hooks":["attack_out"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "attack_out": {"if":[{"and":[{">=":[{"var":"dmg"},1]},{"has_perm":[{"var":"attacker"},{"var":"class"}]},{"in":[{"var":"attacker"},{"or":[{"var":"scored"},[]]}]}]},{"+":[{"var":"dmg"},{"or":[{"class_flag":[{"var":"class"},"attackBonus"]},1]}]},{"var":"dmg"}]}
+  }
+}

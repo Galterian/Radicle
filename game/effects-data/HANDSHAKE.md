@@ -112,6 +112,20 @@ Prefetch from `fx_have` makes this unlikely — the caster announces the card fr
 Information leak (accepted): `fx_have` lists definitions a peer holds (its deck's foreign cards among them);
 `fx_ref` names the committed effect at commit time, after every plan is frozen.
 
+## Death-card gifts and profile cards (FXG)
+
+A foreign card leaving play (death drop → `evt_card_gift`, a won card saved in a profile) carries its ref:
+`card: {kind, id, ref}` (ref = the card's `fx` / `sk`, compactRef). The gift payload also gets `from_peer` (the
+holder: the dead peer, or the hero for a shadow) — only when `card.ref` is set; built-in gifts are byte-identical.
+The receiver (`foreignCardFromRef`, adapters `fxPeer.cardFromRef` / `skPeer.cardFromRef`): held → card at once;
+otherwise `sync.ensure` (content cache first, then announced holders, `from_peer`, the envelope sender, git / httpd),
+validator gate included; refused / not obtained within 30 s → log + `effect_source|skill_source missing` notice,
+the card is lost. Log: `card gift: foreign <id> learned from <src>`. Profile `cards[]` entries keep `ref` (+ `source`
+for the UI badge); on profile load the peer rebuilds them cache-first (2 s), else retries after the transports are
+up (8 / 30 / 90 s). `validateCharacter` accepts a card with a valid ref. All of this is private deck state — the
+resolver and the state hash never see it. Test env: `FX_PREFETCH=0` / `SK_PREFETCH=0` (no `*_have` prefetch).
+Live: `tools/out/_fxg_live.sh <secs> ["FX_PREFETCH=0 SK_PREFETCH=0" | "FX_ACCEPT=0 …"]`.
+
 ## Env
 
 `FORCE_FOREIGN_EFFECT=<def.json>` (dev/test: that definition on top of my deck; libs from my bundled set; branch

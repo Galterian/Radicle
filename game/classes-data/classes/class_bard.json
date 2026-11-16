@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_bard",
+  "name": "Bard",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"static","colors":["elem_time","elem_space","elem_souls","elem_air","elem_water","elem_earth","elem_fire","elem_harmony"],"text":"When you use a skill, any player around uses it if possible."},
+  "flags": {"phase":null,"hooks":["share_skills"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "share_skills": {"let":[{"r":{"reduce":[{"or":[{"var":"adj"},[]]},{"let":[{"o":{"var":"current"},"a0":{"var":"acc"}},{"let":[{"inner":{"reduce":[{"or":[{"var":"skills"},[]]},{"let":[{"sk":{"var":"current"},"q":{"var":"acc"}},{"let":[{"req":{"skill_action":[{"var":"sk"}]}},{"if":[{"or":[{"!":{"bool":{"var":"req"}}},{"===":[{"var":"sk"},"skill_battle_trance"]},{"in":[{"var":"sk"},{"var":"q.have"}]}]},{"var":"q"},{"call":["rides",{"var":"o.codes"},{"var":"req"}]},{"obj":{"have":{"concat":[{"var":"q.have"},[{"var":"sk"}]]},"adds":{"concat":[{"var":"q.adds"},[{"obj":{"on":{"var":"o.id"},"skill":{"var":"sk"}}}]]},"log":{"if":[{"or":[{"===":[{"var":"o.id"},{"ctx_self":[]}]},{"===":[{"var":"actor"},{"ctx_self":[]}]}]},{"concat":[{"var":"q.log"},[{"cat":["[",{"ctx_label":[]},"] bard ",{"slice":[{"var":"actor"},0,8]},": ",{"slice":[{"var":"o.id"},0,8]}," plays ",{"var":"sk"}," too"]}]]},{"var":"q.log"}]}}},{"var":"q"}]}]}]},{"obj":{"have":{"or":[{"var":"o.skills"},[]]},"adds":{"var":"a0.adds"},"log":{"var":"a0.log"}}}]}},{"obj":{"adds":{"var":"inner.adds"},"log":{"var":"inner.log"}}}]}]},{"obj":{"adds":[],"log":[]}}]}},{"obj":{"adds":{"var":"r.adds"},"log":{"var":"r.log"}}}]}
+  }
+}

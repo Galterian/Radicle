@@ -24,6 +24,12 @@ const DIMENSIONS_RID := "rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"
 # chaosD6-Effects (game/effects-repo.mjs, infra/oci/effects-setup.sh): effect definitions as data;
 # seeded so peers can read effects/<id>.json at a pinned commit offline.
 const EFFECTS_RID := "rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ"
+# chaosD6-Skills (game/skills-repo.mjs, infra/oci/skills-setup.sh): skill definitions as data;
+# seeded so peers can read skills/<id>.json + lib/<id>.json at a pinned commit offline.
+const SKILLS_RID := "rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5"
+# TODO(C3) chaosD6-Classes (game/classes-repo.mjs, infra/oci/classes-setup.sh): no RID yet. After the user runs
+# game/tools/oci/classes-rad-init.sh, game/tools/out/_classes_rid_patch.py <rid> --apply adds the CLASSES_RID const
+# here and appends it to the seeded rid list below.
 # game/profile-radicle.mjs: <profileDir>/radicle/identity.pem, profileDir = CHAOSD6_USER_DATA_DIR.
 const IDENTITY_PEM := "user://data/radicle/identity.pem"
 
@@ -55,7 +61,7 @@ func _ready() -> void:
 
 func _start_on_thread(alias: String) -> void:
     var rid_list := PackedStringArray([PROFILES_RID])
-    for extra in [DIMENSIONS_RID, EFFECTS_RID]:
+    for extra in [DIMENSIONS_RID, EFFECTS_RID, SKILLS_RID]:
         if not extra.is_empty():
             rid_list.append(extra)
     var rids := ",".join(rid_list)

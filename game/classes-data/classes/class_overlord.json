@@ -1,0 +1,13 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_overlord",
+  "name": "Overlord",
+  "version": "1.1.0",
+  "source": {"collection":"classes","version":"1.1.0"},
+  "data": {"ability_kind":"tap","colors":["elem_space","elem_souls","elem_earth","elem_harmony"],"text":"Tap: you gain one armor life point (shown gold); if you already wear one, an adjacent ally without one gains it instead. Never two on one unit. It is the first life lost when damage lands, and can be gained again once lost."},
+  "flags": {"phase":"post","needs":"ally_or_self","hooks":["ability"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "ability": {"let":[{"na":{"call":["near_ally",{"var":"actor"},{"call":["ab_peer"]}]}},{"let":[{"who":{"if":[{"call":["bare",{"var":"actor"}]},{"var":"actor"},{"and":[{"bool":{"var":"na"}},{"call":["bare",{"var":"na"}]}]},{"var":"na"},{"or":[{"at":[{"sort":{"filter":[{"call":["adjacent_of",{"var":"actor"}]},{"and":[{"!":{"enemy_of":[{"var":"actor"},{"var":"o"}]}},{"call":["bare",{"var":"o"}]}]},"o"]}},0]},null]}]}},{"if":[{"!":{"bool":{"var":"who"}}},{"call":["not_done",[{"cat":["[",{"ctx_label":[]},"] class overlord: I and every ally next to me already wear an armor point"]}]]},{"call":["done",{"cat":[{"if":[{"===":[{"var":"who"},{"var":"actor"}]},"I wear",{"cat":[{"slice":[{"var":"who"},0,8]}," wears"]}]}," an armor life point"]},{"obj":{"armor":[{"obj":{"on":{"var":"who"},"by":{"var":"actor"}}}]}},[]]}]}]}]}
+  }
+}

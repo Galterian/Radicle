@@ -1,0 +1,16 @@
+{
+  "schema": "chaosd6.skill/1",
+  "id": "skill_overrun",
+  "name": "Overrun / Push",
+  "version": "1.1.0",
+  "source": {"collection":"skills","version":"1.1.0"},
+  "action_type": "A",
+  "is_permanent": false,
+  "point_buy_stat": null,
+  "text": "Swap places with the enemy you Attack (walk over them and go behind): you take their hex and they take yours. Negate the enemy's Move. Alt: the enemy or ally is moved one tile away; step over them.",
+  "flags": {"action":"A","permanent":false,"negating":true,"hooks":["negate_kind","move"],"range":1,"negates":["M","EM"],"negate":{"codes":["M","EM"],"who":"target","mode":"no_move"},"swap":true},
+  "uses": ["skills_std"],
+  "hooks": {
+    "negate_kind": {"engine":"js","impl":"skills.mjs#negateKind","note":"pass 2 (after Grapple, Disruption Move): an adjacent target (declared, else auto) cannot move — noMove.add; negated when it moved (M/EM); a character-targeted Attack on an adjacent enemy queues a swap {by, on} in ctx.swaps (2026-11-16). In-place register edits: JS this milestone."}
+  }
+}

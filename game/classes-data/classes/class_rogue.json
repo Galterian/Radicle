@@ -1,0 +1,15 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_rogue",
+  "name": "Rogue",
+  "version": "1.2.0",
+  "source": {"collection":"classes","version":"1.2.0"},
+  "data": {"ability_kind":"tap","passive":true,"colors":["elem_space","elem_concentration","elem_harmony"],"trap_dodges_per_turn":1,"threat_dodges_per_turn":1,"threat_radius":2,"text":"Passive, two charges per turn. Trap: once per turn your move over a building or a trap does not trigger it (a laid trap, a building's hidden trap or a dungeon's) — the trap stays where it is. Threat: once per turn you may move into an enemy's threat area (2 hexes) unseen — that monster (or enemy) does not wake or chase you for the rest of the turn."},
+  "flags": {"phase":null,"passiveTurn":true,"hooks":["config","step","dungeon_step"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "config": {"call":["cfg_rogue"]},
+    "step": {"obj":{"stealth":{"and":[{"bool":{"var":"threatReady"}},{">":[{"len":{"or":[{"var":"ring"},[]]}},0]}]},"trap":{"if":[{"!":{"bool":{"var":"trap"}}},"none",{">":[{"var":"trapLeft"},0]},"dodge","spring"]}}},
+    "dungeon_step": {"if":[{"!":{"bool":{"var":"trap"}}},"none",{">":[{"var":"trapLeft"},0]},"dodge","spring"]}
+  }
+}

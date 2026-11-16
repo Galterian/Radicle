@@ -1,0 +1,246 @@
+#!/usr/bin/env node
+// Oracle for game/classes-repo.mjs (+ the shared core game/defs-repo.mjs, classes-repo-sync.mjs and
+// the repo's tools/: manifest.mjs, check.mjs, engine/, validator/, pins.json): hash stability, ref
+// round-trip, load at a pinned commit (isomorphic-git and git CLI), tamper rejection, cache
+// hit/miss, httpd fetcher URLs, cache dirs, tools sha256 recorded + enforced. Needs `git` on PATH
+// (run inside WSL). Offline. Same coverage as effects-repo-check.mjs.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  CLASSES_RID, canonicalJson, classHash, classRef, classLibRef, parseClassRef, verifyClass, buildClassesManifest, createClassCache,
+  getClassByRef, getClassLibByRef, loadClassesFrom, loadClassLibsFrom, loadClassSetFrom, gitClassFetcher, gitClassLibFetcher,
+  httpdClassFetcher, httpdClassLibFetcher, classesCacheDir, isPlayerBranch, ClassRefError,
+} from '../classes-repo.mjs';
+import { DefsRefError, createDefsRepo, sha256Hex } from '../defs-repo.mjs';
+import * as effectsRepo from '../effects-repo.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const GAME = path.resolve(HERE, '..');
+let pass = 0, fail = 0;
+const ok = (cond, name, extra = '') => { if (cond) { pass++; console.log(`  ok   ${name}`); } else { fail++; console.log(`  FAIL ${name} ${extra}`); } };
+const throwsCode = async (fn, code) => { try { await fn(); return false; } catch (e) { return e?.code === code || (code === '*' && !!e); } };
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'classrepo-'));
+const sh = (cwd, ...a) => execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { encoding: 'utf8' }).trim();
+const node = (args, opts = {}) => spawnSync(process.execPath, args, { encoding: 'utf8', ...opts });
+
+const A1 = { id: 'class_alpha', name: 'Alpha', uses: ['std'], hooks: { onCast: { if: [{ '>': [{ var: 'a' }, 1] }, 2, 3] } }, power: 3 };
+const A1_shuffled = { power: 3, hooks: { onCast: { if: [{ '>': [{ var: 'a' }, 1] }, 2, 3] } }, uses: ['std'], name: 'Alpha', id: 'class_alpha' };
+const A2 = { ...A1, power: 4 };
+const B = { id: 'class_beta', name: 'Beta', n: -0, f: 0.1, s: 'ü "q"\n', power: 1 };
+const C = { id: 'class_gamma', name: 'Gamma', power: 2 };
+const LIB = { id: 'std', schema: 'chaosd6.class-lib/1', subs: { one: { params: [], body: 1 } } };
+const LIB2 = { ...LIB, subs: { ...LIB.subs, two: { params: [], body: 2 } } };
+
+console.log('hash stability (shared core)');
+ok(classHash(A1) === classHash(A1_shuffled), 'key order does not change the hash');
+ok(classHash(A1) === classHash(JSON.parse(JSON.stringify(A1, null, 4))), 'whitespace does not change the hash');
+ok(classHash(A1) !== classHash(A2), 'a changed value changes the hash');
+ok(classHash({ ...A1, uses: ['b', 'a'] }) !== classHash({ ...A1, uses: ['a', 'b'] }), 'array order is significant');
+ok(canonicalJson({ b: 1, a: [true, null, 'x'], c: { z: 0, y: -0 } }) === '{"a":[true,null,"x"],"b":1,"c":{"y":0,"z":0}}', 'canonical form');
+ok(await throwsCode(() => canonicalJson({ n: NaN }), '*'), 'NaN rejected');
+ok(classHash({ z: { c: null, b: false }, id: 'effect_x', a: [1, 'x'] }) === 'c38d7fc0ba5c5317ebd5baaf67e1544fbe43dd00b02230cbb844bdbae185b6fb', 'fixed test vector (same as effects)');
+ok([A1, B, C, LIB].every(d => classHash(d) === effectsRepo.effectHash(d)), 'classes and effects hash identically (one core)');
+const tm = await import(pathToFileURL(path.join(HERE, 'classes-repo-template', 'tools', 'manifest.mjs')).href);
+ok([A1, A2, B, C, LIB].every(d => tm.defHash(d) === classHash(d)), 'repo tools/manifest.mjs hashes like the loader');
+
+console.log('refs');
+ok(CLASSES_RID === (process.env.CHAOSD6_CLASSES_RID || 'rad:TODO_CLASSES_RID'), `CLASSES_RID default/env (${CLASSES_RID})`);
+const ref = classRef(A1, { repo: 'rad:z2xbfJfwT3kukR73m8LXmmuvchEwr', branch: 'players/alice/alpha', commit: 'a'.repeat(40) });
+ok(JSON.stringify(parseClassRef(JSON.parse(JSON.stringify(ref)))) === JSON.stringify(ref), 'ref JSON round-trip');
+ok(Object.keys(ref).sort().join() === 'branch,commit,id,repo,sha256', 'ref fields {repo, branch, commit, sha256, id}');
+ok(classRef(A1).repo === CLASSES_RID && parseClassRef(classRef(A1)).repo === CLASSES_RID, 'default repo = CLASSES_RID (placeholder accepted)');
+ok(await throwsCode(() => parseClassRef({ ...ref, sha256: 'xyz' }), 'bad-ref'), 'bad sha rejected');
+ok(await throwsCode(() => parseClassRef({ ...ref, id: '../etc/passwd' }), 'bad-id'), 'path-traversal id rejected');
+ok(await throwsCode(() => parseClassRef({ ...ref, commit: 'HEAD' }), 'bad-ref'), 'non-oid commit rejected');
+ok(await throwsCode(() => parseClassRef({ ...ref, repo: 'rad:../x' }), 'bad-ref'), 'bad repo rejected');
+ok(isPlayerBranch('players/alice/alpha') && !isPlayerBranch('main') && !isPlayerBranch('players/x'), 'player branch convention');
+ok(await throwsCode(() => verifyClass(A2, ref), 'sha-mismatch'), 'verifyClass: other version rejected');
+try { verifyClass(A2, ref); } catch (e) { ok(e instanceof ClassRefError && e instanceof DefsRefError && e.name === 'ClassRefError' && /class|sha256/.test(e.message), 'errors are ClassRefError (⊂ DefsRefError)'); }
+try { parseClassRef({ id: 7 }); } catch (e) { ok(/invalid class id/.test(e.message), 'messages say "class"', e.message); }
+const man = buildClassesManifest([B, A1], [LIB]);
+ok(Object.keys(man).join() === 'format,hash,classes,lib' && Object.keys(man.classes).join() === 'class_alpha,class_beta' && man.classes.class_alpha === ref.sha256 && man.lib.std === classHash(LIB), 'manifest {classes, lib} sorted id → sha256');
+ok(await throwsCode(() => buildClassesManifest([A1, A2]), 'dup-id'), 'manifest rejects duplicate ids');
+ok(JSON.stringify(effectsRepo.buildManifest([B, A1].map(d => ({ ...d, id: d.id.replace('class', 'effect') })))).includes('"effects"') && !('lib' in effectsRepo.buildManifest([])), 'effects manifest shape unchanged (no lib key)');
+const X = createDefsRepo({ kind: 'widget', subdir: 'widgets', rid: 'rad:zW', cacheEnv: 'X_CACHE' });
+ok(X.path('w1') === 'widgets/w1.json' && new X.RefError('c', 'm').name === 'WidgetRefError' && X.buildManifest([{ id: 'w1' }]).widgets.w1, 'core: kind-parameterised (path, error name, manifest key)');
+
+console.log('fake game/ (engine + validator) and sync');
+const g = path.join(tmp, 'g'); fs.mkdirSync(path.join(g, 'tools'), { recursive: true });
+fs.writeFileSync(path.join(g, 'eng-helper.mjs'), "export const MAXP = 5;\n");
+fs.writeFileSync(path.join(g, 'effect-engine.mjs'), "import { MAXP } from './eng-helper.mjs';\nexport const ENGINE = 'fake';\nexport { MAXP };\n");
+fs.writeFileSync(path.join(g, 'classes.mjs'), "import { MAXP } from './effect-engine.mjs';\nexport function validateClassDef(def) { return typeof def.power === 'number' ? [] : ['power must be a number']; }\nexport { MAXP };\nexport async function neverCalled() { return import('./peer.mjs'); }\n");
+fs.writeFileSync(path.join(g, 'peer.mjs'), "export const NOPE = 1;\n");
+fs.writeFileSync(path.join(g, 'tools', 'classes-validator.mjs'), [
+  "import fs from 'node:fs';",
+  "import { MAXP } from '../classes.mjs';",
+  "const cal = JSON.parse(fs.readFileSync(new URL('./classes-validator-calibration.json', import.meta.url), 'utf8'));",
+  "export function checkClass(def) { return { verdict: def.power * cal.k > MAXP ? 'too-strong' : 'ok', reasons: ['power ' + def.power] }; }",
+  "const SELF = fs.readFileSync(new URL(import.meta.url), 'utf8').split(String.fromCharCode(13)).join('');",
+  "const LIBD = new URL('../classes-data/lib/', import.meta.url);",
+  "const LIBN = fs.existsSync(LIBD) ? fs.readdirSync(LIBD).length : -1;",
+  "export function computePin() { return { format: 'fake-pin/1', pin_id: SELF.length + '.' + cal.k + '.' + LIBN, accept: ['ok'] }; }",
+  "export function verifyPin(pin) { const m = computePin(); return { ok: pin?.pin_id === m.pin_id, diffs: pin?.pin_id === m.pin_id ? [] : ['pin_id'] }; }",
+  '',
+].join('\r\n'));   // CRLF source: pins are over LF bytes
+fs.writeFileSync(path.join(g, 'tools', 'classes-validator-calibration.json'), '{ "k": 1 }\n');
+const src = path.join(g, 'classes-data'); fs.mkdirSync(path.join(src, 'classes'), { recursive: true }); fs.mkdirSync(path.join(src, 'lib'));
+fs.writeFileSync(path.join(src, 'SCHEMA.md'), '# classes schema\n'); fs.writeFileSync(path.join(src, 'HOOKS.md'), '# hooks\r\n');
+const repo = path.join(tmp, 'repo');
+const sync = (...a) => { const r = node([path.join(HERE, 'classes-repo-sync.mjs'), '--repo', repo, '--src', src, '--game-root', g, ...a]); if (r.status) throw new Error(r.stdout + r.stderr); return r.stdout; };
+const put = (d, sub = 'classes', pretty = 2) => fs.writeFileSync(path.join(src, sub, `${d.id}.json`), JSON.stringify(d, null, pretty));
+put(A1); put(B); put(LIB, 'lib');
+const dry = sync('--dry-run');
+ok(dry.includes('dry run') && !fs.existsSync(repo), '--dry-run writes nothing');
+sync('-m', 'one');
+const c1 = sh(repo, 'rev-parse', 'HEAD');
+fs.unlinkSync(path.join(src, 'classes', 'class_beta.json')); put(A2, 'classes', 0); put(C); put(LIB2, 'lib');
+sync('-m', 'two');
+const c2 = sh(repo, 'rev-parse', 'HEAD');
+ok(c1 !== c2 && sh(repo, 'rev-list', '--count', 'HEAD') === '2', 'sync committed twice locally');
+ok(sh(repo, 'remote') === '', 'sync added no remote (local only)');
+ok(node([path.join(repo, 'tools', 'manifest.mjs'), '--check']).stdout.includes('ok (2 classes, 1 libs)'), 'repo index.json fresh (manifest --check)');
+ok(['README.md', 'SCHEMA.md', 'HOOKS.md', '.gitattributes', 'validator/pin.json', 'tools/README.md', 'tools/check.mjs'].every(f => fs.existsSync(path.join(repo, f))), 'skeleton files present (README, SCHEMA, HOOKS, pin, tools/README, check)');
+ok(fs.readFileSync(path.join(repo, 'SCHEMA.md'), 'utf8') === '# classes schema\n' && !fs.readFileSync(path.join(repo, 'HOOKS.md'), 'utf8').includes('\r'), 'SCHEMA/HOOKS mirrored from src, LF');
+ok(!sync().includes('committed'), 'sync is idempotent (no empty commit)');
+
+console.log('tools/ mirrored + sha256 recorded');
+const pins = JSON.parse(fs.readFileSync(path.join(repo, 'tools', 'pins.json'), 'utf8'));
+ok(Object.keys(pins.engine.files).sort().join() === 'classes.mjs,effect-engine.mjs,eng-helper.mjs', 'engine/ = entries + their import closure', Object.keys(pins.engine.files).join());
+ok(pins.engine.entry.classes === 'classes.mjs' && pins.engine.entry.effect_engine === 'effect-engine.mjs', 'engine entries recorded');
+ok(pins.validator.entry === 'classes-validator.mjs' && Object.keys(pins.validator.files).sort().join() === 'classes-validator-calibration.json,classes-validator.mjs', 'validator/ = validator + calibration');
+ok(pins.unresolved.length === 1 && pins.unresolved[0].import === 'g/peer.mjs', 'peer.mjs never mirrored (listed unresolved)', JSON.stringify(pins.unresolved));
+const vtxt = fs.readFileSync(path.join(repo, 'tools', 'validator', 'classes-validator.mjs'), 'utf8');
+ok(vtxt === fs.readFileSync(path.join(g, 'tools', 'classes-validator.mjs'), 'utf8').replace(/\r\n/g, '\n') && vtxt.includes("from '../classes.mjs'"), 'validator copied byte-identical (LF), imports untouched');
+ok(pins.validator.files['classes-validator.mjs'].source === 'g/tools/classes-validator.mjs' && pins.engine.files['classes.mjs'].source === 'g/classes.mjs' && pins.game_dir === 'g', 'chaosD6 source paths recorded (layout for staging)');
+const vpinFile = JSON.parse(fs.readFileSync(path.join(repo, 'validator', 'pin.json'), 'utf8'));
+ok(vpinFile.format === 'fake-pin/1' && vpinFile.pin_id === pins.validator.pin_id, "validator/pin.json = the validator's computePin(), pin_id in pins.json");
+const allRecorded = [['', pins.self.files], ['engine', pins.engine.files], ['validator', pins.validator.files]].every(([area, files]) =>
+  Object.entries(files).every(([rel, rec]) => sha256Hex(fs.readFileSync(path.join(repo, 'tools', area, rel), 'utf8')) === rec.sha256));
+ok(allRecorded && Object.keys(pins.self.files).sort().join() === 'README.md,check.mjs,manifest.mjs', 'every tools file sha256 matches pins.json');
+ok(pins.engine.files['effect-engine.mjs'].sha256 === sha256Hex(fs.readFileSync(path.join(g, 'effect-engine.mjs'), 'utf8')), 'engine sha256 = sha of the chaosD6 file');
+const shaMap = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.sha256]));
+ok(pins.tools_sha256 === sha256Hex(canonicalJson({ self: shaMap(pins.self.files), engine: shaMap(pins.engine.files), validator: shaMap(pins.validator.files) })), 'tools_sha256 over {self, engine, validator}');
+
+console.log('tools/check.mjs (offline)');
+const check = (...a) => node([path.join(repo, 'tools', 'check.mjs'), ...a], { cwd: repo });
+let r = check('classes/class_gamma.json');
+ok(r.status === 0 && /ok\s+classes\/class_gamma\.json.*schema:ok engine:ok validator:ok \(ok\)/.test(r.stdout), 'good class passes schema + engine + validator (staged layout)', r.stdout);
+ok(/validator pin: ok/.test(r.stdout), 'validator/pin.json verified against the staged validator (verifyPin)', r.stdout);
+r = check('--all', '--json');
+const J = JSON.parse(r.stdout);
+ok(r.status === 0 && J.ok && J.results.length === 2 && J.results.every(x => x.sha256 === classHash(JSON.parse(fs.readFileSync(path.join(repo, x.file), 'utf8')))), '--all --json: sha256 per class');
+const scratch = path.join(tmp, 'prop'); fs.mkdirSync(scratch);
+const wr = (d, n = `${d.id}.json`) => { const f = path.join(scratch, n); fs.writeFileSync(f, JSON.stringify(d)); return f; };
+r = check(wr({ id: 'class_big', power: 9 }));
+ok(r.status === 1 && r.stdout.includes('too-strong'), 'validator verdict outside accept → fail');
+r = check(wr({ id: 'class_nopow' }));
+ok(r.status === 1 && r.stdout.includes('power must be a number'), 'pinned engine validateClassDef runs');
+r = check(wr({ id: 'class_lib', power: 1, uses: ['nolib'] }));
+ok(r.status === 1 && r.stdout.includes('unknown lib nolib'), 'unknown lib → schema fail');
+r = check(wr({ id: 'class_x', power: 1 }, 'other_name.json'));
+ok(r.status === 1 && r.stdout.includes('file name must be class_x.json'), 'id ≠ file name → schema fail');
+r = check(wr({ id: 'class_big', power: 9 }), '--no-validator');
+ok(r.status === 0 && r.stdout.includes('validator:skipped'), '--no-validator skips the validator');
+fs.writeFileSync(path.join(repo, 'validator', 'pin.json'), JSON.stringify({ ...vpinFile, pin_id: 'other' }));
+r = check('classes/class_gamma.json');
+ok(r.status === 1 && /validator pin: FAIL/.test(r.stdout), 'validator/pin.json for another validator → FAIL', r.stdout);
+sh(repo, 'checkout', '--', 'validator/pin.json');
+fs.appendFileSync(path.join(repo, 'tools', 'engine', 'eng-helper.mjs'), '// tampered\n');
+r = check('classes/class_gamma.json');
+ok(r.status === 1 && /pins: FAIL[\s\S]*tools\/engine\/eng-helper\.mjs: sha256/.test(r.stdout), 'tampered engine file → pins FAIL', r.stdout);
+sh(repo, 'checkout', '--', 'tools/engine/eng-helper.mjs');
+ok(check('classes/class_gamma.json').status === 0, 'restored → pass again');
+
+console.log('load at a pinned commit');
+for (const engine of ['isomorphic', 'git']) {
+  const L1 = await loadClassesFrom({ dir: repo, commit: c1, engine, repo: 'rad:zTest', branch: 'main' });
+  const L2 = await loadClassesFrom({ dir: repo, commit: c2, engine });
+  ok(L1.commit === c1 && Object.keys(L1.classes).join() === 'class_alpha,class_beta', `${engine}: commit 1 = alpha+beta`);
+  ok(classHash(L1.classes.class_alpha) === classHash(A1) && L1.refs.class_alpha.commit === c1 && L1.refs.class_alpha.repo === 'rad:zTest', `${engine}: commit 1 alpha is v1, ref pinned`);
+  ok(Object.keys(L2.classes).join() === 'class_alpha,class_gamma' && L2.refs.class_alpha.sha256 === classHash(A2), `${engine}: commit 2 = alpha v2 + gamma`);
+  const LL1 = await loadClassLibsFrom({ dir: repo, commit: c1, engine }); const LL2 = await loadClassLibsFrom({ dir: repo, commit: c2, engine });
+  ok(classHash(LL1.libs.std) === classHash(LIB) && classHash(LL2.libs.std) === classHash(LIB2) && LL2.refs.std.sha256 === classHash(LIB2), `${engine}: lib/std pinned per commit`);
+  const LH = await loadClassSetFrom({ dir: repo, commit: 'main', engine });
+  ok(LH.commit === c2 && LH.refs.class_gamma.branch === 'main' && LH.libRefs.std.branch === 'main' && LH.libs.std && !LH.errors.length, `${engine}: class set at branch tip (classes + libs)`);
+  const LG = await loadClassesFrom({ gitdir: path.join(repo, '.git'), commit: c1, engine });
+  ok(Object.keys(LG.classes).length === 2, `${engine}: gitdir works (Radicle storage style)`);
+}
+fs.writeFileSync(path.join(repo, 'classes', 'class_wrong.json'), JSON.stringify({ id: 'class_other' }));
+sh(repo, 'add', '-A'); sh(repo, 'commit', '-qm', 'bad');
+const LB = await loadClassesFrom({ dir: repo });
+ok(!LB.classes.class_other && !LB.classes.class_wrong && LB.errors.length === 1 && LB.errors[0].file === 'classes/class_wrong.json', 'id/file-name mismatch reported in errors');
+
+console.log('cache + getClassByRef');
+const cache = createClassCache({ dir: path.join(tmp, 'cache') });
+const r1 = classRef(A1, { commit: c1 });
+let calls = 0;
+const gitF = gitClassFetcher({ dir: repo });
+const counting = async (x) => { calls++; return gitF(x); };
+const got1 = await getClassByRef(r1, { cache, fetch: counting });
+ok(classHash(got1) === r1.sha256 && calls === 1 && cache.stats.misses === 1, 'miss → fetched old commit from git, verified');
+ok(fs.readFileSync(cache.path(r1.sha256), 'utf8') === canonicalJson(A1), 'cached as <sha256>.json (canonical)');
+const got2 = await getClassByRef(r1, { cache, fetch: counting });
+ok(calls === 1 && cache.stats.hits === 1 && classHash(got2) === r1.sha256, 'hit → no fetch');
+const [p1, p2] = await Promise.all([getClassByRef(classRef(C, { commit: c2 }), { cache, fetch: counting }), getClassByRef(classRef(C, { commit: c2 }), { cache, fetch: counting })]);
+ok(calls === 2 && p1.id === p2.id, 'concurrent misses share one fetch');
+ok(await throwsCode(() => getClassByRef(classRef(B, { commit: c2 }), { cache, fetch: gitF }), 'not-found'), 'absent at commit → not-found');
+ok(await throwsCode(() => getClassByRef(classRef(B), { cache }), 'not-found'), 'no fetcher → not-found');
+const lib1 = await getClassLibByRef(classLibRef(LIB, { commit: c1 }), { cache, fetch: gitClassLibFetcher({ dir: repo, engine: 'git' }) });
+ok(classHash(lib1) === classHash(LIB), 'lib by ref from lib/<id>.json at the old commit (git CLI)');
+ok(await throwsCode(() => getClassLibByRef(classLibRef(LIB2, { commit: c1 }), { cache, fetch: gitClassLibFetcher({ dir: repo }) }), 'sha-mismatch'), 'lib v2 ref at commit 1 → sha-mismatch');
+
+console.log('tamper');
+const rB = classRef(B, { commit: c1 });
+const evil = async () => ({ ...B, n: 99 });
+ok(await throwsCode(() => getClassByRef(rB, { cache, fetch: evil }), 'sha-mismatch'), 'tampered fetch → sha-mismatch');
+ok(!cache.has(rB.sha256), 'tampered definition not cached');
+ok(await throwsCode(() => getClassByRef(rB, { cache, fetch: async () => ({ ...C, id: 'class_beta' }) }), 'sha-mismatch'), 'substituted definition rejected');
+ok(classHash(await getClassByRef(rB, { cache, fetch: [evil, gitF] })) === rB.sha256, 'fetcher list: bad source skipped, good one accepted');
+fs.writeFileSync(cache.path(rB.sha256), canonicalJson({ ...B, n: 5 }));
+ok(cache.get(rB.sha256) === null && !cache.has(rB.sha256) && cache.stats.corrupt === 1, 'tampered cache file → miss + deleted');
+ok((await getClassByRef(rB, { cache, fetch: gitF })).id === 'class_beta', 're-fetched after cache tamper');
+
+console.log('httpd fetchers');
+let seenUrl = '';
+const fakeFetch = (body) => async (url) => { seenUrl = url; return { ok: true, status: 200, json: async () => ({ content: JSON.stringify(body, null, 2), binary: false }) }; };
+const cacheH = createClassCache({ dir: path.join(tmp, 'cacheH') });
+await getClassByRef({ ...r1, repo: 'z2xbfJfwT3kukR73m8LXmmuvchEwr' }, { cache: cacheH, fetch: httpdClassFetcher({ seedHost: 'seed.example', rid: 'rad:zDefault', fetchImpl: fakeFetch(A1) }) });
+ok(seenUrl === `https://seed.example/api/v1/repos/rad:z2xbfJfwT3kukR73m8LXmmuvchEwr/blob/${c1}/classes/class_alpha.json`, 'URL = /api/v1/repos/<rid>/blob/<commit>/classes/<id>.json', seenUrl);
+await getClassLibByRef({ ...classLibRef(LIB, { commit: c1 }), repo: '' }, { cache: cacheH, fetch: httpdClassLibFetcher({ seedHost: 'https://seed.example/', rid: 'rad:zDefault', fetchImpl: fakeFetch(LIB) }) });
+ok(seenUrl === `https://seed.example/api/v1/repos/rad:zDefault/blob/${c1}/lib/std.json`, 'lib URL …/lib/<id>.json; empty ref.repo → default rid', seenUrl);
+const h404 = httpdClassFetcher({ seedHost: 'seed.example', fetchImpl: async () => ({ ok: false, status: 404 }) });
+ok(await throwsCode(() => getClassByRef(classRef(C, { commit: c2 }), { cache: cacheH, fetch: h404 }), 'not-found'), 'httpd 404 → not-found');
+
+console.log('cache dir');
+const env = { ...process.env };
+for (const k of ['CHAOSD6_CLASSES_CACHE', 'CHAOSD6_EFFECTS_CACHE', 'CHAOSD6_USER_DATA_DIR']) delete process.env[k];
+process.env.XDG_DATA_HOME = '/x/share';
+ok(classesCacheDir() === '/x/share/chaosd6/classes', 'desktop: $XDG_DATA_HOME/chaosd6/classes');
+process.env.CHAOSD6_USER_DATA_DIR = '/data/user/0/app/files/data';
+ok(classesCacheDir() === '/data/user/0/app/files/data/classes', 'phone: <filesDir>/data/classes');
+process.env.CHAOSD6_CLASSES_CACHE = '/t/s';
+ok(classesCacheDir() === '/t/s' && effectsRepo.effectsCacheDir() === '/data/user/0/app/files/data/effects', 'override: $CHAOSD6_CLASSES_CACHE (effects cache unaffected)');
+for (const k of Object.keys(process.env)) if (!(k in env)) delete process.env[k];
+Object.assign(process.env, env);
+
+console.log('real tree: dry-run sync over game/');
+r = node([path.join(HERE, 'classes-repo-sync.mjs'), '--repo', path.join(tmp, 'real'), '--dry-run']);
+ok(r.status === 0 && /tools: engine [^\n]*effect-engine\.mjs/.test(r.stdout) && !fs.existsSync(path.join(tmp, 'real')), 'default engine includes game/effect-engine.mjs; nothing written', r.stdout + r.stderr);
+r = node([path.join(HERE, 'classes-repo-sync.mjs'), '--repo', path.join(tmp, 'real'), '--no-commit']);
+const realPins = r.status === 0 ? JSON.parse(fs.readFileSync(path.join(tmp, 'real', 'tools', 'pins.json'), 'utf8')) : null;
+ok(realPins && !realPins.unresolved.length && realPins.engine.files['effect-engine.mjs']?.sha256 === sha256Hex(fs.readFileSync(path.join(GAME, 'effect-engine.mjs'), 'utf8').replace(/\r\n/g, '\n')), 'real sync: engine pinned to game/effect-engine.mjs, nothing unresolved', r.stdout + r.stderr);
+if (realPins?.validator?.entry) {
+  const probe = path.join(tmp, 'real', 'classes', 'class_c3_probe.json');
+  fs.writeFileSync(probe, JSON.stringify({ id: 'class_c3_probe' }));
+  r = node([path.join(tmp, 'real', 'tools', 'check.mjs'), probe, '--json'], { cwd: path.join(tmp, 'real') });
+  let RJ = null; try { RJ = JSON.parse(r.stdout); } catch {}
+  ok(RJ && RJ.pins === 'ok' && !RJ.load.length && RJ.validator_pin.ok && /^ok/.test(RJ.validator_pin.why) && RJ.results[0].steps.validator,
+    `real validator (${realPins.validator.entry}) runs offline from the repo, its pin matches (verdict ${RJ?.results?.[0]?.verdict ?? '?'})`, r.stdout.slice(0, 600) + r.stderr.slice(0, 600));
+} else ok(true, 'real sync: no classes validator in game/tools yet (skipped)');
+
+fs.rmSync(tmp, { recursive: true, force: true });
+console.log(`\nclasses-repo-check: ${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

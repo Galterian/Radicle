@@ -33,9 +33,10 @@ const listPublishedDimensions = async (opts) => DIMS_FIXTURE ? JSON.parse(await 
 import { enrichDimensions, planDelete, removeLocalDirs, loadHidden, hideDimension, mineMapsOf, OLD_AFTER_MS, LOCAL_ONLY_NOTE } from './dims-local.mjs';
 import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { fancyLabel } from './js/names.js';
-import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR } from './tools/autosave.mjs';
+import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR, readPrivateMark } from './tools/autosave.mjs';
+import { isTestMode, PRIVATE_TEST_ENV, privateDimId } from './join-plan.mjs';
 import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing, describeDimension, doorMapSummaries, validTile,
-  dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors } from './join-plan.mjs';
+  dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
 import { randomBytes } from 'node:crypto';
 import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
@@ -130,6 +131,7 @@ function spawnChild(name, args, env) {
   child._http = Number(env?.PEER_PORT_HTTP) || null;
   child._dim = env?.DIM_NAME || null;
   child._profileCharId = env?.PROFILE_CHAR_ID || null;   // no-cloning check (aliveHere)
+  child._private = env?.DIM_PRIVATE === '1';              // a private test game: never counts for one-dimension
   const logFile = logStreamFor(name, env);
   child.stdout.on('data', (b) => { process.stdout.write(`${b}`); logFile.write(b); });
   child.stderr.on('data', (b) => { process.stderr.write(`${b}`); logFile.write(b); });
@@ -264,17 +266,21 @@ const TEAM_TIER_RING = { strong: { min: 2, max: 6 }, reachable: { min: 9, max: 1
 // `override` (profile launches, user ruling 2026-11-13) replaces the hero and/or
 // the default ally: { hero: profile character | null (random), allies: [profile
 // characters] (bots, alliance npc_a) | null (the Pride Guardian), tier }.
-async function startDimension({ dimensionName, publicIp }, override = null) {
+async function startDimension({ dimensionName, publicIp, mode }, override = null) {
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
-  // One dimension at a time (user ruling 2026-11-15): Create Dimension / Test my character / Test my team refuse
-  // (409) when the hero or any team member is alive in another dimension.
-  if (override?.hero) await refuseAliveHere(null, [override.hero, ...(override.allies || [])]);
+  // Test my character / Test my team / Test Random character are LOCAL and PRIVATE (user 2026-11-16): no Door, no
+  // Nostr bus, loopback only, an unguessable DIM_ID, never unattended — and so never "one dimension at a time"
+  // (supersedes the 2026-11-15 refusal for tests). Create Dimension (named) stays public and still refuses (409)
+  // when the hero is alive in another dimension.
+  const test = isTestMode(mode);
+  if (override?.hero && !test) await refuseAliveHere(null, [override.hero, ...(override.allies || [])]);
   const DIM_NAME = (dimensionName || 'Ashfall-Micro').trim();
-  const DIM_ID   = `dim-${slug(DIM_NAME)}`;
+  const DIM_ID   = test ? privateDimId(DIM_NAME) : `dim-${slug(DIM_NAME)}`;
   const DOOR_ID  = 'door-primary';
-  const ip = (publicIp || '').trim() || defaultPublicIp();
+  const ip = test ? '127.0.0.1' : ((publicIp || '').trim() || defaultPublicIp());
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error(`"${ip}" is not an IPv4 address`);
-  const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  const netEnv = test ? { ...PRIVATE_TEST_ENV, TEST_MODE: mode } : { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  // (The peers' autosave writes private.json beside the saves — TEST_MODE — so Load old Dimension tags it "test".)
   const pc = override?.hero || null;
   const hero = pc ? { id: pc.base_character, name: pc.name } : randomCharacter();
   const file = profilePath();
@@ -308,8 +314,8 @@ async function startDimension({ dimensionName, publicIp }, override = null) {
   ]);
   const libp2pBase = await freePortRun(Math.max(7410, httpBase + roster.length), roster.length);
   const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
-  startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME };
-  console.log(`[launcher] starting dimension ${DIM_NAME}  (dim_id=${DIM_ID}; direct links via ${ip}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+; bus relays ${DEFAULT_RELAYS.join(', ')})`);
+  startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME, ...(test ? { private: true, dimensionId: DIM_ID } : {}) };
+  console.log(`[launcher] starting dimension ${DIM_NAME}  (dim_id=${DIM_ID}; direct links via ${ip}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+; ${test ? `PRIVATE test game (${mode}): no Door, no bus, loopback` : `bus relays ${DEFAULT_RELAYS.join(', ')}`})`);
   const allGunUrls = peers.map(p => `http://${ip}:${p.gun}/gun`);
   // libp2p ids are minted at boot, so each peer learns the addresses of the
   // ones already up (via their /status) and dials them straight away. Without
@@ -344,7 +350,7 @@ async function startDimension({ dimensionName, publicIp }, override = null) {
   }
   const ok = await waitForPort(peers[0].http);
   if (!ok) throw new Error(`peer-player-1 did not come up on :${peers[0].http}`);
-  return { peerPort: peers[0].http, status: 'started', dimension: DIM_NAME, publicIp: ip };
+  return { peerPort: peers[0].http, status: 'started', dimension: DIM_NAME, publicIp: ip, ...(test ? { private: true, dimension_id: DIM_ID } : {}) };
 }
 
 // Doors lag reality by up to a Door push: a hero who joined seconds ago is not
@@ -353,7 +359,7 @@ async function startDimension({ dimensionName, publicIp }, override = null) {
 // merge their view (peers + self) into the Door members before placing.
 async function liveMembersFromLocalPeers(dimName) {
   const out = [];
-  const mine = children.filter(c => c._dim === dimName && c._http && c.exitCode === null && !c.killed);
+  const mine = children.filter(c => c._dim === dimName && !c._private && c._http && c.exitCode === null && !c.killed);
   await Promise.all(mine.map(async c => {
     try {
       const st = await fetch(`http://127.0.0.1:${c._http}/status`, { signal: AbortSignal.timeout(1500) }).then(r => r.json());
@@ -513,10 +519,12 @@ async function refuseAliveHere(dim, chars, { except = null } = {}) {
   if (!chars.length) return;
   let all = [];
   try { all = await listPublishedDimensions({ sync: false }); } catch (e) { console.warn(`[launcher] one-dimension check: cannot list dimensions (${e.message}) — checking ${dim?.dimension_name || 'the running peers'} only`); }
-  const hits = aliveInDimensions([dim, ...all].filter(d => d && d.dimension_name !== except), chars);
+  // Only LIVE presence counts in other dimensions (user 2026-11-16: a record left alive in a quiet dimension never
+  // blocks joining elsewhere; a live shadow does); in the join target `dim` any-age records still refuse (no clone).
+  const hits = aliveInDimensions([dim, ...all].filter(d => d && d.dimension_name !== except), chars, { anyAgeIn: dim?.dimension_name ?? null });
   for (const c of chars) {
     if (hits.some(h => h.character.id === c.id)) continue;
-    const run = children.filter(x => x._profileCharId === c.id && x.exitCode === null && x.signalCode === null && (except == null || x._dim !== except));
+    const run = children.filter(x => x._profileCharId === c.id && !x._private && x.exitCode === null && x.signalCode === null && (except == null || x._dim !== except));
     for (const x of run) {
       const st = x._http ? await fetch(`http://127.0.0.1:${x._http}/status`, { signal: AbortSignal.timeout(1500) }).then(r => r.json()).catch(() => null) : null;
       const life = st?.entity?.life;
@@ -530,7 +538,7 @@ async function refuseAliveHere(dim, chars, { except = null } = {}) {
 // children, plus (Linux) any other node peer.mjs whose env says the same
 // DIM_NAME + PEER_LABEL - e.g. one started by an earlier launcher run.
 function localPeerProcs(dimName, label) {
-  const out = children.filter(c => c._dim === dimName && c._name === `peer:${label}` && c.exitCode === null && !c.killed)
+  const out = children.filter(c => c._dim === dimName && !c._private && c._name === `peer:${label}` && c.exitCode === null && !c.killed)
     .map(c => ({ pid: c.pid, http: c._http }));
   if (process.platform === 'linux') {
     let pids = [];
@@ -598,7 +606,10 @@ async function restoreDimension({ tmjPath, label }) {
   // as the phone matches it) must not be alive in ANOTHER dimension; alive in this one = the allowed way back.
   const savedPc = playerEnt && loadProfile(profilePath()).characters
     .find(c => c.base_character === String(playerEnt.p.source_id || '') && c.name === playerEnt.name);
-  if (savedPc) await refuseAliveHere(null, [savedPc], { except: DIM_NAME });
+  // A private test game's save (private.json beside it) comes back private: no one-dimension check, no Radicle
+  // rejoin, the private env again (user 2026-11-16).
+  const priv = await readPrivateMark(path.dirname(absPath));
+  if (savedPc && !priv) await refuseAliveHere(null, [savedPc], { except: DIM_NAME });
   const savedTile = playerEnt && Number.isInteger(playerEnt.p.tile_q) && Number.isInteger(playerEnt.p.tile_r)
     ? { q: playerEnt.p.tile_q, r: playerEnt.p.tile_r } : null;
   // Still published on Radicle (any Door / commit, live or not)? Then join that
@@ -607,7 +618,7 @@ async function restoreDimension({ tmjPath, label }) {
   //     stop it, and take its place under the same peer id;
   //   - else my own Door (same peer id) -> its tile if it is newer than the save;
   //   - else the saved tile. Only a dimension Radicle doesn't know is respawned.
-  if (radicleEnv.enabled && playerEnt) {
+  if (radicleEnv.enabled && playerEnt && !priv) {
     let dim = null;
     try {
       dim = (await listPublishedDimensions()).find(d => d.dimension_name === DIM_NAME);
@@ -624,6 +635,11 @@ async function restoreDimension({ tmjPath, label }) {
         if (myDoor?.tile && Date.parse(myDoor.pushed_at || 0) > Date.parse(props.saved_at || 0) && (myDoor.life ?? 1) > 0) {
           tile = { q: myDoor.tile.q, r: myDoor.tile.r }; life = Number(myDoor.life) || life; how = 'my newest Door';
         }
+        // Hero shadows (rule_hero_shadow): a shadow of me stood in after the save → I take it over (its tile, its
+        // life, REPLACES_PEER_ID); killed → I died there, the restore must not bring me back alive.
+        const sh = wantLabel ? heroShadowIn(dim.doors, `peer:${wantLabel}`, Date.parse(props.saved_at || 0) || 0) : null;
+        if (sh?.dead) throw Object.assign(new Error(`${playerEnt.name || wantLabel} died in ${DIM_NAME} as its shadow${sh.killer_name ? ` (killed by ${sh.killer_name})` : ''} — it cannot come back there`), { status: 409 });
+        if (sh) { tile = sh.tile || tile; life = sh.life; how = `my shadow ${sh.peer_id}`; }
         const running = wantLabel ? localPeerProcs(DIM_NAME, wantLabel) : [];
         let replaced = false;
         if (running.length) {
@@ -644,10 +660,10 @@ async function restoreDimension({ tmjPath, label }) {
           characterId: String(playerEnt.p.source_id || '') || randomCharacter().id,
           creatureId: '', label: wantLabel,
           entityName: playerEnt.name || 'You',
-          preferredTile: tile,
-          extraEnv: { ...(life > 0 ? { START_LIFE: String(life) } : {}), ...(classId ? { FORCE_CLASS: classId } : {}) },
+          preferredTile: tile, ...(sh?.tile ? { startTile: sh.tile } : {}),   // the shadow's own hex: it steps down for me
+          extraEnv: { ...(life > 0 ? { START_LIFE: String(life) } : {}), ...(classId ? { FORCE_CLASS: classId } : {}), ...(sh ? { REPLACES_PEER_ID: sh.peer_id } : {}) },
         });
-        return { ...out, status: replaced ? 'replaced' : 'rejoined', tmj: absPath, savedTile, tile, from: how };
+        return { ...out, status: replaced ? 'replaced' : 'rejoined', tmj: absPath, savedTile, tile, from: how, ...(sh ? { took_over: sh.peer_id } : {}) };
       }
       if (dim) console.log(`[launcher] ${DIM_NAME} has no joinable Doors on Radicle — cold-respawning the whole mesh from TMJ`);
       else console.log(`[launcher] ${DIM_NAME} is not on Radicle — cold-respawning the whole mesh from TMJ`);
@@ -655,8 +671,8 @@ async function restoreDimension({ tmjPath, label }) {
   }
 
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
-  const ip = defaultPublicIp();
-  const netEnv = { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
+  const ip = priv ? '127.0.0.1' : defaultPublicIp();
+  const netEnv = priv ? { ...PRIVATE_TEST_ENV, TEST_MODE: String(priv.mode || 'test') } : { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
   // Restore the SAME roster shape startDimension uses, so the ally and foes
   // are present (otherwise the launcher's "my ally died before my dimension
   // loaded" happens — there is simply no ally spawned). Only player-1 reads
@@ -676,7 +692,7 @@ async function restoreDimension({ tmjPath, label }) {
   ]);
   const libp2pBase = await freePortRun(Math.max(7410, httpBase + roster.length), roster.length);
   const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
-  startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME };
+  startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME, ...(priv ? { private: true, dimensionId: DIM_ID } : {}) };
   console.log(`[launcher] restoring ${DIM_NAME} from ${absPath}  (dim_id=${DIM_ID}, seed=${MAP_SEED}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+)`);
   const allGunUrls = peers.map(p => `http://${ip}:${p.gun}/gun`);
   const bootstrap = [];
@@ -713,8 +729,8 @@ async function restoreDimension({ tmjPath, label }) {
 // A dimension this launcher has peers running in (its roster or any live child of it).
 function dimensionRunning(name) {
   if (!name) return false;
-  if (startedDimension?.dimensionName === name) return true;
-  return children.some(c => c._dim === name && c.exitCode === null && c.signalCode === null);
+  if (startedDimension?.dimensionName === name && !startedDimension.private) return true;
+  return children.some(c => c._dim === name && !c._private && c.exitCode === null && c.signalCode === null);
 }
 
 async function readBody(req) {
@@ -758,7 +774,12 @@ async function handleApi(req, res, p) {
       // + on_radicle / saved_locally / local_bytes / last_active / old / hexes / turn_max; tombstoned ones dropped.
       const { radicle: items } = await enrichDimensions({ radicle: raw, saves, hidden: await loadHidden(),
         branches: await localDimensionBranches(), branchBytes: localBranchBytes, running: dimensionRunning });
-      return json(200, { ok: true, enabled: radicleEnv.enabled, reason: radicleEnv.enabled ? null : radicleEnv.reason, door_live_ms: DOOR_LIVE_MS, old_after_ms: OLD_AFTER_MS, synced: doSync, items });
+      // Hero shadows (rule_hero_shadow): a fallen shadow of one of my profile characters → its death card leaves
+      // the profile now (game/shadow-settle.mjs, once per gift id); the killer already has it.
+      const settled = await import('./shadow-settle.mjs').then(m => m.settleFromDimensions(profilePath(), raw)).catch(e => { console.warn(`[launcher] shadow settle failed: ${e.message}`); return []; });
+      for (const s of settled) console.log(`[launcher] shadow: ${s.text}`);
+      return json(200, { ok: true, enabled: radicleEnv.enabled, reason: radicleEnv.enabled ? null : radicleEnv.reason, door_live_ms: DOOR_LIVE_MS, old_after_ms: OLD_AFTER_MS, synced: doSync, items,
+        ...(settled.length ? { shadow_settled: settled } : {}) });
     } catch (e) {
       return json(200, { ok: false, enabled: radicleEnv.enabled, reason: e.message, synced: doSync, items: [] });
     }
@@ -801,6 +822,9 @@ async function handleApi(req, res, p) {
       else if (body.mode === 'test-character' || body.mode === 'test-team' || body.mode === 'join-team') out = await launchProfile(body);
       else if (body.mode === 'join') out = await joinFromList(body);
       else if (body.mode === 'restore') out = await restoreDimension(body);
+      else if (body.mode === 'restore-here') out = await restoreHere(body);
+      // "⇱ Dimension Out" from the start screen (rule_dimension_out): restore-here + the 10-round channel at once.
+      else if (body.mode === 'dim-out') out = await restoreHere(body, { dimOut: true });
       else throw new Error(`unknown mode "${body.mode}"`);
       return json(200, { ok: true, ...out });
     } catch (e) {
@@ -875,7 +899,20 @@ async function joinFromList(body) {
   const b = withProfileJoiner(body);
   const dim = (await listPublishedDimensions()).find(d => d.dimension_name === b.dimensionName);
   if (!dim) throw new Error(`dimension "${b.dimensionName}" is not published on Radicle`);
+  // The owner comes back (rule_unattended_character, user 2026-11-16: "Once the unattended character owning player
+  // joins back he automatically gains control of its character back"): my profile character standing unattended
+  // there → this join is its restore-here takeover (its life, its tile). Its own record (live, or left alive while
+  // the dimension was quiet) still refuses below — "rejoin/restore there" (no clone).
+  const back = b._profileChar ? restoreHereTarget(dim, b._profileChar) : null;
+  if (back?.replaces) {
+    console.log(`[launcher] ${dim.dimension_name}: ${b._profileChar.name} is unattended there (${back.replaces}) — the join takes it back`);
+    return restoreHere({ dimensionName: dim.dimension_name, profileCharId: b._profileChar.id });
+  }
   if (b._profileChar) await refuseAliveHere(dim, [b._profileChar]);
+  // The ally-join link (rule_unattended_character): a unit-list join next to `nearPeer` as its ally — the joiner
+  // publishes ally_of, the link the master of unattended characters is chosen through.
+  const nearPeer = typeof body.nearPeer === 'string' && /^peer:[A-Za-z0-9_.:-]{1,80}$/.test(body.nearPeer) ? body.nearPeer : '';
+  if (nearPeer && !b.creatureId) b.extraEnv = { ...(b.extraEnv || {}), ALLY_OF: nearPeer };
   // "Monster" join (user ruling 2026-11-15: "We know its type, so the same type of monster should be joined and the
   // computer should control it"): the type the Doors know (knownMonsterType) — a bot, no HUMAN. Random only when the
   // Doors know no monster.
@@ -888,6 +925,44 @@ async function joinFromList(body) {
   const out = await joinDimension({ ...b, dim, regen: true, human: !b.creatureId });
   if (out.regen?.length) out.monsters = await startRegenMonsters({ dim, hero: out, monsters: out.regen });
   return out;
+}
+
+// "↻ Restore <name> here" (user 2026-11-16: "I don't know on which old dimension I am alive. I should see it in the
+// list below as a restore one, so I announce to the other nodes that I activated it again"). Body
+// { mode: 'restore-here', dimensionName, profileCharId }. The character comes back under its own peer id at its
+// last tile with its last life (join-plan.mjs restoreHereTarget; a live shadow is taken over: REPLACES_PEER_ID =
+// the shadow, its life), from the Doors' map — a quiet dimension gets its Door-known monsters back as on any quiet
+// join. Its first Door is pushed at once (RADICLE_PUSH_FIRST_SEC) — that push + the bus presence is the
+// announcement that makes other nodes list the dimension LIVE. One dimension at a time: LIVE presence in another
+// dimension refuses (stale records elsewhere don't). A copy of it still running on this box is replaced.
+async function restoreHere(body, { dimOut = false } = {}) {
+  const prof = loadProfile(profilePath());
+  const c = characterOf(prof, String(body.profileCharId || ''));
+  if (!c) throw badRequest(`no profile character ${body.profileCharId || '(none given)'}`);
+  const name = String(body.dimensionName || '').trim();
+  if (!name) throw badRequest('dimensionName is required');
+  if (!radicleEnv.enabled) throw new Error(`radicle disabled: ${radicleEnv.reason}`);
+  const dim = (await listPublishedDimensions()).find(d => d.dimension_name === name);
+  if (!dim?.doors?.length) throw Object.assign(new Error(`${name} is not published on Radicle with Doors — use "Load old Dimension"`), { status: 404 });
+  const t = restoreHereTarget(dim, c);
+  if (!t) throw Object.assign(new Error(`${c.name} is not alive in ${name} (dead there, or never there)`), { status: 409 });
+  await refuseAliveHere(null, [c], { except: name });
+  const running = localPeerProcs(name, t.label);
+  if (running.length) { console.log(`[launcher] ${name}: ${t.label} still runs here (pid ${running.map(r => r.pid).join(',')}) — replacing it`); await stopPeerProcs(running); }
+  const side = ['player', 'player_c', 'player_d', 'npc_b'].includes(t.alliance) ? t.alliance : 'player';
+  // My last tile, unless another live unit (not me, not my shadow) stands on it now → the nearest free hex.
+  const taken = t.tile && unionMembers(dim.doors).some(m => m.peer_id !== t.peer_id && m.peer_id !== t.replaces && (m.life ?? 1) > 0 && m.tile?.q === t.tile.q && m.tile?.r === t.tile.r);
+  console.log(`[launcher] ${name}: restoring ${c.name} as ${t.label} at (${t.tile?.q},${t.tile?.r}) hp ${t.life ?? '?'}${t.replaces ? ` — taking over its shadow ${t.replaces}` : ''}${t.live ? '' : ' (quiet dimension: it wakes up)'}`);
+  const out = await joinDimension({
+    dimensionName: name, dim, doorId: t.doorId, placement: 'nearby', side, human: true, regen: true,
+    characterId: c.base_character, creatureId: '', label: t.label, entityName: c.name,
+    ...(t.tile && !taken ? { startTile: t.tile } : { preferredTile: t.tile }),
+    extraEnv: { ...profileEnv(profilePath(), c), ...(t.life > 0 ? { START_LIFE: String(t.life) } : {}), ...(t.replaces ? { REPLACES_PEER_ID: t.replaces } : {}),
+      RADICLE_PUSH_FIRST_SEC: process.env.RESTORE_PUSH_FIRST_SEC || '1', ALLY_OF: '', DIM_OUT_ON_START: dimOut ? '1' : '' },
+  });
+  if (out.regen?.length) out.monsters = await startRegenMonsters({ dim, hero: out, monsters: out.regen });
+  if (dimOut) console.log(`[launcher] ${name}: ${c.name} starts its Dimension Out at once`);
+  return { ...out, status: dimOut ? 'dim-out' : 'restored-here', character: c.name, took_over: t.replaces || null, dim_out: dimOut };
 }
 
 // Ally tiles for "Join my team": a walkable hex of the tier ring around the hero's start tile per ally

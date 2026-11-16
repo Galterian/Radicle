@@ -1,0 +1,14 @@
+{
+  "schema": "chaosd6.class/1",
+  "id": "class_monk",
+  "name": "Monk",
+  "version": "1.0.0",
+  "source": {"collection":"classes","version":"1.0.0"},
+  "data": {"ability_kind":"static","colors":["elem_time","elem_space","elem_souls","elem_concentration","elem_harmony"],"text":"Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move."},
+  "flags": {"phase":null,"stance":{"EP":"M"},"emits":{"M":true,"EM":["plan","manip"]},"hooks":["stance","emits"]},
+  "uses": ["classes_std"],
+  "hooks": {
+    "stance": {"call":["stance_by_flag"]},
+    "emits": {"call":["emits_by_flag"]}
+  }
+}

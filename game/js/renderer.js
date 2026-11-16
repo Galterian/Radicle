@@ -685,11 +685,12 @@ export function createRenderer(canvas, state) {
       ctx.globalAlpha = 1;
 
       // Invisibility: I and my allies still see the hidden unit, faded (enemies never get it — main.js hiddenFromMe).
-      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, e.gone ? 0.35 : dead ? 0.75 : e.invisible ? 0.45 : 1) : false;
+      // A hero shadow (rule_hero_shadow) is drawn dimmed too.
+      const drewSprite = a.anim ? a.anim.draw(ctx, x, y + 6, now, e.gone ? 0.35 : dead ? 0.75 : e.invisible ? 0.45 : e.shadow ? 0.5 : 1) : false;
       if (!drewSprite) {
         // Fallback disc marker while the sheet is loading / no resources.
         if (dead || e.gone) ctx.globalAlpha = 0.35;
-        else if (e.invisible) ctx.globalAlpha = 0.45;
+        else if (e.invisible || e.shadow) ctx.globalAlpha = 0.45;
         ctx.beginPath();
         ctx.arc(x, y - 6, 16, 0, Math.PI * 2);
         ctx.fillStyle = color;
@@ -739,13 +740,36 @@ export function createRenderer(canvas, state) {
       }
 
       // Label (outlined so it reads over textured tiles).
-      const label = isMobileUI && dead ? `☠ ${e.name}` : e.gone ? `⌛ ${e.name}` : e.name;
+      // Unattended characters (rule_unattended_character): "follow <leader>" / "unattended"; a master gets a ⚑ flag.
+      const label = isMobileUI && dead ? `☠ ${e.name}` : e.gone ? `⌛ ${e.name}` : e.shadow ? `${e.name} · ${e.followName ? `follow ${e.followName}` : 'unattended'}`
+        : e.leader > 0 && !dead ? `⚑ ${e.name}` : e.name;
       ctx.font = '11px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineJoin = 'round';
       ctx.strokeText(label, x, top - 6);
-      ctx.fillStyle = dead || e.gone ? '#9aa0a8' : '#e8ecf1';
+      ctx.fillStyle = dead || e.gone ? '#9aa0a8' : e.leader > 0 ? '#ffd166' : e.shadow ? '#c9a0ff' : '#e8ecf1';
       ctx.fillText(label, x, top - 6);
+      // Dimension Out (rule_dimension_out): a violet "⇱ N" countdown chip under the name, for everyone.
+      if (e.dimOutLeft != null && !dead && !e.gone) {
+        const txt = `⇱ ${e.dimOutLeft}`;
+        ctx.save();
+        ctx.font = 'bold 11px ui-sans-serif, system-ui';
+        const w = ctx.measureText(txt).width + 10, cy = top - 22;
+        ctx.fillStyle = 'rgba(70, 30, 120, 0.85)'; ctx.strokeStyle = '#c9a0ff'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x - w / 2, cy - 8, w, 15, 7) : ctx.rect(x - w / 2, cy - 8, w, 15); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#f1e6ff'; ctx.textAlign = 'center'; ctx.fillText(txt, x, cy + 3);
+        ctx.restore();
+      }
+      // The leader flag: a small pennant over a master's head (gold), so the group's leader reads at a glance.
+      if (e.leader > 0 && !dead && !e.gone) {
+        const fx = x + 14, fy = top - 30;
+        ctx.save();
+        ctx.strokeStyle = '#2b2410'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx, fy + 14); ctx.stroke();
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx + 10, fy + 3.5); ctx.lineTo(fx, fy + 7); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
 
       // Queued-action chip over the player's head during planning. Once
       // committed, keep the letter as-is until the next round — only the
