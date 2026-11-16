@@ -26,6 +26,7 @@
 // cost C (actions) = emissions × (instant ? instant_action_factor : 1) + expected point-buy retries; stat-buy
 //   emissions = round-robin bank until the need is met (exact per caster).
 // curve V̂(C) = a + b·C, least squares over the built-ins (`calibrate`). ratio r = V / V̂(C).
+// TOLERANCE: ±10 % (user ruling 2026-11-16) — calibration policy.tolerance, DEFAULT_TOLERANCE when absent; the band is [0.90, 1.10].
 // VERDICT: reject (schema / unknown or unbounded op / r > hard_cap_ratio / r < hard_floor_ratio), nerf (r > 1+tol),
 //   boost (r < 1−tol), ok. With a baseline (explicit, or automatic when the def has the id of / `extends` a built-in)
 //   the band applies to r / r_baseline — a branch is judged against its parent, so an outlier built-in can still be tuned.
@@ -35,6 +36,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const VALIDATOR_VERSION = '1.0.0';
+export const DEFAULT_TOLERANCE = 0.10;   // user ruling 2026-11-16 (was 0.15)
 export const PIN_FORMAT = 'chaosd6-effects-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
@@ -431,11 +433,11 @@ function patchOf(n0, n1) {
 }
 
 // ------------------------------------------------------------------ checkEffect
-// opts: { baseline: effect id | definition | null (auto: own id / extends a built-in), tolerance, calibration }
+// opts: { baseline: effect id | definition | null (auto: own id / extends a built-in), tolerance (default 0.10), calibration }
 export function checkEffect(def, opts = {}) {
   const cal = opts.calibration || loadCalibration();
   const pin = computePin(cal);
-  const tol = Number.isFinite(opts.tolerance) ? opts.tolerance : cal.policy.tolerance;
+  const tol = Number.isFinite(opts.tolerance) ? opts.tolerance : (Number.isFinite(cal.policy.tolerance) ? cal.policy.tolerance : DEFAULT_TOLERANCE);
   const n = normalizeDef(def);
   const def_sha256 = sha256(canonicalJson(def));
   const base = { validator: { version: VALIDATOR_VERSION, pin_id: pin.pin_id }, effect_id: n.id ?? null, def_sha256, tolerance: tol };

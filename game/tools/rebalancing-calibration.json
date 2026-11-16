@@ -101,7 +101,7 @@
     }
   ],
   "policy": {
-    "tolerance": 0.15,
+    "tolerance": 0.1,
     "hard_cap_ratio": 2,
     "hard_floor_ratio": 0.2,
     "max_elements": 6,
@@ -227,7 +227,7 @@
       "value": 1.8,
       "actions": 2.5,
       "ratio": 0.890166,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_artifice": {
       "value": 1.228363,
@@ -305,7 +305,7 @@
       "value": 1.812714,
       "actions": 2.5,
       "ratio": 0.896454,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_disable": {
       "value": 1.490584,
@@ -341,25 +341,25 @@
       "value": 3.5,
       "actions": 6.666667,
       "ratio": 0.870213,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_elementals_earth": {
       "value": 3.5,
       "actions": 6.666667,
       "ratio": 0.870213,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_elementals_water": {
       "value": 3.5,
       "actions": 6.666667,
       "ratio": 0.870213,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_emotions_bombard": {
       "value": 1.746798,
       "actions": 2.5,
       "ratio": 0.863856,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_empower": {
       "value": 1.090584,
@@ -377,7 +377,7 @@
       "value": 1.79512,
       "actions": 2.629917,
       "ratio": 0.861196,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_fossilization": {
       "value": 1.71829,
@@ -539,7 +539,7 @@
       "value": 1.8,
       "actions": 2.5,
       "ratio": 0.890166,
-      "curve_verdict": "ok"
+      "curve_verdict": "boost"
     },
     "effect_sound_wave": {
       "value": 2.066667,
@@ -557,13 +557,13 @@
       "value": 1.625428,
       "actions": 1.25,
       "ratio": 1.142961,
-      "curve_verdict": "ok"
+      "curve_verdict": "nerf"
     },
     "effect_summoning": {
       "value": 4.9,
       "actions": 7.416667,
       "ratio": 1.118213,
-      "curve_verdict": "ok"
+      "curve_verdict": "nerf"
     },
     "effect_super_force": {
       "value": 1.184848,
@@ -694,6 +694,56 @@
       "id": "effect_dark_matter",
       "ratio": 1.199793,
       "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_spirit_link",
+      "ratio": 1.142961,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_summoning",
+      "ratio": 1.118213,
+      "curve_verdict": "nerf"
+    },
+    {
+      "id": "effect_delay_time",
+      "ratio": 0.896454,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_anger",
+      "ratio": 0.890166,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_sleep",
+      "ratio": 0.890166,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_elementals_air",
+      "ratio": 0.870213,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_elementals_earth",
+      "ratio": 0.870213,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_elementals_water",
+      "ratio": 0.870213,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_emotions_bombard",
+      "ratio": 0.863856,
+      "curve_verdict": "boost"
+    },
+    {
+      "id": "effect_fireball",
+      "ratio": 0.861196,
+      "curve_verdict": "boost"
     },
     {
       "id": "effect_artifice",

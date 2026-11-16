@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkEffect, loadCalibration, loadBuiltinDefs, computePin, verifyPin, canonicalJson, VALIDATOR_VERSION } from './rebalancing-check.mjs';
+import { checkEffect, loadCalibration, loadBuiltinDefs, computePin, verifyPin, canonicalJson, VALIDATOR_VERSION, DEFAULT_TOLERANCE } from './rebalancing-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 let fails = 0, passes = 0;
@@ -107,12 +107,18 @@ ok('fresh process: same power', canonicalJson(fresh.power) === canonicalJson(rs.
 console.log(`determinism: stamp ${rs.stamp.def_sha256.slice(0, 12)} verdict ${rs.stamp.verdict} ratio ${rs.stamp.ratio} pin ${rs.stamp.pin_id.slice(0, 12)} (node ${process.version})`);
 
 // 6. tolerance, baseline, pin
+ok('default tolerance is 0.10 (band [0.9, 1.1])', rs.tolerance === 0.1 && rs.band.low === 0.9 && rs.band.high === 1.1 && cal.policy.tolerance === 0.1 && DEFAULT_TOLERANCE === 0.1, `${rs.tolerance} [${rs.band.low}, ${rs.band.high}]`);
+ok('tolerance 0.10 → nerf', checkEffect(strong, { tolerance: 0.10 }).verdict === 'nerf');
 ok('tolerance 0.15 → nerf', checkEffect(strong, { tolerance: 0.15 }).verdict === 'nerf');
+{ // an effect between 1.10 and 1.15: nerf at the default, ok at the old 0.15
+  const mid = builtins.map(d => checkEffect(d, { baseline: null })).find(r => r.judged_ratio > 1.1 && r.judged_ratio <= 1.15);
+  if (mid) ok(`${mid.effect_id} ×${mid.judged_ratio}: nerf at 0.10, ok at 0.15`, mid.verdict === 'nerf' && checkEffect(builtins.find(d => d.id === mid.effect_id), { baseline: null, tolerance: 0.15 }).verdict === 'ok');
+}
 ok('tolerance 0.6 → ok', checkEffect(strong, { tolerance: 0.6 }).verdict === 'ok');
 const fb = builtins.find(d => d.id === 'effect_fireball');
 const fbCurve = checkEffect(fb, { baseline: null });
 ok('tolerance 0 → off-curve built-in leaves the band', checkEffect(fb, { baseline: null, tolerance: 0 }).verdict === (fbCurve.power.ratio > 1 ? 'nerf' : 'boost'));
-ok('tolerance widens monotonically', [0, 0.05, 0.15, 0.3, 0.6, 1].map(t => checkEffect(strong, { tolerance: t }).verdict === 'ok').every((v, i, a) => i === 0 || !a[i - 1] || v));
+ok('tolerance widens monotonically', [0, 0.05, 0.1, 0.15, 0.3, 0.6, 1].map(t => checkEffect(strong, { tolerance: t }).verdict === 'ok').every((v, i, a) => i === 0 || !a[i - 1] || v));
 const fbAoe = { ...fb, rule: { ...fb.rule, scope: 'all_seen' } };
 const rAoe = checkEffect(fbAoe);
 ok('fireball branch hitting everyone in view → judged against its parent → nerf/reject', rAoe.mode === 'baseline' && rAoe.baseline.id === 'effect_fireball' && ['nerf', 'reject'].includes(rAoe.verdict), `${rAoe.verdict} ${rAoe.judged_ratio}`);

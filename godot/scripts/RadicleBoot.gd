@@ -21,6 +21,9 @@ const PROFILES_RID := "rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"
 # chaosD6-Dimensions: the node also publishes refs/heads/ActiveDimensions/<Name>
 # there (bridge POST /publish). Both are seeded; start() takes a comma list.
 const DIMENSIONS_RID := "rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"
+# chaosD6-Effects (game/effects-repo.mjs, infra/oci/effects-setup.sh): effect definitions as data;
+# seeded so peers can read effects/<id>.json at a pinned commit offline.
+const EFFECTS_RID := "rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ"
 # game/profile-radicle.mjs: <profileDir>/radicle/identity.pem, profileDir = CHAOSD6_USER_DATA_DIR.
 const IDENTITY_PEM := "user://data/radicle/identity.pem"
 
@@ -51,7 +54,11 @@ func _ready() -> void:
     th.start(_start_on_thread.bind(alias))
 
 func _start_on_thread(alias: String) -> void:
-    var rids := PROFILES_RID if DIMENSIONS_RID.is_empty() else "%s,%s" % [PROFILES_RID, DIMENSIONS_RID]
+    var rid_list := PackedStringArray([PROFILES_RID])
+    for extra in [DIMENSIONS_RID, EFFECTS_RID]:
+        if not extra.is_empty():
+            rid_list.append(extra)
+    var rids := ",".join(rid_list)
     var nid: String = _plugin.call("start", alias, rids, ProjectSettings.globalize_path(IDENTITY_PEM))
     call_deferred("_emit_result", nid)
 

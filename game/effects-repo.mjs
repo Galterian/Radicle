@@ -27,7 +27,7 @@ import { execFileSync } from 'node:child_process';
 
 // TODO(E3/E4): set once `rad init` has created chaosD6-Effects (game/tools/out/effects-rad-init.sh
 // prints it). Until then refs must carry `repo` or CHAOSD6_EFFECTS_RID must be set.
-export const EFFECTS_RID = process.env.CHAOSD6_EFFECTS_RID || 'rad:TODO_EFFECTS_RID';
+export const EFFECTS_RID = process.env.CHAOSD6_EFFECTS_RID || 'rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ';
 export const DEFAULT_SEED_HOST = '92-5-138-121.sslip.io';
 export const EFFECTS_SUBDIR = 'effects';
 export const MAIN_BRANCH = 'main';

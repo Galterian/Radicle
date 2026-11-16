@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent OCI-seed side of chaosD6-Effects (program E3). Unlike chaosD6-Profiles the OCI
 # node is NOT the delegate: the repo is `rad init`ed on the dev PC (delegate = the user's key,
-# game/tools/out/effects-rad-init.sh) and players push `players/<nid-or-name>/<slug>` branches in
+# game/tools/oci/effects-rad-init.sh) and players push `players/<nid-or-name>/<slug>` branches in
 # their own namespaces. The seed must therefore
 #   1. seed the RID with scope `all` (every player namespace, not only followed NIDs),
 #   2. once the repo has replicated into storage, pin it in web.pinned.repositories so
