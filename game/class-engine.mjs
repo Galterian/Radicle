@@ -85,14 +85,14 @@ export const HOOK_SPECS = Object.freeze({
   stance_target:   { args: ['cands'], result: 'id' },
   emits:           { args: ['code', 'site'], result: 'bool' },
   plan_emits:      { args: ['held', 'archived', 'usedTurn', 'turn', 'options', 'code', 'queued'], result: 'bool' },
-  attack_out:      { args: ['attacker', 'dmg', 'scored'], result: 'number' },
-  lifesteal:       { args: ['attacker', 'amount'], result: 'number' },
+  attack_out:      { args: ['attacker', 'dmg', 'scored', 'defender'], result: 'number' },   // CR: + defender (Assassin vs an enemy below full life)
+  lifesteal:       { args: ['attacker', 'amount', 'source', 'why'], result: 'number' },   // CR: + source / why (Noble: only its own Attack)
   lifesteal_apply: { args: ['amount', 'life', 'lifeMax', 'held'], result: 'number' },
   pre_cast:        { args: ['actor', 'elements', 'salt'], result: 'pre_cast' },
   ability:         { args: ['actor', 'ab', 'salt'], result: 'ability' },
   transmute:       { args: ['id', 'outcomes'], result: 'transmute' },
   destroy_result:  { args: ['d'], result: 'string' },
-  end_turn:        { args: ['held', 'moved', 'life', 'lifeMax'], result: 'number' },
+  end_turn:        { args: ['held', 'moved', 'life', 'lifeMax', 'movedRounds'], result: 'number' },   // CR: + movedRounds (Guardian: still on the 2nd and 3rd action)
   step:            { args: ['threatReady', 'ring', 'trap', 'wtrap', 'building', 'trapLeft'], result: 'step' },
   dungeon_step:    { args: ['trap', 'trapLeft'], result: 'trap' },
   combat_in:       { args: ['list'], result: 'bool' },

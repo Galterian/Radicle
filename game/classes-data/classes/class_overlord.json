@@ -2,9 +2,9 @@
   "schema": "chaosd6.class/1",
   "id": "class_overlord",
   "name": "Overlord",
-  "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
-  "data": {"ability_kind":"tap","colors":["elem_space","elem_souls","elem_earth","elem_harmony"],"text":"Tap: you gain one armor life point (shown gold); if you already wear one, an adjacent ally without one gains it instead. Never two on one unit. It is the first life lost when damage lands, and can be gained again once lost."},
+  "version": "1.2.0",
+  "source": {"collection":"classes","version":"1.2.0"},
+  "data": {"ability_kind":"tap","colors":["elem_space","elem_earth","elem_harmony"],"text":"Tap: you gain one armor life point (shown gold); if you already wear one, an adjacent ally without one gains it instead. Never two on one unit. It is the first life lost when damage lands, and can be gained again once lost."},
   "flags": {"phase":"post","needs":"ally_or_self","hooks":["ability"]},
   "uses": ["classes_std"],
   "hooks": {

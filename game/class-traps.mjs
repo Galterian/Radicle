@@ -25,6 +25,9 @@ export function rogueConfig(data = {}) {
     threatRadius: num(data.threat_radius, ROGUE_DEFAULTS.threat_radius),
   };
 }
+// CR (user class ruling 2026-11-17, Rogue): "one shared charge per turn (trap dodge OR unseen step)" — data
+// shared_charge: true → spending either charge spends both for the turn (a trap dodge wins when one step needs both).
+export const rogueShared = (data = {}) => data?.shared_charge === true;
 export function clericConfig(data = {}) {
   return { range: num(data.disable_range, CLERIC_DEFAULTS.disable_range) };
 }

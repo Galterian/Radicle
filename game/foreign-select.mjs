@@ -11,7 +11,24 @@
 //                                         that are not holders.
 //   FOREIGN_ORDER=<label,…>               label order for the numeric forms (default: the swarm heroes below).
 //
-// Labels are exact PEER_LABELs; companions (`<label>-sumN`) and monsters are never holders/refusers unless listed.
+// Labels are exact PEER_LABELs; companions (`<label>-sumN`) and monsters are never holders unless listed.
+// RF (ruling 2026-11-19): a summoned companion refuses whatever its owner refuses. Its principal is the owner
+// it was spawned with (OWNER_PEER_ID = `peer:<owner label>`, set by peer.mjs#spawnCompanion; a companion of a
+// companion resolves to the root hero), else its label with every `-sumN` suffix stripped. The env knobs
+// FX_ACCEPT / SK_ACCEPT / CL_ACCEPT reach a companion unchanged (spawnCompanion passes `...process.env`).
+// Wild spawns (monsters, OWNER_PEER_ID '') keep their own label. A ∀-bound creature learns its owner only at
+// bind time, after its handshake policy is fixed at boot — it keeps its own policy.
+
+const SUM_RE = /-sum\d+$/;
+const stripSum = (l) => { let s = String(l || ''); while (SUM_RE.test(s)) s = s.replace(SUM_RE, ''); return s; };
+/** The label whose foreign policy `label` follows: the owner for a summoned companion, else `label`. */
+export function foreignPrincipal(label) {
+  const l = String(label || '');
+  const own = String(process.env.OWNER_PEER_ID || '').replace(/^peer:/, '');
+  const self = process.env.PEER_LABEL;
+  if (own && (!self || self === l)) return stripSum(own);   // this process is a companion of `own`
+  return SUM_RE.test(l) ? stripSum(l) : l;
+}
 
 const list = (s) => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
 // The swarm heroes (tools/swarm-test.mjs joins), C-Agent6 / D-Agent7 only when TEAM_C / TEAM_D is on.
@@ -34,7 +51,8 @@ export function foreignRefusers() {
   return n > 0 ? order().filter(l => !h.has(l)).slice(-n) : [];
 }
 export const foreignHolder = (label) => { const h = foreignHolders(); return h === null || h.includes(label); };
-export const foreignRefuser = (label) => foreignRefusers().includes(label);
+// RF: a listed label refuses, and so does every companion whose principal (owner) is listed.
+export const foreignRefuser = (label) => { const r = foreignRefusers(); return r.includes(label) || r.includes(foreignPrincipal(label)); };
 /** 'holder' | 'refuser' | 'learner' | 'all' (no FOREIGN_HOLDERS: every peer holds). */
 export function foreignRole(label) {
   if (foreignRefuser(label)) return 'refuser';

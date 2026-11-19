@@ -145,3 +145,40 @@ The post-pass `switch` keeps only the five peer-resolved cases. The state hash a
 ## World rulings that touch classes
 
 - Lava (user ruling 2026-11-16, option c): lava hexes stay walkable, and nothing is built or planted on them. This is the current code, unchanged. Units still move onto lava (resolver movement does not test the biome). Priest (Shrine), Animator (copy) and Seeker (plant) place through join-plan.mjs `hexWalkableAt` (peer.mjs `buildSiteFree`, the Seeker `isBlocked`), which refuses water / lava / mountains / cliffs (biome.js `isWalkable`). A foreign class that places a building or a trap must refuse lava hexes the same way. No hook change.
+
+## Class rebalance rulings 2026-11-17 / 2026-11-18 (CR, data versions tagged `cr_2026_11_19`)
+
+Hook changes (JS in classes.mjs = JsonLogic in classes-data, shadow-checked); peer.mjs side in `// CR:`-tagged hunks (tools/out/_cr_peer_hunks.py).
+
+- Weapon master 1.1.0: `local` gives `{op: draw, n: 1, max_hand: 3}`; peer.mjs draws only while the hand holds ≤ 3 cards.
+- Druid 1.2.0: `ability` raises up to 2 stones (free stats best first, then the stood stones lowest first), one point-buy each (salt `…:druid:<action>` / `…:2`); all rolls failing keeps the ability ready.
+- Elementalist 1.2.0: `perAction: true` — peer.mjs never marks it used for the turn (once per action).
+- Healer 1.1.0: `ability` heals me AND the adjacent ally (the one pointed at, else the first adjacent non-enemy by id).
+- Priest 1.2.0 / Seeker 1.2.0: data `max_standing: 1` (class-world `maxStanding`); peer.mjs turns the older Shrine into a `gone` world edit / lifts the older Seeker trap (card to my discard). Seeker becomes `once_per_round`.
+- Prophet 1.2.0: data `range: 3, contact: 3`. Witch 1.2.0: data `range: 1` (3 cards). Avenger 1.2.0: `ability_kind: tap` (chase bonus unchanged).
+- Guardian 1.2.0: `end_turn` arg `movedRounds` (hg.round indices); data `still_actions: [2, 3]` — a move on the 1st action does not cost the heal.
+- Manipulator 1.2.0: data `trigger: attack` → `combat_in` uses class-manipulator `attackHit` (an action damage entry with `why: 'Attack'`).
+- Shaman 1.1.0: colours Vitality / Souls / Water. Overlord 1.2.0: Souls removed ("Solus" read as Souls). Reaver 1.2.0: colours Vitality / Souls.
+- Rogue 1.3.0: data `shared_charge: true` (class-traps `rogueShared`) — `step` returns no stealth when the step dodges a trap; peer.mjs zeroes the other charge once one is used.
+- Monk 1.2.0: no `stance` (EP no longer fights as Move); `emits` M / EM unchanged.
+- Noble 1.1.0: data `lifesteal: {from: attack, max_per_action: 1}` — `lifesteal` args `source`, `why`; `lifesteal_apply` caps the heal.
+- Assassin 1.1.0: data `vs_hurt_only: true` — `attack_out` arg `defender`; +1 only when its snapshot life < `life_max`.
+- Enchanter 1.1.0: `static`, `emits: {A, B, M}` at every site, `plan_emits` gone; colours Air / Water / Earth / Fire. Its A / B now keep a channel (channel-rule).
+- Barbarian 1.3.0: `stance: {EP: B, EM: B}` — EM fights as a Block and still moves (ruling 2026-11-19, like the Reaver's EM: peer.mjs `moveAs`); only a real Block card emits and keeps the channel (the EM stays an Empty Move there).
+- Alchemist: unchanged (recharge-by-casting is priced by the validator's `p_recharge_emit`).
+
+## Class picks 2026-11-19 (CP, user picks of CLASSES_BALANCE "Proposals 2026-11-19", tag `cp_2026_11_19`)
+
+Today's uncommitted CR versions amended in place; Bard 1.1.0 appended. peer.mjs side in `// CP:`-tagged hunks (tools/out/_cp_peer_hunks.py, applied). The answers to the open items (tag `cp2_2026_11_19`) amend the same versions.
+
+- Weapon master 1.1.0: `local` gives `{op: draw, n: 2, max_hand: 3}`; peer.mjs CLASS_LOCAL draws `local.n` cards (hunk `wm_draw_n`). Colours without Water.
+- Druid 1.2.0: data `chain_stones: true` — `ability` rolls the 2nd point-buy only when the 1st succeeded; a failed 1st keeps the ability ready.
+- Healer 1.1.0: data `unmoved_only`, `ally_required` — `ability` arg `moved` (peer.mjs `!!moveCodeOf(r)`, hunk `healer_moved`): moved → not used; no adjacent living ally → not used (the card stays untapped).
+- Priest 1.2.0: data `building.heal: 2` — class-world `priestConfig().heal`, `shrineMade` power `{kind: mend, n: 2}`, `copyMade` drops `n` (a copy mends 1); peer.mjs turn-end mend heals `power.n` (hunk `shrine_heal_n`).
+- Seeker 1.2.0: colours Time / Space / Souls / Earth. Bard 1.1.0: colours Time / Space / Souls / Harmony. Noble 1.1.0: + Time, Space.
+- Witch 1.2.0: data `self_discard: 1` — `ability` adds `{on: me, n: 1, seed: …:self, self: true}` to `discards` (the peer's forced-discard loop applies it; never a card in play).
+- Avenger 1.2.0: data `chase_bonus.max_only: true` — `chase_step` returns `heal: 0` (`heal` = `grant` without max_only); std `life_points` loses the max-only point first but counts it in no `absorbed`; peer.mjs adds `st.heal` to life and refunds the max drop of a lost / faded max-only point (hunks `avenger_*`).
+- CP2 Elementalist 1.2.0: + Concentration, Vitality (7 colours). Assassin 1.1.0: + Air, Water (7 colours).
+- CP2 Druid 1.2.0: data `fail_spends: true` — `ability`: every rolled point-buy failed → `used: true`, no stone, `mine` = the fail lines (the tap is spent; no peer change, `useAbility` taps).
+- CP2 Healer 1.1.0: data `untap_emissions: 4` — std `progress` (untap only, N an integer above the colour count): every fresh colour counts in `progress.n`; a round with every colour done restarts (`done: []`); `n ≥ N` → untap. `restore` is unchanged (a colour once per round). `progress.n` carries over on other events; without the knob the progress object has no `n`. Cosmetic peer hunk `healer_untap_log` (tools/out/_cp2_peer_hunks.py, applied): the step log line shows `n/N emissions`.
+- CPD Druid 1.2.0 (option C, tag `cpd_2026_11_19`): data `unmoved_only: true` — the Healer's gate: `ability` arg `moved` (peer.mjs `!!moveCodeOf(r)`, every ability) → not used, the card stays untapped; no roll. On top of `chain_stones` and `fail_spends`; untap unchanged. No peer hunk.

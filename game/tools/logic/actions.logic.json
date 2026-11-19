@@ -82,7 +82,7 @@
       ],
       "effects": [
         { "id": "may_cast_non_instant", "description": "Empty Posture emits.", "target": "caster", "unit": "tokens", "value": { "rule": ["action_can_cast_non_instant", { "action": "EP" }] } },
-        { "id": "combat_action", "description": "The action combat is judged on after class stances: A / B / M for Reaver / Barbarian / Monk, else EP.", "target": "caster", "unit": "actions", "value": { "if": [{ "includes": [{ "var": "caster.permanents" }, "class_reaver"] }, "A", { "includes": [{ "var": "caster.permanents" }, "class_barbarian"] }, "B", { "includes": [{ "var": "caster.permanents" }, "class_monk"] }, "M", "EP"] } },
+        { "id": "combat_action", "description": "The action combat is judged on after class stances: A / B for Reaver / Barbarian, else EP (the Monk's EP-as-Move stance was dropped, CR 2026-11-17).", "target": "caster", "unit": "actions", "value": { "if": [{ "includes": [{ "var": "caster.permanents" }, "class_reaver"] }, "A", { "includes": [{ "var": "caster.permanents" }, "class_barbarian"] }, "B", "EP"] } },
         { "id": "combat_damage", "description": "EP deals nothing by itself (matrix row 0).", "target": "target", "unit": "damage", "value": { "rule": ["rps_edge", { "actor": "EP", "defender": { "var": "defender.action" } }] } },
         { "id": "damage_taken", "description": "What the defender's action scores on a plain EP (Attack 2, Posture 1, Move/Block 0).", "target": "caster", "unit": "damage", "value": { "rule": ["rps_edge", { "actor": { "var": "defender.action" }, "defender": "EP" }] } },
         { "id": "cards_discarded", "description": "No card leaves the hand.", "target": "caster", "unit": "cards", "value": 0 }
@@ -102,7 +102,7 @@
       "effects": [
         { "id": "hexes_moved", "description": "Halfway toward the target: ceil(dist / 2), at least 1.", "target": "caster", "unit": "hexes", "value": { "max": [1, { "ceil": [{ "/": [{ "var": "dist" }, 2] }] }] } },
         { "id": "may_cast_non_instant", "description": "Empty Move emits like Empty Posture.", "target": "caster", "unit": "tokens", "value": { "rule": ["action_can_cast_non_instant", { "action": "EP" }] } },
-        { "id": "combat_action", "description": "The action combat is judged on: A for a Reaver, else EM.", "target": "caster", "unit": "actions", "value": { "if": [{ "includes": [{ "var": "caster.permanents" }, "class_reaver"] }, "A", "EM"] } },
+        { "id": "combat_action", "description": "The action combat is judged on: A for a Reaver, B for a Barbarian (CR 2026-11-18 (a); the EM still moves, ruling 2026-11-19), else EM.", "target": "caster", "unit": "actions", "value": { "if": [{ "includes": [{ "var": "caster.permanents" }, "class_reaver"] }, "A", { "includes": [{ "var": "caster.permanents" }, "class_barbarian"] }, "B", "EM"] } },
         { "id": "damage_taken", "description": "What the defender's action scores on a plain EM (Posture 1, Block 1 per the data edges, Attack 0).", "target": "caster", "unit": "damage", "value": { "if": [{ "==": [{ "var": "defender.action" }, "B"] }, 1, { "rule": ["rps_edge", { "actor": { "var": "defender.action" }, "defender": "EM" }] }] } }
       ],
       "validation": [

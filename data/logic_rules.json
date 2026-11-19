@@ -871,14 +871,15 @@
     {
       "id": "class_ep_stance",
       "name": "Empty-action stance of the EP classes",
-      "description": "peer.mjs: a Reaver's EP and EM fight as Attack, a Barbarian's EP as Block, a Monk's EP as Move; everything else is unchanged. Used by class_reaver / class_barbarian / class_monk and by action_empty_posture / action_empty_move.",
+      "description": "peer.mjs: a Reaver's EP and EM fight as Attack, a Barbarian's EP and EM as Block (CR 2026-11-18 (a)); the Monk's EP-as-Move stance was dropped (CR 2026-11-17); everything else is unchanged. Used by class_reaver / class_barbarian and by action_empty_posture / action_empty_move.",
       "tags": ["classes", "actions", "rule_9", "pc_override", "shared_candidate", "from:classes"],
       "params": {"action": {"type": "string"}, "permanents": {"type": "[entry_id]"}},
-      "logic": {"if": [{"and": [{"includes": [{"param": "permanents"}, "class_reaver"]}, {"in": [{"param": "action"}, ["EP", "EM"]]}]}, "A", {"and": [{"includes": [{"param": "permanents"}, "class_barbarian"]}, {"==": [{"param": "action"}, "EP"]}]}, "B", {"and": [{"includes": [{"param": "permanents"}, "class_monk"]}, {"==": [{"param": "action"}, "EP"]}]}, "M", {"param": "action"}]},
+      "logic": {"if": [{"and": [{"includes": [{"param": "permanents"}, "class_reaver"]}, {"in": [{"param": "action"}, ["EP", "EM"]]}]}, "A", {"and": [{"includes": [{"param": "permanents"}, "class_barbarian"]}, {"in": [{"param": "action"}, ["EP", "EM"]]}]}, "B", {"param": "action"}]},
       "examples": [
         {"args": {"action": "EM", "permanents": ["class_reaver"]}, "expect": "A"},
-        {"args": {"action": "EP", "permanents": ["class_monk"]}, "expect": "M"},
+        {"args": {"action": "EP", "permanents": ["class_monk"]}, "expect": "EP"},
         {"args": {"action": "EM", "permanents": ["class_monk"]}, "expect": "EM"},
+        {"args": {"action": "EM", "permanents": ["class_barbarian"]}, "expect": "B"},
         {"args": {"action": "P", "permanents": ["class_barbarian"]}, "expect": "P"}
       ]
     },

@@ -2,13 +2,13 @@
   "schema": "chaosd6.class/1",
   "id": "class_noble",
   "name": "Noble",
-  "version": "1.0.0",
-  "source": {"collection":"classes","version":"1.0.0"},
-  "data": {"ability_kind":"static","colors":["elem_vitality","elem_souls","elem_water","elem_harmony"],"text":"When you deal combat damage, you heal the same amount."},
+  "version": "1.1.0",
+  "source": {"collection":"classes","version":"1.1.0"},
+  "data": {"ability_kind":"static","colors":["elem_vitality","elem_souls","elem_water","elem_harmony","elem_time","elem_space"],"text":"When your Attack deals combat damage, you heal 1 (at most 1 per action).","lifesteal":{"from":"attack","max_per_action":1}},
   "flags": {"phase":null,"hooks":["lifesteal","lifesteal_apply"]},
   "uses": ["classes_std"],
   "hooks": {
-    "lifesteal": {"if":[{"and":[{">":[{"var":"amount"},0]},{"has_perm":[{"var":"attacker"},{"var":"class"}]},{"===":[{"var":"attacker"},{"ctx_self":[]}]}]},{"var":"amount"},0]},
-    "lifesteal_apply": {"if":[{"and":[{">":[{"var":"amount"},0]},{">":[{"var":"life"},0]},{"bool":{"var":"held"}}]},{"min":[{"var":"lifeMax"},{"+":[{"var":"life"},{"var":"amount"}]}]},{"var":"life"}]}
+    "lifesteal": {"let":[{"lc":{"call":["lifesteal_cfg"]}},{"if":[{"and":[{">":[{"var":"amount"},0]},{"has_perm":[{"var":"attacker"},{"var":"class"}]},{"===":[{"var":"attacker"},{"ctx_self":[]}]},{"or":[{"!==":[{"var":"lc.from"},"attack"]},{"and":[{"===":[{"var":"source"},"action"]},{"===":[{"var":"why"},"Attack"]}]}]}]},{"var":"amount"},0]}]},
+    "lifesteal_apply": {"let":[{"lc":{"call":["lifesteal_cfg"]}},{"if":[{"and":[{">":[{"var":"amount"},0]},{">":[{"var":"life"},0]},{"bool":{"var":"held"}}]},{"min":[{"var":"lifeMax"},{"+":[{"var":"life"},{"if":[{"and":[{"is_int":{"var":"lc.max_per_action"}},{">=":[{"var":"lc.max_per_action"},0]}]},{"min":[{"var":"amount"},{"var":"lc.max_per_action"}]},{"var":"amount"}]}]}]},{"var":"life"}]}]}
   }
 }

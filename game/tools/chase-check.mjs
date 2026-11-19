@@ -13,12 +13,13 @@ const active = (file, id) => {
 
 // ---- data ↔ defaults ----
 const av = active('classes.json', 'class_avenger'), pr = active('classes.json', 'class_prophet');
-eq('avenger 1.1.0 canonical', [av.version, av.status], ['1.1.0', 'canonical']);
-eq('prophet 1.1.0 canonical', [pr.version, pr.status], ['1.1.0', 'canonical']);
-eq('avenger data = defaults', avengerConfig(av.data), avengerConfig(AVENGER_DEFAULTS));
-eq('avenger config 10 / +1 / max 1', avengerConfig(av.data), { range: 10, per: 1, max: 1 });
+// CR 2026-11-17 (data cr_2026_11_19): Avenger 1.2.0 (tap lure), Prophet 1.2.0 (contact 3); CP 2026-11-19 (pick 9 a): the Avenger's bonus is max-only.
+eq('avenger 1.2.0 canonical', [av.version, av.status], ['1.2.0', 'canonical']);
+eq('prophet 1.2.0 canonical', [pr.version, pr.status], ['1.2.0', 'canonical']);
+eq('avenger data = defaults but max_only', avengerConfig(av.data), { ...avengerConfig(AVENGER_DEFAULTS), maxOnly: true });
+eq('avenger config 10 / +1 / max 1, life max only', avengerConfig(av.data), { range: 10, per: 1, max: 1, maxOnly: true });
 eq('avenger has no hand_reveal any more', av.data.hand_reveal ?? null, null);
-eq('prophet data = defaults', prophetConfig(pr.data), prophetConfig(PROPHET_DEFAULTS));
+eq('prophet contact 3 (CR 2026-11-17: within 3 hexes; default 1)', [prophetConfig(pr.data), prophetConfig(PROPHET_DEFAULTS)], [{ contact: 3 }, { contact: 1 }]);
 eq('prophet is passive and reveals the whole hand', [pr.data.passive, pr.data.hand_reveal?.n], [true, 'all']);
 
 // ---- wild monsters ----
@@ -56,6 +57,9 @@ s = o; o = chaseBonusStep(s, [], cfg);
 eq('nobody chases any more → the point fades', [o.fade, o.bonus, o.chasers], [true, 0, []]);
 s = o; o = chaseBonusStep(s, ['m3'], cfg);
 eq('m3 chases again after the chase ended → counts as new', [o.fresh, o.grant, o.bonus], [['m3'], 1, 1]);
+eq('chase bonus +1 life max AND +1 life (heal = grant) without max_only', [o.grant, o.heal, chaseBonusStep({ chasers: [], bonus: 0 }, ['m1'], avengerConfig(AVENGER_DEFAULTS)).heal], [1, cfg.maxOnly ? 0 : 1, 1]);
+{ const mo = avengerConfig({ chase_bonus: { life: 1, max: 1, max_only: true } }); const g = chaseBonusStep({ chasers: [], bonus: 0 }, ['m1'], mo);
+  eq('CP 2026-11-19 (pick 9 a): max_only → +1 life max, heal 0 (no +1 life)', [g.grant, g.heal, g.bonus], [1, 0, 1]); }
 
 // ---- Prophet pick ----
 eq('prophet: the enemy I fought first', prophetPick([{ id: 'a' }, { id: 'c', fought: true }, { id: 'b', fought: true }]), 'b');

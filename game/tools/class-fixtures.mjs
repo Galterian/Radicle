@@ -50,6 +50,22 @@ function mutateData(R, d) {
   if (R.p(0.2)) m.vision = R.pick([undefined, null, {}, { radius: odd() }, { radius: 4 }]);
   if (R.p(0.2)) m.colors = R.pick([[], ['elem_fire'], ['elem_fire', 'elem_air', 'elem_souls'], ['elem_bogus', 'elem_will', 'elem_harmony'], [...ELEMS]]);
   if (R.p(0.2)) m.destroy_reanimated = R.pick([undefined, null, {}, { elements: [] }, { elements: ['elem_harmony'], die: 5 }, { elements: ['elem_fire', 'elem_harmony', 'elem_concentration'] }, { die: '6' }, { die: 4 }]);   // ruling 2026-11-16
+  // CR 2026-11-17/18 knobs (Assassin, Noble, Guardian, Manipulator, Rogue)
+  if (R.p(0.2)) m.vs_hurt_only = R.pick([true, false, undefined, 1, 'true']);
+  if (R.p(0.2)) m.lifesteal = R.pick([undefined, null, [], 'attack', {}, { from: 'attack' }, { max_per_action: 1 }, { from: 'attack', max_per_action: 2 }, { max_per_action: -1 }, { max_per_action: 1.5 }, { from: 'any', max_per_action: 0 }]);
+  if (R.p(0.2)) m.still_actions = R.pick([undefined, null, [], [3], [2, 3], [1, 2, 3], 'x', [0]]);
+  if (R.p(0.2)) m.trigger = R.pick([undefined, null, 'attack', 'combat', 'Attack']);
+  if (R.p(0.2)) m.shared_charge = R.pick([undefined, null, true, false, 1, 'true']);
+  // CP 2026-11-19 knobs (Druid chain, Healer gates, Witch own discard, Priest Shrine heal, Avenger max-only bonus)
+  if (R.p(0.2)) m.chain_stones = R.pick([undefined, null, true, false, 1, 'true']);
+  if (R.p(0.2)) m.unmoved_only = R.pick([undefined, null, true, false, 1]);
+  if (R.p(0.2)) m.ally_required = R.pick([undefined, null, true, false, 'yes']);
+  if (R.p(0.2)) m.self_discard = R.pick([undefined, null, 0, 1, 2, -1, 1.5, '1']);
+  if (R.p(0.2)) m.chase_bonus = R.pick([{ life: 1, max: 1, max_only: true }, { life: 2, max: 3, max_only: false }, { max_only: true }, { life: 1, max: 1, max_only: 'yes' }]);
+  if (R.p(0.2)) m.building = R.pick([{ label: 'Shrine', power: 'mend', heal: 2 }, { heal: 0 }, { power: 'mend', heal: 'x' }, { heal: 3 }]);
+  // CP2 2026-11-19 knobs (Druid fail spends the tap, Healer longer untap)
+  if (R.p(0.2)) m.fail_spends = R.pick([undefined, null, true, false, 1, 'true']);
+  if (R.p(0.25)) m.untap_emissions = R.pick([undefined, null, 0, 1, 2, 3, 4, 5, 6, 7, -2, 1.5, '5']);
   for (const k of Object.keys(m)) if (m[k] === undefined) delete m[k];
   return m;
 }
@@ -91,6 +107,8 @@ export function genWorld(seed, { mutate = 0.25 } = {}) {
     };
     if (v.monster_state === undefined) delete v.monster_state;
     if (creature && parseInt(sha256Hex(`${seed}:${id}`).slice(0, 2), 16) < 64) v.raised_by = 'class_necromancer';   // a reanimated unit (no R draw: other fixtures unchanged)
+    // CR 2026-11-17 (Assassin vs an enemy below full life): life_max = life + 0..2, sometimes missing (no R draw)
+    { const h = parseInt(sha256Hex(`${seed}:${id}:life_max`).slice(0, 2), 16); if (h >= 24) v.life_max = v.life + (h % 3); }
     view.set(id, v);
   }
   const self = R.p(0.85) ? R.pick(ids) : 'peer:zz99';
@@ -132,15 +150,15 @@ export function argsFor(hook, classId, W, R) {
     case 'strike': { const c = cs(); const cols = colsObj(); const stat = R.p(0.9) ? R.pick(STATS) : 'luck'; return { args: { cs: c, cols, stat, elem: R.p(0.5) ? null : R.pick(ELEMS), enemy: R.p(0.75), pb: pb() } }; }
     case 'reanimated_strike': { const pool = ['elem_harmony', 'elem_concentration', 'elem_harmony', 'elem_concentration', ...ELEMS]; return { args: { down: [...new Set(Array.from({ length: R.int(3) }, () => R.pick(pool)))], stat: R.p(0.7) ? 'will' : R.p(0.8) ? R.pick(STATS) : 'luck', elem: R.p(0.5) ? null : R.pick(pool), enemy: R.p(0.8), pb: pb() } }; }
     case 'restore': return { args: { cs: cs(), cols: colsObj(), stat: R.pick(STATS), kind: R.pick(['recast', 'untap']) } };
-    case 'progress': { const cols = STATS.filter(() => R.p(0.6)); return { args: { state: { down: STATS.filter(() => R.p(0.3)), archived: R.p(0.3), tapped: R.p(0.4), progress: R.p(0.5) ? { mode: R.pick(['recast', 'untap']), done: STATS.filter(() => R.p(0.5)) } : null },
+    case 'progress': { const cols = STATS.filter(() => R.p(0.6)); return { args: { state: { down: STATS.filter(() => R.p(0.3)), archived: R.p(0.3), tapped: R.p(0.4), progress: R.p(0.5) ? { mode: R.pick(['recast', 'untap']), done: STATS.filter(() => R.p(0.5)), ...(R.p(0.5) ? { n: R.pick([0, 1, 2, 3, 4, 6, -1, 2.5, 'x', null]) } : {}) } : null },
       cols: cols.length ? cols : ['will'], co: { kind: R.pick(['colour', 'class_destroyed', 'recast', 'untap', 'other']), stat: R.pick(STATS) } } }; }
     case 'life_points': return { args: { dmg: R.int(4), illusion: R.int(2), armor: R.int(2), chaseBonus: R.int(2) } };
     case 'stance': return { args: { code: R.pick([...CODES, 'BT']) } };
     case 'stance_target': return { args: { cands: R.p(0.15) ? [] : ids.filter(() => R.p(0.6)).map(id => ({ id, cost: R.int(2), lands: R.int(2), life: R.int(4) })) } };
     case 'emits': return { args: { code: R.pick(CODES), site: R.pick(['plan', 'destroy', 'manip', 'badge']) } };
     case 'plan_emits': return { args: { held: R.p(0.8), archived: R.p(0.2), usedTurn: R.p(0.4) ? ctx.turn : ctx.turn - 1, turn: ctx.turn, options: R.p(0.2), code: R.pick(CODES), queued: R.p(0.7) } };
-    case 'attack_out': return { args: { attacker: someId(), dmg: R.int(4), scored: ids.filter(() => R.p(0.4)) } };
-    case 'lifesteal': return { args: { attacker: R.p(0.5) ? ctx.self : someId(), amount: R.int(4) } };
+    case 'attack_out': return { args: { attacker: someId(), dmg: R.int(4), scored: ids.filter(() => R.p(0.4)), defender: R.p(0.9) ? someId() : undefined } };   // CR: + defender
+    case 'lifesteal': return { args: { attacker: R.p(0.5) ? ctx.self : someId(), amount: R.int(4), source: R.pick(['action', 'action', 'effect', 'trap']), why: R.pick(['Attack', 'Attack', 'Block', 'P', '', undefined]) } };   // CR: + source / why
     case 'lifesteal_apply': { const lifeMax = 1 + R.int(6); return { args: { amount: R.int(4), life: R.int(lifeMax + 1), lifeMax, held: R.p(0.8) } }; }
     case 'pre_cast': return { args: { actor: someId(), elements: R.p(0.1) ? [] : ELEMS.filter(() => R.p(0.3)).concat(R.p(0.1) ? ['elem_bogus'] : []), salt: R.p(0.9) ? `s${R.int(1e6)}` : undefined } };
     case 'ability': {
@@ -150,7 +168,7 @@ export function argsFor(hook, classId, W, R) {
       const target = kind === 'character' ? { kind, ref: R.pick(ids) } : kind === 'tile' ? { kind, ref: R.p(0.8) && v ? { q: (v.tile_q ?? 0) + R.int(3) - 1, r: (v.tile_r ?? 0) + R.int(3) - 1 } : R.p(0.5) ? { q: 'x', r: 1 } : null } : null;
       const eff = R.pick(LIBRARY);
       const attach = R.p(0.7) ? { card_id: R.p(0.8) ? `c${R.int(99)}` : null, kind: 'effect', name: R.p(0.7) ? 'Card' : '', effect_id: R.p(0.9) ? eff.effect_id : null, skill_id: null, elements: R.p(0.85) ? [...eff.elements] : R.p(0.5) ? [] : 'x' } : null;
-      return { args: { actor, ab: { id: classId, target, attach, stat: R.p(0.8) ? R.pick(STATS) : 'luck' }, salt: R.p(0.9) ? `s${R.int(1e6)}` : undefined }, ctx: R.p(0.4) ? { ...ctx, self: actor } : ctx };
+      return { args: { actor, ab: { id: classId, target, attach, stat: R.p(0.8) ? R.pick(STATS) : 'luck' }, salt: R.p(0.9) ? `s${R.int(1e6)}` : undefined, moved: R.p(0.3) }, ctx: R.p(0.4) ? { ...ctx, self: actor } : ctx };   // CP 2026-11-19: + moved (peer.mjs moveCodeOf)
     }
     case 'transmute': {
       const id = R.pick(ids);
@@ -160,10 +178,10 @@ export function argsFor(hook, classId, W, R) {
       return { args: { id, outcomes }, ctx: R.p(0.4) ? { ...ctx, self: id } : ctx };
     }
     case 'destroy_result': return { args: { d: { actor: someId(), result: R.pick(['destroyed', 'destroyed', 'retry', 'too weak', 'banked']), phylactery: R.p(0.2), tok: R.p(0.6) ? { id: 't', value: 3 } : null, kind: R.pick(['stat', 'tile', 'perm']) } } };
-    case 'end_turn': { const lifeMax = 1 + R.int(6); return { args: { held: R.p(0.8), moved: R.p(0.5), life: R.int(lifeMax + 1), lifeMax } }; }
+    case 'end_turn': { const lifeMax = 1 + R.int(6); const mr = R.p(0.15) ? undefined : [0, 1, 2].filter(() => R.p(0.3)); return { args: { held: R.p(0.8), moved: mr ? mr.length > 0 : R.p(0.5), life: R.int(lifeMax + 1), lifeMax, ...(mr ? { movedRounds: mr } : {}) } }; }   // CR: + movedRounds
     case 'step': return { args: { threatReady: R.p(0.6), ring: ids.filter(() => R.p(0.3)), trap: R.p(0.6), wtrap: R.p(0.4), building: R.p(0.4), trapLeft: R.int(3) - (R.p(0.2) ? 1 : 0) } };
     case 'dungeon_step': return { args: { trap: R.p(0.7), trapLeft: R.int(3) } };
-    case 'combat_in': return { args: { list: R.p(0.2) ? undefined : Array.from({ length: R.int(4) }, () => (R.p(0.1) ? null : { source: R.pick(['action', 'effect', 'trap']), amount: R.int(3), ...(R.p(0.3) ? { bonus: R.p(0.5) } : {}) })) } };
+    case 'combat_in': return { args: { list: R.p(0.2) ? undefined : Array.from({ length: R.int(4) }, () => (R.p(0.1) ? null : { source: R.pick(['action', 'effect', 'trap']), amount: R.int(3), ...(R.p(0.3) ? { bonus: R.p(0.5) } : {}), why: R.pick(['Attack', 'Attack', 'Block', 'P']) })) } };   // CR: + why
     case 'pick_target': return { args: { seed: `s${R.int(1e6)}:manipulator:${ctx.turn}.${R.int(3)}`, cands: ids.filter(() => R.p(0.5)) } };
     case 'chase_step': return { args: { state: R.p(0.1) ? undefined : { chasers: ids.filter(() => R.p(0.3)), bonus: R.pick([0, 1, 2, '1', undefined, null]) }, chasing: ids.filter(() => R.p(0.4)).concat(R.p(0.2) ? [R.pick(ids)] : []) } };
     case 'contact': return { args: { foes: R.p(0.1) ? undefined : ids.filter(() => R.p(0.5)).map(id => (R.p(0.05) ? null : { id, fought: R.p(0.3) })) } };

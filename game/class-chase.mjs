@@ -9,6 +9,8 @@
 //     the Avenger as its prey by itself) the Avenger gets a temporary +1 life max (and +1 life), never more
 //     than `chase_bonus.max` (1) in total. The point is lost first on damage (after illusion / armor) and
 //     fades when no monster chases the Avenger any more; a new chaser grants it again.
+//     CP 2026-11-19 (user pick 9 a, data chase_bonus.max_only): +1 life MAX only, no +1 life with it — the point
+//     then absorbs no damage (it is still the first one lost) and losing it never costs a life point.
 // Prophet (passive, once per turn): the first resolution of a turn that ends with an enemy (hero or
 //   monster, not invisible) in CONTACT — adjacent, `contact` hexes (1), the same "in contact" as the Sleep
 //   trap and the in_contact named rule — shows the Prophet that enemy's whole hand (popup).
@@ -24,6 +26,7 @@ export function avengerConfig(data = {}) {
     range: num(data.lure_range, AVENGER_DEFAULTS.lure_range),
     per: num(cb.life, AVENGER_DEFAULTS.chase_bonus.life),
     max: num(cb.max, AVENGER_DEFAULTS.chase_bonus.max),
+    maxOnly: cb.max_only === true,   // CP 2026-11-19 (pick 9 a): the bonus is +life MAX only — no +life with it
   };
 }
 export function prophetConfig(data = {}) {
@@ -44,7 +47,8 @@ export function lureTargets(cands, range) {
 // One step of the Avenger's chase bonus. `state` = { chasers: [ids], bonus: 0..max } (what I had),
 // `chasingNow` = ids of the monsters chasing me this action. Returns the new state plus what changed:
 //   fresh  — the monsters that started chasing me now (not in the previous chaser list)
-//   grant  — life points to add (to life max AND life): only when someone fresh came and room is left
+//   grant  — life points to add to life max: only when someone fresh came and room is left
+//   heal   — life points to add to life with it: = grant, or 0 with cfg.maxOnly (CP 2026-11-19, pick 9 a)
 //   fade   — the bonus is dropped (nobody chases me any more)
 export function chaseBonusStep(state, chasingNow, cfg = avengerConfig()) {
   const prev = new Set(state?.chasers || []);
@@ -54,7 +58,7 @@ export function chaseBonusStep(state, chasingNow, cfg = avengerConfig()) {
   let grant = 0, fade = false;
   if (!now.length && bonus > 0) { fade = true; bonus = 0; }
   else if (fresh.length && bonus < cfg.max) { grant = Math.min(cfg.per * fresh.length, cfg.max - bonus); bonus += grant; }
-  return { chasers: now, bonus, fresh, grant, fade };
+  return { chasers: now, bonus, fresh, grant, heal: cfg.maxOnly ? 0 : grant, fade };
 }
 
 // Prophet: whom to look at among the enemies in contact. `foes` = [{ id, fought }] (fought = we targeted each

@@ -6,7 +6,7 @@
 // 2. identity: EFFECT_HOOKS_CHECK_N (default 700) seeded random worlds × every hook — JS vs data, JSON-identical;
 //    every record op of every hook is produced at least once (coverage).
 // 3. oracles: worked numbers (trap damage Σ(20 − stat)/10, the Reaver/Barbarian channel ruling 2026-11-17, Blessing
-//    replacement, trap routing ruling 2026-10-30, Elementals/Golems family ruling 2026-11-12).
+//    replacement, trap routing ruling 2026-10-30, Elementals/Golems family ruling 2026-11-12, same-type recast ruling 2026-11-19: Golems, Elementals, Summoning, Resurrect, Phantom).
 // 4. shadow apply: a small model of the peer's holdings; the pre-MV inline code (verbatim from peer.mjs) vs the
 //    hook records applied through applyHookRecords with the handlers _mv_peer_hunks.py installs — identical state + logs.
 // 5. failures: a data error / bad shape → the neutral value, counted; effectHook(…, 'shadow') reports 0 mismatches.
@@ -128,7 +128,9 @@ function genWorld(seed) {
       archived: maybe(0.3) ? { creature_id: 'mon_bear', name: 'Bear', stat_sum: 33, card_id: 'arc-1' } : null,
       dealt: maybe(0.5) ? smOf() : (maybe(0.5) ? { creature_id: 'mon_wolf', name: 'W', need: 5 } : null) },
     summon_paid: { perm_id, sm: smOf(), summons: maybe(0.5) ? [{ peer_id: 'x', perm: perm_id }] : [{ peer_id: 'y', perm: 'effect_phantom' }],
-      permanents: [...new Set([perm_id, ...SUMMONS.filter(() => maybe(0.3)), 'effect_shield'])] },
+      permanents: [...new Set([perm_id, ...SUMMONS.filter(() => maybe(0.3)), 'effect_shield'])],
+      held: [...SUMMONS.filter(() => maybe(0.25)), ...(maybe(0.5) ? [perm_id] : []), 'effect_shield'],
+      wards: maybe(0.5) ? [pick(ids)] : [] },   // DW: my Death Wards (an earlier Resurrect cast)
   };
   return { ctx, args, ids, views, traps, self, turn, action, channels, perms, R };
 }
@@ -233,6 +235,56 @@ const both = (label, name, ctx, args, check) => { for (const m of ENGINES) ok(`$
   const sm = { creature_id: 'mon_golem', name: 'G', need: 24 };
   both('a new Golems drops the earlier Golems, keeps the Elementals, spawns', 'summon_paid', {}, { perm_id: 'effect_golems_fire', sm, summons: [], permanents: ['effect_golems_earth', 'effect_elementals_air', 'effect_golems_fire'] },
     (r) => J(r) === J([{ op: 'drop_perm', id: 'effect_golems_earth' }, { op: 'spawn', creature_id: 'mon_golem' }]));
+  // Same-type Golems recast (user ruling 2026-11-19): the old card leaves the holding for the discard pile at once.
+  const g = 'effect_golems_earth';
+  both('same Golems recast while it stands: summon_end, release_held (old card → discard), spawn', 'summon_paid', {}, { perm_id: g, sm, summons: [{ peer_id: 'x', perm: g }], permanents: [g], held: [g, 'effect_shield'] },
+    (r) => J(r) === J([{ op: 'summon_end', perm: g }, { op: 'release_held', perm: g }, { op: 'spawn', creature_id: 'mon_golem' }]));
+  both('same Golems recast, its creature already gone: still release_held', 'summon_paid', {}, { perm_id: g, sm, summons: [], permanents: [g], held: [g] },
+    (r) => J(r.map(x => x.op)) === J(['release_held', 'spawn']));
+  both('first Golems (no card of it held): no release_held', 'summon_paid', {}, { perm_id: g, sm, summons: [], permanents: [g], held: ['effect_golems_water'] },
+    (r) => !r.some(x => x.op === 'release_held'));
+  // Extended 2026-11-19 ("yes"): Elementals, Summoning and Resurrect too.
+  const el = 'effect_elementals_air', su = 'effect_summoning', rs = 'effect_resurrect_death_ward';
+  both('same Elementals recast while it stands: summon_end, release_held, spawn', 'summon_paid', {}, { perm_id: el, sm, summons: [{ peer_id: 'x', perm: el }], permanents: [el], held: [el, su] },
+    (r) => J(r) === J([{ op: 'summon_end', perm: el }, { op: 'release_held', perm: el }, { op: 'spawn', creature_id: 'mon_golem' }]));
+  both('same Elementals recast next to another Elementals: release_held before drop_perm', 'summon_paid', {}, { perm_id: el, sm, summons: [], permanents: [el, 'effect_elementals_water'], held: [el, 'effect_elementals_water'] },
+    (r) => J(r) === J([{ op: 'release_held', perm: el }, { op: 'drop_perm', id: 'effect_elementals_water' }, { op: 'spawn', creature_id: 'mon_golem' }]));
+  both('first Elementals (another family held): no release_held', 'summon_paid', {}, { perm_id: el, sm, summons: [], permanents: [el], held: ['effect_golems_earth', su] },
+    (r) => J(r.map(x => x.op)) === J(['spawn']));
+  both('same Summoning recast (raise): summon_end, release_held, spawn', 'summon_paid', {}, { perm_id: su, sm: { creature_id: 'mon_wolf', name: 'W', need: 9 }, summons: [{ peer_id: 'x', perm: su }], permanents: [su], held: [su] },
+    (r) => J(r) === J([{ op: 'summon_end', perm: su }, { op: 'release_held', perm: su }, { op: 'spawn', creature_id: 'mon_wolf' }]));
+  both('same Summoning recast (bind, archive pick): archive_take, summon_end, release_held, summon_add', 'summon_paid', {}, { perm_id: su, sm: { bind: 'E', creature_id: 'mon_wolf', name: 'W', need: 18, archive_card_id: 'arc' }, summons: [{ peer_id: 'x', perm: su }], permanents: [su], held: [su] },
+    (r) => J(r.map(x => x.op)) === J(['archive_take', 'summon_end', 'release_held', 'summon_add']) && r[2].perm === su);
+  both('first Summoning: no release_held', 'summon_paid', {}, { perm_id: su, sm: { creature_id: 'mon_wolf', name: 'W', need: 9 }, summons: [], permanents: [su], held: [el] },
+    (r) => J(r.map(x => x.op)) === J(['spawn']));
+  both('Resurrect recast landing a Death Ward: release_held, ward', 'summon_paid', {}, { perm_id: rs, sm: { ward: 'A', name: 'A', need: 0 }, summons: [], permanents: [rs], held: [rs] },
+    (r) => J(r) === J([{ op: 'release_held', perm: rs }, { op: 'ward', peer_id: 'A' }]));
+  both('Resurrect recast raising a corpse: archive_take, summon_end (the previous raise goes, ruling 2026-11-19), release_held, summon_add (revive)', 'summon_paid', {}, { perm_id: rs, sm: { revive: 'D', creature_id: 'mon_wolf', is_player: false, name: 'W', need: 30, archive_card_id: 'arc-r' }, summons: [{ peer_id: 'x', perm: rs }], permanents: [rs], held: [rs] },
+    (r) => J(r.map(x => x.op)) === J(['archive_take', 'summon_end', 'release_held', 'summon_add']) && r[1].perm === rs && r[3].summon.mode === 'revive');
+  both('Resurrect recast from the archive while the first raised creature stands: archive_take, summon_end, release_held, spawn (ruling 2026-11-19)', 'summon_paid', {}, { perm_id: rs, sm: { creature_id: 'mon_wolf', name: 'W', need: 40, archive_card_id: 'arc-2' }, summons: [{ peer_id: 'x', perm: rs }, { peer_id: 'g', perm: g }], permanents: [rs, g], held: [rs, g] },
+    (r) => J(r) === J([{ op: 'archive_take', card_id: 'arc-2' }, { op: 'summon_end', perm: rs }, { op: 'release_held', perm: rs }, { op: 'spawn', creature_id: 'mon_wolf' }]));
+  both('Resurrect recast landing a Death Ward while its raised creature stands: summon_end, release_held, ward (ruling 2026-11-19)', 'summon_paid', {}, { perm_id: rs, sm: { ward: 'A', name: 'A', need: 0 }, summons: [{ peer_id: 'x', perm: rs }], permanents: [rs], held: [rs] },
+    (r) => J(r) === J([{ op: 'summon_end', perm: rs }, { op: 'release_held', perm: rs }, { op: 'ward', peer_id: 'A' }]));
+  both('Resurrect recast raising a player while a creature stands: revive_player only (dropPermanent ends the creature, releases the card)', 'summon_paid', {}, { perm_id: rs, sm: { revive: 'P', creature_id: null, is_player: true, name: 'P', need: 30 }, summons: [{ peer_id: 'x', perm: rs }], permanents: [rs], held: [rs] },
+    (r) => J(r) === J([{ op: 'revive_player' }]));
+  both('Resurrect recast raising a player: revive_player only (dropPermanent releases the card)', 'summon_paid', {}, { perm_id: rs, sm: { revive: 'P', creature_id: null, is_player: true, name: 'P', need: 30 }, summons: [], permanents: [rs], held: [rs] },
+    (r) => J(r) === J([{ op: 'revive_player' }]));
+  both('first Resurrect (Death Ward, nothing held): no release_held', 'summon_paid', {}, { perm_id: rs, sm: { ward: 'A', name: 'A', need: 0 }, summons: [], permanents: [rs], held: [su] },
+    (r) => J(r) === J([{ op: 'ward', peer_id: 'A' }]));
+  // DW: ruling 2026-11-19 — a Resurrect recast clears the Death Ward the earlier cast placed (ward_clear), after
+  // summon_end / release_held and before what the new cast lands; a raised player: revive_player only.
+  both('DW: Resurrect recast, a Death Ward on B stands, new Death Ward on A: release_held, ward_clear [B], ward A', 'summon_paid', {}, { perm_id: rs, sm: { ward: 'A', name: 'A', need: 0 }, summons: [], permanents: [rs], held: [rs], wards: ['B'] },
+    (r) => J(r) === J([{ op: 'release_held', perm: rs }, { op: 'ward_clear', peers: ['B'] }, { op: 'ward', peer_id: 'A' }]));
+  both('DW: Resurrect recast on the same ally: ward_clear [A] then ward A (one ward)', 'summon_paid', {}, { perm_id: rs, sm: { ward: 'A', name: 'A', need: 0 }, summons: [], permanents: [rs], held: [rs], wards: ['A'] },
+    (r) => J(r) === J([{ op: 'release_held', perm: rs }, { op: 'ward_clear', peers: ['A'] }, { op: 'ward', peer_id: 'A' }]));
+  both('DW: Resurrect recast raising a corpse while a Death Ward stands: archive_take, release_held, ward_clear, summon_add', 'summon_paid', {}, { perm_id: rs, sm: { revive: 'D', creature_id: 'mon_wolf', is_player: false, name: 'W', need: 30, archive_card_id: 'arc-r' }, summons: [], permanents: [rs], held: [rs], wards: ['B'] },
+    (r) => J(r.map(x => x.op)) === J(['archive_take', 'release_held', 'ward_clear', 'summon_add']) && J(r[2].peers) === J(['B']));
+  both('DW: Resurrect recast from the archive while a Death Ward stands: archive_take, release_held, ward_clear, spawn', 'summon_paid', {}, { perm_id: rs, sm: { creature_id: 'mon_wolf', name: 'W', need: 40, archive_card_id: 'arc-2' }, summons: [], permanents: [rs], held: [rs], wards: ['B'] },
+    (r) => J(r) === J([{ op: 'archive_take', card_id: 'arc-2' }, { op: 'release_held', perm: rs }, { op: 'ward_clear', peers: ['B'] }, { op: 'spawn', creature_id: 'mon_wolf' }]));
+  both('DW: Resurrect recast raising a player while a Death Ward stands: revive_player only (dropPermanent clears the wards)', 'summon_paid', {}, { perm_id: rs, sm: { revive: 'P', creature_id: null, is_player: true, name: 'P', need: 30 }, summons: [], permanents: [rs], held: [rs], wards: ['B'] },
+    (r) => J(r) === J([{ op: 'revive_player' }]));
+  both('DW: a Golems cast while my Death Ward stands: no ward_clear', 'summon_paid', {}, { perm_id: g, sm, summons: [], permanents: [g, rs], held: [rs], wards: ['B'] },
+    (r) => !r.some(x => x.op === 'ward_clear'));
   both('Death Ward lands, nothing else', 'summon_paid', {}, { perm_id: 'effect_resurrect_death_ward', sm: { ward: 'A', name: 'A', need: 0, archive_card_id: 'arc' }, summons: [], permanents: [] },
     (r) => J(r) === J([{ op: 'archive_take', card_id: 'arc' }, { op: 'ward', peer_id: 'A' }]));
   const peers = [{ peer_id: 'ME', tile_q: 0, tile_r: 0, life: 3, alliance: 'player' }, { peer_id: 'D2', tile_q: 1, tile_r: 0, life: 0, creature_id: 'mon_wolf', name: 'Wolf', stat_vitality: 5, stat_world: 5, stat_matter: 5, stat_will: 5 },
@@ -245,15 +297,80 @@ const both = (label, name, ctx, args, check) => { for (const m of ENGINES) ok(`$
   both('Golems keep the creature they were dealt with', 'summon_plan', c, { effect_id: 'effect_golems_earth', every: false, self: 'ME', here: { q: 0, r: 0 }, target: null, side: 'player', peers, archived: null, dealt: null }, (r) => r.op === 'keep');
 }
 
+{
+  // Random worlds: release_held iff the same summon permanent is recast with its card in the holding - every family,
+  // every path but a raised player (dropPermanent releases it) - and before the record that lands the new cast.
+  let n = 0, hit = 0, bad = null; const fams = new Map();
+  for (let s = 1; s <= N; s++) {
+    const a = genWorld(s + 200000).args.summon_paid;
+    const want = a.held.includes(a.perm_id) && !(a.sm.revive && a.sm.is_player);
+    for (const m of ENGINES) {
+      const r = H.effectHook('summon_paid', {}, a, m); n++;
+      const rel = r.filter(x => x.op === 'release_held');
+      const lands = r.findIndex(x => ['spawn', 'summon_add', 'ward'].includes(x.op));
+      const good = want ? (rel.length === 1 && rel[0].perm === a.perm_id && lands >= 0 && r.findIndex(x => x.op === 'release_held') < lands) : rel.length === 0;
+      if (good) hit++; else bad ||= `seed ${s} ${m}: ${J(a)} → ${J(r)}`;
+      if (want && good) { const f = `${a.perm_id.replace(/_(earth|fire|air|water)$/, '')}/${a.sm.ward ? 'ward' : a.sm.revive ? 'revive' : a.sm.bind ? 'bind' : 'spawn'}`; fams.set(f, (fams.get(f) || 0) + 1); }
+    }
+  }
+  ok(`random worlds: same-type recast → release_held, else none (${hit}/${n})`, hit === n && n > 0, bad);
+  const needF = ['effect_golems/spawn', 'effect_elementals/spawn', 'effect_summoning/spawn', 'effect_summoning/bind', 'effect_resurrect_death_ward/ward', 'effect_resurrect_death_ward/revive'];
+  ok(`random worlds: release_held seen for every family / path (${[...fams].map(([k, v]) => `${k}:${v}`).join(' ')})`, needF.every(f => fams.get(f) > 0), needF.filter(f => !fams.get(f)).join());
+  // Ruling 2026-11-19 (Resurrect recast): summon_end iff a creature of that permanent stands, on every path but a raised
+  // player (dropPermanent ends it), and before the record that lands the new cast.
+  let n2 = 0, hit2 = 0, bad2 = null; const paths = new Map();
+  for (let s = 1; s <= N; s++) {
+    const a = genWorld(s + 200000).args.summon_paid;
+    const want = a.summons.some(x => x.perm === a.perm_id) && !(a.sm.revive && a.sm.is_player);
+    for (const m of ENGINES) {
+      const r = H.effectHook('summon_paid', {}, a, m); n2++;
+      const e = r.filter(x => x.op === 'summon_end'), lands = r.findIndex(x => ['spawn', 'summon_add', 'ward'].includes(x.op));
+      const good = want ? (e.length === 1 && e[0].perm === a.perm_id && lands >= 0 && r.findIndex(x => x.op === 'summon_end') < lands) : e.length === 0;
+      if (good) hit2++; else bad2 ||= `seed ${s} ${m}: ${J(a)} → ${J(r)}`;
+      if (want && good && a.perm_id === 'effect_resurrect_death_ward') { const k = a.sm.ward ? 'ward' : a.sm.revive ? 'revive' : 'spawn'; paths.set(k, (paths.get(k) || 0) + 1); }
+    }
+  }
+  ok(`random worlds: a recast ends the creature the permanent holds (summon_end), else none (${hit2}/${n2}; Resurrect ${[...paths].map(([k, v]) => `${k}:${v}`).join(' ')})`, hit2 === n2 && n2 > 0 && ['ward', 'revive', 'spawn'].every(k => paths.get(k) > 0), bad2 || `paths ${J([...paths])}`);
+  // DW: ruling 2026-11-19 (Death Ward recast): ward_clear {peers = my wards} iff Resurrect is paid while a ward of mine
+  // stands, on every path but a raised player; after summon_end / release_held, before the record that lands the cast.
+  let n3 = 0, hit3 = 0, bad3 = null; const paths3 = new Map();
+  for (let s = 1; s <= N; s++) {
+    const a = genWorld(s + 200000).args.summon_paid;
+    const want = a.perm_id === 'effect_resurrect_death_ward' && a.wards.length > 0 && !(a.sm.revive && a.sm.is_player);
+    for (const m of ENGINES) {
+      const r = H.effectHook('summon_paid', {}, a, m); n3++;
+      const c = r.filter(x => x.op === 'ward_clear'), ic = r.findIndex(x => x.op === 'ward_clear'), lands = r.findIndex(x => ['spawn', 'summon_add', 'ward'].includes(x.op));
+      const after = ['summon_end', 'release_held'].every(op => r.findIndex(x => x.op === op) < ic);
+      const good = want ? (c.length === 1 && J(c[0].peers) === J(a.wards) && lands > ic && after) : c.length === 0;
+      if (good) hit3++; else bad3 ||= `seed ${s} ${m}: ${J(a)} → ${J(r)}`;
+      if (want && good) { const k = a.sm.ward ? 'ward' : a.sm.revive ? 'revive' : 'spawn'; paths3.set(k, (paths3.get(k) || 0) + 1); }
+    }
+  }
+  ok(`DW random worlds: a Resurrect recast clears the earlier Death Ward (ward_clear), else none (${hit3}/${n3}; ${[...paths3].map(([k, v]) => `${k}:${v}`).join(' ')})`, hit3 === n3 && n3 > 0 && ['ward', 'revive', 'spawn'].every(k => paths3.get(k) > 0), bad3 || `paths ${J([...paths3])}`);
+}
+{
+  // Phantom (no hook: spawnPhantom in peer.mjs): the old card is released first, synchronously - before the first await
+  // (doResolution), so before endRound holds the new card.
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../peer.mjs', import.meta.url), 'utf8');
+  const body = src.slice(src.indexOf('async function spawnPhantom('), src.indexOf('async function spawnCompanion('));
+  const iRel = body.indexOf('if (heldCards.some(c => c.effect_id === permId)) releaseHeld(permId);');
+  ok('Phantom recast: spawnPhantom releases the held old card before any await / return', iRel > 0 && iRel < body.indexOf('await') && iRel < body.indexOf('return'));
+  const er = src.indexOf('const leave = held ? holdCard : dropCard;'), call = src.indexOf('spawnPhantom(eff.effect_id)'), call2 = src.indexOf('onSummoned(eff.effect_id, oc.summon)');
+  ok('timing: onSummoned / spawnPhantom (doResolution) come before the new card is held (endRound holdCard)', call > 0 && call2 > 0 && er > call && er > call2);
+}
+
 // ---- 4. shadow apply: pre-MV inline peer.mjs code vs records + handlers ---------------------------------------------
 console.log('-- 4. shadow apply (state after the inline code = state after the records)');
 // A tiny peer: holdings, cards, logs. `inline.*` are the pre-MV peer.mjs blocks, verbatim but for the globals.
 function peerModel(w) {
   const P = { channels: structuredClone(w.channels.get(w.self) || []), traps: structuredClone(w.args.perm_falls.traps), held: [], discard: [], archive: [{ card_id: 'arc-1', kind: 'creature' }, { card_id: 'arc-r', kind: 'creature' }],
-    perms: new Set(w.args.summon_paid.permanents), summons: structuredClone(w.args.summon_paid.summons), wards: [], worldEdits: [{ id: 'wtrap:0,0', gone: true, at: 0 }], logs: [], dropped: [], spawned: [], ended: [], dirty: 0 };
+    perms: new Set(w.args.summon_paid.permanents), summons: structuredClone(w.args.summon_paid.summons), wards: structuredClone(w.args.summon_paid.wards || []), worldEdits: [{ id: 'wtrap:0,0', gone: true, at: 0 }], logs: [], dropped: [], spawned: [], ended: [], dirty: 0 };
   for (const c of [...P.channels, ...P.traps]) if (c.card_id) P.held.push({ card_id: c.card_id });
   for (const c of w.args.channel_land.channels) if (c.card_id) P.held.push({ card_id: c.card_id });
   for (const c of w.args.trap_lay.traps) if (c.card_id) P.held.push({ card_id: c.card_id });
+  for (const pm of w.args.summon_paid.held || []) P.held.push({ card_id: `held-${pm}`, perm: pm });
+  P.releaseHeld = (perm) => { for (let i = P.held.length - 1; i >= 0; i--) if (P.held[i].perm === perm) { const c = P.held.splice(i, 1)[0]; P.discard.push(c); P.logs.push(`${c.card_id} leaves the holding`); } };
   P.releaseHeldCard = (cid, toDiscard = true) => { if (!cid) return; for (let i = P.held.length - 1; i >= 0; i--) if (P.held[i].card_id === cid) { const c = P.held.splice(i, 1)[0]; if (toDiscard) P.discard.push(c); P.logs.push(`spent ${cid} ${toDiscard}`); } };
   P.holdCard = (cid) => P.logs.push(`hold ${cid}`);
   P.dropPermanent = (id) => { P.dropped.push(id); P.perms.delete(id); };
@@ -306,12 +423,20 @@ const inline = {
   },
   summon_paid(P, { perm_id: permId, sm }) {
     if (sm.archive_card_id) { const i = P.archive.findIndex(c => c.card_id === sm.archive_card_id); if (i >= 0) P.archive.splice(i, 1); }
-    if (sm.ward) { if (!P.wards.includes(sm.ward)) P.wards.push(sm.ward); P.logs.push(`ward ${sm.ward}`); return; }
+    const recast = P.held.some(c => c.perm === permId);   // ruling 2026-11-19 (every summon family)
+    const ends = () => { if (P.summons.some(x => x.perm === permId)) { P.logs.push(`a new ${permId} releases`); P.onSummonEnd(permId); } };   // ruling 2026-11-19 (Resurrect)
+    const clears = () => { if (permId === 'effect_resurrect_death_ward' && P.wards.length) { const gone = [...P.wards]; P.wards = P.wards.filter(x => !gone.includes(x)); P.logs.push(`ward cleared ${gone}`); } };   // DW: ruling 2026-11-19
+    if (sm.ward) { ends(); if (recast) P.releaseHeld(permId); clears(); if (!P.wards.includes(sm.ward)) P.wards.push(sm.ward); P.logs.push(`ward ${sm.ward}`); return; }
     if (sm.revive) {
       if (sm.is_player) { P.logs.push(`${sm.name} back`); P.dropPermanent(permId); return; }
+      ends();
+      if (recast) P.releaseHeld(permId);
+      clears();   // DW
       P.summons.push({ peer_id: sm.revive, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'revive' }); P.logs.push(`${sm.name} rises`); return;
     }
     if (P.summons.some(x => x.perm === permId)) { P.logs.push(`a new ${permId} releases`); P.onSummonEnd(permId); }
+    if (recast) P.releaseHeld(permId);
+    clears();   // DW
     const familyOf = (id) => id.startsWith('effect_elementals') ? 'Elementals' : id.startsWith('effect_golems') ? 'Golems' : null;
     if (familyOf(permId)) for (const other of [...P.perms]) if (other !== permId && familyOf(other) === familyOf(permId)) { P.logs.push(`replaces ${other}`); P.dropPermanent(other); }
     if (sm.bind) { P.summons.push({ peer_id: sm.bind, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'bind' }); P.logs.push(`${sm.name} bound`); return; }
@@ -339,6 +464,8 @@ const handlers = {
     revive_player: () => { P.logs.push(`${a.sm.name} back`); P.dropPermanent(a.perm_id); },
     summon_add: (x) => { P.summons.push(x.summon); P.logs.push(x.summon.mode === 'revive' ? `${x.summon.name} rises` : `${x.summon.name} bound`); },
     summon_end: (x) => { P.logs.push(`a new ${x.perm} releases`); P.onSummonEnd(x.perm); },
+    release_held: (x) => P.releaseHeld(x.perm),
+    ward_clear: (x) => { P.wards = P.wards.filter(id => !x.peers.includes(id)); P.logs.push(`ward cleared ${x.peers}`); },   // DW: = the peer.mjs hunk
     drop_perm: (x) => { P.logs.push(`replaces ${x.id}`); P.dropPermanent(x.id); },
     spawn: (x) => { if (x.creature_id === 'mon_imp') return; P.spawned.push(x.creature_id); },
   }),
@@ -353,9 +480,9 @@ for (let s = 1; s <= N; s++) {
       if (name === 'channel_land') a.mine = A.channels;
       if (name === 'trap_lay') a.count = A.traps.length;
       if (name === 'perm_falls') { a.channels = A.channels; a.traps = A.traps; }
-      if (name === 'summon_paid') { a.summons = A.summons; a.permanents = [...A.perms]; }
+      if (name === 'summon_paid') { a.summons = A.summons; a.permanents = [...A.perms]; a.held = A.held.filter(c => c.perm).map(c => c.perm); a.wards = A.wards; }   // DW: wards
       inline[name](A, structuredClone(a), w.ctx.effectKnown);
-      const b = { ...structuredClone(a), ...(name === 'channel_land' ? { mine: B.channels } : {}), ...(name === 'perm_falls' ? { channels: B.channels, traps: B.traps } : {}), ...(name === 'summon_paid' ? { summons: B.summons, permanents: [...B.perms] } : {}) };
+      const b = { ...structuredClone(a), ...(name === 'channel_land' ? { mine: B.channels } : {}), ...(name === 'perm_falls' ? { channels: B.channels, traps: B.traps } : {}), ...(name === 'summon_paid' ? { summons: B.summons, permanents: [...B.perms], held: B.held.filter(c => c.perm).map(c => c.perm), wards: [...B.wards] } : {}) };
       const ctx = name === 'trap_spent' ? { ...w.ctx, worldEditGone: (id) => B.worldEdits.some(e => e.id === id && e.gone) } : w.ctx;
       if (name === 'trap_spent') inline.trap_spent(A, structuredClone(a), w.ctx.effectKnown);   // a second spend of the same trap (world edit already there)
       H.applyHookRecords(H.effectHook(name, ctx, b, mode), handlers[name](B, b.ts ?? b));

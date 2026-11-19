@@ -423,5 +423,37 @@ function world(stats, tiles, sides) {
   yes('LR: another lib version is another fxKey', fxKey(makeFxRef(def, [myLib2])) !== fxKey(makeFxRef(def, [myLib])) && effectLibHash(myLib2) !== ref.libs.lrlib);
 }
 
+// ---------------------------------------------------------------- RF. a refuser's summoned companions refuse too (ruling 2026-11-19)
+{
+  const sel = await import('../foreign-select.mjs');
+  const KEYS = ['FOREIGN_REFUSERS', 'FOREIGN_HOLDERS', 'FOREIGN_ORDER', 'OWNER_PEER_ID', 'PEER_LABEL', 'FX_ACCEPT', 'FX_VALIDATOR'];
+  const saved = Object.fromEntries(KEYS.map(k => [k, process.env[k]]));
+  const setEnv = (o) => { for (const k of KEYS) delete process.env[k]; for (const [k, v] of Object.entries(o)) if (v !== undefined) process.env[k] = v; };
+  // boot an fx adapter as PEER_LABEL=label (OWNER_PEER_ID as a spawned companion gets it) → its policy on Frost Lance
+  const as = async (label, env = {}) => {
+    setEnv({ FOREIGN_REFUSERS: 'P-Agent5', FX_VALIDATOR: '0', PEER_LABEL: label, ...env });
+    const lines = [], p = await createFxPeer({ selfId: `peer:${label}`, label, dimId: 'dim-rf', log: (l) => lines.push(l) });
+    p.store.addDef(FROST_LANCE);
+    return { st: p.store.prepare(REF).status, role: sel.foreignRole(label), why: lines.find(l => / validator /.test(l))?.replace(/.* validator /, '') };
+  };
+  eq('RF: the listed refuser refuses', await as('P-Agent5'), { st: 'rejected', role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: its companion (OWNER_PEER_ID peer:P-Agent5) refuses too', await as('P-Agent5-sum1', { OWNER_PEER_ID: 'peer:P-Agent5' }), { st: 'rejected', role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: a companion of that companion refuses too', await as('P-Agent5-sum1-sum2', { OWNER_PEER_ID: 'peer:P-Agent5-sum1' }), { st: 'rejected', role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: numeric FOREIGN_REFUSERS=1 (last hero P-Agent5) reaches its companion', await as('P-Agent5-sum3', { OWNER_PEER_ID: 'peer:P-Agent5', FOREIGN_REFUSERS: '1' }), { st: 'rejected', role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: a companion of a non-refuser does not refuse', (await as('P-Agent4-sum1', { OWNER_PEER_ID: 'peer:P-Agent4' })).st, 'ready');
+  eq('RF: a wild spawn (OWNER_PEER_ID empty, released P-Agent5-sum1-r4) keeps its own policy', (await as('P-Agent5-sum1-r4', { OWNER_PEER_ID: '' })).st, 'ready');
+  eq('RF: FX_ACCEPT=0 inherited by the companion env → refuses', await as('P-Agent4-sum2', { OWNER_PEER_ID: 'peer:P-Agent4', FX_ACCEPT: '0' }), { st: 'rejected', role: 'all', why: 'FX_ACCEPT=0 (refuse all)' });
+  setEnv({ FOREIGN_REFUSERS: 'P-Agent5' });
+  eq('RF: foreignPrincipal by label alone (no OWNER_PEER_ID)', ['P-Agent5-sum1', 'P-Agent5-sum1-sum2', 'P-Agent5-sum1-r4', 'P-Agent5', 'lurker_1_2'].map(sel.foreignPrincipal), ['P-Agent5', 'P-Agent5', 'P-Agent5-sum1-r4', 'P-Agent5', 'lurker_1_2']);
+  eq('RF: foreignRefuser on companion labels', ['P-Agent5-sum7', 'P-Agent4-sum1', 'P-Agent5-sum1-r4'].map(sel.foreignRefuser), [true, false, false]);
+  setEnv(saved);
+  // spawnCompanion must keep passing the owner's env: `...process.env` first, and no reset of the refusal knobs.
+  const peerSrc = fs.readFileSync(new URL('../peer.mjs', import.meta.url), 'utf8');
+  const envBlock = (peerSrc.match(/async function spawnCompanion\([\s\S]*?const env = \{([\s\S]*?)\n  \};/) || [])[1] || '';
+  yes('RF: spawnCompanion env starts with ...process.env', /^\s*\.\.\.process\.env,/.test(envBlock));
+  eq('RF: spawnCompanion env does not reset FX/SK/CL_ACCEPT, FOREIGN_REFUSERS/ORDER, PEER_LABEL pattern ok',
+    [/\b(FX|SK|CL)_ACCEPT\s*:/.test(envBlock), /FOREIGN_(REFUSERS|ORDER)\s*:/.test(envBlock), /OWNER_PEER_ID: wild \? '' : PEER_ID_STRING/.test(envBlock), /PEER_ID_STRING\s*=\s*`peer:\$\{PEER_LABEL\}`/.test(peerSrc)], [false, false, true, true]);
+}
+
 console.log(fails ? `${fails} handshake check(s) FAILED` : 'all handshake checks passed');
 process.exit(fails ? 1 : 0);

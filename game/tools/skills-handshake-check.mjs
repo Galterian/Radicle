@@ -337,5 +337,26 @@ try { ({ checkSkill } = await import('./skills-rebalancing-check.mjs')); } catch
   eq('adapter: refused → UI notice', uiSeen.map(m => [m.kind, m.event, m.ref?.id, m.ref?.kind]), [['skill_source', 'missing', 'skill_quick_dodge', 'skill']]);
 }
 
+// ---------------------------------------------------------------- RF. a refuser's summoned companions refuse too (ruling 2026-11-19)
+// (logs/swarm-0421: P-Agent5 refused Quick Dodge, P-Agent5-sum1 learned it from ally-1)
+{
+  const sel = await import('../foreign-select.mjs');
+  const KEYS = ['FOREIGN_REFUSERS', 'FOREIGN_HOLDERS', 'FOREIGN_ORDER', 'OWNER_PEER_ID', 'PEER_LABEL', 'SK_ACCEPT'];
+  const saved = Object.fromEntries(KEYS.map(k => [k, process.env[k]]));
+  const setEnv = (o) => { for (const k of KEYS) delete process.env[k]; for (const [k, v] of Object.entries(o)) if (v !== undefined) process.env[k] = v; };
+  const as = async (label, env = {}) => {
+    setEnv({ FOREIGN_REFUSERS: 'P-Agent5', PEER_LABEL: label, ...env });
+    const lines = [], p = await createSkPeer({ selfId: `peer:${label}`, label, dimId: 'dim-rf', log: (l) => lines.push(l), validate: null });
+    p.store.addDef(QUICK_DODGE);
+    return { refused: p.store.prepare(REF).status === 'rejected', role: sel.foreignRole(label), why: lines.find(l => / validator /.test(l))?.replace(/.* validator /, '') };
+  };
+  eq('RF: the listed refuser refuses Quick Dodge', await as('P-Agent5'), { refused: true, role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: its companion P-Agent5-sum1 refuses it too', await as('P-Agent5-sum1', { OWNER_PEER_ID: 'peer:P-Agent5' }), { refused: true, role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: a companion of that companion refuses too', (await as('P-Agent5-sum1-sum1', { OWNER_PEER_ID: 'peer:P-Agent5-sum1' })).refused, true);
+  eq('RF: a companion of a non-refuser does not refuse', (await as('P-Agent4-sum1', { OWNER_PEER_ID: 'peer:P-Agent4' })).refused, false);
+  eq('RF: SK_ACCEPT=0 inherited by the companion env → refuses', await as('P-Agent4-sum2', { OWNER_PEER_ID: 'peer:P-Agent4', SK_ACCEPT: '0' }), { refused: true, role: 'all', why: 'SK_ACCEPT=0 (refuse all)' });
+  setEnv(saved);
+}
+
 console.log(fails ? `${fails} skills handshake check(s) FAILED` : 'all skills handshake checks passed');
 process.exit(fails ? 1 : 0);

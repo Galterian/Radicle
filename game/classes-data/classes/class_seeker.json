@@ -2,9 +2,9 @@
   "schema": "chaosd6.class/1",
   "id": "class_seeker",
   "name": "Seeker",
-  "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
-  "data": {"ability_kind":"tap","colors":["elem_time","elem_space","elem_souls","elem_air","elem_water","elem_earth","elem_fire"],"attach":"effect","distance":[20,30],"vision":{"radius":5,"until":"end_of_next_turn"},"text":"Tap: choose an effect card from your hand — it becomes a trap building at a random hex 20 to 30 hexes away (walkable; no unit, wall, fortress or other trap there) and springs on whoever steps there. You see that hex and 5 hexes around it until the end of your next turn."},
+  "version": "1.2.0",
+  "source": {"collection":"classes","version":"1.2.0"},
+  "data": {"ability_kind":"once_per_round","colors":["elem_time","elem_space","elem_souls","elem_earth"],"attach":"effect","distance":[20,30],"vision":{"radius":5,"until":"end_of_next_turn"},"text":"Once per turn: choose an effect card from your hand — it becomes a trap building at a random hex 20 to 30 hexes away (walkable; no unit, wall, fortress or other trap there) and springs on whoever steps there. One planted trap stands at a time: a new one replaces the old (its card returns to your discard pile). You see that hex and 5 hexes around it until the end of your next turn.","max_standing":1},
   "flags": {"phase":"post","needs":"attach_effect","hooks":["ability","config"]},
   "uses": ["classes_std"],
   "hooks": {

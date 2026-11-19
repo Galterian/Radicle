@@ -102,9 +102,10 @@ const av = active('classes.json', 'class_animator');
 eq('animator canonical 1.1.0, near 2, copy rises next to me', [av.version, animatorConfig(av.data).near, animatorConfig(av.data).place], ['1.1.0', 2, 1]);
 eq('animator defaults', animatorConfig({}), { near: 2, place: 1 });
 const pv = active('classes.json', 'class_priest');
-eq('priest canonical 1.1.0, once per turn, Shrine (mend) within 2', [pv.version, pv.data.ability_kind, priestConfig(pv.data)], ['1.1.0', 'once_per_round', { place: 2, label: 'Shrine', power: 'mend' }]);
+eq('priest canonical 1.2.0 (CR 2026-11-17: one Shrine standing; CP 2026-11-19 pick 5 a: it heals 2), once per turn, Shrine (mend) within 2', [pv.version, pv.data.ability_kind, priestConfig(pv.data), pv.data.max_standing], ['1.2.0', 'once_per_round', { place: 2, label: 'Shrine', power: 'mend', heal: 2 }, 1]);
+eq('priest (CP 2026-11-19 pick 5 a): its Shrine mends 2 (power n), a copy of it mends 1', [shrineMade(priestConfig(pv.data), null, 'class_priest').bonus, copyMade({ ...shrineMade(priestConfig(pv.data), null, 'class_priest'), placed: true }, 1, 1, 'class_animator').bonus], [{ power: { kind: 'mend', n: 2 } }, { power: { kind: 'mend' } }]);
 eq('priest has no forced discard / passive left', [pv.data.hand_discard ?? null, pv.data.passive ?? null], [null, null]);
-eq('priest defaults', priestConfig({}), { place: 2, label: 'Shrine', power: 'mend' });
+eq('priest defaults', priestConfig({}), { place: 2, label: 'Shrine', power: 'mend', heal: 1 });   // CP 2026-11-19: + heal (default 1)
 {
   const here = { q: 0, r: 0 };
   const blds = [{ q: 2, r: 0 }, { q: 0, r: 2 }, { q: 1, r: -1 }, { q: 5, r: 0 }, { q: -1, r: 0 }];
@@ -163,7 +164,7 @@ eq('priest defaults', priestConfig({}), { place: 2, label: 'Shrine', power: 'men
 // ---- Seeker (classes.json class_seeker 1.1.0) ----
 const sv = active('classes.json', 'class_seeker');
 const sc = seekerConfig(sv.data);
-eq('seeker canonical 1.1.0, distance 20..30, vision 5, until end of next turn', [sv.version, sc.min, sc.max, sc.radius, sc.turns], ['1.1.0', 20, 30, 5, 1]);
+eq('seeker canonical 1.2.0 (CR 2026-11-17: once per turn, one trap standing), distance 20..30, vision 5, until end of next turn', [sv.version, sc.min, sc.max, sc.radius, sc.turns, sv.data.ability_kind, sv.data.max_standing], ['1.2.0', 20, 30, 5, 1, 'once_per_round', 1]);
 eq('seeker defaults', seekerConfig({}), { min: 20, max: 30, radius: 5, turns: 1 });
 {
   const anchor = { q: 3, r: -4 };

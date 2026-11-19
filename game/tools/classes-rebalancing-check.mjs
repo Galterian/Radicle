@@ -66,6 +66,30 @@
 //   ruling 2026-11-17: an EXTRA way to kill the raised unit).
 //   Tap recharge (user ruling 2026-11-17, Alchemist / every tap class): a tap card also untaps from the elements
 //   emitted while casting other effects — the untap time is k / (p_restore + p_recharge_emit · f) (powerOf).
+// MODEL 1.2.0 (user class rebalance rulings 2026-11-17 / 2026-11-18, data versions cr_2026_11_19): new optional
+//   object shapes of the old keys (a bare number / true keeps its 1.1.0 meaning) and one new key:
+//   draw {n, hand_max} × p_hand_small · heal {n, ally} — + ally heals × allies(1) · stone {n} (n stones per use) ·
+//   discard {n, range} — range ≤ 1 gates on p_contact (else p_enemy_near) · attack_bonus {n, hurt_only} × p_foe_hurt ·
+//   regen {n, still: [actions]} — p(unmoved on those actions) = p_unmoved_action^|still| (a product, no pow) ·
+//   reroll {per: action} — trigger action, p_damage_spell_action · build {max} — the building-turn cap uses
+//   min(building_slots, max) · reveal {range} — range > 1 uses p_enemy_near instead of p_contact · plant {max} — of the
+//   traps planted only m + (uses − m) · p_planted_sprung get the chance to spring (a new one lifts the old) ·
+//   swap {attack_only} × p_attack_of_combat · lifesteal {max, attack_only} — min(dmg_per_hit, max) (× p_attack_of_combat) ·
+//   dodge n (NEW, Rogue one shared charge): n · (W.trap · p_trap_turn + W.threat · (1 − p_trap_turn)).
+//   The new odds are swarm placeholders (calibration swarm_placeholders).
+// MODEL 1.3.0 (user class picks 2026-11-19 of CLASSES_BALANCE "Proposals 2026-11-19", data cp_2026_11_19): new optional
+//   fields of the object shapes (absent = the 1.2.0 meaning):
+//   stone {chain} — the k-th point-buy rolls only after the (k−1)-th succeeded: Σ_{i<n} p^i stones a use instead of n ·
+//   heal {unmoved, ally_required} — a tap gate (gateOf: p_unmoved_action × p_ally_adjacent; an unused tap waits), and
+//   with ally_required the ally heal is certain (× 1, not × allies(1)) · discard {self} — the holder also discards
+//   `self` own cards: (n − self) × W.card · build {heal} — a Shrine heals `heal` (× heal, the slot cap too) ·
+//   chase_bonus {max_only} — +life MAX only, worth a life only while hurt (× p_hurt). New swarm placeholder p_ally_adjacent.
+//   The fair line is LOCKED (policy.fit_locked, user instruction 2026-11-19 "do not refit the fair line"): calibrate()
+//   re-snapshots the built-ins against the accepted fit instead of refitting it; fitCurve's answer is reported only.
+//   CP2 (the user's answers, data cp2_2026_11_19): data untap_emissions N (a tap class, N above k) — the untap takes
+//   N emissions instead of k: untap = max(k, N) / (p_restore + p_recharge_emit · f) (powerOf). Data fail_spends (Druid)
+//   needs no new term: stone {chain} already prices a failed roll as a spent use.
+//   CPD (Druid option C, data cpd_2026_11_19): stone {unmoved} — the Healer's no-move tap gate (gateOf p_unmoved_action).
 // FOREIGN LIMITS (user ruling 2026-11-17): a foreign class (an id with no BUILTIN_POWER) may not have an ability the
 // game code resolves itself (peer: hooks, JS markers, the peer-resolved keys build / disable_traps / plant /
 // relocate) and may not be a hand class (data.hand_reveal / hand_discard, flags.handDefaults, the keys discard /
@@ -76,7 +100,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CORE_VERSION, r6, r3, sha256, isObj, canonicalJson, fileSha, readJson, pointBuyStats, fitCurve, bandVerdict } from './rebalancing-core.mjs';
 
 export { canonicalJson };
-export const VALIDATOR_VERSION = '1.1.0';   // 1.1.0 (user rulings 2026-11-17): the six weight answers — see MODEL 1.1.0 below
+export const VALIDATOR_VERSION = '1.3.0';   // 1.3.0 (class picks 2026-11-19): MODEL 1.3.0 below; 1.2.0 (class rebalance rulings 2026-11-17/18): MODEL 1.2.0; 1.1.0: the six weight answers
 export const DEFAULT_TOLERANCE = 0.30;   // user ruling 2026-11-18 (was 0.10 since 2026-11-16)
 export const PIN_FORMAT = 'chaosd6-classes-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -179,6 +203,7 @@ export const POWER_KEYS = {
   regen:         { trigger: 'turn',   shape: 'n' },        // +n life at the end of an unmoved turn
   trap_dodge:    { trigger: 'turn',   shape: 'n' },        // n trap steps per turn do not trigger
   threat_dodge:  { trigger: 'turn',   shape: 'n' },        // n threatened moves per turn are stealthy
+  dodge:         { trigger: 'turn',   shape: 'n' },        // 1.2.0: n shared charges per turn — a trap step does not trigger, else a threatened move is stealthy
   reroll:        { trigger: 'turn',   shape: 'true' },     // a point-buy die added to a damage spell
   swap:          { trigger: 'turn',   shape: 'true' },     // a nearby enemy's action is swapped before it hits me
   reveal:        { trigger: 'turn',   shape: 'true', hand: true },     // an adjacent enemy's hand opens
@@ -188,37 +213,37 @@ export const POWER_KEYS = {
 export const BUILTIN_POWER = {
   class_alchemist: { trap: true },
   class_animator: { build: { gate: true } },   // 1.1.0: copies the building nearest (within 2) — gated by p_building_near
-  class_assassin: { attack_bonus: 1 },
-  class_avenger: { lure: { range: 10 }, chase_bonus: { life: 1, max: 1 } },
-  class_barbarian: { stance: { codes: ['EP'] }, emit: { codes: ['B'] } },   // ruling 2026-11-16: may emit during Block (B); 2026-11-17: that Block emission progresses (keeps the channel, peer.mjs classKeeps) = a full emit
+  class_assassin: { attack_bonus: { n: 1, hurt_only: true } },   // CR 2026-11-17: only vs an enemy below full life
+  class_avenger: { lure: { range: 10 }, chase_bonus: { life: 1, max: 1, max_only: true } },   // CP 2026-11-19 (pick 9 a): +1 life MAX only
+  class_barbarian: { stance: { codes: ['EP', 'EM'] }, emit: { codes: ['B'] } },   // CR 2026-11-18 (a): EM is a Block too (only a real Block emits)   // ruling 2026-11-16: may emit during Block (B); 2026-11-17: that Block emission progresses (keeps the channel, peer.mjs classKeeps) = a full emit
   class_bard: { share_skills: true },
   class_cleric: { disable_traps: { range: 3 }, trap_disable: true },
-  class_druid: { stone: true },
-  class_elementalist: { reroll: true },
-  class_enchanter: { plan_emit: { codes: ['A', 'B', 'M'] } },
-  class_guardian: { regen: 1 },
-  class_healer: { heal: 1 },
+  class_druid: { stone: { n: 2, chain: true, unmoved: true } },   // CPD 2026-11-19 (option C): only on an action I do not move;   // CR 2026-11-17: two stones (best stat + next best); CP 2026-11-19 (pick 2 b): the 2nd only after the 1st succeeded
+  class_elementalist: { reroll: { per: 'action' } },   // CR 2026-11-17: once per ACTION
+  class_enchanter: { emit: { codes: ['A', 'B', 'M'] } },   // CR 2026-11-18 (b): static, A / B / M emit at every site
+  class_guardian: { regen: { n: 1, still: [2, 3] } },   // CR 2026-11-17: unmoved on the 2nd and 3rd action
+  class_healer: { heal: { n: 1, ally: 1, unmoved: true, ally_required: true } },   // CR 2026-11-17: me AND an adjacent ally; CP 2026-11-19 (pick 4 a): only unmoved, only with an ally adjacent
   class_illusionist: { illusion: { range: 10 } },
   class_kensei: { recover: 1 },
-  class_manipulator: { swap: true },
-  class_monk: { stance: { codes: ['EP'] }, emit: { codes: ['M', 'EM'] } },   // ruling 2026-11-16: Move and Empty Move emit at every site
+  class_manipulator: { swap: { attack_only: true } },   // CR 2026-11-17: only an incoming Attack
+  class_monk: { emit: { codes: ['M', 'EM'] } },   // CR 2026-11-17: no EP-as-Move stance   // ruling 2026-11-16: Move and Empty Move emit at every site
   class_necromancer: { revive: true },
-  class_noble: { lifesteal: true },
+  class_noble: { lifesteal: { max: 1, attack_only: true } },   // CR 2026-11-17: ≤ 1 per action, own Attack only
   class_overlord: { armor: 1 },
   class_paladin: { recover: 1 },
-  class_priest: { build: true },
-  class_prophet: { reveal: true },
+  class_priest: { build: { max: 1, heal: 2 } },   // CR 2026-11-17: one Shrine standing; CP 2026-11-19 (pick 5 a): the Priest's Shrine heals 2
+  class_prophet: { reveal: { range: 3 } },   // CR 2026-11-17: an enemy within 3 hexes
   class_ranger: { trap: true },
   class_reaver: { stance: { codes: ['EP', 'EM'] }, emit: { codes: ['A'] } },   // EP / EM fight as Attack; the Attack emits (and keeps the channel, ruling 2026-11-17)
   class_restaurateur: { take_tokens: true },
-  class_rogue: { trap_dodge: 1, threat_dodge: 1 },
-  class_seeker: { plant: true },
+  class_rogue: { dodge: 1 },   // CR 2026-11-17: one shared charge per turn
+  class_seeker: { plant: { max: 1 } },   // CR 2026-11-17: once per turn, one trap standing
   class_shaman: { recover: 1 },
   class_summoner: { grant: { effect_id: 'effect_summoning' } },
   class_transmuter: { transmute: true },
   class_warrior: { relocate: true },
-  class_weapon_master: { draw: 1 },
-  class_witch: { discard: 3 },
+  class_weapon_master: { draw: { n: 2, hand_max: 3 } },   // CR 2026-11-17: only while the hand holds ≤ 3; CP 2026-11-19 (pick 1 a): draw 2
+  class_witch: { discard: { n: 3, range: 1, self: 1 } },   // CR 2026-11-18 (b): range 1; CP 2026-11-19 (pick 8 a): she also discards 1 of her own
 };
 // A non-std hook is priced by any of these keys (the ability by its output keys, see auditAbility).
 export const HOOK_POWER = {
@@ -227,7 +252,7 @@ export const HOOK_POWER = {
   stance: ['stance'], stance_target: ['stance'], emits: ['emit', 'stance'], plan_emits: ['plan_emit'],
   attack_out: ['attack_bonus'], lifesteal: ['lifesteal'], lifesteal_apply: ['lifesteal'],
   pre_cast: ['reroll'], transmute: ['transmute'], destroy_result: ['take_tokens'], end_turn: ['regen'],
-  step: ['trap_dodge', 'threat_dodge', 'trap_disable'], dungeon_step: ['trap_dodge', 'trap_disable'],
+  step: ['trap_dodge', 'threat_dodge', 'trap_disable', 'dodge'], dungeon_step: ['trap_dodge', 'trap_disable', 'dodge'],
   combat_in: ['swap'], pick_target: ['swap'], chase_step: ['chase_bonus'], contact: ['reveal'],
   local: ['draw', 'recover', 'grant'], share_skills: ['share_skills'],
   // Necromancer destroy reanimated (ruling 2026-11-16): a way for ENEMIES to destroy what the class raised — a drawback
@@ -256,6 +281,7 @@ export function validateNorm(n, cal = null) {
   if (n.extends !== null && !BUILTIN_POWER[n.extends]) errors.push(`extends ${n.extends}: not a built-in class`);
   if (!KINDS.includes(n.kind)) errors.push(`data.ability_kind must be ${KINDS.join('|')}`);
   if (!n.k || !n.colours.every(e => ELEMS.includes(e)) || new Set(n.colours).size !== n.k) errors.push('data.colors must be a non-empty list of distinct elements');
+  if (n.data.untap_emissions !== undefined && !posInt(n.data.untap_emissions)) errors.push('data.untap_emissions must be an integer 1..20');   // 1.3.0 CP2
   if (!n.power) errors.push('power required (a foreign class declares what it does: see POWER_KEYS)');
   else {
     if (!Object.keys(n.power).length) errors.push('power is empty (the class does nothing)');
@@ -276,19 +302,32 @@ export const EMIT_CODES = ['A', 'B', 'M', 'EM'];   // the codes that do not emit
 const CODE_SET = { stance: STANCE_CODES, emit: EMIT_CODES, plan_emit: ['A', 'B', 'M', 'EM'] };
 const LEGACY_CODES = { stance: ['EP'], plan_emit: ['A', 'B', 'M'] };
 const codesOk = (key, v) => isObj(v) && Array.isArray(v.codes) && v.codes.length > 0 && new Set(v.codes).size === v.codes.length && v.codes.every(c => CODE_SET[key].includes(c));
+// 1.2.0: the object forms of the old keys (CR 2026-11-17/18). `n` (where listed) is required and an integer 1..20.
+const bool = (x) => typeof x === 'boolean';
+const range64 = (x) => Number.isInteger(x) && x >= 0 && x <= 64;
+const EXT = {
+  draw: { n: posInt, hand_max: posInt }, heal: { n: posInt, ally: posInt, unmoved: bool, ally_required: bool }, stone: { n: posInt, chain: bool, unmoved: bool }, discard: { n: posInt, range: range64, self: posInt },   // 1.3.0: + unmoved / ally_required, chain, self
+  attack_bonus: { n: posInt, hurt_only: bool }, regen: { n: posInt, still: (x) => Array.isArray(x) && x.length > 0 && new Set(x).size === x.length && x.every(a => [1, 2, 3].includes(a)) },
+  reroll: { per: (x) => x === 'action' || x === 'turn' }, reveal: { range: range64 }, plant: { max: posInt },
+  swap: { attack_only: bool }, lifesteal: { max: posInt, attack_only: bool },
+};
+const NEEDS_N = ['draw', 'heal', 'stone', 'discard', 'attack_bonus', 'regen'];
+const extOk = (key, v) => isObj(v) && !!EXT[key] && Object.keys(v).length > 0 && Object.entries(v).every(([f, x]) => EXT[key][f] && EXT[key][f](x)) && (!NEEDS_N.includes(key) || posInt(v.n));
+export const nOf = (v) => (typeof v === 'number' ? v : isObj(v) && posInt(v.n) ? v.n : 1);
 function shapeOk(key, shape, v) {
+  if (EXT[key] && isObj(v)) return extOk(key, v);
   switch (shape) {
     case 'n': return posInt(v);
     case 'true': return v === true;
     case 'range': return isObj(v) && Number.isInteger(v.range) && v.range >= 0 && v.range <= 64;
-    case 'life': return isObj(v) && posInt(v.life) && posInt(v.max ?? v.life);
+    case 'life': return isObj(v) && posInt(v.life) && posInt(v.max ?? v.life) && Object.keys(v).every(k => ['life', 'max', 'max_only'].includes(k)) && (v.max_only === undefined || bool(v.max_only));   // 1.3.0: + max_only
     case 'codes': return (key !== 'emit' && v === true) || (key === 'emit' && Number.isInteger(v) && v >= 1 && v <= EMIT_CODES.length) || codesOk(key, v);
-    case 'build': return v === true || (isObj(v) && Object.keys(v).every(k => k === 'gate') && (v.gate === undefined || typeof v.gate === 'boolean'));
+    case 'build': return v === true || (isObj(v) && Object.keys(v).every(k => k === 'gate' || k === 'max' || k === 'heal') && (v.gate === undefined || typeof v.gate === 'boolean') && (v.max === undefined || posInt(v.max)) && (v.heal === undefined || posInt(v.heal)));   // 1.3.0: + heal
     case 'grant': return v === true || (isObj(v) && typeof v.effect_id === 'string' && /^effect_[a-z0-9_]+$/.test(v.effect_id));
     default: return false;
   }
 }
-const SHAPE_TEXT = { n: 'an integer 1..20', true: 'true', range: '{range: 0..64}', life: '{life, max} (1..20)', build: 'true | {gate: boolean}', grant: 'true | {effect_id}',
+const SHAPE_TEXT = { n: 'an integer 1..20 (or its 1.2.0 object form)', true: 'true (or its 1.2.0 object form)', range: '{range: 0..64}', life: '{life, max, max_only?} (1..20)', build: 'true | {gate: boolean, max: 1..20, heal: 1..20}', grant: 'true | {effect_id}',
   stance: `true | {codes: ${STANCE_CODES.join('|')}}`, emit: `an integer 1..${EMIT_CODES.length} | {codes: ${EMIT_CODES.join('|')}}`, plan_emit: `true | {codes: ${CODE_SET.plan_emit.join('|')}}` };
 // The codes a codes-shaped key covers.
 export function codesOf(key, v) { return isObj(v) && Array.isArray(v.codes) ? v.codes : (LEGACY_CODES[key] || null); }
@@ -321,7 +360,9 @@ export function pCodes(G, codes) {
 // 1.1.0 (4): the per-action odds that a gated use finds its target (null = not gated). A gated use is not spent
 // without one, so the gate goes into the uses (powerOf), not into the value per use.
 export function gateOf(key, v, G) {
-  if (key === 'discard') return G.p_enemy_near;
+  if (key === 'discard') return isObj(v) && Number.isInteger(v.range) && v.range <= 1 ? G.p_contact : G.p_enemy_near;   // 1.2.0: range 1 = contact
+  if (key === 'heal' && isObj(v) && (v.unmoved || v.ally_required)) return (v.unmoved ? G.p_unmoved_action : 1) * (v.ally_required ? G.p_ally_adjacent : 1);   // 1.3.0: Healer tap gates
+  if (key === 'stone' && isObj(v) && v.unmoved) return G.p_unmoved_action;   // 1.3.0 CPD: the Druid's no-move tap gate
   if (key === 'build' && isObj(v) && v.gate) return G.p_building_near;
   if (key === 'plan_emit') return G.p_cast_queued * pCodes(G, codesOf(key, v));
   return null;
@@ -335,25 +376,26 @@ export function grantValue(v, W, cal) {
 // Value of one power key per trigger (calibration weights W, odds G; cal for the grants table).
 export function keyValue(key, v, G, W, cal = null) {
   const pbOk = pointBuyStats(G.stat_mean);
-  const n = typeof v === 'number' ? v : 1;
+  const n = nOf(v);
+  const o = isObj(v) ? v : {};
   switch (key) {
-    case 'heal': return n * W.life * G.p_hurt;
+    case 'heal': return (n + (o.ally || 0) * (o.ally_required ? 1 : allies(G, 1))) * W.life * G.p_hurt;   // 1.2.0: + the adjacent ally's heal; 1.3.0: certain with ally_required (the gate prices the wait)
     case 'armor': return n * W.shield;
     case 'illusion': return (1 + allies(G, v.range)) * W.illusion;
-    case 'discard': return n * W.card;   // 1.1.0 (4): p_enemy_near is in the uses (gateOf)
-    case 'stone': return pbOk.p * pbOk.ev * W.stat_point;
+    case 'discard': return (n - (o.self || 0)) * W.card;   // 1.1.0 (4): p_enemy_near is in the uses (gateOf); 1.3.0: − my own discards
+    case 'stone': { let k = n; if (o.chain) { k = 0; let q = 1; for (let i = 0; i < n; i++) { k += q; q *= pbOk.p; } } return k * pbOk.p * pbOk.ev * W.stat_point; }   // 1.3.0: chain → Σ p^i
     case 'trap': return TRAP_POWER / 20 * W.trap * G.p_trap_springs;
     case 'plant': return W.trap * G.p_trap_springs * G.p_far_trap + W.vision;
     case 'lure': return allies(G, v.range) * G.monsters_per_ally * W.lure;
     case 'revive': return W.revive * (G.p_fallen_near + (1 - G.p_fallen_near) * G.p_archived) * (1 - G.p_reanimated_destroyed * G.reanimated_loss);
-    case 'build': return W.building_turn * G.p_building_used * Math.min(G.building_life_turns, (G.turns - 1) / 2);   // 1.1.0 (1)
+    case 'build': return W.building_turn * G.p_building_used * Math.min(G.building_life_turns, (G.turns - 1) / 2) * (posInt(o.heal) ? o.heal : 1);   // 1.1.0 (1); 1.3.0: × heal
     case 'disable_traps': return allies(G, v.range) * G.traps_per_ally * W.disable;
-    case 'draw': return n * W.card;
+    case 'draw': return n * W.card * (o.hand_max ? G.p_hand_small : 1);   // 1.2.0: only while the hand is small
     case 'recover': return n * W.recover;
     case 'grant': return grantValue(v, W, cal) ?? 0;   // 1.1.0 (6)
     case 'plan_emit': return W.emit;   // 1.1.0 (3): fires with gateOf (p_cast_queued × p(code))
-    case 'attack_bonus': return n * W.life * G.p_combat * G.p_scored;
-    case 'lifesteal': return W.lifesteal * G.p_combat * G.dmg_per_hit * G.p_hurt;
+    case 'attack_bonus': return n * W.life * G.p_combat * G.p_scored * (o.hurt_only ? G.p_foe_hurt : 1);
+    case 'lifesteal': return W.lifesteal * G.p_combat * (o.max ? Math.min(G.dmg_per_hit, o.max) : G.dmg_per_hit) * G.p_hurt * (o.attack_only ? G.p_attack_of_combat : 1);
     case 'stance': return W.stance * pCodes(G, codesOf('stance', v));   // 1.1.0 (3): per code covered
     case 'emit': return W.emit * (typeof v === 'number' ? v * pCodes(G, EMIT_CODES) / EMIT_CODES.length : pCodes(G, codesOf('emit', v)));
     case 'trap_disable': return W.disable * G.p_trap_step;
@@ -361,16 +403,18 @@ export function keyValue(key, v, G, W, cal = null) {
     case 'take_tokens': return W.take * G.p_destroy_near;
     case 'transmute': return W.transmute * G.p_ally_cast;
     case 'relocate': return W.relocate;
-    case 'regen': return n * W.life * G.p_unmoved * G.p_hurt;
+    case 'regen': { let still = G.p_unmoved; if (Array.isArray(o.still)) { still = 1; for (let i = 0; i < o.still.length; i++) still *= G.p_unmoved_action; } return n * W.life * still * G.p_hurt; }
     case 'trap_dodge': return n * W.trap * G.p_trap_turn;
     case 'threat_dodge': return n * W.threat;
-    case 'reroll': return W.stat_point * pbOk.p * pbOk.ev * G.p_damage_spell;
-    case 'swap': return W.swap * G.p_combat_taken;
-    case 'reveal': return W.info * G.p_contact;
-    case 'chase_bonus': return Math.min(v.life, v.max ?? v.life) * W.life * G.p_chased;
+    case 'dodge': return n * (W.trap * G.p_trap_turn + W.threat * (1 - G.p_trap_turn));
+    case 'reroll': return W.stat_point * pbOk.p * pbOk.ev * (o.per === 'action' ? G.p_damage_spell_action : G.p_damage_spell);
+    case 'swap': return W.swap * G.p_combat_taken * (o.attack_only ? G.p_attack_of_combat : 1);
+    case 'reveal': return W.info * (Number.isInteger(o.range) && o.range > 1 ? G.p_enemy_near : G.p_contact);
+    case 'chase_bonus': return Math.min(v.life, v.max ?? v.life) * W.life * G.p_chased * (v.max_only ? G.p_hurt : 1);   // 1.3.0: max only → worth a life only while hurt
     default: return 0;
   }
 }
+export const triggerOf = (key, v) => (key === 'reroll' && isObj(v) && v.per === 'action' ? 'action' : POWER_KEYS[key].trigger);   // 1.2.0
 export function rechargeShare(colours) {
   const stats = new Set((colours || []).map(e => ELEM_TO_STAT[e]).filter(Boolean));
   return ELEMS.filter(e => stats.has(ELEM_TO_STAT[e])).length / ELEMS.length / 2;
@@ -386,7 +430,8 @@ export function powerOf(n, cal) {
   // takes k / (p_restore + p_recharge_emit · f) actions: f = the share of incidental emissions that land on a still
   // unchecked stat of the class = ½ × (elements of the class's stats) / 10 (half of them unchecked on average;
   // restore is per stat, classes.mjs restore). p_recharge_emit is a swarm placeholder (calibration swarm_placeholders).
-  const untap = k / (G.p_restore + (G.p_recharge_emit || 0) * rechargeShare(n.colours));
+  const ue = n.data?.untap_emissions, emissions = n.kind === 'tap' && Number.isInteger(ue) && ue > k ? ue : k;   // 1.3.0 CP2: a longer untap
+  const untap = emissions / (G.p_restore + (G.p_recharge_emit || 0) * rechargeShare(n.colours));
   const uses = n.kind === 'tap' ? 1 + (A - 1) / (1 + untap) : G.turns;
   // 1.1.0 (4): a gated use waits (1 − p)/p actions for its target (tap), or fires in a turn with 1 − (1 − p)^actions.
   const usesOf = (p) => {
@@ -400,13 +445,20 @@ export function powerOf(n, cal) {
   const components = {};
   let sum = 0;
   for (const [key, v] of Object.entries(n.power)) {
-    const t = POWER_KEYS[key].trigger;
+    const t = triggerOf(key, v);
     const per = keyValue(key, v, G, W, cal);
     const gate = t === 'use' ? gateOf(key, v, G) : null;
     const times = t === 'use' ? usesOf(gate) : t === 'action' ? A : G.turns;
     // 1.1.0 (1): building-turns are capped by the units that can stand on them: at most building_slots of my
     // buildings are used a turn, over the turns after the first one rises (turns − 1).
-    const x = key === 'build' ? r6(Math.min(per * times, W.building_turn * G.p_building_used * G.building_slots * (G.turns - 1))) : r6(per * times);
+    const slots = key === 'build' && isObj(v) && posInt(v.max) ? Math.min(G.building_slots, v.max) : G.building_slots;   // 1.2.0: max standing
+    let x;
+    if (key === 'build') x = r6(Math.min(per * times, W.building_turn * G.p_building_used * slots * (G.turns - 1) * (isObj(v) && posInt(v.heal) ? v.heal : 1)));   // 1.3.0: × heal
+    else if (key === 'plant' && isObj(v) && posInt(v.max)) {
+      // 1.2.0: a new plant lifts the oldest beyond max — only m + (times − m) · p_planted_sprung traps get to spring; the vision is per plant
+      const live = Math.min(times, v.max + Math.max(0, times - v.max) * G.p_planted_sprung);
+      x = r6(W.trap * G.p_trap_springs * G.p_far_trap * live + W.vision * times);
+    } else x = r6(per * times);
     components[key] = { trigger: t, per: r6(per), times: r6(times), value: x, ...(gate !== null ? { gate: r6(gate) } : {}) };
     sum += x;
   }
@@ -460,16 +512,17 @@ function auditArgs(h, n, Wd) {
     case 'restore': return { cs: cs(), cols, stat, kind: pick(['recast', 'untap']) };
     case 'progress': return { state: { down: Object.keys(cols).filter(() => f() < 0.3), archived: f() < 0.3, tapped: f() < 0.4, progress: null }, cols: Object.keys(cols), co: { kind: pick(['colour', 'class_destroyed', 'recast', 'untap']), stat: pick(Object.keys(cols)) } };
     case 'life_points': return { dmg: int(4), illusion: int(2), armor: int(2), chaseBonus: int(2) };
-    case 'ability': { const kind = pick(['character', 'tile', null]); return { actor: 'peer:u0', ab: { id: n.id, target: kind === 'character' ? { kind, ref: pick(ids) } : kind === 'tile' ? { kind, ref: { q: int(3) - 1, r: int(3) - 1 } } : null, attach: f() < 0.7 ? { card_id: 'c1', kind: 'effect', name: 'Card', effect_id: 'effect_frost', skill_id: null, elements: ['elem_water'] } : null, stat }, salt: `a${int(1e6)}` }; }
-    case 'attack_out': return { attacker: 'peer:u0', dmg: int(4), scored: f() < 0.5 ? ['peer:u0'] : [] };
-    case 'lifesteal': return { attacker: 'peer:u0', amount: int(4) };
+    case 'ability': { const kind = pick(['character', 'tile', null]); return { actor: 'peer:u0', ab: { id: n.id, target: kind === 'character' ? { kind, ref: pick(ids) } : kind === 'tile' ? { kind, ref: { q: int(3) - 1, r: int(3) - 1 } } : null, attach: f() < 0.7 ? { card_id: 'c1', kind: 'effect', name: 'Card', effect_id: 'effect_frost', skill_id: null, elements: ['elem_water'] } : null, stat }, salt: `a${int(1e6)}`, moved: f() < 0.3 }; }   // 1.3.0: + moved
+    case 'attack_out': return { attacker: 'peer:u0', dmg: int(4), scored: f() < 0.5 ? ['peer:u0'] : [], defender: pick(ids) };   // 1.2.0: + defender
+    case 'lifesteal': return { attacker: 'peer:u0', amount: int(4), source: pick(['action', 'effect']), why: pick(['Attack', 'Block', 'P']) };   // 1.2.0: + source / why
     case 'lifesteal_apply': return { amount: int(4), life: 1 + int(3), lifeMax: 4, held: true };
-    case 'end_turn': return { held: true, moved: f() < 0.5, life: 1 + int(3), lifeMax: 4 };
+    case 'end_turn': { const mr = [0, 1, 2].filter(() => f() < 0.3); return { held: true, moved: mr.length > 0, life: 1 + int(3), lifeMax: 4, movedRounds: mr }; }   // 1.2.0: + movedRounds
     case 'chase_step': return { state: { chasers: [], bonus: 0 }, chasing: ids.filter(() => f() < 0.4) };
     default: return {};
   }
 }
 const sum = (l, k) => l.reduce((s, x) => s + (Number(x?.[k]) || 0), 0);
+const J1 = (x) => JSON.stringify(x);
 // auditLogic(def, n, cal) → { ran, why?, fatal?, exceeds: [..], runs }
 export function auditLogic(def, n, cal = loadCalibration()) {
   if (cal.policy.audit === false) return { ran: false, why: 'audit disabled by the calibration', exceeds: [] };
@@ -511,12 +564,16 @@ export function auditLogic(def, n, cal = loadCalibration()) {
       const lim = (key, ok, why) => { if (!ok) exceeds.add(why); };
       for (const [k, l] of Object.entries(out)) {
         if (!l.length) continue;
-        if (k === 'heals') lim(k, P.heal && sum(l, 'amount') <= P.heal, `heals ${sum(l, 'amount')} > power.heal ${P.heal ?? 0}`);
+        const healMax = P.heal ? nOf(P.heal) + (isObj(P.heal) ? P.heal.ally || 0 : 0) : 0;
+        if (k === 'heals') lim(k, P.heal && sum(l, 'amount') <= healMax, `heals ${sum(l, 'amount')} > power.heal ${healMax}`);
         else if (k === 'armor') lim(k, P.armor && l.length <= P.armor, `armor ${l.length} > power.armor ${P.armor ?? 0}`);
         else if (k === 'illusion') lim(k, P.illusion && l.every(x => x.on === 'peer:u0' || Wd.ctx.dist('peer:u0', x.on) <= P.illusion.range), `illusion beyond power.illusion.range ${P.illusion?.range ?? '-'}`);
-        else if (k === 'discards') lim(k, P.discard && sum(l, 'n') <= P.discard, `discards ${sum(l, 'n')} > power.discard ${P.discard ?? 0}`);
+        else if (k === 'discards') {   // 1.3.0: my own discards (on the holder) are bounded by power.discard.self
+          const mine = l.filter(x => x?.on === 'peer:u0'), theirs = l.filter(x => x?.on !== 'peer:u0');
+          lim(k, P.discard && sum(theirs, 'n') <= nOf(P.discard) && sum(mine, 'n') <= (isObj(P.discard) ? P.discard.self || 0 : 0), `discards ${sum(theirs, 'n')} (+${sum(mine, 'n')} own) > power.discard ${P.discard ? J1(P.discard) : 0}`);
+        }
         else if (k === 'traps') lim(k, (P.trap || P.plant) && l.length <= 1 && l.every(t => Number(t.power) <= TRAP_POWER), `traps ${l.length} (power ${l.map(t => t.power)}) without power.trap / > 1 / > ${TRAP_POWER}`);
-        else if (k === 'tokens') lim(k, P.stone && l.length <= 1 && l.every(t => Number(t.value) <= 6), `tokens ${l.length} without power.stone / > 1 / value > 6`);
+        else if (k === 'tokens') lim(k, P.stone && l.length <= nOf(P.stone) && l.every(t => Number(t.value) <= 6), `tokens ${l.length} without power.stone / > ${P.stone ? nOf(P.stone) : 0} / value > 6`);
         else if (k === 'revives') lim(k, P.revive && l.length <= 1, `revives ${l.length} without power.revive / > 1`);
         else if (k === 'lures') lim(k, P.lure && l.every(x => Wd.ctx.dist('peer:u0', x.on) <= P.lure.range), `lures beyond power.lure.range ${P.lure?.range ?? '-'}`);
         else exceeds.add(`ability output ${k} is not priced`);
@@ -524,14 +581,16 @@ export function auditLogic(def, n, cal = loadCalibration()) {
     }
     const num = (h) => { if (n.hooks[h] === undefined) return null; const a = auditArgs(h, n, Wd); runs++; return { a, r: run(prepared, h, Wd, a) }; };
     let x;
-    if ((x = num('attack_out')) && !(Number(x.r) - x.a.dmg <= (P.attack_bonus || 0))) exceeds.add(`attack_out +${Number(x.r) - x.a.dmg} > power.attack_bonus ${P.attack_bonus || 0}`);
-    if ((x = num('end_turn')) && !(Number(x.r) <= (P.regen || 0))) exceeds.add(`end_turn +${x.r} > power.regen ${P.regen || 0}`);
+    if ((x = num('attack_out')) && !(Number(x.r) - x.a.dmg <= (P.attack_bonus ? nOf(P.attack_bonus) : 0))) exceeds.add(`attack_out +${Number(x.r) - x.a.dmg} > power.attack_bonus ${P.attack_bonus ? nOf(P.attack_bonus) : 0}`);
+    if ((x = num('end_turn')) && !(Number(x.r) <= (P.regen ? nOf(P.regen) : 0))) exceeds.add(`end_turn +${x.r} > power.regen ${P.regen ? nOf(P.regen) : 0}`);
     if ((x = num('lifesteal')) && !(Number(x.r) <= (P.lifesteal ? x.a.amount : 0))) exceeds.add(`lifesteal ${x.r} > the damage dealt ${x.a.amount}`);
-    if ((x = num('lifesteal_apply')) && !(Number(x.r) - x.a.life <= (P.lifesteal ? x.a.amount : 0))) exceeds.add(`lifesteal_apply +${Number(x.r) - x.a.life} > the damage dealt`);
+    if ((x = num('lifesteal_apply')) && !(Number(x.r) - x.a.life <= (P.lifesteal ? (isObj(P.lifesteal) && P.lifesteal.max ? Math.min(x.a.amount, P.lifesteal.max) : x.a.amount) : 0))) exceeds.add(`lifesteal_apply +${Number(x.r) - x.a.life} > the damage dealt (or power.lifesteal.max)`);
     if ((x = num('chase_step')) && !(Number(x.r?.grant) <= (P.chase_bonus?.life || 0) && Number(x.r?.bonus) <= (P.chase_bonus?.max ?? P.chase_bonus?.life ?? 0))) exceeds.add(`chase_step grant ${x.r?.grant} / bonus ${x.r?.bonus} > power.chase_bonus`);
+    if (x && P.chase_bonus?.max_only && Number(x.r?.heal) > 0) exceeds.add(`chase_step heal ${x.r?.heal} > 0 (power.chase_bonus.max_only)`);   // 1.3.0
     if (s === 0 && (x = num('local')) && x.r) {
       const op = x.r.op;
-      if (op === 'draw' && !(Number(x.r.n) <= (P.draw || 0))) exceeds.add(`local draw ${x.r.n} > power.draw ${P.draw || 0}`);
+      if (op === 'draw' && !(Number(x.r.n) <= (P.draw ? nOf(P.draw) : 0))) exceeds.add(`local draw ${x.r.n} > power.draw ${P.draw ? nOf(P.draw) : 0}`);
+      if (op === 'draw' && isObj(P.draw) && P.draw.hand_max && !(Number.isInteger(x.r.max_hand) && x.r.max_hand <= P.draw.hand_max)) exceeds.add(`local draw max_hand ${x.r.max_hand} beyond power.draw.hand_max ${P.draw.hand_max}`);
       if (op === 'recover' && !P.recover) exceeds.add('local recover without power.recover');
       if (op === 'grant' && !P.grant) exceeds.add('local grant without power.grant');
     }
@@ -637,10 +696,15 @@ export function calibrate(cal0 = loadCalibration()) {
   const cal = { ...cal0, grants: grantsTable() };
   const defs = loadBuiltinDefs();
   const pts = defs.map(d => { const n = normalizeDef(d); return { id: n.id, n, pw: powerOf(n, cal) }; });
-  const fit = fitCurve(pts.map(p => ({ C: p.pw.k, V: p.pw.value })), { drop: cal.policy.fit_drop ?? 0.6, minKeep: 5 });
+  const ols = fitCurve(pts.map(p => ({ C: p.pw.k, V: p.pw.value })), { drop: cal.policy.fit_drop ?? 0.6, minKeep: 5 });
+  // 1.3.0: a locked fair line (policy.fit_locked) is kept as accepted; the OLS refit is only reported (calibrate CLI).
+  const fit = cal.policy.fit_locked && cal0.fit ? cal0.fit : ols;
+
   const builtins = {};
   for (const p of pts) { const e = r6(fit.a + fit.b * p.pw.k); builtins[p.id] = { k: p.pw.k, kind: p.pw.kind, value: p.pw.value, ratio: r6(p.pw.value / Math.max(1e-6, e)) }; }
-  return { ...cal, fit, builtins };
+  const out = { ...cal, fit, builtins };
+  if (cal.policy.fit_locked) Object.defineProperty(out, 'refit', { value: ols, enumerable: false });   // 1.3.0: reported, never written
+  return out;
 }
 export function report(cal = loadCalibration()) {
   return loadBuiltinDefs().map(d => {
@@ -674,6 +738,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === SELF_PATH) {
       out(rows, rows.map(r => `${r.id.padEnd(22)} ${String(r.kind).padEnd(15)} k=${r.k} V=${String(r.value).padEnd(10)} V̂=${String(r.expected).padEnd(10)} r=${String(r.ratio).padEnd(9)} ${r.curve_verdict.padEnd(6)} ${r.keys.join(',')}`).join('\n'));
     } else if (cmd === 'calibrate') {
       const c = calibrate();
+      if (c.refit) console.log(`fair line LOCKED (policy.fit_locked ${c.policy.fit_locked}): kept a=${c.fit.a} b=${c.fit.b}; an OLS refit would give a=${c.refit.a} b=${c.refit.b} (fit on ${c.refit.n_fit})`);
       if (rest.includes('--write')) { fs.writeFileSync(CALIBRATION_PATH, JSON.stringify(c, null, 2) + '\n'); console.log(`calibration written: a=${c.fit.a} b=${c.fit.b} (n=${c.fit.n}, fit on ${c.fit.n_fit})`); }
       else out(c, `fit a=${c.fit.a} b=${c.fit.b} (n=${c.fit.n}, fit on ${c.fit.n_fit}) — not written (--write)`);
     } else if (cmd === 'audit') {

@@ -32,6 +32,9 @@ export function pickAltAction(hand, excludeIds, rnd = Math.random) {
 
 // "About to get combat damage": a positive matrix strike of the main action in the damage list.
 export const combatHit = (list) => (list || []).some(d => d && d.source === 'action' && !d.bonus && d.amount > 0);
+// CR (user class ruling 2026-11-17): "only an incoming Attack triggers" — class data trigger: "attack" → only a positive
+// matrix strike of an enemy ATTACK (peer.mjs addDmg `why` 'Attack' = the strike's code A; a Block / Posture strike no).
+export const attackHit = (list) => (list || []).some(d => d && d.source === 'action' && !d.bonus && d.amount > 0 && d.why === 'Attack');
 
 // The random nearby enemy: candidates sorted by id, index from the Manipulator's reveal salt.
 export function pickManipTarget(seed, candidateIds, sha256Hex) {

@@ -12,16 +12,22 @@ const posInt = (v, lo = 0) => Number.isInteger(v) && v >= lo;
 export function animatorConfig(d = {}) {
   return { near: posInt(d?.near, 1) ? d.near : ANIMATOR_DEFAULTS.near, place: posInt(d?.place_range, 1) ? d.place_range : ANIMATOR_DEFAULTS.place_range };
 }
-// classes.json class_priest data → { place, label, power } (the Shrine it raises; power 'mend' = +1 life at the
-// end of the turn's 3rd action, js/building-bonus.js).
+// classes.json class_priest data → { place, label, power, heal } (the Shrine it raises; power 'mend' = +heal life at
+// the end of the turn's 3rd action, js/building-bonus.js). CP 2026-11-19 (user pick 5 a): building.heal (the Priest's
+// Shrine heals 2); default 1.
 export function priestConfig(d = {}) {
   const b = d?.building && typeof d.building === 'object' ? d.building : {};
   return {
     place: posInt(d?.place_range, 1) ? d.place_range : PRIEST_DEFAULTS.place_range,
     label: typeof b.label === 'string' && b.label ? b.label : PRIEST_DEFAULTS.building.label,
     power: typeof b.power === 'string' && b.power ? b.power : PRIEST_DEFAULTS.building.power,
+    heal: posInt(b.heal, 1) ? b.heal : 1,
   };
 }
+// CR (user class rulings 2026-11-17): how many of the class's own placements may stand at once — Priest "one Shrine per
+// Priest at a time, a new one replaces the old", Seeker "at most one planted trap standing (a new one replaces the
+// old)". data.max_standing (an integer ≥ 1) → that number; absent → null (no limit, the 2026-11-14 rules).
+export const maxStanding = (d = {}) => (posInt(d?.max_standing, 1) ? d.max_standing : null);
 // classes.json class_seeker data → { min, max, radius, turns } (turns: vision lasts until the end of turn + turns).
 export function seekerConfig(d = {}) {
   const ok = Array.isArray(d?.distance) && d.distance.length === 2 && d.distance.every(x => posInt(x, 1)) && d.distance[0] <= d.distance[1];
@@ -58,12 +64,17 @@ export function buildSite({ here, range, picked, okTile, salt, sha }) {
 export function copyMade(f, q, r, by) {
   // A building with a fixed bonus (a Priest's Shrine) is copied with that bonus — re-rolling it on the Shrine's
   // hex would give the copy a stat bonus the Shrine never had (and the copy, like the Shrine, hides no trap).
+  // CP 2026-11-19 (user pick 5 a): only the Priest's OWN Shrine heals more than 1 — a copy mends 1 (power.n dropped).
+  const bonus = f.bonus && typeof f.bonus === 'object' ? JSON.parse(JSON.stringify(f.bonus)) : null;
+  if (bonus?.power && typeof bonus.power === 'object' && bonus.power.kind === 'mend') delete bonus.power.n;
   return { label: f.label || 'Building', path: f.path || '', desc: f.desc || '', biome: f.biome || '', ...(f.theme ? { theme: f.theme } : {}),
     copy_of: f.copy_of && Number.isInteger(f.copy_of.q) ? { q: f.copy_of.q, r: f.copy_of.r } : { q, r },
-    ...(f.bonus && typeof f.bonus === 'object' ? { bonus: JSON.parse(JSON.stringify(f.bonus)) } : {}), made_by: by };
+    ...(bonus ? { bonus } : {}), made_by: by };
 }
 // The world-edit payload of a Priest's Shrine: the catalogue sprite (when found), only its power (no stat bonus).
+// CP 2026-11-19: cfg.heal > 1 → power {kind, n: heal} (peer.mjs turn-end mend heals n); 1 → the old {kind} payload.
 export function shrineMade(cfg, sprite, by) {
-  return { label: cfg.label, path: sprite?.path || '', desc: `A ${cfg.label} raised by a Priest: stand here at the end of a turn — +1 life (never above your maximum).`, theme: cfg.power,
-    bonus: { power: { kind: cfg.power } }, made_by: by };
+  const heal = Number.isInteger(cfg.heal) && cfg.heal > 1 ? cfg.heal : 1;
+  return { label: cfg.label, path: sprite?.path || '', desc: `A ${cfg.label} raised by a Priest: stand here at the end of a turn — +${heal} life (never above your maximum).`, theme: cfg.power,
+    bonus: { power: heal > 1 ? { kind: cfg.power, n: heal } : { kind: cfg.power } }, made_by: by };
 }

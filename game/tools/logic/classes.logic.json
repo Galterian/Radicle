@@ -3,7 +3,7 @@
   "notes": "User ruling 2026-10-30, implemented in peer.mjs: EVERY unit (character or monster) enters with its class on the board (characters draw one / FORCE_CLASS; a monster's follows from its creature id). A class is destroyed COLOUR by colour — a colour is the stat group of its listed elements (the four Matter elements count as one colour), an adjacent enemy emits one of those elements and needs a die of 6 (class_colour_falls), one colour per action in any order; struck colours show en-gray in the unit list; when every colour is down the card goes to its OWNER's archive (class_colours_all_down) and its statics stop. The owner recasts it from the archive (back as initially) or untaps a tapped ability by emitting every colour with ANY successful point-buy, power 1 (class_progress_complete). Tap abilities are clicked in the permanents strip (reveal field class_ability); once-per-round and clickable static abilities are once per ACTION (hg.action). Context fields: caster.class_id, caster.class_down ([stats]), caster.class_archived, caster.class_tapped, caster.class_progress {mode, done}, caster.class_used_action, action.index, cast.elem (the element emitted against the colour), die, dist, target.*. UX: click an adjacent enemy's class colour chip twice, then the emission goes out on your Posture.",
   "entries": {
     "class_weapon_master": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): once per action, local: one extra card is drawn from my deck (the deck is private — the peer alone does it). Paper text: \"You draw an extra card.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/earth/fire), Wi (concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): once per action, local: one extra card is drawn from my deck (the deck is private — the peer alone does it). Paper text: \"You draw an extra card.\" CR 2026-11-17 (1.1.0): inactive until the hand holds 3 cards or fewer (classes.mjs local max_hand 3; peer.mjs CLASS_LOCAL). CP 2026-11-19 (pick 1 a, 1.1.0 amended): draws TWO cards (classes.mjs local n 2; peer.mjs CLASS_LOCAL draws local.n); Water dropped (5 → 4 colours).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -45,6 +45,22 @@
                   ]
                 }
               }
+            ]
+          }
+        },
+        {
+          "id": "hand_small",
+          "description": "CR 2026-11-17: the hand holds 3 cards or fewer (local descriptor max_hand).",
+          "when": {
+            "<=": [
+              {
+                "len": [
+                  {
+                    "var": "caster.hand"
+                  }
+                ]
+              },
+              3
             ]
           }
         }
@@ -134,10 +150,10 @@
         },
         {
           "id": "draw",
-          "description": "One extra card drawn (deck → hand).",
+          "description": "CP 2026-11-19: two extra cards drawn (deck → hand), only while the hand holds 3 or fewer.",
           "target": "caster",
           "unit": "cards",
-          "value": 1
+          "value": 2
         }
       ],
       "validation": [
@@ -507,7 +523,7 @@
       ]
     },
     "class_druid": {
-      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: V (vitality), W (souls), M (water/earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): a point-buy on the stat I am best at that has no Druid stone on my tile yet; success raises a Druid stone (a bonus tile token of that stat's element, drawn as a Healing Orb / obelisk) on my tile with the highest die as its value. Whoever stands on the tile adds it to that stat — and so to life by the Σ/10 rule. One stone per stat; with all four standing, the roll targets the lowest stone and replaces it only if it beats it. A failed roll lays nothing and the ability stays ready. Paper text: \"Point buy: put a point-buy defense token over this location for any color.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: V (vitality), W (souls), M (water/earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): a point-buy on the stat I am best at that has no Druid stone on my tile yet; success raises a Druid stone (a bonus tile token of that stat's element, drawn as a Healing Orb / obelisk) on my tile with the highest die as its value. Whoever stands on the tile adds it to that stat — and so to life by the Σ/10 rule. One stone per stat; with all four standing, the roll targets the lowest stone and replaces it only if it beats it. A failed roll lays nothing and the ability stays ready. Paper text: \"Point buy: put a point-buy defense token over this location for any color.\" CR 2026-11-17 (1.2.0): each use raises TWO stones — the best stat and the next best of the picks (free stats best first, then stood stones lowest first), one point-buy each; both failed → stays ready. CP 2026-11-19 (pick 2 b, 1.2.0 amended): the 2nd point-buy rolls only if the 1st succeeded (data chain_stones). CP2 2026-11-19 (answer 3, 1.2.0 amended): a failed first roll SPENDS the tap — the card taps, no stone (data fail_spends); the 2nd stone still rolls only if the 1st succeeded. CPD 2026-11-19 (option C, 1.2.0 amended): the tap works only on an action in which I do not move (data unmoved_only; peer.mjs moveCodeOf → args moved: a Move, an Empty Move or an Attack on a tile); otherwise the card stays untapped.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -543,6 +559,15 @@
                 }
               }
             ]
+          }
+        },
+        {
+          "id": "unmoved_action",
+          "description": "CPD 2026-11-19 (data unmoved_only): not on an action in which I move (M, EM, a tile Attack).",
+          "when": {
+            "!": {
+              "var": "cast.moved"
+            }
           }
         }
       ],
@@ -664,7 +689,7 @@
         },
         {
           "id": "druid_stone",
-          "description": "Druid stone value = the point-buy's highest die on that stat (fail → 0, nothing laid, ability stays ready).",
+          "description": "Druid stone value = the point-buy's highest die on that stat (fail → 0, nothing laid; CP2 2026-11-19, data fail_spends: every rolled point-buy failed → the tap is spent).",
           "target": "tile",
           "unit": "bonus_token",
           "value": {
@@ -753,6 +778,57 @@
           "value": {
             "var": "tile.druid_stone"
           }
+        },
+        {
+          "id": "stones_per_use",
+          "description": "CR 2026-11-17: two stat picks per use, each its own point-buy (salt …:druid:<action>, …:druid:<action>:2); CP 2026-11-19 (data chain_stones): the second is rolled only after the first succeeded.",
+          "target": "tile",
+          "unit": "stones",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "==": [
+                      {
+                        "var": "entry.data.chain_stones"
+                      },
+                      true
+                    ]
+                  },
+                  {
+                    "!": {
+                      "var": "cast.first_succeeded"
+                    }
+                  }
+                ]
+              },
+              {
+                "min": [
+                  1,
+                  {
+                    "count": [
+                      {
+                        "var": "cast.picks"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "min": [
+                  2,
+                  {
+                    "count": [
+                      {
+                        "var": "cast.picks"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "validation": [
@@ -823,7 +899,7 @@
       "references": []
     },
     "class_enchanter": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), W (time/space). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): once per action: an element of the queued effect goes out during an Attack / Block / Move (not a Posture) — the cast advances as if a Posture emitted it. Paper text: \"Emit an element during your non-Posture action.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): once per action: an element of the queued effect goes out during an Attack / Block / Move (not a Posture) — the cast advances as if a Posture emitted it. Paper text: \"Emit an element during your non-Posture action.\" CR 2026-11-18 (b) (1.1.0): static — every Attack, Block and Move emits (no once-per-turn limit, no queued-cast gate); colours 6 → 4 (Time, Space dropped). An emitting A / B keeps a channel I hold (channel-rule.mjs), a Move breaks it.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -841,28 +917,6 @@
               {
                 "!": {
                   "var": "caster.class_archived"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "not_used_this_action",
-          "description": "Once per action (hg.action).",
-          "when": {
-            "rule": [
-              "class_ability_ready",
-              {
-                "kind": "once_per_round",
-                "used_this_round": {
-                  "==": [
-                    {
-                      "var": "caster.class_used_action"
-                    },
-                    {
-                      "var": "action.index"
-                    }
-                  ]
                 }
               }
             ]
@@ -888,12 +942,11 @@
       "effects": [
         {
           "id": "colours",
-          "description": "The class colours (stat groups of its elements): M, W.",
+          "description": "The class colours (stat groups of its elements): M.",
           "target": "caster",
           "unit": "colours",
           "value": [
-            "matter",
-            "world"
+            "matter"
           ]
         },
         {
@@ -938,8 +991,7 @@
               "class_colours_all_down",
               {
                 "colours": [
-                  "matter",
-                  "world"
+                  "matter"
                 ],
                 "down": {
                   "var": "caster.class_down"
@@ -958,8 +1010,7 @@
               "class_progress_complete",
               {
                 "colours": [
-                  "matter",
-                  "world"
+                  "matter"
                 ],
                 "done": {
                   "var": "caster.class_progress.done"
@@ -970,10 +1021,21 @@
         },
         {
           "id": "emission_on_action",
-          "description": "One element emitted on a non-Posture action.",
+          "description": "CR 2026-11-18 (b): Attack, Block and Move emit an element, every time (static).",
           "target": "caster",
           "unit": "emissions",
-          "value": 1
+          "value": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "A",
+                "B",
+                "M"
+              ]
+            ]
+          }
         }
       ],
       "validation": [
@@ -1044,7 +1106,7 @@
       "references": []
     },
     "class_elementalist": {
-      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn): when one of my damage casts completes, a point-buy on my highest stat among that cast's elements; its highest die is added to the cast's damage. A failed roll adds nothing and the ability stays ready for a later cast this turn. Paper text: \"Each time you emit an element you may take an element token and add it to effects as point-buy damage.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: M (air/water/earth/fire), Wi (harmony/concentration), V (vitality). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn): when one of my damage casts completes, a point-buy on my highest stat among that cast's elements; its highest die is added to the cast's damage. A failed roll adds nothing and the ability stays ready for a later cast this turn. Paper text: \"Each time you emit an element you may take an element token and add it to effects as point-buy damage.\" CR 2026-11-17 (1.2.0): once per ACTION (classes.mjs perAction; the use never spends the turn). CP2 2026-11-19 (answer 1 to pick 3, 1.2.0 amended): + Concentration + Vitality (Harmony is already a colour) — 5 → 7 colours.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -1068,28 +1130,14 @@
           }
         },
         {
-          "id": "once_per_turn",
-          "description": "Passive (user ruling 2026-11-12): fires by itself, at most once per turn — no tap, no untap. peer.mjs: PASSIVE_TURN_CLASSES; the data keeps ability_kind \"tap\" because \"passive\" is not an allowed kind yet.",
+          "id": "once_per_action",
+          "description": "Passive (user ruling 2026-11-12; CR 2026-11-17: once per ACTION): fires by itself at most once in an action — no tap, no untap, never spends the turn. The data keeps ability_kind \"tap\" (passive via CLASS_RULES passiveTurn).",
           "when": {
-            "and": [
+            "includes": [
               {
-                "includes": [
-                  {
-                    "var": "caster.permanents"
-                  },
-                  "class_elementalist"
-                ]
+                "var": "caster.permanents"
               },
-              {
-                "!=": [
-                  {
-                    "var": "caster.class_used_turn"
-                  },
-                  {
-                    "var": "turn"
-                  }
-                ]
-              }
+              "class_elementalist"
             ]
           }
         },
@@ -1106,12 +1154,13 @@
       "effects": [
         {
           "id": "colours",
-          "description": "The class colours (stat groups of its elements): M, Wi.",
+          "description": "The class colours (stat groups of its elements): M, Wi, V.",
           "target": "caster",
           "unit": "colours",
           "value": [
             "matter",
-            "will"
+            "will",
+            "vitality"
           ]
         },
         {
@@ -1157,7 +1206,8 @@
               {
                 "colours": [
                   "matter",
-                  "will"
+                  "will",
+                  "vitality"
                 ],
                 "down": {
                   "var": "caster.class_down"
@@ -1177,7 +1227,8 @@
               {
                 "colours": [
                   "matter",
-                  "will"
+                  "will",
+                  "vitality"
                 ],
                 "done": {
                   "var": "caster.class_progress.done"
@@ -2188,7 +2239,7 @@
       "references": []
     },
     "class_healer": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (water). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: +1 life to the ally in contact I pointed at (right-click), else to me; capped at life maximum, never on a corpse. Paper text: \"Restore one life token to a nearby creature or yourself.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (water). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: +1 life to the ally in contact I pointed at (right-click), else to me; capped at life maximum, never on a corpse. Paper text: \"Restore one life token to a nearby creature or yourself.\" CR 2026-11-17 (1.1.0): heals me AND an adjacent ally (the one pointed at, else the first adjacent living ally by id); no ally next to me → only me. CP 2026-11-19 (pick 4 a, 1.1.0 amended): the tap is used only on an action in which I do not move (data unmoved_only; peer.mjs moveCodeOf → args moved) and only with an adjacent living ally (data ally_required); otherwise the card stays untapped. CP2 2026-11-19 (answer 4, 1.1.0 amended): the move + ally gate stays; a longer untap — 4 successful emissions in all (data untap_emissions; classes.mjs std progress: each colour once per round, a full round starts again, progress.n counts).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -2227,37 +2278,21 @@
           }
         },
         {
-          "id": "ally_in_contact_or_self",
-          "description": "An ally in contact was pointed at, else the caster is the target.",
+          "id": "unmoved_action",
+          "description": "CP 2026-11-19 (data unmoved_only): not on an action in which I move (M, EM, a tile Attack).",
           "when": {
-            "or": [
-              {
-                "==": [
-                  {
-                    "var": "target.peer_id"
-                  },
-                  {
-                    "var": "caster.peer_id"
-                  }
-                ]
-              },
-              {
-                "rule": [
-                  "ally_in_contact",
-                  {
-                    "dist": {
-                      "var": "dist"
-                    },
-                    "a_alliance": {
-                      "var": "caster.alliance"
-                    },
-                    "b_alliance": {
-                      "var": "target.alliance"
-                    }
-                  }
-                ]
-              }
-            ]
+            "!": {
+              "var": "cast.moved"
+            }
+          }
+        },
+        {
+          "id": "ally_adjacent",
+          "description": "CP 2026-11-19 (data ally_required): a living ally stands next to me.",
+          "when": {
+            "!!": {
+              "var": "ally.peer_id"
+            }
           }
         }
       ],
@@ -2349,7 +2384,7 @@
         },
         {
           "id": "untap",
-          "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.",
+          "description": "Tapped: 4 successful emissions (any successful roll, power 1), every colour once per round → the ability is ready again (CP2 2026-11-19, data untap_emissions).",
           "target": "caster",
           "unit": "untap",
           "value": {
@@ -2370,8 +2405,8 @@
         },
         {
           "id": "life_restored",
-          "description": "One life, capped at the target's missing life.",
-          "target": "target",
+          "description": "One life to me, capped at my missing life.",
+          "target": "caster",
           "unit": "life",
           "value": {
             "min": [
@@ -2381,15 +2416,50 @@
                   {
                     "-": [
                       {
-                        "var": "target.life_max"
+                        "var": "caster.life_max"
                       },
                       {
-                        "var": "target.life"
+                        "var": "caster.life"
                       }
                     ]
                   }
                 ]
               }
+            ]
+          }
+        },
+        {
+          "id": "ally_restored",
+          "description": "CR 2026-11-17: one life to the adjacent ally too (pointed at, else the first by id), capped at its missing life.",
+          "target": "ally",
+          "unit": "life",
+          "value": {
+            "if": [
+              {
+                "!!": {
+                  "var": "ally.peer_id"
+                }
+              },
+              {
+                "min": [
+                  1,
+                  {
+                    "max0": [
+                      {
+                        "-": [
+                          {
+                            "var": "ally.life_max"
+                          },
+                          {
+                            "var": "ally.life"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              0
             ]
           }
         }
@@ -2462,7 +2532,7 @@
       "references": []
     },
     "class_priest": {
-      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14 (amended the same day). Colours: V (vitality), W (souls), Wi (harmony/concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (once per TURN — ability_kind once_per_round, peer classUsedTurn; user rework \"The Priest should generate a Shrine (the building that heals you +1 HP at the end of the 3rd round) on target unoccupied location nearby\"): a Shrine (data.building: label Shrine, power mend) rises on the hex I clicked if it lies 1..data.place_range (2) from me and is free, else on a random free hex within data.place_range. The Shrine is the mend building of js/building-bonus.js: whoever stands on it when the turn's 3rd action resolves gets +1 life, never above the maximum (peer.mjs building turn-end powers); it has no stat bonus. A free hex is walkable and holds no feature of its own (building, dungeon, tree, labyrinth wall — created buildings included), no obstacle, no standing fortress, no living unit after the action's moves, and no other building raised in the same action; never the creator's own hex. Random pick: sha256 over `${salt}:<class>:${action}` modulo the (q, r)-sorted free hexes — the same on every peer. No free hex → nothing happens and the ability stays ready. The creator records the building as the world edit `made:q,r` {q, r, made, at} in its world_edits_json (snapshot); every peer folds all such edits of its resolution view into the js/features.js overlay before resolving (peer.mjs syncPlacedBuildings; browser main.js syncPlacedBuildings from the roster), so featureAt / buildingBonusAt / the renderer / object cards treat it as a map building from the next action on (first `at` per hex wins, then the creator id). A Shrine hides no trap (an Animator copy of it neither — it keeps the Shrine's fixed bonus). peer.mjs: priestShrine + createBuilding; pure helpers game/class-world.mjs priestConfig / buildSite / shrineMade (oracles tools/fortress-check.mjs).",
+      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14 (amended the same day). Colours: V (vitality), W (souls), Wi (harmony/concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (once per TURN — ability_kind once_per_round, peer classUsedTurn; user rework \"The Priest should generate a Shrine (the building that heals you +1 HP at the end of the 3rd round) on target unoccupied location nearby\"): a Shrine (data.building: label Shrine, power mend) rises on the hex I clicked if it lies 1..data.place_range (2) from me and is free, else on a random free hex within data.place_range. The Shrine is the mend building of js/building-bonus.js: whoever stands on it when the turn's 3rd action resolves gets +1 life, never above the maximum (peer.mjs building turn-end powers); it has no stat bonus. A free hex is walkable and holds no feature of its own (building, dungeon, tree, labyrinth wall — created buildings included), no obstacle, no standing fortress, no living unit after the action's moves, and no other building raised in the same action; never the creator's own hex. Random pick: sha256 over `${salt}:<class>:${action}` modulo the (q, r)-sorted free hexes — the same on every peer. No free hex → nothing happens and the ability stays ready. The creator records the building as the world edit `made:q,r` {q, r, made, at} in its world_edits_json (snapshot); every peer folds all such edits of its resolution view into the js/features.js overlay before resolving (peer.mjs syncPlacedBuildings; browser main.js syncPlacedBuildings from the roster), so featureAt / buildingBonusAt / the renderer / object cards treat it as a map building from the next action on (first `at` per hex wins, then the creator id). A Shrine hides no trap (an Animator copy of it neither — it keeps the Shrine's fixed bonus). peer.mjs: priestShrine + createBuilding; pure helpers game/class-world.mjs priestConfig / buildSite / shrineMade (oracles tools/fortress-check.mjs). CR 2026-11-17 (1.2.0): one Shrine per Priest at a time — a new one replaces the old (data max_standing 1; peer.mjs marks the older Shrine gone). CP 2026-11-19 (pick 5 a, 1.2.0 amended): the Priest's Shrine heals 2 (data building.heal; class-world.mjs shrineMade power {mend, n: 2}); a copy of it (Animator) mends 1.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -2644,7 +2714,7 @@
         },
         {
           "id": "shrine_mends",
-          "description": "A unit standing on the Shrine at the end of the turn's 3rd action heals 1 life, never above its maximum.",
+          "description": "A unit standing on the Priest's Shrine at the end of the turn's 3rd action heals data.building.heal (2) life, never above its maximum (CP 2026-11-19).",
           "target": "occupant",
           "unit": "life",
           "value": {
@@ -2671,8 +2741,49 @@
                   }
                 ]
               },
-              1,
+              {
+                "min": [
+                  {
+                    "var": "entry.data.building.heal"
+                  },
+                  {
+                    "-": [
+                      {
+                        "var": "caster.life_max"
+                      },
+                      {
+                        "var": "caster.life"
+                      }
+                    ]
+                  }
+                ]
+              },
               0
+            ]
+          }
+        },
+        {
+          "id": "one_standing",
+          "description": "CR 2026-11-17: at most data.max_standing (1) Shrines of this Priest stand; the new one replaces the oldest.",
+          "target": "tile",
+          "unit": "buildings",
+          "value": {
+            "min": [
+              {
+                "+": [
+                  {
+                    "count": [
+                      {
+                        "var": "caster.shrines"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "var": "entry.data.max_standing"
+              }
             ]
           }
         }
@@ -2751,7 +2862,7 @@
       ]
     },
     "class_prophet": {
-      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: W (time/space/souls), Wi (harmony/concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn; user rework #2 2026-11-14 \"automatically on first contact resolution phase\"): the first resolution of a turn that leaves me in contact (adjacent, distance 1 after the action's moves — the in_contact rule) with a living, visible enemy — hero or monster — shows me its whole hand; with several, one I fought this action, else the smallest id. No click. The look is not part of the action: my peer sends requestHand() (an evt_hand_request envelope) after its resolution and the enemy answers with evt_peek to me alone — a popup with the cards. No resolver state, no state hash; only class_used_turn changes. Paper text: \"Look at the top five cards of a nearby target player's deck.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: W (time/space/souls), Wi (harmony/concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn; user rework #2 2026-11-14 \"automatically on first contact resolution phase\"): the first resolution of a turn that leaves me in contact (adjacent, distance 1 after the action's moves — the in_contact rule) with a living, visible enemy — hero or monster — shows me its whole hand; with several, one I fought this action, else the smallest id. No click. The look is not part of the action: my peer sends requestHand() (an evt_hand_request envelope) after its resolution and the enemy answers with evt_peek to me alone — a popup with the cards. No resolver state, no state hash; only class_used_turn changes. Paper text: \"Look at the top five cards of a nearby target player's deck.\" CR 2026-11-17 (1.2.0): the look reaches the first enemy within 3 hexes (data contact 3, range 3) — no contact needed.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -2797,17 +2908,17 @@
           }
         },
         {
-          "id": "enemy_in_contact",
-          "description": "A living, visible (no Invisibility) enemy hero or monster is adjacent after this action's moves.",
+          "id": "enemy_within_3",
+          "description": "CR 2026-11-17: a living, visible (no Invisibility) enemy hero or monster within data.contact (3) hexes after this action's moves.",
           "when": {
             "and": [
               {
-                "rule": [
-                  "in_contact",
+                "<=": [
                   {
-                    "dist": {
-                      "var": "dist"
-                    }
+                    "var": "dist"
+                  },
+                  {
+                    "var": "entry.data.contact"
                   }
                 ]
               },
@@ -2928,7 +3039,7 @@
         },
         {
           "id": "hand_open",
-          "description": "The contacted enemy's whole hand is shown to me.",
+          "description": "The enemy's whole hand is shown to me.",
           "target": "target",
           "unit": "cards",
           "value": {
@@ -3008,7 +3119,7 @@
       "references": []
     },
     "class_seeker": {
-      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-14. Colours: W (time/space/souls), M (air/water/earth/fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap, user ruling 2026-11-14): the effect card I attach from my hand becomes a trap building (enter trigger, damage like the other class traps, the card held by it, owner = me) on a random hex data.distance [20, 30] hexes away — pure map functions (js/join-plan.mjs tileInRing / hexWalkableAt), so unrevealed land counts; no living unit, obstacle, labyrinth wall, fortress or other trap there; hashed over `${salt}:seeker:${action}` (same on every peer). I see that hex and data.vision.radius (5) hexes around it until the end of my next turn (vision-grant, until_turn = turn + 1). peer.mjs: seekerPlant + grantSeekerVision. Paper text: \"Choose a non-action card from your hand; reveal where this card is located in this Dimension. If it exists in Dimension Library, place it on top of an unknown location as a trap.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-14. Colours: W (time/space/souls), M (earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap, user ruling 2026-11-14): the effect card I attach from my hand becomes a trap building (enter trigger, damage like the other class traps, the card held by it, owner = me) on a random hex data.distance [20, 30] hexes away — pure map functions (js/join-plan.mjs tileInRing / hexWalkableAt), so unrevealed land counts; no living unit, obstacle, labyrinth wall, fortress or other trap there; hashed over `${salt}:seeker:${action}` (same on every peer). I see that hex and data.vision.radius (5) hexes around it until the end of my next turn (vision-grant, until_turn = turn + 1). peer.mjs: seekerPlant + grantSeekerVision. Paper text: \"Choose a non-action card from your hand; reveal where this card is located in this Dimension. If it exists in Dimension Library, place it on top of an unknown location as a trap.\" CR 2026-11-17 (1.2.0): once per turn (not tap) and at most one planted trap standing — a new one replaces the old, its card back to my discard pile (data ability_kind once_per_round, max_standing 1). CP 2026-11-19 (pick 6 b, 1.2.0 amended): ability unchanged; Air, Water and Fire dropped (7 → 4 colours).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -3032,21 +3143,6 @@
           }
         },
         {
-          "id": "untapped",
-          "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).",
-          "when": {
-            "rule": [
-              "class_ability_ready",
-              {
-                "kind": "tap",
-                "tapped": {
-                  "var": "caster.class_tapped"
-                }
-              }
-            ]
-          }
-        },
-        {
           "id": "effect_attached",
           "description": "An effect card of my hand is attached (CLASS_NEEDS attach_effect).",
           "when": {
@@ -3055,6 +3151,28 @@
                 "var": "cast.attach.kind"
               },
               "effect"
+            ]
+          }
+        },
+        {
+          "id": "not_used_this_turn",
+          "description": "CR 2026-11-17: once per turn (hg.turn = 3 actions): not used yet this turn.",
+          "when": {
+            "rule": [
+              "class_ability_ready",
+              {
+                "kind": "once_per_round",
+                "used_this_round": {
+                  "==": [
+                    {
+                      "var": "caster.class_used_turn"
+                    },
+                    {
+                      "var": "turn"
+                    }
+                  ]
+                }
+              }
             ]
           }
         }
@@ -3221,6 +3339,31 @@
                 "var": "turn"
               },
               1
+            ]
+          }
+        },
+        {
+          "id": "one_standing",
+          "description": "CR 2026-11-17: at most data.max_standing (1) Seeker traps of mine stand; laying a new one removes the old.",
+          "target": "tile",
+          "unit": "traps",
+          "value": {
+            "min": [
+              {
+                "+": [
+                  {
+                    "count": [
+                      {
+                        "var": "caster.seeker_traps"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "var": "entry.data.max_standing"
+              }
             ]
           }
         }
@@ -3805,7 +3948,7 @@
       "references": []
     },
     "class_guardian": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: when I did not move during a whole turn I restore one life at turn end (capped). Paper text: \"When you stay on one tile for a whole round, restore one life token.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: when I did not move during a whole turn I restore one life at turn end (capped). Paper text: \"When you stay on one tile for a whole round, restore one life token.\" CR 2026-11-17 (1.2.0): the heal needs no move on the 2nd and the 3rd action of the turn (data still_actions [2, 3]); a move on the 1st action is fine.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -3914,15 +4057,33 @@
         },
         {
           "id": "regen",
-          "description": "+1 life at turn end when I stayed on my tile the whole turn.",
+          "description": "CR 2026-11-17: +1 life at turn end when I did not move on the 2nd or the 3rd action (data.still_actions).",
           "target": "caster",
           "unit": "life",
           "value": {
             "if": [
               {
-                "!": {
-                  "var": "caster.moved_this_round"
-                }
+                "none": [
+                  {
+                    "var": "caster.moved_rounds"
+                  },
+                  {
+                    "in": [
+                      {
+                        "+": [
+                          {
+                            "var": ""
+                          },
+                          1
+                        ]
+                      },
+                      [
+                        2,
+                        3
+                      ]
+                    ]
+                  }
+                ]
               },
               1,
               0
@@ -3994,7 +4155,7 @@
       "references": []
     },
     "class_manipulator": {
-      "description": "Class permanent, user rework 2026-11-14 (version 1.1.0). Colours: W (souls), M (air), Wi (concentration/harmony); destroyed colour by colour → archive, recast by emitting every colour (unchanged). Ability: PASSIVE, once per turn (hg.turn = 3 actions), no click. The first time in a turn the Manipulator is about to take COMBAT damage (a positive Attack / Block / Posture strike of the damage matrix in the main action — not bonus rounds, spells, traps, tokens or combos) the ability fires by itself and is spent until the next turn. A random enemy within range (3 hexes, pre-action tiles; index = sha(Manipulator's reveal salt : turn.action) mod the sorted candidates) returns its revealed Action — and every skill riding on it, Battle Trance included — to its hand and plays another Action card from its hand instead; it may be the same kind. A non-instant cast or a Rule 24 emission survives only if the new action still emits (P/EP, Reaver A, Monk M/EM); an interrupted cast is discarded (Rule 19). The round is then resolved again with the swap. Determinism: hands are private, so every unit within publish_range (6) of an enemy Manipulator commits `manip_alt` = one random OTHER Action card of its hand (Empty Posture when it has none), part of the commit hash; candidates without it cannot be picked. The ability is only spent when a swap happens. Code: game/class-manipulator.mjs, peer.mjs doPlanningEnd (manip_alt) and doResolution (probe + swap). Paper text 1.0.0: \"Force a player to act as a monster: draw a random Action card from their hand (not deck for monsters) and force them to use it.\"",
+      "description": "Class permanent, user rework 2026-11-14 (version 1.1.0). Colours: W (souls), M (air), Wi (concentration/harmony); destroyed colour by colour → archive, recast by emitting every colour (unchanged). Ability: PASSIVE, once per turn (hg.turn = 3 actions), no click. The first time in a turn the Manipulator is about to take COMBAT damage (a positive Attack / Block / Posture strike of the damage matrix in the main action — not bonus rounds, spells, traps, tokens or combos) the ability fires by itself and is spent until the next turn. A random enemy within range (3 hexes, pre-action tiles; index = sha(Manipulator's reveal salt : turn.action) mod the sorted candidates) returns its revealed Action — and every skill riding on it, Battle Trance included — to its hand and plays another Action card from its hand instead; it may be the same kind. A non-instant cast or a Rule 24 emission survives only if the new action still emits (P/EP, Reaver A, Monk M/EM); an interrupted cast is discarded (Rule 19). The round is then resolved again with the swap. Determinism: hands are private, so every unit within publish_range (6) of an enemy Manipulator commits `manip_alt` = one random OTHER Action card of its hand (Empty Posture when it has none), part of the commit hash; candidates without it cannot be picked. The ability is only spent when a swap happens. Code: game/class-manipulator.mjs, peer.mjs doPlanningEnd (manip_alt) and doResolution (probe + swap). Paper text 1.0.0: \"Force a player to act as a monster: draw a random Action card from their hand (not deck for monsters) and force them to use it.\" CR 2026-11-17 (1.2.0): only an incoming enemy Attack triggers the swap (data trigger \"attack\"), not a Block / Posture strike.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -4032,12 +4193,12 @@
           }
         },
         {
-          "id": "about_to_take_combat_damage",
-          "description": "A positive matrix strike of the main action is about to land on the Manipulator (probe run of the round).",
+          "id": "about_to_take_attack_damage",
+          "description": "CR 2026-11-17: a positive matrix strike of an enemy ATTACK (main action) is about to land on the Manipulator (probe run of the round).",
           "when": {
             ">": [
               {
-                "var": "incoming.combat_damage"
+                "var": "incoming.attack_damage"
               },
               0
             ]
@@ -4264,7 +4425,7 @@
       "references": []
     },
     "class_bard": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), M (air/water/earth/fire), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: every ally in contact who revealed an action plays the skills I played too, when their action (or Empty option for M / P skills) allows it; Battle Trance and Counter Spell (judged before) are not shared. Paper text: \"When you use a skill, any player around uses it if possible.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: every ally in contact who revealed an action plays the skills I played too, when their action (or Empty option for M / P skills) allows it; Battle Trance and Counter Spell (judged before) are not shared. Paper text: \"When you use a skill, any player around uses it if possible.\" CP 2026-11-19 (pick 7 a, 1.1.0): ability unchanged; Air, Water, Earth and Fire dropped (8 → 4 colours).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -4291,12 +4452,11 @@
       "effects": [
         {
           "id": "colours",
-          "description": "The class colours (stat groups of its elements): W, M, Wi.",
+          "description": "The class colours (stat groups of its elements): W, Wi.",
           "target": "caster",
           "unit": "colours",
           "value": [
             "world",
-            "matter",
             "will"
           ]
         },
@@ -4343,7 +4503,6 @@
               {
                 "colours": [
                   "world",
-                  "matter",
                   "will"
                 ],
                 "down": {
@@ -4364,7 +4523,6 @@
               {
                 "colours": [
                   "world",
-                  "matter",
                   "will"
                 ],
                 "done": {
@@ -4452,7 +4610,7 @@
       "references": []
     },
     "class_shaman": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (air/water/earth/fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap, local: the most recent Effect card of my discard pile returns to my hand. Paper text: \"Return an effect card from your deck discard pile to your hand.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (water). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap, local: the most recent Effect card of my discard pile returns to my hand. Paper text: \"Return an effect card from your deck discard pile to your hand.\" CR 2026-11-17 (1.1.0): Air, Earth and Fire removed (3 elements left).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -4938,7 +5096,7 @@
       "references": []
     },
     "class_witch": {
-      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: V (vitality), M (air/water). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): the enemy I right-clicked within 3 hexes — else one of the enemies there picked by my reveal salt — puts 3 random cards of its hand onto its discard pile (what it has if fewer; never the cards it has in play this action). Judged by every peer in the resolver (seed = salt:witch:action:me); the victim applies it to its private hand with pickHandDiscards (card ids sorted, index = sha(seed:k) mod what is left). Untap to use it again. Paper text: \"Target nearby player puts up to three cards from hand to discard pile; you choose by color.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: V (vitality), M (air/water). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): the enemy I right-clicked within 3 hexes — else one of the enemies there picked by my reveal salt — puts 3 random cards of its hand onto its discard pile (what it has if fewer; never the cards it has in play this action). Judged by every peer in the resolver (seed = salt:witch:action:me); the victim applies it to its private hand with pickHandDiscards (card ids sorted, index = sha(seed:k) mod what is left). Untap to use it again. Paper text: \"Target nearby player puts up to three cards from hand to discard pile; you choose by color.\" CR 2026-11-18 (b) (1.2.0): still 3 cards, but only an ADJACENT enemy (data range 1). CP 2026-11-19 (pick 8 a, 1.2.0 amended): the Witch also puts 1 random card of her own hand onto her discard pile (data self_discard; never a card in play).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -4978,7 +5136,7 @@
         },
         {
           "id": "enemy_nearby",
-          "description": "The target is a living, visible (no Invisibility) enemy within the class range (data.range, default 3 hexes).",
+          "description": "CR 2026-11-18 (b): the target is a living, visible (no Invisibility) enemy within the class range (data.range 1: adjacent).",
           "when": {
             "and": [
               {
@@ -4986,7 +5144,9 @@
                   {
                     "var": "dist"
                   },
-                  3
+                  {
+                    "var": "entry.data.range"
+                  }
                 ]
               },
               {
@@ -5136,6 +5296,26 @@
                 "len": [
                   {
                     "var": "target.hand_spare"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "own_discard",
+          "description": "CP 2026-11-19 (data self_discard 1): 1 random card of my own hand (not in play) to my discard pile.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "min": [
+              {
+                "var": "entry.data.self_discard"
+              },
+              {
+                "len": [
+                  {
+                    "var": "caster.hand_spare"
                   }
                 ]
               }
@@ -6080,7 +6260,7 @@
       "references": []
     },
     "class_reaver": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static (pc override): my Empty Posture and Empty Move fight as an Attack (an EM with nobody adjacent still walks its half journey); I may emit elements during an Attack (Rule 24 emission too). Paper text: \"Your Empty Posture is treated as an Attack action. You may emit elements during your Attack.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static (pc override): my Empty Posture and Empty Move fight as an Attack (an EM with nobody adjacent still walks its half journey); I may emit elements during an Attack (Rule 24 emission too). Paper text: \"Your Empty Posture is treated as an Attack action. You may emit elements during your Attack.\" CR 2026-11-18 (a) (1.2.0): colours 3 → 2, Vitality + Souls (Harmony dropped); EP / EM still fight as Attack, the Attack emits and keeps the channel.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6107,13 +6287,12 @@
       "effects": [
         {
           "id": "colours",
-          "description": "The class colours (stat groups of its elements): V, W, Wi.",
+          "description": "The class colours (stat groups of its elements): V, W.",
           "target": "caster",
           "unit": "colours",
           "value": [
             "vitality",
-            "world",
-            "will"
+            "world"
           ]
         },
         {
@@ -6159,8 +6338,7 @@
               {
                 "colours": [
                   "vitality",
-                  "world",
-                  "will"
+                  "world"
                 ],
                 "down": {
                   "var": "caster.class_down"
@@ -6180,8 +6358,7 @@
               {
                 "colours": [
                   "vitality",
-                  "world",
-                  "will"
+                  "world"
                 ],
                 "done": {
                   "var": "caster.class_progress.done"
@@ -6290,7 +6467,7 @@
       "references": []
     },
     "class_barbarian": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Block; I may emit elements during a Block. User ruling 2026-11-16: my Block (B) emits at every site — a cast rides on it, it carries a Rule 24 emission, it counts for the Manipulator test and badges the element. Paper text: \"Your Empty Posture is treated as a Block action. You may emit elements during your Block.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Block; I may emit elements during a Block. User ruling 2026-11-16: my Block (B) emits at every site — a cast rides on it, it carries a Rule 24 emission, it counts for the Manipulator test and badges the element. Paper text: \"Your Empty Posture is treated as a Block action. You may emit elements during your Block.\" CR 2026-11-18 (a) (1.3.0): Empty Move is also treated as a Block (with Empty Posture); only a real Block card emits and keeps the channel. Ruling 2026-11-19: that Empty Move still walks its half journey, like the Reaver's EM (no emission; a channel breaks).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6399,7 +6576,7 @@
         },
         {
           "id": "stance",
-          "description": "EP judged as Block.",
+          "description": "EP and EM judged as Block (CR 2026-11-18 (a)); the EM still moves (ruling 2026-11-19).",
           "target": "caster",
           "unit": "action",
           "value": {
@@ -6513,7 +6690,7 @@
       "references": []
     },
     "class_overlord": {
-      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: W (space/souls), M (earth), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): I gain one armor life point (shown gold); if I already wear one, the ally I picked — or the first adjacent ally — without one gains it instead. Never two on one unit. It is the first life lost when damage lands and can be gained again once lost. Paper text: \"A nearby ally or yourself gains +1 life token (armor bonus, non-cumulative but reusable once lost).\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-12. Colours: W (space), M (earth), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): I gain one armor life point (shown gold); if I already wear one, the ally I picked — or the first adjacent ally — without one gains it instead. Never two on one unit. It is the first life lost when damage lands and can be gained again once lost. Paper text: \"A nearby ally or yourself gains +1 life token (armor bonus, non-cumulative but reusable once lost).\" CR 2026-11-17 (1.2.0): Souls removed (\"Solus\").",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6784,7 +6961,7 @@
       "references": []
     },
     "class_rogue": {
-      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-14. Colours: W (space), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, user ruling 2026-11-14 — two separate charges per turn, both data-driven): trap charge (trap_dodges_per_turn, 1) — a step that would spring a trap (a laid enter-trap, a building's hidden trap, or an unexplored dungeon at the turn's 3rd action) springs nothing and the trap stays armed; threat charge (threat_dodges_per_turn, 1) — the first step that ends within threat_radius (2) hexes of any enemy is unseen: monsters / NPC enemies neither wake nor chase (\"chain\") me for the rest of the turn. peer.mjs: class-traps.mjs rogueConfig / chargesLeft; snapshot rogue_trap_turn + rogue_trap_n (trap) and stealth_turn (threat). Paper text: \"Once per round your Move does not trigger any trap; stepping over unrevealed tile doesn't reveal and monsters don't wake.\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-14. Colours: W (space), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, user ruling 2026-11-14 — two separate charges per turn, both data-driven): trap charge (trap_dodges_per_turn, 1) — a step that would spring a trap (a laid enter-trap, a building's hidden trap, or an unexplored dungeon at the turn's 3rd action) springs nothing and the trap stays armed; threat charge (threat_dodges_per_turn, 1) — the first step that ends within threat_radius (2) hexes of any enemy is unseen: monsters / NPC enemies neither wake nor chase (\"chain\") me for the rest of the turn. peer.mjs: class-traps.mjs rogueConfig / chargesLeft; snapshot rogue_trap_turn + rogue_trap_n (trap) and stealth_turn (threat). Paper text: \"Once per round your Move does not trigger any trap; stepping over unrevealed tile doesn't reveal and monsters don't wake.\" CR 2026-11-17 (1.3.0): ONE shared charge per turn — the trap dodge or the unseen step, whichever comes first (data shared_charge); a step that needs both dodges the trap.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -6809,64 +6986,26 @@
         },
         {
           "id": "charge_left",
-          "description": "Passive, no tap: the trap charge has uses left this turn (trap_dodges_per_turn minus rogue_trap_n when rogue_trap_turn is this turn) or the threat charge is unused (stealth_turn is not this turn).",
+          "description": "CR 2026-11-17: passive, no tap — the one shared charge is unused this turn: no trap dodge (rogue_trap_turn) and no unseen step (stealth_turn) yet this turn.",
           "when": {
-            "or": [
+            "and": [
               {
-                ">": [
+                "!=": [
                   {
-                    "-": [
-                      {
-                        "entry": [
-                          "class_rogue",
-                          "trap_dodges_per_turn"
-                        ]
-                      },
-                      {
-                        "if": [
-                          {
-                            "==": [
-                              {
-                                "var": "caster.rogue_trap_turn"
-                              },
-                              {
-                                "var": "turn"
-                              }
-                            ]
-                          },
-                          {
-                            "var": "caster.rogue_trap_n"
-                          },
-                          0
-                        ]
-                      }
-                    ]
+                    "var": "caster.rogue_trap_turn"
                   },
-                  0
+                  {
+                    "var": "turn"
+                  }
                 ]
               },
               {
-                "and": [
+                "!=": [
                   {
-                    ">": [
-                      {
-                        "entry": [
-                          "class_rogue",
-                          "threat_dodges_per_turn"
-                        ]
-                      },
-                      0
-                    ]
+                    "var": "caster.stealth_turn"
                   },
                   {
-                    "!=": [
-                      {
-                        "var": "caster.stealth_turn"
-                      },
-                      {
-                        "var": "turn"
-                      }
-                    ]
+                    "var": "turn"
                   }
                 ]
               }
@@ -7097,7 +7236,7 @@
       "references": []
     },
     "class_avenger": {
-      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: V (vitality), M (fire), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (once per turn, at the click; user rework #2 2026-11-14): every living wild monster (an enemy creature with a monster state, no owner) within lure_range (10 hexes) wakes and chases me — judged by every peer in the resolver (classAbilityOut.lures), applied by each monster (lured_by, chase_target); no monster in reach → the ability stays ready. Chase bonus: each time a NEW monster starts chasing me (lured now, or a wild monster whose chase_target is me and was not chasing me at my last resolution) I gain +1 life max and +1 life, never more than chase_bonus.max (1) in total; it is the first life lost after illusion / armor, a new chaser grants it again, and it fades when no monster chases me any more (snapshot chase_bonus, chasers_csv). Paper text: \"Reveal two of nearby enemy's cards in hand (you may identify skills/action/effect cards by card backs).\"",
+      "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: V (vitality), M (fire), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (once per turn, at the click; user rework #2 2026-11-14): every living wild monster (an enemy creature with a monster state, no owner) within lure_range (10 hexes) wakes and chases me — judged by every peer in the resolver (classAbilityOut.lures), applied by each monster (lured_by, chase_target); no monster in reach → the ability stays ready. Chase bonus: each time a NEW monster starts chasing me (lured now, or a wild monster whose chase_target is me and was not chasing me at my last resolution) I gain +1 life max and +1 life, never more than chase_bonus.max (1) in total; it is the first life lost after illusion / armor, a new chaser grants it again, and it fades when no monster chases me any more (snapshot chase_bonus, chasers_csv). Paper text: \"Reveal two of nearby enemy's cards in hand (you may identify skills/action/effect cards by card backs).\" CR 2026-11-17 (1.2.0): the lure is a TAP (untap by emitting every colour); the chase-bonus life stays. CP 2026-11-19 (pick 9 a, 1.2.0 amended): the chase bonus is +1 life MAX only (data chase_bonus.max_only) — no +1 life with it; still lost first (it absorbs nothing) and fades when nobody chases.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -7115,28 +7254,6 @@
               {
                 "!": {
                   "var": "caster.class_archived"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "id": "not_used_this_turn",
-          "description": "Once per turn (not per action): unused since hg.turn began (class_used_turn).",
-          "when": {
-            "rule": [
-              "class_ability_ready",
-              {
-                "kind": "once_per_round",
-                "used_this_round": {
-                  "==": [
-                    {
-                      "var": "caster.class_used_turn"
-                    },
-                    {
-                      "var": "turn"
-                    }
-                  ]
                 }
               }
             ]
@@ -7176,6 +7293,21 @@
               {
                 "!!": {
                   "var": "target.monster_state"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "untapped",
+          "description": "CR 2026-11-17: tap — the class card is untapped (untap by emitting every colour, any successful roll).",
+          "when": {
+            "rule": [
+              "class_ability_ready",
+              {
+                "kind": "tap",
+                "tapped": {
+                  "var": "caster.class_tapped"
                 }
               }
             ]
@@ -7284,7 +7416,7 @@
         },
         {
           "id": "chase_bonus",
-          "description": "Life max (and life) gained when new monsters start chasing me, capped at 1 in total.",
+          "description": "Life max (NOT life — CP 2026-11-19, data chase_bonus.max_only) gained when new monsters start chasing me, capped at 1 in total.",
           "target": "caster",
           "unit": "life_max",
           "value": {
@@ -7371,7 +7503,7 @@
       "references": []
     },
     "class_monk": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Move; I may emit elements during a Move (Rule 24 emission too). User ruling 2026-11-16: Move and Empty Move (M / EM) emit at every site — a cast continues on them, they carry a Rule 24 emission (strike), count for the Manipulator test and badge the element. Paper text: \"Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Move; I may emit elements during a Move (Rule 24 emission too). User ruling 2026-11-16: Move and Empty Move (M / EM) emit at every site — a cast continues on them, they carry a Rule 24 emission (strike), count for the Manipulator test and badge the element. Paper text: \"Your Empty Posture is treated as a (non-empty) Move for combat calculations. You may emit elements during Move.\" CR 2026-11-17 (1.2.0): no \"Empty Posture fights as a Move\" any more; the Monk casts while moving — Move and Empty Move emit (ruling 2026-11-16).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -7479,25 +7611,6 @@
           }
         },
         {
-          "id": "stance",
-          "description": "EP judged as Move.",
-          "target": "caster",
-          "unit": "action",
-          "value": {
-            "rule": [
-              "class_ep_stance",
-              {
-                "action": {
-                  "var": "caster.action"
-                },
-                "permanents": {
-                  "var": "caster.permanents"
-                }
-              }
-            ]
-          }
-        },
-        {
           "id": "move_emits",
           "description": "Ruling 2026-11-16: Move and Empty Move emit an element (cast, Rule 24 strike, Manipulator, badge).",
           "target": "caster",
@@ -7579,7 +7692,7 @@
       "references": []
     },
     "class_noble": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), M (water), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: whenever I deal combat damage (matrix / Attack, not effect damage) I heal the same amount, capped at life maximum, only while alive. Paper text: \"When you deal combat damage, you heal the same amount.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls/time/space), M (water), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: whenever I deal combat damage (matrix / Attack, not effect damage) I heal the same amount, capped at life maximum, only while alive. Paper text: \"When you deal combat damage, you heal the same amount.\" CR 2026-11-17 (1.1.0): lifesteal only from my own Attack, at most 1 per action (data lifesteal {from: attack, max_per_action: 1}). CP 2026-11-19 (pick 10 b, 1.1.0 amended): ability unchanged; Time and Space added (4 → 6 colours).",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -7694,7 +7807,7 @@
         },
         {
           "id": "lifesteal",
-          "description": "Heal = combat damage dealt, capped.",
+          "description": "CR 2026-11-17: heal = the combat damage of my Attack this action, at most 1, capped at my maximum.",
           "target": "caster",
           "unit": "life",
           "value": {
@@ -7702,7 +7815,12 @@
               "heal_capped",
               {
                 "amount": {
-                  "var": "outcome.combat_damage_dealt"
+                  "min": [
+                    1,
+                    {
+                      "var": "outcome.attack_damage_dealt"
+                    }
+                  ]
                 },
                 "life": {
                   "var": "caster.life"
@@ -7779,7 +7897,7 @@
       "references": []
     },
     "class_assassin": {
-      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space), M (fire), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: an Attack of mine deals +1 once I have already dealt damage this round (resolver-local flag). Paper text: \"If you have dealt combat damage this round, you deal +1 extra damage.\"",
+      "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space), M (fire/air/water), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: an Attack of mine deals +1 once I have already dealt damage this round (resolver-local flag). Paper text: \"If you have dealt combat damage this round, you deal +1 extra damage.\" CR 2026-11-17 (1.1.0): the +1 lands only on an enemy below its full life (data vs_hurt_only). CP2 2026-11-19 (answer 2 to pick 11, 1.1.0 amended): + Air + Water — 5 → 7 colours.",
       "prerequisites": [
         {
           "id": "class_card_held",
@@ -7891,13 +8009,27 @@
         },
         {
           "id": "extra_damage",
-          "description": "+1 Attack damage after the first hit of the round.",
+          "description": "CR 2026-11-17: +1 Attack damage after the first hit of the round, only against an enemy below full life.",
           "target": "target",
           "unit": "damage",
           "value": {
             "if": [
               {
-                "var": "caster.dealt_damage_this_round"
+                "and": [
+                  {
+                    "var": "caster.dealt_damage_this_round"
+                  },
+                  {
+                    "<": [
+                      {
+                        "var": "target.life"
+                      },
+                      {
+                        "var": "target.life_max"
+                      }
+                    ]
+                  }
+                ]
               },
               1,
               0

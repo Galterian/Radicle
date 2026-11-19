@@ -46,7 +46,14 @@
     "building_life_turns": 12,
     "p_cast_queued": 0.5,
     "p_recharge_emit": 0.25,
-    "building_slots": 1.8
+    "building_slots": 1.8,
+    "p_hand_small": 0.4,
+    "p_damage_spell_action": 0.112,
+    "p_unmoved_action": 0.669,
+    "p_attack_of_combat": 0.6,
+    "p_foe_hurt": 0.5,
+    "p_planted_sprung": 0.15,
+    "p_ally_adjacent": 0.735
   },
   "weights": {
     "life": 1,
@@ -78,11 +85,12 @@
     "hard_floor_ratio": 0.2,
     "fit_drop": 0.6,
     "audit": true,
-    "audit_worlds": 120
+    "audit_worlds": 120,
+    "fit_locked": "2026-11-19: the accepted fair line V̂ = 5.521349 − 0.495541·k (user instruction \"do not refit the fair line\", class picks 2026-11-19)"
   },
   "fit": {
-    "a": 5.836635,
-    "b": -0.526026,
+    "a": 5.521349,
+    "b": -0.495541,
     "n": 33,
     "n_fit": 32,
     "model": "V = a + b·C (OLS, refit without |r−1|>0.6)"
@@ -92,199 +100,199 @@
       "k": 4,
       "kind": "tap",
       "value": 2.995365,
-      "ratio": 0.802502
+      "ratio": 0.846343
     },
     "class_animator": {
       "k": 3,
       "kind": "tap",
       "value": 3.285957,
-      "ratio": 0.771613
+      "ratio": 0.814419
     },
     "class_assassin": {
-      "k": 5,
+      "k": 7,
       "kind": "static",
-      "value": 5.04,
-      "ratio": 1.571805
+      "value": 2.52,
+      "ratio": 1.227734
     },
     "class_avenger": {
       "k": 4,
-      "kind": "once_per_round",
-      "value": 5.508106,
-      "ratio": 1.475703
+      "kind": "tap",
+      "value": 2.582372,
+      "ratio": 0.729652
     },
     "class_barbarian": {
       "k": 2,
       "kind": "static",
-      "value": 3.106383,
-      "ratio": 0.649248
+      "value": 5.177305,
+      "ratio": 1.142826
     },
     "class_bard": {
-      "k": 8,
+      "k": 4,
       "kind": "static",
-      "value": 4.32,
-      "ratio": 2.652867
+      "value": 4.238298,
+      "ratio": 1.197535
     },
     "class_cleric": {
       "k": 4,
       "kind": "tap",
       "value": 3.348439,
-      "ratio": 0.897096
+      "ratio": 0.946105
     },
     "class_druid": {
       "k": 4,
       "kind": "tap",
-      "value": 2.122823,
-      "ratio": 0.568736
+      "value": 3.917583,
+      "ratio": 1.106917
     },
     "class_elementalist": {
-      "k": 5,
+      "k": 7,
       "kind": "passive",
-      "value": 1.716,
-      "ratio": 0.535162
+      "value": 1.92192,
+      "ratio": 0.936352
     },
     "class_enchanter": {
-      "k": 6,
-      "kind": "once_per_round",
-      "value": 1.3875,
-      "ratio": 0.517631
+      "k": 4,
+      "kind": "static",
+      "value": 3.531915,
+      "ratio": 0.997946
     },
     "class_guardian": {
       "k": 5,
       "kind": "static",
-      "value": 2.16,
-      "ratio": 0.673631
+      "value": 3.222439,
+      "ratio": 1.058744
     },
     "class_healer": {
       "k": 3,
       "kind": "tap",
-      "value": 3.07863,
-      "ratio": 0.722928
+      "value": 4.651642,
+      "ratio": 1.152902
     },
     "class_illusionist": {
       "k": 3,
       "kind": "tap",
       "value": 5.755588,
-      "ratio": 1.351535
+      "ratio": 1.426513
     },
     "class_kensei": {
       "k": 3,
       "kind": "tap",
       "value": 3.229332,
-      "ratio": 0.758316
+      "ratio": 0.800384
     },
     "class_manipulator": {
       "k": 4,
       "kind": "passive",
-      "value": 4.70922,
-      "ratio": 1.261669
+      "value": 2.825532,
+      "ratio": 0.798357
     },
     "class_monk": {
       "k": 5,
       "kind": "static",
-      "value": 4.8,
-      "ratio": 1.496957
+      "value": 2.4,
+      "ratio": 0.788528
     },
     "class_necromancer": {
       "k": 3,
       "kind": "tap",
       "value": 4.698393,
-      "ratio": 1.103283
+      "ratio": 1.164489
     },
     "class_noble": {
-      "k": 4,
+      "k": 6,
       "kind": "static",
-      "value": 5.785277,
-      "ratio": 1.549961
+      "value": 2.7216,
+      "ratio": 1.068089
     },
     "class_overlord": {
-      "k": 4,
+      "k": 3,
       "kind": "tap",
-      "value": 3.177954,
-      "ratio": 0.851421
+      "value": 3.662647,
+      "ratio": 0.907781
     },
     "class_paladin": {
       "k": 3,
       "kind": "tap",
       "value": 3.591736,
-      "ratio": 0.843416
+      "ratio": 0.890206
     },
     "class_priest": {
       "k": 4,
       "kind": "once_per_round",
-      "value": 3.496596,
-      "ratio": 0.93679
+      "value": 3.885106,
+      "ratio": 1.09774
     },
     "class_prophet": {
       "k": 5,
       "kind": "passive",
-      "value": 2.4,
-      "ratio": 0.748478
+      "value": 3.36,
+      "ratio": 1.10394
     },
     "class_ranger": {
       "k": 3,
       "kind": "tap",
       "value": 3.591736,
-      "ratio": 0.843416
+      "ratio": 0.890206
     },
     "class_reaver": {
-      "k": 3,
+      "k": 2,
       "kind": "static",
-      "value": 5.531915,
-      "ratio": 1.299012
+      "value": 5.177305,
+      "ratio": 1.142826
     },
     "class_restaurateur": {
       "k": 5,
       "kind": "static",
       "value": 2.88,
-      "ratio": 0.898174
+      "ratio": 0.946234
     },
     "class_rogue": {
       "k": 3,
       "kind": "passive",
-      "value": 4.978723,
-      "ratio": 1.16911
+      "value": 4.729787,
+      "ratio": 1.17227
     },
     "class_seeker": {
-      "k": 7,
-      "kind": "tap",
-      "value": 1.774118,
-      "ratio": 0.823466
+      "k": 4,
+      "kind": "once_per_round",
+      "value": 4.259882,
+      "ratio": 1.203634
     },
     "class_shaman": {
-      "k": 6,
+      "k": 3,
       "kind": "tap",
-      "value": 2.409302,
-      "ratio": 0.898833
+      "value": 3.591736,
+      "ratio": 0.890206
     },
     "class_summoner": {
       "k": 5,
       "kind": "tap",
       "value": 3.415093,
-      "ratio": 1.065052
+      "ratio": 1.122041
     },
     "class_transmuter": {
       "k": 5,
       "kind": "static",
       "value": 3.6,
-      "ratio": 1.122718
+      "ratio": 1.182793
     },
     "class_warrior": {
       "k": 5,
       "kind": "static",
       "value": 2.88,
-      "ratio": 0.898174
+      "ratio": 0.946234
     },
     "class_weapon_master": {
-      "k": 5,
+      "k": 4,
       "kind": "once_per_round",
-      "value": 4.8,
-      "ratio": 1.496957
+      "value": 3.767376,
+      "ratio": 1.064476
     },
     "class_witch": {
       "k": 3,
       "kind": "tap",
-      "value": 5.556685,
-      "ratio": 1.304828
+      "value": 3.521624,
+      "ratio": 0.872829
     }
   },
   "swarm_placeholders": {
@@ -357,6 +365,41 @@
       "value": 0.25,
       "status": "placeholder — needs a swarm measurement",
       "measure": "p(the holder emits an element while casting another effect, per action) — the tap recharge (every tap class)"
+    },
+    "p_hand_small": {
+      "value": 0.4,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "p(the hand holds ≤ 3 cards when the local class ability resolves at planning) (Weapon master, CR 2026-11-17)"
+    },
+    "p_damage_spell_action": {
+      "value": 0.112,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "p(a damage spell of the holder completes in an action) — 0.112 ≈ the per-action rate behind p_damage_spell 0.3 a turn (Elementalist, CR 2026-11-17)"
+    },
+    "p_unmoved_action": {
+      "value": 0.669,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "p(the holder does not move in one action) — 0.669³ ≈ p_unmoved 0.3 (Guardian, CR 2026-11-17)"
+    },
+    "p_attack_of_combat": {
+      "value": 0.6,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "share of the combat damage taken / dealt that comes from an Attack card (Manipulator, Noble, CR 2026-11-17)"
+    },
+    "p_foe_hurt": {
+      "value": 0.5,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "p(the defender of a scoring Attack is below full life) (Assassin, CR 2026-11-17)"
+    },
+    "p_planted_sprung": {
+      "value": 0.15,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "p(a planted far trap springs before the next plant lifts it, one turn later) (Seeker, CR 2026-11-17)"
+    },
+    "p_ally_adjacent": {
+      "value": 0.735,
+      "status": "placeholder — needs a swarm measurement",
+      "measure": "p(at least one living ally stands next to the holder when its tap resolves) — 0.735 = the fixture worlds' p(≥ 1 adjacent ally) at adjacent_allies 0.8 (Healer, CP 2026-11-19)"
     }
   },
   "grants": {

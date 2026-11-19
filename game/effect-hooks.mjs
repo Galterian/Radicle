@@ -184,18 +184,31 @@ function summonPlan(ctx, { effect_id, every, self, here: at, target, side, peers
 // summon_paid — a stat buy of mine is paid (outcome `summon`): what happens, in order. The archived card leaves the
 // archive; a Death Ward lands; a raised player is back (the permanent is spent); a raised creature / a bound one joins
 // my summons; otherwise the creature the permanent held is released, a new Elementals / Golems replaces the earlier one
-// of its family (user ruling 2026-11-12), and the creature is spawned.  args {perm_id, sm, summons, permanents}.
+// of its family (user ruling 2026-11-12), and the creature is spawned. A same-type recast (Golems, Elementals, Summoning,
+// Resurrect / Death Ward) while the same permanent stands sends the old card from the holding to the discard pile
+// (release_held; user ruling 2026-11-19 — as drop_perm does for another Golems; the new card is still in hand and is held
+// after the action). A raised player spends the permanent (dropPermanent releases the card and ends what it held).
+// User ruling 2026-11-19 (Resurrect): the recast also ends the creature the previous cast raised (summon_end: an archive
+// creature vanishes, a corpse raised in place falls again; its card goes to my archive) — before a Death Ward or a
+// raised corpse too, as on the spawn / bind path. User ruling 2026-11-19 (Death Ward): a Resurrect recast also clears
+// the Death Ward the earlier cast placed (ward_clear {peers}: the warded ids leave my wards, so wards_csv in my next
+// snapshot) — after summon_end / release_held, before the new ward / raised corpse / spawn; a raised player spends the
+// permanent instead (dropPermanent clears the wards).  args {perm_id, sm, summons,
+// permanents, held, wards} (held: the perm id of each card in my permanents holding; wards: my Death Ward peer ids).
 const familyOf = (id) => id.startsWith('effect_elementals') ? 'Elementals' : id.startsWith('effect_golems') ? 'Golems' : null;
-function summonPaid(_ctx, { perm_id: permId, sm, summons, permanents }) {
+function summonPaid(_ctx, { perm_id: permId, sm, summons, permanents, held, wards }) {
   const out = [];
+  const recast = (held || []).includes(permId) ? [{ op: 'release_held', perm: permId }] : [];   // ruling 2026-11-19
+  const ended = (summons || []).some(x => x.perm === permId) ? [{ op: 'summon_end', perm: permId }] : [];   // ruling 2026-11-19 (Resurrect)
+  const cleared = permId === RESURRECT && (wards || []).length > 0 ? [{ op: 'ward_clear', peers: [...wards] }] : [];   // ruling 2026-11-19 (Death Ward)
   if (sm.archive_card_id) out.push({ op: 'archive_take', card_id: sm.archive_card_id });
-  if (sm.ward) { out.push({ op: 'ward', peer_id: sm.ward }); return out; }
+  if (sm.ward) { out.push(...ended, ...recast, ...cleared, { op: 'ward', peer_id: sm.ward }); return out; }
   if (sm.revive) {
     if (sm.is_player) { out.push({ op: 'revive_player' }); return out; }
-    out.push({ op: 'summon_add', summon: { peer_id: sm.revive, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'revive' } });
+    out.push(...ended, ...recast, ...cleared, { op: 'summon_add', summon: { peer_id: sm.revive, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'revive' } });
     return out;
   }
-  if ((summons || []).some(x => x.perm === permId)) out.push({ op: 'summon_end', perm: permId });
+  out.push(...ended, ...recast, ...cleared);
   if (familyOf(permId)) for (const other of permanents || []) if (other !== permId && familyOf(other) === familyOf(permId)) out.push({ op: 'drop_perm', id: other });
   if (sm.bind) { out.push({ op: 'summon_add', summon: { peer_id: sm.bind, creature_id: sm.creature_id, name: sm.name, bound: true, perm: permId, mode: 'bind' } }); return out; }
   out.push({ op: 'spawn', creature_id: sm.creature_id });
@@ -219,7 +232,7 @@ export const EFFECT_HOOK_SPECS = Object.freeze({
   trap_spent:    { family: 'trap', result: 'records', ops: ['trap_remove', 'release_card', 'discard_new', 'drop_perm', 'mine_done', 'world_edit', 'card_to_me'] },
   perm_falls:    { family: 'holdings', result: 'records', ops: ['release_card', 'channels', 'traps'] },
   summon_plan:   { family: 'summon', result: 'plan' },
-  summon_paid:   { family: 'summon', result: 'records', ops: ['archive_take', 'ward', 'revive_player', 'summon_add', 'summon_end', 'drop_perm', 'spawn'] },
+  summon_paid:   { family: 'summon', result: 'records', ops: ['archive_take', 'ward', 'revive_player', 'summon_add', 'summon_end', 'release_held', 'ward_clear', 'drop_perm', 'spawn'] },
 });
 export const EFFECT_HOOK_NAMES = Object.freeze(Object.keys(EFFECT_HOOK_SPECS));
 const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);

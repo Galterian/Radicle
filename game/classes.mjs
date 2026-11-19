@@ -30,8 +30,8 @@
 //   sha(s)                               sha256 hex (peer.mjs sha256Hex)
 import * as CE from './class-engine.mjs';   // C2 data hooks (pure; loads classes-data/ only when used)
 import { pointBuy } from './effect-engine.mjs';   // byte-identical to effects.mjs#pointBuy (tools/effect-engine-check.mjs)
-import { rogueConfig, clericConfig } from './class-traps.mjs';
-import { manipulatorConfig, combatHit, pickManipTarget } from './class-manipulator.mjs';
+import { rogueConfig, clericConfig, rogueShared } from './class-traps.mjs';
+import { manipulatorConfig, combatHit, attackHit, pickManipTarget } from './class-manipulator.mjs';
 import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from './class-chase.mjs';
 import { animatorConfig, priestConfig, seekerConfig } from './class-world.mjs';
 
@@ -49,18 +49,21 @@ export const ELEM_TO_STAT = Object.freeze({ elem_vitality: 'vitality', elem_soul
 //   needs       what the click must carry (peer.mjs CLASS_NEEDS): tile | ally_or_self | enemy_near | monster_near | attach_effect
 //   local       planning-time deck operation (CLASS_LOCAL): {op: recover, kind, what} | {op: draw, n} | {op: grant, effect_id}
 //   passiveTurn fires by itself once per turn (peer.mjs PASSIVE_TURN_CLASSES)
+//   perAction   CR 2026-11-17 (Elementalist): the passive fires at most once per ACTION — the use never spends the turn
 //   handDefaults  fallbacks for hand classes (peer.mjs HAND_CLASS_DEFAULTS)
-//   stance      code → code the action fights as (Reaver EP/EM → A, Barbarian EP → B, Monk EP → M)
+//   stance      code → code the action fights as (Reaver EP/EM → A, Barbarian EP/EM → B — CR 2026-11-18 (a); the Monk's
+//               EP-as-Move stance was dropped, CR 2026-11-17)
 //   emits       action codes that emit an element: true = every site, [sites] = only there (user rulings 2026-11-16:
-//               Barbarian B and Monk M / EM emit at every site — planning, Rule 24, Manipulator, element badge)
-//   planEmits   Enchanter: these codes emit once per turn while a cast is queued / running
+//               Barbarian B and Monk M / EM emit at every site — planning, Rule 24, Manipulator, element badge;
+//               CR 2026-11-18 (b): the Enchanter's A / B / M at every site, static)
+//   planEmits   (legacy, no built-in uses it since CR 2026-11-18) these codes emit once per turn while a cast is queued
 //   hooks       the hook points it acts in (HOOKS.md); 'peer:<name>' = behaviour that stays in peer.mjs
 export const CLASS_RULES = {
-  class_weapon_master: { phase: 'local', local: { op: 'draw', n: 1 }, hooks: ['local'] },
+  class_weapon_master: { phase: 'local', local: { op: 'draw', n: 2, max_hand: 3 }, hooks: ['local'] },   // CR 2026-11-17: inactive until the hand holds ≤ 3 cards; CP 2026-11-19 (pick 1 a): draw 2
   class_animator:      { phase: 'post', needs: 'tile', hooks: ['ability', 'config'] },
   class_druid:         { phase: 'post', hooks: ['ability'] },
-  class_enchanter:     { phase: null, planEmits: ['A', 'B', 'M'], hooks: ['plan_emits'] },
-  class_elementalist:  { phase: null, passiveTurn: true, hooks: ['pre_cast'] },
+  class_enchanter:     { phase: null, emits: { A: true, B: true, M: true }, hooks: ['emits'] },   // CR 2026-11-18 (b): static, every A / B / M emits
+  class_elementalist:  { phase: null, passiveTurn: true, perAction: true, hooks: ['pre_cast'] },   // CR 2026-11-17: once per ACTION
   class_transmuter:    { phase: null, hooks: ['transmute'] },
   class_alchemist:     { phase: 'post', needs: 'tile', hooks: ['ability'] },
   class_summoner:      { phase: 'local', local: { op: 'grant', effect_id: 'effect_summoning' }, hooks: ['local'] },
@@ -82,11 +85,11 @@ export const CLASS_RULES = {
   class_ranger:        { phase: 'post', needs: 'attach_effect', hooks: ['ability'] },
   class_kensei:        { phase: 'local', local: { op: 'recover', kind: 'skill', what: 'a skill card' }, hooks: ['local'] },
   class_reaver:        { phase: null, stance: { EP: 'A', EM: 'A' }, emits: { A: true }, hooks: ['stance', 'stance_target', 'emits'] },
-  class_barbarian:     { phase: null, stance: { EP: 'B' }, emits: { B: true }, hooks: ['stance', 'emits'] },
+  class_barbarian:     { phase: null, stance: { EP: 'B', EM: 'B' }, emits: { B: true }, hooks: ['stance', 'emits'] },   // CR 2026-11-18 (a): EM is a Block too
   class_overlord:      { phase: 'post', needs: 'ally_or_self', hooks: ['ability'] },
   class_rogue:         { phase: null, passiveTurn: true, hooks: ['config', 'step', 'dungeon_step'] },
   class_avenger:       { phase: 'post', needs: 'monster_near', hooks: ['ability', 'config', 'chase_step'] },
-  class_monk:          { phase: null, stance: { EP: 'M' }, emits: { M: true, EM: true }, hooks: ['stance', 'emits'] },
+  class_monk:          { phase: null, emits: { M: true, EM: true }, hooks: ['emits'] },   // CR 2026-11-17: no EP-as-Move stance; casts while moving (M / EM)
   class_noble:         { phase: null, hooks: ['lifesteal', 'lifesteal_apply'] },
   class_assassin:      { phase: null, attackBonus: 1, hooks: ['attack_out'] },
 };
@@ -177,17 +180,31 @@ function reanimatedStrike(ctx, id, { down, stat, elem, enemy, pb }) {
 }
 // restore: may `stat` be emitted to recast (from the archive) / untap my class?  args { cs, cols, stat, kind }
 const restore = (_ctx, _id, { cs, cols, stat, kind }) => !!cs?.class_id && stat in cols && (kind === 'recast' ? !!cs.archived : (!!cs.tapped && !cs.archived)) && !(cs.progress?.mode === kind && (cs.progress.done || []).includes(stat));
+// CP2 2026-11-19: data untap_emissions when an integer above the class's colour (stat) count, else 0 (= the colour count).
+const untapEmissions = (ctx, id, cols) => { const N = cdOf(ctx, id).untap_emissions; return Number.isInteger(N) && N > cols.length ? N : 0; };
 // progress: what one landed class outcome does to MY class state (doResolution's class-card loop).
 // args { state: {down, archived, tapped, progress}, cols: [stats], co: {kind, stat} } → { state, event }
 //   event: colour | destroyed | recast | untap | step
 function progress(_ctx, _id, { state, cols, co }) {
-  const s = { down: [...(state.down || [])], archived: !!state.archived, tapped: !!state.tapped, progress: state.progress ? { mode: state.progress.mode, done: [...(state.progress.done || [])] } : null };
+  const s = { down: [...(state.down || [])], archived: !!state.archived, tapped: !!state.tapped, progress: state.progress ? { mode: state.progress.mode, done: [...(state.progress.done || [])], ...('n' in state.progress ? { n: state.progress.n } : {}) } : null };   // CP2: n (the untap emission count) carries over
   if (co.kind === 'colour') { if (!s.down.includes(co.stat)) s.down.push(co.stat); return { state: s, event: 'colour' }; }
   if (co.kind === 'class_destroyed') { s.down = [...cols]; s.archived = true; s.tapped = false; s.progress = null; return { state: s, event: 'destroyed' }; }
   if (co.kind === 'recast' || co.kind === 'untap') {
     if (!s.progress || s.progress.mode !== co.kind) s.progress = { mode: co.kind, done: [] };
-    if (!s.progress.done.includes(co.stat)) s.progress.done.push(co.stat);
+    const fresh = !s.progress.done.includes(co.stat);
+    if (fresh) s.progress.done.push(co.stat);
     const complete = cols.every(x => s.progress.done.includes(x));
+    // CP2 2026-11-19 (Healer, "a longer untap"): data untap_emissions N (an integer above the colour count) → the untap
+    // takes N successful emissions. Within a round each colour once (restore); a round with every colour done starts
+    // again (done → []); progress.n counts the emissions. Without the knob nothing changes (no n field).
+    const N = untapEmissions(_ctx, _id, cols);
+    if (co.kind === 'untap' && N) {
+      const prev = state.progress && state.progress.mode === 'untap' ? state.progress : null;
+      const n = (prev && Number.isInteger(prev.n) && prev.n >= 0 ? prev.n : 0) + (fresh ? 1 : 0);
+      if (n >= N) { s.tapped = false; s.progress = null; return { state: s, event: 'untap' }; }
+      s.progress = { mode: 'untap', done: complete ? [] : s.progress.done, n };
+      return { state: s, event: 'step' };
+    }
     if (complete && co.kind === 'recast') { s.archived = false; s.down = []; s.progress = null; return { state: s, event: 'recast' }; }
     if (complete) { s.tapped = false; s.progress = null; return { state: s, event: 'untap' }; }
     return { state: s, event: 'step' };
@@ -196,11 +213,12 @@ function progress(_ctx, _id, { state, cols, co }) {
 }
 // life_points: the shield life points are the first life lost — illusion, then armor, then the Avenger's chase bonus.
 // args { dmg, illusion, armor, chaseBonus } → { illusion, armor, chaseBonus, absorbed }
-function lifePoints(_ctx, _id, { dmg, illusion, armor, chaseBonus }) {
+// CP 2026-11-19 (user pick 9 a, data chase_bonus.max_only): a max-only chase bonus is still lost first, but absorbs nothing.
+function lifePoints(ctx, id, { dmg, illusion, armor, chaseBonus }) {
   let hit = 0, il = illusion, ar = armor, cb = chaseBonus;
   if (dmg > 0 && il) { il = 0; hit++; }
   if (dmg > hit && ar) { ar = 0; hit++; }
-  if (dmg > hit && cb) { cb = 0; hit++; }
+  if (dmg > hit && cb) { cb = 0; if (cdOf(ctx, id).chase_bonus?.max_only !== true) hit++; }
   return { illusion: il, armor: ar, chaseBonus: cb, absorbed: hit };
 }
 
@@ -216,12 +234,17 @@ const emits = (_ctx, id, { code, site }) => { const e = rulesOf(id).emits?.[code
 // args { held, archived, usedTurn, turn, options (a Battle Trance pair), code, queued }
 const planEmits = (_ctx, id, a) => !!a.held && !a.archived && a.usedTurn !== a.turn && !a.options && (rulesOf(id).planEmits || []).includes(a.code) && !!a.queued;
 // attack_out (Assassin): +1 on an Attack that connects once I already dealt combat damage this action.
-// args { attacker, dmg, scored: [ids that already landed damage] } → dmg
-const attackOut = (ctx, id, { attacker, dmg, scored }) => (dmg >= 1 && ctx.hasPerm(attacker, id) && (scored || []).includes(attacker)) ? dmg + (rulesOf(id).attackBonus || 1) : dmg;
-// lifesteal (Noble): combat damage I deal is banked for my own heal.  args { attacker, amount } → amount banked
-const lifesteal = (ctx, id, { attacker, amount }) => (amount > 0 && ctx.hasPerm(attacker, id) && attacker === ctx.self) ? amount : 0;
+// CR 2026-11-17: with data vs_hurt_only, only against an enemy below full life (its snapshot life < life_max).
+// args { attacker, dmg, scored: [ids that already landed damage], defender } → dmg
+const hurtNow = (ctx, id) => !!id && ctx.lifeOf(id) < Number(ctx.view(id)?.life_max);
+const attackOut = (ctx, id, { attacker, dmg, scored, defender }) => (dmg >= 1 && ctx.hasPerm(attacker, id) && (scored || []).includes(attacker) && (cdOf(ctx, id).vs_hurt_only !== true || hurtNow(ctx, defender))) ? dmg + (rulesOf(id).attackBonus || 1) : dmg;
+// lifesteal (Noble): combat damage I deal is banked for my own heal.  args { attacker, amount, source, why } → amount banked
+// CR 2026-11-17: data lifesteal.from "attack" → only the damage of my own Attack strike (addDmg source 'action', why 'Attack').
+const lifestealCfg = (ctx, id) => { const l = cdOf(ctx, id).lifesteal; return l && typeof l === 'object' && !Array.isArray(l) ? l : {}; };
+const lifesteal = (ctx, id, { attacker, amount, source, why }) => (amount > 0 && ctx.hasPerm(attacker, id) && attacker === ctx.self && (lifestealCfg(ctx, id).from !== 'attack' || (source === 'action' && why === 'Attack'))) ? amount : 0;
 // lifesteal_apply: the bank heals me after my damage lands, capped at my maximum.  args { amount, life, lifeMax, held } → life
-const lifestealApply = (_ctx, _id, { amount, life, lifeMax, held }) => (amount > 0 && life > 0 && held) ? Math.min(lifeMax, life + amount) : life;
+// CR 2026-11-17: data lifesteal.max_per_action caps the heal of one action (the bank of one resolution).
+const lifestealApply = (ctx, id, { amount, life, lifeMax, held }) => { const cap = lifestealCfg(ctx, id).max_per_action; return (amount > 0 && life > 0 && held) ? Math.min(lifeMax, life + (Number.isInteger(cap) && cap >= 0 ? Math.min(amount, cap) : amount)) : life; };
 // pre_cast (Elementalist, passive once per turn): the emission completing a damage cast rolls a point-buy on my
 // highest stat among the cast's elements (ties by name; no stat → matter).  args { actor, elements, salt }
 // → { stat, fail, dice, value }  (the caller adds `value` to the cast when !fail)
@@ -248,22 +271,32 @@ function transmute(ctx, _cid, { id, outcomes }) {
 }
 // destroy_result (Restaurateur, static): a token I destroy is taken instead.  args { d } → result
 const destroyResult = (_ctx, _id, { d }) => (d.result === 'destroyed' && !d.phylactery && d.tok) ? 'taken' : d.result;
-// end_turn (Guardian): +1 life at the end of a turn I never moved in (user ruling 2026-11-12).  args { held, moved, life, lifeMax } → heal
-const endTurn = (_ctx, _id, { held, moved, life, lifeMax }) => (held && !moved && life > 0 && life < lifeMax) ? 1 : 0;
+// end_turn (Guardian): +1 life at the end of a turn I never moved in (user ruling 2026-11-12).  args { held, moved, life, lifeMax, movedRounds } → heal
+// CR 2026-11-17: "heal if you stand still on the 2nd AND 3rd action of the turn" — data still_actions [2, 3] (1-based
+// actions of the turn that must see no move; default all three); movedRounds = the hg.round indices (0..2) I moved in
+// (absent → the old `moved` flag).
+const stillActions = (cd) => (Array.isArray(cd.still_actions) ? cd.still_actions : [1, 2, 3]);
+const endTurn = (ctx, id, { held, moved, life, lifeMax, movedRounds }) => {
+  const still = stillActions(cdOf(ctx, id));
+  const mv = Array.isArray(movedRounds) ? movedRounds.some(r => still.includes(r + 1)) : !!moved;
+  return (held && !mv && life > 0 && life < lifeMax) ? 1 : 0;
+};
 // step (Rogue / Cleric passives on a move that ends on a new hex). The caller asks the mover's STANDING class.
 // args { threatReady, ring: [enemy ids within the threat radius], trap (a laid enter-trap or building trap there),
 //        wtrap (a building's hidden trap), building (a building tile), trapLeft } → { stealth, trap: none|dodge|disable|spring }
-function step(_ctx, id, a) {
+// CR 2026-11-17 (Rogue, data shared_charge): one charge per turn for both — a step that needs both spends it on the trap.
+function step(ctx, id, a) {
   const stealth = id === 'class_rogue' && !!a.threatReady && (a.ring || []).length > 0;
   if (!a.trap) return { stealth, trap: 'none' };
-  if (id === 'class_rogue' && a.trapLeft > 0) return { stealth, trap: 'dodge' };
+  if (id === 'class_rogue' && a.trapLeft > 0) return { stealth: stealth && !rogueShared(cdOf(ctx, id)), trap: 'dodge' };
   if (id === 'class_cleric' && (a.wtrap || a.building)) return { stealth, trap: 'disable' };
   return { stealth, trap: 'spring' };
 }
 // dungeon_step: a hero ending the turn's 3rd action in an unexplored dungeon.  args { trap, trapLeft } → none|dodge|disable|spring
 const dungeonStep = (_ctx, id, { trap, trapLeft }) => !trap ? 'none' : (id === 'class_rogue' && trapLeft > 0) ? 'dodge' : id === 'class_cleric' ? 'disable' : 'spring';
 // combat_in (Manipulator): about to take combat damage this action?  args { list } (my damage entries)
-const combatIn = (_ctx, _id, { list }) => combatHit(list);
+// CR 2026-11-17: data trigger "attack" → only an incoming Attack strike (class-manipulator.mjs attackHit).
+const combatIn = (ctx, id, { list }) => (cdOf(ctx, id).trigger === 'attack' ? attackHit(list) : combatHit(list));
 // pick_target (Manipulator): the random nearby enemy that must swap.  args { seed, cands } → id | null
 const pickTarget = (ctx, _id, { seed, cands }) => pickManipTarget(seed, cands || [], ctx.sha);
 // chase_step (Avenger): one step of the chase bonus.  args { state: {chasers, bonus}, chasing: [ids] } → chaseBonusStep(...)
@@ -313,7 +346,17 @@ const ABILITIES = {
     const allies = E.ids.filter(o => o !== me && ctx.lifeOf(o) > 0 && !ctx.enemyOf(me, o) && ctx.dist(me, o) <= R).sort();
     return done(`an illusion life point for me and ${allies.length} all${allies.length === 1 ? 'y' : 'ies'} until the turn's 3rd action`, { illusion: [me, ...allies].map(o => ({ on: o, by: me })) });
   },
-  class_healer: (_ctx, me, _ab, E) => { const who = E.nearAlly || me; return done(`one life token restored to ${who === me ? 'me' : who.slice(0, 8)}`, { heals: [{ on: who, amount: 1, by: me }] }); },
+  // Healer (CR 2026-11-17, "heals you AND an adjacent ally"): one life to me and one to the adjacent ally I pointed at,
+  // else to the first adjacent living ally (id order); with no ally next to me, only to me.
+  // CP 2026-11-19 (user pick 4 a): data unmoved_only → no use on an action I move in (args moved); data ally_required →
+  // no use without an adjacent living ally. Either way the card stays untapped.
+  class_healer: (ctx, me, ab, E) => {
+    const cd = cdOf(ctx, 'class_healer');
+    if (cd.unmoved_only === true && ab.moved === true) return notDone([`[${ctx.label}] class healer: I move this action — the card stays untapped`]);
+    const ally = E.nearAlly || E.adjacentOf(me, o => !ctx.enemyOf(me, o))[0] || null;
+    if (cd.ally_required === true && !ally) return notDone([`[${ctx.label}] class healer: no ally next to me — the card stays untapped`]);
+    return done(`one life token restored to me${ally ? ` and to ${ally.slice(0, 8)}` : ''}`, { heals: [{ on: me, amount: 1, by: me }, ...(ally ? [{ on: ally, amount: 1, by: me }] : [])] });
+  },
   // Overlord (user ruling 2026-11-12): one armor life point, never two on a unit — mine, else the ally picked / the first bare adjacent ally.
   class_overlord: (ctx, me, _ab, E) => {
     const bare = (id) => !Number(ctx.view(id)?.armor);
@@ -322,17 +365,37 @@ const ABILITIES = {
     return done(`${who === me ? 'I wear' : `${who.slice(0, 8)} wears`} an armor life point`, { armor: [{ on: who, by: me }] });
   },
   // Druid (user ruling 2026-11-12): a stone (tile bonus) of the stat I am best at with no stone here yet; all four → beat the lowest.
+  // CR 2026-11-17 ("each use raises 2 stones: best stat + next best"): the stats picked in order — my stats with no
+  // stone here yet, best first (ties by name), then the stood stones lowest first — and the first TWO are rolled, each
+  // with its own point-buy (salt …:druid:<action> and …:druid:<action>:2). A failed roll raises nothing; a roll on a
+  // stood stat must beat that stone. Both rolls failed → nothing, the ability stays ready.
   class_druid: (ctx, me, ab, E) => {
+    // CPD 2026-11-19 (user option C, data unmoved_only = the Healer's gate): no use on an action I move in — the card stays untapped.
+    if (cdOf(ctx, 'class_druid').unmoved_only === true && ab.moved === true) return notDone([`[${ctx.label}] class druid: I move this action — the card stays untapped`]);
     const es = elemStatOf(ctx);
     const stones = parseJsonList(E.v.tile_tokens_json, []).filter(t => t.kind === 'bonus' && t.druid && t.q === E.here.q && t.r === E.here.r);
     const have = new Map(stones.map(t => [es(t.elem), t]));
-    const st = [...STATS].sort((a, b) => ctx.statOf(me, b) - ctx.statOf(me, a) || a.localeCompare(b)).find(x => !have.has(x))
-      || [...have.values()].sort((a, b) => a.value - b.value || String(a.id).localeCompare(String(b.id))).map(t => es(t.elem))[0] || E.stat;
-    const elem = (colours(ctx, 'class_druid')[st] || [])[0] || Object.keys(ELEM_TO_STAT).filter(el => es(el) === st)[0] || 'elem_vitality';
-    const pb = pointBuy(ctx.statOf(me, st), `${ab.salt || ''}:druid:${ctx.action}`, ctx.sha);
-    if (pb.fail) return notDone([`[${ctx.label}] class druid: the ${st} point-buy failed [${pb.dice.join(',')}] — no stone, the ability stays ready`]);
-    if (have.has(st) && have.get(st).value >= pb.value) return done(`all four stones stand; the ${pb.value} does not beat the lowest (${st} ${have.get(st).value})`, {});
-    return done(`a Druid stone of ${st} +${pb.value} rises on my tile`, { tokens: [{ by: me, kind: 'bonus', druid: true, elem, value: pb.value, q: E.here.q, r: E.here.r }] });
+    const order = [...[...STATS].sort((a, b) => ctx.statOf(me, b) - ctx.statOf(me, a) || a.localeCompare(b)).filter(x => !have.has(x)),
+      ...[...have.values()].sort((a, b) => a.value - b.value || String(a.id).localeCompare(String(b.id))).map(t => es(t.elem))];
+    const picks = (order.length ? order : [E.stat]).slice(0, 2);
+    const tokens = [], notes = [], fails = [];
+    // CP 2026-11-19 (user pick 2 b, data chain_stones): the 2nd point-buy rolls only if the 1st succeeded.
+    const chain = cdOf(ctx, 'class_druid').chain_stones === true;
+    let rolled = 0;
+    picks.forEach((st, i) => {
+      if (chain && i > 0 && fails.length) return;
+      rolled++;
+      const elem = (colours(ctx, 'class_druid')[st] || [])[0] || Object.keys(ELEM_TO_STAT).filter(el => es(el) === st)[0] || 'elem_vitality';
+      const pb = pointBuy(ctx.statOf(me, st), `${ab.salt || ''}:druid:${ctx.action}${i ? `:${i + 1}` : ''}`, ctx.sha);
+      if (pb.fail) { fails.push(`[${ctx.label}] class druid: the ${st} point-buy failed [${pb.dice.join(',')}] — no ${st} stone`); return; }
+      if (have.has(st) && have.get(st).value >= pb.value) { notes.push(`the ${pb.value} does not beat the ${st} stone ${have.get(st).value}`); return; }
+      tokens.push({ by: me, kind: 'bonus', druid: true, elem, value: pb.value, q: E.here.q, r: E.here.r });
+      notes.push(`a Druid stone of ${st} +${pb.value} rises on my tile`);
+    });
+    // CP2 2026-11-19 (user answer 3, data fail_spends): a failed roll SPENDS the tap (the card taps, no stone).
+    if (fails.length === rolled && cdOf(ctx, 'class_druid').fail_spends === true) return { used: true, note: 'no stone — the point-buy failed, the tap is spent', log: [], mine: fails, out: {} };
+    if (fails.length === rolled) return notDone([...fails, `[${ctx.label}] class druid: no stone — the ability stays ready`]);
+    return { ...done(notes.join('; '), tokens.length ? { tokens } : {}), mine: fails };
   },
   // Witch (user rework 2026-11-14, tap): the enemy picked within range, else one there by the reveal salt, discards N random hand cards.
   class_witch: (ctx, me, ab, E) => {
@@ -342,8 +405,11 @@ const ABILITIES = {
     const on = foes.includes(E.peer) ? E.peer : pickBySalt(`${seed}:who`, foes, ctx.sha);
     if (!on) return notDone([`[${ctx.label}] class witch: no enemy within ${cfg.range} hexes — the card stays untapped`]);
     const n = Number(cfg.hand_discard?.n) || 3;
-    return done(`${on.slice(0, 8)} puts ${n} random hand cards onto its discard pile`, { discards: [{ on, by: me, n, seed, why: 'witch' }] },
-      [`[${ctx.label}] witch: ${me.slice(0, 14)} makes ${on.slice(0, 14)} discard ${n} (seed ${ctx.sha(seed).slice(0, 8)})`]);
+    // CP 2026-11-19 (user pick 8 a, data self_discard): the Witch also puts that many random cards of her OWN hand onto
+    // her discard pile (peer.mjs: the forced-discard loop, seed …:self).
+    const own = Number.isInteger(cdOf(ctx, 'class_witch').self_discard) && cdOf(ctx, 'class_witch').self_discard > 0 ? cdOf(ctx, 'class_witch').self_discard : 0;
+    return done(`${on.slice(0, 8)} puts ${n} random hand cards onto its discard pile${own ? ` — and I discard ${own} of mine` : ''}`, { discards: [{ on, by: me, n, seed, why: 'witch' }, ...(own ? [{ on: me, by: me, n: own, seed: `${seed}:self`, why: 'witch', self: true }] : [])] },
+      [`[${ctx.label}] witch: ${me.slice(0, 14)} makes ${on.slice(0, 14)} discard ${n}${own ? ` and discards ${own} of its own` : ''} (seed ${ctx.sha(seed).slice(0, 8)})`]);
   },
   // Avenger (user rework #2 2026-11-14, once per turn): every living wild monster within lure_range wakes and chases me.
   class_avenger: (ctx, me, _ab, E) => {
@@ -377,11 +443,12 @@ const ABILITIES = {
     return done('no fallen ally in reach — an archived creature of mine enters if I have one', { revives: [{ by: me, who: null }] });
   },
 };
-function ability(ctx, id, { actor, ab, salt }) {
+// CP 2026-11-19: args.moved = the actor moves in this action (peer.mjs moveCodeOf) — the Healer's unmoved_only gate.
+function ability(ctx, id, { actor, ab, salt, moved }) {
   if (PEER_ABILITIES[id]) return null;
   const f = ABILITIES[id];
   if (!f) return notDone();
-  return f(ctx, actor, { ...(ab || {}), salt }, abilityEnv(ctx, actor, ab));
+  return f(ctx, actor, { ...(ab || {}), salt, moved: moved === true }, abilityEnv(ctx, actor, ab));
 }
 
 // ---- dispatcher -------------------------------------------------------------------------------------------------

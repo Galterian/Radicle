@@ -326,5 +326,26 @@ try { ({ checkClass } = await import('./classes-rebalancing-check.mjs')); } catc
   yes('clearForeignClasses', !CL.isForeignClassId('class_marauder') && !('class_zealot' in CL.CLASS_RULES));
 }
 
+// ---------------------------------------------------------------- RF. a refuser's summoned companions refuse too (ruling 2026-11-19)
+{
+  const sel = await import('../foreign-select.mjs');
+  const KEYS = ['FOREIGN_REFUSERS', 'FOREIGN_HOLDERS', 'FOREIGN_ORDER', 'OWNER_PEER_ID', 'PEER_LABEL', 'CL_ACCEPT'];
+  const saved = Object.fromEntries(KEYS.map(k => [k, process.env[k]]));
+  const setEnv = (o) => { for (const k of KEYS) delete process.env[k]; for (const [k, v] of Object.entries(o)) if (v !== undefined) process.env[k] = v; };
+  const as = async (label, env = {}) => {
+    setEnv({ FOREIGN_REFUSERS: 'P-Agent5', PEER_LABEL: label, ...env });
+    const lines = [], p = await createClPeer({ selfId: `peer:${label}`, label, dimId: 'dim-rf', log: (l) => lines.push(l), validate: null });
+    p.store.addDef(MARAUDER);
+    const tapeC = [{ type: 'evt_action_commit', turn: 3, round: 0, actor_peer_id: 'peer:T', payload: { cl_ref: REF } }];
+    return { missing: await p.missingForReveal(tapeC, 3, 0), role: sel.foreignRole(label), why: lines.find(l => / validator /.test(l))?.replace(/.* validator /, '') };
+  };
+  eq('RF: the listed refuser lists the Marauder in cl_missing', await as('P-Agent5'), { missing: [REF.sha256], role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: its companion P-Agent5-sum1 lists it too', await as('P-Agent5-sum1', { OWNER_PEER_ID: 'peer:P-Agent5' }), { missing: [REF.sha256], role: 'refuser', why: 'FOREIGN_REFUSERS (refuse all)' });
+  eq('RF: a companion of that companion too', (await as('P-Agent5-sum1-sum1', { OWNER_PEER_ID: 'peer:P-Agent5-sum1' })).missing, [REF.sha256]);
+  eq('RF: a companion of a non-refuser does not', (await as('P-Agent4-sum1', { OWNER_PEER_ID: 'peer:P-Agent4' })).missing, []);
+  eq('RF: CL_ACCEPT=0 inherited by the companion env → lists it', await as('P-Agent4-sum2', { OWNER_PEER_ID: 'peer:P-Agent4', CL_ACCEPT: '0' }), { missing: [REF.sha256], role: 'all', why: 'CL_ACCEPT=0 (refuse all)' });
+  setEnv(saved);
+}
+
 console.log(fails ? `${fails} classes handshake check(s) FAILED` : 'all classes handshake checks passed');
 process.exit(fails ? 1 : 0);
