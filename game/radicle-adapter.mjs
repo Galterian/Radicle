@@ -99,10 +99,18 @@ const SSH_AUTH_SOCK = await detectSshAuthSock();
 // the main chaosD6 code repo (`RADICLE_RID`). Prefix is the env-var namespace;
 // the second argument is a shared fallback so the dims env, if unconfigured,
 // transparently falls back to the code env (= current single-RID behaviour).
+const DEFAULT_DIMS_RID = 'z2xbfJfwT3kukR73m8LXmmuvchEwr';   // chaosD6-Dimensions
 async function buildEnv(prefix, fallback = null) {
   if (IS_MOBILE) return { enabled: false, reason: 'mobile peer — radicle disabled' };
   if (!RADICLE_PUSH_REMOTE) return { enabled: false, reason: 'disabled via RADICLE_PUSH_REMOTE=0' };
   let rid = process.env[`${prefix}RID`] || '';
+  // Dims env: default to the chaosD6-Dimensions repo the phone lists (mobile-menu / MOBILE_DIMS_RID). Unset used to
+  // inherit the CODE repo, so desktop doors (Desktop-Micro …) never reached the phone's list (2026-11-19).
+  // RADICLE_DIMS_RID=code keeps the old single-repo behaviour. A `rad:` prefix is tolerated.
+  if (prefix === 'RADICLE_DIMS_') {
+    if (rid === 'code') rid = '';
+    else rid = (rid || DEFAULT_DIMS_RID).replace(/^rad:/, '');
+  }
   let pushUrl = process.env[`${prefix}PUSH_URL`] || '';
   // For the code env (prefix "RADICLE_"), fall back to the project's own rad
   // remote. The dims env has no project-root remote to probe — if its vars are

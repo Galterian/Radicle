@@ -17,6 +17,9 @@ fi
 # The swarm summary scans the hashgraph tape (swarm-test.mjs §6 reads hashgraph.1.jsonl + hashgraph.jsonl): cap it at
 # 64 MB per file (peer.mjs TAPE_MAX_BYTES rotates past it) — an uncapped tape reached 1.2 GB (Swarm-1159). 0 = unbounded.
 export TAPE_MAX_BYTES="${TAPE_MAX_BYTES:-67108864}"
+# Swarm dims are tests: keep their Doors on the local bare only, off the public Dimensions repo the phone lists
+# (before 2026-11-19 every Swarm-HHMM landed in the Code repo's ActiveDimensions/*). RADICLE_PUSH_REMOTE=1 to publish.
+export RADICLE_PUSH_REMOTE="${RADICLE_PUSH_REMOTE:-0}"
 # NOGUN=1: every peer (launcher A/C, joiners, companions) runs without Gun (P2P rework M6 step 1). Default: Gun on.
 export NOGUN="${NOGUN:-0}"
 ps -eo pid,comm,args | grep -E '^ *[0-9]+ +node +.*\.mjs' | grep -v bash | awk '{print $1}' | xargs -r kill 2>/dev/null || true
