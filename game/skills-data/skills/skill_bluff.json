@@ -9,8 +9,8 @@
   "point_buy_stat": null,
   "text": "Negate enemy's action and replace it with Empty Posture.",
   "flags": {"action":"M","permanent":false,"negating":true,"hooks":["negate_action"],"range":1,"negate":{"codes":["A","M","B","P","EM"],"who":"target","mode":"ep"}},
-  "uses": ["skills_std"],
+  "uses": ["skills_std", "skills_pass"],
   "hooks": {
-    "negate_action": {"engine":"js","impl":"skills.mjs#negateAction","note":"pass 1: the target's action → Empty Posture (a trance collapses), riders return. JS this milestone."}
+    "negate_action": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"M"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"let":[{"o":{"if":[{"bool":[{"var":"t"}]},{"reveal_of":[{"var":"t"}]},{"var":"t"}]}},{"if":[{"and":[{"bool":[{"var":"o"}]},{"<=":[{"dist":[{"var":"actor"},{"var":"t"}]},1]},{"or":[{"trance_has":[{"var":"t"}]},{"!==":[{"eff_action":[{"var":"t"}]},"EP"]}]}]},{"let":[{"what":{"if":[{"trance_has":[{"var":"t"}]},{"join":[{"trance_opts":[{"var":"t"}]},"+"]},{"eff_action":[{"var":"t"}]}]}},{"concat":[[{"obj":{"op":"set_code","id":{"var":"t"},"code":"EP"}},{"obj":{"op":"drop_trance","id":{"var":"t"}}}],{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},{"var":"what"}]}]}]},[]]}]}]}]}
   }
 }

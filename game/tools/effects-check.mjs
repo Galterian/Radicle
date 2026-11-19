@@ -4,6 +4,10 @@ import { createHash } from 'node:crypto';
 import { manipulatorConfig, pickAltAction, combatHit, pickManipTarget, applyManipSwap } from '../class-manipulator.mjs';
 import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum, invisibilityBreaks } from '../effects.mjs';
 import { pickBySalt, pickHandDiscards } from '../effects.mjs';
+import { awakePlan } from '../awake.mjs';
+import { possessArchivePick, phylacteryPick, releasedPossessed, releasedCompanions } from '../possess.mjs';
+import { placedBuildingsFrom } from '../js/features.js';
+import { ledgerUnits, ledgerFor } from '../js/world-ledger.js';
 import { rogueConfig, clericConfig, chargesLeft, trapsInRange, clericRoute, disabledCardMoves } from '../class-traps.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
@@ -388,6 +392,54 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('awake moves the adjacent ally first', resolveEffect(mk(far), aw).moves, [{ who: 'A', q: 3, r: 0, reason: 'awakened' }]);
   eq('awake without an adjacent ally moves me', resolveEffect(mk({ ...far, A: { q: -4, r: 0 } }), aw).moves[0].who, 'C');
   eq('awake without a tile fizzles', resolveEffect(mk(far), { ...aw, target: null }).status, 'fizzled');
+  // Awake plan (user request 2026-11-17: clicked tile, else the most beneficial move — game/awake.mjs → cast.awake).
+  const U = (id, q, r, side, life = 4, lifeMax = 4) => ({ id, q, r, side, life, lifeMax });
+  const plan = (units, extra = {}) => {
+    const occ = (q, r) => units.some(u => u.q === q && u.r === r);
+    const blds = extra.buildings || [];
+    return awakePlan({ me: { id: 'C', q: units[0].q, r: units[0].r }, units, buildings: blds, picked: extra.picked || null,
+      unitFree: extra.none ? () => false : (q, r) => !occ(q, r), siteFree: extra.none ? () => false : (q, r) => !occ(q, r) && !blds.some(b => b.q === q && b.r === r),
+      hasBuilding: (q, r) => blds.some(b => b.q === q && b.r === r) });
+  };
+  const fight = [U('C', 0, 0, 'me'), U('A', -1, 0, 'ally'), U('E', 5, 0, 'enemy')];
+  eq('awake plan, no click: the healthy ally 6 hexes off gains most → into contact with the enemy', plan(fight), { kind: 'unit', who: 'A', from: { q: -1, r: 0 }, q: 4, r: 0, gain: 5, how: 'auto' });
+  eq('awake plan, clicked free tile: the subject that gains most there (the ally, +3)', plan(fight, { picked: { q: 2, r: 0 } }), { kind: 'unit', who: 'A', from: { q: -1, r: 0 }, q: 2, r: 0, gain: 3, how: 'picked tile' });
+  eq('awake plan, clicked my own hex: I move, to my best hex', plan(fight, { picked: { q: 0, r: 0 } }), { kind: 'unit', who: 'C', from: { q: 0, r: 0 }, q: 4, r: 0, gain: 4, how: 'picked thing' });
+  eq('awake plan, clicked hex 11 away: auto', plan(fight, { picked: { q: 11, r: 0 } }).how, 'auto (picked hex not usable)');
+  eq('awake plan, hurt (1/4) next to a foe: as far as the cap (10) allows, shortest move', plan([U('C', 0, 0, 'me', 1, 4), U('A', -4, 0, 'ally'), U('E', 2, 0, 'enemy')]), { kind: 'unit', who: 'C', from: { q: 0, r: 0 }, q: -8, r: 0, gain: 8, how: 'auto' });
+  eq('awake plan, no foe: the building 2 away goes next to me and my ally (+2 each)', plan([U('C', 0, 0, 'me'), U('A', 1, 0, 'ally')], { buildings: [{ q: 0, r: -2, label: 'Tower' }] }), { kind: 'building', label: 'Tower', from: { q: 0, r: -2 }, q: 1, r: -1, gain: 4, how: 'auto' });
+  eq('awake plan, clicked the building: it is what moves', plan([U('C', 0, 0, 'me'), U('A', 1, 0, 'ally')], { buildings: [{ q: 0, r: -2, label: 'Tower' }], picked: { q: 0, r: -2 } }).kind, 'building');
+  eq('awake plan, nothing can move → none', plan(fight, { none: true }).kind, 'none');
+  const bo = resolveEffect(mk(far), { ...aw, awake: { kind: 'building', label: 'Tower', from: { q: 0, r: -2 }, q: 1, r: -1, gain: 4, how: 'auto' } });
+  eq('awake with a building plan → a building relocation, done', [bo.status, bo.relocations], ['done', [{ kind: 'building', owner: 'world', id: 'bld:0,-2', label: 'Tower', by: 'C', from: { q: 0, r: -2 }, q: 1, r: -1 }]]);
+  eq('awake with a unit plan ignores the legacy tile rule', resolveEffect(mk(far), { ...aw, target: null, awake: { kind: 'unit', who: 'C', from: { q: 0, r: 0 }, q: 4, r: 0, gain: 4, how: 'auto' } }).moves, [{ who: 'C', q: 4, r: 0, reason: 'awakened' }]);
+  eq('awake with a none plan fizzles, no move', (o => [o.status, o.moves.length])(resolveEffect(mk(far), { ...aw, awake: { kind: 'none', why: 'x' } })), ['fizzled', 0]);
+  // features.js overlay: a vacated hex hides the building, a later `made` there stands again.
+  const pb = placedBuildingsFrom([{ peer_id: 'C', world_edits_json: JSON.stringify([{ id: 'moved:0,-2', q: 0, r: -2, vacated: true, at: 5 }, { id: 'made:1,-1', q: 1, r: -1, made: { label: 'Tower' }, at: 5 }]) },
+    { peer_id: 'B', world_edits_json: JSON.stringify([{ id: 'made:0,-2', q: 0, r: -2, made: { label: 'Old' }, at: 2 }, { id: 'made:3,3', q: 3, r: 3, made: { label: 'X' }, at: 1 }]) }]);
+  eq('placed overlay: vacated hex, moved building, untouched one', pb.map(b => [b.q, b.r, b.vacated ? 'vacated' : b.label]), [[0, -2, 'vacated'], [1, -1, 'Tower'], [3, 3, 'X']]);
+  eq('placed overlay: a made after the vacate stands', placedBuildingsFrom([{ peer_id: 'C', world_edits_json: JSON.stringify([{ id: 'moved:0,-2', q: 0, r: -2, vacated: true, at: 5 }, { id: 'made:0,-2', q: 0, r: -2, made: { label: 'Back' }, at: 9 }]) }]).map(b => b.label), ['Back']);
+  // Wall tokens (2026-11-18): a hurt caster whose only movable thing is a wall → the wall goes between it and the enemy.
+  const wallPlan = awakePlan({ me: { id: 'C', q: 0, r: 0 }, units: [U('C', 0, 0, 'me', 1, 4), U('E', 3, 0, 'enemy')], walls: [{ q: 0, r: -2, owner: 'A', id: 'o1', label: 'obstacle' }],
+    unitFree: () => false, siteFree: (q, r) => !(q === 0 && r === 0) && !(q === 3 && r === 0), hasBuilding: () => false });
+  eq('awake plan: a wall shields the hurt caster (next to it, toward the enemy)', wallPlan, { kind: 'wall', label: 'obstacle', from: { q: 0, r: -2 }, q: 1, r: 0, gain: 3, how: 'auto', reloc: { kind: 'obstacle', owner: 'A', id: 'o1', label: 'obstacle', by: 'C', q: 1, r: 0 } });
+  eq('awake plan: a labyrinth wall relocation is a world edit (kind wall)', awakePlan({ me: { id: 'C', q: 0, r: 0 }, units: [U('C', 0, 0, 'me', 1, 4), U('E', 3, 0, 'enemy')], walls: [{ q: -1, r: 1, lab: true }], unitFree: () => false, siteFree: () => true, hasBuilding: () => false }).reloc,
+    { kind: 'wall', owner: 'world', id: 'lab:-1,1', label: 'Impassable Wall', by: 'C', from: { q: -1, r: 1 }, q: 1, r: 0 });
+  const wo = resolveEffect(mk(far), { ...aw, awake: wallPlan });
+  eq('awake with a wall plan → the obstacle relocation (applied by its owner)', wo.relocations, [wallPlan.reloc]);
+  const tk = resolveEffect(mk(far), { ...aw, target: null, _channel_tick: true });
+  eq('awake channel tick: a Harmony bonus token on my tile (Will 12 point-buy) or a failed roll, nothing moves', [tk.status, tk.moves.length, tk.tokens.every(t => t.kind === 'bonus' && t.elem === 'elem_harmony' && t.q === 0 && t.r === 0), tk.rolls.length], ['done', 0, true, 1]);
+  const first = resolveEffect(mk(far), aw);
+  eq('awake cast: the card stands as a channel permanent (stop break; contact stop keyed in peer.mjs)', [first.permanents, first.channels.map(c => c.stop)], [[{ on: 'C', id: 'effect_awake' }], ['break']]);
+  // World-edit ledger (user ruling 2026-11-18): a mover who left still counts through the others' ledgers.
+  const mv = [{ id: 'made:1,-1', q: 1, r: -1, made: { label: 'Tower' }, at: 5 }, { id: 'moved:0,-2', q: 0, r: -2, vacated: true, at: 5 }];
+  const gone = ledgerUnits([{ peer_id: 'B', world_edits_json: '[]', world_ledger_json: JSON.stringify(mv.map(e => ({ ...e, by: 'M' }))) }]);
+  eq('ledger: the mover left — the moved building still stands for the others', placedBuildingsFrom(gone).map(b => [b.q, b.r, b.vacated ? 'vacated' : b.label, b.by]), [[0, -2, 'vacated', 'M'], [1, -1, 'Tower', 'M']]);
+  const d4 = { id: 'dng:3,3', explored: 4, at: 4, by: 'M' }, d9 = { id: 'dng:3,3', explored: 9, at: 9, by: 'M' };
+  eq('ledger: last writer wins by clock, whatever the order', [JSON.parse(ledgerUnits([{ peer_id: 'B', world_ledger_json: JSON.stringify([d9]) }, { peer_id: 'C', world_ledger_json: JSON.stringify([d4]) }]).find(u => u.peer_id === 'M').world_edits_json)[0].explored,JSON.parse(ledgerUnits([{ peer_id: 'C', world_ledger_json: JSON.stringify([d4]) }, { peer_id: 'B', world_ledger_json: JSON.stringify([d9]) }]).find(u => u.peer_id === 'M').world_edits_json)[0].explored], [9, 9]);
+  eq('ledger: an author\'s own newer edit beats a stale copy', JSON.parse(ledgerUnits([{ peer_id: 'M', world_edits_json: JSON.stringify([{ id: 'dng:3,3', explored: 12, at: 12 }]) }, { peer_id: 'B', world_ledger_json: JSON.stringify([d9]) }]).find(u => u.peer_id === 'M').world_edits_json)[0].explored, 12);
+  eq('ledger: my published ledger leaves my own edits out (they travel in world_edits_json)', ledgerFor([{ peer_id: 'B', world_edits_json: JSON.stringify([{ id: 'x', at: 1 }]), world_ledger_json: JSON.stringify([{ ...d9 }]) }], 'B').map(e => [e.by, e.id]), [['M', 'dng:3,3']]);
+  eq('ledger: the same bytes whatever the unit order', JSON.stringify(ledgerUnits([{ peer_id: 'A', world_edits_json: JSON.stringify(mv) }, { peer_id: 'B', world_ledger_json: JSON.stringify([d9]) }])), JSON.stringify(ledgerUnits([{ peer_id: 'B', world_ledger_json: JSON.stringify([d9]) }, { peer_id: 'A', world_edits_json: JSON.stringify(mv) }])));
 }
 
 // Blessing / Phantom / Possess / Vision (user spec 2026-10-29).
@@ -400,11 +452,50 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('blessing without an attachment fizzles', resolveEffect(w, { ...bl, attach: null }).status, 'fizzled');
   eq('phantom flags the spawn + permanent', [resolveEffect(w, { actor: 'C', effect_id: 'effect_phantom', elements: ['elem_vitality', 'elem_souls', 'elem_space'], salt: 'ph', target: null, is_instant: false }).phantom, resolveEffect(w, { actor: 'C', effect_id: 'effect_phantom', elements: ['elem_vitality', 'elem_souls', 'elem_space'], salt: 'ph', target: null, is_instant: false }).permanents.length], [true, 1]);
   const ps = { actor: 'C', effect_id: 'effect_possess_phylactery', elements: ['elem_vitality'], salt: 'ps', target: { kind: 'character', ref: 'E' }, is_instant: false };
-  eq('possess: Σ54 beats Σ38 → E is bound to me', [resolveEffect(w, ps).possess, resolveEffect(w, ps).permanents.length], [{ bind: 'E' }, 1]);
-  eq('possess: the permanent lands in the POSSESSED unit\'s holding, marked by the possessor (user ruling 2026-10-30)', resolveEffect(w, ps).permanents, [{ on: 'E', id: 'effect_possess_phylactery', by: 'C' }]);
-  eq('possess against a stronger Σ fizzles', resolveEffect(world({ ...stats, E: M(20, 20, 20, 20) }, tiles, sides), ps).status, 'fizzled');
-  eq('phylactery shatters the named enemy permanent', resolveEffect(w, { ...ps, phylactery: { peer_id: 'E', perm: 'effect_haste' } }).possess, { phylactery: { peer_id: 'E', perm: 'effect_haste' } });
-  eq('phylactery on a permanent the enemy does not hold fizzles', resolveEffect(w, { ...ps, phylactery: { peer_id: 'E', perm: 'effect_aura' } }).status, 'fizzled');
+  // Possess (user ruling 2026-11-17): the archived creature picked in the reveal → I play it; the permanent is MINE.
+  const pso = resolveEffect(w, { ...ps, possess: { creature_id: 'mon_wolf', card_id: 'mon_wolf#ab12', name: 'Wolf' } });
+  eq('possess: the picked archive creature rides out, the permanent lands in my holding', [pso.status, pso.possess, pso.permanents], ['done', { creature: { creature_id: 'mon_wolf', card_id: 'mon_wolf#ab12', name: 'Wolf' } }, [{ on: 'C', id: 'effect_possess_phylactery' }]]);
+  eq('possess needs no target and no Σ contest (a stronger enemy next to me changes nothing)', resolveEffect(world({ ...stats, E: M(20, 20, 20, 20) }, tiles, sides), { ...ps, target: null, possess: { creature_id: 'mon_wolf' } }).possess, { creature: { creature_id: 'mon_wolf', card_id: null, name: null } });
+  const phy = resolveEffect(w, ps);
+  eq('possess with no creature in my archive → the Phylactery permanent (mine)', [phy.status, phy.possess, phy.permanents], ['done', { phylactery: true }, [{ on: 'C', id: 'effect_possess_phylactery' }]]);
+  eq('a bogus pick (non-string id) is the Phylactery too', resolveEffect(w, { ...ps, possess: { creature_id: 7 } }).possess, { phylactery: true });
+  // possess.mjs: the archive pick and the Phylactery's target (user ruling 2026-11-17).
+  const arch = [{ kind: 'skill', card_id: 's1' }, { kind: 'creature', card_id: 'w#1', creature_id: 'mon_wolf', name: 'Wolf', stat_sum: 30 }, { kind: 'creature', card_id: 't#1', creature_id: 'mon_troll', name: 'Troll', stat_sum: 44 }];
+  eq('possess pick: the picked card', possessArchivePick(arch, 'w#1').card_id, 'w#1');
+  eq('possess pick: none picked (or gone) → the strongest Σ', [possessArchivePick(arch, null).card_id, possessArchivePick(arch, 'gone').card_id], ['t#1', 't#1']);
+  eq('possess pick: no creature → null (Phylactery)', possessArchivePick([{ kind: 'effect', card_id: 'e' }], null), null);
+  const T = { C: { q: 0, r: 0 }, E: { q: 1, r: 0 }, F: { q: 2, r: 0 }, G: { q: 5, r: 0 }, A: { q: -1, r: 0 } };
+  const SD = { C: 'p', A: 'p', E: 'm', F: 'm', G: 'm' };
+  const P = { E: ['class_rogue'], F: ['effect_shield', 'effect_summoning', 'effect_haste'], G: ['effect_balefire'], A: ['effect_aura'] };
+  const PW = { F: { effect_shield: 4, effect_summoning: 6, effect_haste: 6 }, G: { effect_balefire: 6 } };
+  const pctx = (over = {}) => ({ me: 'C', ids: Object.keys(T), alive: () => true, enemy: (a, b) => SD[a] !== SD[b], dist: (a, b) => Math.max(Math.abs(T[a].q - T[b].q), Math.abs(T[a].r - T[b].r)),
+    perms: (id) => P[id] || [], power: (id, p) => PW[id]?.[p] || 1, holdsCreature: (p) => p === 'effect_summoning', hostile: (p) => p === 'effect_balefire', ...over });
+  const pp = phylacteryPick(pctx(), 2);
+  eq('phylactery: the nearest enemy WITH a permanent (E holds only its class) → F; power 6 tie → the creature holder Summoning', [pp?.peer_id, pp?.perm, pp?.power], ['F', 'effect_summoning', 6]);
+  eq('phylactery: nothing within reach → null (inactive)', phylacteryPick(pctx({ ids: ['C', 'A', 'E', 'G'] }), 2), null);
+  eq('phylactery: allies never, reach 5 takes the farther enemy when the near ones hold nothing', phylacteryPick(pctx({ ids: ['C', 'A', 'E', 'G'] }), 5)?.perm, 'effect_balefire');
+  // Swarm-1536 T16.R2: a released possessed creature is gone for every resolver, whether or not its own life-0
+  // snapshot arrived (stale living copy at (2,6) vetoed its possessor's move on 3 of 12 peers).
+  const rv = (ownerSum, extra = {}) => new Map([
+    ['peer:H', { peer_id: 'peer:H', summoned_csv: ownerSum, permanents_csv: '' }],
+    ['peer:H-sum1', { peer_id: 'peer:H-sum1', possessed_by: 'peer:H', owner_peer_id: 'peer:H', life: 5, tile_q: 2, tile_r: 6 }],
+    ['peer:B', { peer_id: 'peer:B', owner_peer_id: 'peer:H', life: 3 }],   // a bound / summoned unit (no possessed_by): untouched
+    ['peer:X', { peer_id: 'peer:X', possessed_by: 'peer:Y', life: 4 }],   // 2026-10-30 form (possessed enemy, own holding): untouched
+    ...Object.entries(extra)]);
+  eq('possess release: possessor no longer lists its creature → it leaves the view (stale living snapshot or not)', releasedPossessed(rv('peer:B')), ['peer:H-sum1']);
+  eq('possess release: still listed → stays', releasedPossessed(rv('peer:B,peer:H-sum1')), []);
+  eq('possess release: possessor not in the view → no judgement', releasedPossessed(new Map([...rv('')].filter(([id]) => id !== 'peer:H'))), []);
+  eq('possess release: never myself (a vanishing creature resolving)', releasedPossessed(rv(''), 'peer:H-sum1'), []);
+  // 2026-11-18: every companion (companion_of marker) — Summoning / Golems / phantom alike; bound creatures never.
+  const cv = (ownerSum, withOwner = true) => new Map([
+    ...(withOwner ? [['peer:O', { peer_id: 'peer:O', summoned_csv: ownerSum }]] : []),
+    ['peer:O-sum1', { peer_id: 'peer:O-sum1', companion_of: 'peer:O', owner_peer_id: 'peer:O', life: 4, tile_q: 1, tile_r: 1 }],   // Golem companion
+    ['peer:O-sum2', { peer_id: 'peer:O-sum2', companion_of: 'peer:O', owner_peer_id: 'peer:O', life: 4, tile_q: 1, tile_r: 2 }],   // Summoning companion
+    ['peer:W', { peer_id: 'peer:W', owner_peer_id: 'peer:O', life: 5 }]]);   // a wild creature BOUND by O (∀ Summoning): no companion_of
+  eq('companion release: the owner no longer lists it → dropped; the bound creature (not listed either) untouched', releasedCompanions(cv('peer:O-sum2')), ['peer:O-sum1']);
+  eq('companion release: listed companions stay', releasedCompanions(cv('peer:O-sum1,peer:O-sum2,peer:W')), []);
+  eq('companion release: owner absent from the view → no judgement', releasedCompanions(cv('', false)), []);
+  eq('companion release: never myself', releasedCompanions(cv(''), 'peer:O-sum1'), ['peer:O-sum2']);
   const vi = { actor: 'C', effect_id: 'effect_vision', elements: ['elem_time'], salt: 'vi', target: { kind: 'character', ref: 'E' }, is_instant: false };
   eq('vision: World 14 beats 10 → peek at E\'s hand', resolveEffect(w, vi).peeks, [{ by: 'C', kind: 'hand', of: 'E' }]);
   eq('vision on a tile reveals the map there', resolveEffect(w, { ...vi, target: { kind: 'tile', ref: { q: 4, r: 4 } } }).peeks, [{ by: 'C', kind: 'tile', q: 4, r: 4 }]);
@@ -536,5 +627,82 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('spirit link: no copy → no link', N.naturalLinkStats(0), []);
 }
 
+// Fossilization 1.1.0 (user request 2026-11-17): Earth OR Vitality bonus tile token — the cast's elem picks it,
+// else the caster's higher stat (tie Earth); the Earth shield token and the rest-of-turn lock are unchanged.
+{
+  const { tileTokenElem } = await import('../effects.mjs');
+  const ms = (v, m) => (el) => (el === 'elem_vitality' ? v : m);
+  eq('fossil pick: no elem, Matter higher → Earth', tileTokenElem({ effect_id: 'effect_fossilization' }, 'elem_earth', ms(8, 15)), 'elem_earth');
+  eq('fossil pick: no elem, Vitality higher → Vitality', tileTokenElem({ effect_id: 'effect_fossilization' }, 'elem_earth', ms(15, 8)), 'elem_vitality');
+  eq('fossil pick: tie → Earth', tileTokenElem({ effect_id: 'effect_fossilization' }, 'elem_earth', ms(12, 12)), 'elem_earth');
+  eq('fossil pick: clicked Vitality', tileTokenElem({ effect_id: 'effect_fossilization', elem: 'elem_vitality' }, 'elem_earth', ms(1, 20)), 'elem_vitality');
+  eq('fossil pick: clicked Fire is not offered → stat rule', tileTokenElem({ effect_id: 'effect_fossilization', elem: 'elem_fire' }, 'elem_earth', ms(1, 20)), 'elem_earth');
+  eq('other effects untouched (Ice Blast water)', tileTokenElem({ effect_id: 'effect_ice_blast', elem: 'elem_vitality' }, 'elem_water', ms(20, 1)), 'elem_water');
+  const tiles = { C: { q: 0, r: 0 }, E: { q: 1, r: 0 } };
+  const sides = { C: 'a', E: 'b' };
+  let landedV = null, landedLock = 0;
+  for (let i = 0; i < 40 && landedV === null; i++) {
+    const oc = resolveEffect(world({ C: M(15, 10, 8, 10), E: M(10, 10, 10, 10) }, tiles, sides), { actor: 'C', effect_id: 'effect_fossilization', elements: ['elem_earth', 'elem_vitality'], salt: `fz${i}`, target: { kind: 'character', ref: 'E' }, is_instant: false });
+    if (oc.status === 'done') { landedV = oc.tokens.filter(t => t.kind === 'bonus').map(t => t.elem); landedLock = oc.locks.filter(l => l.on === 'E' && l.restOfTurn).length; eq('fossil shield stays Earth', oc.tokens.filter(t => t.kind === 'shield').map(t => t.elem), ['elem_earth']); }
+  }
+  eq('fossil Vitality 15 > Matter 8 → Vitality bonus token', landedV, ['elem_vitality']);
+  eq('fossil locks E for the rest of the turn', landedLock, 1);
+}
+// Effect result toasts (effect-results.mjs): success over the locked enemy; failed over the declared target.
+{
+  const { effectResultsOf, plannedLossResults, isPenaltyRule } = await import('../effect-results.mjs');
+  const { EFFECT_RULES } = await import('../effects.mjs');
+  const enemyOf = (a, b) => (a < 'M') !== (b < 'M');   // A..L one side, M..Z the other
+  const base = { rules: EFFECT_RULES, enemyOf, tileOf: (id) => ({ q: id.charCodeAt(0) - 65, r: 0 }), tag: '1:0' };
+  const oc = (status, extra = {}) => ({ status, hits: [], tokens: [], statTokens: [], locks: [], moves: [], peeks: [], notes: [], ...extra });
+  eq('penalty: fossilization / oblivion / lightning / aging / banish', ['effect_fossilization', 'effect_oblivion', 'effect_lightning', 'effect_aging', 'effect_banish'].map(id => isPenaltyRule(EFFECT_RULES[id])), [true, true, true, true, true]);
+  eq('no penalty: fireball / shield / potion brew', ['effect_fireball', 'effect_shield', 'effect_potion_brew'].map(id => isPenaltyRule(EFFECT_RULES[id])), [false, false, false]);
+  const ok = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fossilization', name: 'Fossilization' }, oc: oc('done', { locks: [{ on: 'X', restOfTurn: true }] }) }], base);
+  eq('fossil success over X', ok.map(i => [i.name, i.on, i.ok]), [['Fossilization', 'X', true]]);
+  const bad = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fossilization', name: 'Fossilization' }, oc: oc('retry', { notes: ['point-buy tile:elem_earth failed'] }) }], { ...base, targetOf: () => 'Y' });
+  eq('fossil roll failed over the declared Y', bad.map(i => [i.on, i.ok, i.why]), [['Y', false, 'roll failed']]);
+  const auto = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_oblivion' }, oc: oc('fizzled', { notes: ['nobody in reach'] }) }], { ...base, autoTarget: () => null });
+  eq('nobody in reach → over the caster', auto.map(i => [i.on, i.why]), [['A', 'nobody in reach']]);
+  const dis = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_lightning' }, oc: oc('blocked', { notes: ['peer:Z\'s Disable bars elem_air'] }) }], { ...base, disableTriggers: [{ holder: 'Z', caster: 'A', elem: 'elem_air' }] });
+  eq('Disable: lightning failed over Z + Disable success over A', dis.map(i => [i.effect_id, i.on, i.ok]), [['effect_lightning', 'Z', false], ['effect_disable', 'A', true]]);
+  const bl = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fossilization' }, oc: oc('done') }], { ...base, blessFired: [{ holder: 'X', caster: 'A', effect_id: 'effect_fossilization' }] });
+  eq('Blessing ∀ negation → failed over X', bl.map(i => [i.on, i.ok, i.why]), [['X', false, 'Blessing ∀']]);
+  eq('casting step → nothing', effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fossilization' }, oc: oc('casting') }], base), []);
+  eq('fireball done → nothing (damage only)', effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fireball' }, oc: oc('done', { hits: [{ victim: 'X' }] }) }], base), []);
+  const lt = (n, R, r) => n > 0 && r >= Math.max(1, R - n);
+  const pl = plannedLossResults([{ id: 'X', foes: [{ id: 'A', delay: true }] }, { id: 'Y', foes: [{ id: 'B', petrify: true }] }], { roundsPerTurn: 3, round: 2, lostToHolders: lt });
+  eq('planned losses: Delay Time on X (last action), Petrify on Y', pl.map(i => [i.effect_id, i.on]), [['effect_delay_time', 'X'], ['effect_petrify', 'Y']]);
+  eq('Delay Time not on the first action', plannedLossResults([{ id: 'X', foes: [{ id: 'A', delay: true }] }], { roundsPerTurn: 3, round: 0, lostToHolders: lt }), []);
+  // Round 2 (user ruling 2026-11-18): Blizzard hits and natural Mists / Anger / Love / Awe / Fear get toasts.
+  const bz = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_blizzard', name: 'Blizzard' }, oc: oc('done', { hits: [{ victim: 'X' }, { victim: 'Y' }, { victim: 'B' }] }) }], base);
+  eq('Blizzard success over each enemy hit (not the ally B)', bz.map(i => [i.name, i.on, i.ok]), [['Blizzard', 'X', true], ['Blizzard', 'Y', true]]);
+  const { naturalResults } = await import('../effect-results.mjs');
+  const nat = naturalResults([{ effect_id: 'effect_mists', on: 'A', by: 'X', kind: 'ban' }, { effect_id: 'effect_anger', on: 'B', by: 'X', kind: 'aim' }, { effect_id: 'effect_fear', on: 'C', by: 'Y', kind: 'block' }, { effect_id: 'effect_love', on: 'D', by: 'Y', kind: 'afflict' }, { effect_id: 'effect_mists', on: 'A', by: 'X', kind: 'ban' }], { nameOf: (id) => id.replace('effect_', ''), tag: '2:1' });
+  eq('natural toasts (deduped)', nat.map(i => [i.name, i.on, i.why]), [['mists', 'A', 'cannot Attack in contact'], ['anger', 'B', 'may only aim at it'], ['fear', 'C', 'cannot damage anyone'], ['love', 'D', 'afflicted until its tower']]);
+}
+// Fossilization token retry (user ruling 2026-11-18: "No, the old token stays but you are spending one more round in
+// retrying (lock)"): a failed token roll keeps the lock + the bought token; the retry emission buys only the owed one
+// and locks nobody again (ruling 2026-11-18 #2: "do retry, not lock").
+{
+  const { tokenRetryOwed } = await import('../effects.mjs');
+  const tiles = { C: { q: 0, r: 0 }, E: { q: 1, r: 0 } };
+  const sides = { C: 'a', E: 'b' };
+  const W = () => world({ C: M(15, 10, 3, 10), E: M(10, 10, 10, 10) }, tiles, sides);
+  const fz = (salt, kept) => resolveEffect(W(), { actor: 'C', effect_id: 'effect_fossilization', elements: ['elem_earth', 'elem_vitality'], salt, target: { kind: 'character', ref: 'E' }, is_instant: false, ...(kept ? { kept } : {}) });
+  let first = null;
+  for (let i = 0; i < 80 && !first; i++) { const o = fz(`fr${i}`); if (o.status === 'done' && Array.isArray(o.kept) && o.kept[0] != null && o.kept[1] == null) first = o; }
+  eq('token fail keeps the cast done', first?.status, 'done');
+  eq('… the rest-of-turn lock lands', first?.locks.map(l => [l.on, !!l.restOfTurn]), [['E', true]]);
+  eq('… the bought Vitality bonus lands, the shield is owed', [first?.tokens.map(t => t.kind), first?.kept[1]], [['bonus'], null]);
+  eq('… tokenRetryOwed → the peer re-emits', tokenRetryOwed('effect_fossilization', first), true);
+  let retry = null;
+  for (let i = 0; i < 80 && !retry; i++) { const o = fz(`rt${i}`, first?.kept); if (o.status === 'done' && !o.kept) retry = o; }
+  eq('retry emission: no new lock ("do retry, not lock")', retry?.locks, []);
+  eq('retry emission: only the owed shield is bought', retry?.tokens.map(t => [t.kind, t.elem]), [['shield', 'elem_earth']]);
+  eq('retry emission: nothing owed any more', tokenRetryOwed('effect_fossilization', retry), false);
+  const away = resolveEffect(world({ C: M(15, 10, 3, 10), E: M(10, 10, 10, 10) }, { C: { q: 0, r: 0 }, E: { q: 5, r: 0 } }, sides), { actor: 'C', effect_id: 'effect_fossilization', elements: ['elem_earth', 'elem_vitality'], salt: 'rt0', target: null, is_instant: false, kept: [4, null] });
+  eq('retry with nobody in reach: no fizzle, no lock', [away.status === 'fizzled', away.locks.length], [false, 0]);
+  eq('Ice Blast keeps the old all-or-nothing retry', tokenRetryOwed('effect_ice_blast', { status: 'done', kept: [null] }), false);
+}
 console.log(fails ? `\n${fails} FAILED` : '\nall checks passed');
 process.exit(fails ? 1 : 0);

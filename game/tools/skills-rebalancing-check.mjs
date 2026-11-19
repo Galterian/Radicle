@@ -38,7 +38,7 @@
 //   cost C     = card + wait·(1−p_job)/p_job (instants) + extra_card (Trance) + permanent + pointbuy_retry·E[retries]
 //              + locked_action·(remaining actions of the round)·(share of the codes a self-lock forbids)
 // curve V̂(C) = a + b·C (OLS over the built-ins, refit without |r−1| > fit_drop). ratio r = V / V̂(C).
-// TOLERANCE ±10 % (as the effects validator, user ruling 2026-11-16). VERDICT: reject (schema / r > hard cap 2.0 /
+// TOLERANCE ±30 % (user ruling 2026-11-18, as the effects validator; was ±10 % since 2026-11-16), band [0.70, 1.30]. VERDICT: reject (schema / r > hard cap 2.0 /
 // r < floor 0.2 — limits confirmed 2026-11-16 / logic audit), nerf (r > 1+tol), boost (r < 1−tol), ok. With a
 // baseline (explicit, or automatic when the def has the id of / `extends` a built-in) the band applies to
 // r / r_baseline.
@@ -68,7 +68,7 @@ import { CORE_VERSION, r6, r3, sha256, isObj, canonicalJson, fileSha, readJson, 
 
 export { canonicalJson };
 export const VALIDATOR_VERSION = '1.1.0';   // 1.1.0 (2026-11-16): skill rebalance rulings, equal action weights
-export const DEFAULT_TOLERANCE = 0.10;   // user ruling 2026-11-16 (same band as the effects validator)
+export const DEFAULT_TOLERANCE = 0.30;   // user ruling 2026-11-18 (was 0.10, same band as the effects validator)
 export const PIN_FORMAT = 'chaosd6-skills-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');

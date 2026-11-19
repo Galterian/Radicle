@@ -23,14 +23,15 @@
 //   game       A = turns · actions_per_turn actions
 //   lifetime   q = p_strike (a colour of mine falls per enemy action, die of 6); L = k / q actions before the last
 //              colour falls; R = k / p_restore actions to recast it. φ(k) = 1 if L ≥ A, else (L + (A − L)·L/(L+R)) / A
-//   uses       tap: 1 + (A − 1) / (1 + k / p_restore) (untap = every colour emitted again);
+//   uses       tap: 1 + (A − 1) / (1 + U) (untap = every colour emitted again; 1.1.0: U = k / (p_restore +
+//              p_recharge_emit · f), the recharge by emissions of other casts, see powerOf; + the gate wait (4));
 //              once_per_round / passive / static: one per turn (turns)
 //   power      the class's POWER vocabulary (BUILTIN_POWER for the built-ins, `power` in a foreign definition):
 //              each key has a trigger — `use` (× uses), `action` (× A), `turn` (× turns) — and a per-trigger value
 //              from the calibration weights and odds (VALUE below)
 //   V          = φ(k) · Σ value(key)
-// curve V̂(k) = a + b·k (fitCurve of rebalancing-core over the built-ins). ratio r = V / V̂(k). TOLERANCE ±10 %
-// (user ruling 2026-11-16, as the effects and skills validators). VERDICT: reject (schema / r > hard cap / r < floor /
+// curve V̂(k) = a + b·k (fitCurve of rebalancing-core over the built-ins). ratio r = V / V̂(k). TOLERANCE ±30 %
+// (user ruling 2026-11-18, as the effects and skills validators; was ±10 % since 2026-11-16), band [0.70, 1.30]. VERDICT: reject (schema / r > hard cap / r < floor /
 // logic audit), nerf (r > 1+tol), boost (r < 1−tol), ok. With a baseline (explicit, or automatic when the def has the
 // id of / `extends` a built-in) the band applies to r / r_baseline: a built-in unchanged is exactly 1 → ok.
 //
@@ -44,14 +45,39 @@
 //     attack_out ≤ +attack_bonus, end_turn ≤ regen, lifesteal ≤ the damage, chase_step grant ≤ chase_bonus.life,
 //     local draw ≤ draw.
 // A built-in ability marked {"engine":"js"} resolves in peer.mjs and is audited by tools/classes-check.mjs instead.
+//
+// MODEL 1.1.0 (user rulings 2026-11-17, the six weight answers of CLASSES_BALANCE.md, all "Ok"):
+//   (1) build = W.building_turn × p_building_used × the turns it stands, min(building_life_turns, (turns − 1)/2)
+//       (a building raised over the game stands on average for half of what is left), not a flat price;
+//   (2) W.recover 0.5 → 0.7 (a chosen card back beats a random draw, W.card 0.4);
+//   (3) stance / emit / plan_emit priced per action code covered: Σ p(code) over the codes the class turns
+//       (stance: {codes}) or makes emit (emit: {codes}); p(code) = code_mix[code] / Σ code_mix (equal weights, as
+//       the skills validator's "basic-action mix not measurable" ruling). plan_emit (Enchanter, once per turn)
+//       fires with p = 1 − (1 − p_cast_queued · Σ p(code))³ (three actions a turn);
+//   (4) a range-gated use (POWER_KEYS gate: discard → p_enemy_near, build → p_building_near) is not spent without
+//       a target, so the gate lengthens the tap cycle (+ (1 − p)/p actions of waiting) — it no longer scales the
+//       value per use; a once-per-turn gated use fires with 1 − (1 − p)³;
+//   (5) the odds only a swarm can measure are explicit calibration parameters (game.*, listed in
+//       `swarm_placeholders` with their placeholder status); tools/class-fixtures.mjs genWorld({odds}) varies them;
+//   (6) grant = W.card × V(granted effect) / mean V(built-in effects), both from the effects validator's calibration
+//       (tools/rebalancing-calibration.json), frozen into `grants` by `calibrate`.
+//   Necromancer: revive = W.revive · (p_fallen_near + (1 − p_fallen_near) · p_archived) · (1 − p_reanimated_destroyed ·
+//   reanimated_loss) — the archive fallback, and the destroy-reanimated drawback (Rule 24: Harmony + Concentration at 6,
+//   ruling 2026-11-17: an EXTRA way to kill the raised unit).
+//   Tap recharge (user ruling 2026-11-17, Alchemist / every tap class): a tap card also untaps from the elements
+//   emitted while casting other effects — the untap time is k / (p_restore + p_recharge_emit · f) (powerOf).
+// FOREIGN LIMITS (user ruling 2026-11-17): a foreign class (an id with no BUILTIN_POWER) may not have an ability the
+// game code resolves itself (peer: hooks, JS markers, the peer-resolved keys build / disable_traps / plant /
+// relocate) and may not be a hand class (data.hand_reveal / hand_discard, flags.handDefaults, the keys discard /
+// reveal) — but it MAY be passive (ability_kind passive, data.passive, flags.passiveTurn).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CORE_VERSION, r6, r3, sha256, isObj, canonicalJson, fileSha, readJson, pointBuyStats, fitCurve, bandVerdict } from './rebalancing-core.mjs';
 
 export { canonicalJson };
-export const VALIDATOR_VERSION = '1.0.0';
-export const DEFAULT_TOLERANCE = 0.10;   // user ruling 2026-11-16
+export const VALIDATOR_VERSION = '1.1.0';   // 1.1.0 (user rulings 2026-11-17): the six weight answers — see MODEL 1.1.0 below
+export const DEFAULT_TOLERANCE = 0.30;   // user ruling 2026-11-18 (was 0.10 since 2026-11-16)
 export const PIN_FORMAT = 'chaosd6-classes-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
@@ -129,53 +155,53 @@ export const POWER_KEYS = {
   heal:          { trigger: 'use',    shape: 'n' },        // n life tokens restored (self or an ally)
   armor:         { trigger: 'use',    shape: 'n' },        // n armor life points
   illusion:      { trigger: 'use',    shape: 'range' },    // one illusion point on me + every ally within range
-  discard:       { trigger: 'use',    shape: 'n' },        // an enemy discards n random hand cards
+  discard:       { trigger: 'use',    shape: 'n', gate: 'p_enemy_near', hand: true },   // an enemy (within range) discards n random hand cards
   stone:         { trigger: 'use',    shape: 'true' },     // a point-buy stat bonus token on my tile
   trap:          { trigger: 'use',    shape: 'true' },     // a trap of TRAP_POWER (Library or hand card)
-  plant:         { trigger: 'use',    shape: 'true' },     // a hand effect as a far trap + vision
+  plant:         { trigger: 'use',    shape: 'true', peer: true },     // a hand effect as a far trap + vision
   lure:          { trigger: 'use',    shape: 'range' },    // wild monsters within range chase me
   revive:        { trigger: 'use',    shape: 'true' },     // a fallen ally creature rises
-  build:         { trigger: 'use',    shape: 'true' },     // a building (copy / shrine) rises
-  disable_traps: { trigger: 'use',    shape: 'range' },    // every foreign trap within range is gone
+  build:         { trigger: 'use',    shape: 'build', peer: true },   // a building rises: true (Shrine) | {gate: true} (Animator: needs a building near to copy)
+  disable_traps: { trigger: 'use',    shape: 'range', peer: true },    // every foreign trap within range is gone
   draw:          { trigger: 'use',    shape: 'n' },        // draw n cards
   recover:       { trigger: 'use',    shape: 'n' },        // n cards discard pile → hand
-  grant:         { trigger: 'use',    shape: 'true' },     // an effect (Summoning) granted
-  plan_emit:     { trigger: 'use',    shape: 'true' },     // emit an element during a non-Posture action
+  grant:         { trigger: 'use',    shape: 'grant' },    // an effect card granted: true (= effect_summoning) | {effect_id} (priced from calibration grants)
+  plan_emit:     { trigger: 'use',    shape: 'codes' },    // once per turn, emit during one of these codes while a cast is queued: true (= A, B, M) | {codes}
   attack_bonus:  { trigger: 'action', shape: 'n' },        // +n combat damage once I scored this round
   lifesteal:     { trigger: 'action', shape: 'true' },     // heal the combat damage I deal
-  stance:        { trigger: 'action', shape: 'true' },     // Empty Posture fights as another action
-  emit:          { trigger: 'action', shape: 'n' },        // n more action codes emit elements
+  stance:        { trigger: 'action', shape: 'codes' },    // these empty codes fight as another action: true (= EP) | {codes: [EP, EM]}
+  emit:          { trigger: 'action', shape: 'codes' },    // these (non-emitting) codes emit: {codes: [A|B|M|EM]} | n (legacy: n codes of mean odds)
   trap_disable:  { trigger: 'action', shape: 'true' },     // stepping on a building trap disables it
   share_skills:  { trigger: 'action', shape: 'true' },     // adjacent allies use my skills too
   take_tokens:   { trigger: 'action', shape: 'true' },     // destroyed tokens become mine
   transmute:     { trigger: 'action', shape: 'true' },     // a nearby ally's stat / heal cast works on me too
-  relocate:      { trigger: 'action', shape: 'true' },     // move a nearby unit one hex at the end of a round
+  relocate:      { trigger: 'action', shape: 'true', peer: true },     // move a nearby unit one hex at the end of a round
   regen:         { trigger: 'turn',   shape: 'n' },        // +n life at the end of an unmoved turn
   trap_dodge:    { trigger: 'turn',   shape: 'n' },        // n trap steps per turn do not trigger
   threat_dodge:  { trigger: 'turn',   shape: 'n' },        // n threatened moves per turn are stealthy
   reroll:        { trigger: 'turn',   shape: 'true' },     // a point-buy die added to a damage spell
   swap:          { trigger: 'turn',   shape: 'true' },     // a nearby enemy's action is swapped before it hits me
-  reveal:        { trigger: 'turn',   shape: 'true' },     // an adjacent enemy's hand opens
+  reveal:        { trigger: 'turn',   shape: 'true', hand: true },     // an adjacent enemy's hand opens
   chase_bonus:   { trigger: 'turn',   shape: 'life' },     // +life max while monsters chase me
 };
 // Built-in power, read off peer.mjs / classes.mjs on 2026-11-16 (the logic audit proves the data-run ones).
 export const BUILTIN_POWER = {
   class_alchemist: { trap: true },
-  class_animator: { build: true },
+  class_animator: { build: { gate: true } },   // 1.1.0: copies the building nearest (within 2) — gated by p_building_near
   class_assassin: { attack_bonus: 1 },
   class_avenger: { lure: { range: 10 }, chase_bonus: { life: 1, max: 1 } },
-  class_barbarian: { stance: true, emit: 1 },   // ruling 2026-11-16: may emit during Block (B)
+  class_barbarian: { stance: { codes: ['EP'] }, emit: { codes: ['B'] } },   // ruling 2026-11-16: may emit during Block (B); 2026-11-17: that Block emission progresses (keeps the channel, peer.mjs classKeeps) = a full emit
   class_bard: { share_skills: true },
   class_cleric: { disable_traps: { range: 3 }, trap_disable: true },
   class_druid: { stone: true },
   class_elementalist: { reroll: true },
-  class_enchanter: { plan_emit: true },
+  class_enchanter: { plan_emit: { codes: ['A', 'B', 'M'] } },
   class_guardian: { regen: 1 },
   class_healer: { heal: 1 },
   class_illusionist: { illusion: { range: 10 } },
   class_kensei: { recover: 1 },
   class_manipulator: { swap: true },
-  class_monk: { stance: true, emit: 2 },   // ruling 2026-11-16: Move and Empty Move emit at every site
+  class_monk: { stance: { codes: ['EP'] }, emit: { codes: ['M', 'EM'] } },   // ruling 2026-11-16: Move and Empty Move emit at every site
   class_necromancer: { revive: true },
   class_noble: { lifesteal: true },
   class_overlord: { armor: 1 },
@@ -183,12 +209,12 @@ export const BUILTIN_POWER = {
   class_priest: { build: true },
   class_prophet: { reveal: true },
   class_ranger: { trap: true },
-  class_reaver: { stance: true, emit: 1 },
+  class_reaver: { stance: { codes: ['EP', 'EM'] }, emit: { codes: ['A'] } },   // EP / EM fight as Attack; the Attack emits (and keeps the channel, ruling 2026-11-17)
   class_restaurateur: { take_tokens: true },
   class_rogue: { trap_dodge: 1, threat_dodge: 1 },
   class_seeker: { plant: true },
   class_shaman: { recover: 1 },
-  class_summoner: { grant: true },
+  class_summoner: { grant: { effect_id: 'effect_summoning' } },
   class_transmuter: { transmute: true },
   class_warrior: { relocate: true },
   class_weapon_master: { draw: 1 },
@@ -205,7 +231,8 @@ export const HOOK_POWER = {
   combat_in: ['swap'], pick_target: ['swap'], chase_step: ['chase_bonus'], contact: ['reveal'],
   local: ['draw', 'recover', 'grant'], share_skills: ['share_skills'],
   // Necromancer destroy reanimated (ruling 2026-11-16): a way for ENEMIES to destroy what the class raised — a drawback
-  // on power.revive, never a gain (the neutral answer, null, is the strongest), so it needs no price of its own.
+  // on power.revive, never a gain (the neutral answer, null, is the strongest), so it needs no power key of its own;
+  // 1.1.0 prices it inside revive (p_reanimated_destroyed × reanimated_loss, see keyValue).
   reanimated_strike: null,
 };
 const STD = ['colours', 'kind', 'ready', 'config', 'strike', 'restore', 'progress', 'life_points'];
@@ -223,7 +250,7 @@ export function normalizeDef(def) {
   return { id: d.id, extends: base, kind: passive ? 'passive' : data.ability_kind, colours, k: colours.length, power, hooks: isObj(d.hooks) ? d.hooks : {}, data, def: d };
 }
 const posInt = (x) => Number.isInteger(x) && x >= 1 && x <= 20;
-export function validateNorm(n) {
+export function validateNorm(n, cal = null) {
   const errors = [];
   if (typeof n.id !== 'string' || !/^class_[a-z0-9_]+$/.test(n.id)) errors.push('id must match class_[a-z0-9_]+');
   if (n.extends !== null && !BUILTIN_POWER[n.extends]) errors.push(`extends ${n.extends}: not a built-in class`);
@@ -235,39 +262,100 @@ export function validateNorm(n) {
     for (const [key, v] of Object.entries(n.power)) {
       const pk = POWER_KEYS[key];
       if (!pk) { errors.push(`power.${key}: unknown key (${Object.keys(POWER_KEYS).join(', ')})`); continue; }
-      const ok = pk.shape === 'n' ? posInt(v) : pk.shape === 'true' ? v === true : pk.shape === 'range' ? isObj(v) && Number.isInteger(v.range) && v.range >= 0 && v.range <= 64 : isObj(v) && posInt(v.life) && posInt(v.max ?? v.life);
-      if (!ok) errors.push(`power.${key}: must be ${pk.shape === 'n' ? 'an integer 1..20' : pk.shape === 'true' ? 'true' : pk.shape === 'range' ? '{range: 0..64}' : '{life, max} (1..20)'}`);
+      const ok = shapeOk(key, pk.shape, v);
+      if (!ok) errors.push(`power.${key}: must be ${SHAPE_TEXT[key] || SHAPE_TEXT[pk.shape]}`);
     }
   }
+  if (!BUILTIN_POWER[n.id]) errors.push(...foreignLimits(n));
+  if (cal && n.power?.grant !== undefined && shapeOk('grant', 'grant', n.power.grant) && grantValue(n.power.grant, cal.weights, cal) === null) errors.push(`power.grant: ${isObj(n.power.grant) ? n.power.grant.effect_id : 'effect_summoning'} has no price in the calibration grants (the effects validator's built-ins)`);
+  return errors;
+}
+// 1.1.0 shapes. codes: true (the legacy default codes) | {codes: [distinct codes of the key's set]}; emit also n.
+export const STANCE_CODES = ['EP', 'EM'];
+export const EMIT_CODES = ['A', 'B', 'M', 'EM'];   // the codes that do not emit by themselves (P / EP always emit)
+const CODE_SET = { stance: STANCE_CODES, emit: EMIT_CODES, plan_emit: ['A', 'B', 'M', 'EM'] };
+const LEGACY_CODES = { stance: ['EP'], plan_emit: ['A', 'B', 'M'] };
+const codesOk = (key, v) => isObj(v) && Array.isArray(v.codes) && v.codes.length > 0 && new Set(v.codes).size === v.codes.length && v.codes.every(c => CODE_SET[key].includes(c));
+function shapeOk(key, shape, v) {
+  switch (shape) {
+    case 'n': return posInt(v);
+    case 'true': return v === true;
+    case 'range': return isObj(v) && Number.isInteger(v.range) && v.range >= 0 && v.range <= 64;
+    case 'life': return isObj(v) && posInt(v.life) && posInt(v.max ?? v.life);
+    case 'codes': return (key !== 'emit' && v === true) || (key === 'emit' && Number.isInteger(v) && v >= 1 && v <= EMIT_CODES.length) || codesOk(key, v);
+    case 'build': return v === true || (isObj(v) && Object.keys(v).every(k => k === 'gate') && (v.gate === undefined || typeof v.gate === 'boolean'));
+    case 'grant': return v === true || (isObj(v) && typeof v.effect_id === 'string' && /^effect_[a-z0-9_]+$/.test(v.effect_id));
+    default: return false;
+  }
+}
+const SHAPE_TEXT = { n: 'an integer 1..20', true: 'true', range: '{range: 0..64}', life: '{life, max} (1..20)', build: 'true | {gate: boolean}', grant: 'true | {effect_id}',
+  stance: `true | {codes: ${STANCE_CODES.join('|')}}`, emit: `an integer 1..${EMIT_CODES.length} | {codes: ${EMIT_CODES.join('|')}}`, plan_emit: `true | {codes: ${CODE_SET.plan_emit.join('|')}}` };
+// The codes a codes-shaped key covers.
+export function codesOf(key, v) { return isObj(v) && Array.isArray(v.codes) ? v.codes : (LEGACY_CODES[key] || null); }
+// Foreign limits (user ruling 2026-11-17): no ability the game code resolves itself, no hand class — passive is fine.
+export function foreignLimits(n) {
+  const errors = [];
+  const flags = isObj(n.def?.flags) ? n.def.flags : {};
+  const peerHooks = Array.isArray(flags.hooks) ? flags.hooks.filter(h => typeof h === 'string' && h.startsWith('peer:')) : [];
+  if (peerHooks.length) errors.push(`foreign class: flags.hooks ${peerHooks.join(', ')} — an ability the game code resolves itself is for built-in classes only`);
+  const js = Object.entries(n.hooks || {}).filter(([, p]) => isObj(p) && Object.prototype.hasOwnProperty.call(p, 'engine')).map(([h]) => h);
+  if (js.length) errors.push(`foreign class: hooks ${js.join(', ')} marked {"engine": …} — the game code resolving it is for built-in classes only`);
+  for (const key of Object.keys(n.power || {})) {
+    if (POWER_KEYS[key]?.peer) errors.push(`foreign class: power.${key} is resolved by the game code (peer.mjs) — built-in classes only`);
+    if (POWER_KEYS[key]?.hand) errors.push(`foreign class: power.${key} makes it a hand class — built-in classes only`);
+  }
+  for (const k of ['hand_reveal', 'hand_discard']) if (n.data?.[k] !== undefined && n.data[k] !== null) errors.push(`foreign class: data.${k} makes it a hand class — built-in classes only`);
+  if (flags.handDefaults !== undefined && flags.handDefaults !== null) errors.push('foreign class: flags.handDefaults makes it a hand class — built-in classes only');
   return errors;
 }
 
 // ------------------------------------------------------------------ the model
 const allies = (G, range) => r6(G.allies_max * range / (range + G.allies_half));
-// Value of one power key per trigger (calibration weights W, odds G).
-export function keyValue(key, v, G, W) {
+// 1.1.0 (3): p(an action is one of `codes`) = Σ code_mix[c] / Σ code_mix (equal weights in the calibration).
+export function pCodes(G, codes) {
+  const mix = G.code_mix || {};
+  let all = 0, hit = 0;
+  for (const c of Object.keys(mix).sort()) { all += mix[c]; if (codes.includes(c)) hit += mix[c]; }
+  return all > 0 ? hit / all : 0;
+}
+// 1.1.0 (4): the per-action odds that a gated use finds its target (null = not gated). A gated use is not spent
+// without one, so the gate goes into the uses (powerOf), not into the value per use.
+export function gateOf(key, v, G) {
+  if (key === 'discard') return G.p_enemy_near;
+  if (key === 'build' && isObj(v) && v.gate) return G.p_building_near;
+  if (key === 'plan_emit') return G.p_cast_queued * pCodes(G, codesOf(key, v));
+  return null;
+}
+// 1.1.0 (6): the granted effect card, priced in cards: W.card × V(effect) / mean V(built-in effects) (calibration grants).
+export function grantValue(v, W, cal) {
+  const id = isObj(v) ? v.effect_id : 'effect_summoning';
+  const g = cal?.grants?.effects?.[id];
+  return g && cal.grants.mean_value > 0 ? W.card * g / cal.grants.mean_value : null;
+}
+// Value of one power key per trigger (calibration weights W, odds G; cal for the grants table).
+export function keyValue(key, v, G, W, cal = null) {
   const pbOk = pointBuyStats(G.stat_mean);
   const n = typeof v === 'number' ? v : 1;
   switch (key) {
     case 'heal': return n * W.life * G.p_hurt;
     case 'armor': return n * W.shield;
     case 'illusion': return (1 + allies(G, v.range)) * W.illusion;
-    case 'discard': return n * W.card * G.p_enemy_near;
+    case 'discard': return n * W.card;   // 1.1.0 (4): p_enemy_near is in the uses (gateOf)
     case 'stone': return pbOk.p * pbOk.ev * W.stat_point;
     case 'trap': return TRAP_POWER / 20 * W.trap * G.p_trap_springs;
     case 'plant': return W.trap * G.p_trap_springs * G.p_far_trap + W.vision;
     case 'lure': return allies(G, v.range) * G.monsters_per_ally * W.lure;
-    case 'revive': return W.revive * G.p_fallen_near;
-    case 'build': return W.building;
+    case 'revive': return W.revive * (G.p_fallen_near + (1 - G.p_fallen_near) * G.p_archived) * (1 - G.p_reanimated_destroyed * G.reanimated_loss);
+    case 'build': return W.building_turn * G.p_building_used * Math.min(G.building_life_turns, (G.turns - 1) / 2);   // 1.1.0 (1)
     case 'disable_traps': return allies(G, v.range) * G.traps_per_ally * W.disable;
     case 'draw': return n * W.card;
     case 'recover': return n * W.recover;
-    case 'grant': return W.grant;
-    case 'plan_emit': return W.emit;
+    case 'grant': return grantValue(v, W, cal) ?? 0;   // 1.1.0 (6)
+    case 'plan_emit': return W.emit;   // 1.1.0 (3): fires with gateOf (p_cast_queued × p(code))
     case 'attack_bonus': return n * W.life * G.p_combat * G.p_scored;
     case 'lifesteal': return W.lifesteal * G.p_combat * G.dmg_per_hit * G.p_hurt;
-    case 'stance': return W.stance * G.p_empty_posture;
-    case 'emit': return n * W.emit * G.p_code;
+    case 'stance': return W.stance * pCodes(G, codesOf('stance', v));   // 1.1.0 (3): per code covered
+    case 'emit': return W.emit * (typeof v === 'number' ? v * pCodes(G, EMIT_CODES) / EMIT_CODES.length : pCodes(G, codesOf('emit', v)));
     case 'trap_disable': return W.disable * G.p_trap_step;
     case 'share_skills': return W.skill * G.p_skill_use * G.adjacent_allies;
     case 'take_tokens': return W.take * G.p_destroy_near;
@@ -283,21 +371,43 @@ export function keyValue(key, v, G, W) {
     default: return 0;
   }
 }
+export function rechargeShare(colours) {
+  const stats = new Set((colours || []).map(e => ELEM_TO_STAT[e]).filter(Boolean));
+  return ELEMS.filter(e => stats.has(ELEM_TO_STAT[e])).length / ELEMS.length / 2;
+}
 export function powerOf(n, cal) {
   const G = cal.game, W = cal.weights;
   const A = G.turns * G.actions_per_turn;
   const k = n.k;
   const L = k / G.p_strike, R = k / G.p_restore;
   const phi = L >= A ? 1 : (L + (A - L) * L / (L + R)) / A;
-  const uses = n.kind === 'tap' ? 1 + (A - 1) / (1 + k / G.p_restore) : G.turns;
+  // 1.1.0 (user ruling 2026-11-17, relayed): a tap class also untaps from the elements I emit while casting OTHER
+  // effects ("the Class is recharged whenever you emit the unchecked element by casting other effects"). An untap
+  // takes k / (p_restore + p_recharge_emit · f) actions: f = the share of incidental emissions that land on a still
+  // unchecked stat of the class = ½ × (elements of the class's stats) / 10 (half of them unchecked on average;
+  // restore is per stat, classes.mjs restore). p_recharge_emit is a swarm placeholder (calibration swarm_placeholders).
+  const untap = k / (G.p_restore + (G.p_recharge_emit || 0) * rechargeShare(n.colours));
+  const uses = n.kind === 'tap' ? 1 + (A - 1) / (1 + untap) : G.turns;
+  // 1.1.0 (4): a gated use waits (1 − p)/p actions for its target (tap), or fires in a turn with 1 − (1 − p)^actions.
+  const usesOf = (p) => {
+    if (p === null || p >= 1) return uses;
+    if (!(p > 0)) return 0;
+    if (n.kind === 'tap') return 1 + (A - 1) / (1 + untap + (1 - p) / p);
+    let miss = 1;
+    for (let i = 0; i < G.actions_per_turn; i++) miss *= 1 - p;
+    return G.turns * (1 - miss);
+  };
   const components = {};
   let sum = 0;
   for (const [key, v] of Object.entries(n.power)) {
     const t = POWER_KEYS[key].trigger;
-    const per = keyValue(key, v, G, W);
-    const times = t === 'use' ? uses : t === 'action' ? A : G.turns;
-    const x = r6(per * times);
-    components[key] = { trigger: t, per: r6(per), times: r6(times), value: x };
+    const per = keyValue(key, v, G, W, cal);
+    const gate = t === 'use' ? gateOf(key, v, G) : null;
+    const times = t === 'use' ? usesOf(gate) : t === 'action' ? A : G.turns;
+    // 1.1.0 (1): building-turns are capped by the units that can stand on them: at most building_slots of my
+    // buildings are used a turn, over the turns after the first one rises (turns − 1).
+    const x = key === 'build' ? r6(Math.min(per * times, W.building_turn * G.p_building_used * G.building_slots * (G.turns - 1))) : r6(per * times);
+    components[key] = { trigger: t, per: r6(per), times: r6(times), value: x, ...(gate !== null ? { gate: r6(gate) } : {}) };
     sum += x;
   }
   return { value: r6(phi * sum), lifetime: r6(phi), uses: r6(uses), k, kind: n.kind, components };
@@ -426,6 +536,27 @@ export function auditLogic(def, n, cal = loadCalibration()) {
       if (op === 'grant' && !P.grant) exceeds.add('local grant without power.grant');
     }
   }
+  // 4. 1.1.0 (3): stance / emits / plan_emits answer only for the codes their power key covers (priced per code).
+  const ALL_CODES = ['A', 'B', 'M', 'P', 'EM', 'EP'];
+  const covers = (key) => (P[key] === undefined ? [] : typeof P[key] === 'number' ? null : codesOf(key, P[key]) || []);
+  for (let s = 0; s < Math.min(N, 12); s++) {
+    const Wd = auditWorld(9000 + s, n);
+    const on = (h) => n.hooks[h] !== undefined && !marker(h);
+    if (on('stance')) {
+      const cov = covers('stance');
+      for (const code of ALL_CODES) { const r = run(prepared, 'stance', Wd, { code }); runs++; if (r !== null && r !== undefined && !r?.$throws && !cov.includes(code)) exceeds.add(`stance turns ${code} (power.stance covers ${cov.join(', ') || 'none'})`); }
+    }
+    if (on('emits')) {
+      const cov = covers('emit');
+      const extra = new Set();
+      for (const code of ALL_CODES) for (const site of ['plan', 'destroy', 'manip', 'badge']) { const r = run(prepared, 'emits', Wd, { code, site }); runs++; if (r === true && code !== 'P' && code !== 'EP' && !(cov || []).includes(code)) extra.add(code); }
+      if (cov === null ? extra.size > P.emit : extra.size) exceeds.add(`emits on ${[...extra].sort().join(', ')} beyond power.emit ${JSON.stringify(P.emit ?? null)}`);
+    }
+    if (on('plan_emits')) {
+      const cov = covers('plan_emit');
+      for (const code of ALL_CODES) { const r = run(prepared, 'plan_emits', Wd, { held: true, archived: false, usedTurn: Wd.ctx.turn - 1, turn: Wd.ctx.turn, options: false, code, queued: true }); runs++; if (r === true && !cov.includes(code)) exceeds.add(`plan_emits on ${code} (power.plan_emit covers ${cov.join(', ') || 'none'})`); }
+    }
+  }
   return { ran: true, engine: 'game/classes.mjs#resolveClassProgram', runs, N, exceeds: [...exceeds].sort() };
 }
 
@@ -439,7 +570,7 @@ export function checkClass(def, opts = {}) {
   const base = { validator: { version: VALIDATOR_VERSION, pin_id: pin.pin_id }, class_id: n.id ?? null, def_sha256, tolerance: tol };
   const stamp = (verdict, ratio) => ({ class_id: n.id ?? null, def_sha256, pin_id: pin.pin_id, verdict, ratio, tolerance: tol });
   const reject = (errors, reasons, extra = {}) => ({ ...base, valid: !errors.length, errors, ...extra, verdict: 'reject', reasons, suggestions: [], stamp: stamp('reject', null) });
-  const errors = validateNorm(n);
+  const errors = validateNorm(n, cal);
   if (errors.length) return reject(errors, ['invalid definition']);
   if (!cal.fit) throw new Error('calibration has no fit — run `node tools/classes-rebalancing-check.mjs calibrate --write`');
   const audit = auditLogic(def, n, cal);
@@ -454,7 +585,7 @@ export function checkClass(def, opts = {}) {
     if (!b) return reject([`baseline ${bref} is not a calibrated built-in`], ['bad baseline']);
     baseline = { id: bref, value: b.value, k: b.k, ratio: b.ratio };
   } else if (isObj(bref)) {
-    const bn = normalizeDef(bref), be = validateNorm(bn);
+    const bn = normalizeDef(bref), be = validateNorm(bn, cal);
     if (be.length) return reject(be.map(e => `baseline: ${e}`), ['bad baseline']);
     const bp = powerOf(bn, cal);
     baseline = { id: bn.id, value: bp.value, k: bp.k, ratio: ratioOf(bp, cal.fit).ratio };
@@ -486,7 +617,24 @@ export function loadBuiltinDefs() {
   const dir = path.join(GAME, 'classes-data', 'classes');
   return fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => readJson(path.join(dir, f)));
 }
-export function calibrate(cal = loadCalibration()) {
+// 1.1.0 (6): the grants table — V of every grantable effect and the mean V of the built-in effects, read off the
+// effects validator's calibration (tools/rebalancing-calibration.json, E5) at calibrate time only; checkClass reads
+// the frozen copy here (self-contained). Only the effects a class may grant are copied (GRANTABLE).
+export const EFFECTS_CALIBRATION_PATH = path.join(HERE, 'rebalancing-calibration.json');
+export const GRANTABLE = ['effect_summoning'];
+export function grantsTable(file = EFFECTS_CALIBRATION_PATH) {
+  const ec = readJson(file);
+  const vals = Object.keys(ec.builtins || {}).sort().map(id => ec.builtins[id].value).filter(Number.isFinite);
+  let tot = 0; for (const x of vals) tot += x;
+  return {
+    source: 'game/tools/rebalancing-calibration.json (effects validator builtins.value)',
+    source_sha256: sha256(canonicalJson(ec)),
+    mean_value: r6(vals.length ? tot / vals.length : 0), n: vals.length,
+    effects: Object.fromEntries(GRANTABLE.filter(id => Number.isFinite(ec.builtins?.[id]?.value)).map(id => [id, ec.builtins[id].value])),
+  };
+}
+export function calibrate(cal0 = loadCalibration()) {
+  const cal = { ...cal0, grants: grantsTable() };
   const defs = loadBuiltinDefs();
   const pts = defs.map(d => { const n = normalizeDef(d); return { id: n.id, n, pw: powerOf(n, cal) }; });
   const fit = fitCurve(pts.map(p => ({ C: p.pw.k, V: p.pw.value })), { drop: cal.policy.fit_drop ?? 0.6, minKeep: 5 });

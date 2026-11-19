@@ -46,7 +46,7 @@ Read with: `git clone --depth 1 --single-branch --branch profiles/<id> <seed>/<R
 MD
   git add README.md
   git -c user.name=chaosd6-oci -c user.email=oci@chaosd6 commit -qm "chaosD6-Profiles"
-  rad init --name chaosD6-Profiles --description "chaosD6 player profiles" --default-branch main --public --no-confirm
+  rad init --name chaosD6-Profiles --description "chaosD6 player profiles" --default-branch main --private --no-confirm
 fi
 cd "$W"
 git config receive.denyNonFastForwards true

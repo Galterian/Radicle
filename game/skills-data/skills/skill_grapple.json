@@ -9,8 +9,8 @@
   "point_buy_stat": null,
   "text": "Negate enemy's Posture or Empty Posture (enemy may replace with another action; Empty Move is still possible). While sharing a tile, neither may use Posture or Empty Posture.",
   "flags": {"action":"A","permanent":false,"negating":true,"hooks":["negate_kind"],"negates":["P"],"negate":{"codes":["P"],"who":"target","mode":"ep"}},
-  "uses": ["skills_std"],
+  "uses": ["skills_std", "skills_pass"],
   "hooks": {
-    "negate_kind": {"engine":"js","impl":"skills.mjs#negateKind","note":"pass 2: the target's Posture → Empty Posture, its riding instants return (negate). JS this milestone."}
+    "negate_kind": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"A"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"if":[{"and":[{"bool":[{"var":"t"}]},{"code_is":[{"var":"t"},"P"]}]},{"concat":[[{"obj":{"op":"replace","id":{"var":"t"},"from":"P","to":"EP"}}],{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},"P"]}]},[]]}]}]}
   }
 }

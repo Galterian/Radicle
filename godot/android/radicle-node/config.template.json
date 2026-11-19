@@ -8,7 +8,7 @@
     "alias": "{{ALIAS}}",
     "listen": ["0.0.0.0:8776"],
     "externalAddresses": [],
-    "peers": { "type": "dynamic" },
+    "peers": { "type": "static" },
     "connect": [
       "z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT@92-5-138-121.sslip.io:8776"
     ],

@@ -130,13 +130,13 @@ const strong = { id: 'skill_test_strong', action_type: 'B', is_permanent: true, 
 const weak = { id: 'skill_test_weak', action_type: 'A', is_permanent: false, flags: { negate: { codes: ['EM'], who: 'target', mode: 'no_move' } } };
 const mixUniform = Object.values(cal.mix.foe).every(v => v === 1 / 6) && Object.values(cal.mix.self).every(v => v === 1 / 6) && Object.keys(cal.mix.foe).length === 6;
 const feeble = { id: 'skill_test_feeble', action_type: 'A', is_permanent: true, point_buy_stat: 'stat_will', flags: { trapImmune: true } };
-const rd = checkSkill(doom), rwall = checkSkill(wall), rs = checkSkill(strong), rw = checkSkill(weak), rfe = checkSkill(feeble);
+const rd = checkSkill(doom), rwall = checkSkill(wall), rs = checkSkill(strong), rw = checkSkill(weak, { tolerance: 0.10 }), rfe = checkSkill(feeble);
 ok('overpowered instant → reject (hard cap)', rd.verdict === 'reject' && rd.valid && rd.judged_ratio > cal.policy.hard_cap_ratio, `${rd.verdict} ${rd.judged_ratio}`);
 ok('overpowered permanent → reject (hard cap)', rwall.verdict === 'reject' && rwall.valid, `${rwall.verdict} ${rwall.judged_ratio}`);
 ok('strong → nerf', rs.verdict === 'nerf', `${rs.verdict} ${rs.judged_ratio}`);
 ok('nerf offers a change', rs.suggestions.some(s => s.patch), JSON.stringify(rs.suggestions));
 ok('nerf never suggests doing more', rs.suggestions.filter(s => s.patch).every(s => !/too$|every adjacent|also |alternative|no self-lock/.test(s.change)), JSON.stringify(rs.suggestions.map(s => s.change)));
-ok('weak → boost', rw.verdict === 'boost', `${rw.verdict} ${rw.judged_ratio}`);
+ok('weak → boost (at the old ±10 %: it is inside the ±30 % band)', rw.verdict === 'boost', `${rw.verdict} ${rw.judged_ratio}`);
 ok('boost offers a change', rw.suggestions.some(s => s.patch), JSON.stringify(rw.suggestions));
 ok('next to nothing → reject (floor)', rfe.verdict === 'reject' && rfe.valid && rfe.judged_ratio < cal.policy.hard_floor_ratio, `${rfe.verdict} ${rfe.judged_ratio}`);
 console.log(`synthetic: doom ${rd.verdict} ×${rd.judged_ratio}, wall ${rwall.verdict} ×${rwall.judged_ratio}, strong ${rs.verdict} ×${rs.judged_ratio} (→ ${rs.suggestions[0]?.change}), weak ${rw.verdict} ×${rw.judged_ratio} (→ ${rw.suggestions[0]?.change}), feeble ${rfe.verdict} ×${rfe.judged_ratio}`);
@@ -183,13 +183,14 @@ for (const o of others) ok(`digest ${me} == ${o.platform}`, o.digest === digest,
 console.log(`determinism: digest ${digest.slice(0, 12)} on ${me}; compared with ${others.length ? others.map(o => o.platform).join(', ') : 'no other platform yet (run under the other node)'}; stamp ${rs.stamp.def_sha256.slice(0, 12)} ${rs.stamp.verdict} ×${rs.stamp.ratio}`);
 
 // 5. tolerance, baseline, pin, effects validator, core parity
-ok('default tolerance is 0.10 (band [0.9, 1.1])', rs.tolerance === 0.1 && rs.band.low === 0.9 && rs.band.high === 1.1 && cal.policy.tolerance === 0.1 && DEFAULT_TOLERANCE === 0.1);
+ok('default tolerance is 0.30 (band [0.7, 1.3], user ruling 2026-11-18)', rs.tolerance === 0.3 && rs.band.low === 0.7 && rs.band.high === 1.3 && cal.policy.tolerance === 0.3 && DEFAULT_TOLERANCE === 0.3, `${rs.tolerance} [${rs.band.low}, ${rs.band.high}]`);
+ok('weak → ok at the default ±30 %', checkSkill(weak).verdict === 'ok', `${checkSkill(weak).verdict}`);
 ok('tolerance widens monotonically', [0, 0.05, 0.1, 0.15, 0.3, 0.6, 0.9, 1].map(t => checkSkill(strong, { tolerance: t }).verdict === 'ok').every((v, i, a) => i === 0 || !a[i - 1] || v));
 ok('tolerance 0.9 → strong ok', checkSkill(strong, { tolerance: 0.9 }).verdict === 'ok');
 {
-  const mid = builtins.map(d => checkSkill(d, { baseline: null })).find(r => r.judged_ratio > 1.1 && r.judged_ratio <= 1.15);
-  if (mid) ok(`${mid.skill_id} ×${mid.judged_ratio}: nerf at 0.10, ok at 0.15`, mid.verdict === 'nerf' && checkSkill(builtins.find(d => d.id === mid.skill_id), { baseline: null, tolerance: 0.15 }).verdict === 'ok');
-  else console.log('tolerance: no built-in between 1.10 and 1.15');
+  const mid = builtins.map(d => checkSkill(d, { baseline: null })).find(r => r.judged_ratio > 1.1 && r.judged_ratio <= 1.3);
+  if (mid) ok(`${mid.skill_id} ×${mid.judged_ratio}: ok at 0.30, nerf at 0.10`, mid.verdict === 'ok' && checkSkill(builtins.find(d => d.id === mid.skill_id), { baseline: null, tolerance: 0.10 }).verdict === 'nerf');
+  else console.log('tolerance: no built-in between 1.10 and 1.30');
 }
 const pa = builtins.find(d => d.id === 'skill_powerful_attack');
 const paCurve = checkSkill(pa, { baseline: null });
@@ -215,9 +216,11 @@ ok('audit off → engines out of the pin', canonicalJson(computePin(noAudit).eng
 ok('verifyPin(foreign) reports the diff', !verifyPin({ ...pin, core_sha256: '0'.repeat(64), pin_id: 'x' }).ok && verifyPin({ ...pin, core_sha256: '0'.repeat(64) }).diffs.includes('core_sha256'));
 ok('stamp carries the pin', rs.stamp.pin_id === pin.pin_id);
 // The effects validator is untouched by S5: same source bytes, does not import the core, pin id as of 2026-11-16.
+// Source sha refreshed 2026-11-18: the effects tolerance ruling (DEFAULT_TOLERANCE 0.30) changed its bytes (was 82ffc898fd83).
+// Refreshed again 2026-11-18: effects validator 1.1.0 binds the ref-pinned libs (was 6e0b08de5c3a).
 const fxPin = fxv.computePin();
 const fxSrc = fs.readFileSync(path.join(HERE, 'rebalancing-check.mjs'), 'utf8');
-ok('effects validator source unchanged', fxPin.source_sha256 === '82ffc898fd83be06b70bcbad36e15c87a961ab0b9c87143c1c7441d0c898eaa9', fxPin.source_sha256);
+ok('effects validator source unchanged', fxPin.source_sha256 === 'f1834ad7a8080d7faa4f71db92e59663d9f563f35cee6c59c1f01ff9f289c166', fxPin.source_sha256);
 ok('effects validator does not import rebalancing-core', !fxSrc.includes('rebalancing-core'));
 if (fxPin.engines_sha256 === '3d66fc7429b93dc618eba71b3666fc422ac25e4d7276131b36e0340565321727') ok('effects pin id unchanged', fxPin.pin_id === '5f8ddbb4640e0842606e6ddfab91c1d50bea0695bf814b8e7cfd6f5c3114d7a0', fxPin.pin_id);
 else console.log(`note: effects engines changed since 2026-11-16 (effects.mjs / effect-engine.mjs / libs) → effects pin ${fxPin.pin_id.slice(0, 12)}; not caused by S5`);

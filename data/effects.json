@@ -1734,14 +1734,13 @@
             "text": "Move around a terrain card, wall token, ally, or yourself. Channel: draw a Harmony token every action until contact."
           },
           "logic": {
-            "description": "Implemented 2026-10-29. The left-clicked unoccupied tile within 10 hexes receives one adjacent thing of mine: an ally next to me, me, or an unoccupied trap / obstacle next to me (allies first, then me, then traps). No tile → fizzles. ∀ unchanged.",
+            "description": "Implemented 2026-10-29, reworked 2026-11-17 (user: clicking a tile while casting moves the nearby building / ally / me there; no click → the most beneficial position). The resolver (game/awake.mjs, same view on every peer) moves me, an ally in contact or a building within 2 hexes to a free hex within 10: the clicked hex (the thing that gains most goes there), the clicked thing (to its best hex), or with no click the most beneficial move. A moved building keeps its look, bonus and hidden trap (world edits moved:/made:). The Empty slot plays as Empty Posture while a tile-taking cast is queued. Not modelled: the Harmony-token channel, ∀ permanent, wall tokens.",
             "prerequisites": [
               {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
-              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}},
-              {"id": "free_tile_within_10", "description": "The chosen tile is free and within 10 hexes (general_ux_range_cast_target).", "when": {"and": [{"!=": [{"var": "target"}, null]}, {"<=": [{"var": "dist"}, 10]}]}}
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}}
             ],
             "effects": [
-              {"id": "map_surgery", "description": "An adjacent ally (else me, else an adjacent unoccupied trap / obstacle) moves onto the chosen free tile.", "target": "tile", "unit": "relocation", "value": true}
+              {"id": "map_surgery", "description": "One of: me, a living ally in contact, a building within 2 hexes (not a fortress / tree / wall) moves to a free hex 1–10 hexes from me. Clicked thing → it moves to its best hex; clicked free hex → the thing that gains most goes there; no / unusable click → the best (thing, hex) pair. Gain = value(new) − value(old): unit +2 on a building; healthy: −(hexes beyond contact with the nearest seen enemy) − (extra enemies in contact); hurt (life ≤ half): +hexes to the nearest enemy (cap 10); building: +2 per friend within 1, −2 per seen enemy within 1. Ties: shorter move, me → ally → building, id, (q, r). game/awake.mjs.", "target": "tile", "unit": "relocation", "value": true}
             ],
             "validation": [
               {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_harmony"]}]}},
@@ -1753,8 +1752,43 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": [],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-18",
+          "data": {
+            "effect_types": ["point_buy", "channeling", "permanent"],
+            "element_cost": ["elem_harmony"],
+            "every_bonus": "Permanent — the two Awakes become one permanent that stays when the channel ends and adds the target's Stat to yours: an awakened ally's Will, a moved building's stat bonus (yourself or a wall lend nothing).",
+            "text": "Move yourself, an ally in contact, a building or a wall token (obstacle, labyrinth wall) within 2 hexes to a free hex within 10: click the hex (the thing that gains most goes there), or click the thing (it goes to its best hex); with no click the most beneficial move. Channel: a Harmony token on your tile every action until contact with an enemy."
+          },
+          "logic": {
+            "description": "Implemented 2026-10-29, reworked 2026-11-17 (user: clicking a tile while casting moves the nearby building / ally / me there; no click → the most beneficial position). The resolver (game/awake.mjs, same view on every peer) moves me, an ally in contact or a building within 2 hexes to a free hex within 10: the clicked hex (the thing that gains most goes there), the clicked thing (to its best hex), or with no click the most beneficial move. A moved building keeps its look, bonus and hidden trap (world edits moved:/made:). The Empty slot plays as Empty Posture while a tile-taking cast is queued. 1.1.0 (user rulings 2026-11-18): wall tokens (obstacles, labyrinth walls) are movable too; the card stands as a channel permanent (smallest die) that puts a Harmony bonus token (Will point-buy) on my tile every following action until I play A/B/M/EM, emit another element, or stand next to an enemy (stop 'contact'); ∀: the permanent stays when the channel ends and adds the target's stat to mine (an ally's Will, a moved building's stat bonus). World edits are dimension state: every peer keeps a ledger (world_ledger_json, autosaved) so a mover who leaves leaves the map changed.",
+            "prerequisites": [
+              {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}}
+            ],
+            "effects": [
+              {"id": "map_surgery", "description": "One of: me, a living ally in contact, a building within 2 hexes (not a fortress / tree / wall) moves to a free hex 1–10 hexes from me. Clicked thing → it moves to its best hex; clicked free hex → the thing that gains most goes there; no / unusable click → the best (thing, hex) pair. Gain = value(new) − value(old): unit +2 on a building; healthy: −(hexes beyond contact with the nearest seen enemy) − (extra enemies in contact); hurt (life ≤ half): +hexes to the nearest enemy (cap 10); building: +2 per friend within 1, −2 per seen enemy within 1; wall (within 2): +3 per hurt friend it shields (next to it, closer to its nearest enemy). Ties: shorter move, me → ally → building → wall, id, (q, r). game/awake.mjs.", "target": "tile", "unit": "relocation", "value": true},
+              {"id": "channel_harmony_token", "description": "Every action after the cast while the channel stands: a Harmony bonus token on the caster's tile, value = Will point-buy die (a failed roll gives none that action).", "target": "caster", "unit": "token", "value": {"var": "caster.stats.will"}},
+              {"id": "every_lends_target_stat", "description": "∀: the permanent stays and adds the target's stat (ally Will / building stat bonus) to the caster's.", "target": "caster", "unit": "stat", "value": {"var": "target.stats.will"}}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_harmony"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}}
+            ],
+            "references": ["action_can_cast_non_instant", "elements_not_disabled"]
+          },
+          "notes": "Paper text (1.0.0): Move around a terrain card, wall token, ally, or yourself. Channel: draw a Harmony token every action until contact. User rulings 2026-11-17/18: clicking a tile while casting moves the nearby building / ally / me there, with no click the most beneficial position; wall tokens are targets too; the Harmony channel until contact; ∀ = one permanent adding the target's Stat; moved buildings are dimension state (world-edit ledger).",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": [],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -2036,8 +2070,46 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["effect_oblivion"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-17",
+          "data": {
+            "effect_types": ["permanent"],
+            "element_cost": ["elem_earth", "elem_vitality"],
+            "text": "Target misses actions until end of round. + You may put an Earth or Vitality permanent bonus token on your tile. + Also put a damage-shield Earth token on your tile."
+          },
+          "logic": {
+            "description": "Implemented. One enemy in contact loses the remaining actions of this turn (lock rest of turn), and the caster buys an Earth OR Vitality bonus token (stat-pill pick, else the higher of its Matter / Vitality, tie Earth — 1.1.0, user request 2026-11-17) and an Earth damage-shield token on its own tile (user ruling 2026-11-18: a failed token roll no longer voids the cast — the lock and the tokens bought land, the owed token re-emits next action and that retry emission only buys the owed token — no new lock ('do retry, not lock') — even with nobody in reach). Standing on the tile, the bonus token adds to the caster's stat and life maximum; the map shows the tokens as lettered dice plus a building on the hex (a stone guardian statue for Earth, a Healing Orb for Vitality) and the stat pills as +N◆; tokens buff whoever stands on the tile, enemies included (user ruling 2026-11-18). Every peer shows '<Fossilization> success' over a locked target or '<Fossilization> failed' (retry / nobody in reach / Disable / Blessing ∀). Aura / Aura ∀ widen the locked recipients.",
+            "prerequisites": [
+              {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}},
+              {"id": "target_in_reach", "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).", "when": {"or": [{"==": [{"var": "target"}, null]}, {"if": [{"var": "cast.aura"}, {"rule": ["in_view", {"dist": {"var": "dist"}, "radius": 10}]}, {"rule": ["in_contact", {"dist": {"var": "dist"}}]}]}]}},
+              {"id": "target_is_enemy", "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.", "when": {"or": [{"==": [{"var": "target"}, null]}, {"rule": ["is_enemy", {"a_alliance": {"var": "caster.alliance"}, "b_alliance": {"var": "target.alliance"}}]}]}},
+              {"id": "target_alive", "description": "A declared target must still be alive (life > 0); dead units are skipped.", "when": {"or": [{"==": [{"var": "target"}, null]}, {">": [{"var": "target.life"}, 0]}]}}
+            ],
+            "effects": [
+              {"id": "actions_lost_rest_of_turn", "description": "The target loses the remaining actions of this turn (paper: rest of the round).", "target": "target", "unit": "actions", "value": {"max0": [{"-": [{"var": "target.actions_per_round"}, {"+": [{"var": "action_index"}, 1]}]}]}},
+              {"id": "self_bonus_tokens", "description": "One bonus token on the caster tile, Earth OR Vitality: the element picked by clicking a stat pill (Vitality, or Matter cycled to Earth), else the one the caster's stat is higher in (tie: Earth). One point-buy on that stat, highest die is the token value; a failed roll keeps the lock and re-emits the last element for this token only (the retry locks nobody again). While anyone (caster, ally or enemy) stands on the tile the token adds to its Matter (Earth) or Vitality stat and to its life maximum (general_ux_hitpoints_calculations).", "target": "tile", "unit": "tokens", "value": 1},
+              {"id": "self_shield_tokens", "description": "Damage-shield token(s) on the caster tile for elem_earth: one point-buy each on the caster stat, highest die is the token value; a failed roll keeps the lock and the bonus token and re-emits the last element for the shield only. The shield absorbs the first damage taken on that tile and is spent.", "target": "tile", "unit": "tokens", "value": 1}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_earth (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_earth"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}}
+            ],
+            "references": ["action_can_cast_non_instant", "elements_not_disabled", "in_contact", "in_view", "is_enemy"]
+          },
+          "notes": "User request 2026-11-17: the paper's 'Earth or Vitality permanent bonus token' is implemented (stat-pill pick, else the caster's higher stat, tie Earth); the tile tokens are shown on the map and in the stat pills; success / failed toasts over the target. User rulings 2026-11-18 (amended in place, uncommitted): a failed token roll keeps the lock and the bought token, the owed token re-emits next action and that retry only buys it — no new lock (user: 'do retry, not lock', the caster's own failed roll); tile tokens buff whoever stands there (enemies too) and show as a building (stone guardian statue / Healing Orb).",
+          "origin": "player_vote",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_oblivion"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -2533,8 +2605,60 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["effect_phantom", "effect_resurrect_death_ward"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-17",
+          "data": {
+            "effect_types": ["permanent", "point_buy"],
+            "element_cost": ["elem_vitality"],
+            "text": "Possess: pick a creature you killed from your archive and play it while this permanent stands (your character stands still, Empty Posture / Empty Move). No creature in your archive: the Phylactery permanent instead — click it to destroy the most valuable permanent of the nearest enemy (inactive with no enemy or no permanent near).",
+            "possess": {
+              "source": "archive_creature",
+              "pick": "ui_or_strongest_stat_sum",
+              "permanent_on": "caster",
+              "hero_action": "EP",
+              "ends": ["permanent_destroyed", "creature_dies"]
+            },
+            "phylactery": {
+              "reach": 2,
+              "target": "nearest_enemy_with_permanent",
+              "perm": "highest_power_then_creature_then_hostile_then_id",
+              "uses": 1
+            }
+          },
+          "logic": {
+            "description": "Implemented 2026-11-17 (user ruling, supersedes the 2026-10-30 enemy bind). Units I kill hand their creature card to my archive (the killer = who dealt the dead unit the most damage that action, ties → smallest id). Possess: the reveal carries the archive creature I picked (UI 👁 in the archive; none picked → the strongest by Σ stats); the permanent (fixed power 6, destroyable by Rule 24 like any permanent) lands in MY holding and the creature enters next to me as my companion — my action card and target drive it (reveal proxy), my hero holds with Empty Posture. It ends when the permanent is destroyed (the creature leaves, its card back to my archive) or the creature dies (the permanent falls with it; its killer gets the creature card). Phylactery: Possess cast with no creature in my archive gives the Phylactery permanent instead; one click shatters, at the end of that action and with no roll, the best permanent of the NEAREST enemy within data.phylactery.reach hexes that holds one (class cards never): highest Rule 24 power, then a creature-holding one, then a hostile one, then id — judged by every peer from the same view; the Phylactery is spent. No enemy in reach or no permanent → it is shown inactive and the click does nothing.",
+            "prerequisites": [
+              {"id": "action_may_cast", "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).", "when": {"rule": ["action_can_cast_non_instant", {"action": {"var": "caster.action"}, "is_instant": false}]}},
+              {"id": "elements_not_disabled", "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).", "when": {"rule": ["elements_not_disabled", {"elements": {"root": "elements"}, "disabled": {"root": "caster.disabled_elems"}}]}}
+            ],
+            "effects": [
+              {"id": "permanents_destroyed_alt", "description": "Phylactery (no creature in my archive): one enemy permanent shattered, no roll, on a click — the Phylactery is spent.", "target": "target", "unit": "permanents", "value": 1},
+              {"id": "permanent_power", "description": "Rule 24 threshold of the permanent: fixed 6 (no placement die).", "target": "caster", "unit": "die", "value": {"rule": ["fixed_power_6", {}]}},
+              {"id": "destroyed_by_rule_24", "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.", "target": "caster", "unit": "die", "value": {"rule": ["using_rule_24", {"die": {"var": "die"}, "power": {"rule": ["fixed_power_6", {}]}}]}},
+              {"id": "permanent_on_caster", "description": "The permanent lands in the caster's holding (possess_mode possess with an archive creature, else phylactery).", "target": "caster", "unit": "permanent", "value": 1},
+              {"id": "possessor_drives", "description": "The caster's picked action and target are the archive creature's reveal (proxy); the caster's hero holds with Empty Posture.", "target": "target", "unit": "proxy", "value": {"var": "cast.proxy"}},
+              {"id": "phylactery_reach", "description": "Phylactery target: the nearest enemy within this many hexes holding a non-class permanent; on it the highest-power permanent (creature holder, then hostile, then id on ties).", "target": "target", "unit": "hexes", "value": 2}
+            ],
+            "validation": [
+              {"id": "cost_keeps_key_element", "description": "element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).", "assert": {"and": [{">=": [{"count": [{"var": "proposal.data.element_cost"}]}, 1]}, {"includes": [{"var": "proposal.data.element_cost"}, "elem_vitality"]}]}},
+              {"id": "cost_count_within_one", "description": "The number of elements stays within ±1 of the canonical cost.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.element_cost"}]}, {"count": [{"var": "entry.data.element_cost"}]}]}]}, 1]}},
+              {"id": "keeps_type_permanent", "description": "effect_types keeps \"permanent\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "permanent"]}},
+              {"id": "keeps_type_point_buy", "description": "effect_types keeps \"point_buy\".", "assert": {"includes": [{"var": "proposal.data.effect_types"}, "point_buy"]}}
+            ],
+            "references": ["action_can_cast_non_instant", "elements_not_disabled", "fixed_power_6", "using_rule_24"]
+          },
+          "notes": "User ruling 2026-11-17: Possess plays a creature killed by me from my archive (hero stands still EP/EM); with no creature archived the Phylactery permanent, one click destroys the nearest enemy's most valuable permanent, inactive when nothing is in reach. Kills land in the killer's archive again.",
+          "origin": "player_vote",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["effect_phantom", "effect_resurrect_death_ward"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }

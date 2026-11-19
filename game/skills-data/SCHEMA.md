@@ -70,10 +70,10 @@ built-in with a program, in deal order), then registered foreign skills in id or
 |---|---|---|---|---|---|
 | `rides` | data | single | `codes, req` | bool | `rides` |
 | `plan_target` | data | single | `skillIds` | bool (any skill with `flags.keepsTarget`) | `plan_target` |
-| `counter_pre` | **js** | pass | — (edits `o.skills`, `counterPen`, `effAction/tranceOpts`, `skillFx`) | — | |
-| `negate_action` | **js** | pass | — (edits `effAction/tranceOpts`, `o.skills`, `skillFx`) | — | |
-| `negate_kind` | **js** | pass | — (edits codes, `noMove`, `skillFx`) | — | |
-| `trance_assign` | **js** | pass | — (writes `r.vs`, `r.played`) | — | |
+| `counter_pre` | data | pass (sorted reveals) | `r, actor, phase, carry` | edit records (`skills`, `fx`, `trance_collapse`, `pen`, `log`, `continue`) | |
+| `negate_action` | data | pass (Bluff → Intimidation) | `r, actor, phase, carry` | edit records (`set_code`, `drop_trance`, `replace`, `skills`, `fx`) | |
+| `negate_kind` | data | pass (Grapple → Disruption Move → Overrun) | `r, actor, phase, carry` | edit records (`replace`, `no_move`, `no_emit`, `swap`, `fx`) | |
+| `trance_assign` | data | pass | `r, actor, phase, carry` (+ ctx `by_actor, code_vs, attacks_on`) | edit record `trance {vs, played}` | |
 | `block_in` | data | or | `defender, blocker` | truthy = the Block deals nothing | |
 | `block_cost` | data | max | `attacker, defender` | number | |
 | `attack_range` | data | max | `attacker, code` | hexes the strike reaches (neutral 1) | |
@@ -96,20 +96,35 @@ bookkeeping (the die spent by `effect_leg`), there is no rule left to run.
 
 **Data / JS split (S2):** data — `rides, plan_target, block_in, block_cost, attack_range, attack_out, attack_target,
 attack_vs_block, defend_in, damage_in, effect_in, effect_leg, end_round, perm_landing, perm_stats, disposition, plan_lock`
-(attack_range, attack_vs_block, plan_lock and block_in's `blocker`: SKILL REBALANCE 2026-11-16); JS — `counter_pre, negate_action,
-negate_kind, trance_assign` (Counter Spell, Bluff, Intimidation, Grapple, Disruption Move, Overrun, Battle Trance).
+(attack_range, attack_vs_block, plan_lock and block_in's `blocker`: SKILL REBALANCE 2026-11-16); since MV 2026-11-17 also
+the pass hooks `counter_pre, negate_action, negate_kind, trance_assign` (Counter Spell, Bluff, Intimidation, Grapple,
+Disruption Move, Overrun, Battle Trance) — programs in the skill files + `lib/skills_pass.json`.
 
-### Moving the pass hooks to data (next milestone)
+### Pass hooks as data: ordered edit records (MV 2026-11-17)
 
 They edit the resolver's registers in place and later skills read the edits of earlier ones in the same pass
-(Intimidation sees Bluff's EP; Overrun's target choice reads codes rewritten by Grapple; Counter Spell's
-`bestElem` writes and restores `counterPen` while it probes). A data version needs an **ordered edit record**, the
-generalisation of `damage_in`: the dispatcher runs the participants one reveal at a time in the old order, each
-program returns `[{op: 'set_code'|'replace_code'|'drop_trance'|'strip_skills'|'no_move'|'pen'|'fx'|'vs', …}]`, and the
-dispatcher applies them before the next program runs (so `code_is`, `reveal_of` see the edits). Plus: a pure
-`effect_dmg_with_pen(o, def, pen)` query (so Counter Spell can probe without mutating `counterPen`), `codeVs` /
-`attacksOn` as ctx queries for `trance_assign`, and the Map-valued `r.vs` written from an `{enemy: index}` result.
-The identity method stays the same (skills-check worlds + skill-engine-check ≥ 600 cases per skill per hook).
+(Intimidation sees Bluff's EP; Overrun's target choice reads codes rewritten by Grapple). The dispatcher
+(skills.mjs `dataPass`) runs one program per (reveal, skill) — reveals sorted by actor (`counter_pre`) or in live order,
+skills in `HOOK_SPECS[hook].order` — with root registers `{skill, r, actor, phase, carry}`; the program returns edit
+records (`skill-engine.mjs PASS_OPS`) that are applied in order before the next program runs, so `code_is` /
+`reveal_of` see them:
+
+| record | applied as |
+|---|---|
+| `set_code {id, code}` / `drop_trance {id}` / `replace {id, from, to}` | `effAction.set` / `tranceOpts.delete` / `ctx.replace` (trance-aware) |
+| `skills {id, skills}` | the reveal's skills list := skills (Counter Spell's strip) |
+| `fx {fx}` / `log {text}` | `skillFx.push` / `ctx.log` |
+| `no_move {id}` / `no_emit {id}` / `swap {by, on}` | `noMove` / `noEmit` / `swaps` (the last two only when the register exists) |
+| `trance_collapse {id, code}` | the trance falls to `code` (Counter Spell on Battle Trance) |
+| `pen {id, elem, amount}` | `counterPen[id][elem] += amount` |
+| `trance {vs: [[enemy, i]…], played: [i…]}` | `r.vs` (Map) / `r.played` (Set) of the current reveal |
+| `continue {carry}` | apply what came before, then run the same program again with `phase + 1` (≤ 8 phases) |
+
+Counter Spell probes elements with the ctx query `effect_dmg_pen [o, def, el, amount]` (sets, reads and restores
+`counterPen` — the JS `bestElem` probe). A program error / limit / bad record stops that (reveal, skill) run with the
+records already applied, counted as a data-hook error. Shadow mode runs data on the real registers, snapshots them,
+restores, then runs JS; every register, the reveals' `skills / trance / vs / played` and the logs must be identical.
+Foreign skills with a pass program run after the built-ins' pass, foreign ids in order.
 
 ## Vocabulary (`SKILL_OPS`, 90 ops)
 
@@ -150,7 +165,7 @@ markers, data hooks only), binds the libraries, adds `flags` to `SKILL_RULES` (n
 `flags.negating`, to `NEGATING_SKILLS`; dealing (`SKILLS_IMPLEMENTED`) is unchanged. The last registration of an id
 wins. From then on the skill takes part in every data hook it has a program for — after the built-ins, foreign ids in
 code-unit order — in every `SKILL_ENGINE` mode; its per-skill hooks (`perm_stats`, `disposition`, …) run its own program
-or the std default on its metadata. It cannot act in the JS pass hooks yet.
+or the std default on its metadata. A pass program of a foreign skill runs after the built-ins' pass (MV).
 
 ## Example (Dodge)
 

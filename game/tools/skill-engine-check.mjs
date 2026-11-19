@@ -2,7 +2,7 @@
 // game/skill-engine.mjs must give exactly what the JS hooks of game/skills.mjs give.
 //   node tools/skill-engine-check.mjs            → ends with "all skill-engine checks passed"
 // 1. files: the 14 definitions + lib validate; metadata = data/skills.json; flags = SKILL_RULES (+ the S5 validator's
-//    BUILTIN_FLAGS); hooks = SKILL_RULES hooks; pass hooks marked {"engine":"js"}.
+//    BUILTIN_FLAGS); hooks = SKILL_RULES hooks; pass hooks as data (MV), section 2 also compares the JS pass vs the data pass.
 // 2. identity: for every data hook and every skill that has a program for it (std hooks: every skill), ≥ 600 seeded
 //    random cases (SKILL_ENGINE_CHECK_N, default 700) — the JS hook vs resolveSkillProgram(def, …), JSON-identical,
 //    on the random worlds of tools/skills-check.mjs (same generator); programs never mutate the ctx.
@@ -50,7 +50,7 @@ for (const [id, def] of bundle.defs) {
   const vk = Object.fromEntries(Object.keys(def.flags).filter(k => FLAG_KEYS[k]).map(k => [k, def.flags[k]]));
   const wantHooks = r.hooks.filter(h => HOOK_SET.has(h));
   const marks = Object.entries(def.hooks).filter(([, h]) => SE.isJsMarker(h)).map(([n]) => n);
-  ok(`${id}: schema keys, metadata = data/skills.json, flags = SKILL_RULES + BUILTIN_FLAGS, hooks = SKILL_RULES hooks, pass hooks JS`,
+  ok(`${id}: schema keys, metadata = data/skills.json, flags = SKILL_RULES + BUILTIN_FLAGS, hooks = SKILL_RULES hooks, no JS marker but Force Shield end_round`,
     req.every(k => k in def) && Object.keys(def).every(k => allowed.includes(k))
     && def.name === DATA[id].name && def.version === d.version && def.action_type === d.data.action_type && def.is_permanent === !!d.data.is_permanent
     && def.point_buy_stat === (d.data.point_buy_stat ?? null) && def.text === d.data.text
@@ -228,6 +228,40 @@ for (let s = 1; s <= N; s++) {
     for (const def of owners('plan_lock')) cmp('plan_lock', def, skillHook('plan_lock', def.id, { skillData }, { paid }), resolveSkillProgram(def, 'plan_lock', { skillData }, { paid }), null);
   }
   if (snap(B) !== before) mutated++;
+  // MV 2026-11-17 — pass hooks (edit records): the JS pass on one copy of the world, the data pass (passHookData) on
+  // another, hook after hook from equal states; every register, the reveals and the logs must be identical.
+  {
+    const PA = bind(structuredClone(w)), PB = bind(structuredClone(w));
+    const passes = [['counter_pre', 'skill_counter_spell'], ['negate_action', null], ['negate_kind', null]];
+    for (const [h, id] of passes) {
+      const pre = snap(PA);
+      skillHook(h, id, PA.skCtx); SK.passHookData(h, PB.skCtx);
+      const a = snap(PA), b = snap(PB);
+      count(h, 'pass', a === b, a !== pre, `js ${a.slice(0, 300)} data ${b.slice(0, 300)}`);
+    }
+    // trance_assign with the reveals finalised after the prohibitions (as skills-rebalancing-check / peer.mjs)
+    const fin = (B) => {
+      for (const r of B.revealsThisTurn) { if (B.tranceOpts.has(r.actor)) r.trance = B.tranceOpts.get(r.actor); else r.action = B.effAction.get(r.actor); }
+      const byActor = new Map(B.revealsThisTurn.map(r => [r.actor, r]));
+      const codeVs = (id, other) => { const r = byActor.get(id); if (!r) return 'EP'; if (!r.trance) return r.action; const idx = r.vs?.get(other) ?? (r.played ? [...r.played][0] : 0); return r.trance[idx]; };
+      const attacksOn = (r, victim) => {
+        if (!r) return false;
+        const declared = r.target?.kind === 'character' && r.target.ref === victim;
+        if (!r.trance) return r.action === 'A' && declared;
+        const idx = r.vs?.get(victim);
+        if (idx !== undefined) return r.trance[idx] === 'A';
+        return !r.vs && declared && r.trance.includes('A');
+      };
+      return { byActor, codeVs, attacksOn };
+    };
+    const fa = fin(PA), fb = fin(PB);
+    const pre = snap(PA);
+    skillHook('trance_assign', TRANCE, PA.skCtx, fa); SK.passHookData('trance_assign', PB.skCtx, fb);
+    const a = snap(PA) + J(PA.revealsThisTurn.map(r => [r.vs ? [...r.vs] : null, r.played ? [...r.played] : null]));
+    const b = snap(PB) + J(PB.revealsThisTurn.map(r => [r.vs ? [...r.vs] : null, r.played ? [...r.played] : null]));
+    count('trance_assign', 'pass', a === b, PA.revealsThisTurn.some(r => r.vs && r.vs.size), `js ${a.slice(-300)} data ${b.slice(-300)}`);
+    void pre;
+  }
 }
 ok('programs never mutate the resolver registers / reveals (non-edit hooks)', mutated === 0, `${mutated} worlds changed`);
 const rows = [...tally.entries()].sort();
@@ -242,7 +276,7 @@ console.log(`     ${cases} cases over ${rows.length} (hook, skill) pairs`);
   const w = genWorld(77), A = bind(structuredClone(w)), Bw = bind(structuredClone(w));
   skillHook('counter_pre', 'skill_counter_spell', A.skCtx);
   resolveSkillProgram(bundle.defs.get('skill_counter_spell'), 'counter_pre', Bw.skCtx);
-  ok('resolveSkillProgram on a JS-marked pass hook runs the built-in JS hook', snap(A) === snap(Bw));
+  ok('MV: resolveSkillProgram on a built-in pass program = the JS hook (Counter Spell alone)', snap(A) === snap(Bw));
 }
 
 // ---- 3. bad programs, limits -----------------------------------------------------------------------------
@@ -255,7 +289,10 @@ rejects('denied outcome op (emit)', base({ attack_out: { emit: ['hits', 1] } }),
 rejects('denied dice op (rng)', base({ attack_out: { rng: ['t', 6] } }), /unknown operation rng/);
 rejects('call to an unknown sub', base({ attack_out: { call: ['nope'] } }), /unknown subroutine nope/);
 rejects('unknown hook', base({ on_fire: { var: 'dmg' } }), /unknown hook/);
-rejects('a data program on a JS pass hook', base({ negate_kind: { var: 'x' } }), /no data engine yet/);
+ok('MV: a pass program is a valid hook program (edit records)', J(SK.validateSkillDef(base({ negate_kind: [{ obj: { op: 'no_move', id: { var: 'actor' } } }] }))) === '[]');
+{ const w = genWorld(9), B = bind(structuredClone(w)), b0 = snap(B), e1 = SK.skillShadowStats.errors;
+  resolveSkillProgram(base({ negate_kind: [{ obj: { op: 'no_such_op', id: { var: 'actor' } } }] }), 'negate_kind', B.skCtx);
+  ok('MV: a pass program with a bad record applies nothing (error counted)', snap(B) === b0 && SK.skillShadowStats.errors > e1); }
 rejects('{"engine":"js"} on a foreign skill', base({ attack_out: { engine: 'js', impl: 'skills.mjs#attackOut' } }), /built-in skills only/);
 rejects('bad schema / id / action', base({}, { schema: 'x', id: 'Skill X', action_type: 'Q' }), /schema/);
 rejects('permanent without point_buy_stat', base({}, { is_permanent: true }), /point_buy_stat/);

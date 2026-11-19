@@ -176,3 +176,54 @@ export function argsFor(hook, classId, W, R) {
     default: throw new Error(`argsFor: no generator for ${hook}`);
   }
 }
+
+// CL2 (2026-11-17, validator 1.1.0 weight answer 5): fixtures that VARY the odds only a swarm can measure (the
+// calibration's swarm_placeholders: adjacent_allies, p_ally_cast, p_trap_step, p_destroy_near, p_archived, …).
+// withOdds(W, me, odds, seed) → W + { odds }: when odds.adjacent_allies is a number, the units within 1 hex of `me`
+// are rearranged so that floor(x) (+1 with p = the fraction) living allies stand next to it (allies first, then far
+// enemies turned allies); adjacent enemies and corpses stay where they are. The
+// odds.p_fallen_near places (or removes) a fallen allied creature next to `me`. The
+// other odds ride along in W.odds for the measuring code (tools/out/_c3_balance.mjs) to draw its arguments with. A
+// separate rng (seed ^ 0x5eed1) is used, so genWorld and every existing fixture stay byte-identical.
+const NEIGHBOURS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+export function withOdds(W, me, odds = {}, seed = 0) {
+  const R2 = rngOf(((seed ^ 0x5eed1) >>> 0) || 1);
+  const v0 = W.view.get(me);
+  const x = odds.adjacent_allies;
+  if (Number.isFinite(x) && x >= 0 && v0 && Number.isInteger(v0.tile_q)) {
+    const others = W.ids.filter(o => o !== me && W.view.get(o) && Number.isInteger(W.view.get(o).tile_q)).sort();
+    const living = others.filter(o => (W.view.get(o).life ?? 0) > 0);   // corpses stay where they fell (Necromancer)
+    const foe = (o) => sideOf(W.view.get(o).alliance) !== sideOf(v0.alliance);
+    // living allies next to me step back (enemies stay: the enemy context of the world is kept)
+    for (const o of living) { const v = W.view.get(o); if (!foe(o) && hexDistance(v0, v) <= 1) { v.tile_q = v0.tile_q + 3 + R2.int(3); v.tile_r = v0.tile_r - 1 - R2.int(2); } }
+    const taken = new Set(others.map(o => W.view.get(o)).filter(v => hexDistance(v0, v) <= 1).map(v => `${v.tile_q},${v.tile_r}`));
+    const free = NEIGHBOURS.map(([dq, dr]) => [v0.tile_q + dq, v0.tile_r + dr]).filter(([q, r]) => !taken.has(`${q},${r}`));
+    // allies first, then far enemies turned allies (an adjacent enemy is never converted)
+    const pool = [...living.filter(o => !foe(o)), ...living.filter(o => foe(o) && hexDistance(v0, W.view.get(o)) > 1)];
+    const want = Math.min(free.length, pool.length, Math.floor(x) + (R2.p(x % 1) ? 1 : 0));
+    for (let i = 0; i < want; i++) {
+      const v = W.view.get(pool[i]);
+      v.alliance = v0.alliance; v.tile_q = free[i][0]; v.tile_r = free[i][1];
+    }
+  }
+  // odds.p_fallen_near: with that p a fallen allied creature (not raised before) lies next to `me`, else none does.
+  const pf = odds.p_fallen_near;
+  if (Number.isFinite(pf) && v0 && Number.isInteger(v0.tile_q)) {
+    const raised = new Set([...W.view.values()].flatMap(v => String(v?.reanimated_csv || '').split(',').filter(Boolean)));
+    const near = (v) => Number.isInteger(v.tile_q) && hexDistance(v0, v) <= 1;
+    const fallenAlly = (o) => { const v = W.view.get(o); return (v.life ?? 0) <= 0 && v.creature_id && sideOf(v.alliance) === sideOf(v0.alliance); };
+    const others = W.ids.filter(o => o !== me && W.view.get(o)).sort();
+    for (const o of others) { const v = W.view.get(o); if (fallenAlly(o) && near(v)) { v.tile_q = v0.tile_q + 4; v.tile_r = v0.tile_r - 2; } }
+    if (R2.p(pf)) {
+      const cand = others.filter(o => !raised.has(o) && !near(W.view.get(o)) && (W.view.get(o).life ?? 0) <= 0);
+      const pool = cand.length ? cand : others.filter(o => !raised.has(o) && !near(W.view.get(o)));
+      if (pool.length) {
+        const v = W.view.get(pool[R2.int(pool.length)]);
+        const [dq, dr] = NEIGHBOURS[R2.int(6)];
+        Object.assign(v, { life: 0, alliance: v0.alliance, creature_id: v.creature_id || 'mon_wolf', character_id: '', tile_q: v0.tile_q + dq, tile_r: v0.tile_r + dr });
+        delete v.raised_by;
+      }
+    }
+  }
+  return { ...W, odds: { ...odds } };
+}

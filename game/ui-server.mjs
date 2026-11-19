@@ -35,6 +35,7 @@ import { createNostrBus, DEFAULT_RELAYS } from './nostr-bus.mjs';
 import { fancyLabel } from './js/names.js';
 import { listSavedDimensions as listLocalTmjSaves, DIMENSIONS_DIR, readPrivateMark } from './tools/autosave.mjs';
 import { isTestMode, PRIVATE_TEST_ENV, privateDimId } from './join-plan.mjs';
+import { lastKnownClock, doorClockCands, saveClockCand } from './merge-order.mjs';   // start clock of a join (user 2026-11-17)
 import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing, describeDimension, doorMapSummaries, validTile,
   dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
@@ -441,6 +442,7 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
 
   const taken = new Set(members.map(m => String(m.peer_id || '').replace(/^peer:/, '')));
   const peerLabel = (label || '').trim() || fancyLabel(taken);
+  const clockEnv = await startClockEnv(dim);
   spawnChild(`peer:${peerLabel}`, [path.join(__dirname, 'peer.mjs')], {
     PEER_LABEL:        peerLabel,
     ALLIANCE:          side,
@@ -462,6 +464,7 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
     PEER_PUBLIC_IP:    publicIp,
     BIND_HOST:         publicIp === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0',
     JOIN_SYNC_WAIT_MS: liveDoors.length ? '8000' : '500',
+    ...clockEnv,
     ...commonPeerEnv(),
     NOSTR_RELAYS:      [...relays].join(','),
     HUMAN:             human ? '1' : '',
@@ -478,6 +481,20 @@ async function joinDimension({ dimensionName, doorId, placement, side, character
   }
   return { peerPort: portHttp, status: 'joined', dimension: dim.dimension_name, door: anchorDoor?.peer_id || null, placement, startTile, live_doors: liveDoors.length, label: peerLabel, side,
     ...(regen ? { regen: regenOut, regen_known: regenAll.length } : {}) };
+}
+
+// The last known clock of `dim` (user 2026-11-17: "start at the last known game state, round and turn"): the most
+// advanced of its Door clocks and this box's TMJ saves of it (merge-order.mjs lastKnownClock) → START_ACTION for
+// every peer a join starts (the hero, its allies, the regenerated monsters: one clock for all). peer.mjs uses it
+// only when no live node other than wild monsters answers its join sync. Memoised on the dim record.
+async function startClockEnv(dim) {
+  if (dim._startClockEnv && Date.now() - dim._startClockAt < 60_000) return dim._startClockEnv;   // one join's peers; a cached dim record never freezes it
+  dim._startClockAt = Date.now();
+  const id = dimIdOf(dim);
+  const saves = (await listLocalTmjSaves(DIMENSIONS_DIR).catch(() => [])).filter(s => !s.private && (s.dim_id === id || s.dim_name === dim.dimension_name));
+  const k = lastKnownClock([...doorClockCands(dim.doors), ...saves.map(s => saveClockCand(s))]);
+  if (k) console.log(`[launcher] ${dim.dimension_name}: last known clock turn ${k.turn} round ${k.round} (action ${k.action}, ${k.source})`);
+  return (dim._startClockEnv = k ? { START_ACTION: String(k.action), START_CLOCK_SRC: `${k.source} T${k.turn}.R${k.round}` } : {});
 }
 
 // A quiet join's Door-known monsters (user ruling 2026-11-15): each its own npc_b bot peer on its last tile with its
@@ -712,6 +729,8 @@ async function restoreDimension({ tmjPath, label }) {
       DIM_NAME, DIM_ID, DOOR_ID,
       MAP_SEED,
       ...(p.restore ? { RESTORE_FROM_TMJ: absPath } : {}),
+      // The whole respawned roster starts at the save's clock (user 2026-11-17), not T0.
+      START_TURN: String(Number(props.turn) || 0), START_ROUND: String(Number(props.round) || 0), START_CLOCK_SRC: `save ${path.basename(path.dirname(absPath))}`,
       PEER_GUN_URLS:     others.join(','),
       JOIN_SYNC_WAIT_MS: p === peers[0] ? '500' : '8000',
       ...commonPeerEnv(),

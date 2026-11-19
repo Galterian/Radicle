@@ -67,8 +67,9 @@ same way (by sha, peers only). Prefetch: a peer that sees an `fx_have` entry it 
 
 Once loaded a definition is **prepared**: structure (`loadEffectDefs`), `ref.libs` = `def.uses`, a foreign def that
 reuses a built-in id must keep that id's flags (peer.mjs reads them), one set of flags per foreign id, then the
-**validator gate**: `checkEffect(def)` from E5 (`tools/rebalancing-check.mjs`, pinned); verdict `reject` (or a
-validator error) → refused. `FX_ACCEPT=0` refuses every foreign effect (local player policy; the tests use it).
+**validator gate**: `checkEffect(def, { libs, libShas: ref.libs })` from E5 (`tools/rebalancing-check.mjs`, pinned;
+since validator 1.1.0 the audit binds the libs the ref pins, not the bundled ones, and `stamp.libs` records their
+sha256 map); verdict `reject` (or a validator error, or a lib whose hash is not the pinned one) → refused. `FX_ACCEPT=0` refuses every foreign effect (local player policy; the tests use it).
 An accepted def registers its flags in `EFFECT_RULES` (new ids only; never in `playableEffects`, so dealing,
 library and building picks are unchanged) and its runner under its fxKey. UI: `{kind:'effect_source', event:
 'learned'|'shared'|'missing', ref, peer}` (E6 handler in main.js).

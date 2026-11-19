@@ -9,8 +9,8 @@
   "point_buy_stat": null,
   "text": "The enemy cannot use Attack until end of round.",
   "flags": {"action":"P","permanent":false,"negating":true,"hooks":["negate_action"],"range":1,"negates":["A"],"negate":{"codes":["A"],"who":"adjacent","mode":"ep"},"altCounterSkill":true},
-  "uses": ["skills_std"],
+  "uses": ["skills_std", "skills_pass"],
   "hooks": {
-    "negate_action": {"engine":"js","impl":"skills.mjs#negateAction","note":"pass 1 (after Bluff): every adjacent Attack → Empty Posture; with none, counters a non-permanent skill of an adjacent enemy. JS this milestone."}
+    "negate_action": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"P"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"atk":{"filter":[{"call":["ps_adjacent_foes",{"var":"actor"}]},{"code_is":[{"var":"id"},"A"]},"id"]}},{"if":[{"var":"atk"},{"reduce":[{"var":"atk"},{"concat":[{"var":"acc"},[{"obj":{"op":"replace","id":{"var":"current"},"from":"A","to":"EP"}}],{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"current"},"A"]}]},[]]},{"let":[{"o":{"find":[{"map":[{"filter":[{"concat":[[{"call":["ps_foe_for",{"var":"r"}]}],{"call":["ps_adjacent_foes",{"var":"actor"}]}]},{"bool":[{"var":"id"}]},"id"]},{"reveal_of":[{"var":"id"}]},"id"]},{"and":[{"bool":[{"var":"x"}]},{"<=":[{"dist":[{"var":"actor"},{"var":"x.actor"}]},1]},{"some":[{"or":[{"var":"x.skills"},[]]},{"call":["ps_non_perm",{"var":"s"}]},"s"]}]},"x"]}},{"if":[{"var":"o"},{"call":["ps_counter",{"var":"actor"},{"var":"skill"},{"var":"o.actor"}]},[]]}]}]}]}]}
   }
 }

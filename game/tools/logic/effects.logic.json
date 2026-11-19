@@ -5889,7 +5889,7 @@
       "references": []
     },
     "effect_fossilization": {
-      "description": "Implemented. One enemy in contact loses the remaining actions of this turn (lock rest of turn), and the caster buys an Earth bonus token and an Earth damage-shield token on its own tile (a failed token roll retries the cast). The paper alternative Vitality bonus token is not offered. Aura / Aura ∀ widen the locked recipients.",
+      "description": "Implemented. One enemy in contact loses the remaining actions of this turn (lock rest of turn), and the caster buys an Earth OR Vitality bonus token (stat-pill pick, else the higher of its Matter / Vitality, tie Earth — 1.1.0, user request 2026-11-17) and an Earth damage-shield token on its own tile (user ruling 2026-11-18: a failed token roll no longer voids the cast — the lock and the tokens bought land, the owed token re-emits next action and that retry emission only buys the owed token — no new lock ('do retry, not lock') — even with nobody in reach). Standing on the tile, the bonus token adds to the caster's stat and life maximum; the map shows the tokens as lettered dice plus a building on the hex (a stone guardian statue for Earth, a Healing Orb for Vitality) and the stat pills as +N◆; tokens buff whoever stands on the tile, enemies included (user ruling 2026-11-18). Every peer shows '<Fossilization> success' over a locked target or '<Fossilization> failed' (retry / nobody in reach / Disable / Blessing ∀). Aura / Aura ∀ widen the locked recipients.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -6049,14 +6049,14 @@
         },
         {
           "id": "self_bonus_tokens",
-          "description": "Bonus token(s) on the caster tile for elem_earth: one point-buy each on the caster stat, highest die is the token value; a failed roll re-emits the last element.",
+          "description": "One bonus token on the caster tile, Earth OR Vitality: the element picked by clicking a stat pill (Vitality, or Matter cycled to Earth), else the one the caster's stat is higher in (tie: Earth). One point-buy on that stat, highest die is the token value; a failed roll keeps the lock and re-emits the last element for this token only (the retry locks nobody again). While anyone (caster, ally or enemy) stands on the tile the token adds to its Matter (Earth) or Vitality stat and to its life maximum (general_ux_hitpoints_calculations).",
           "target": "tile",
           "unit": "tokens",
           "value": 1
         },
         {
           "id": "self_shield_tokens",
-          "description": "Damage-shield token(s) on the caster tile for elem_earth: one point-buy each on the caster stat, highest die is the token value; a failed roll re-emits the last element.",
+          "description": "Damage-shield token(s) on the caster tile for elem_earth: one point-buy each on the caster stat, highest die is the token value; a failed roll keeps the lock and the bonus token and re-emits the last element for the shield only. The shield absorbs the first damage taken on that tile and is spent.",
           "target": "tile",
           "unit": "tokens",
           "value": 1
@@ -12304,7 +12304,7 @@
       "references": []
     },
     "effect_awake": {
-      "description": "Implemented 2026-10-29. The left-clicked unoccupied tile within 10 hexes receives one adjacent thing of mine: an ally next to me, me, or an unoccupied trap / obstacle next to me (allies first, then me, then traps). No tile → fizzles. ∀ unchanged.",
+      "description": "Implemented 2026-10-29, reworked 2026-11-17 (user: clicking a tile while casting moves the nearby building / ally / me there; no click → the most beneficial position). The resolver (game/awake.mjs, same view on every peer) moves me, an ally in contact or a building within 2 hexes to a free hex within 10: the clicked hex (the thing that gains most goes there), the clicked thing (to its best hex), or with no click the most beneficial move. A moved building keeps its look, bonus and hidden trap (world edits moved:/made:). The Empty slot plays as Empty Posture while a tile-taking cast is queued. 1.1.0 (user rulings 2026-11-18): wall tokens (obstacles, labyrinth walls) are movable too; the card stands as a channel permanent (smallest die) that puts a Harmony bonus token (Will point-buy) on my tile every following action until I play A/B/M/EM, emit another element, or stand next to an enemy (stop 'contact'); ∀: the permanent stays when the channel ends and adds the target's stat to mine (an ally's Will, a moved building's stat bonus). World edits are dimension state: every peer keeps a ledger (world_ledger_json, autosaved) so a mover who leaves leaves the map changed.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -12337,39 +12337,29 @@
               }
             ]
           }
-        },
-        {
-          "id": "free_tile_within_10",
-          "description": "The chosen tile is free and within 10 hexes (general_ux_range_cast_target).",
-          "when": {
-            "and": [
-              {
-                "!=": [
-                  {
-                    "var": "target"
-                  },
-                  null
-                ]
-              },
-              {
-                "<=": [
-                  {
-                    "var": "dist"
-                  },
-                  10
-                ]
-              }
-            ]
-          }
         }
       ],
       "effects": [
         {
           "id": "map_surgery",
-          "description": "An adjacent ally (else me, else an adjacent unoccupied trap / obstacle) moves onto the chosen free tile.",
+          "description": "One of: me, a living ally in contact, a building within 2 hexes (not a fortress / tree / wall) moves to a free hex 1–10 hexes from me. Clicked thing → it moves to its best hex; clicked free hex → the thing that gains most goes there; no / unusable click → the best (thing, hex) pair. Gain = value(new) − value(old): unit +2 on a building; healthy: −(hexes beyond contact with the nearest seen enemy) − (extra enemies in contact); hurt (life ≤ half): +hexes to the nearest enemy (cap 10); building: +2 per friend within 1, −2 per seen enemy within 1; wall (within 2): +3 per hurt friend it shields (next to it, closer to its nearest enemy). Ties: shorter move, me → ally → building → wall, id, (q, r). game/awake.mjs.",
           "target": "tile",
           "unit": "relocation",
           "value": true
+        },
+        {
+          "id": "channel_harmony_token",
+          "description": "Every action after the cast while the channel stands: a Harmony bonus token on the caster's tile, value = Will point-buy die (a failed roll gives none that action).",
+          "target": "caster",
+          "unit": "token",
+          "value": {"var": "caster.stats.will"}
+        },
+        {
+          "id": "every_lends_target_stat",
+          "description": "∀: the permanent stays and adds the target's stat (ally Will / building stat bonus) to the caster's.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {"var": "target.stats.will"}
         }
       ],
       "validation": [
@@ -13288,7 +13278,7 @@
       "references": []
     },
     "effect_possess_phylactery": {
-      "description": "Implemented 2026-10-29, reworked 2026-10-30 (user ruling): Possess is NOT an alliance change. With an enemy in contact whose Σ stats my Σ stats beat, the Possess permanent (fixed power 6) lands in the POSSESSED unit's holding; while it stands there and I live, I no longer play my hero — my action card and target drive the possessed unit (reveal field proxy), my hero only holds (EP) — and the unit fights on my side (effective side override; its alliance field is unchanged). The enemy's first job is to destroy that permanent: an ally adjacent to the possessed unit emitting a World element aims at it first under Rule 24. When it falls (or I die) the unit is free and my Possess card goes to my discard pile. Phylactery: at any action the holder names an enemy permanent (class cards excepted) — it shatters at the end of that action and the Possess permanent is spent, wherever it stands.",
+      "description": "Implemented 2026-11-17 (user ruling, supersedes the 2026-10-30 enemy bind). Units I kill hand their creature card to my archive (the killer = who dealt the dead unit the most damage that action, ties → smallest id). Possess: the reveal carries the archive creature I picked (UI 👁 in the archive; none picked → the strongest by Σ stats); the permanent (fixed power 6, destroyable by Rule 24 like any permanent) lands in MY holding and the creature enters next to me as my companion — my action card and target drive it (reveal proxy), my hero holds with Empty Posture. It ends when the permanent is destroyed (the creature leaves, its card back to my archive) or the creature dies (the permanent falls with it; its killer gets the creature card). Phylactery: Possess cast with no creature in my archive gives the Phylactery permanent instead; one click shatters, at the end of that action and with no roll, the best permanent of the NEAREST enemy within data.phylactery.reach hexes that holds one (class cards never): highest Rule 24 power, then a creature-holding one, then a hostile one, then id — judged by every peer from the same view; the Phylactery is spent. No enemy in reach or no permanent → it is shown inactive and the click does nothing.",
       "prerequisites": [
         {
           "id": "action_may_cast",
@@ -13321,40 +13311,12 @@
               }
             ]
           }
-        },
-        {
-          "id": "stat_sum_beats_target",
-          "description": "Σ of my four stats is strictly above the target's Σ (else the cast fizzles).",
-          "when": {
-            ">": [
-              {
-                "rule": [
-                  "stat_sum_of",
-                  {
-                    "stats": {
-                      "var": "caster.stats"
-                    }
-                  }
-                ]
-              },
-              {
-                "rule": [
-                  "stat_sum_of",
-                  {
-                    "stats": {
-                      "var": "target.stats"
-                    }
-                  }
-                ]
-              }
-            ]
-          }
         }
       ],
       "effects": [
         {
           "id": "permanents_destroyed_alt",
-          "description": "Phylactery: enemy permanents shattered (no roll) when the holder spends Possess for it.",
+          "description": "Phylactery (no creature in my archive): one enemy permanent shattered, no roll, on a click — the Phylactery is spent.",
           "target": "target",
           "unit": "permanents",
           "value": 1
@@ -13394,24 +13356,15 @@
           }
         },
         {
-          "id": "permanent_on_possessed",
-          "description": "The permanent lands in the possessed unit's holding, marked by the possessor.",
-          "target": "target",
+          "id": "permanent_on_caster",
+          "description": "The permanent lands in the caster's holding (possess_mode possess with an archive creature, else phylactery).",
+          "target": "caster",
           "unit": "permanent",
-          "value": {
-            "rule": [
-              "stat_sum_of",
-              {
-                "stats": {
-                  "var": "caster.stats"
-                }
-              }
-            ]
-          }
+          "value": 1
         },
         {
           "id": "possessor_drives",
-          "description": "The possessor's picked action and target are the possessed unit's reveal; the possessor's hero holds.",
+          "description": "The caster's picked action and target are the archive creature's reveal (proxy); the caster's hero holds with Empty Posture.",
           "target": "target",
           "unit": "proxy",
           "value": {
@@ -13419,11 +13372,11 @@
           }
         },
         {
-          "id": "first_rule_24_target",
-          "description": "An ally adjacent to the possessed unit emitting World aims at the Possess permanent first.",
+          "id": "phylactery_reach",
+          "description": "Phylactery target: the nearest enemy within this many hexes holding a non-class permanent; on it the highest-power permanent (creature holder, then hostile, then id on ties).",
           "target": "target",
-          "unit": "priority",
-          "value": 1
+          "unit": "hexes",
+          "value": 2
         }
       ],
       "validation": [

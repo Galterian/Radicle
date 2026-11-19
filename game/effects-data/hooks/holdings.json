@@ -1,0 +1,9 @@
+{
+  "schema": "chaosd6.effect-hooks/1",
+  "id": "holdings",
+  "version": "1.0.0",
+  "description": "What a falling permanent takes with it: the effect under a Blessing (channel) and a trap it holds (Traps Mastery).",
+  "hooks": {
+    "perm_falls": {"concat":[{"map":[{"filter":[{"or":[{"var":"channels"},[]]},{"===":[{"var":"c.holder"},{"var":"id"}]},"c"]},{"obj":{"op":"release_card","card_id":{"var":"c.card_id"}}},"c"]},[{"obj":{"op":"channels","list":{"filter":[{"or":[{"var":"channels"},[]]},{"and":[{"!==":[{"var":"c.effect_id"},{"var":"id"}]},{"!==":[{"var":"c.holder"},{"var":"id"}]}]},"c"]}}}],{"map":[{"filter":[{"or":[{"var":"traps"},[]]},{"===":[{"var":"t.holder"},{"var":"id"}]},"t"]},{"obj":{"op":"release_card","card_id":{"var":"t.card_id"}}},"t"]},[{"obj":{"op":"traps","list":{"filter":[{"or":[{"var":"traps"},[]]},{"!==":[{"var":"t.holder"},{"var":"id"}]},"t"]}}}]]}
+  }
+}

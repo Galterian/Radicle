@@ -106,6 +106,11 @@ function labChunk(seed, cq, cr, bAt) {
 // Returns {path, label, kind:"wall", desc, blocking:true, id, biome} if (q, r)
 // is a labyrinth-wall hex for the given seed, else null. Pure.
 export function labyrinthWallAt(seed, q, r, biomeAt = null) {
+  // Awake moves labyrinth walls (user ruling 2026-11-18): the placed overlay (world edits) wins over the seed.
+  const key = `${q},${r}`;
+  if (_vacant.has(key)) return null;
+  const moved = _placed.get(key);
+  if (moved) return moved.kind === 'wall' ? moved : null;
   const bAt = biomeAt || biomeFor(seed).biomeAt;
   // Anchors whose run can reach (q, r) lie within LAB_MAX_LEN + 3 < LAB_CHUNK
   // hexes, so the 3×3 chunks around (q, r)'s own chunk hold all of them.
@@ -280,31 +285,49 @@ const mix32 = (h) => { h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 1
 // a placed building exactly like a generated one. NOT part of the pure (seed, q, r) contract (Features.gd has no
 // overlay; the mobile HUD draws with this file).
 const _placed = new Map();   // "q,r" → feature record
+const _vacant = new Set();   // "q,r" a building was moved away from (Awake) — no feature there
 let _placedKey = '';
 // The real (catalogue) building a feature record stands for — what an Animator may copy.
 const NOT_BUILDING = /\btree\b|tree of|grove|thorns|gravestone|faerie ring/i;
 export const isBuildingFeature = (f) => !!f && (f.kind || 'building') === 'building' && !f.blocking && !NOT_BUILDING.test(f.label || '');
 // World edits of every unit → the placed-building list (first `at` per hex wins, then the creator id).
 // `units` = [{ peer_id, world_edits_json }].
+// Awake (user request 2026-11-17) moves a building: its mover records `{ id: 'moved:q,r', q, r, vacated: true, at }`
+// for the hex it left (a world building or a placed one disappears there) plus `made:` for the hex it went to.
+// Per hex the edits replay in (at, creator id, made before vacated) order: a `made` stands when the hex is empty,
+// a `vacated` empties it — so without any `vacated` this is "first `at`, then creator id wins" as before.
+// A hex left empty by a `vacated` comes back as `{ q, r, vacated: true, by }` (featureAt answers null there).
 export function placedBuildingsFrom(units) {
-  const best = new Map();
+  const evts = new Map();
   for (const u of units || []) {
     let list = []; try { list = JSON.parse(u?.world_edits_json || '[]'); } catch { list = []; }
     for (const e of Array.isArray(list) ? list : []) {
-      if (!e || e.gone || !e.made || !Number.isInteger(e.q) || !Number.isInteger(e.r) || e.id !== `made:${e.q},${e.r}`) continue;
-      const k = `${e.q},${e.r}`, cur = best.get(k), by = String(u?.peer_id || '');
-      if (!cur || (e.at ?? 0) < cur.at || ((e.at ?? 0) === cur.at && by < cur.by)) best.set(k, { e, at: e.at ?? 0, by });
+      if (!e || e.gone || !Number.isInteger(e.q) || !Number.isInteger(e.r)) continue;
+      const made = !!e.made && e.id === `made:${e.q},${e.r}`, vacated = e.vacated === true && e.id === `moved:${e.q},${e.r}`;
+      if (!made && !vacated) continue;
+      const k = `${e.q},${e.r}`;
+      if (!evts.has(k)) evts.set(k, []);
+      evts.get(k).push({ e, at: e.at ?? 0, by: String(u?.peer_id || ''), made });
     }
   }
-  return [...best.values()].map(({ e, by }) => ({ ...e.made, q: e.q, r: e.r, by })).sort((a, b) => a.q - b.q || a.r - b.r);
+  const out = [];
+  for (const list of evts.values()) {
+    list.sort((a, b) => a.at - b.at || (a.by < b.by ? -1 : a.by > b.by ? 1 : 0) || (a.made === b.made ? 0 : a.made ? -1 : 1));
+    let cur = null, emptied = null;
+    for (const x of list) { if (x.made) { if (!cur) cur = x; } else { cur = null; emptied = x; } }
+    if (cur) out.push({ ...cur.e.made, q: cur.e.q, r: cur.e.r, by: cur.by });
+    else if (emptied) out.push({ q: emptied.e.q, r: emptied.e.r, vacated: true, by: emptied.by });
+  }
+  return out.sort((a, b) => a.q - b.q || a.r - b.r);
 }
 // Replace the overlay. Returns true when it changed (listeners notified: renderer, building-bonus memo).
 export function setPlacedBuildings(list) {
   const key = JSON.stringify(list || []);
   if (key === _placedKey) return false;
-  _placedKey = key; _placed.clear();
-  for (const b of list || []) if (Number.isInteger(b.q) && Number.isInteger(b.r)) _placed.set(`${b.q},${b.r}`, {
-    path: b.path || '', label: b.label || 'Building', kind: 'building', biome: b.biome || '', id: `made:${b.q},${b.r}`, desc: b.desc || '',
+  _placedKey = key; _placed.clear(); _vacant.clear();
+  for (const b of list || []) if (Number.isInteger(b.q) && Number.isInteger(b.r) && b.vacated) _vacant.add(`${b.q},${b.r}`);
+  for (const b of list || []) if (Number.isInteger(b.q) && Number.isInteger(b.r) && !b.vacated) _placed.set(`${b.q},${b.r}`, {
+    path: b.path || '', label: b.label || 'Building', kind: b.kind === 'wall' ? 'wall' : 'building', ...(b.kind === 'wall' ? { blocking: true } : {}), biome: b.biome || '', id: `made:${b.q},${b.r}`, desc: b.desc || '',
     ...(b.theme ? { theme: b.theme } : {}), ...(b.copy_of ? { copy_of: { q: b.copy_of.q, r: b.copy_of.r } } : {}), ...(b.bonus ? { bonus: b.bonus } : {}),
     placed: true, by: b.by || null, made_by: b.made_by || null,
   });
@@ -326,6 +349,7 @@ export function catalogSpriteFor(re) {
 export function featureAt(seedHex, q, r, biomeAt = null) {
   const made = _placed.get(`${q},${r}`);
   if (made) return made;
+  if (_vacant.has(`${q},${r}`)) return null;
   // Buildings stay where they are (user ruling 2026-11-12): stepping on one
   // gives its bonus while you stand there, it is never picked up / consumed.
   const bAt = biomeAt || biomeFor(seedHex).biomeAt;

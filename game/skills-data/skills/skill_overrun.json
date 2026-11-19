@@ -9,8 +9,8 @@
   "point_buy_stat": null,
   "text": "Swap places with the enemy you Attack (walk over them and go behind): you take their hex and they take yours. Negate the enemy's Move. Alt: the enemy or ally is moved one tile away; step over them.",
   "flags": {"action":"A","permanent":false,"negating":true,"hooks":["negate_kind","move"],"range":1,"negates":["M","EM"],"negate":{"codes":["M","EM"],"who":"target","mode":"no_move"},"swap":true},
-  "uses": ["skills_std"],
+  "uses": ["skills_std", "skills_pass"],
   "hooks": {
-    "negate_kind": {"engine":"js","impl":"skills.mjs#negateKind","note":"pass 2 (after Grapple, Disruption Move): an adjacent target (declared, else auto) cannot move — noMove.add; negated when it moved (M/EM); a character-targeted Attack on an adjacent enemy queues a swap {by, on} in ctx.swaps (2026-11-16). In-place register edits: JS this milestone."}
+    "negate_kind": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"A"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"if":[{"and":[{"bool":[{"var":"t"}]},{"<=":[{"dist":[{"var":"actor"},{"var":"t"}]},1]}]},{"let":[{"mv":{"if":[{"code_is":[{"var":"t"},"M"]},"M",{"code_is":[{"var":"t"},"EM"]},"EM",null]}},{"let":[{"sw":{"and":[{"has_register":["swaps"]},{"enemy_of":[{"var":"actor"},{"var":"t"}]},{"!==":[{"var":"r.target.kind"},"tile"]},{"none":[{"swaps":[]},{"or":[{"in":[{"var":"actor"},[{"var":"s.by"},{"var":"s.on"}]]},{"in":[{"var":"t"},[{"var":"s.by"},{"var":"s.on"}]]}]},"s"]}]}},{"concat":[[{"obj":{"op":"no_move","id":{"var":"t"}}}],{"if":[{"var":"mv"},{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},{"var":"mv"}]},[]]},{"if":[{"var":"sw"},{"concat":[[{"obj":{"op":"swap","by":{"var":"actor"},"on":{"var":"t"}}}],{"if":[{"var":"mv"},[],[{"obj":{"op":"fx","fx":{"obj":{"by":{"var":"actor"},"skill":{"var":"skill"},"on":{"var":"t"},"what":"swap","building":{"from_building":[{"var":"actor"},{"var":"skill"}]}}}}}]]}]},[]]}]}]}]},[]]}]}]}
   }
 }

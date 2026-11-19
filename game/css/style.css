@@ -1182,6 +1182,7 @@ html.mobile #deck-row { max-width: 100%; }
 
 /* 2026-11-12 batch 3: building bonus stacked on a stat; fortress break button */
 .bld-plus { color: #ffe66e; font-weight: 600; margin-left: 1px; }
+.tile-plus { color: #c9f0a0; font-weight: 600; margin-left: 1px; }   /* bonus tile tokens under the unit (Fossilization …) */
 #object-card .oc-break { margin-left: 6px; padding: 2px 8px; border-radius: 4px; border: 1px solid #ff9a5c; background: #2a1a10; color: #ffcf9a; font-size: 11px; cursor: pointer; }
 #object-card .oc-break[disabled] { opacity: 0.45; cursor: default; }
 #object-card .oc-break.armed { border-color: #6ad99f; color: #b8f5d2; background: #10261b; }

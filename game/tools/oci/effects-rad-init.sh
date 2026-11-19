@@ -6,7 +6,7 @@
 #
 # Steps (each is idempotent; re-running after a failure is safe):
 #   0. preflight  repo exists, on main, clean, has commits; rad CLI; local rad-node running
-#   1. rad init   --name chaosD6-Effects --public --default-branch main  (skipped if already a rad repo)
+#   1. rad init   --name chaosD6-Effects --private --default-branch main  (skipped if already a rad repo)
 #   2. git push rad main                      (no-op right after init)
 #   3. OCI seeding policy: infra/oci/effects-setup.sh (rad seed --scope all) in the background,
 #      while 4. rad node connect + rad sync --announce  hands the repo to the seed
@@ -42,7 +42,7 @@ echo "== 1. rad init =="
 if RID=$(rad . 2>/dev/null) && [ -n "$RID" ] && git remote get-url rad >/dev/null 2>&1; then
   echo "already a Radicle repo: $RID"
 else
-  run rad init --name "$NAME" --description "$DESC" --default-branch main --public --scope all --no-confirm
+  run rad init --name "$NAME" --description "$DESC" --default-branch main --private --scope followed --no-confirm
   RID=$( [ "$DRY" = 1 ] && echo "rad:zDRYRUN" || rad . )
 fi
 echo "RID: $RID"
@@ -76,5 +76,5 @@ Done. Wire the RID into the game (prepared, not applied — review the diff firs
   python3 $GAME_ROOT/game/tools/out/_effects_rid_patch.py $RID            # dry run: shows the edits
   python3 $GAME_ROOT/game/tools/out/_effects_rid_patch.py $RID --apply    # RadicleBoot.gd + effects-repo.mjs
 Later syncs of built-in effects:
-  node $GAME_ROOT/game/tools/effects-repo-sync.mjs && (cd $REPO && git push rad main && rad sync --announce)
+  node $GAME_ROOT/game/tools/effects-repo-sync.mjs && (cd $REPO && git push rad main && rad sync --announce --seed $OCI_SEED_NID)
 EOF

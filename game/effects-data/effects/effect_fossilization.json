@@ -2,8 +2,8 @@
   "schema": "chaosd6.effect/1",
   "id": "effect_fossilization",
   "name": "Fossilization",
-  "version": "1.0.0",
-  "source": {"collection":"effects","version":"1.0.0"},
+  "version": "1.1.0",
+  "source": {"collection":"effects","version":"1.1.0"},
   "elements": ["elem_earth","elem_vitality"],
   "cost": 2,
   "kind": "lock",
@@ -12,13 +12,49 @@
   "text": "Target misses actions until end of round. + You may put an Earth or Vitality permanent bonus token on your tile. + Also put a damage-shield Earth token on your tile.",
   "flags": {"scope":"target","lockRestOfTurn":true,"selfTileTokens":["elem_earth"],"selfShieldTokens":["elem_earth"]},
   "uses": ["std"],
+  "notes": "1.1.0 (user rulings 2026-11-17/18): Earth OR Vitality bonus token (cast.elem, else the higher stat, tie Earth); a failed token roll keeps the lock and the bought token (status done, kept = token slots [value|null]); the retry emission (cast.kept non-empty) locks nobody ('do retry, not lock'), never fizzles, buys only the owed slots. Mirrors effects.mjs TOKEN_RETRY_KEEPS.",
   "logic": {"seq": [
       {"call":["prelude"]},
       {"call":["targets","target",1,false]},
-      {"call":["require_recipients"]},
-      {"map":[{"var":"recipients"},{"call":["lock_rest",{"var":"def"},false]},"def"]},
-      {"call":["self_tile_token","elem_earth","bonus","tile"]},
-      {"call":["self_tile_token","elem_earth","shield","shield"]},
+      {"let":[{"tk":{"if":[{"and":[{"is_array":[{"var":"cast.kept"}]},{">":[{"len":[{"var":"cast.kept"}]},0]}]},{"var":"cast.kept"},null]}},
+        {"seq":[
+          {"if":[{"!":[{"var":"tk"}]},{"call":["require_recipients"]}]},
+          {"if":[{"!":[{"var":"tk"}]},{"map":[{"var":"recipients"},{"call":["lock_rest",{"var":"def"},false]},"def"]}]},
+          {"let":[{"bel":{"if":[{"in":[{"var":"cast.elem"},["elem_earth","elem_vitality"]]},{"var":"cast.elem"},{">":[{"call":["my_stat","elem_vitality"]},{"call":["my_stat","elem_earth"]}]},"elem_vitality","elem_earth"]},"keep":{"===":[{"out":"status"},"done"]},"nk":[],"tf":false},
+            {"if":[{"!":[{"var":"keep"}]},
+              {"seq":[
+                {"call":["self_tile_token",{"var":"bel"},"bonus","tile"]},
+                {"call":["self_tile_token","elem_earth","shield","shield"]}
+              ]},
+              {"seq":[
+                {"let":[{"el":{"var":"bel"},"s":0,"kind":"bonus","tp":"tile"},
+                  {"let":[{"tag":{"cat":[{"var":"tp"},":",{"var":"el"}]},"st":{"call":["my_stat",{"var":"el"}]}},
+                    {"if":[{"and":[{"var":"tk"},{"!=":[{"at":[{"var":"tk"},{"var":"s"}]},null]}]},
+                      {"set":["nk",{"concat":[{"var":"nk"},[{"at":[{"var":"tk"},{"var":"s"}]}]]}]},
+                      {"let":[{"pb":{"point_buy":[{"var":"st"},{"var":"tag"}]}},
+                        {"seq":[
+                          {"emit":["rolls",{"obj":{"elem":{"var":"tag"},"dice":{"var":"pb.dice"},"stat":{"var":"st"},"ok":{"!":[{"var":"pb.fail"}]}}}]},
+                          {"if":[{"var":"pb.fail"},
+                            {"seq":[{"set":["tf",true]},{"set":["nk",{"concat":[{"var":"nk"},[null]]}]},{"note":["point-buy ",{"var":"tag"}," failed [",{"join":[{"var":"pb.dice"},","]},"] > ",{"var":"st"}," — that token re-emits next action"]}]},
+                            {"seq":[{"set":["nk",{"concat":[{"var":"nk"},[{"var":"pb.value"}]]}]},
+                              {"if":[{">":[{"var":"pb.value"},0]},{"emit":["tokens",{"obj":{"kind":{"var":"kind"},"elem":{"var":"el"},"value":{"var":"pb.value"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]}]}]}]}]}]}]}]}]},
+                {"let":[{"el":"elem_earth","s":1,"kind":"shield","tp":"shield"},
+                  {"let":[{"tag":{"cat":[{"var":"tp"},":",{"var":"el"}]},"st":{"call":["my_stat",{"var":"el"}]}},
+                    {"if":[{"and":[{"var":"tk"},{"!=":[{"at":[{"var":"tk"},{"var":"s"}]},null]}]},
+                      {"set":["nk",{"concat":[{"var":"nk"},[{"at":[{"var":"tk"},{"var":"s"}]}]]}]},
+                      {"let":[{"pb":{"point_buy":[{"var":"st"},{"var":"tag"}]}},
+                        {"seq":[
+                          {"emit":["rolls",{"obj":{"elem":{"var":"tag"},"dice":{"var":"pb.dice"},"stat":{"var":"st"},"ok":{"!":[{"var":"pb.fail"}]}}}]},
+                          {"if":[{"var":"pb.fail"},
+                            {"seq":[{"set":["tf",true]},{"set":["nk",{"concat":[{"var":"nk"},[null]]}]},{"note":["point-buy ",{"var":"tag"}," failed [",{"join":[{"var":"pb.dice"},","]},"] > ",{"var":"st"}," — that token re-emits next action"]}]},
+                            {"seq":[{"set":["nk",{"concat":[{"var":"nk"},[{"var":"pb.value"}]]}]},
+                              {"if":[{">":[{"var":"pb.value"},0]},{"emit":["tokens",{"obj":{"kind":{"var":"kind"},"elem":{"var":"el"},"value":{"var":"pb.value"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]}]}]}]}]}]}]}]}]},
+                {"if":[{"var":"tf"},{"put":["kept",{"var":"nk"}]}]}
+              ]}
+            ]}
+          ]}
+        ]}
+      ]},
       {"call":["finish"]}
     ]}
 }

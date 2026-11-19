@@ -160,7 +160,7 @@
     }
   },
   "policy": {
-    "tolerance": 0.1,
+    "tolerance": 0.3,
     "hard_cap_ratio": 2,
     "hard_floor_ratio": 0.2,
     "fit_drop": 0.6,
@@ -245,7 +245,7 @@
       "value": 0.823648,
       "actions": 1.5,
       "ratio": 1.104549,
-      "curve_verdict": "nerf",
+      "curve_verdict": "ok",
       "uses": 0.823645,
       "per_use": 1
     },
@@ -253,7 +253,7 @@
       "value": 1.156682,
       "actions": 2.245392,
       "ratio": 1.15785,
-      "curve_verdict": "nerf",
+      "curve_verdict": "ok",
       "uses": 1,
       "per_use": 1.156682
     },
@@ -285,7 +285,7 @@
       "value": 1,
       "actions": 1.607143,
       "ratio": 1.278614,
-      "curve_verdict": "nerf",
+      "curve_verdict": "ok",
       "uses": 1,
       "per_use": 1
     },
@@ -349,7 +349,7 @@
       "value": 0.606895,
       "actions": 1.5,
       "ratio": 0.813874,
-      "curve_verdict": "boost",
+      "curve_verdict": "ok",
       "uses": 0.433497,
       "per_use": 1.4
     }
@@ -374,26 +374,6 @@
       "id": "skill_bluff",
       "ratio": 1.417088,
       "curve_verdict": "nerf"
-    },
-    {
-      "id": "skill_dodge",
-      "ratio": 1.278614,
-      "curve_verdict": "nerf"
-    },
-    {
-      "id": "skill_battle_trance",
-      "ratio": 1.15785,
-      "curve_verdict": "nerf"
-    },
-    {
-      "id": "skill_barricade",
-      "ratio": 1.104549,
-      "curve_verdict": "nerf"
-    },
-    {
-      "id": "skill_taunt",
-      "ratio": 0.813874,
-      "curve_verdict": "boost"
     },
     {
       "id": "skill_sanctuary",

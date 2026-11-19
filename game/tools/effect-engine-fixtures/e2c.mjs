@@ -158,6 +158,32 @@ function targeted(id, sha) {
     add('character target', mk(far), c0);
     add('no trapsAt', mk(far, {}, { no: ['trapsAt'] }), tile(3, 0));
     add('blocked by bombard', mk(tiles, {}, { perms: { E: ['effect_emotions_bombard'] } }), tile(3, 0));
+    // The resolver's plan (game/awake.mjs → cast.awake, user request 2026-11-17).
+    const unitPlan = (who, q, r, how = 'auto', gain = 2) => ({ kind: 'unit', who, from: { q: 0, r: 0 }, q, r, gain, how });
+    const bldPlan = { kind: 'building', label: 'Watch Tower', from: { q: 1, r: -1 }, q: -1, r: 1, gain: 4, how: 'picked tile' };
+    add('plan: me moves', mk(far), { ...c0, target: null, awake: unitPlan('C', 4, 0) });
+    add('plan: ally moves (picked tile)', mk(far), tile(3, 0, { awake: unitPlan('A', 3, 0, 'picked tile', -1) }));
+    add('plan: building moves', mk(far), tile(-1, 1, { awake: bldPlan }));
+    add('plan: building without a label', mk(far), { ...c0, awake: { ...bldPlan, label: undefined } });
+    add('plan: none', mk(far), tile(3, 0, { awake: { kind: 'none', why: 'nothing near me can move to a free hex within 10' } }));
+    add('plan: none without why', mk(far), { ...c0, awake: { kind: 'none' } });
+    add('plan: unit without who', mk(far), { ...c0, awake: { kind: 'unit', q: 1, r: 1 } });
+    add('plan: kind not a string', mk(far), tile(3, 0, { awake: { kind: 7 } }));
+    add('plan: blocked by bombard', mk(tiles, {}, { perms: { E: ['effect_emotions_bombard'] } }), { ...c0, awake: unitPlan('C', 4, 0) });
+    add('plan: disabled harmony', mk(far, {}, { disabled: { C: ['elem_harmony'] } }), { ...c0, awake: bldPlan });
+    // 2026-11-18: wall tokens (obstacle by its owner / labyrinth wall as world edits), the Harmony channel tick, ∀.
+    const obPlan = { kind: 'wall', label: 'obstacle', from: { q: 1, r: -1 }, q: 0, r: -2, gain: 3, how: 'auto', reloc: { kind: 'obstacle', owner: 'A', id: 'o1', label: 'obstacle', by: 'C', q: 0, r: -2 } };
+    const labPlan = { kind: 'wall', label: 'Impassable Wall', from: { q: -1, r: 1 }, q: 1, r: 1, gain: 3, how: 'picked thing', reloc: { kind: 'wall', owner: 'world', id: 'lab:-1,1', label: 'Impassable Wall', by: 'C', from: { q: -1, r: 1 }, q: 1, r: 1 } };
+    add('plan: obstacle moves', mk(far), { ...c0, awake: obPlan });
+    add('plan: labyrinth wall moves', mk(far), tile(-1, 1, { awake: labPlan }));
+    add('plan: wall without reloc', mk(far), { ...c0, awake: { ...obPlan, reloc: undefined } });
+    add('plan: ∀ unit move', mk(far), { ...c0, every: true, awake: unitPlan('A', 3, 0) });
+    for (const s of salts) {
+      add(`channel tick ${s}`, mk(far), { ...c0, target: null, salt: s, _channel_tick: true });
+      add(`channel tick weak will ${s}`, mk(far, {}, {}, { ...base, C: M(10, 12, 16, 3) }), { ...c0, target: null, salt: s, _channel_tick: true });
+    }
+    add('channel tick with a plan (plan ignored)', mk(far), { ...c0, _channel_tick: true, awake: bldPlan });
+    add('channel tick blocked by bombard', mk(tiles, {}, { perms: { E: ['effect_emotions_bombard'] } }), { ...c0, _channel_tick: true });
     add('∀', mk(far), tile(3, 0, { every: true }));
   }
   return cases;
@@ -262,6 +288,12 @@ export function e2cBranch(id, cast, o) {
     if (o.moves.length && o.moves[0].who === cast.actor) b.push('me moved');
     if (has('no free tile within 10 chosen')) b.push('dest refused');
     if (has('awake needs a free tile')) b.push('needs a tile');
+    if (o.relocations.some(r => r.kind === 'building')) b.push('building moved');
+    if (o.relocations.some(r => r.kind === 'obstacle' || r.kind === 'wall')) b.push('wall moved');
+    if (has('awake channel: Harmony token')) b.push('tick token');
+    if (has('awake channel: the Harmony roll failed')) b.push('tick roll failed');
+    if (o.permanents.length && o.channels.length) b.push('permanent + channel');
+    if (has('awake: ')) b.push('plan none');
   }
   return b;
 }
@@ -270,7 +302,7 @@ export const E2C_BRANCHES = {
   effect_metaphysics: ['moved token', 'moved trap', 'dest refused', 'nothing to move', 'tile cast deals damage', 'damage', 'status done', 'status fizzled', 'status blocked'],
   effect_disruption: ['moved trap', 'dest refused', 'nothing to move', 'tile cast deals damage', 'damage', 'status done', 'status fizzled', 'status blocked'],
   effect_mind_blast: ['switch with a unit', 'switch without a unit', 'switch moves things', 'switch moves an obstacle', 'switch refused', 'self damage equal', 'status done', 'status fizzled', 'status casting', 'status retry', 'status blocked'],
-  effect_awake: ['ally moved', 'me moved', 'dest refused', 'needs a tile', 'status done', 'status fizzled', 'status blocked'],
+  effect_awake: ['ally moved', 'me moved', 'building moved', 'wall moved', 'tick token', 'tick roll failed', 'permanent + channel', 'plan none', 'dest refused', 'needs a tile', 'status done', 'status fizzled', 'status blocked'],
 };
 
 // Section 4b entry point (tools/effect-engine-check.mjs loads every file of this folder).

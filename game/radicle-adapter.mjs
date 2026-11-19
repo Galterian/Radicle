@@ -616,7 +616,10 @@ export async function syncFromSeeds(timeoutSec = 10) {
     }
     if (!seeds.length) console.log(`[radicle] no priority seeds registered yet in dimensions-4e9ae — publish from any live peer to populate`);
   } catch { /* local-seeds disabled or offline */ }
-  try { await pexec(radBin, ['sync', '--fetch', '--timeout', `${timeoutSec}sec`, `rad:${dimsEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: outerMs }); return true; }
+  // Privacy (2026-11-18): without --seed, rad picks seeds from the routing table — public seeds that once fetched
+  // the repo — and dials them even with peers.type=static. Fetch from our own seed(s) only (RAD_SYNC_SEEDS, comma list).
+  const seedArgs = (process.env.RAD_SYNC_SEEDS || 'z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT').split(',').map(s => s.trim()).filter(Boolean).flatMap(s => ['--seed', s]);
+  try { await pexec(radBin, ['sync', '--fetch', ...seedArgs, '--timeout', `${timeoutSec}sec`, `rad:${dimsEnv.rid}`], { cwd: PROJECT_ROOT, windowsHide: true, env: radEnv, timeout: outerMs }); return true; }
   catch (e) {
     const msg = (e.stderr || e.message || '').toString().split('\n')[0].slice(0, 160);
     const killed = /ETIMEDOUT|SIGTERM|SIGKILL|killed/i.test(String(e.signal || e.code || msg));

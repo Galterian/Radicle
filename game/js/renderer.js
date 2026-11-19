@@ -25,6 +25,13 @@ const TEAM_HP = { A: ['#5fe08a', '#16301f'], B: ['#ff6b6b', '#3a1616'], C: ['#b0
 const HP_ARMOR = '#ffcc33', HP_ILLUSION = '#7fe8ff';
 const DRUID_ORB = 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png';
 const DRUID_OBELISK = 'assets/terrain_scatter/standing_stone_obelisk_on_round_base_fgm0.png';
+// Effect-placed Earth / Vitality tile tokens (Fossilization's bonus + shield, user ruling 2026-11-18 "map the tile-token
+// permanent to an appropriate building"): a stone guardian statue for Earth (petrified), a Healing Orb for Vitality,
+// standing on the hex while the token(s) do. Druid stones keep their own sprites; world features keep theirs.
+const TOKEN_BUILDING = {
+  elem_earth: 'assets/Sprites/Buildings/Shared/Stone Golem (guardian statue)/Stone Golem (guardian statue) - base [BWGS].png',
+  elem_vitality: 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png',
+};
 // Threat area: an enemy goes for whoever steps within this many hexes of it.
 const THREAT_RADIUS = 2;
 // Enemies my planned journey (pathPlan, else the destination) walks into the
@@ -49,6 +56,10 @@ const ELEM_COLOR = {
   elem_vitality: '#ff6b6b', elem_souls: '#b48cff', elem_time: '#d9c36a', elem_space: '#8fa3ff',
   elem_air: '#dfe3e8', elem_water: '#6ad9ff', elem_earth: '#c49a6c', elem_fire: '#ff9a3c',
   elem_concentration: '#6ad99f', elem_harmony: '#ffb6e6',
+};
+const ELEM_LETTER = {
+  elem_vitality: 'V', elem_souls: 'S', elem_time: 'T', elem_space: 'Sp', elem_air: 'A',
+  elem_water: 'W', elem_earth: 'E', elem_fire: 'F', elem_concentration: 'C', elem_harmony: 'H',
 };
 
 // How long an entity's position change takes to animate, in ms. The move is
@@ -276,7 +287,8 @@ export function createRenderer(canvas, state) {
     const stillFloating = (state.ui.floatingDmgs || []).some(f => now - f.startAt < f.duration);
     const stillIcons = (state.ui.floatingIcons || []).some(f => now - f.startAt < f.duration);
     const stillBadges = Object.values(state.ui.revealBadges || {}).some(b => now - b.startAt < b.duration);
-    if ((stillMoving || stillFloating || stillIcons || stillBadges) && !rafId) {
+    const stillToasts = (state.ui.effectToasts || []).some(f => now - f.startAt < f.duration);
+    if ((stillMoving || stillFloating || stillIcons || stillBadges || stillToasts) && !rafId) {
       rafId = requestAnimationFrame(() => { rafId = 0; render(); scheduleIfAnimating(); });
     }
   }
@@ -558,23 +570,54 @@ export function createRenderer(canvas, state) {
       // Beside whoever stands on the hex (right side), so the unit's sprite doesn't hide it.
       ctx.drawImage(tex.img, x - dw / 2 + HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
     }
+    // Effect tile tokens as a building (left side of the hex; Vitality wins the hex when both stand — the orb heals).
+    const tokenHexes = new Map();
+    for (const t of (state.tileTokens || [])) {
+      if (t.druid || t.world || t.item || !TOKEN_BUILDING[t.elem]) continue;
+      const k = `${t.q},${t.r}`;
+      if (druidHexes.has(k)) continue;
+      if (!tokenHexes.has(k) || t.elem === 'elem_vitality') tokenHexes.set(k, t.elem);
+    }
+    for (const [k, elem] of tokenHexes) {
+      const [q, r] = k.split(',').map(Number);
+      const { x, y } = tilePx(q, r);
+      if (!inView(x, y)) continue;
+      const tex = featureImage(TOKEN_BUILDING[elem]);
+      if (!tex?.ready) continue;
+      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const scale = Math.min(1.0, Math.max(0.2, (hexH * 0.7) / sy));
+      const dw = sx * scale, dh = sy * scale;
+      ctx.drawImage(tex.img, x - dw / 2 - HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
+    }
     // Tile tokens (dice left on hexes by effects), bottom-right of the hex.
     for (const t of (state.tileTokens || [])) {
       const { x, y } = tilePx(t.q, t.r);
       const i = (state.tileTokens || []).filter(o => o.q === t.q && o.r === t.r).indexOf(t);
-      const tx = x + HEX_SIZE * 0.45 - i * 11, ty = y + HEX_SIZE * H_SQUASH * 0.55;
+      // 2026-11-17 (Fossilization request): a bigger die with the element's letter on top so an Earth / Vitality
+      // bonus (filled) or shield (hollow, 🛡 corner) token reads at a glance next to the unit standing on it.
+      const tx = x + HEX_SIZE * 0.45 - i * 15, ty = y + HEX_SIZE * H_SQUASH * 0.55;
       if (!inView(tx, ty)) continue;
       ctx.beginPath();
-      ctx.rect(tx - 5, ty - 5, 10, 10);
+      ctx.rect(tx - 7, ty - 7, 14, 14);
       ctx.fillStyle = t.kind === 'shield' ? '#0b0d12' : (ELEM_COLOR[t.elem] || '#ccc');
       ctx.fill();
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2;
       ctx.strokeStyle = ELEM_COLOR[t.elem] || '#ccc';
       ctx.stroke();
       ctx.fillStyle = t.kind === 'shield' ? (ELEM_COLOR[t.elem] || '#ccc') : '#0b0d12';
-      ctx.font = 'bold 8px ui-monospace, Consolas, monospace';
+      ctx.font = 'bold 10px ui-monospace, Consolas, monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(String(t.value), tx, ty + 3);
+      ctx.fillText(String(t.value), tx, ty + 4);
+      if (!t.world) {
+        const letter = ELEM_LETTER[t.elem] || '?';
+        ctx.font = 'bold 8px ui-sans-serif, system-ui, sans-serif';
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        const lbl = t.kind === 'shield' ? `${letter}🛡` : `${letter}+`;
+        ctx.strokeText(lbl, tx, ty - 9);
+        ctx.fillStyle = ELEM_COLOR[t.elem] || '#ccc';
+        ctx.fillText(lbl, tx, ty - 9);
+      }
       // World-generated features (Shrine, Grove, Crystal …) carry their name over the die so the land reads at a glance.
       if (t.world && t.item) {
         ctx.font = '7px ui-sans-serif, system-ui, sans-serif';
@@ -988,6 +1031,50 @@ export function createRenderer(canvas, state) {
         ctx.restore();
       }
       icons.length = liveWriteIdx;
+    }
+
+    // Effect result toasts (user request 2026-11-17): "<effect> success" (green) / "<effect> failed" (red) over
+    // the unit an enemy penalty landed on / missed — the effect's WBC3 strip (or a ✔ / ✖ glyph) above the text,
+    // rising slowly and fading out. Fed by main.js onEffectResults from the peer's `effect_result` message.
+    const toasts = state.ui.effectToasts || [];
+    if (toasts.length) {
+      let live = 0;
+      for (let i = 0; i < toasts.length; i++) {
+        const f = toasts[i];
+        const t = (now - f.startAt) / f.duration;
+        if (t >= 1) continue;
+        if (live !== i) toasts[live] = f;
+        live++;
+        if (t < 0) continue;
+        const p = tilePx(f.q, f.r);
+        if (!inView(p.x, p.y)) continue;
+        const x = p.x, y = p.y - HEX_SIZE * 0.9 - 26 * t - (f.dy || 0);
+        const alpha = t < 0.1 ? t / 0.1 : t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+        const col = f.ok ? '#7dff9a' : '#ff6b6b';
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, alpha);
+        const strip = effectStrip(resourcesFor(f.effect_id)?.sprites?.effect?.path);
+        if (strip) drawEffectFrame(ctx, strip, Math.min(1, t * 1.6), x, y - 18, 34);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 13px "Segoe UI Emoji", "Apple Color Emoji", ui-sans-serif, system-ui';
+        ctx.lineWidth = 3.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+        if (!strip) { ctx.strokeText(f.ok ? '✔' : '✖', x, y - 16); ctx.fillStyle = col; ctx.fillText(f.ok ? '✔' : '✖', x, y - 16); }
+        ctx.font = 'bold 12px ui-sans-serif, system-ui, sans-serif';
+        ctx.strokeText(f.text, x, y);
+        ctx.fillStyle = col;
+        ctx.fillText(f.text, x, y);
+        if (f.why) {
+          ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+          ctx.lineWidth = 3;
+          ctx.strokeText(f.why, x, y + 12);
+          ctx.fillStyle = f.ok ? '#d0ffd8' : '#ffd0d0';
+          ctx.fillText(f.why, x, y + 12);
+        }
+        ctx.restore();
+      }
+      toasts.length = live;
     }
   }
 

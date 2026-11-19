@@ -7,8 +7,11 @@
 //  4. a program that does more than its flags declare → reject (logic audit)
 //  5. determinism: same result over 3 runs, and in a fresh process
 //  6. tolerance knob, baseline mode, pin / verifyPin
+//  7. ref-pinned libs (1.1.0): a stronger lib changes the verdict, bundled path unchanged, stamp.libs, pin mismatch refused, CLI --libs
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { checkEffect, loadCalibration, loadBuiltinDefs, computePin, verifyPin, canonicalJson, VALIDATOR_VERSION, DEFAULT_TOLERANCE } from './rebalancing-check.mjs';
@@ -61,7 +64,8 @@ console.log(`E1 definitions audited: ${e1Audited}/${e1Ids.length}`);
 const doom = { id: 'effect_test_doom', element_cost: ['elem_fire'], effect_types: ['damage', 'instant'], rule: { damage: 'pointbuy', scope: 'all_seen', lock: 3, draw: 5 } };
 const strong = { id: 'effect_test_strong', element_cost: ['elem_fire', 'elem_fire'], effect_types: ['damage'], rule: { damage: 'delta', scope: 'all_enemies', lock: 1 } };
 const weak = { id: 'effect_test_weak', element_cost: ['elem_fire', 'elem_fire', 'elem_air', 'elem_air'], effect_types: ['damage'], rule: { damage: 'delta', scope: 'target' } };
-const rd = checkEffect(doom), rs = checkEffect(strong), rw = checkEffect(weak);
+// weak (×0.82) is inside the ±30 % default band (ruling 2026-11-18), so its boost path is tested at the old ±10 %.
+const rd = checkEffect(doom), rs = checkEffect(strong), rw = checkEffect(weak, { tolerance: 0.10 });
 ok('overpowered → reject (hard cap)', rd.verdict === 'reject' && rd.valid === true, `${rd.verdict} ${rd.judged_ratio}`);
 ok('strong → nerf', rs.verdict === 'nerf', `${rs.verdict} ${rs.judged_ratio}`);
 ok('nerf offers an in-band change', rs.suggestions.some(s => s.in_band), JSON.stringify(rs.suggestions));
@@ -107,12 +111,12 @@ ok('fresh process: same power', canonicalJson(fresh.power) === canonicalJson(rs.
 console.log(`determinism: stamp ${rs.stamp.def_sha256.slice(0, 12)} verdict ${rs.stamp.verdict} ratio ${rs.stamp.ratio} pin ${rs.stamp.pin_id.slice(0, 12)} (node ${process.version})`);
 
 // 6. tolerance, baseline, pin
-ok('default tolerance is 0.10 (band [0.9, 1.1])', rs.tolerance === 0.1 && rs.band.low === 0.9 && rs.band.high === 1.1 && cal.policy.tolerance === 0.1 && DEFAULT_TOLERANCE === 0.1, `${rs.tolerance} [${rs.band.low}, ${rs.band.high}]`);
+ok('default tolerance is 0.30 (band [0.7, 1.3])', rs.tolerance === 0.3 && rs.band.low === 0.7 && rs.band.high === 1.3 && cal.policy.tolerance === 0.3 && DEFAULT_TOLERANCE === 0.3, `${rs.tolerance} [${rs.band.low}, ${rs.band.high}]`);
 ok('tolerance 0.10 → nerf', checkEffect(strong, { tolerance: 0.10 }).verdict === 'nerf');
 ok('tolerance 0.15 → nerf', checkEffect(strong, { tolerance: 0.15 }).verdict === 'nerf');
-{ // an effect between 1.10 and 1.15: nerf at the default, ok at the old 0.15
-  const mid = builtins.map(d => checkEffect(d, { baseline: null })).find(r => r.judged_ratio > 1.1 && r.judged_ratio <= 1.15);
-  if (mid) ok(`${mid.effect_id} ×${mid.judged_ratio}: nerf at 0.10, ok at 0.15`, mid.verdict === 'nerf' && checkEffect(builtins.find(d => d.id === mid.effect_id), { baseline: null, tolerance: 0.15 }).verdict === 'ok');
+{ // an effect between 1.10 and 1.30: ok at the default 0.30, nerf at the old 0.10
+  const mid = builtins.map(d => checkEffect(d, { baseline: null })).find(r => r.judged_ratio > 1.1 && r.judged_ratio <= 1.3);
+  if (mid) ok(`${mid.effect_id} ×${mid.judged_ratio}: ok at 0.30, nerf at 0.10`, mid.verdict === 'ok' && checkEffect(builtins.find(d => d.id === mid.effect_id), { baseline: null, tolerance: 0.10 }).verdict === 'nerf');
 }
 ok('tolerance 0.6 → ok', checkEffect(strong, { tolerance: 0.6 }).verdict === 'ok');
 const fb = builtins.find(d => d.id === 'effect_fireball');
@@ -137,6 +141,69 @@ const tampered = JSON.parse(JSON.stringify(cal)); tampered.weights.damage += 0.0
 ok('calibration change → new pin', computePin(tampered).pin_id !== pin.pin_id);
 ok('verifyPin(foreign pin) reports the diff', !verifyPin({ ...pin, source_sha256: '0'.repeat(64), pin_id: 'x' }).ok);
 ok('stamp carries the pin', rs.stamp.pin_id === pin.pin_id);
+ok('validator version 1.1.0 (ref-pinned libs)', VALIDATOR_VERSION === '1.1.0' && pin.validator_version === '1.1.0');
+
+// 7. libs bound from the ref / commit (1.1.0): a foreign effect is priced against ITS libs, not the bundled ones
+{
+  const libDir = path.join(HERE, '..', 'effects-data', 'lib');
+  const bundledLibs = fs.readdirSync(libDir).filter(f => f.endsWith('.json')).sort().map(f => JSON.parse(fs.readFileSync(path.join(libDir, f), 'utf8').replace(/^﻿/, '')));
+  const std = bundledLibs.find(l => l.id === 'std');
+  const shaOf = (l) => crypto.createHash('sha256').update(canonicalJson(l)).digest('hex');
+  ok('stamp carries the libs map (flags-only def → {})', canonicalJson(rs.stamp.libs) === '{}' && rs.libs.source === 'bundled');
+  if (fbE1 && std) {
+    const copy = JSON.parse(JSON.stringify(fbE1)); copy.id = 'effect_test_fireball_libs';
+    const rb = checkEffect(copy);
+    ok('bundled: stamp.libs = sha256 of the bundled std', rb.libs.source === 'bundled' && canonicalJson(rb.stamp.libs) === canonicalJson({ std: shaOf(std) }), canonicalJson(rb.stamp.libs));
+    const rg = checkEffect(copy, { libs: bundledLibs, libShas: { std: shaOf(std) } });
+    ok('given = the bundled libs → same verdict / power / stamp', rg.libs.source === 'given' && rg.verdict === rb.verdict && canonicalJson(rg.power) === canonicalJson(rb.power) && canonicalJson(rg.stamp) === canonicalJson(rb.stamp));
+    // a player's std where main_delta deals double: the effect's flags (what is priced) are unchanged
+    const strongStd = JSON.parse(JSON.stringify(std)); strongStd.version = '9.9.9';
+    strongStd.subs.main_delta.body = { '*': [strongStd.subs.main_delta.body, 2] };
+    const rx = checkEffect(copy, { libs: [strongStd], libShas: { std: shaOf(strongStd) } });
+    ok('stronger lib bound → verdict changes (reject: logic exceeds its flags)', rb.verdict !== 'reject' && rx.verdict === 'reject' && rx.reasons.some(x => x.includes('logic exceeds') && x.includes('damage')), `${rb.verdict} → ${rx.verdict} ${rx.reasons.join('; ')}`);
+    ok('stronger lib: stamp.libs records the bound lib', rx.stamp.libs.std === shaOf(strongStd) && rx.stamp.libs.std !== rb.stamp.libs.std);
+    ok('no libs given → still the bundled verdict (unchanged path)', checkEffect(copy).verdict === rb.verdict && canonicalJson(checkEffect(copy).stamp) === canonicalJson(rb.stamp));
+    const rm = checkEffect(copy, { libs: [strongStd], libShas: { std: shaOf(std) } });
+    ok('lib hash ≠ the ref pin → reject', rm.verdict === 'reject' && rm.valid === false && rm.errors.some(e => e.includes('≠ pinned')), rm.errors?.join('; '));
+    const rp = checkEffect(copy, { libs: bundledLibs, libShas: { std: shaOf(std), e2a: shaOf(bundledLibs.find(l => l.id === 'e2a')) } });
+    ok('ref pinning a lib the def does not use → reject', rp.verdict === 'reject' && rp.errors.some(e => e.includes('ref pins libs')), rp.errors?.join('; '));
+    const rn = checkEffect(copy, { libs: [] });
+    ok('used lib not provided → reject', rn.verdict === 'reject' && rn.errors.some(e => e.includes('not provided')), rn.errors?.join('; '));
+    const rbad = checkEffect(copy, { libs: [{ ...std, schema: 'nope' }] });
+    ok('invalid given lib → reject', rbad.verdict === 'reject' && rbad.errors.some(e => e.startsWith('lib std:')), rbad.errors?.join('; '));
+    // CLI --libs <dir>: the same verdict as the API with the same libs
+    const ld = path.join(HERE, 'out', '_rbc_test_libs'); fs.mkdirSync(ld, { recursive: true });
+    for (const l of [strongStd]) fs.writeFileSync(path.join(ld, `${l.id}.json`), JSON.stringify(l));
+    const tmpF = path.join(HERE, 'out', '_rbc_test_fb_libs.json'); fs.writeFileSync(tmpF, JSON.stringify(copy));
+    let cli;
+    try { cli = JSON.parse(execFileSync(process.execPath, [path.join(HERE, 'rebalancing-check.mjs'), 'check', tmpF, '--json', '--libs', ld], { encoding: 'utf8' })); }
+    catch (e) { cli = JSON.parse(e.stdout); }   // reject → exit 1
+    ok('CLI --libs <dir> binds them (same stamp as the API)', canonicalJson(cli.stamp) === canonicalJson(rx.stamp), canonicalJson(cli.stamp));
+    const cliB = JSON.parse(execFileSync(process.execPath, [path.join(HERE, 'rebalancing-check.mjs'), 'check', tmpF, '--json'], { encoding: 'utf8' }));
+    ok('CLI without --libs = bundled', canonicalJson(cliB.stamp) === canonicalJson(rb.stamp));
+    // CLI --ref <commit> --repo <dir>: lib/ of a (scratch) chaosD6-Effects commit
+    let repo = null, c1 = null;
+    try {
+      repo = fs.mkdtempSync(path.join(os.tmpdir(), 'rbc-libs-repo-'));
+      const g = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      g('init', '-q', '-b', 'main');
+      fs.mkdirSync(path.join(repo, 'lib'));
+      for (const l of bundledLibs) fs.writeFileSync(path.join(repo, 'lib', `${l.id}.json`), JSON.stringify(l.id === 'std' ? strongStd : l, null, 2) + '\n');
+      g('add', '-A'); g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'strong std');
+      c1 = g('rev-parse', 'HEAD');
+      fs.writeFileSync(path.join(repo, 'lib', 'std.json'), JSON.stringify(std, null, 2) + '\n');
+      g('add', '-A'); g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'bundled std');
+    } catch (e) { console.log(`libs: CLI --ref skipped (no git: ${String(e.message).split('\n')[0]})`); c1 = null; }
+    if (c1) {
+      const run = (c) => { try { return JSON.parse(execFileSync(process.execPath, [path.join(HERE, 'rebalancing-check.mjs'), 'check', tmpF, '--json', '--ref', c, '--repo', repo], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })); } catch (e) { try { return JSON.parse(e.stdout); } catch { return { verdict: `error: ${String(e.stderr || e.message).split('\n')[0]}` }; } } };
+      const r1 = run(c1), r2 = run('HEAD');
+      ok('CLI --ref <commit with a stronger std> → priced (reject, its std in the stamp)', r1.verdict === 'reject' && canonicalJson(r1.stamp) === canonicalJson(rx.stamp), `${r1.verdict} ${canonicalJson(r1.stamp)}`);
+      ok('CLI --ref <commit with the bundled std> → the bundled verdict', r2.verdict === rb.verdict && canonicalJson(r2.stamp) === canonicalJson(rb.stamp), `${r2.verdict}`);
+    }
+    if (repo) fs.rmSync(repo, { recursive: true, force: true });
+    console.log(`libs: bundled ${rb.verdict} (std@${rb.stamp.libs.std.slice(0, 8)}), doubled main_delta → ${rx.verdict} (std@${rx.stamp.libs.std.slice(0, 8)}), mismatched pin → ${rm.verdict}`);
+  } else console.log('libs: skipped (no E1 fireball / std lib)');
+}
 
 console.log(fails ? `${fails} FAILED, ${passes} passed` : `all rebalancing checks passed (${passes})`);
 process.exit(fails ? 1 : 0);

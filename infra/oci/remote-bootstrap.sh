@@ -59,7 +59,7 @@ sudo -u radicle -H bash -lc "
     \"log\": \"INFO\",
     \"relay\": \"auto\",
     \"workers\": 8,
-    \"seedingPolicy\": { \"default\": \"allow\" }
+    \"seedingPolicy\": { \"default\": \"block\" }
   }
 }
 JSON

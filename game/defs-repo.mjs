@@ -35,6 +35,16 @@ export const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;   // file-name safe: 
 export const SHA_RE = /^[0-9a-f]{64}$/;
 export const COMMIT_RE = /^[0-9a-f]{40}$/;
 export const RID_RE = /^(rad:)?z[1-9A-HJ-NP-Za-km-z]+$/;
+// PV (proposal votes, 2026-11-17): optional ref provenance, never part of any sha256 (the def hash is of the def):
+//   ns      Radicle namespace (node NID, z6Mk…) the branch / commit was read from = the def's publisher
+//   review  true when the def's proposal vote collection has n ≥ 10 and mean ≤ −3 (proposal-votes.mjs)
+export const NID_RE = /^z6Mk[1-9A-HJ-NP-Za-km-z]{40,50}$/;
+/** Copy the optional PV provenance fields (ns, review) of `from` onto `to` when valid. */
+export function withProvenance(to, from) {
+  if (from && NID_RE.test(String(from.ns || ''))) to.ns = String(from.ns);
+  if (from && from.review === true) to.review = true;
+  return to;
+}
 
 /** Base class of every kind's ref error (EffectRefError, SkillRefError, …); `.code` is the contract. */
 export class DefsRefError extends Error {
@@ -82,6 +92,9 @@ export const isPlayerBranch = (b) => typeof b === 'string' && b.startsWith(PLAYE
  *  <filesDir>/data) → $XDG_DATA_HOME/chaosd6/<sub> (default ~/.local/share/chaosd6/<sub>). */
 export function cacheDirFor(cacheEnv, sub) {
   if (cacheEnv && process.env[cacheEnv]) return process.env[cacheEnv];
+  // PS (tests): CHAOSD6_DEFS_CACHE_ROOT=<dir> → <dir>/<PEER_LABEL>/<sub> — one isolated cache per peer on a shared box,
+  // so a peer that did not preload a foreign def has to learn it over the handshake (partial foreign swarms).
+  if (process.env.CHAOSD6_DEFS_CACHE_ROOT) return path.join(process.env.CHAOSD6_DEFS_CACHE_ROOT, String(process.env.PEER_LABEL || 'peer').replace(/[^a-z0-9._-]+/gi, '_'), sub);
   if (process.env.CHAOSD6_USER_DATA_DIR) return path.join(process.env.CHAOSD6_USER_DATA_DIR, sub);
   return path.join(process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'), 'chaosd6', sub);
 }
@@ -166,9 +179,9 @@ export function createDefsRepo({ kind, subdir, manifestKey = subdir, rid = '', c
   /** Path of a definition inside the repo: <subdir>/<id>.json */
   const defPath = (id, sub = subdir) => `${sub}/${assertId(id)}.json`;
 
-  function ref(def, { repo = RID, branch = MAIN_BRANCH, commit } = {}) {
+  function ref(def, { repo = RID, branch = MAIN_BRANCH, commit, ns, review } = {}) {
     if (!def || typeof def !== 'object' || Array.isArray(def)) throw new Err('bad-def', 'definition must be an object');
-    return { repo: String(repo || ''), branch: String(branch || ''), commit: String(commit || ''), sha256: defHash(def), id: assertId(def.id) };
+    return withProvenance({ repo: String(repo || ''), branch: String(branch || ''), commit: String(commit || ''), sha256: defHash(def), id: assertId(def.id) }, { ns, review });   // PV
   }
 
   /** Validate the shape of a ref received from the network; returns a normalised copy. */
@@ -179,7 +192,7 @@ export function createDefsRepo({ kind, subdir, manifestKey = subdir, rid = '', c
     if (!SHA_RE.test(r.sha256)) throw new Err('bad-ref', `ref ${r.id}: sha256 must be 64 hex`);
     if (r.commit && !COMMIT_RE.test(r.commit)) throw new Err('bad-ref', `ref ${r.id}: commit must be 40 hex`);
     if (r.repo && !RID_RE.test(r.repo) && r.repo !== RID) throw new Err('bad-ref', `ref ${r.id}: bad repo ${r.repo}`);
-    return r;
+    return withProvenance(r, r0);   // PV: ns / review pass through (optional)
   }
 
   /** Throws unless `def` is exactly what `ref` names. */
@@ -289,8 +302,12 @@ export function createDefsRepo({ kind, subdir, manifestKey = subdir, rid = '', c
    * A file whose `id` does not match its name is reported in `errors`, not loaded.
    */
   async function loadFrom({ dir = null, gitdir = null, commit = 'HEAD', repo = RID, branch = '',
-    subdir: sub = subdir, engine = 'auto', cache = null } = {}) {
+    subdir: sub = subdir, engine = 'auto', cache = null, ns = '' } = {}) {
     if (!dir && !gitdir) throw new Error(`${loadName}: dir or gitdir required`);
+    // PV: the publisher's namespace — given, or read off a Radicle storage ref refs/namespaces/<nid>/refs/heads/<branch>
+    const nsm = /^refs\/namespaces\/([^/]+)\/refs\/heads\/(.+)$/.exec(String(commit || ''));
+    if (!ns && nsm && NID_RE.test(nsm[1])) ns = nsm[1];
+    if (!branch && nsm) branch = nsm[2];
     const { commit: oid, files } = await readCommitFiles({ dir, gitdir, commit, subdir: sub, engine });
     const defs = {}; const refs = {}; const errors = [];
     for (const { name, text } of files.sort((a, b) => (a.name < b.name ? -1 : 1))) {
@@ -299,7 +316,7 @@ export function createDefsRepo({ kind, subdir, manifestKey = subdir, rid = '', c
         assertId(def?.id);
         if (`${def.id}.json` !== name) throw new Err('id-mismatch', `id ${def.id} in ${name}`);
         defs[def.id] = def;
-        refs[def.id] = ref(def, { repo, branch: branch || (COMMIT_RE.test(commit) ? '' : commit), commit: oid });
+        refs[def.id] = ref(def, { repo, branch: branch || (COMMIT_RE.test(commit) ? '' : commit), commit: oid, ns });   // PV: ns
         if (cache) cache.put(def);
       } catch (e) { errors.push({ file: `${sub}/${name}`, error: e.message }); }
     }

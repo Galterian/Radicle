@@ -6208,6 +6208,22 @@
               }
             ]
           }
+        },
+        {
+          "id": "attack_keeps_channel",
+          "description": "Ruling 2026-11-17: my Attack (it emits) does not break a channel I hold, and a cast in progress advances on it (only an emitted element other than the channel cost breaks the channel). A plain Attack by any other class still breaks it.",
+          "target": "caster",
+          "unit": "channel",
+          "value": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "A"
+              ]
+            ]
+          }
         }
       ],
       "validation": [
@@ -6405,6 +6421,22 @@
           "description": "Ruling 2026-11-16: a Block (B) emits an element (cast, Rule 24, Manipulator, badge).",
           "target": "caster",
           "unit": "emit",
+          "value": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "B"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "block_keeps_channel",
+          "description": "Ruling 2026-11-17: my Block progresses like a Reaver's Attack — a cast in progress advances on it, and a channel I hold is not broken by it (only an emitted element other than the channel cost breaks it).",
+          "target": "caster",
+          "unit": "channel",
           "value": {
             "in": [
               {

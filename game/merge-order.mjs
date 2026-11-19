@@ -132,3 +132,53 @@ export function clockFrame(snap, keys) {
   for (const k of keys) if (snap?.[k] !== undefined && snap[k] !== null) rec[k] = snap[k];
   return { sig: `${snap?.action}|${snap?.phase}|${snap?.phase_ends_at}`, rec };
 }
+
+// (4) Start clock (user 2026-11-17): "I should start at the last known game state, round and turn." A joiner
+//     never starts at T0.R0 of a dimension that has run before. `live` = other peers' snapshots heard at join
+//     sync; `known` = lastKnownClock(...) of the newest Door clocks and the local TMJ save (launcher env
+//     START_ACTION / RESTORE_FROM_TMJ meta). Rule:
+//       · a FRESH live node that is not a wild monster (a hero, an ally bot, an unattended hero, a summon)
+//         → the live clock (pickClockRef over everyone heard: max fresh action, majority phase, median
+//         deadline — unchanged), whatever the Doors say;
+//       · otherwise (nobody, or only monsters / stale snapshots) → the higher of the live monsters' action and
+//         the last known action, entered in planning; `null` known and nobody live → fresh (action 0).
+//     Returns { source: 'live' | 'known' | 'fresh', action, turn, round, phase, phase_ends_at, ref, cohort, from }.
+export const isWildMonster = (p) => !!p && !!p.creature_id && !p.owner_peer_id;
+export function clockCandidate(c, roundsPerTurn = 3) {
+  if (!c) return -1;
+  const a = Number(c.action);
+  if (c.action !== undefined && c.action !== null && c.action !== '' && Number.isInteger(a) && a >= 0) return a;
+  const t = Number(c.turn), r = Number(c.round) || 0;
+  return c.turn !== undefined && c.turn !== null && c.turn !== '' && Number.isInteger(t) && t >= 0 ? t * roundsPerTurn + Math.max(0, Math.min(roundsPerTurn - 1, r)) : -1;
+}
+// cands: [{ action | turn+round, at (ms or ISO), source }]. The newest state is the most advanced action — a
+// dimension's clock only runs forward, so a time-based pick would let a Door pushed later by a peer whose
+// clock was reset (a pre-fix quiet join at T0) undo the real one; ties → the later `at`. null when none.
+export function lastKnownClock(cands, { roundsPerTurn = 3 } = {}) {
+  let best = null;
+  for (const c of cands || []) {
+    const action = clockCandidate(c, roundsPerTurn);
+    if (action < 0) continue;
+    const at = typeof c.at === 'number' ? c.at : (Date.parse(c.at || 0) || 0);
+    if (!best || action > best.action || (action === best.action && at > best.at)) best = { action, at, source: String(c.source || '?') };
+  }
+  return best && { ...best, turn: Math.floor(best.action / roundsPerTurn), round: best.action % roundsPerTurn };
+}
+// The clock candidates of a dimension's Doors (join-plan / launcher records: { peer_id, clock, pushed_at }).
+export const doorClockCands = (doors) => (doors || []).filter(d => d?.clock).map(d => ({ ...d.clock, at: typeof d.clock.at === 'number' ? d.clock.at : d.pushed_at, source: `door ${d.peer_id || '?'}` }));
+// A local TMJ save (autosave.mjs listSavedDimensions item, or loadTmj().meta).
+export const saveClockCand = (s, path = '') => s ? { turn: s.turn, round: s.round, at: s.saved_at || s.mtime, source: `save ${path || s.path || s.dim_id || ''}`.trim() } : null;
+export function pickStartClock(live, known, { now = Date.now(), freshMs = 20_000, roundsPerTurn = 3 } = {}) {
+  const others = (live || []).filter(p => p && snapAction(p, roundsPerTurn) >= 0);
+  const keepers = others.filter(p => !isWildMonster(p) && snapTime(p) > now - freshMs);
+  const at = (action, extra) => ({ action, turn: Math.floor(action / roundsPerTurn), round: action % roundsPerTurn, ...extra });
+  if (keepers.length) {   // the live mesh: the same reference as ever, over everyone heard (monsters included)
+    const pick = pickClockRef(others, { now, freshMs, roundsPerTurn });
+    return at(pick.action, { source: 'live', phase: pick.phase, phase_ends_at: pick.phase_ends_at, ref: pick.ref, cohort: pick.cohort, from: pick.ref.peer_id });
+  }
+  const mon = others.length ? pickClockRef(others, { now, freshMs, roundsPerTurn }) : null;
+  const k = known && Number.isInteger(known.action) && known.action >= 0 ? known.action : -1;
+  if (mon && mon.action >= k) return at(mon.action, { source: 'live', phase: mon.phase, phase_ends_at: mon.phase_ends_at, ref: mon.ref, cohort: mon.cohort, from: mon.ref.peer_id });
+  if (k >= 0) return at(k, { source: 'known', phase: 'planning', phase_ends_at: null, ref: null, cohort: 0, from: known.source });
+  return at(0, { source: 'fresh', phase: 'planning', phase_ends_at: null, ref: null, cohort: 0, from: null });
+}

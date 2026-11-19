@@ -77,6 +77,16 @@ export async function prepareJoin(dim, { doorId = null, side = 'player', placeme
     PEER_GUN_URLS: plan.network.gunRelays.join(','),
     JOIN_SYNC_WAIT_MS: plan.liveDoors.length ? '8000' : '500',
   };
+  // Start clock (user 2026-11-17): the most advanced of the Door clocks and this device's TMJ saves of the
+  // dimension (merge-order.mjs lastKnownClock) — peer.mjs starts there when no live node other than wild monsters
+  // answers; the regenerated monsters / allies (workers) inherit the same env, so all start on one clock.
+  try {
+    const { lastKnownClock, doorClockCands, saveClockCand } = await import('./merge-order.mjs');
+    const id = dimIdOf(dim);
+    const saves = await import('./tools/autosave.mjs').then(m => m.listSavedDimensions()).catch(() => []);
+    const k = lastKnownClock([...doorClockCands(dim.doors), ...saves.filter(s => !s.private && (s.dim_id === id || s.dim_name === dim.dimension_name)).map(s => saveClockCand(s))]);
+    if (k) Object.assign(env, { START_ACTION: String(k.action), START_CLOCK_SRC: `${k.source} T${k.turn}.R${k.round}` });
+  } catch (e) { console.warn(`[join] start clock: ${e.message}`); }
   const a = plan.anchorDoor;
   const summary = `${dim.dimension_name}: ${placement} ${a?.peer_id || '(no anchor)'} at ${a?.tile?.q},${a?.tile?.r}${nearTile ? ` near (${nearTile.q},${nearTile.r})` : ''} → ${side} ${plan.peerLabel} at ${plan.startTile.q},${plan.startTile.r} (${dim.doors.length} Doors, ${plan.liveDoors.length} live${plan.liveDoors.length ? '' : ' — quiet, starting it from its Doors'}, ${plan.knownMap.size()} hexes)`
     + (plan.regen?.length ? `; ${plan.regen.length}/${plan.regenKnown} known monsters come back` : '');

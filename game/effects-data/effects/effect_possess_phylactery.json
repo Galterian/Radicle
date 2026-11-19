@@ -2,21 +2,21 @@
   "schema": "chaosd6.effect/1",
   "id": "effect_possess_phylactery",
   "name": "Possess / Phylactery",
-  "version": "1.0.0",
-  "source": {"collection":"effects","version":"1.0.0"},
+  "version": "1.1.0",
+  "source": {"collection":"effects","version":"1.1.0"},
   "elements": ["elem_vitality"],
   "cost": 1,
   "kind": "meta",
   "duration": "permanent",
   "every": {"behaviour":"none"},
-  "text": "Swap yourself with any creature from your archives, put your character into archives. On Possess destruction, swap back (also usable with Golems and Elementals). + Phylactery alt: destroy one permanent effect any time.",
-  "flags": {"permanent":true,"scope":"target","possess":true,"fixedPower":6},
+  "text": "Possess: pick a creature you killed from your archive and play it while this permanent stands (your character stands still, Empty Posture / Empty Move). No creature in your archive: the Phylactery permanent instead — click it to destroy the most valuable permanent of the nearest enemy (inactive with no enemy or no permanent near).",
+  "flags": {"permanent":true,"scope":"self","possess":true,"fixedPower":6},
   "uses": ["std","e2b"],
   "logic": {"seq": [
       {"call":["prelude"]},
-      {"call":["targets","target",1,false]},
-      {"if":[{"and":[{"var":"cast.phylactery.peer_id"},{"var":"cast.phylactery.perm"}]},{"let":[{"tgt":{"var":"cast.phylactery.peer_id"},"perm":{"var":"cast.phylactery.perm"}},{"if":[{"and":[{"call":["alive",{"var":"tgt"}]},{"enemy_of":[{"var":"me"},{"var":"tgt"}]},{"has_perm":[{"var":"tgt"},{"var":"perm"}]},{"!":[{"starts_with":[{"var":"perm"},"class_"]}]}]},{"seq":[{"put":["possess",{"obj":{"phylactery":{"obj":{"peer_id":{"var":"tgt"},"perm":{"var":"perm"}}}}}]},{"note":["phylactery shatters ",{"var":"tgt"},"'s ",{"var":"perm"}]}]},{"call":["fizzle","no such enemy permanent"]}]}]},{"let":[{"tgt":{"at":[{"var":"recipients"},0]}},{"if":[{"!":[{"var":"tgt"}]},{"call":["fizzle","nobody in reach"]},{"let":[{"mine":{"call":["stat_sum",{"var":"me"}]},"theirs":{"call":["stat_sum",{"var":"tgt"}]}},{"if":[{"<=":[{"var":"mine"},{"var":"theirs"}]},{"seq":[{"put":["status","fizzled"]},{"note":[{"var":"tgt"}," resists (Σ ",{"var":"theirs"}," ≥ mine ",{"var":"mine"},")"]}]},{"seq":[{"put":["possess",{"obj":{"bind":{"var":"tgt"}}}]},{"note":["possess ",{"var":"tgt"}," (Σ ",{"var":"mine"}," > ",{"var":"theirs"},")"]}]}]}]}]}]}]},
-      {"if":[{"and":[{"===":[{"out":"status"},"done"]},{"!":[{"var":"cast._channel_tick"}]}]},{"let":[{"b":{"get":[{"out":"possess"},"bind"]}},{"emit":["permanents",{"if":[{"var":"b"},{"obj":{"on":{"var":"b"},"id":{"var":"effect_id"},"by":{"var":"me"}}},{"obj":{"on":{"var":"me"},"id":{"var":"effect_id"}}}]}]}]}]},
+      {"call":["targets","self",1,false]},
+      {"let":[{"cid":{"var":"cast.possess.creature_id"},"ccard":{"var":"cast.possess.card_id"},"cname":{"var":"cast.possess.name"}},{"if":[{"and":[{"===":[{"str":[{"var":"cid"}]},{"var":"cid"}]},{"!==":[{"var":"cid"},""]}]},{"seq":[{"put":["possess",{"obj":{"creature":{"obj":{"creature_id":{"var":"cid"},"card_id":{"if":[{"===":[{"str":[{"var":"ccard"}]},{"var":"ccard"}]},{"var":"ccard"},null]},"name":{"if":[{"===":[{"str":[{"var":"cname"}]},{"var":"cname"}]},{"var":"cname"},null]}}}}}]},{"note":["possess ",{"var":"cid"}," from my archive"]}]},{"seq":[{"put":["possess",{"obj":{"phylactery":true}}]},{"note":["no creature in my archive — the Phylactery"]}]}]}]},
+      {"if":[{"and":[{"===":[{"out":"status"},"done"]},{"!":[{"var":"cast._channel_tick"}]}]},{"emit":["permanents",{"obj":{"on":{"var":"me"},"id":{"var":"effect_id"}}}]}]},
       {"call":["finish"]}
     ]}
 }

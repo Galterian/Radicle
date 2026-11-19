@@ -46,6 +46,15 @@ PY
   exit 2
 fi
 echo "ok: no public-mesh seeds in rad config"
+ptype=$(jq -r '.node.peers.type // "dynamic"' "$CFG")
+if [ "$ptype" != "static" ]; then
+  echo "FAIL: node.peers.type=$ptype -> node dials random public seeds; set it to static"; exit 2
+fi
+for rid in rad:zqZmP6itceBMqYwi1K1n8phQqCaj rad:z2xbfJfwT3kukR73m8LXmmuvchEwr rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ \
+           rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5 rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH; do
+  v=$(rad inspect "$rid" --visibility 2>/dev/null | head -1)
+  [ "$v" = "public" ] && { echo "FAIL: $rid is public"; exit 2; }
+done
 
 # Also show whatever IS configured so the user can see at a glance.
 echo

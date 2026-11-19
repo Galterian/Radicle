@@ -125,6 +125,25 @@ export const RULE24_KIND_RANK = { perm: 0, stat: 1, tile: 2 };
 export const rule24Order = (cands) => cands.map((c, i) => [c, i])
   .sort((a, b) => (RULE24_KIND_RANK[a[0].kind] ?? 9) - (RULE24_KIND_RANK[b[0].kind] ?? 9) || a[1] - b[1]).map(x => x[0]);
 
+// Bonus tile token element choice (paper text, user request 2026-11-17): Fossilization "may put an Earth OR
+// Vitality permanent bonus token on your tile". The cast's `elem` (a stat-pill click, like Artifice) picks one of
+// the listed elements; otherwise the one my stat is higher in (tie: the first). Not an EFFECT_RULES key, so the
+// flags (effects-data parity, rebalancing-check RULE_KEYS) stay as they are; effects-data mirrors it in logic.
+export const TILE_TOKEN_CHOICE = { effect_fossilization: ['elem_earth', 'elem_vitality'] };
+// User ruling 2026-11-18 (Fossilization): "No, the old token stays but you are spending one more round in retrying
+// (lock)". A failed tile/shield token roll no longer voids the cast: the lock and the tokens already bought land
+// (status 'done'), `out.kept` lists the token slots [value | null] and the peer re-emits the cast's last element
+// next action (castStatus 'retry'); that retry emission buys only the owed token(s) and locks nobody ("do retry,
+// not lock" — the caster's failed roll is the caster's problem); with nobody in reach it still buys them (no fizzle).
+export const TOKEN_RETRY_KEEPS = new Set(['effect_fossilization']);
+export const tokenRetryOwed = (effectId, oc) => TOKEN_RETRY_KEEPS.has(effectId) && oc?.status === 'done' && Array.isArray(oc.kept) && oc.kept.some(v => v == null);
+export function tileTokenElem(cast, el, myStat) {
+  const choice = TILE_TOKEN_CHOICE[cast?.effect_id];
+  if (!choice || !choice.includes(el)) return el;
+  if (choice.includes(cast.elem)) return cast.elem;
+  return choice.reduce((best, e) => (myStat(e) > myStat(best) ? e : best), choice[0]);
+}
+
 export const EFFECT_RULES = {
   // damage
   effect_fireball:      { damage: 'delta', scope: 'target', tileToken: { kind: 'fire', elem: 'elem_fire' } },
@@ -134,7 +153,7 @@ export const EFFECT_RULES = {
   effect_throw:         { damage: 'delta', scope: 'target', pullToken: true },   // Force Smash / Pull: steal an adjacent bonus tile token instead when one is in reach
   effect_metaphysics:   { damage: 'delta', scope: 'target', tileTarget: true, surgery: 'unite' },    // no enemy adjacent: move a nearby feature / trap onto the chosen free tile
   effect_disruption:    { damage: 'delta', scope: 'target', tileTarget: true, surgery: 'split' },    // no enemy adjacent: move any visible trap (even under an enemy) onto the chosen free tile
-  effect_awake:         { tileTarget: true, surgery: 'awake' },                                     // move an adjacent ally / me / unoccupied trap onto the chosen free tile within 10
+  effect_awake:         { tileTarget: true, surgery: 'awake', permanent: true, channel: { stop: 'break' } },   // (the extra "until contact" stop is keyed on effect_awake in peer.mjs — the validator only bounds stop 'break') move me / an ally in contact / a building or wall within 2 — clicked tile or the most beneficial spot within 10 (game/awake.mjs → cast.awake); channel: a Harmony token each action until contact; ∀ = the permanent stays + the target's stat (peer.mjs)
   effect_balefire:      { damage: 'delta', scope: 'target', permanent: true, fixedPower: 6, draw: 5, completesWithoutTarget: true },   // Balefire(6): +5 cards, every card an instant until the end of my next turn
   effect_poison:        { damage: 'delta', scope: 'target', trap: { trigger: 'targeted', mode: 'damage' } },   // + the card stays as a trap under me
   effect_space_bending: { damage: 'delta', scope: 'target', lock: 1, altTrap: true },                          // nobody in reach → a random trap within 10
@@ -190,7 +209,7 @@ export const EFFECT_RULES = {
   effect_spirit_link:    { permanent: true, spiritLink: true },                   // an ally's stat is added to mine while it stands (∀: all four)
   effect_blessing_curse: { permanent: true, blessAttach: true },                  // the attached effect fires every action while this stands (an unbreakable channel)
   effect_phantom:        { permanent: true, phantom: true },                      // a copy of me (stats + deck) fights for me; it falls at the first point of damage
-  effect_possess_phylactery: { permanent: true, scope: 'target', possess: true, fixedPower: 6 },   // beat the enemy's Σstats → they fight for me while it stands; Phylactery: destroy one enemy permanent instead
+  effect_possess_phylactery: { permanent: true, scope: 'self', possess: true, fixedPower: 6 },   // user 2026-11-17: play a creature from my archive (cast.possess) while it stands; empty archive → the Phylactery permanent (click: shatter the nearest enemy's best permanent)
   // scouting
   effect_vision:         { scope: 'target', vision: true, tileTarget: true },     // a tile: reveal the map around it; an enemy: beat their World (Time) → see their hand
   effect_super_sense:    { permanent: true },                                     // see the traps around me; the permanent is spent to evade one point of damage (peer.mjs)
@@ -291,7 +310,11 @@ export function resolveEffectJs(ctx, cast) {
   };
   const buy = (stat, tag) => buyPB(stat, tag).value;
   const lockN = (rule.lock || 0) * (cast.every ? 2 : 1);
+  // Token retry (TOKEN_RETRY_KEEPS, user ruling 2026-11-18 "do retry, not lock"): the retry emission of a cast whose
+  // lock already landed (cast.kept = the token slots) only buys the owed token — it locks nobody again.
+  const tokKept = TOKEN_RETRY_KEEPS.has(cast.effect_id) && Array.isArray(cast.kept) && cast.kept.length ? cast.kept : null;
   const lock = (defId) => {
+    if (tokKept) return;
     if (rule.lock) out.locks.push({ on: defId, n: lockN, by: me, effect_id: cast.effect_id });
     if (rule.lockRestOfTurn) out.locks.push({ on: defId, restOfTurn: true, nextTurn: !!rule.lockNextTurn, by: me, effect_id: cast.effect_id });
   };
@@ -424,7 +447,40 @@ export function resolveEffectJs(ctx, cast) {
   // the bonus tokens / features (relocations kind 'token'), the traps ('trap') and obstacles ('obstacle');
   // each relocation is applied by the thing's owner, so every peer derives the same map.
   let surgeryDone = false;
-  if (rule.surgery && cast.target?.kind === 'tile' && ctx.tileTokensAt && ctx.trapsAt) {
+  // Awake (user request 2026-11-17): the resolver's plan (game/awake.mjs → cast.awake, built on every peer from the
+  // same view) says what moves where — a unit (me / an ally in contact) or a building near me. 'none' = nothing can.
+  // Awake channel (user ruling 2026-11-18, paper "Channel: draw a Harmony token every action until contact"): each tick
+  // (every action after the cast while the channel stands — peer.mjs breaks it on A/B/M/EM, another element, or
+  // contact with an enemy) puts a Harmony bonus token on my tile, bought with my Will; a failed roll = no token
+  // this action (the channel goes on). A tick moves nothing.
+  const awakeTick = rule.surgery === 'awake' && !!cast._channel_tick;
+  if (awakeTick) {
+    const st = myStat('elem_harmony'), pb = pointBuy(st, seed('awake:elem_harmony'), ctx.sha);
+    out.rolls.push({ elem: 'awake:elem_harmony', dice: [...pb.dice], stat: st, ok: !pb.fail });
+    if (!pb.fail && pb.value > 0) out.tokens.push({ kind: 'bonus', elem: 'elem_harmony', value: pb.value, q: myTile.q, r: myTile.r });
+    out.notes.push(pb.fail ? 'awake channel: the Harmony roll failed' : `awake channel: Harmony token ${pb.value}`);
+    surgeryDone = true;
+  }
+  const awakePlanned = !awakeTick && rule.surgery === 'awake' && typeof cast.awake?.kind === 'string';
+  if (awakePlanned) {
+    const p = cast.awake;
+    if (p.kind === 'unit' && p.who) {
+      out.moves.push({ who: p.who, q: p.q, r: p.r, reason: 'awakened' });
+      out.notes.push(`awake moves ${p.who} to (${p.q},${p.r}) [${p.how}, gain ${p.gain}]`);
+      surgeryDone = true;
+    } else if (p.kind === 'building' && p.from) {
+      out.relocations.push({ kind: 'building', owner: 'world', id: `bld:${p.from.q},${p.from.r}`, label: p.label, by: me, from: { q: p.from.q, r: p.from.r }, q: p.q, r: p.r });
+      out.notes.push(`awake moves the ${p.label} (${p.from.q},${p.from.r}) to (${p.q},${p.r}) [${p.how}, gain ${p.gain}]`);
+      surgeryDone = true;
+    } else if (p.kind === 'wall' && p.reloc && p.from) {
+      // A wall token (Creation / building-wall obstacle: kind 'obstacle', applied by its owner) or a labyrinth wall
+      // (kind 'wall', world edits by me) — awake.mjs builds the relocation itself.
+      out.relocations.push({ ...p.reloc });
+      out.notes.push(`awake moves the ${p.label} (${p.from.q},${p.from.r}) to (${p.q},${p.r}) [${p.how}, gain ${p.gain}]`);
+      surgeryDone = true;
+    } else { out.status = 'fizzled'; out.notes.push(`awake: ${p.why || 'nothing can move'}`); }
+  }
+  if (rule.surgery && !awakePlanned && !awakeTick && cast.target?.kind === 'tile' && ctx.tileTokensAt && ctx.trapsAt) {
     const hd = (a, b) => Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs((a.q + a.r) - (b.q + b.r)));
     const dest = cast.target.ref;
     const unitAt = (q, r) => ctx.peers().find(id => alive(id) && (t => t && t.q === q && t.r === r)(ctx.tileOf(id))) || null;
@@ -523,7 +579,7 @@ export function resolveEffectJs(ctx, cast) {
     }
   } else {
     if (rule.lock || rule.lockRestOfTurn) {
-      if (!recipients.length) { out.status = 'fizzled'; out.notes.push('nobody in reach'); }
+      if (!recipients.length && !tokKept) { out.status = 'fizzled'; out.notes.push('nobody in reach'); }
       for (const defId of recipients) lock(defId);
     }
   }
@@ -570,14 +626,28 @@ export function resolveEffectJs(ctx, cast) {
       }
     }
   }
-  for (const el of rule.selfTileTokens || []) {
-    const v = buy(myStat(el), `tile:${el}`);
-    if (v > 0) out.tokens.push({ kind: 'bonus', elem: el, value: v, q: myTile.q, r: myTile.r });
-  }
-  for (const el of rule.selfShieldTokens || []) {
-    const v = buy(myStat(el), `shield:${el}`);
-    if (v > 0) out.tokens.push({ kind: 'shield', elem: el, value: v, q: myTile.q, r: myTile.r });
-  }
+  // TOKEN_RETRY_KEEPS: a failed token roll does not cancel the cast — the lock and the tokens bought land, the
+  // missing token re-emits next action (out.kept = per token slot: value placed | null still owed).
+  const keepTok = TOKEN_RETRY_KEEPS.has(cast.effect_id) && out.status === 'done';
+  const slots = [...(rule.selfTileTokens || []).map(el => ['bonus', el]), ...(rule.selfShieldTokens || []).map(el => ['shield', el])];
+  const newKept = [];
+  let tokFailed = false;
+  slots.forEach(([kind, el0], s) => {
+    const el = kind === 'bonus' ? tileTokenElem(cast, el0, myStat) : el0;
+    const tag = `${kind === 'bonus' ? 'tile' : 'shield'}:${el}`;
+    if (keepTok) {
+      if (tokKept && tokKept[s] != null) { newKept.push(tokKept[s]); return; }
+      const pb = pointBuy(myStat(el), seed(tag), ctx.sha);
+      out.rolls.push({ elem: tag, dice: [...pb.dice], stat: myStat(el), ok: !pb.fail });
+      if (pb.fail) { tokFailed = true; newKept.push(null); out.notes.push(`point-buy ${tag} failed [${pb.dice.join(',')}] > ${myStat(el)} — that token re-emits next action`); return; }
+      newKept.push(pb.value);
+      if (pb.value > 0) out.tokens.push({ kind, elem: el, value: pb.value, q: myTile.q, r: myTile.r });
+      return;
+    }
+    const v = buy(myStat(el), tag);
+    if (v > 0) out.tokens.push({ kind, elem: el, value: v, q: myTile.q, r: myTile.r });
+  });
+  if (keepTok && tokFailed) out.kept = newKept;
   if (rule.zone === 'no_damage') {
     out.zones.push({ q: myTile.q, r: myTile.r });
     for (const n of ctx.neighbours(myTile.q, myTile.r)) out.zones.push({ q: n.q, r: n.r });
@@ -664,21 +734,16 @@ export function resolveEffectJs(ctx, cast) {
   }
   // Phantom: peer.mjs spawns a copy of me bound to this permanent.
   if (rule.phantom && out.status === 'done') out.phantom = true;
-  // Possess: an enemy in reach whose Σstats I beat fights for me while the permanent stands.
-  // Phylactery (cast.phylactery = {peer_id, perm}): destroy that enemy permanent instead — no stat contest.
+  // Possess (user ruling 2026-11-17): the reveal carries the creature I picked from my archive
+  // (cast.possess = {creature_id, card_id?, name?}) — I play it while the Possess permanent stands in MY
+  // holding (peer.mjs spawns it next to me; my hero holds EP). No creature in my archive → the permanent
+  // is the Phylactery (peer.mjs: one click shatters the nearest enemy's best permanent, then it is spent).
   if (rule.possess) {
-    const stats = ['vitality', 'world', 'matter', 'will'];
-    const sum = (id) => stats.reduce((s, k) => s + ctx.baseStat(id, k), 0);
-    if (cast.phylactery?.peer_id && cast.phylactery.perm) {
-      const tgt = cast.phylactery.peer_id;
-      if (alive(tgt) && ctx.enemyOf(me, tgt) && ctx.hasPerm(tgt, cast.phylactery.perm) && !String(cast.phylactery.perm).startsWith('class_')) { out.possess = { phylactery: { peer_id: tgt, perm: cast.phylactery.perm } }; out.notes.push(`phylactery shatters ${tgt}'s ${cast.phylactery.perm}`); }
-      else { out.status = 'fizzled'; out.notes.push('no such enemy permanent'); }
-    } else {
-      const tgt = recipients[0];
-      if (!tgt) { out.status = 'fizzled'; out.notes.push('nobody in reach'); }
-      else if (sum(me) <= sum(tgt)) { out.status = 'fizzled'; out.notes.push(`${tgt} resists (Σ ${sum(tgt)} ≥ mine ${sum(me)})`); }
-      else { out.possess = { bind: tgt }; out.notes.push(`possess ${tgt} (Σ ${sum(me)} > ${sum(tgt)})`); }
-    }
+    const pk = cast.possess;
+    if (pk && typeof pk.creature_id === 'string' && pk.creature_id) {
+      out.possess = { creature: { creature_id: pk.creature_id, card_id: typeof pk.card_id === 'string' ? pk.card_id : null, name: typeof pk.name === 'string' ? pk.name : null } };
+      out.notes.push(`possess ${pk.creature_id} from my archive`);
+    } else { out.possess = { phylactery: true }; out.notes.push('no creature in my archive — the Phylactery'); }
   }
   // Vision: a tile → the map around it is revealed to me; an enemy in reach → my World (Time) must beat theirs to see their hand.
   if (rule.vision) {
@@ -702,9 +767,8 @@ export function resolveEffectJs(ctx, cast) {
   }
   // Permanent landing on the original cast only. Channel ticks re-fire the
   // behaviour but the card is already in front of the caster — don't double-land it.
-  // Possess (user ruling 2026-10-30): the permanent sits in the POSSESSED unit's holding (its allies must
-  // destroy it there); every other permanent lands on the caster.
-  if (rule.permanent && out.status === 'done' && !cast._channel_tick) out.permanents.push({ on: out.possess?.bind || me, id: cast.effect_id, ...(out.possess?.bind ? { by: me } : {}) });
+  // Every permanent lands on the caster (Possess too since 2026-11-17: it stands in my holding).
+  if (rule.permanent && out.status === 'done' && !cast._channel_tick) out.permanents.push({ on: me, id: cast.effect_id });
   // Register the channel on the original cast; the tick path never re-emits one.
   if (rule.channel && out.status === 'done' && !cast._channel_tick) {
     out.channels.push({

@@ -36,10 +36,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { canonicalJson, sha256Hex, effectHash, parseEffectRef, getEffectByRef, createEffectCache, effectsCacheDir,
-  httpdEffectFetcher, gitEffectFetcher, EFFECTS_RID, EffectRefError } from './effects-repo.mjs';
+  httpdEffectFetcher, gitEffectFetcher, EFFECTS_RID, EffectRefError, gitEffectLibFetcher, httpdEffectLibFetcher } from './effects-repo.mjs';
 import { loadEffectDefs, resolveEffectData, EFFECTS_DATA_DIR } from './effect-engine.mjs';
 import { encodeFrame, createFrameDecoder, createBusRpc } from './map-sync.mjs';
+import { foreignHolder, foreignRefuser, foreignRole, foreignSelectActive, foreignHolders, foreignRefusers } from './foreign-select.mjs';   // PS: partial foreign swarms
 import { registerForeignEffect, EFFECT_RULES } from './effects.mjs';
+import { withProvenance } from './defs-repo.mjs';   // PV: ref provenance (ns = publisher namespace, review) — never hashed
 
 export const FX_PROTOCOL_VERSION = 1;
 export const fxProtocol = (dimId) => `/chaos/${dimId}/effects/1`;
@@ -60,29 +62,37 @@ export function libShaMap(libs) {
   for (const l of list.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) out[l.id] = effectHash(l);
   return out;
 }
-/** Deterministic id of what a peer runs: sha256(canonical {libs:{name:sha}, effects:{id:sha}}). */
-export function effectSetId({ libs = {}, effects = {} } = {}) {
-  return sha256Hex(canonicalJson({ libs, effects }));
+/** Deterministic id of what a peer runs: sha256(canonical {libs:{name:sha}, effects:{id:sha}[, hooks:{family:sha}]}).
+ *  HR (2026-11-18): the effect hook programs (hooks/<family>.json, chaosD6-Effects) are part of what a peer runs
+ *  (EFFECT_HOOKS_ENGINE=data|shadow resolves channel ticks / traps / summons from them), so they are in the set id;
+ *  `hooks` is added only when non-empty, so a hook-less set keeps its pre-HR id. */
+export function effectSetId({ libs = {}, effects = {}, hooks = null } = {}) {
+  return sha256Hex(canonicalJson(hooks && Object.keys(hooks).length ? { libs, effects, hooks } : { libs, effects }));
 }
 /** The pin of one runnable effect: its sha256 + the sha256 of every library it uses. */
 export function fxKey(ref) { return sha256Hex(canonicalJson({ effect: ref.sha256, libs: ref.libs || {} })); }
 
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
 const jsonFiles = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => path.join(dir, f)) : []);
-/** The bundled main set (effects-data/effects + lib) and its set id. */
-export function bundledEffectSet(dir = process.env.EFFECT_DEFS_DIR || EFFECTS_DATA_DIR) {
+/** The bundled main set (effects-data/effects + lib + hooks) and its set id. Hooks: `hooksDir`, else
+ *  $EFFECT_HOOKS_DIR (what effect-hooks.mjs runs), else <dir>/hooks, else hooks/ next to the effects dir. */
+export function bundledEffectSet(dir = process.env.EFFECT_DEFS_DIR || EFFECTS_DATA_DIR, hooksDir = null) {
   const effDir = fs.existsSync(path.join(dir, 'effects')) ? path.join(dir, 'effects') : dir;
   const libDir = fs.existsSync(path.join(dir, 'lib')) ? path.join(dir, 'lib') : path.join(effDir, '..', 'lib');
   const effects = new Map(), libs = new Map();
   for (const f of jsonFiles(libDir)) { try { const l = readJson(f); if (l?.id) libs.set(l.id, l); } catch {} }
   for (const f of jsonFiles(effDir)) { try { const d = readJson(f); if (d?.id) effects.set(d.id, d); } catch {} }
+  const hDir = hooksDir || process.env.EFFECT_HOOKS_DIR || (fs.existsSync(path.join(dir, 'hooks')) ? path.join(dir, 'hooks') : path.join(effDir, '..', 'hooks'));
+  const hooks = new Map();
+  for (const f of jsonFiles(hDir)) { try { const h = readJson(f); if (h?.id) hooks.set(h.id, h); } catch {} }
   const set = { libs: libShaMap(libs), effects: {} };
   for (const id of [...effects.keys()].sort()) set.effects[id] = effectHash(effects.get(id));
-  return { effects, libs, set, id: effectSetId(set) };
+  if (hooks.size) set.hooks = libShaMap(hooks);   // {family: sha256}, sorted (same helper as the libs)
+  return { effects, libs, hooks, set, id: effectSetId(set) };
 }
 
 /** A ref for `def` with its libraries pinned. `libs`: Map|array of lib objects or {name: sha}. */
-export function makeFxRef(def, libs, { repo = '', branch = '', commit = '', verdict = null } = {}) {
+export function makeFxRef(def, libs, { repo = '', branch = '', commit = '', verdict = null, ns = '', review = false } = {}) {   // PV: ns / review
   const uses = [...(def.uses || [])].sort();
   const byName = libs instanceof Map ? Object.fromEntries([...libs].map(([k, l]) => [k, effectHash(l)]))
     : Array.isArray(libs) ? libShaMap(libs) : { ...(libs || {}) };
@@ -94,6 +104,7 @@ export function makeFxRef(def, libs, { repo = '', branch = '', commit = '', verd
   }
   const ref = { id: def.id, sha256: effectHash(def), libs: pinned, repo: String(repo || ''), branch: String(branch || ''), commit: String(commit || ''), name: String(def.name || '') };
   if (verdict) ref.verdict = verdict;
+  withProvenance(ref, { ns, review });   // PV
   return parseFxRef(ref);
 }
 /** Validate a ref received from the network → normalised copy (throws EffectRefError). */
@@ -114,12 +125,12 @@ export function parseLibbedRef(ref, parseBase, RefError) {
   const out = { id: base.id, sha256: base.sha256, libs, repo: base.repo, branch: base.branch, commit: base.commit };
   if (typeof ref.name === 'string' && ref.name) out.name = ref.name.slice(0, 64);
   if (typeof ref.verdict === 'string' && VERDICTS.has(ref.verdict)) out.verdict = ref.verdict;
-  return out;
+  return withProvenance(out, ref);   // PV: ns / review pass through (not part of fxKey / skKey / clKey)
 }
 /** Wire form: empty provenance fields dropped. */
 export function compactRef(ref) {
   const o = { id: ref.id, sha256: ref.sha256, libs: ref.libs };
-  for (const k of ['repo', 'branch', 'commit', 'name', 'verdict']) if (ref[k]) o[k] = ref[k];
+  for (const k of ['repo', 'branch', 'commit', 'name', 'verdict', 'ns', 'review']) if (ref[k]) o[k] = ref[k];   // PV: + ns, review
   return o;
 }
 
@@ -138,7 +149,7 @@ export function createMemoryCache() {
 }
 
 // ------------------------------------------------------------------ store: what this peer holds
-// validate(def) → { verdict } | null (no validator). builtinRules: the EFFECT_RULES as built (before any
+// validate(def, { libs: [lib…], libShas: ref.libs }) → { verdict } | null (no validator); libs = the ref-pinned libs. builtinRules: the EFFECT_RULES as built (before any
 // foreign registration) — a foreign def reusing a built-in id must keep its flags (peer.mjs reads them).
 export function createFxStore({ bundled = null, builtinRules = {}, validate = null, onReady = null, log = () => {} } = {}) {
   const defs = new Map(), libs = new Map();   // sha256 -> plain object
@@ -171,7 +182,8 @@ export function createFxStore({ bundled = null, builtinRules = {}, validate = nu
       if (flagsById.has(def.id) && flagsById.get(def.id) !== flags) throw new Error(`another foreign ${def.id} with different flags is already loaded`);
       let verdict = 'unchecked', reasons = [];
       if (validate) {
-        try { const v = validate(def); verdict = v?.verdict || 'unchecked'; reasons = v?.reasons || []; }
+        // 1.1.0: priced against the libs THIS ref pins (hash-checked above), not the bundled ones
+        try { const v = validate(def, { libs: libObjs, libShas: ref.libs }); verdict = v?.verdict || 'unchecked'; reasons = v?.reasons || []; }
         catch (e) { verdict = 'reject'; reasons = [`validator error: ${e.message}`]; }
       }
       if (verdict === 'reject') res = { status: 'rejected', reason: `rebalance verdict reject${reasons.length ? `: ${reasons.join('; ')}` : ''}`, verdict };
@@ -222,7 +234,9 @@ export function assembleBlob(msgs, sha) {
 // Kind-generic (S4): `kind` is the wire kind of a definition ('effect' | 'skill'; libraries are always 'lib'),
 // `parseRef` / `getByRef` / `keyOf` the kind's ref parser, loader and pin key. The defaults are the E4 effect behaviour, unchanged.
 export const FX_DEFAULTS = { prefetchGapMs: 10_000, serveBurst: 30, serveRefillMs: 300, prefetch: true };
-export function createFxSync({ selfId, store, cache = createMemoryCache(), request = null, fallbackFetchers = [], now = () => Date.now(),
+// LR (2026-11-18): `libFallbackFetchers` fetch a pinned library (ref.libs[name] = sha) from the repo at the effect
+// ref's commit (lib/<name>.json in chaosD6-Effects) when no peer serves it; default [] = the pre-LR behaviour (peers only).
+export function createFxSync({ selfId, store, cache = createMemoryCache(), request = null, fallbackFetchers = [], libFallbackFetchers = [], now = () => Date.now(),
   log = () => {}, onLearned = null, onShared = null, opts = {}, kind: DEF = 'effect', parseRef = parseFxRef, getByRef = getEffectByRef, keyOf = fxKey }) {
   const o = { ...FX_DEFAULTS, ...opts };
   const holders = new Map();      // sha16 -> Map(peerId -> at)
@@ -269,9 +283,11 @@ export function createFxSync({ selfId, store, cache = createMemoryCache(), reque
   async function obtain(kind, id, sha, ref, cands) {
     if (kind === DEF ? store.hasDef(sha) : store.hasLib(sha)) return 'have';
     const box = {};
-    const fetchers = [peerFetcher(kind, cands, box), ...(kind === DEF ? fallbackFetchers.map(f => async (r) => { const v = await f(r); if (v != null) box.peer = box.peer || 'fallback'; return v; }) : [])];
+    const fb = kind === DEF ? fallbackFetchers : libFallbackFetchers;   // LR: libs from lib/<id>.json at the ref's commit
+    const fetchers = [peerFetcher(kind, cands, box), ...fb.map(f => async (r) => { const v = await f(r); if (v != null) box.peer = box.peer || 'fallback'; return v; })];
     const hitsBefore = cache.stats?.hits ?? 0;
-    const obj = await getByRef({ id, sha256: sha, repo: kind === DEF ? ref.repo : '', branch: '', commit: kind === DEF ? ref.commit : '' }, { cache, fetch: fetchers });
+    const useRepo = kind === DEF || libFallbackFetchers.length > 0;
+    const obj = await getByRef({ id, sha256: sha, repo: useRepo ? ref.repo : '', branch: '', commit: useRepo ? ref.commit : '' }, { cache, fetch: fetchers });
     if (kind === DEF) store.addDef(obj); else store.addLib(obj);
     const src = box.peer || ((cache.stats?.hits ?? 0) > hitsBefore ? 'cache' : 'fallback');
     source.set(sha, src);
@@ -507,12 +523,14 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   if (process.env.FX_VALIDATOR !== '0') {
     try {
       const m = await import('./tools/rebalancing-check.mjs');
-      if (typeof m.checkEffect === 'function') { validate = (def) => m.checkEffect(def); validatorInfo = `rebalancing-check ${m.VALIDATOR_VERSION || '?'}`; }
+      // validate(def, { libs, libShas }) from the store: the ref-pinned libs are bound (validator ≥ 1.1.0; absent → bundled)
+      if (typeof m.checkEffect === 'function') { validate = (def, pinned = null) => m.checkEffect(def, pinned ? { libs: pinned.libs, libShas: pinned.libShas } : {}); validatorInfo = `rebalancing-check ${m.VALIDATOR_VERSION || '?'}`; }
     } catch (e) { validatorInfo = `absent (${e.message.slice(0, 60)})`; }
   }
   // FX_ACCEPT=0: this player refuses every foreign effect (local policy) — its reveals list them in fx_missing,
   // so such casts are postponed for everybody in the action (and the tests exercise that path).
   if (process.env.FX_ACCEPT === '0') { validate = () => ({ verdict: 'reject', reasons: ['FX_ACCEPT=0: this player refuses foreign effects'] }); validatorInfo = 'FX_ACCEPT=0 (refuse all)'; }
+  else if (foreignRefuser(label)) { validate = () => ({ verdict: 'reject', reasons: ['FOREIGN_REFUSERS: this player refuses foreign effects'] }); validatorInfo = 'FOREIGN_REFUSERS (refuse all)'; }   // PS
   const cache = process.env.CHAOSD6_EFFECTS_CACHE === 'memory' ? createMemoryCache() : createEffectCache({ dir: effectsCacheDir() });
   const fallbackFetchers = [];
   if (process.env.CHAOSD6_EFFECTS_DIR) fallbackFetchers.push(gitEffectFetcher({ dir: process.env.CHAOSD6_EFFECTS_DIR }));
@@ -520,6 +538,13 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
     const httpd = httpdEffectFetcher({ seedHost: process.env.CHAOSD6_EFFECTS_SEED || undefined });
     // The placeholder RID would only produce a 404 round trip: ask the seed when the ref names a repo or the RID is set.
     fallbackFetchers.push(async (r) => (r.commit && (r.repo || !EFFECTS_RID.includes('TODO')) ? httpd(r) : null));
+  }
+  // LR: the libs an effect pins come from the same repo commit (lib/<id>.json); a pre-LR commit 404s → peers / cache only.
+  const libFallbackFetchers = [];
+  if (process.env.CHAOSD6_EFFECTS_DIR) libFallbackFetchers.push(gitEffectLibFetcher({ dir: process.env.CHAOSD6_EFFECTS_DIR }));
+  if (process.env.FX_HTTPD !== '0') {
+    const httpdL = httpdEffectLibFetcher({ seedHost: process.env.CHAOSD6_EFFECTS_SEED || undefined });
+    libFallbackFetchers.push(async (r) => (r.commit && (r.repo || !EFFECTS_RID.includes('TODO')) ? httpdL(r) : null));
   }
   const notice = (event, prep, peer) => ui({ kind: 'effect_source', event, ref: { ...compactRef(prep.ref), ...(prep.verdict ? { verdict: prep.verdict } : {}) }, peer: peer ? { peer_id: peer, name: nameOf(peer) || undefined } : null });
   const store = createFxStore({
@@ -529,7 +554,7 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   let request = null, busRpc = null;
   let active = false;
   const sync = createFxSync({
-    selfId, store, cache, fallbackFetchers, log, opts: process.env.FX_PREFETCH === '0' ? { prefetch: false } : {},   // FXG: FX_PREFETCH=0 (tests) — no fx_have prefetch
+    selfId, store, cache, fallbackFetchers, libFallbackFetchers, log, opts: process.env.FX_PREFETCH === '0' ? { prefetch: false } : {},   // FXG: FX_PREFETCH=0 (tests) — no fx_have prefetch
     request: (peerId, msg) => (request ? request(peerId, msg) : Promise.reject(Object.assign(new Error('no transport yet'), { code: 'NO_ROUTE' }))),
     onLearned: (p, src) => { active = true; log(`learned ${p.ref.id} (${prefixOf(p.ref.sha256)}, ${p.ref.branch || 'no branch'}, verdict ${p.verdict}) from ${src}`); notice('learned', p, src && src.startsWith('peer:') ? src : null); },
     onShared: (p, peer) => { log(`shared ${p.ref.id} (${prefixOf(p.ref.sha256)}) with ${peer}`); notice('shared', p, peer); },
@@ -538,19 +563,22 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r('missing'), ms).unref?.())]);
   const postponedCount = new Map();   // card id -> consecutive postponements of my cast
   const missingNoticed = new Set();
-  log(`bundled set ${bundled.id.slice(0, 16)} (${bundled.effects.size} effects, libs ${Object.entries(bundled.set.libs).map(([k, v]) => `${k}@${v.slice(0, 8)}`).join(' ')}), validator ${validatorInfo}`);
+  log(`bundled set ${bundled.id.slice(0, 16)} (${bundled.effects.size} effects, libs ${Object.entries(bundled.set.libs).map(([k, v]) => `${k}@${v.slice(0, 8)}`).join(' ')}, hooks ${Object.entries(bundled.set.hooks || {}).map(([k, v]) => `${k}@${v.slice(0, 8)}`).join(' ') || '-'}), validator ${validatorInfo}`);
+  // PS: one greppable line per peer for the partial-swarm summary (tools/out/_swarm_partial_summary.sh).
+  if (foreignSelectActive()) log(`foreign role: ${foreignRole(label)} (holders ${(foreignHolders() || ['all']).join(',')}; refusers ${foreignRefusers().join(',') || 'none'})`);
 
   const api = {
     setId: bundled.id, bundled, store, sync,
     get active() { return active; },
     /** FORCE_FOREIGN_EFFECT=<def.json>: a player-branch effect in my deck (dev/test). → an effect card or null. */
     forcedCard(file) {
+      if (!foreignHolder(label)) { log(`FORCE_FOREIGN_EFFECT: not a holder (FOREIGN_HOLDERS) — I start without ${path.basename(String(file))}`); return null; }   // PS
       let def;
       try { def = readJson(file); } catch (e) { log(`FORCE_FOREIGN_EFFECT ${file}: ${e.message}`); return null; }
       try {
         const libObjs = (def.uses || []).map(u => { const l = bundled.libs.get(u); if (!l) throw new Error(`library ${u} not bundled`); return l; });
         const slug = String(def.id || '').replace(/^effect_/, '').replace(/_/g, '-');
-        const ref0 = makeFxRef(def, libObjs, { repo: process.env.FX_FORCE_REPO || '', branch: process.env.FX_FORCE_BRANCH || `players/local/${slug}`, commit: process.env.FX_FORCE_COMMIT || '' });
+        const ref0 = makeFxRef(def, libObjs, { repo: process.env.FX_FORCE_REPO || '', branch: process.env.FX_FORCE_BRANCH || `players/local/${slug}`, commit: process.env.FX_FORCE_COMMIT || '', ns: process.env.FX_FORCE_NS || '' });   // PV: FX_FORCE_NS = publisher namespace (NID)
         const prep = sync.adopt(def, ref0, libObjs);
         if (prep.status !== 'ready') { log(`FORCE_FOREIGN_EFFECT ${def.id}: refused (${prep.reason || prep.status})`); return null; }
         active = true;

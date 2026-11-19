@@ -46,6 +46,13 @@ for i in $(seq 1 40); do
   sleep 1
 done
 [ -n "$A" ] || { echo "launcher A did not come up:"; tail -20 /tmp/chaos-A.log; exit 1; }
+# start-all prints "open http://…" before its ui-server child listens (a slow cold start → ECONNREFUSED in
+# swarm-test, 2026-11-19): wait until the port answers.
+for i in $(seq 1 60); do
+  (exec 3<>/dev/tcp/127.0.0.1/$A) 2>/dev/null && break
+  sleep 1
+done
+(exec 3<>/dev/tcp/127.0.0.1/$A) 2>/dev/null || { echo "launcher A :$A never answered:"; tail -20 /tmp/chaos-A.log; exit 1; }
 echo "launcher A :$A"
 # Second identity / second clone (launcher C) if it is set up — one player joins through it.
 C=""

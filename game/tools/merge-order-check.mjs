@@ -185,4 +185,57 @@ assert.equal(snapAction({ action: 9, turn: 99 }), 9);
   console.log('ok  non-revealer read from its pre-resolution statement: dead ally-1 shield token, fast vs slow resolver (Swarm-0559 oracle)');
 }
 
+// --- (start clock, user 2026-11-17) "I should start at the last known game state, round and turn"
+{
+  const { pickStartClock, lastKnownClock, doorClockCands, saveClockCand, clockCandidate } = await import('../merge-order.mjs');
+  const now = T + 100_000;
+  const hero = (id, action, phase = 'planning', ago = 1000, extra = {}) => ({ peer_id: id, character_id: 'char_x', action, phase, phase_ends_at: now + 3000, last_seen: iso(now - ago), ...extra });
+  const mon = (id, action, ago = 1000) => ({ peer_id: id, creature_id: 'mon_x', alliance: 'npc_b', action, phase: 'planning', phase_ends_at: now + 2000, last_seen: iso(now - ago) });
+  // Door / save candidates: action wins over turn/round; the most advanced clock is the last known one
+  assert.equal(clockCandidate({ turn: 50, round: 2 }), 152);
+  assert.equal(clockCandidate({ action: 7, turn: 99 }), 7);
+  assert.equal(clockCandidate({ turn: '' }), -1);
+  assert.equal(clockCandidate(null), -1);
+  const doors = [
+    { peer_id: 'peer:hero', clock: { turn: 50, round: 1, action: 151, at: T + 10_000 }, pushed_at: iso(T + 10_000) },
+    // pushed LATER by a monster whose clock a pre-fix quiet join had reset to T0 — must not undo T50
+    { peer_id: 'peer:foe', clock: { turn: 3, round: 0, action: 9, at: T + 60_000 }, pushed_at: iso(T + 60_000) },
+    { peer_id: 'peer:old', pushed_at: iso(T) },   // no clock (older build)
+  ];
+  const kDoor = lastKnownClock(doorClockCands(doors));
+  assert.deepEqual([kDoor.action, kDoor.turn, kDoor.round, kDoor.source], [151, 50, 1, 'door peer:hero']);
+  const save = { turn: 52, round: 0, saved_at: iso(T + 90_000), path: '/s/map_autosave.tmj' };
+  const kBoth = lastKnownClock([...doorClockCands(doors), saveClockCand(save)]);
+  assert.deepEqual([kBoth.action, kBoth.turn, kBoth.round], [156, 52, 0], 'the newer save (T52) beats the Door (T50)');
+  assert.equal(lastKnownClock([]), null);
+  assert.equal(lastKnownClock([null, saveClockCand(null)]), null);
+  // nobody live → the last known state, in planning; nothing known → fresh T0
+  let s = pickStartClock([], kDoor, { now });
+  assert.deepEqual([s.source, s.turn, s.round, s.action, s.phase], ['known', 50, 1, 151, 'planning']);
+  s = pickStartClock([], null, { now });
+  assert.deepEqual([s.source, s.action], ['fresh', 0]);
+  // a live hero → the live clock, whatever the Doors say (the same reference pickClockRef always gave)
+  const live = [hero('peer:a', 40, 'reveal'), hero('peer:b', 40, 'reveal'), mon('peer:m', 40)];
+  s = pickStartClock(live, kDoor, { now });
+  const ref = pickClockRef(live, { now });
+  assert.deepEqual([s.source, s.action, s.phase, s.from], ['live', ref.action, ref.phase, ref.ref.peer_id]);
+  assert.equal(s.turn, 13);
+  // only monsters live (e.g. regenerated at T0 by a pre-fix quiet join) and behind the Door → the Door's clock
+  s = pickStartClock([mon('peer:m1', 12), mon('peer:m2', 12)], kDoor, { now });
+  assert.deepEqual([s.source, s.action], ['known', 151], 'live monsters behind the last known state do not drag me back');
+  // only monsters, ahead of what the Door knew (they kept playing) → theirs
+  s = pickStartClock([mon('peer:m1', 160)], kDoor, { now });
+  assert.deepEqual([s.source, s.action], ['live', 160]);
+  // a hero snapshot that is stale (a replay, a silent peer) is no live node
+  s = pickStartClock([hero('peer:gone', 20, 'planning', 60_000)], kDoor, { now });
+  assert.deepEqual([s.source, s.action], ['known', 151]);
+  // a summon (owned creature) is a live node like a hero
+  s = pickStartClock([{ ...mon('peer:sum', 30), owner_peer_id: 'peer:a' }], kDoor, { now });
+  assert.deepEqual([s.source, s.action], ['live', 30]);
+  // determinism: a hero and its regenerated monsters handed the same Doors + save start on one clock
+  const k1 = lastKnownClock([...doorClockCands(doors), saveClockCand(save)]), k2 = lastKnownClock([saveClockCand(save), ...doorClockCands([...doors].reverse())]);
+  assert.deepEqual(pickStartClock([], k1, { now }), pickStartClock([], k2, { now }));
+  console.log('ok  start clock: live non-monster node > (last known Door / save vs live monsters) > fresh; never T0 of a dimension that has run');
+}
+
 console.log('all merge-order checks passed');

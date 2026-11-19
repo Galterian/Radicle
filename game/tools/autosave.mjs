@@ -131,6 +131,8 @@ export function tmjFromSnapshot(snap) {
     tokens_json: JSON.stringify(snap.tokens || []),
     traps_json:  JSON.stringify(snap.traps  || []),
     bounds_json: JSON.stringify(snap.bounds || null),
+    // World-edit ledger (2026-11-18): every author's map edits ({ ...edit, by }) — moved / made buildings etc.
+    world_ledger_json: JSON.stringify(snap.world_ledger || []),
   });
 
   return {
@@ -216,6 +218,7 @@ export async function loadTmj(filepath) {
     obstacles,
     tokens: safeParse(props.tokens_json, []),
     traps:  safeParse(props.traps_json, []),
+    worldLedger: safeParse(props.world_ledger_json || '[]', []),
     entities,
     meta: {
       schema_version: sv,

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// chaosD6-Effects manifest generator: index.json = { format, hash, effects: { <id>: sha256 } }.
+// chaosD6-Effects manifest generator: index.json = { format, hash, effects: { <id>: sha256 }[, hooks: { <family>: sha256 }][, libs: { <id>: sha256 }] }.
+// `hooks` (the peer-side effect hook programs, hooks/<family>.json) appears only when hooks/ holds a .json file;
+// `libs` (the libraries effects `use`, lib/<id>.json) only when lib/ holds a .json file.
 // sha256 is taken over the CANONICAL JSON of each definition (keys sorted, no whitespace), so
 // formatting and key order in effects/<id>.json never change an effect's identity.
 // Standalone on purpose (no chaosD6 game code needed); must stay byte-identical in behaviour to
@@ -33,18 +35,33 @@ export function canonicalJson(value) {
 }
 export const effectHash = (def) => createHash('sha256').update(canonicalJson(def), 'utf8').digest('hex');
 
-export function manifestFor(root) {
-  const dir = path.join(root, 'effects');
-  const effects = {}; const problems = [];
+function hashDir(dir, sub, problems) {
+  const map = {};
   const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort() : [];
   for (const n of names) {
     let def;
-    try { def = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')); } catch (e) { problems.push(`${n}: ${e.message}`); continue; }
-    if (`${def?.id}.json` !== n) { problems.push(`${n}: id ${JSON.stringify(def?.id)} does not match the file name`); continue; }
-    effects[def.id] = effectHash(def);
+    try { def = JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8')); } catch (e) { problems.push(`${sub}/${n}: ${e.message}`); continue; }
+    if (`${def?.id}.json` !== n) { problems.push(`${sub}/${n}: id ${JSON.stringify(def?.id)} does not match the file name`); continue; }
+    map[def.id] = effectHash(def);
   }
-  return { manifest: { format: 1, hash: 'sha256(canonical-json)', effects }, problems };
+  return { map, n: names.length };
 }
+export function manifestFor(root) {
+  const problems = [];
+  const effects = hashDir(path.join(root, 'effects'), 'effects', problems).map;
+  const hooks = hashDir(path.join(root, 'hooks'), 'hooks', problems);
+  const manifest = { format: 1, hash: 'sha256(canonical-json)', effects };
+  if (hooks.n) manifest.hooks = hooks.map;
+  const libs = hashDir(path.join(root, 'lib'), 'lib', problems);
+  if (libs.n) manifest.libs = libs.map;
+  // every effect's `uses` must name a lib of this commit (when the commit has lib/)
+  if (libs.n) for (const n of Object.keys(effects)) {
+    let def; try { def = JSON.parse(fs.readFileSync(path.join(root, 'effects', `${n}.json`), 'utf8')); } catch { continue; }
+    for (const u of def.uses || []) if (!libs.map[u]) problems.push(`effects/${n}.json: uses lib ${u}, not in lib/`);
+  }
+  return { manifest, problems };
+}
+const counts = (m) => `${Object.keys(m.effects).length} effects${m.hooks ? `, ${Object.keys(m.hooks).length} hook files` : ''}${m.libs ? `, ${Object.keys(m.libs).length} libs` : ''}`;
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -55,10 +72,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (process.argv.includes('--check')) {
     const cur = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     if (cur !== txt || problems.length) { console.error('index.json is stale — run: node tools/manifest.mjs'); process.exit(1); }
-    console.log(`index.json ok (${Object.keys(manifest.effects).length} effects)`);
+    console.log(`index.json ok (${counts(manifest)})`);
   } else {
     fs.writeFileSync(file, txt);
-    console.log(`index.json: ${Object.keys(manifest.effects).length} effects${problems.length ? `, ${problems.length} problem(s)` : ''}`);
+    console.log(`index.json: ${counts(manifest)}${problems.length ? `, ${problems.length} problem(s)` : ''}`);
     if (problems.length) process.exit(1);
   }
 }

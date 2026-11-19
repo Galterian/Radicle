@@ -32,8 +32,9 @@ const BRANCHES = {
   effect_spirit_link: { one: (o) => o.links.length === 1, all: (o) => o.links.length === 4, defaultVitality: (o, c) => o.links.length === 1 && o.links[0].stat === 'vitality' && c.link?.stat !== 'vitality', fizzled: fz('no ally to link') },
   effect_phantom: { phantom: (o) => o.phantom === true && o.permanents.length === 1, blocked: (o) => o.status === 'blocked' && !o.phantom },
   effect_vision: { tile: (o) => o.peeks.some(p => p.kind === 'tile'), hand: (o) => o.peeks.some(p => p.kind === 'hand'), hidden: (o) => has(o, 'keeps their hand hidden'), nobody: fz('nobody in reach and no tile') },
-  effect_possess_phylactery: { bind: (o) => !!o.possess?.bind && o.permanents.some(p => p.by), phylactery: (o) => !!o.possess?.phylactery && o.permanents.some(p => !p.by), phylFail: fz('no such enemy permanent'),
-    resists: (o) => has(o, ' resists ('), nobody: fz('nobody in reach') },
+  // 2026-11-17: Possess plays an archived creature (cast.possess) or becomes the Phylactery; the permanent is always mine.
+  effect_possess_phylactery: { creature: (o, c) => !!o.possess?.creature && o.permanents.length === 1 && o.permanents[0].on === c.actor, phylactery: (o, c) => o.possess?.phylactery === true && o.permanents.length === 1 && o.permanents[0].on === c.actor,
+    blocked: (o) => o.status === 'blocked' && !o.possess },
   effect_resurrect_death_ward: { nothing: fz('nothing to raise or ward'), casting: statBuy.casting, revive: (o) => o.status === 'done' && !!o.summon?.revive, reviveFail: fz('nothing to raise here'),
     ward: (o) => o.status === 'done' && !!o.summon?.ward && o.summon.need === 0, wardFail: fz('no ally to ward'), creature: (o) => o.status === 'done' && !!o.summon?.creature_id },
 };
@@ -102,6 +103,8 @@ export default function e2b(h) {
       ['link A ∀', { ...b, every: true, link: { peer_id: 'A', stat: 'matter' } }], ['link E', { ...b, link: { peer_id: 'E', stat: 'will' } }], ['link self', { ...b, link: { peer_id: 'C' } }],
       ['phylactery E haste', { ...b, phylactery: { peer_id: 'E', perm: 'effect_haste' } }], ['phylactery E class', { ...b, phylactery: { peer_id: 'E', perm: 'class_rogue' } }],
       ['phylactery A', { ...b, phylactery: { peer_id: 'A', perm: 'effect_haste' } }],
+      ['possess pick', { ...b, possess: { creature_id: 'mon_x', card_id: 'mon_x#1', name: 'X' } }], ['possess pick bare', { ...b, possess: { creature_id: 'mon_x' } }],
+      ['possess pick bad', { ...b, possess: { creature_id: 7, card_id: 3 } }], ['possess empty id', { ...b, possess: { creature_id: '' } }],
       ['summon paid', { ...b, summon: sm, of: 3, step: 3, kept: [10, 10] }], ['summon step 1', { ...b, summon: sm, of: 3, step: 1, kept: null }],
       ['summon need str', { ...b, summon: { ...sm, need: '15' }, step: 2, of: 2 }], ['summon no need', { ...b, summon: { creature_id: 'c' } }],
       ['summon bind E', { ...b, summon: { ...sm, need: 5, bind: 'E' } }], ['summon bind F far', { ...b, summon: { ...sm, need: 5, bind: 'F', is_player: true, archive_card_id: 'arc-1' } }],
@@ -136,6 +139,7 @@ export default function e2b(h) {
       if (rnd() < 0.5) cast.attach = rnd() < 0.85 ? { effect_id: pick(LIB).effect_id, elements: [...pick(LIB).elements], ...(rnd() < 0.6 ? { card_id: `card-${i}` } : {}) } : { effect_id: 'effect_sleep', elements: [] };
       if (rnd() < 0.5) cast.link = { peer_id: other(), ...(rnd() < 0.8 ? { stat: pick(['vitality', 'world', 'will', 'matter', 'bogus']) } : {}) };
       if (rnd() < 0.3) cast.phylactery = { peer_id: rnd() < 0.9 ? other() : '', perm: pick(['effect_haste', 'effect_aura', 'effect_invisibility', 'class_rogue', 'effect_shield', '']) };
+      if (id === 'effect_possess_phylactery' && rnd() < 0.4) cast.possess =rnd() < 0.1 ? pick([null, 'x', 5, []]) : { ...(rnd() < 0.9 ? { creature_id: pick(['mon_a', 'mon_b', '', 3]) } : {}), ...(rnd() < 0.6 ? { card_id: pick([`arc-${i}`, 9, null]) } : {}), ...(rnd() < 0.4 ? { name: pick(['Beast', 0]) } : {}) };
       if (rnd() < 0.75) {
         const sm = {};
         if (rnd() < 0.7) sm.need = rnd() < 0.9 ? ri(0, 70) : String(ri(0, 40));

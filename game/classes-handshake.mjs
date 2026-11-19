@@ -40,8 +40,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson, sha256Hex, classHash, parseClassRef, getClassByRef, createClassCache, classesCacheDir,
   httpdClassFetcher, gitClassFetcher, CLASSES_RID, ClassRefError } from './classes-repo.mjs';
+import { withProvenance } from './defs-repo.mjs';   // PV: ref provenance (ns, review) — never hashed
 import { libShaMap, compactRef, createMemoryCache, createFxSync, parseLibbedRef, attachDefsRpc, prefixOf, foreignCardFromRef } from './effects-handshake.mjs';   // reused read-only (6f's file)
 import * as CL from './classes.mjs';
+import { foreignHolder, foreignRefuser } from './foreign-select.mjs';   // PS: partial foreign swarms
 
 export { compactRef, prefixOf, createMemoryCache };
 export const CL_PROTOCOL_VERSION = 1;
@@ -80,7 +82,7 @@ export function bundledClassSet(dir = process.env.CLASS_DEFS_DIR || CLASSES_DATA
 }
 
 /** A ref for class `def` with its libraries pinned. `libs`: Map|array of lib objects or {name: sha}. */
-export function makeClRef(def, libs, { repo = '', branch = '', commit = '', verdict = null } = {}) {
+export function makeClRef(def, libs, { repo = '', branch = '', commit = '', verdict = null, ns = '', review = false } = {}) {   // PV: ns / review
   const uses = [...(def.uses || [])].sort();
   const byName = libs instanceof Map ? Object.fromEntries([...libs].map(([k, l]) => [k, classHash(l)]))
     : Array.isArray(libs) ? libShaMap(libs) : { ...(libs || {}) };
@@ -92,6 +94,7 @@ export function makeClRef(def, libs, { repo = '', branch = '', commit = '', verd
   }
   const ref = { id: def.id, sha256: classHash(def), libs: pinned, repo: String(repo || ''), branch: String(branch || ''), commit: String(commit || ''), name: String(def.name || '') };
   if (verdict) ref.verdict = verdict;
+  withProvenance(ref, { ns, review });   // PV
   return parseClRef(ref);
 }
 /** Validate a class ref received from the network → normalised copy (throws ClassRefError). */
@@ -247,6 +250,7 @@ export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {
   // CL_ACCEPT=0: this player refuses every foreign class (local policy) — its reveals list them in cl_missing, so
   // those classes are dormant for everybody in the action.
   if (process.env.CL_ACCEPT === '0') { validate = () => ({ verdict: 'reject', reasons: ['CL_ACCEPT=0: this player refuses foreign classes'] }); validatorInfo = 'CL_ACCEPT=0 (refuse all)'; }
+  else if (foreignRefuser(label)) { validate = () => ({ verdict: 'reject', reasons: ['FOREIGN_REFUSERS: this player refuses foreign classes'] }); validatorInfo = 'FOREIGN_REFUSERS (refuse all)'; }   // PS
   const cache = process.env.CHAOSD6_CLASSES_CACHE === 'memory' ? createMemoryCache() : createClassCache({ dir: classesCacheDir() });
   const fallbackFetchers = [];
   if (process.env.CHAOSD6_CLASSES_DIR) fallbackFetchers.push(gitClassFetcher({ dir: process.env.CHAOSD6_CLASSES_DIR }));
@@ -298,13 +302,14 @@ export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {
      */
     async boot({ file = '', ref: refIn = null } = {}) {
       let prep = null;
+      if (file && !foreignHolder(label)) { log(`FORCE_FOREIGN_CLASS: not a holder (FOREIGN_HOLDERS) — I boot with a built-in class`); return null; }   // PS
       if (file) {
         let def;
         try { def = readJson(file); } catch (e) { log(`FORCE_FOREIGN_CLASS ${file}: ${e.message}`); return null; }
         try {
           const libObjs = (def.uses || []).map(u => { const l = bundled.libs.get(u); if (!l) throw new Error(`library ${u} not bundled`); return l; });
           const slug = String(def.id || '').replace(/^class_/, '').replace(/_/g, '-');
-          const ref0 = makeClRef(def, libObjs, { repo: process.env.CL_FORCE_REPO || '', branch: process.env.CL_FORCE_BRANCH || `players/local/${slug}`, commit: process.env.CL_FORCE_COMMIT || '' });
+          const ref0 = makeClRef(def, libObjs, { repo: process.env.CL_FORCE_REPO || '', branch: process.env.CL_FORCE_BRANCH || `players/local/${slug}`, commit: process.env.CL_FORCE_COMMIT || '', ns: process.env.CL_FORCE_NS || '' });   // PV: CL_FORCE_NS = publisher namespace (NID)
           prep = sync.adopt(def, ref0, libObjs);
           if (prep.status !== 'ready') { log(`FORCE_FOREIGN_CLASS ${def.id}: refused (${prep.reason || prep.status})`); return null; }
         } catch (e) { log(`FORCE_FOREIGN_CLASS ${file}: ${e.message}`); return null; }

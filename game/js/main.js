@@ -7,9 +7,11 @@ import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS } from './map.js';
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
+import { ledgerUnits } from './world-ledger.js';
 // Buildings created during play (Animator copy / Priest Shrine, 2026-11-14): everyone's world_edits_json
 // `made:q,r` → the features.js overlay (renderer + object cards repaint through onFeaturesChanged).
-const syncPlacedBuildings = () => { try { setPlacedBuildings(placedBuildingsFrom(state.entities || [])); } catch (e) { console.warn('[placed buildings]', e); } };
+// World edits are dimension state (js/world-ledger.js, 2026-11-18): an author who left still counts via the others' ledgers.
+const syncPlacedBuildings = () => { try { setPlacedBuildings(placedBuildingsFrom(ledgerUnits(state.entities || []))); } catch (e) { console.warn('[placed buildings]', e); } };
 import { FORTRESS, fortressBonusDice } from './building-bonus.js';
 import { buildingBonusAt, bonusText, clearBuildingBonusMemo, fortressAt, dungeonAt, dungeonExplored, DUNGEON_REARM_TURNS, schoolAt, LEARN_REARM_TURNS } from './building-bonus.js';
 import { onBigFeaturesChanged } from './bigfeature.js';
@@ -19,6 +21,7 @@ import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf, skillInfo } from './skill_card.js';
 import { effectSourceBadge, sourceEpoch, setEffectSource, refText, refId, sourceMark, DEV_FIXTURE } from './effect_source.js';
+import { pvInit, pvSeen, pvOnMessage } from './proposal_vote_ui.js';   // PV: proposal votes on foreign (player-branch) cards
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
 // still landing. Pull it in defensively: when the module (or its export) is
@@ -338,6 +341,42 @@ function buildingStatOf(e, key) {
   if (!Number.isInteger(e?.tile_q) || !state.map?.seed) return 0;
   return buildingBonusAt(state.map.seed, e.tile_q, e.tile_r)?.bonus?.stat?.[key] || 0;
 }
+// Effect result toasts (user request 2026-11-17): the peer's resolver lists, per action, every enemy penalty
+// that landed ('<effect> success') or missed ('<effect> failed' — roll failed / nobody in reach / Disable /
+// Blessing ∀ / resisted). Each floats over its unit as the effect's icon + text and fades (renderer
+// effectToasts); de-duplicated by key. Desktop and phone (same canvas); the phone also gets a toast line for me.
+function onEffectResults(m) {
+  state._fxResultKeys ||= new Set();
+  state.ui.effectToasts ||= [];
+  const start = performance.now() + (m.bonus_rounds || 0) * 1400 + 900;
+  let k = 0;
+  for (const it of m.items || []) {
+    if (!it?.key || state._fxResultKeys.has(it.key)) continue;
+    state._fxResultKeys.add(it.key);
+    const e = state.entities.find(x => x.peer_id === it.on);
+    if (e && hiddenFromMe(e)) continue;
+    const q = Number.isInteger(it.q) ? it.q : e?.tile_q, r = Number.isInteger(it.r) ? it.r : e?.tile_r;
+    const text = `${it.name} ${it.ok ? 'success' : 'failed'}`;
+    logUI(`  ${it.ok ? '✔' : '✖'} ${text} on ${e?.name || peerShort(it.on)}${it.why ? ` (${it.why})` : ''}`, it.ok ? 'phase' : 'damage', { peerId: it.on });
+    if (IS_MOBILE_UI && (it.on === state.myPeerId || it.by === state.myPeerId)) mobileToast(`${it.ok ? '✔' : '✖'} ${text}${it.why ? ` — ${it.why}` : ''}`, it.ok ? 'heal' : 'hurt');
+    if (!Number.isInteger(q) || !Number.isInteger(r)) continue;
+    state.ui.effectToasts.push({ effect_id: it.effect_id, text, why: it.why || '', ok: !!it.ok, q, r, dy: (k++ % 3) * 16, startAt: start, duration: 3200 });
+  }
+  if (state._fxResultKeys.size > 500) state._fxResultKeys = new Set([...state._fxResultKeys].slice(-150));
+  rendererRef?.render?.();
+}
+// Bonus TILE tokens under a unit (Fossilization's Earth / Vitality token, Ice Blast, Artifice on a tile, world
+// features …): the resolver's statOf adds them to the stat of their element while the unit stands there.
+function tileBonusTokensAt(q, r) {
+  const out = [];
+  for (const p of state.entities) { try { for (const t of JSON.parse(p.tile_tokens_json || '[]')) if (t.q === q && t.r === r) out.push(t); } catch {} }
+  try { for (const t of worldFeatures()) if (t.q === q && t.r === r) out.push(t); } catch {}
+  return out.filter(t => t.kind === 'bonus' || (!t.kind && t.world));
+}
+function tileStatOf(e, key) {
+  if (!Number.isInteger(e?.tile_q)) return 0;
+  return tileBonusTokensAt(e.tile_q, e.tile_r).filter(t => ELEM_STAT[t.elem] === key).reduce((a, t) => a + (Number(t.value) || 0), 0);
+}
 
 // Cancel an in-progress multi-round journey. Called from any manual action the
 // user takes that doesn't fit the "keep walking to the destination" story
@@ -358,8 +397,14 @@ function cancelPathJourney(reason) {
 // Chase (mobile double tap on an enemy): every planning phase re-aims at the enemy's CURRENT tile.
 // Adjacent → Attack it (no Attack card: Move, else Empty Move, into it); farther → one EM step along the
 // route (a Move the player picked is kept). Ends when the enemy dies / vanishes or another gesture is made.
+// Possess (user ruling 2026-11-17): while I play a possessed creature, moves / chases / journeys start from IT
+// (my action and target drive it; my hero holds) — the unit the map gestures steer.
+function driverId() {
+  const p = state.possessing && state.entities.find(e => e.peer_id === state.possessing && (e.life ?? 0) > 0);
+  return p ? p.peer_id : state.myPeerId;
+}
 function chaseStep(foe, auto) {
-  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const me = state.entities.find(p => p.peer_id === driverId());
   if (!me || !Number.isInteger(me.tile_q) || !foe || !Number.isInteger(foe.tile_q)) return false;
   const foeTile = { q: foe.tile_q, r: foe.tile_r };
   const usable = code => state.hand.findIndex(c => c && c.code === code && !state.willDiscard.has(c.card_id));
@@ -378,7 +423,7 @@ function chaseStep(foe, auto) {
     else { state.queued = ['EMPTY']; state.target = foeTile; label = `EM → into ${foe.name} (no Attack in hand)`; }
     state.ui.selectedTarget = foeTile;
   } else {
-    const path = findPath({ q: me.tile_q, r: me.tile_r }, foeTile, blockedTilesExcluding(state.myPeerId), knownHex);
+    const path = findPath({ q: me.tile_q, r: me.tile_r }, foeTile, blockedTilesExcluding(me.peer_id), knownHex);
     const step = path.length ? path[0] : stepToward({ q: me.tile_q, r: me.tile_r }, foeTile, knownHex);
     if (!moveExplicit) state.queued = ['EMPTY'];
     state.ui.pathPlan = path.length ? path : [step];
@@ -425,7 +470,7 @@ function resumeJourney() {
   if (!state.ui.pathPlan) return false;
   const dest = state.ui.destinationTile;
   if (!dest) return false;
-  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const me = state.entities.find(p => p.peer_id === driverId());
   if (!me || !Number.isInteger(me.tile_q)) return false;
   if (me.tile_q === dest.q && me.tile_r === dest.r) {
     // Arrived — tear down the journey rather than looping on a zero-length
@@ -444,7 +489,7 @@ function resumeJourney() {
   // hand control back to the next planning phase (Attack can engage from
   // the step we're standing on).
   const occupant = state.entities.find(p =>
-    p.peer_id !== state.myPeerId && (p.life ?? 0) > 0
+    p.peer_id !== me.peer_id && (p.life ?? 0) > 0
     && p.tile_q === dest.q && p.tile_r === dest.r);
   if (occupant && hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, occupant) <= 1) {
     state.ui.pathPlan = null;
@@ -452,7 +497,7 @@ function resumeJourney() {
     logUI(`journey ended — adjacent to ${occupant.name} at (${dest.q},${dest.r})`, 'phase');
     return false;
   }
-  const blocked = blockedTilesExcluding(state.myPeerId);
+  const blocked = blockedTilesExcluding(me.peer_id);
   const path = findPath({ q: me.tile_q, r: me.tile_r }, dest, blocked, knownHex);
   if (!path.length) {
     cancelPathJourney('blocked');
@@ -636,13 +681,19 @@ function foldCastIntoLog(env, a) {
 // Translate the queued pick into the action code the server will commit as.
 // Rule 6: the single "Empty" slot plays as EM when the player has pre-declared
 // a tile target (declared-first requirement), otherwise EP.
+// Exception (2026-11-17 Awake bug, peer.mjs doPlanningEnd has the same rule): with a tile-taking cast queued
+// (Awake, Teleport, Creation, Vision …) the clicked tile is the cast's target and the Empty slot stays EP —
+// before, the click turned it into an Empty Move, which emits nothing, and the cast silently dropped out.
+function emptySlotCode() {
+  const hasTileTarget = state.target && typeof state.target === 'object' && 'q' in state.target;
+  const qe = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
+  const tileCast = !!qe && isEffect(qe) && !qe.is_instant && !!qe.tile_target;
+  return hasTileTarget && !tileCast ? 'EM' : 'EP';
+}
 function effectiveQueuedCode() {
   const q = state.queued[0];
   if (tranceActive()) return 'BT';
-  if (q === 'EMPTY') {
-    const hasTileTarget = state.target && typeof state.target === 'object' && 'q' in state.target;
-    return hasTileTarget ? 'EM' : 'EP';
-  }
+  if (q === 'EMPTY') return emptySlotCode();
   if (typeof q === 'number' && state.hand[q]) return state.hand[q].code;
   return null;
 }
@@ -864,8 +915,7 @@ function renderDeck() {
       // The Empty slot always labels itself EP/EM — never inherit the hand's
       // code (that bled a `B` into the slot whenever Block was queued).
       // EM when a tile target is set (Rule 6 declared-first), else EP.
-      const hasTileTarget = state.target && typeof state.target === 'object' && 'q' in state.target;
-      const code = hasTileTarget ? 'EM' : 'EP';
+      const code = emptySlotCode();
       const emptyIsSecond = trance && state.queuedExtra === null;
       slot.dataset.code = code;
       cardDiv.dataset.code = code;
@@ -906,8 +956,9 @@ function renderDeck() {
       const picks = effectQueued && state.queuedEffect === i ? [
         card.takes_attach ? (state.queuedAttach !== null ? ` · 📎 ${state.hand[state.queuedAttach]?.name || ''}` : ' · 📎 click an effect') : '',
         card.takes_link ? (state.queuedLink ? ` · 🔗 ${state.entities.find(p => p.peer_id === state.queuedLink.peer_id)?.name || ''} ${state.queuedLink.stat}` : ' · 🔗 click an ally stat') : '',
-        card.takes_elem ? (state.queuedElem ? ` · ${elemGlyphs([state.queuedElem])} token` : ' · ◇ random element') : '',
+        card.takes_elem ? (state.queuedElem ? ` · ${elemGlyphs([state.queuedElem])} token` : card.elem_choice ? ` · ◇ ${elemGlyphs(card.elem_choice)} best stat` : ' · ◇ random element') : '',
         card.tile_target ? (state.target && typeof state.target === 'object' ? ` · ⌖ (${state.target.q},${state.target.r})` : ' · ⌖ click a tile') : '',
+        card.takes_possess ? possessPickLine() : '',
       ].join('') : '';
       // Important static flags surfaced as mini-chips so the card tells the
       // player at a glance what the cast does (permanent? damage? needs a
@@ -941,10 +992,12 @@ function renderDeck() {
       }
       setCardHtml(cardDiv, `<div class="nm">${dbl ? '∀ ' : ''}${state.withAura && effectQueued ? '◎ ' : ''}${attached ? '📎 ' : ''}✺ ${card.name}</div>${effectSourceBadge(card, { compact: true })}${mCost}${flags}${desc ? `<div class="ds">${escHtml(abbreviate(desc, 110))}</div>` : ''}<div class="cd">${elemGlyphs(card.element_cost)} · ${castInstant(card, dbl) ? 'instant' : len > 1 ? `${len} postures` : 'posture'} · ${tag}${prog}${sm}${picks}</div>`);
       const hints = [
-        card.tile_target ? 'Left-click a tile for its target (general_ux_range_cast_target).' : '',
+        card.effect_id === 'effect_awake' ? 'Awake: left-click the free hex (≤ 10) to move to — the thing near you that gains most goes there; or click yourself / an ally next to you / a building within 2 to pick what moves. No click: the most beneficial move.'
+          : card.tile_target ? 'Left-click a tile for its target (general_ux_range_cast_target).' : '',
         card.takes_attach ? 'Click a second effect card in hand — it rides on this cast.' : '',
         card.takes_link ? 'Click an ally stat in the unit list to link it.' : '',
-        card.takes_elem ? 'Pick the token element by clicking one of your stat pills… or let the engine choose.' : '',
+        card.takes_elem ? (card.elem_choice ? 'Bonus tile token: click your Vitality pill (Vitality) or Matter pill (Earth)… or the engine takes the higher of the two stats.' : 'Pick the token element by clicking one of your stat pills… or let the engine choose.') : '',
+        card.takes_possess ? 'Possess: open the archive (double-click the pile) and press 👁 on a creature you killed to play it — none picked: your strongest one. No creature in your archive: you get the Phylactery permanent.' : '',
       ].filter(Boolean).join('\n');
       if (twin) slot.title = `${card.text || card.name}\n\nYou hold two: pick both to cast them together (Rule 23 ∀)`;
       else if (canChain) slot.title = `${card.text || card.name}\n\nChains onto ${chainTail().name}: its ${elemGlyphs(card.element_cost.slice(0, 1))} is emitted once for both (Rule 22)`;
@@ -1031,6 +1084,13 @@ function renderDeck() {
   if (!document.getElementById('archive-popup')?.hidden) renderArchivePopup();
 }
 
+// Possess (user ruling 2026-11-17): which archived creature the queued Possess plays (peer: possessArchivePick).
+function possessPickLine() {
+  const cs = state.archive.filter(c => c.kind === 'creature');
+  if (!cs.length) return ' · 💀 no creature archived → Phylactery';
+  const pick = cs.find(c => c.card_id === state.possessPick) || [...cs].sort((a, b) => (b.stat_sum || 0) - (a.stat_sum || 0) || String(a.name).localeCompare(String(b.name)) || String(a.card_id).localeCompare(String(b.card_id)))[0];
+  return ` · 👁 ${pick.name}${state.possessPick ? '' : ' (strongest — pick in the archive)'}`;
+}
 // The archive popup: every archived card; a click puts it back onto the discard pile.
 function renderArchivePopup() {
   const list = document.getElementById('ap-list');
@@ -1041,12 +1101,13 @@ function renderArchivePopup() {
   list.innerHTML = state.archive.map(c => {
     const creature = c.kind === 'creature', klass = c.kind === 'class';
     const nm = creature ? `🐾 ${c.name}` : klass ? `⚜ ${c.name}` : isEffect(c) ? `✺ ${c.name}` : isSkill(c) ? `✦ ${c.name}` : (ACTION_SHORT[c.code] || c.action_name || c.name || c.code);
-    const cd = creature ? `creature · Σ${c.stat_sum ?? ''} · summonable` : klass ? `class · ${c.text || ''} · stats: ${classStatsLine(c.class_id)}` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
+    const cd = creature ? `creature · Σ${c.stat_sum ?? ''}${c.killed ? ' · killed by you' : ''} · <button class="possess-pick${state.possessPick === c.card_id ? ' active' : ''}" data-pick="${c.card_id}" title="Possess plays this creature (click again to clear)">👁 ${state.possessPick === c.card_id ? 'picked' : 'possess'}</button>` : klass ? `class · ${c.text || ''} · stats: ${classStatsLine(c.class_id)}` : isEffect(c) ? elemGlyphs(c.element_cost) : isSkill(c) ? `needs ${isTrance(c) ? 'any' : ACTION_SHORT[c.requires] || c.requires}` : c.card_id.slice(-5);
     return `<div class="ac${creature ? ' creature' : ''}${klass ? ' creature klass' : ''}" data-id="${c.card_id}" title="${(c.text || c.name || '').replace(/"/g, '&quot;')}"><div class="nm">${nm}</div>${isEffect(c) || isSkill(c) || klass ? effectSourceBadge(klass ? (c.source ? c : c.class_id) : c) : ''}<div class="cd">${cd}</div></div>`;   // CH: a class card's badge
   }).join('');
   // Any archived card may go back to the discard pile — including creatures
   // and class cards (user override of the "creatures stay for Summoning"
   // default). The peer accepts the id regardless of kind now.
+  list.querySelectorAll('.possess-pick').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); send({ kind: 'possess_pick', card_id: b.dataset.pick }); uilog('possess_pick', { detail: b.dataset.pick }); }));
   list.querySelectorAll('.ac').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
 }
 // Combo marker (user ruling 2026-11-05): renders the 3 slot pips in the
@@ -1421,7 +1482,8 @@ function renderRoster() {
       if (!Number.isFinite(v)) return '—';
       const mod = statTokens.filter(t => t.stat === key).reduce((a, t) => a + t.value, 0);
       const bld = buildingStatOf(e, key);
-      return `${mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v}${bld ? `+${bld}⌂` : ''}`;
+      const tile = tileStatOf(e, key);
+      return `${mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v}${bld ? `+${bld}⌂` : ''}${tile ? `+${tile}◆` : ''}`;
     };
     const lost = e.lost_actions > 0 ? `<span class="pill perm" title="lost actions">⏳ ${e.lost_actions}</span>` : '';
     let pens = [];
@@ -1626,7 +1688,10 @@ function renderRoster() {
         // general_ux_tokens: the token element for the queued cast (Artifice) — cycle the clicked stat's elements.
         ev.stopPropagation();
         if (state.locked) return;
-        const elems = Object.keys(ELEM_STAT).filter(el => ELEM_STAT[el] === pillEl.dataset.stat);
+        // Fossilization (elem_choice): only its Earth / Vitality alternatives — the Matter pill gives Earth.
+        const only = state.hand[state.queuedEffect]?.elem_choice;
+        const elems = Object.keys(ELEM_STAT).filter(el => ELEM_STAT[el] === pillEl.dataset.stat && (!only || only.includes(el)));
+        if (!elems.length) return;
         const cur = elems.indexOf(state.queuedElem);
         const next = cur >= 0 && cur < elems.length - 1 ? elems[cur + 1] : cur === elems.length - 1 ? state.queuedElem : elems[0];   // last one again → cleared (peer toggles)
         uilog('elem', { detail: next });
@@ -1698,7 +1763,7 @@ function myEmissionPreview() {
   const q0 = state.queued[0];
   const classId = (me.permanents_csv || '').split(',').find(s => s.startsWith('class_')) || me.class_id || '';
   const pickCode = q0 === 'EMPTY'
-    ? ((state.target && typeof state.target === 'object' && 'q' in state.target) ? 'EM' : 'EP')
+    ? emptySlotCode()
     : (typeof q0 === 'number' ? state.hand[q0]?.code : null);
   const pickEmits = pickCode === 'P' || pickCode === 'EP'
     || (!!classId && clsEmits(pickCode));   // C1 ruling 2026-11-16 (Reaver A, Barbarian B, Monk M / EM)
@@ -1738,7 +1803,9 @@ function statPillsHtml(e) {
     // Stat tokens (Artifice, a broken Fortress …) as the roster shows them: base±tokens.
     const mod = statTokenSumOf(e, key);
     const base = mod ? `${v}${mod > 0 ? '+' : '−'}${Math.abs(mod)}` : v;
-    return b ? `${base}<b class="bld-plus" title="the building under it">+${b}⌂</b>` : base;
+    const tile = tileStatOf(e, key);
+    const tileHtml = tile ? `<b class="tile-plus" title="bonus tile token(s) under it (Fossilization, Ice Blast, Artifice, a world feature …)">+${tile}◆</b>` : '';
+    return b ? `${base}<b class="bld-plus" title="the building under it">+${b}⌂</b>${tileHtml}` : `${base}${tileHtml}`;
   };
   return `
     <span class="pill v"  title="Vitality">V ${stat('stat_vitality', 'vitality')}</span>
@@ -2156,8 +2223,17 @@ function myPermCards() {
   return myPermanents().filter(id => !id.startsWith('class_')).map(id => ({
     id, name: id.replace(/^(skill|effect)_/, '').replace(/_/g, ' '), die: power[id] || 0, every: every.has(id),
     action: id === 'effect_aura' && every.has(id) ? 'aura' : (id === 'effect_haste' || id === 'effect_balefire') ? 'bonus'
-      : id === 'effect_blessing_curse' ? 'bless' : id === 'effect_possess_phylactery' ? 'phylactery' : null,
-  }));
+      : id === 'effect_blessing_curse' ? 'bless' : id === 'effect_possess_phylactery' && state.possessMode === 'phylactery' ? 'phylactery' : null,
+  })).map(p => p.id !== 'effect_possess_phylactery' ? p : { ...p, name: state.possessMode === 'phylactery' ? 'phylactery' : 'possess' });
+}
+// Possess (user ruling 2026-11-17): what the Possess permanent holds — the creature I play, or the Phylactery's aim.
+function possessPermLine() {
+  if (state.possessMode === 'phylactery') {
+    const t = state.phylacteryTarget;
+    return state.queuedPhylactery ? `💀 ${t ? `${t.name}: ${String(t.perm).replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}` : 'this action'}` : t ? '💀 ready' : '💀 inactive';
+  }
+  const who = state.possessing && state.entities.find(p => p.peer_id === state.possessing);
+  return who ? `👁 ${who.name}` : '👁 entering…';
 }
 // Which permanents actually bind to a strip shortcut (key 9 / 0 / - / =).
 // `every_csv` from the owner's snapshot is what flips Aura on; a non-owner
@@ -2174,7 +2250,7 @@ function permShortcutsForIds(permIds, entity) {
     const action = id === 'effect_aura' && every.has(id) ? 'aura'
       : (id === 'effect_haste' || id === 'effect_balefire') ? 'bonus'
       : id === 'effect_blessing_curse' ? 'bless'
-      : id === 'effect_possess_phylactery' ? 'phylactery'
+      : id === 'effect_possess_phylactery' && (entity?.possess_mode || (entity?.peer_id === state.myPeerId ? state.possessMode : null)) === 'phylactery' ? 'phylactery'
       : null;
     const key = action && ki < PERM_SHORTCUT_KEYS.length ? PERM_SHORTCUT_KEYS[ki++] : null;
     out.push({ id, key });
@@ -2193,7 +2269,7 @@ const PERM_HELP = {
   effect_spirit_link: 'Spirit Link — the linked ally stat is added to yours (not a token); your life maximum follows',
   effect_blessing_curse: 'Blessing / Curse — the effect card under it fires every action for free; click it, then an effect card in hand, to replace what it holds (old card discarded)',
   effect_phantom: 'Phantom — a mirror of you fights next to you; it shatters at the first point of damage',
-  effect_possess_phylactery: 'Possess / Phylactery (6) — the possessed enemy fights for you (your hero only Empty-Moves / Empty-Postures); click it, then an enemy permanent in the unit list, to shatter that permanent at this action\'s end (spends Possess)',
+  effect_possess_phylactery: 'Possess / Phylactery (6) — Possess: you play the creature it brought in from your archive (your action and target drive it; your hero holds with Empty Posture) until this permanent is destroyed (the creature leaves, its card back to your archive) or the creature dies. Phylactery (Possess cast with no creature in your archive): click it — the most valuable permanent (highest power) of the nearest enemy within 2 hexes shatters at this action\'s end, then the Phylactery is spent; greyed = no enemy with a permanent in reach',
   effect_super_sense: 'Super Sense — the traps on the six tiles around you are shown to you; the first point of damage that would land on you is evaded and the permanent spent',
   effect_harm: 'Harm (channel) — re-fires every action while you keep the Posture and emit nothing else; Attack / Block / Move / Empty Move break it',
   effect_combustion: 'Combustion (channel) — a Harmony penalty token on the target every action while you keep the channel',
@@ -2241,7 +2317,9 @@ function renderPerms() {
     const blessed = (state.channels || []).find(ch => ch.holder === 'effect_blessing_curse');
     // Haste (user ruling 2026-11-12): once per turn — grey from the moment its bonus round is committed until the next turn.
     const hasteSpent = p.action === 'bonus' && !state.bonus?.balefire && (!!state.bonus?.haste_spent || (plans.length > 0 && !state.bonusMode));
-    const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && !hasteSpent && (state.bonusMode || plans.length > 0)) || (p.action === 'bless' && state.blessMode) || (p.action === 'phylactery' && (state.phylacteryMode || state.queuedPhylactery));
+    const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && !hasteSpent && (state.bonusMode || plans.length > 0)) || (p.action === 'bless' && state.blessMode) || (p.action === 'phylactery' && !!state.queuedPhylactery);
+    // Phylactery with nothing to shatter in reach: greyed, the click does nothing (user ruling 2026-11-17).
+    const phylInactive = p.action === 'phylactery' && !state.queuedPhylactery && !state.phylacteryTarget;
     const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
       : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${key || '·'})`
       : SUMMON_PERM_IDS.has(p.id) ? `${p.name} (6) — holds ${mySummoned().map(x => x.name).join(', ') || 'your creature / ward'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
@@ -2249,10 +2327,10 @@ function renderPerms() {
       : PERM_HELP[p.id] ? `${PERM_HELP[p.id]}${key ? ` (key ${key})` : ''}` : p.name;
     const cd = hasteSpent ? (plans.length ? `⚡ ${plans.map(b => b.action).join('▸')} ✓` : '⚡ next turn') : p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}`
       : p.action === 'bless' ? (state.blessMode ? '📎 pick a card' : blessed ? `📎 ${blessed.name}` : 'empty')
-      : p.action === 'phylactery' ? (state.queuedPhylactery ? `💀 ${state.queuedPhylactery.perm.replace(/^(skill|effect)_/, '').replace(/_/g, ' ')}` : state.phylacteryMode ? '💀 pick a perm' : `⚄${p.die || 6}`)
+      : p.id === 'effect_possess_phylactery' ? possessPermLine()
       : p.die ? `⚄${p.die}` : 'perm';
     const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
-    return `<div class="perm${p.action && !hasteSpent ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent ? ' spent' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${SUMMON_PERM_IDS.has(p.id) ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
@@ -2368,10 +2446,14 @@ function clickPermanent(k) {
     renderDeck(); renderPerms();
   }
   if (p.action === 'phylactery') {
-    if (state.queuedPhylactery) { send({ kind: 'phylactery', peer_id: state.queuedPhylactery.peer_id, perm: state.queuedPhylactery.perm }); state.phylacteryMode = false; logUI('phylactery pick cleared', 'phase'); renderPerms(); return; }
-    state.phylacteryMode = !state.phylacteryMode;
-    logUI(state.phylacteryMode ? '💀 Phylactery: click an enemy permanent in the unit list — it shatters at the end of this action (spends Possess)' : 'phylactery pick cancelled', 'phase');
-    renderRoster(); renderPerms();
+    // User ruling 2026-11-17: one click — the peer's resolver shatters the nearest enemy's best permanent (toggle).
+    state.phylacteryMode = false;
+    if (!state.queuedPhylactery && !state.phylacteryTarget) { logUI('💀 Phylactery inactive — no enemy with a permanent near you', 'phase'); return; }
+    const t = state.phylacteryTarget;
+    send({ kind: 'phylactery' });
+    uilog('phylactery', { detail: t ? `${t.peer_id} ${t.perm}` : 'clear' });
+    logUI(state.queuedPhylactery ? 'phylactery cancelled' : `💀 Phylactery → ${t.name}'s ${String(t.perm).replace(/^(skill|effect)_/, '').replace(/_/g, ' ')} shatters at the end of this action (spends the Phylactery)`, 'phase');
+    renderPerms();
   }
 }
 function clearQueuePick() {
@@ -2682,8 +2764,12 @@ function connect() {
         if (m.possessing !== undefined && (m.possessing || null) !== (state.possessing || null)) {
           state.possessing = m.possessing || null;
           const who = state.entities.find(p => p.peer_id === state.possessing);
-          logUI(state.possessing ? `👁 you play ${who?.name || peerShort(state.possessing)} now — your action and target drive it, your hero holds, until its Possess permanent is destroyed` : 'possession over — you play your own hero again', 'phase');
+          logUI(state.possessing ? `👁 you play ${who?.name || peerShort(state.possessing)} now — your action and target drive it, your hero holds, until your Possess permanent is destroyed or it dies` : 'possession over — you play your own hero again', 'phase');
         }
+        // Possess 2026-11-17: the archive creature picked for my next Possess, my permanent's mode, the Phylactery's aim.
+        if (m.possess_pick !== undefined) state.possessPick = m.possess_pick || null;
+        if (m.possess_mode !== undefined) state.possessMode = m.possess_mode || null;
+        if (m.phylactery_target !== undefined) state.phylacteryTarget = m.phylactery_target || null;
         if (Array.isArray(m.channels)) state.channels = m.channels;
         if (Array.isArray(m.sensed_traps)) {
           const seen = new Set(state.sensedTraps.map(t => `${t.by}:${t.q},${t.r}:${t.effect_id}`));
@@ -2704,6 +2790,9 @@ function connect() {
       // Effect provenance (chaosD6-Effects, E4 → E6): learned / shared / missing — see effectSourceNotice().
       if (m.kind === 'class_catalog') { state.classColours = { ...(state.classColours || {}), ...(m.class_colours || {}) }; state.classTexts = { ...(state.classTexts || {}), ...(m.class_texts || {}) }; renderRoster(); }   // CH: a foreign class became runnable here
       if (m.kind === 'effect_source' || m.kind === 'skill_source' || m.kind === 'class_source') effectSourceNotice(m);   // skills: chaosD6-Skills (S4 → S6); CH: classes (chaosD6-Classes)
+      if ((m.kind === 'effect_source' || m.kind === 'skill_source' || m.kind === 'class_source') && m.event !== 'missing') pvSeen(m.ref);   // PV: received for testing → vote control
+      if (m.kind === 'proposal_votes' || m.kind === 'proposal_vote_saved') pvOnMessage(m);   // PV: my votes / save result
+      if (m.kind === 'effect_result') onEffectResults(m);
       if (m.kind === 'peek') showPeek(m.text || (m.what === 'hand' ? `${m.of_name}: ${(m.cards || []).map(c => c.name).join(', ')}` : `tile (${m.q},${m.r})`), m.cards || null);
       // Merge peer updates so a transient broadcast missing an entity doesn't
       // flicker it off the map / roster. The server never *removes* a peer
@@ -3252,6 +3341,7 @@ connect();
 
 function send(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
 
+pvInit({ send, cards: () => [...(state.hand || []), ...(state.archive || []), state.classState] });   // PV: 🗳 Test votes button + panel (js/proposal_vote_ui.js)
 // Forward every meaningful user input to the peer process so it lands in the
 // per-dimension log file alongside the server-side envelopes. This gives us a
 // unified timeline when diagnosing "the hero moved on its own" or "my commit
@@ -3839,7 +3929,7 @@ function wireInput() {
     uilog('rightclick', { tile: t });
     if (!t) return;
     state.ui.chasePeerId = null;   // any other move / target gesture ends a chase
-    const me = state.entities.find(p => p.peer_id === state.myPeerId);
+    const me = state.entities.find(p => p.peer_id === driverId());   // Possess: the creature I play
     if (!me || typeof me.tile_q !== 'number') return;
 
     // If we're past the planning window (reveal / resolution) or already
@@ -3856,7 +3946,7 @@ function wireInput() {
     // clicked". Suppress pathPlan in that case so the right-click is just a
     // target binding.
     const occAtT = state.entities.find(p =>
-      p.peer_id !== state.myPeerId && (p.life ?? 0) > 0
+      p.peer_id !== me.peer_id && (p.life ?? 0) > 0
       && p.tile_q === t.q && p.tile_r === t.r);
     const alreadyAdjacentToOccupant = !!occAtT
       && hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, occAtT) <= 1;
@@ -3879,7 +3969,7 @@ function wireInput() {
         state.ui.selectedTarget = { q: t.q, r: t.r };
         logUI(`journey override — target ${occAtT.name} bound, no walk queued`, 'phase');
       } else {
-        const blocked = blockedTilesExcluding(state.myPeerId);
+        const blocked = blockedTilesExcluding(me.peer_id);
         const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked, knownHex);
         state.ui.destinationTile = { q: t.q, r: t.r };
         state.ui.pathPlan = path.length ? path : null;
@@ -4002,7 +4092,7 @@ function wireInput() {
         state.ui.pathPlan = null;
         label = `${codeTag} → (${t.q},${t.r}) (already in contact)`;
       } else {
-        const blocked = blockedTilesExcluding(state.myPeerId);
+        const blocked = blockedTilesExcluding(me.peer_id);
         const path = findPath({ q: me.tile_q, r: me.tile_r }, t, blocked, knownHex);
         if (path.length) {
           const step = path[0];

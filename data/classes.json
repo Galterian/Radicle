@@ -1738,8 +1738,45 @@
           "origin": "paper_rules",
           "parent_version": null,
           "rebalance_links": ["class_barbarian", "class_monk"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.0.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-17",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_vitality", "elem_souls", "elem_harmony"],
+            "text": "Your Empty Posture is treated as an Attack action. You may emit elements during your Attack."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static (pc override): my Empty Posture and Empty Move fight as an Attack (an EM with nobody adjacent still walks its half journey); I may emit elements during an Attack (Rule 24 emission too). Paper text: \"Your Empty Posture is treated as an Attack action. You may emit elements during your Attack.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_reaver"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, W, Wi.", "target": "caster", "unit": "colours", "value": ["vitality", "world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "stance", "description": "EP / EM judged as Attack.", "target": "caster", "unit": "action", "value": {"rule": ["class_ep_stance", {"action": {"var": "caster.action"}, "permanents": {"var": "caster.permanents"}}]}},
+              {"id": "attack_keeps_channel", "description": "Ruling 2026-11-17: my Attack (it emits) does not break a channel I hold, and a cast in progress advances on it (only an emitted element other than the channel cost breaks the channel). A plain Attack by any other class still breaks it.", "target": "caster", "unit": "channel", "value": {"in": [{"var": "caster.action"}, ["A"]]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The stance stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_ep_stance", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-17: the casting progress is not broken by the class emission. A Reaver's Attack (it emits) does not break a channel the Reaver holds (peer.mjs channelBreaksFor; only an emitted element other than the channel cost breaks it); a cast in progress advances on it (Rule 19, as before). A plain Attack by any other class still breaks a channel. Data unchanged.",
+          "origin": "user_ruling",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["class_barbarian", "class_monk"],
+          "status": "canonical",
+          "version": "1.1.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1819,8 +1856,46 @@
           "origin": "user_ruling",
           "parent_version": "1.0.0",
           "rebalance_links": ["class_reaver", "class_monk"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.1.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-17",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_vitality", "elem_fire"],
+            "text": "Your Empty Posture is treated as a Block action. You may emit elements during your Block."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), M (fire). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: my Empty Posture fights as a Block; I may emit elements during a Block. User ruling 2026-11-16: my Block (B) emits at every site — a cast rides on it, it carries a Rule 24 emission, it counts for the Manipulator test and badges the element. Paper text: \"Your Empty Posture is treated as a Block action. You may emit elements during your Block.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_barbarian"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, M.", "target": "caster", "unit": "colours", "value": ["vitality", "matter"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "matter"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "matter"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "stance", "description": "EP judged as Block.", "target": "caster", "unit": "action", "value": {"rule": ["class_ep_stance", {"action": {"var": "caster.action"}, "permanents": {"var": "caster.permanents"}}]}},
+              {"id": "block_emits", "description": "Ruling 2026-11-16: a Block (B) emits an element (cast, Rule 24, Manipulator, badge).", "target": "caster", "unit": "emit", "value": {"in": [{"var": "caster.action"}, ["B"]]}},
+              {"id": "block_keeps_channel", "description": "Ruling 2026-11-17: my Block progresses like a Reaver's Attack — a cast in progress advances on it, and a channel I hold is not broken by it (only an emitted element other than the channel cost breaks it).", "target": "caster", "unit": "channel", "value": {"in": [{"var": "caster.action"}, ["B"]]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The stance stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_ep_stance", "class_progress_complete", "in_contact"]
+          },
+          "notes": "User ruling 2026-11-17: the casting progress is not broken by the class emission. A Barbarian's Block (it emits, ruling 2026-11-16) progresses like a Reaver's Attack: a cast in progress advances on it (Rule 19, as before), and a channel the Barbarian holds is NOT broken by the Block (peer.mjs channelBreaksFor; only an emitted element other than the channel cost breaks it). Data unchanged.",
+          "origin": "user_ruling",
+          "parent_version": "1.1.0",
+          "rebalance_links": ["class_reaver", "class_monk"],
+          "status": "canonical",
+          "version": "1.2.0",
           "vote_log": [],
           "weight": 1.0
         }

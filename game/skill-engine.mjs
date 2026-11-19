@@ -5,8 +5,9 @@
 // to a program in the effects' JsonLogic dialect (effect-engine.mjs — same evaluator, op budget, depth
 // limit; see effects-data/SCHEMA.md). A hook program gets the hook's arguments as root registers and its
 // VALUE is the hook result. Hooks whose rules edit the resolver's registers in place (counter_pre,
-// negate_action, negate_kind, trance_assign) stay in JS this milestone: the file marks them
-// `{"engine": "js", "impl": "skills.mjs#…"}`.
+// negate_action, negate_kind, trance_assign — the "pass" hooks) return ordered EDIT RECORDS instead (PASS_OPS,
+// MV 2026-11-17); skills.mjs applies them between program runs. A built-in may still mark a hook
+// `{"engine": "js", "impl": "skills.mjs#…"}` (the JS hook then answers in every engine mode).
 //
 // This module is pure: no peer globals. skills.mjs (the dispatcher, SKILL_ENGINE=js|data|shadow) wraps the
 // resolver ctx as W = { c: ctx, sd(id), flag(id, key) } before calling runHookProgram.
@@ -53,6 +54,26 @@ export const SKILL_CTX_OPS = {
   skill_flag: (W, [id, k]) => W.flag(id, k),              // a key of the skill's `flags`
   ctx_self: (W) => W.c?.self ?? null,
   ctx_has: (W, [name]) => !!W.c && typeof W.c[name] === 'function',
+  // MV (pass hooks as data, 2026-11-17): the registers the pass programs read (copies), the Counter Spell probe, and the
+  // Battle Trance args (W.a = the hook's args: byActor, codeVs, attacksOn).
+  ctx_label: (W) => W.c?.label ?? null,
+  eff_has: (W, [id]) => W.c.effAction.has(id),
+  eff_action: (W, [id]) => W.c.effAction.get(id),
+  trance_has: (W, [id]) => W.c.tranceOpts.has(id),
+  trance_opts: (W, [id]) => (W.c.tranceOpts.has(id) ? [...W.c.tranceOpts.get(id)] : null),
+  has_register: (W, [name]) => !!W.c && !!W.c[name] && typeof W.c[name] !== 'function',   // JS truthiness (an empty swaps list counts)
+  swaps: (W) => (W.c.swaps || []).map(s => ({ ...s })),
+  // effect_dmg with `amount` more Counter Spell penalty on `el` for o's caster — set, read, restored (exactly the JS
+  // bestElem probe; counterPen is unchanged afterwards).
+  effect_dmg_pen: (W, [o, def, el, amount]) => {
+    const pen = W.c.counterPen, prev = pen.get(o.actor);
+    pen.set(o.actor, { ...(prev || {}), [el]: (prev?.[el] || 0) + amount });
+    try { return W.c.effectDmgNoShield(o, def); } finally { if (prev) pen.set(o.actor, prev); else pen.delete(o.actor); }
+  },
+  by_actor: (W, [id]) => W.a?.byActor?.get(id) ?? null,
+  by_actor_has: (W, [id]) => !!W.a?.byActor?.has(id),
+  code_vs: (W, [id, other]) => W.a.codeVs(id, other),
+  attacks_on: (W, [er, victim]) => W.a.attacksOn(er ?? undefined, victim),
 };
 export const SKILL_OPS = Object.freeze([...SPECIAL_OPS.filter(o => !DENY.has(o)), ...PURE_OP_NAMES, ...Object.keys(SKILL_CTX_OPS)].sort());
 const KNOWN = new Set(SKILL_OPS);
@@ -62,15 +83,18 @@ const KNOWN = new Set(SKILL_OPS);
 //   single  one program (the named skill's, else the std default)       each   per id of args.skillIds (perm_landing)
 //   chain   the value threads through args[chain]                       or     first truthy result
 //   max     largest result                                              first  first truthy result (die)
-//   edit    returns {edits, fx}; the dispatcher applies them in order    pass   JS only (in-place register edits)
+//   edit    returns {edits, fx}; the dispatcher applies them in order    pass   per (reveal, skill): [edit records] (PASS_OPS)
 // args — the root registers (Map → [[key, value]…] pairs, Set → array). Every program also sees `skill` (its id).
 export const HOOK_SPECS = Object.freeze({
   rides:         { engine: 'data', kind: 'single', std: true, args: ['codes', 'req'], result: 'any' },
   plan_target:   { engine: 'data', kind: 'single', std: true, args: ['skillIds'], result: 'any' },
-  counter_pre:   { engine: 'js', kind: 'pass' },
-  negate_action: { engine: 'js', kind: 'pass' },
-  negate_kind:   { engine: 'js', kind: 'pass' },
-  trance_assign: { engine: 'js', kind: 'pass' },
+  // MV 2026-11-17: the pass hooks run as data — one program run per (reveal, skill) in `order` × reveal order
+  // (`reveals`: 'sorted' by actor or the 'live' array), returning ordered edit records the dispatcher applies before
+  // the next run (PASS_OPS below; {op:'continue', carry} re-runs the same program with phase + 1 after its edits).
+  counter_pre:   { engine: 'data', kind: 'pass', order: ['skill_counter_spell'], reveals: 'sorted', args: ['r', 'actor', 'phase', 'carry'], result: 'records' },
+  negate_action: { engine: 'data', kind: 'pass', order: ['skill_bluff', 'skill_intimidation'], reveals: 'live', args: ['r', 'actor', 'phase', 'carry'], result: 'records' },
+  negate_kind:   { engine: 'data', kind: 'pass', order: ['skill_grapple', 'skill_disruption_move', 'skill_overrun'], reveals: 'live', args: ['r', 'actor', 'phase', 'carry'], result: 'records' },
+  trance_assign: { engine: 'data', kind: 'pass', order: ['skill_battle_trance'], reveals: 'live', args: ['r', 'actor', 'phase', 'carry'], result: 'records' },
   block_in:      { engine: 'data', kind: 'or', args: ['defender', 'blocker'], result: 'any' },
   block_cost:    { engine: 'data', kind: 'max', args: ['attacker', 'defender'], result: 'number' },
   attack_range:  { engine: 'data', kind: 'max', args: ['attacker', 'code'], result: 'number' },
@@ -121,10 +145,37 @@ export function resultOk(hookName, v) {
     case 'stats': return Array.isArray(v) && v.length > 0 && v.every(s => STATS.includes(s));
     case 'disposition': return DISPOSITIONS.includes(v);
     case 'codes': return v === null || (Array.isArray(v) && v.length > 0 && v.every(c => CODES.includes(c)));
+    case 'records': return Array.isArray(v) && v.every(passRecordOk);
     case 'edit': return isObj(v) && Array.isArray(v.edits) && Array.isArray(v.fx)
       && v.edits.every(e => isObj(e) && typeof e.victim === 'string' && Number.isInteger(e.i) && e.i >= 0 && isNum(e.amount))
       && v.fx.every(f => isObj(f) && typeof f.by === 'string' && typeof f.skill === 'string' && typeof f.what === 'string');
     default: return true;
+  }
+}
+
+// MV 2026-11-17 — the edit records of the pass hooks (applied in order by skills.mjs#applyPassRecord):
+//   set_code {id, code}         effAction.set            drop_trance {id}          tranceOpts.delete
+//   replace {id, from, to}      ctx.replace (trance-aware) skills {id, skills}     the reveal's skills list := skills
+//   fx {fx}                     skillFx.push(fx)         no_move {id} / no_emit {id}   noMove / noEmit .add
+//   swap {by, on}               swaps.push               trance_collapse {id, code}  effAction := code, trance dropped
+//   pen {id, elem, amount}      counterPen[id][elem] += amount                       log {text}   ctx.log(text)
+//   trance {vs: [[enemy, i]…], played: [i…]}  the current reveal's r.vs (Map) / r.played (Set)
+//   continue {carry}            stop here; run the same program again with phase + 1 and this carry
+export const PASS_OPS = Object.freeze(['set_code', 'drop_trance', 'replace', 'skills', 'fx', 'no_move', 'no_emit', 'swap', 'trance_collapse', 'pen', 'log', 'trance', 'continue']);
+const isId = (x) => typeof x === 'string';
+function passRecordOk(r) {
+  if (!isObj(r) || !PASS_OPS.includes(r.op)) return false;
+  switch (r.op) {
+    case 'set_code': case 'trance_collapse': return isId(r.id) && (r.code === undefined || CODES.includes(r.code));
+    case 'drop_trance': case 'no_move': case 'no_emit': return isId(r.id);
+    case 'replace': return isId(r.id) && CODES.includes(r.from) && CODES.includes(r.to);
+    case 'skills': return isId(r.id) && Array.isArray(r.skills) && r.skills.every(isId);
+    case 'fx': return isObj(r.fx) && isId(r.fx.by) && isId(r.fx.skill) && isId(r.fx.what);
+    case 'swap': return isId(r.by) && isId(r.on);
+    case 'pen': return isId(r.id) && isId(r.elem) && isNum(r.amount);
+    case 'log': return typeof r.text === 'string';
+    case 'trance': return Array.isArray(r.vs) && r.vs.every(p => Array.isArray(p) && p.length === 2 && isId(p[0]) && Number.isInteger(p[1])) && Array.isArray(r.played) && r.played.every(Number.isInteger);
+    default: return true;   // continue
   }
 }
 

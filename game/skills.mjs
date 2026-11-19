@@ -431,14 +431,17 @@ export function skillHook(hookName, skillId, ctx, args = {}) {
   if (SKILL_ENGINE === 'js' || spec.engine === 'js') res = h(skillId, ctx, args);
   else if (SKILL_ENGINE === 'data') res = dataHook(hookName, skillId, ctx, args);
   else res = shadowHook(h, hookName, skillId, ctx, args);
+  // MV: foreign pass programs run after the built-ins' pass (a second sweep over the reveals, foreign ids in order).
+  if (spec.kind === 'pass') { if (foreignIds.size) dataPass(hookName, ctx, args, null, true); return res; }
   return foreignIds.size && FOLDED.has(spec.kind) ? foldForeign(spec, hookName, ctx, args, res) : res;
 }
 
 // ---- S2: engine switch, data hooks, foreign skills ------------------------------------------------------
 // SKILL_ENGINE=js (default): the hooks above. data: every hook marked "data" in skill-engine.mjs#HOOK_SPECS runs the
 // program of the skill's definition (game/skills-data/skills/<id>.json, or SKILL_DEFS_DIR); the pass hooks
-// (counter_pre, negate_action, negate_kind, trance_assign) stay on JS. shadow: both run, results (and for
-// damage_in the edited damage map + fx) must be JSON-identical; a mismatch goes to stderr, SKILL_SHADOW_STRICT=1
+// (counter_pre, negate_action, negate_kind, trance_assign) run as edit-record programs (MV 2026-11-17, dataPass).
+// shadow: both run, results (for damage_in the edited damage map + fx; for a pass every register, the reveals'
+// skills / trance / vs / played and the logs) must be JSON-identical; a mismatch goes to stderr, SKILL_SHADOW_STRICT=1
 // throws; the JS result is returned. SKILL_SHADOW_REPORT=1 prints a tally at exit.
 const ENGINE_ENV = (typeof process !== 'undefined' && process.env) || {};
 export const SKILL_ENGINE = ['data', 'shadow'].includes(ENGINE_ENV.SKILL_ENGINE) ? ENGINE_ENV.SKILL_ENGINE : 'js';
@@ -455,9 +458,10 @@ export const skillBundle = () => (bundle ||= SE.loadSkillDefs(undefined, { built
 const foreignByKey = new Map(), foreignById = new Map(), foreignIds = new Set();
 const defOf = (id) => foreignById.get(id) || (BUILTIN_IDS.has(id) ? skillBundle().defs.get(id) : undefined);
 const metaOf = (d) => ({ action_type: d.action_type, is_permanent: d.is_permanent, point_buy_stat: d.point_buy_stat ?? null });
-// The ctx the programs' queries see (skill-engine.mjs SKILL_CTX_OPS). `own` = a definition being run directly.
-const wrap = (ctx, own) => ({
-  c: ctx,
+// The ctx the programs' queries see (skill-engine.mjs SKILL_CTX_OPS). `own` = a definition being run directly;
+// `a` = the hook's args (pass hooks: trance_assign's byActor / codeVs / attacksOn).
+const wrap = (ctx, own, a = null) => ({
+  c: ctx, a,
   sd: (id) => (own && id === own.id && !(ctx && ctx.skillData)) ? metaOf(own) : sdOf(ctx, id),
   flag: (id, k) => { const d = own && id === own.id ? own : defOf(id); return d ? d.flags?.[k] : SKILL_RULES[id]?.[k]; },
 });
@@ -503,6 +507,7 @@ function dataHook(hookName, skillId, ctx, args, own = null) {
     return out;
   }
   // skillId null: every built-in with a program for the hook, in deal order (defend_in: Barricade → Sanctuary).
+  if (spec.kind === 'pass') return dataPass(hookName, ctx, args, own);
   const ids = skillId != null ? [skillId] : own ? [own.id] : SKILLS_IMPLEMENTED.filter(id => hasProgram(defOf(id), hookName));
   if (spec.kind === 'edit') { for (const id of ids) applyEdits(runOne(progFor(id), hookName, id, ctx, args, own), args, ctx); return undefined; }
   return fold(spec, hookName, ids, ctx, args, undefined, progFor, own);
@@ -515,9 +520,102 @@ function foldForeign(spec, hookName, ctx, args, res) {
   if (spec.kind === 'edit') { for (const id of ids) applyEdits(runOne(progFor(id), hookName, id, ctx, args, null), args, ctx); return res; }
   return fold(spec, hookName, ids, ctx, args, res, progFor, null);
 }
+// ---- MV 2026-11-17: pass hooks as data (ordered edit records) --------------------------------------------------
+// The pass hooks (counter_pre, negate_action, negate_kind, trance_assign) edit the resolver's registers in place and a
+// later skill reads the edits of an earlier one. As data: for each reveal (spec.reveals: sorted by actor | the live
+// array), for each participating skill (spec.order: the JS order), the skill's program runs with root registers
+// {skill, r (the live reveal), actor, phase, carry} and returns edit records (skill-engine.mjs PASS_OPS); they are
+// applied in order before the next program runs, so code_is / reveal_of / foe picks see them. {op:'continue', carry}
+// applies what came before it and runs the same program again (phase + 1) — Counter Spell reads its own strip / trance
+// collapse back before it picks the element. A program error / limit / bad shape stops that (reveal, skill) run with
+// the edits already applied (deterministic on every peer) and is counted like any data-hook error.
+const MAX_PASS_PHASES = 8;
+function applyPassRecord(ctx, r, rec) {
+  switch (rec.op) {
+    case 'set_code': ctx.effAction.set(rec.id, rec.code); break;
+    case 'drop_trance': ctx.tranceOpts.delete(rec.id); break;
+    case 'replace': ctx.replace(rec.id, rec.from, rec.to); break;
+    case 'skills': { const o = ctx.byActorPre.get(rec.id); if (o) o.skills = [...rec.skills]; break; }
+    case 'fx': ctx.skillFx.push(rec.fx); break;
+    case 'no_move': ctx.noMove.add(rec.id); break;
+    case 'no_emit': if (ctx.noEmit) ctx.noEmit.add(rec.id); break;
+    case 'swap': if (ctx.swaps) ctx.swaps.push({ by: rec.by, on: rec.on }); break;
+    case 'trance_collapse': { ctx.effAction.set(rec.id, rec.code); ctx.tranceOpts.delete(rec.id); const o = ctx.byActorPre.get(rec.id); if (o) o.trance = null; break; }
+    case 'pen': { const pen = ctx.counterPen.get(rec.id) || {}; pen[rec.elem] = (pen[rec.elem] || 0) + rec.amount; ctx.counterPen.set(rec.id, pen); break; }
+    case 'log': ctx.log(rec.text); break;
+    case 'trance': r.vs = new Map(rec.vs); r.played = new Set(rec.played); break;
+    default: break;
+  }
+}
+function runPassProgram(prog, hookName, id, ctx, args, r, own) {
+  let carry = null;
+  for (let phase = 0; phase < MAX_PASS_PHASES; phase++) {
+    let recs;
+    try { recs = SE.runHookProgram(prog, hookName, id, wrap(ctx, own, args), { r, actor: r.actor, phase, carry }); } catch (e) {
+      if (!(e instanceof SE.EffectEngineLimit || e instanceof SE.EffectProgramError)) throw e;   // a ctx query threw: as JS
+      note(`${id} ${hookName}: ${e.message}`); return;
+    }
+    if (!SE.resultOk(hookName, recs)) { note(`${id} ${hookName}: bad result ${JSON.stringify(recs)?.slice(0, 200)}`); return; }
+    let next = null;
+    for (const rec of recs) { if (rec.op === 'continue') { next = rec; break; } applyPassRecord(ctx, r, rec); }
+    if (!next) return;
+    carry = next.carry ?? null;
+  }
+  note(`${id} ${hookName}: more than ${MAX_PASS_PHASES} phases`);
+}
+// dataPass(hook, ctx, args[, own][, foreignOnly]) — the built-ins of spec.order with a program (a built-in still marked
+// {"engine":"js"} makes the whole pass the JS hook), or one definition (`own`), or the registered foreign skills.
+function dataPass(hookName, ctx, args = {}, own = null, foreignOnly = false) {
+  const spec = SE.HOOK_SPECS[hookName];
+  const std = skillBundle().std;
+  let ids;
+  if (own) ids = [own.id];
+  else if (foreignOnly) ids = [...foreignIds].filter(id => hasProgram(foreignById.get(id), hookName)).sort();
+  else {
+    if (spec.order.some(id => SE.isJsMarker(defOf(id)?.hooks?.[hookName]))) return HOOKS[hookName](null, ctx, args);
+    ids = spec.order.filter(id => hasProgram(defOf(id), hookName));
+  }
+  if (!ids.length) return undefined;
+  const progs = ids.map(id => [id, SE.programOf(own && id === own.id ? own : (foreignOnly ? foreignById.get(id) : defOf(id)), hookName, std)]);
+  const revs = spec.reveals === 'sorted' ? [...ctx.reveals].sort((a, b) => a.actor.localeCompare(b.actor)) : ctx.reveals;
+  for (const r of revs) for (const [id, prog] of progs) if (prog && !prog.js) runPassProgram(prog, hookName, id, ctx, args, r, own);
+  return undefined;
+}
+// passHookData(hook, ctx, args) — the built-ins' data pass alone (checks: tools/skill-engine-check.mjs section 2b).
+export const passHookData = (hookName, ctx, args = {}) => dataPass(hookName, ctx, args);
+// Shadow of a pass: data first on the real registers (logs held back), snapshot, restore the registers in place, then the
+// JS hook on them — the JS edits are what stays. Compared: every register + the reveals' skills / trance / vs / played + logs.
+function passSnap(ctx) {
+  return {
+    e: [...ctx.effAction], t: [...ctx.tranceOpts].map(([k, v]) => [k, [...v]]), n: [...ctx.noMove], ne: ctx.noEmit ? [...ctx.noEmit] : null,
+    sw: ctx.swaps ? ctx.swaps.map(s => ({ ...s })) : null, c: [...ctx.counterPen].map(([k, v]) => [k, { ...v }]), fx: ctx.skillFx.length,
+    r: ctx.reveals.map(r => ['skills', 'trance', 'vs', 'played'].map(k => [k, Object.prototype.hasOwnProperty.call(r, k), r[k]])),
+  };
+}
+function passRestore(ctx, s) {
+  ctx.effAction.clear(); for (const [k, v] of s.e) ctx.effAction.set(k, v);
+  ctx.tranceOpts.clear(); for (const [k, v] of s.t) ctx.tranceOpts.set(k, [...v]);
+  ctx.noMove.clear(); for (const k of s.n) ctx.noMove.add(k);
+  if (ctx.noEmit) { ctx.noEmit.clear(); for (const k of s.ne || []) ctx.noEmit.add(k); }
+  if (ctx.swaps) { ctx.swaps.length = 0; for (const x of s.sw || []) ctx.swaps.push({ ...x }); }
+  ctx.counterPen.clear(); for (const [k, v] of s.c) ctx.counterPen.set(k, { ...v });
+  ctx.skillFx.length = s.fx;
+  ctx.reveals.forEach((r, i) => { for (const [k, had, v] of s.r[i]) { if (had) r[k] = v; else delete r[k]; } });
+}
+const passKey = (ctx, n0, logs) => JSON.stringify([[...ctx.effAction], [...ctx.tranceOpts], [...ctx.noMove], ctx.noEmit ? [...ctx.noEmit] : null, ctx.swaps || null,
+  [...ctx.counterPen], ctx.skillFx.slice(n0), ctx.reveals.map(r => [r.actor, r.skills ?? null, r.trance ?? null, r.vs ? [...r.vs] : null, r.played ? [...r.played] : null]), logs]);
+function shadowPass(h, hookName, skillId, ctx, args) {
+  const s0 = passSnap(ctx), logsD = [], logsJ = [];
+  let got;
+  try { dataHook(hookName, skillId, { ...ctx, log: (...a) => logsD.push(a.join(' ')) }, args); got = passKey(ctx, s0.fx, logsD); } catch (e) { got = `throws ${e?.message}`; }
+  passRestore(ctx, s0);
+  const js = h(skillId, { ...ctx, log: (...a) => { logsJ.push(a.join(' ')); ctx.log(...a); } }, args);
+  return { js, want: passKey(ctx, s0.fx, logsJ), got };
+}
 function shadowHook(h, hookName, skillId, ctx, args) {
   let want, got, js;
-  if (SE.HOOK_SPECS[hookName].kind === 'edit') {
+  if (SE.HOOK_SPECS[hookName].kind === 'pass') ({ js, want, got } = shadowPass(h, hookName, skillId, ctx, args));
+  else if (SE.HOOK_SPECS[hookName].kind === 'edit') {
     // data first, on copies of the damage map and skillFx (it edits them); then JS on the real ones
     const pre = JSON.stringify([...(args.damage || [])]), n0 = ctx.skillFx.length;
     const dmg = new Map(JSON.parse(pre)), cCopy = { ...ctx, skillFx: [] };
@@ -564,13 +662,14 @@ export function resolveSkillProgram(def, hookName, ctx, args = {}) {
   }
   if (spec.kind === 'pass') {
     const m = own.hooks?.[hookName];
-    return SE.isJsMarker(m) && BUILTIN_IDS.has(own.id) && m.impl.startsWith('skills.mjs') ? HOOKS[hookName](own.id, ctx, args) : undefined;
+    if (SE.isJsMarker(m)) return BUILTIN_IDS.has(own.id) && m.impl.startsWith('skills.mjs') ? HOOKS[hookName](own.id, ctx, args) : undefined;
+    return m !== undefined ? dataPass(hookName, ctx, args, own) : undefined;   // MV: its pass program alone (edit records)
   }
   return dataHook(hookName, spec.kind === 'each' ? null : own.id, ctx, args, own);
 }
 // registerForeignSkill(key, id, flags, hooks[, {meta, uses, libs, name, version}]) → the bound definition.
 // flags: SKILL_RULES-style (action, permanent, pointBuyStat, negating, keepsTarget, …) and/or validator keys;
-// hooks: {hookName: program} — data hooks only (a foreign skill cannot take part in the JS pass hooks yet).
+// hooks: {hookName: program} — data hooks only; a pass program (edit records) runs after the built-ins' pass (MV).
 // Throws on a built-in id or an invalid definition.
 export function registerForeignSkill(key, id, flags, hooks, opts = {}) {
   if (BUILTIN_IDS.has(id)) throw new Error(`registerForeignSkill: ${id} is a built-in skill`);

@@ -53,6 +53,17 @@ const libsBy = (names) => names.map(n => bundled.libs.get(n));
   eq('bundled set pins every lib file', Object.keys(bundled.set.libs), [...bundled.libs.keys()].sort());
   const reordered = Object.fromEntries(Object.entries(bundled.libs.get('std')).reverse());
   eq('lib hash ignores key order', libShaMap([reordered]).std, bundled.set.libs.std);
+  // HR (2026-11-18): the effect hook programs are part of the set id; a hook-less set keeps its pre-HR id
+  const base = { libs: { std: 'a'.repeat(64) }, effects: { effect_x: 'c'.repeat(64) } };
+  eq('set id: empty hooks = the pre-HR id', effectSetId({ ...base, hooks: {} }), createHash('sha256').update(canonicalJson(base)).digest('hex'));
+  yes('set id: hooks change it', effectSetId({ ...base, hooks: { trap: 'f'.repeat(64) } }) !== effectSetId(base));
+  yes('set id: another hook file version is another set', effectSetId({ ...base, hooks: { trap: 'f'.repeat(64) } }) !== effectSetId({ ...base, hooks: { trap: 'e'.repeat(64) } }));
+  eq('bundled set pins every hook file', Object.keys(bundled.set.hooks || {}), [...bundled.hooks.keys()].sort());
+  yes('bundled set has the channel/trap/holdings/summon hooks', ['channel', 'holdings', 'summon', 'trap'].every(k => /^[0-9a-f]{64}$/.test(bundled.set.hooks?.[k] || '')));
+  eq('bundled hook sha = effectHash of the file', bundled.set.hooks?.trap, effectHash(bundled.hooks.get('trap')));
+  const noHooks = bundledEffectSet(undefined, '/nonexistent-hooks-dir');
+  eq('no hook dir → set id without hooks', noHooks.id, effectSetId({ libs: noHooks.set.libs, effects: noHooks.set.effects }));
+  yes('hooks are in the bundled id', noHooks.id !== bundled.id);
 }
 
 // ---------------------------------------------------------------- 2. refs carry libs
@@ -175,6 +186,41 @@ const flush = () => new Promise(r => setTimeout(r, 30));
     const v = checkEffect(FROST_LANCE).verdict;
     yes(`E5 verdict on Frost Lance is not reject (${v})`, v !== 'reject');
   } catch (e) { console.log(`skip E5 validator (${e.message})`); }
+}
+
+// ---------------------------------------------------------------- 4b. validator 1.1.0: the ref-pinned libs are priced
+{
+  const std = bundled.libs.get('std');
+  const strongStd = JSON.parse(JSON.stringify(std)); strongStd.version = '9.9.9';
+  strongStd.subs.main_delta.body = { '*': [strongStd.subs.main_delta.body, 2] };   // every delta hit deals double
+  const lance = { ...FROST_LANCE, id: 'effect_frost_lance_lr' };                    // own id: section 6 registers Frost Lance
+  // the store hands the validator exactly the libs the ref pins
+  const seen = [];
+  const spy = createFxStore({ bundled, validate: (def, o) => { seen.push({ id: def.id, libs: (o?.libs || []).map(l => [l.id, effectHash(l)]), libShas: o?.libShas }); return { verdict: 'ok' }; } });
+  spy.addDef(lance); spy.addLib(strongStd);
+  const refStrong = makeFxRef(lance, [strongStd]);
+  spy.prepare(refStrong);
+  eq('store → validator gets the ref-pinned libs + ref.libs', seen[0], { id: lance.id, libs: [['std', effectHash(strongStd)]], libShas: refStrong.libs });
+  let checkEffect = null;
+  try { ({ checkEffect } = await import('./rebalancing-check.mjs')); } catch (e) { console.log(`skip 4b validator (${e.message})`); }
+  if (checkEffect) {
+    const vSave = process.env.FX_VALIDATOR; delete process.env.FX_VALIDATOR;
+    const pv = await createFxPeer({ selfId: 'peer:V', dimId: 'dim-lr-validator', log: () => {} });
+    if (vSave !== undefined) process.env.FX_VALIDATOR = vSave;
+    pv.store.addDef(lance); pv.store.addLib(strongStd);
+    const pS = pv.store.prepare(refStrong);
+    eq('peer validator: same def, stronger std pinned → rejected (priced)', [pS.status, /logic exceeds/.test(pS.reason || '') && /damage/.test(pS.reason || '')], ['rejected', true]);
+    const refB = makeFxRef(lance, libsBy(['std']));
+    // direct checks first: once accepted, the id is a registered foreign effect (skews a later audit in this process)
+    const direct = checkEffect(lance);
+    eq('stamp carries the libs map (bundled)', direct.stamp.libs, { std: effectHash(std) });
+    eq('stamp carries the libs map (ref-pinned)', checkEffect(lance, { libs: [strongStd], libShas: refStrong.libs }).stamp.libs, { std: effectHash(strongStd) });
+    const mm = checkEffect(lance, { libs: [strongStd], libShas: refB.libs });
+    eq('a lib whose hash ≠ ref.libs → reject', [mm.verdict, mm.errors.some(e => e.includes('≠ pinned'))], ['reject', true]);
+    const pB = pv.store.prepare(refB);
+    eq('peer validator: same def, bundled std pinned → ready (not reject)', [pB.status, pB.verdict !== 'reject'], ['ready', true]);
+    eq('no libs given → bundled verdict (= the bundled-std ref)', direct.verdict, pB.verdict);
+  }
 }
 
 // ---------------------------------------------------------------- 5. have propagation A → B → C
@@ -350,6 +396,31 @@ function world(stats, tiles, sides) {
   const ve = validateCharacter({ cards: [{ uid: 'u1', kind: 'effect', id: 'effect_frost_lance', where: 'deck', ref: compactRef(REF) }, { uid: 'u2', kind: 'effect', id: 'effect_unknown', where: 'deck' }] }, cat).filter(e => e.startsWith('card '));
   eq('profile validation: foreign card accepted, unknown built-in still refused', ve, ['card u2: unknown effect effect_unknown']);
   fs.unlinkSync(pf);
+}
+
+// ---------------------------------------------------------------- LR. libs from the repo commit of the ref
+{
+  const { buildEffectsManifest, httpdEffectLibFetcher, effectLibHash } = await import('../effects-repo.mjs');
+  // the repo index's libs are exactly the set-id libs (libs stay in the set id; nothing new to add)
+  eq('LR: index.json libs == bundled set libs', buildEffectsManifest([], null, [...bundled.libs.values()]).libs, bundled.set.libs);
+  const myLib = { schema: 'chaosd6.effect-lib/1', id: 'lrlib', version: '1.0.0', subs: { zap: { params: [], body: { put: ['status', 'fizzled'] } } } };
+  const myLib2 = { ...myLib, version: '2.0.0' };
+  const def = { ...FROST_LANCE, id: 'effect_lr_probe', uses: ['lrlib'], logic: { call: ['zap'] } };
+  const COMMIT = 'c'.repeat(40), RID = 'rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ';
+  const ref = makeFxRef(def, [myLib], { repo: RID, branch: 'players/x/lr', commit: COMMIT });
+  const defF = async (r) => (r.sha256 === ref.sha256 ? def : null);
+  const seen = [];
+  const libF = (lib) => async (r) => { seen.push([r.id, r.commit, r.repo]); return lib; };
+  const mk = (libFallbackFetchers) => createFxSync({ selfId: 'Z', store: createFxStore({ bundled }), cache: createMemoryCache(), request: null, fallbackFetchers: [defF], libFallbackFetchers });
+  eq('LR: no lib fallback (pre-LR) → a lib nobody serves stays missing', await mk([]).ensure(ref), 'missing');
+  eq('LR: lib fetched from the repo at the ref commit → ready', await mk([libF(myLib)]).ensure(ref), 'ready');
+  eq('LR: lib fetcher asked for lib id @ the effect ref\'s commit + repo', seen[0], ['lrlib', COMMIT, RID]);
+  eq('LR: the repo commit holding another lib version → refused by hash (missing)', await mk([libF(myLib2)]).ensure(ref), 'missing');
+  let url = '';
+  const hl = httpdEffectLibFetcher({ seedHost: 'seed.example', fetchImpl: async (u) => { url = u; return { ok: true, status: 200, json: async () => ({ content: JSON.stringify(myLib) }) }; } });
+  eq('LR: httpd lib fallback → ready', await mk([hl]).ensure(ref), 'ready');
+  eq('LR: httpd lib URL', url, `https://${'seed.example'}/api/v1/repos/${RID}/blob/${COMMIT}/lib/lrlib.json`);
+  yes('LR: another lib version is another fxKey', fxKey(makeFxRef(def, [myLib2])) !== fxKey(makeFxRef(def, [myLib])) && effectLibHash(myLib2) !== ref.libs.lrlib);
 }
 
 console.log(fails ? `${fails} handshake check(s) FAILED` : 'all handshake checks passed');

@@ -4,8 +4,14 @@ The effects (and later skills) of chaosD6, defined as data. One effect per file:
 
 ```
 effects/<id>.json      one definition; "id" inside == file name
+hooks/<family>.json    peer-side effect hook programs (channel, trap, holdings, summon; schema
+                       chaosd6.effect-hooks/1, run by chaosD6 game/effect-hooks.mjs); "id" == family == file name.
+                       Changed by the delegates only; the game ships the same files as its built-in fallback
+lib/<id>.json          libraries of sub-routines the effects `use` (std, e2a, e2b, e2c; schema chaosd6.effect-lib/1).
+                       Changed by the delegates only. A ref pins each used lib by sha256 (ref.libs), so a peer
+                       fetches lib/<id>.json at the ref's commit; commits without lib/ use the game's bundled libs
 SCHEMA.md              the definition format (mirrored from chaosD6 game/effects-data/SCHEMA.md)
-index.json             manifest: id -> sha256 of the canonical JSON (node tools/manifest.mjs)
+index.json             manifest: effects + hooks + libs, id -> sha256 of the canonical JSON (node tools/manifest.mjs)
 validator/pin.json     which validator build checks this repo (commit + sha256 of the validator)
 tools/manifest.mjs     manifest generator / checker (standalone, Node >= 18)
 ```

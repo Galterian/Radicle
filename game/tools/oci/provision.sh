@@ -101,7 +101,8 @@ sudo -u rad -H bash -c "
     | .node.externalAddresses = [\$host + \":8776\"]
     | .node.policy = \"allow\"
     | .node.scope = \"all\"
-    | .node.seedingPolicy = { default: \"allow\", scope: \"all\" }
+    | .node.seedingPolicy = { default: \"block\" }
+    | .node.peers = { type: \"dynamic\" }   # a seed must accept players; privacy = block policy + rad seed only ours
     | .preferredSeeds = []
   ' config.json > \"\$tmp\" && mv \"\$tmp\" config.json
 "

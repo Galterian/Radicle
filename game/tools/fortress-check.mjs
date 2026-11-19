@@ -286,7 +286,7 @@ eq('seeker defaults', seekerConfig({}), { min: 20, max: 30, radius: 5, turns: 1 
   entity.statTokens.push({ id: 'x#1#0', stat: 'matter', elem: 'elem_earth', value: 4, effect_id: 'effect_artifice' });
   new Function('entity', 'FORTRESS_TOKEN_EFFECT', 'console', 'PEER_LABEL', deathSrc)(entity, FORTRESS_TOKEN_EFFECT, quiet, 'me');
   eq('peer path: on death the Fortress token goes, the Artifice token stays', entity.statTokens.map(t => t.effect_id), ['effect_artifice']);
-  eq('peer path: the death drop sits in the DIED branch', /if \(wasAlive && entity\.life <= 0\) \{[\s\S]{0,900}const fzLost = entity\.statTokens/.test(src), true);
+  eq('peer path: the death drop sits in the DIED branch', /if \(wasAlive && entity\.life <= 0\) \{[\s\S]{0,1600}const fzLost = entity\.statTokens/.test(src), true);
   // The UI's "aimed" state is the peer's queued destroy (hand msg), which the peer drops after every action.
   const mainSrc = fs.readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
   eq('UI: the fortress button reads the peer-queued destroy, no sticky local aim flag', [/destroyAim/.test(mainSrc), /const aimed = state\.destroy\?\.building ===/.test(mainSrc)], [false, true]);

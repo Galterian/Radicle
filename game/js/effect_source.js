@@ -96,6 +96,8 @@ export function normalizeSource(s, kind = null) {
     id,
     name: s.name ? String(s.name) : null,
     kind: k,
+    ...(/^z6Mk[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(String(s.ns || '')) ? { ns: String(s.ns) } : {}),   // PV: publisher namespace (author check)
+    ...(s.review === true ? { review: true } : {}),                                              // PV: players' votes flag it for review
   };
 }
 
@@ -168,6 +170,7 @@ export function sourceTitle(src) {
     `Player ${KINDS.has(src.kind) ? src.kind : 'effect'} — from ${src.repo} branch ${src.branch}`,
     src.author ? `author: ${src.author}` : '',
     `validator: ${v ? `${v.glyph} ${v.label}` : 'not checked'}`,
+    src.review ? 'players: ⚑ REVIEW — 10+ test votes with a mean of −3 or lower' : '',   // PV
     src.commit ? `commit ${_short(src.commit, 7)}` : '',
     src.sha256 ? `sha256 ${_short(src.sha256, 12)}` : '',
   ].filter(Boolean).join('\n');
@@ -181,6 +184,7 @@ export function sourceBadgeHtml(src, { compact = false } = {}) {
     + `<span class="fx-src-br">${_esc(sourceLabel(src, compact))}</span>`
     + (!compact && src.author ? `<span class="fx-src-au">${_esc(src.author)}</span>` : '')
     + (v ? `<span class="fx-src-v" aria-label="${_esc(v.label)}">${v.glyph}</span>` : '')
+    + (src.review ? '<span class="fx-src-rv" aria-label="players flagged it for review" style="color:#ff9b5b;margin-left:2px">⚑</span>' : '')   // PV: votes n ≥ 10, mean ≤ −3
     + '</span>';
 }
 // Convenience: badge HTML for anything effectSource() takes ('' when built-in).

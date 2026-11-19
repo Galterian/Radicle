@@ -36,8 +36,10 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson, sha256Hex, skillHash, parseSkillRef, getSkillByRef, createSkillCache, skillsCacheDir,
   httpdSkillFetcher, gitSkillFetcher, SKILLS_RID, SkillRefError } from './skills-repo.mjs';
+import { withProvenance } from './defs-repo.mjs';   // PV: ref provenance (ns, review) — never hashed
 import { libShaMap, compactRef, createMemoryCache, createFxSync, parseLibbedRef, attachDefsRpc, prefixOf, foreignCardFromRef } from './effects-handshake.mjs';   // FXG: foreignCardFromRef
 import * as SK from './skills.mjs';
+import { foreignHolder, foreignRefuser } from './foreign-select.mjs';   // PS: partial foreign swarms
 
 export { compactRef, prefixOf, createMemoryCache };
 export const SK_PROTOCOL_VERSION = 1;
@@ -81,7 +83,7 @@ export function bundledSkillSet(dir = process.env.SKILL_DEFS_DIR || SKILLS_DATA_
 }
 
 /** A ref for skill `def` with its libraries pinned. `libs`: Map|array of lib objects or {name: sha}. */
-export function makeSkRef(def, libs, { repo = '', branch = '', commit = '', verdict = null } = {}) {
+export function makeSkRef(def, libs, { repo = '', branch = '', commit = '', verdict = null, ns = '', review = false } = {}) {   // PV: ns / review
   const uses = [...(def.uses || [])].sort();
   const byName = libs instanceof Map ? Object.fromEntries([...libs].map(([k, l]) => [k, skillHash(l)]))
     : Array.isArray(libs) ? libShaMap(libs) : { ...(libs || {}) };
@@ -94,6 +96,7 @@ export function makeSkRef(def, libs, { repo = '', branch = '', commit = '', verd
   const name = String(def.name || def.data?.name || '');
   const ref = { id: def.id, sha256: skillHash(def), libs: pinned, repo: String(repo || ''), branch: String(branch || ''), commit: String(commit || ''), name };
   if (verdict) ref.verdict = verdict;
+  withProvenance(ref, { ns, review });   // PV
   return parseSkRef(ref);
 }
 /** Validate a skill ref received from the network → normalised copy (throws SkillRefError). */
@@ -280,6 +283,7 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
   // SK_ACCEPT=0: this player refuses every foreign skill (local policy) — its reveals list them in sk_missing,
   // so those skills are stripped for everybody in the action.
   if (process.env.SK_ACCEPT === '0') { validate = () => ({ verdict: 'reject', reasons: ['SK_ACCEPT=0: this player refuses foreign skills'] }); validatorInfo = 'SK_ACCEPT=0 (refuse all)'; }
+  else if (foreignRefuser(label)) { validate = () => ({ verdict: 'reject', reasons: ['FOREIGN_REFUSERS: this player refuses foreign skills'] }); validatorInfo = 'FOREIGN_REFUSERS (refuse all)'; }   // PS
   const cache = process.env.CHAOSD6_SKILLS_CACHE === 'memory' ? createMemoryCache() : createSkillCache({ dir: skillsCacheDir() });
   const fallbackFetchers = [];
   if (process.env.CHAOSD6_SKILLS_DIR) fallbackFetchers.push(gitSkillFetcher({ dir: process.env.CHAOSD6_SKILLS_DIR }));
@@ -312,12 +316,13 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
     skillData(id) { const p = store.readyById(id); return p ? { action_type: p.shape.action_type, is_permanent: p.shape.is_permanent, point_buy_stat: p.shape.point_buy_stat, name: p.shape.name, text: p.shape.text } : undefined; },
     /** FORCE_FOREIGN_SKILL=<def.json>: a player-branch skill in my deck (dev/test). → a skill card or null. */
     forcedCard(file) {
+      if (!foreignHolder(label)) { log(`FORCE_FOREIGN_SKILL: not a holder (FOREIGN_HOLDERS) — I start without ${path.basename(String(file))}`); return null; }   // PS
       let def;
       try { def = readJson(file); } catch (e) { log(`FORCE_FOREIGN_SKILL ${file}: ${e.message}`); return null; }
       try {
         const libObjs = (def.uses || []).map(u => { const l = bundled.libs.get(u); if (!l) throw new Error(`library ${u} not bundled`); return l; });
         const slug = String(def.id || '').replace(/^skill_/, '').replace(/_/g, '-');
-        const ref0 = makeSkRef(def, libObjs, { repo: process.env.SK_FORCE_REPO || '', branch: process.env.SK_FORCE_BRANCH || `players/local/${slug}`, commit: process.env.SK_FORCE_COMMIT || '' });
+        const ref0 = makeSkRef(def, libObjs, { repo: process.env.SK_FORCE_REPO || '', branch: process.env.SK_FORCE_BRANCH || `players/local/${slug}`, commit: process.env.SK_FORCE_COMMIT || '', ns: process.env.SK_FORCE_NS || '' });   // PV: SK_FORCE_NS = publisher namespace (NID)
         const prep = sync.adopt(def, ref0, libObjs);
         if (prep.status !== 'ready') { log(`FORCE_FOREIGN_SKILL ${def.id}: refused (${prep.reason || prep.status})`); return null; }
         active = true;

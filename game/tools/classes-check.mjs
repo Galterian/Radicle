@@ -15,6 +15,7 @@ import { manipulatorConfig, combatHit, pickManipTarget } from '../class-manipula
 import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../class-chase.mjs';
 import { animatorConfig, priestConfig, seekerConfig } from '../class-world.mjs';
 import { CLASSES, SKILLS, ELEM_TO_STAT, STATS, genWorld, argsFor, sha256Hex } from './class-fixtures.mjs';
+import { channelBreaks } from '../channel-rule.mjs';
 
 let fails = 0, oks = 0;
 const J = (x) => JSON.stringify(x);
@@ -382,6 +383,30 @@ console.log('-- 2. worked examples (user rulings)');
   eq('Necromancer: then Concentration with a 6 (another action) → the reanimated unit is destroyed', classHook('reanimated_strike', 'class_necromancer', nd, { down: ['elem_harmony'], stat: 'will', elem: null, enemy: true, pb: { fail: false, value: 6, dice: [6, 1] } }), { result: 'destroyed', ok: true, last: true, elem: 'elem_concentration' });
   eq('Necromancer: a 5 is too weak; a Matter emission has no target', [classHook('reanimated_strike', 'class_necromancer', nd, { down: [], stat: 'will', elem: null, enemy: true, pb: { fail: false, value: 5, dice: [5] } }), classHook('reanimated_strike', 'class_necromancer', nd, { down: [], stat: 'matter', elem: null, enemy: true, pb: { fail: false, value: 6, dice: [6] } })], [{ result: 'too weak', ok: false, last: false, elem: 'elem_harmony' }, null]);
   eq('Necromancer: other classes raise nothing that this applies to', classHook('reanimated_strike', 'class_healer', nd, { down: [], stat: 'will', elem: null, enemy: true, pb: { fail: false, value: 6, dice: [6] } }), null);
+  // CR: channel rule (user ruling 2026-11-17) — game/channel-rule.mjs, as peer.mjs simulate()#channelBreaksFor calls it
+  {
+    const em = (cls) => (code) => classHook('emits', cls, ctx0, { code, site: 'plan' });
+    const rv = (action, extra = {}) => ({ action, declared: action, trance: null, effect: null, ...extra });
+    const cases = [
+      ['Reaver A keeps the channel', rv('A'), 'class_reaver', { breaks: false, kept: true }],
+      ['Barbarian B keeps the channel', rv('B'), 'class_barbarian', { breaks: false, kept: true }],
+      ['Reaver B breaks it', rv('B'), 'class_reaver', { breaks: true, kept: false }],
+      ['Barbarian A breaks it', rv('A'), 'class_barbarian', { breaks: true, kept: false }],
+      ['plain A by a Healer breaks it', rv('A'), 'class_healer', { breaks: true, kept: false }],
+      ['plain B by a classless unit breaks it', rv('B'), null, { breaks: true, kept: false }],
+      ['Monk M breaks it (Move)', rv('M'), 'class_monk', { breaks: true, kept: false }],
+      ['Reaver Battle Trance pair A+P breaks it', rv('A', { trance: ['A', 'P'] }), 'class_reaver', { breaks: true, kept: false }],
+      ['Barbarian Battle Trance pair B+EP breaks it', rv('B', { trance: ['B', 'EP'] }), 'class_barbarian', { breaks: true, kept: false }],
+      ['Reaver A emitting an off-cost element breaks it', rv('A', { effect: { elements: ['elem_fire', 'elem_air'], step: 1 } }), 'class_reaver', { breaks: true, kept: false }],
+      ['Barbarian B emitting the cost element keeps it', rv('B', { effect: { elements: ['elem_harm'], step: 1 } }), 'class_barbarian', { breaks: false, kept: true }],
+      ['plain P with an off-cost element breaks it', rv('P', { effect: { elements: ['elem_fire'], step: 1 } }), 'class_healer', { breaks: true, kept: false }],
+      ['plain P keeps it (not a class save)', rv('P'), 'class_healer', { breaks: false, kept: false }],
+      ['Reaver EP (stance A, declared EP) keeps it as a Posture', rv('EP'), 'class_reaver', { breaks: false, kept: false }],
+      ['no reveal → no break', null, 'class_reaver', { breaks: false, kept: false }],
+    ];
+    eq('channel rule oracle (Reaver A / Barbarian B keep; others, Trance pairs, off-cost elements break)', cases.map(([, rev, cls]) => channelBreaks(rev, 'elem_harm', cls ? em(cls) : null)), cases.map(c => c[3]));
+    for (const [label, rev, cls, want] of cases) eq(`  channel: ${label}`, channelBreaks(rev, 'elem_harm', cls ? em(cls) : null), want, true);
+  }
   eq('kinds: Elementalist / Rogue / Manipulator / Prophet passive; Weapon Master once_per_round; Bard static', ['class_elementalist', 'class_rogue', 'class_manipulator', 'class_prophet', 'class_weapon_master', 'class_bard', 'class_healer'].map(c => classHook('kind', c, { ...ctx0, classData: (id) => CLASSES[id].data })), ['passive', 'passive', 'passive', 'passive', 'once_per_round', 'static', 'tap']);
 }
 

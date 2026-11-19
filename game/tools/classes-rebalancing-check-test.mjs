@@ -16,7 +16,8 @@ const byId = Object.fromEntries(defs.map(d => [d.id, d]));
 const copy = (id, over = {}) => ({ ...JSON.parse(J(byId[id])), ...over });
 
 console.log('-- calibration');
-eq('tolerance ±10 % (user ruling 2026-11-16)', cal.policy.tolerance, 0.1);
+eq('tolerance ±30 % (user ruling 2026-11-18, was ±10 %)', cal.policy.tolerance, 0.3);
+eq('DEFAULT_TOLERANCE 0.30', V.DEFAULT_TOLERANCE, 0.3);
 eq('every built-in has a BUILTIN_POWER entry', defs.filter(d => !V.BUILTIN_POWER[d.id]).map(d => d.id), []);
 eq('BUILTIN_POWER has no stray ids', Object.keys(V.BUILTIN_POWER).filter(id => !byId[id]), []);
 eq('every BUILTIN_POWER entry validates', defs.flatMap(d => V.validateNorm(V.normalizeDef(d))), []);
@@ -32,31 +33,47 @@ console.log('-- model');
   eq('a tap class: more colours → fewer uses', V.powerOf({ ...n, k: 5 }, cal).uses < a.uses, true);
   eq('lifetime grows with colours', V.powerOf({ ...n, k: 1 }, cal).lifetime <= V.powerOf({ ...n, k: 6 }, cal).lifetime, true);
   eq('once_per_round = one use per turn', V.powerOf(V.normalizeDef(byId.class_priest), cal).uses, cal.game.turns);
-  eq('doubling the heal doubles its component', V.powerOf({ ...n, power: { heal: 2 } }, cal).components.heal.value, Math.round(a.components.heal.value * 2 * 1e6) / 1e6);
+  eq('doubling the heal doubles its component (to the r6 rounding)', Math.abs(V.powerOf({ ...n, power: { heal: 2 } }, cal).components.heal.value - a.components.heal.value * 2) < 3e-6, true);
 }
 
 console.log('-- checkClass');
 eq('every built-in is ok in baseline mode (judged 1)', defs.map(d => V.checkClass(d)).filter(r => r.verdict !== 'ok' || r.judged_ratio !== 1).map(r => r.class_id), []);
-eq('an `extends` copy of the Witch is ok', V.checkClass(copy('class_witch', { id: 'class_hexer', extends: 'class_witch' })).verdict, 'ok');
-eq('a foreign class without power is rejected', V.checkClass(copy('class_witch', { id: 'class_hexer' })).verdict, 'reject');
-eq('unknown power key rejected', V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3, teleport: true } })).errors.some(e => /teleport/.test(e)), true);
-eq('bad colours rejected', V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3 }, data: { ...byId.class_witch.data, colors: ['elem_fire', 'elem_fire'] } })).verdict, 'reject');
+// 1.1.0 foreign limits (user ruling 2026-11-17): the Witch is a HAND class (discard / hand_discard) → no foreign copy;
+// the copies below use the Healer (a tap class whose ability runs as data).
+const healN = (n) => JSON.parse(J(byId.class_healer).replace('"amount":1', `"amount":${n}`));
+eq('an `extends` copy of the Healer is ok', V.checkClass(copy('class_healer', { id: 'class_mender', extends: 'class_healer' })).verdict, 'ok');
+eq('a foreign class without power is rejected', V.checkClass(copy('class_healer', { id: 'class_mender' })).verdict, 'reject');
+eq('unknown power key rejected', V.checkClass(copy('class_healer', { id: 'class_mender', power: { heal: 1, teleport: true } })).errors.some(e => /teleport/.test(e)), true);
+eq('bad colours rejected', V.checkClass(copy('class_healer', { id: 'class_mender', power: { heal: 1 }, data: { ...byId.class_healer.data, colors: ['elem_fire', 'elem_fire'] } })).verdict, 'reject');
+eq('a foreign hand class (Witch copy) is rejected', V.checkClass(copy('class_witch', { id: 'class_hexer', extends: 'class_witch' })).errors.some(e => /hand class/.test(e)), true);
+eq('a foreign hand class (Prophet copy, reveal) is rejected', V.checkClass(copy('class_prophet', { id: 'class_seer', extends: 'class_prophet' })).errors.some(e => /hand class/.test(e)), true);
+eq('a foreign PASSIVE class is allowed (Rogue copy: flags.passiveTurn)', (() => { const r = V.checkClass(copy('class_rogue', { id: 'class_sneak', extends: 'class_rogue' })); return [r.errors, r.verdict]; })(), [[], 'ok']);
+eq('a foreign PASSIVE class is allowed (Elementalist copy)', V.checkClass(copy('class_elementalist', { id: 'class_sparker', extends: 'class_elementalist' })).verdict, 'ok');
 {
-  // discard 5 (not the Witch's 3): out of band on the curve whatever the fit (the Witch itself sits at r≈1.10 since the 2026-11-16 refit)
-  const r = V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 5 }, data: { ...byId.class_witch.data, hand_discard: { n: 5 } } }));
-  eq('a Witch copy with its own power is judged on the curve', [r.mode, r.verdict, r.power.ratio], ['curve', 'nerf', r.power.ratio]);
+  // heal 2 (not the Healer's 1): out of band on the curve whatever the fit
+  const r = V.checkClass({ ...healN(2), id: 'class_mender', power: { heal: 2 } });
+  eq('a Healer copy with its own power is judged on the curve', [r.mode, r.verdict], ['curve', 'nerf']);
   eq('…and gets a scale hint', r.suggestions.some(s => /scale the power/.test(s.change)), true);
-  const r2 = V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3 } }), { baseline: 'class_witch' });
-  eq('…the same against the Witch baseline is ok', [r2.mode, r2.verdict, r2.judged_ratio], ['baseline', 'ok', 1]);
-  const r3 = V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 6 }, data: { ...byId.class_witch.data, hand_discard: { n: 6 } } }), { baseline: 'class_witch' });
-  eq('a Witch discarding 6 vs the Witch → nerf', r3.verdict, 'nerf');
-  eq('baseline as a definition object = baseline by id', V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 3 } }), { baseline: byId.class_witch }).judged_ratio, 1);
+  const r2 = V.checkClass(copy('class_healer', { id: 'class_mender', power: { heal: 1 } }), { baseline: 'class_healer' });
+  eq('…the same against the Healer baseline is ok', [r2.mode, r2.verdict, r2.judged_ratio], ['baseline', 'ok', 1]);
+  const r3 = V.checkClass({ ...healN(2), id: 'class_mender', power: { heal: 2 } }, { baseline: 'class_healer' });
+  eq('a Healer healing 2 vs the Healer → nerf', r3.verdict, 'nerf');
+  eq('baseline as a definition object = baseline by id', V.checkClass(copy('class_healer', { id: 'class_mender', power: { heal: 1 } }), { baseline: byId.class_healer }).judged_ratio, 1);
   eq('stamp carries pin, def sha, verdict', Object.keys(r.stamp).sort(), ['class_id', 'def_sha256', 'pin_id', 'ratio', 'tolerance', 'verdict']);
+}
+{
+  // 1.1.0 model answers
+  const p = (id) => V.powerOf(V.normalizeDef(byId[id]), cal);
+  const c0 = { ...cal, game: { ...cal.game, p_recharge_emit: 0 } };
+  eq('tap recharge-by-emission raises the uses of every tap class', defs.filter(d => d.data.ability_kind === 'tap' && V.normalizeDef(d).kind === 'tap').filter(d => !(p(d.id).uses > V.powerOf(V.normalizeDef(d), c0).uses)).map(d => d.id), []);
+  eq('W.recover = 0.7 (weight answer 2)', cal.weights.recover, 0.7);
+  eq('every swarm placeholder is a game param of the same value', Object.entries(cal.swarm_placeholders).filter(([k, v]) => cal.game[k] !== v.value || !/needs a swarm measurement/.test(v.status)).map(([k]) => k), []);
+  eq('Witch: the range gate is in the uses, not in the value per use', [p('class_witch').components.discard.per, p('class_witch').components.discard.times < p('class_healer').uses], [Math.round(cal.weights.card * 3 * 1e6) / 1e6, true]);
+  eq('Summoner grant = W.card × V(effect_summoning) / mean V', p('class_summoner').components.grant.per, Math.round(cal.weights.card * cal.grants.effects.effect_summoning / cal.grants.mean_value * 1e6) / 1e6);
 }
 
 console.log('-- logic audit');
 const hl = byId.class_healer;
-eq('a Witch that discards 3 but declares 1 → reject', V.checkClass(copy('class_witch', { id: 'class_hexer', power: { discard: 1 } })).reasons.some(r => /discards 3 > power.discard 1/.test(r)), true);
 eq('a std override (life_points absorbs everything) → reject', V.checkClass(copy('class_healer', { id: 'class_tank', power: { heal: 1 }, hooks: { ...hl.hooks, life_points: { obj: { illusion: 0, armor: 0, chaseBonus: 0, absorbed: { var: 'dmg' } } } } })).reasons.some(r => /std hook life_points/.test(r)), true);
 eq('a std override that equals the rule is fine', V.checkClass(copy('class_healer', { id: 'class_mender', extends: 'class_healer', hooks: { ...hl.hooks, kind: { call: ['kind'] } } })).verdict, 'ok');
 eq('an unpriced hook → reject', V.checkClass(copy('class_healer', { id: 'class_brute', power: { heal: 1 }, hooks: { ...hl.hooks, attack_out: { '+': [{ var: 'dmg' }, 2] } } })).reasons.some(r => /not priced/.test(r)), true);

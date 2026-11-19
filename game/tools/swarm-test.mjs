@@ -215,6 +215,8 @@ function startAgent(peerId, port, attempt = 0) {
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
     if (!me || (me.life ?? 1) <= 0) return;
+    // Phylactery (user ruling 2026-11-17): click it as soon as the peer reports an enemy permanent in reach.
+    if (a.phylTarget && !a.queuedPhyl) { send({ kind: 'phylactery' }); a.queuedPhyl = true; a.phylClicks = (a.phylClicks || 0) + 1; console.log(`[swarm] ${peerId.slice(0, 14)} clicks the Phylactery → ${a.phylTarget.name}'s ${a.phylTarget.perm}`); }
     // Dimension Out running (SWARM_DIMOUT): hold still with Empty Posture — a move, attack or cast would cancel it.
     if (Number(me.dim_out_until_turn ?? -1) >= 0) { queue('EMPTY', []); send({ kind: 'target', target: null }); a.dimOutHolds = (a.dimOutHolds || 0) + 1; return; }
     a.reserved = null;
@@ -347,6 +349,19 @@ function startAgent(peerId, port, attempt = 0) {
       a.invisCasts = (a.invisCasts || 0) + 1;
       return;
     }
+    // Awake (2026-11-17): cast it now and then on a Posture / Empty Posture — ~35% with a clicked hex 1–4 away,
+    // ~15% clicking my own hex (I am the one to move), else no click (the resolver picks the most beneficial move).
+    const awIdx = a.hand.findIndex(c => isEffect(c) && c.effect_id === 'effect_awake');
+    if (awIdx >= 0 && Math.random() < 0.4) {
+      const p = slotOf('P');
+      queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, awIdx);
+      const ring = [...a.map.tiles()].filter(t => { const d = hexDistance({ q: me.tile_q, r: me.tile_r }, t); return d >= 1 && d <= 4; });
+      const roll = Math.random();
+      const pick = roll < 0.35 && ring.length ? ring[Math.floor(Math.random() * ring.length)] : roll < 0.5 ? { q: me.tile_q, r: me.tile_r } : null;
+      send({ kind: 'target', target: pick ? { q: pick.q, r: pick.r } : null }); send({ kind: 'lock' });
+      a.awakeCasts = (a.awakeCasts || 0) + 1; a.awakePicks = (a.awakePicks || 0) + (pick ? 1 : 0);
+      return;
+    }
     // Adjacent with an effect in hand: cast it on a Posture (explicit P card
     // or the Empty Posture) half the time — this is what exercises the
     // Rule 21 effect-damage path in the resolver. A Summoning needs no enemy
@@ -428,7 +443,7 @@ function startAgent(peerId, port, attempt = 0) {
     const m = JSON.parse(e.data);
     if (m.kind === 'hello') { a.me = m.peer_id; a.hand = m.hand || []; if (m.map) { a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); } for (const p of m.peers || []) a.peers.set(p.peer_id, p); log(`  ${peerId} hello: map ${a.map.size()} hexes / ${a.map.blockCount()} blocks`); }
     if (m.kind === 'map') { if (m.map.seed !== a.map.seed) a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); }
-    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; if (m.class_state) a.classState = m.class_state; if (m.queued_class_ability !== undefined) a.queuedClass = !!m.queued_class_ability; if (Array.isArray(m.fortresses)) a.fortresses = m.fortresses; }
+    if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; if (m.class_state) a.classState = m.class_state; if (m.queued_class_ability !== undefined) a.queuedClass = !!m.queued_class_ability; if (Array.isArray(m.fortresses)) a.fortresses = m.fortresses; if (m.phylactery_target !== undefined) a.phylTarget = m.phylactery_target || null; if (m.queued_phylactery !== undefined) a.queuedPhyl = !!m.queued_phylactery; }
     if (m.kind === 'peers') for (const p of m.peers || []) a.peers.set(p.peer_id, { ...(a.peers.get(p.peer_id) || {}), ...p });
     if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; a.queuedClass = false;setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
   };
@@ -441,6 +456,12 @@ function startAgent(peerId, port, attempt = 0) {
 const host = await api('/api/launch', { mode: 'host', dimensionName: DIM });
 if (!host.ok) { console.error('host failed', host); process.exit(1); }
 log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
+// PS: partial foreign swarms — FOREIGN_HOLDERS / FOREIGN_REFUSERS reach every peer through the launcher's env (foreign-select.mjs).
+{
+  const fsel = await import('../foreign-select.mjs');
+  const fk = ['FORCE_FOREIGN_EFFECT', 'FORCE_FOREIGN_SKILL', 'FORCE_FOREIGN_CLASS'].filter(k => process.env[k]).map(k => `${k.slice(14).toLowerCase()} ${path.basename(process.env[k])}`);
+  if (fk.length) log(`foreign: ${fk.join(', ')} — holders ${(fsel.foreignHolders() || ['every peer']).join(',')}; refusers ${fsel.foreignRefusers().join(',') || 'none'}; cache ${process.env.CHAOSD6_DEFS_CACHE_ROOT ? `per peer under ${process.env.CHAOSD6_DEFS_CACHE_ROOT}` : 'shared (~/.local/share/chaosd6)'}`);
+}
 // NOGUN=1 reaches every peer through the launcher's env (tools/swarm-run.sh exports it before start-all.mjs).
 log(`gun: ${process.env.NOGUN === '1' ? 'OFF (NOGUN=1) — clock via libp2p/bus clock frames, directory via Door + bus who' : 'on (default)'}`);
 if (FORCED_CLASSES.length > 1 && FORCED_LABELS.length) log(`force-class: ${FORCED_LABELS.map((l, i) => `${l}=${FORCED_CLASSES[i % FORCED_CLASSES.length]}`).join(', ')}${process.env.FORCE_CLASS_MONSTERS === '1' ? ' (+ wild lurkers by label hash)' : ''}`);
@@ -571,6 +592,20 @@ for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir)
   counts[f].bus = bus ? `sent ${bus[3]} rx ${bus[4]} (${bus[1]}/${bus[2]} relays)` : '?';
 }
 console.table(counts);
+// Awake (FORCE_EFFECTS=effect_awake): bot casts / clicked, and the resolver's move lines across every peer log.
+{
+  let units = 0, blds = 0, dropped = 0, fizzled = 0;
+  for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
+    const txt = fs.readFileSync(path.join(dir, f), 'utf8');
+    units += (txt.match(/\] awake: \S+ moves (itself|\S+) to \(/g) || []).length;
+    blds += (txt.match(/\] awake: \S+ moves the .* → \(/g) || []).length;
+    dropped += (txt.match(/\] awake: .* dropped/g) || []).length;
+    fizzled += (txt.match(/cast effect_awake fizzled/g) || []).length;
+  }
+  const casts = agents.reduce((s, a) => s + (a.awakeCasts || 0), 0);
+  if (casts || units || blds) log(`awake: bot casts ${casts} (clicked ${agents.reduce((s, a) => s + (a.awakePicks || 0), 0)}) · unit moves ${units} / building moves ${blds} (lines, all peers) · dropped ${dropped} · fizzled (caster) ${fizzled}`);
+}
 // Manipulator swaps (FORCE_CLASS=class_manipulator): every peer logs `manipulator: <A> forces <B> to swap <old>→<new>`.
 {
   const seen = new Map();   // swap text → number of peer logs that carry it

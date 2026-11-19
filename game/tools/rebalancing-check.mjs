@@ -8,13 +8,15 @@
 //   * self-contained — the verdict depends only on this file and tools/rebalancing-calibration.json
 //     (both sha256-pinned, see `pin`), never on data/*.json or effects.mjs at check time.
 //
-//   node tools/rebalancing-check.mjs check <def.json|effect_id> [--baseline <id|def.json>] [--tolerance 0.2] [--json] [--mc N]
+//   node tools/rebalancing-check.mjs check <def.json|effect_id> [--baseline <id|def.json>] [--tolerance 0.2] [--json] [--mc N] [--libs <dir> | --ref <commit> [--repo <dir>]]
 //   node tools/rebalancing-check.mjs report [--json]          every built-in: value, cost, ratio, verdict
 //   node tools/rebalancing-check.mjs calibrate [--write]      refit the cost curve on the built-ins (writes fit + builtins + known_outliers)
 //   node tools/rebalancing-check.mjs pin [--write <path>]     the validator pin (validator/pin.json for the chaosD6-Effects repo)
 //
 // Import: `import { checkEffect } from './tools/rebalancing-check.mjs'`;
-//   checkEffect(def, { baseline, tolerance, calibration }) → { verdict: ok|nerf|boost|reject, power, ratio, suggestions, stamp, … }
+//   checkEffect(def, { baseline, tolerance, calibration, libs, libShas }) → { verdict: ok|nerf|boost|reject, power, ratio, suggestions, stamp, … }
+//   libs / libShas (1.1.0): the libraries the ref / commit pins (see resolveLibs); stamp.libs = {id: sha256} of the libs bound.
+//   CLI: check … --libs <dir>  (lib/*.json of a checkout)  |  --ref <commit> [--repo <dir>]  (lib/ of a chaosD6-Effects commit)
 //
 // POWER MODEL (unit = one point of life swing). value V = Σ components, each an exact expectation over the
 // pool (ordered caster/defender pairs for contests, casters for point-buys):
@@ -26,7 +28,7 @@
 // cost C (actions) = emissions × (instant ? instant_action_factor : 1) + expected point-buy retries; stat-buy
 //   emissions = round-robin bank until the need is met (exact per caster).
 // curve V̂(C) = a + b·C, least squares over the built-ins (`calibrate`). ratio r = V / V̂(C).
-// TOLERANCE: ±10 % (user ruling 2026-11-16) — calibration policy.tolerance, DEFAULT_TOLERANCE when absent; the band is [0.90, 1.10].
+// TOLERANCE: ±30 % (user ruling 2026-11-18, was ±10 % since 2026-11-16: Awake 1.1.0 at 1.26× must pass) — calibration policy.tolerance, DEFAULT_TOLERANCE when absent; the band is [0.70, 1.30].
 // VERDICT: reject (schema / unknown or unbounded op / r > hard_cap_ratio / r < hard_floor_ratio), nerf (r > 1+tol),
 //   boost (r < 1−tol), ok. With a baseline (explicit, or automatic when the def has the id of / `extends` a built-in)
 //   the band applies to r / r_baseline — a branch is judged against its parent, so an outlier built-in can still be tuned.
@@ -35,8 +37,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const VALIDATOR_VERSION = '1.0.0';
-export const DEFAULT_TOLERANCE = 0.10;   // user ruling 2026-11-16 (was 0.15)
+export const VALIDATOR_VERSION = '1.1.0';   // 1.1.0 (2026-11-18): the audit binds the ref-pinned libs (opts.libs / libShas), stamp.libs
+export const DEFAULT_TOLERANCE = 0.30;   // user ruling 2026-11-18 (was 0.10, before that 0.15)
 export const PIN_FORMAT = 'chaosd6-effects-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
@@ -75,6 +77,46 @@ function libsFor(uses) {
     for (const [k, s] of Object.entries(lib.subs || {})) if (!subs.has(k)) subs.set(k, s);
   }
   return { subs, files };
+}
+// 1.1.0 (2026-11-18): the libraries the audit binds. A foreign effect is priced against the lib versions ITS ref /
+// repo commit pins, not the bundled game/effects-data/lib — else a player could strengthen an effect by editing a lib.
+//   opts.libs     lib objects to bind (array | Map | {id: lib}; e.g. effects-repo.mjs#effectLibFiles({dir, commit}).files,
+//                 or the handshake store's libs for ref.libs). Absent → the bundled libs, exactly as 1.0.0.
+//   opts.libShas  {id: sha256} the ref pins (ref.libs): must name exactly the def's `uses`, and every bound lib must
+//                 hash to it (sha256 of the canonical JSON = effects-repo.mjs#effectLibHash) — else reject.
+// → { source: 'bundled' | 'given', subs, shas: {id: sha256} (sorted, only the used libs), errors }
+export function resolveLibs(def, opts = {}) {
+  const uses = [...new Set(Array.isArray(def?.uses) ? def.uses.filter(u => typeof u === 'string') : [])].sort();
+  const errors = [], shas = {}, subs = new Map();
+  let source = 'bundled', pick;
+  if (opts.libs != null) {
+    source = 'given';
+    const given = new Map();
+    const entries = opts.libs instanceof Map ? [...opts.libs] : Array.isArray(opts.libs) ? opts.libs.map(l => [l?.id, l]) : Object.entries(opts.libs);
+    for (const [k, l] of entries) {
+      if (!isObj(l) || typeof l.id !== 'string') { errors.push(`lib ${k}: not a library object`); continue; }
+      if (k !== l.id) errors.push(`lib ${k}: its id is ${l.id}`);
+      else if (given.has(l.id) && canonicalJson(given.get(l.id)) !== canonicalJson(l)) errors.push(`lib ${l.id}: given twice, differently`);
+      else given.set(l.id, l);
+    }
+    pick = (u) => given.get(u) || null;
+  } else {
+    pick = (u) => { const p = path.join(LIB_DIR, `${u}.json`); return fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, '')) : null; };
+  }
+  for (const u of uses) {
+    const lib = pick(u);
+    if (!lib) { if (source === 'given') errors.push(`lib ${u}: used but not provided`); continue; }
+    if (source === 'given' && DATA_ENGINE?.validateLib) for (const e of DATA_ENGINE.validateLib(lib)) errors.push(`lib ${u}: ${e}`);
+    shas[u] = sha256(canonicalJson(lib));
+    for (const [k, s] of Object.entries(lib.subs || {})) if (!subs.has(k)) subs.set(k, s);
+  }
+  if (opts.libShas != null) {
+    const pinned = isObj(opts.libShas) ? opts.libShas : {};
+    const names = Object.keys(pinned).sort();
+    if (canonicalJson(names) !== canonicalJson(uses)) errors.push(`ref pins libs [${names}] but the definition uses [${uses}]`);
+    for (const u of uses) if (shas[u] && pinned[u] !== undefined && pinned[u] !== shas[u]) errors.push(`lib ${u}: sha256 ${shas[u].slice(0, 12)} ≠ pinned ${String(pinned[u]).slice(0, 12)}`);
+  }
+  return { source, subs, shas, errors };
 }
 function engineHashes() {
   const libs = fs.existsSync(LIB_DIR) ? fs.readdirSync(LIB_DIR).filter(f => f.endsWith('.json')).sort() : [];
@@ -117,7 +159,7 @@ export function computePin(cal = loadCalibration()) {
     policy: { tolerance: cal.policy.tolerance, hard_cap_ratio: cal.policy.hard_cap_ratio, hard_floor_ratio: cal.policy.hard_floor_ratio, audit_slack: cal.policy.audit_slack },
     fit: cal.fit ? { a: cal.fit.a, b: cal.fit.b } : null,
     accept: ['ok'],
-    notes: 'A ref (effect branch) is accepted when its stamp.pin_id equals this pin_id and stamp.verdict is in `accept`. Peers re-run checkEffect on the def and compare stamp.def_sha256 + verdict; a different pin_id means a different validator — re-check, do not trust.',
+    notes: 'A ref (effect branch) is accepted when its stamp.pin_id equals this pin_id and stamp.verdict is in `accept`. Peers re-run checkEffect on the def with the libs the ref pins (ref.libs → opts.libs/libShas) and compare stamp.def_sha256 + stamp.libs + verdict; a different pin_id means a different validator — re-check, do not trust.',
   };
 }
 // A peer holding a pin from the repo: does my running validator match it?
@@ -440,13 +482,15 @@ export function checkEffect(def, opts = {}) {
   const tol = Number.isFinite(opts.tolerance) ? opts.tolerance : (Number.isFinite(cal.policy.tolerance) ? cal.policy.tolerance : DEFAULT_TOLERANCE);
   const n = normalizeDef(def);
   const def_sha256 = sha256(canonicalJson(def));
-  const base = { validator: { version: VALIDATOR_VERSION, pin_id: pin.pin_id }, effect_id: n.id ?? null, def_sha256, tolerance: tol };
-  const stamp = (verdict, ratio) => ({ effect_id: n.id ?? null, def_sha256, pin_id: pin.pin_id, verdict, ratio, tolerance: tol });
+  const L = resolveLibs(def, opts);
+  const base = { validator: { version: VALIDATOR_VERSION, pin_id: pin.pin_id }, effect_id: n.id ?? null, def_sha256, tolerance: tol, libs: { source: L.source, shas: L.shas } };
+  const stamp = (verdict, ratio) => ({ effect_id: n.id ?? null, def_sha256, pin_id: pin.pin_id, libs: L.shas, verdict, ratio, tolerance: tol });
   const errors = validateNorm(n, cal);
   if (errors.length) return { ...base, valid: false, errors, verdict: 'reject', reasons: ['invalid definition'], suggestions: [], stamp: stamp('reject', null) };
+  if (L.errors.length) return { ...base, valid: false, errors: L.errors, verdict: 'reject', reasons: ['libraries refused (not the ones the ref pins, or invalid)'], suggestions: [], stamp: stamp('reject', null) };
   if (!cal.fit) throw new Error('calibration has no fit — run `node tools/rebalancing-check.mjs calibrate --write`');
-  // Logic audit: the program may not do more than the flags it is priced by.
-  const audit = auditLogic(def, n, cal);
+  // Logic audit: the program may not do more than the flags it is priced by — run with the bound libs.
+  const audit = auditLogic(def, n, cal, L.subs);
   if (audit.fatal || audit.exceeds?.length) {
     const why = audit.errors?.length ? audit.errors : audit.exceeds?.length ? audit.exceeds.map(x => `logic exceeds its declared flags — ${x}`) : [audit.why];
     return { ...base, valid: !audit.errors?.length, errors: audit.errors || [], audit, verdict: 'reject', reasons: why, suggestions: [], stamp: stamp('reject', null) };
@@ -649,24 +693,24 @@ function referenceResolver(n) {
     try { return REF.resolveEffect(ctx, cast); } finally { if (had) REF.EFFECT_RULES[n.id] = old; else delete REF.EFFECT_RULES[n.id]; }
   };
 }
-function logicResolver(def) {
-  const { subs } = libsFor(def.uses);
+function logicResolver(def, subs = libsFor(def.uses).subs) {
   const bound = { ...def };
   Object.defineProperty(bound, '$subs', { value: subs, enumerable: false });
   return (ctx, cast) => { try { return DATA_ENGINE.resolveEffectData(bound, ctx, cast); } catch (e) { return { status: 'error', notes: [String(e.message || e)] }; } };
 }
 // Audit: the program may not do MORE than its flags declare (they are what the validator prices) — on any
 // dimension, or by finishing in fewer actions. Doing less is allowed (priced as the flags: the author's loss).
-export function auditLogic(def, n, cal = loadCalibration()) {
+export function auditLogic(def, n, cal = loadCalibration(), subs = null) {
+  subs ||= libsFor(def.uses).subs;   // null → the bundled libs (1.0.0 behaviour)
   const N = cal.policy.audit_scenarios || 48, slack = cal.policy.audit_slack ?? 0.05;
   if (cal.policy.audit === false) return { ran: false, why: 'audit disabled by the calibration policy' };
   if (def.logic === undefined) return { ran: false, why: 'no logic program (flags-only definition: the reference engine runs the flags)' };
   if (!DATA_ENGINE?.resolveEffectData || !REF?.resolveEffect) return { ran: false, why: 'engine missing (effect-engine.mjs / effects.mjs)', fatal: true };
   const errors = [];
-  if (def.schema && DATA_ENGINE.validateEffectDef) errors.push(...DATA_ENGINE.validateEffectDef(def, libsFor(def.uses).subs));
+  if (def.schema && DATA_ENGINE.validateEffectDef) errors.push(...DATA_ENGINE.validateEffectDef(def, subs));
   if (errors.length) return { ran: false, errors, fatal: true, why: 'E1 schema validation failed' };
   const ref = scenarioRun(referenceResolver(n), n, N, cal);
-  const got = scenarioRun(logicResolver(def), n, N, cal);
+  const got = scenarioRun(logicResolver(def, subs), n, N, cal);
   const exceeds = [];
   if (got.errors) exceeds.push(`the program errored / ran out of engine budget in ${got.errors}/${N} scenarios`);
   for (const k of DIMS) if (got.mean[k] > ref.mean[k] * (1 + slack) + slack) exceeds.push(`${k}: program ${got.mean[k]} vs flags ${ref.mean[k]}`);
@@ -675,9 +719,9 @@ export function auditLogic(def, n, cal = loadCalibration()) {
   return { ran: true, N, identical, exceeds, reference: ref, program: got };
 }
 // Informative Monte-Carlo of the analytic model's inputs (not part of the verdict beyond the audit).
-export function monteCarlo(def, N = 240, cal = loadCalibration()) {
+export function monteCarlo(def, N = 240, cal = loadCalibration(), subs = null) {
   const n = normalizeDef(def);
-  if (def.logic !== undefined && DATA_ENGINE?.resolveEffectData) return { engine: 'effect-engine.mjs#resolveEffectData', ...scenarioRun(logicResolver(def), n, N, cal) };
+  if (def.logic !== undefined && DATA_ENGINE?.resolveEffectData) return { engine: 'effect-engine.mjs#resolveEffectData', ...scenarioRun(logicResolver(def, subs || undefined), n, N, cal) };
   if (!REF?.resolveEffect) return { engine: null, error: 'no engine' };
   return { engine: 'effects.mjs#resolveEffect (flags)', ...scenarioRun(referenceResolver(n), n, N, cal) };
 }
@@ -688,7 +732,7 @@ async function cli(argv) {
   const flags = {}; const args = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (a.startsWith('--')) { const k = a.slice(2); const nx = rest[i + 1]; if (nx !== undefined && !nx.startsWith('--') && ['baseline', 'tolerance', 'mc', 'write'].includes(k)) { flags[k] = nx; i++; } else flags[k] = true; }
+    if (a.startsWith('--')) { const k = a.slice(2); const nx = rest[i + 1]; if (nx !== undefined && !nx.startsWith('--') && ['baseline', 'tolerance', 'mc', 'write', 'libs', 'ref', 'repo'].includes(k)) { flags[k] = nx; i++; } else flags[k] = true; }
     else args.push(a);
   }
   const readDef = async (ref) => {
@@ -705,10 +749,21 @@ async function cli(argv) {
     if (flags.tolerance !== undefined) opts.tolerance = Number(flags.tolerance);
     if (typeof flags.baseline === 'string') opts.baseline = fs.existsSync(flags.baseline) ? JSON.parse(fs.readFileSync(flags.baseline, 'utf8')) : flags.baseline;
     if (flags['no-baseline']) opts.baseline = null;
+    // 1.1.0: bind the libs of a checkout dir (--libs) or of a chaosD6-Effects commit (--ref, repo --repo / CHAOSD6_EFFECTS_DIR)
+    if (typeof flags.libs === 'string') {
+      if (!fs.existsSync(flags.libs) || !fs.statSync(flags.libs).isDirectory()) throw new Error(`--libs ${flags.libs}: not a directory`);
+      opts.libs = fs.readdirSync(flags.libs).filter(f => f.endsWith('.json')).sort().map(f => JSON.parse(fs.readFileSync(path.join(flags.libs, f), 'utf8').replace(/^﻿/, '')));
+    } else if (typeof flags.ref === 'string') {
+      const repo = typeof flags.repo === 'string' ? flags.repo : (process.env.CHAOSD6_EFFECTS_DIR || '/home/galt/chaosd6-effects-repo');
+      const { effectLibFiles } = await import(pathToFileURL(path.join(GAME, 'effects-repo.mjs')).href);
+      const lf = await effectLibFiles({ dir: repo, commit: flags.ref });
+      if (lf.errors.length) throw new Error(`--ref ${flags.ref}: lib/ of ${repo} refused: ${lf.errors.map(e => `${e.file}: ${e.error}`).join('; ')}`);
+      opts.libs = lf.files;   // a pre-LR commit (no lib/) → effectLibFiles gives the bundled libs
+    } else if (flags.libs === true || flags.ref === true) throw new Error('--libs <dir> / --ref <commit> need a value');
     const res = checkEffect(def, opts);
-    if (flags.mc) res.monte_carlo = monteCarlo(def, Number(flags.mc) || 240);
+    if (flags.mc) res.monte_carlo = monteCarlo(def, Number(flags.mc) || 240, undefined, opts.libs ? resolveLibs(def, opts).subs : null);
     if (flags.json) { console.log(JSON.stringify(res, null, 2)); return res.verdict === 'reject' ? 1 : 0; }
-    console.log(`${res.effect_id}: VERDICT ${res.verdict.toUpperCase()}  (validator ${VALIDATOR_VERSION}, pin ${res.validator.pin_id.slice(0, 12)})`);
+    console.log(`${res.effect_id}: VERDICT ${res.verdict.toUpperCase()}  (validator ${VALIDATOR_VERSION}, pin ${res.validator.pin_id.slice(0, 12)}, libs ${res.libs.source}${Object.keys(res.libs.shas).length ? ` ${Object.entries(res.libs.shas).map(([k, v]) => `${k}@${v.slice(0, 8)}`).join(' ')}` : ''})`);
     if (!res.valid) { for (const e of res.errors) console.log(`  ✗ ${e}`); return 1; }
     const p = res.power;
     console.log(`  value ${p.value}  cost ${p.cost.actions} actions (emissions ${p.cost.emissions}${p.cost.instant ? ' instant' : ''}, retries ${p.cost.retries})  curve ${p.expected}  ratio ${p.ratio}`);
@@ -743,7 +798,7 @@ async function cli(argv) {
     else process.stdout.write(txt);
     return 0;
   }
-  console.log('usage: node tools/rebalancing-check.mjs check <def.json|effect_id> [--baseline <id|file>] [--no-baseline] [--tolerance t] [--json] [--mc N]\n       | report [--json] | calibrate [--write] | pin [--write <path>]');
+  console.log('usage: node tools/rebalancing-check.mjs check <def.json|effect_id> [--baseline <id|file>] [--no-baseline] [--tolerance t] [--json] [--mc N] [--libs <dir> | --ref <commit> [--repo <dir>]]\n       | report [--json] | calibrate [--write] | pin [--write <path>]');
   return 2;
 }
 
