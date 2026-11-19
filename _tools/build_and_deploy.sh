@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build the Godot Android APK with the Firebase google-services.json baked in,
-# then install it on an attached device via adb.
+# then install it on an attached device via adb. Every build first stages the
+# current game/ code into the phone bundle (game/tools/stage-mobile-bundle.mjs).
 #
 # Usage:
 #   bash _tools/build_and_deploy.sh                  # debug build + install
@@ -105,6 +106,18 @@ if [[ "$MODE" == "release" && $DO_BUILD -eq 1 ]]; then
   sed -i -E "s|^version/code=.*|version/code=${NEW_CODE}|g" "$PRESETS"
   sed -i -E "s|^version/name=.*|version/name=\"${NEW_NAME}\"|g" "$PRESETS"
   echo "[deploy] bumped version: ${CUR_NAME} (code ${CUR_CODE}) -> ${NEW_NAME} (code ${NEW_CODE})"
+fi
+
+# -- 1c. Stage the phone's Node bundle from the current game/ sources ----------
+# The APK ships godot/android/plugins/nodejs_mobile/src/main/assets/nodejs-project as-is; without this step
+# 0.79–0.83 shipped the 11-16 game code (2026-11-19). Syntax-check first so a broken peer never reaches the phone.
+if (( DO_BUILD )); then
+  NODE_BIN="$(command -v node || echo /home/galt/.nvm/versions/node/v22.23.4/bin/node)"
+  for f in peer.mjs mobile-entry.mjs mobile-menu.mjs join-plan.mjs; do
+    "$NODE_BIN" --check "game/$f" || { echo "[deploy] syntax error in game/$f — not building" >&2; exit 1; }
+  done
+  "$NODE_BIN" game/tools/effects-check.mjs | tail -1
+  "$NODE_BIN" game/tools/stage-mobile-bundle.mjs || { echo "[deploy] staging the phone bundle failed — not building" >&2; exit 1; }
 fi
 
 # -- 2. Build -----------------------------------------------------------------
