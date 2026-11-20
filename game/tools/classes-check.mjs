@@ -7,13 +7,13 @@
 //    is on 2026-11-16 (copied verbatim, only the closure names bound to the test world; grep the quoted anchors in
 //    peer.mjs), compared JSON-for-JSON with classHook(...) on a deep copy of the same world.
 // Under CLASS_ENGINE=shadow|data (tools/class-engine-check.mjs runs it that way) the classHook side is the data engine.
-import { CLASS_RULES, CLASSES_IMPLEMENTED, CLASS_NEEDS, PASSIVE_TURN_CLASSES, PEER_ABILITIES, TRAP_POWER as CL_TRAP_POWER, ELEM_TO_STAT as CL_E2S, HOOK_NAMES, classHook, CLASS_ENGINE, classBundleErrors } from '../classes.mjs';
+import { CLASS_RULES, CLASSES_IMPLEMENTED, CLASS_NEEDS, PASSIVE_TURN_CLASSES, ABILITY_REQUESTS, TRAP_POWER as CL_TRAP_POWER, ELEM_TO_STAT as CL_E2S, HOOK_NAMES, classHook, CLASS_ENGINE, classBundleErrors } from '../classes.mjs';
 import { TRAP_POWER, pickBySalt, pointBuy } from '../effects.mjs';
 import { pointBuy as enginePointBuy } from '../effect-engine.mjs';
 import { rogueConfig, clericConfig } from '../class-traps.mjs';
 import { manipulatorConfig, combatHit, attackHit, pickManipTarget } from '../class-manipulator.mjs';
 import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../class-chase.mjs';
-import { animatorConfig, priestConfig, seekerConfig, shrineMade, copyMade } from '../class-world.mjs';
+import { animatorConfig, priestConfig, seekerConfig, shrineMade, copyMade, maxStanding } from '../class-world.mjs';
 import { CLASSES, SKILLS, ELEM_TO_STAT, STATS, genWorld, argsFor, sha256Hex, hexDistance, sideOf as fxSide } from './class-fixtures.mjs';
 import { channelBreaks } from '../channel-rule.mjs';
 import * as CS from '../class-state.mjs';
@@ -60,7 +60,15 @@ eq('local descriptors = peer.mjs CLASS_LOCAL', Object.fromEntries(CLASSES_IMPLEM
 const POST_CASES = ['class_healer', 'class_overlord', 'class_druid', 'class_witch', 'class_avenger', 'class_animator', 'class_priest', 'class_cleric', 'class_alchemist', 'class_ranger', 'class_seeker', 'class_warrior', 'class_necromancer'];
 eq('phase post = the post-pass switch cases', CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].phase === 'post').sort(), [...POST_CASES].sort());
 eq('phase pre = Illusionist', CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].phase === 'pre'), ['class_illusionist']);
-eq('peer-resolved abilities = animator / priest / cleric / seeker / warrior', Object.keys(PEER_ABILITIES).sort(), ['class_animator', 'class_cleric', 'class_priest', 'class_seeker', 'class_warrior']);
+// Phase 3: the map-bound abilities ask the engine (simulate() 'ability requests'); each request = the old config.
+const REQ = {
+  class_animator: (cd) => ({ copy_building: [animatorConfig(cd)] }),
+  class_priest: (cd) => ({ build: [{ ...priestConfig(cd), max_standing: maxStanding(cd) }] }),
+  class_seeker: (cd) => ({ far_trap: [{ ...seekerConfig(cd), max_standing: maxStanding(cd) }] }),
+  class_cleric: (cd) => ({ disable_traps: [{ radius: clericConfig(cd).range }] }),
+  class_warrior: () => ({ step: [{ n: 1 }] }),
+};
+eq('engine requests = copy_building / build / far_trap / disable_traps / step', [...ABILITY_REQUESTS].sort(), ['build', 'copy_building', 'disable_traps', 'far_trap', 'step']);
 eq('every listed hook exists', CLASSES_IMPLEMENTED.flatMap(id => CLASS_RULES[id].hooks.filter(h => !h.startsWith('peer:') && !HOOK_NAMES.includes(h)).map(h => `${id}:${h}`)), []);
 eq('TRAP_POWER = effects.mjs TRAP_POWER', CL_TRAP_POWER, TRAP_POWER);
 eq('ELEM_TO_STAT = data/elements.json stats', CL_E2S, ELEM_TO_STAT);
@@ -554,7 +562,7 @@ for (const id of CLASSES_IMPLEMENTED) {
       const snap = J(args);
       let got, want;
       if (h === 'ability') {
-        if (PEER_ABILITIES[id]) { got = classHook(h, id, ctx, structuredClone(args)); want = null; }
+        if (REQ[id]) { got = classHook(h, id, ctx, structuredClone(args)); want = { used: true, note: '', log: [], mine: [], out: REQ[id](ctx.classData(id) || {}) }; }
         else {
           const res = classHook(h, id, ctx, structuredClone(args));
           got = observedFromHook(res, ctx, id, args.actor);
@@ -585,7 +593,7 @@ for (const id of CLASSES_IMPLEMENTED) {
 }
 console.log(`     ${CLASSES_IMPLEMENTED.length} classes × ${HOOKS_TO_CHECK.length} hooks identical`);
 // both branches of every data-able ability were exercised
-for (const id of CLASSES_IMPLEMENTED.filter(c => ['pre', 'post'].includes(CLASS_RULES[c].phase) && !PEER_ABILITIES[c])) {
+for (const id of CLASSES_IMPLEMENTED.filter(c => ['pre', 'post'].includes(CLASS_RULES[c].phase) && !REQ[c])) {
   const used = exercised[`${id} ability used`] || 0, idle = exercised[`${id} ability idle`] || 0;
   const needIdle = !['class_healer', 'class_illusionist', 'class_necromancer', 'class_alchemist', 'class_druid'].includes(id);   // these always fire (the fixture Library is never empty; CP2: the Druid's failed roll spends the tap — its idle branch is the fail_spends-off oracle)
   eq(`${id}: fixtures exercise the ability (used ${used}, idle ${idle})`, used > 0 && (!needIdle || idle > 0), true, true);

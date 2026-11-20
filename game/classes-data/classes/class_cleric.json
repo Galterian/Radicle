@@ -2,13 +2,13 @@
   "schema": "chaosd6.class/1",
   "id": "class_cleric",
   "name": "Cleric",
-  "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
+  "version": "1.2.0",
+  "source": {"collection":"classes","version":"1.2.0"},
   "data": {"ability_kind":"tap","colors":["elem_vitality","elem_time","elem_space","elem_souls"],"disable_range":3,"passive_building_traps":"to_my_discard","text":"Tap: disable every trap within 3 hexes that is not yours — each laid trap goes to its owner's discard pile; a building's or dungeon's trap is simply gone. Untap by emitting every colour. Passive: when you step onto a building with trap(s), they do not spring (no damage, nothing is cast on you) and their cards go to your discard pile."},
   "flags": {"phase":"post","hooks":["ability","config","step","dungeon_step"]},
   "uses": ["classes_std"],
   "hooks": {
-    "ability": {"engine":"js","impl":"peer.mjs#clericDisableNearby","note":"resolved in simulate() (map geometry, occupancy, the move register) — not separable without changing behaviour"},
+    "ability": {"call":["done","",{"obj":{"disable_traps":[{"obj":{"radius":{"get":[{"call":["cfg_cleric"]},"range"]}}}]}},[]]},
     "config": {"call":["cfg_cleric"]},
     "step": {"obj":{"stealth":false,"trap":{"if":[{"!":{"bool":{"var":"trap"}}},"none",{"or":[{"bool":{"var":"wtrap"}},{"bool":{"var":"building"}}]},"disable","spring"]}}},
     "dungeon_step": {"if":[{"!":{"bool":{"var":"trap"}}},"none","disable"]}

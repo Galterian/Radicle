@@ -62,7 +62,7 @@ import { createSkPeer } from './skills-handshake.mjs';   // S4: foreign (player-
 import { createClPeer, clRefOf } from './classes-handshake.mjs';   // CH: foreign (player-branch) classes by ref (chaosD6-Classes)
 import { isClassSuspended, foreignClassDef } from './classes.mjs';   // CH: a dormant foreign class (classes-handshake.mjs gate); a foreign class's data
 import { SKILLS_IMPLEMENTED, TRANCE, NEGATING_SKILLS, skillHook, ridesOn as skillRidesOn } from './skills.mjs';   // S1: pure skill rules (skills-data/HOOKS.md)
-import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook, builtinClassEntries, classBundleErrors } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md)
+import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook, builtinClassEntries, classBundleErrors, ABILITY_REQUESTS } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md)
 import { channelBreaks } from './channel-rule.mjs';   // CR: the channel break rule (oracle in tools/classes-check.mjs)
 import { effectHook, applyHookRecords } from './effect-hooks.mjs';   // MV: import — channels / traps / holdings / summons as hook records
 import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP, GUN_MEMBER_CORE } from './gun-member.mjs';
@@ -78,7 +78,6 @@ import { effectResultsOf, plannedLossResults, naturalResults } from './effect-re
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
 import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, angerForcedTarget, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats } from './natural-perms.mjs';
 import { animatorConfig, priestConfig, seekerConfig, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './class-world.mjs';
-import { maxStanding } from './class-world.mjs';   // CR: import_world — Priest one Shrine / Seeker one trap standing (2026-11-17)
 import { awakePlan, AWAKE_CONFIG } from './awake.mjs';
 import { mergeLedger, ledgerUnits, ledgerFor } from './js/world-ledger.js';
 const awakeLast = new Map();   // caster → the Awake plan of its last real (non-quiet) resolution (∀ lend)
@@ -4120,12 +4119,20 @@ async function doResolution() {
   const foesNearby = (id, range) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && enemyOf(id, o) && distBetween(id, o) <= range && !hasPerm(o, 'effect_invisibility')).sort();
   const useAbility = (r, note) => { classAbilityOut.used.push({ actor: r.actor, class_id: r.classAbility.id }); if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${r.classAbility.id}: ${note}`); };
   // C1 ability: the hook's {used, note, log, mine, out} → classAbilityOut + log (null = resolved here in peer.mjs).
-  const classAbility = (r, ab) => {
+  // Phase 3: `requests` (the post pass's ABILITY_REQUEST_FNS) resolves the engine requests of `out` — each request
+  // decides the use itself; a pre-pass ability may not ask for one (logged, dropped).
+  const classAbility = (r, ab, requests = null) => {
     const res = classHook('ability', ab.id, clCtx, { actor: r.actor, ab, salt: r.salt, moved: !!moveCodeOf(r) });   // CP: healer_moved — Healer unmoved_only (pick 2026-11-19 #4 a)
     if (!res) return false;
-    for (const [k, l] of Object.entries(res.out)) classAbilityOut[k].push(...l);
+    const reqs = Object.keys(res.out).filter(k => ABILITY_REQUESTS.includes(k)).sort();
+    for (const [k, l] of Object.entries(res.out)) if (!ABILITY_REQUESTS.includes(k)) classAbilityOut[k].push(...l);
     for (const s of res.log) log(s);
     if (r.actor === PEER_ID_STRING) for (const s of res.mine) log(s);
+    if (reqs.length) {
+      if (!requests) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${ab.id}: requests ${reqs.join(', ')} only resolve in the post pass — dropped`); return true; }
+      for (const k of reqs) for (const rq of res.out[k]) requests[k](r, ab, rq);
+      return true;
+    }
     if (res.used) useAbility(r, res.note);
     return true;
   };
@@ -4611,60 +4618,13 @@ async function doResolution() {
   const buildClaimed = new Set();
   const buildSiteFree = (t) => hexWalkableAt(MAP_SEED, t.q, t.r) && !buildingFeatureAt(MAP_SEED, t.q, t.r) && !obstacleAt(t.q, t.r) && !labyrinthBlocks(t.q, t.r)
     && !occupantAt(t.q, t.r) && !buildClaimed.has(`${t.q},${t.r}`);
-  const createBuilding = (r, me, { made, range, picked, why }) => {
+  const createBuilding = (r, me, { made, range, picked, why, max_standing = null }) => {
     const v = view.get(me), here = { q: v.tile_q, r: v.tile_r };
     const site = buildSite({ here, range, picked, okTile: (t) => buildSiteFree(t), salt: `${r.salt || ''}:${why}:${hg.action}`, sha: sha256Hex });
     if (!site) return null;
     buildClaimed.add(`${site.dest.q},${site.dest.r}`);
-    classAbilityOut.builds.push({ by: me, q: site.dest.q, r: site.dest.r, made, why, random: site.random });
+    classAbilityOut.builds.push({ by: me, q: site.dest.q, r: site.dest.r, made, why, random: site.random, ...(max_standing ? { max_standing } : {}) });
     return site;
-  };
-  // Animator (user ruling 2026-11-14, "create a new one, the same as the nearby building, on a nearby location
-  // chosen by you next to you (if not chosen a random location near you)"): the building nearest to me within
-  // `near` (class data, 2; distance, then q, r; a broken fortress no longer counts) is copied — same look, same
-  // bonus — onto the hex next to me I picked (`place_range` 1), else a random free hex next to me (salt hash).
-  // No building near / no free hex: nothing happens and the ability stays ready (untapped).
-  const animatorCopy = (r, me, tile) => {
-    const { near, place } = animatorConfig(data.classes.class_animator?.data);
-    const v = view.get(me), here = { q: v.tile_q, r: v.tile_r };
-    const cands = discAround(here, near).map(h => ({ ...h, f: buildingFeatureAt(MAP_SEED, h.q, h.r) }))
-      .filter(h => isBuildingFeature(h.f) && !(fortressAt(MAP_SEED, h.q, h.r) && !fortressAt(MAP_SEED, h.q, h.r, worldEditsNow)));
-    const src = nearestBuilding(cands, here, near);
-    if (!src) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class animator: no building within ${near} hexes — nothing to copy, the ability stays ready`); return false; }
-    const site = createBuilding(r, me, { made: copyMade(src.f, src.q, src.r, 'class_animator'), range: place, picked: tile, why: 'animator' });
-    if (!site) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class animator: no free hex within ${place} of me for the copy of the ${src.f.label} — the ability stays ready`); return false; }
-    useAbility(r, `a copy of the ${src.f.label} at (${src.q},${src.r}) rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex next to me' : ''}`);
-    return true;
-  };
-  // Priest (user rework 2026-11-14, "generate a Shrine (the building that heals you +1 HP at the end of the 3rd
-  // round) on target unoccupied location nearby"): once per turn, a Shrine (power `mend` only — +1 life at the
-  // end of the turn's 3rd action, never above the maximum; no stat bonus) rises on the hex I picked within
-  // `place_range` (class data, 2), else on a random free hex there. No free hex: the ability stays ready.
-  const priestShrine = (r, me, tile) => {
-    const cfg = priestConfig(data.classes.class_priest?.data);
-    const sprite = catalogSpriteFor(new RegExp(`^${cfg.label.replace(/[^\w ]/g, '.')}$`, 'i')) || catalogSpriteFor(/shrine/i);
-    const site = createBuilding(r, me, { made: shrineMade(cfg, sprite, 'class_priest'), range: cfg.place, picked: tile, why: 'priest' });
-    if (!site) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class priest: no free hex within ${cfg.place} of me for a ${cfg.label} — the ability stays ready`); return false; }
-    useAbility(r, `a ${cfg.label} rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex near me' : ''}`);
-    return true;
-  };
-  // Seeker (user ruling 2026-11-14): the effect card I picked from my hand becomes a trap building on a random
-  // walkable hex `distance` [20, 30] hexes away (class data; pure map functions, so unrevealed land counts; no
-  // unit, obstacle, labyrinth wall, fortress or other trap there) — hashed from the reveal salt, the same on every
-  // peer. The card is held by the trap (my card, owner = me) and springs on whoever steps there ('enter',
-  // damage like the other class traps). I see that hex and `vision.radius` (5) around it until the end of my next
-  // turn (`trap.vision` → grantSeekerVision when I lay it).
-  const seekerPlant = (r, me, ab, here) => {
-    const { min: dmin, max: dmax, radius: vr, turns: vturns } = seekerConfig(data.classes.class_seeker?.data);
-    if (!ab.attach?.effect_id || !Array.isArray(ab.attach.elements) || !ab.attach.elements.length) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class seeker: pick an effect card from my hand first`); return false; }
-    const key = ab.attach.effect_id;
-    const occupied = new Set([...view.keys()].filter(id => lifeOf(id) > 0).map(id => { const t = postTile(id); return t ? `${t.tile_q},${t.tile_r}` : ''; }));
-    const pick = tileInRing(here, { min: dmin, max: dmax, seed: MAP_SEED, salt: `${r.salt || ''}:seeker:${hg.action}`, occupied,
-      isBlocked: (q, rr) => !hexWalkableAt(MAP_SEED, q, rr) || !!obstacleAt(q, rr) || labyrinthBlocks(q, rr) || allTraps.some(t => t.q === q && t.r === rr) || classAbilityOut.traps.some(t => t.q === q && t.r === rr) });
-    if (!pick) { useAbility(r, `${ab.attach.name || key} finds no walkable hex ${dmin}–${dmax} hexes away`); return false; }
-    classAbilityOut.traps.push({ by: me, q: pick.q, r: pick.r, effect_id: key, elements: [...ab.attach.elements], card_id: ab.attach.card_id || null, library: true, power: TRAP_POWER, trigger: 'enter', mode: 'damage', holder: null, vision: { radius: vr, until_turn: hg.turn + vturns } });
-    useAbility(r, `${ab.attach.name || key} lies as a trap building at (${pick.q},${pick.r}), ${hexDist(here, pick)} hexes away — in my sight (radius ${vr}) until the end of turn ${hg.turn + vturns}`);
-    return true;
   };
   const libraryCardFor = (salt) => { const lib = effCtx.library(); return lib.length ? lib[parseInt(sha256Hex(salt).slice(0, 8), 16) % lib.length] : null; };
   // ---- Rogue / Cleric trap helpers (user rulings 2026-11-14; pure parts in class-traps.mjs) ----
@@ -4694,54 +4654,94 @@ async function doResolution() {
     if (cleric === PEER_ID_STRING || tp.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] cleric ${cleric.slice(0, 8)} ${mode}: ${tp.owner === 'world' ? (tp.dungeon ? 'dungeon' : 'building') : tp.owner.slice(0, 8)} trap ${tp.effect_id} at (${tp.q},${tp.r}) disabled → ${route.to ? `${route.to.slice(0, 8)}'s discard pile` : 'gone'}`);
     return `${tp.effect_id}@${tp.q},${tp.r}`;
   };
-  const clericDisableNearby = (me, here) => {
-    const R = clericConfig(data.classes.class_cleric?.data).range;
+  const disableTrapsNear = (me, here, R) => {
     const laid = trapsInRange(allTraps.filter(tp => tp.owner !== me && !trapGone.has(tp.id) && !spentIds.has(`trap:${tp.id}`)), here, R, hexD);
     const world = trapsInRange(hexesWithin(here, R).flatMap(h => worldTrapsOn(h.q, h.r)), here, R, hexD);
     return [...laid, ...world].map(tp => disableTrap(tp, me, 'active'));
   };
+  // ---- Engine-resolved ability requests (class isolation phase 3, 2026-11-20; user ruling #1: a class chooses from a
+  // fixed set of engine placement / ability results). A class program returns one in its ability `out` (class-engine.mjs
+  // ABILITY_REQUESTS) and gives only the numbers (its data); the engine does the geometry, occupancy and the move
+  // register exactly as the class code these replace (Animator / Priest / Seeker / Cleric / Warrior, user rulings
+  // 2026-11-14). A request that finds nothing leaves the ability ready (no use) — except far_trap finding no hex.
+  //   copy_building {near, place}  the building nearest to me within `near` (distance, q, r; a broken fortress no longer
+  //                    counts) is copied — same look, same bonus — onto the hex I picked within `place`, else a random
+  //                    free one (salt hash). Nothing near / no free hex → stays ready.
+  //   build {label, power, heal, place, max_standing}  a building of that power (mend: +heal life at the end of the
+  //                    turn's 3rd action, never above the maximum; no stat bonus) on the picked / a random free hex within
+  //                    `place`; at most max_standing of mine stand (the oldest go). No free hex → stays ready.
+  //   far_trap {min, max, radius, turns, max_standing}  the effect card I attached becomes a trap building on a random
+  //                    walkable hex min..max away (pure map functions, so unrevealed land counts; no unit, obstacle,
+  //                    labyrinth wall, fortress or other trap there), hashed from the reveal salt; it springs on whoever
+  //                    steps there ('enter', damage); I see `radius` around it until the end of turn + turns. No card →
+  //                    stays ready; no hex → the use is spent, nothing laid.
+  //   disable_traps {radius}  every trap within radius that is not mine is disabled ('active': a laid trap's card to its
+  //                    owner's discard pile, a building's / dungeon's trap simply gone). None → stays ready.
+  //   step {n}         the adjacent ally I pointed at (else me) steps n hexes toward the picked tile, when that unit has
+  //                    not moved this action and the hex is free (no unit, obstacle, labyrinth wall). Otherwise no use.
+  const clsShort = (id) => String(id).replace(/^class_/, '');
+  const clsName = (id) => data.classes[id]?.name || clsShort(id);
+  const reqInt = (v, d, lo = 1) => (Number.isInteger(v) && v >= lo ? v : d);
+  const mineLog = (me, cls, s) => { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${clsShort(cls)}: ${s}`); };
+  const ABILITY_REQUEST_FNS = {
+    copy_building: (r, ab, rq) => {
+      const me = r.actor, cls = ab.id, near = reqInt(rq.near, 2), place = reqInt(rq.place, 1);
+      const v = view.get(me), here = { q: v.tile_q, r: v.tile_r };
+      const cands = discAround(here, near).map(h => ({ ...h, f: buildingFeatureAt(MAP_SEED, h.q, h.r) }))
+        .filter(h => isBuildingFeature(h.f) && !(fortressAt(MAP_SEED, h.q, h.r) && !fortressAt(MAP_SEED, h.q, h.r, worldEditsNow)));
+      const src = nearestBuilding(cands, here, near);
+      if (!src) return mineLog(me, cls, `no building within ${near} hexes — nothing to copy, the ability stays ready`);
+      const site = createBuilding(r, me, { made: copyMade(src.f, src.q, src.r, cls), range: place, picked: abilityTile(ab), why: clsShort(cls) });
+      if (!site) return mineLog(me, cls, `no free hex within ${place} of me for the copy of the ${src.f.label} — the ability stays ready`);
+      useAbility(r, `a copy of the ${src.f.label} at (${src.q},${src.r}) rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex next to me' : ''}`);
+    },
+    build: (r, ab, rq) => {
+      const me = r.actor, cls = ab.id;
+      const cfg = { label: typeof rq.label === 'string' && rq.label ? rq.label : 'Shrine', power: typeof rq.power === 'string' && rq.power ? rq.power : 'mend', heal: reqInt(rq.heal, 1), place: reqInt(rq.place, 2) };
+      const sprite = catalogSpriteFor(new RegExp(`^${cfg.label.replace(/[^\w ]/g, '.')}$`, 'i')) || catalogSpriteFor(/shrine/i);
+      const site = createBuilding(r, me, { made: shrineMade(cfg, sprite, cls, clsName(cls)), range: cfg.place, picked: abilityTile(ab), why: clsShort(cls), max_standing: reqInt(rq.max_standing, null) });
+      if (!site) return mineLog(me, cls, `no free hex within ${cfg.place} of me for a ${cfg.label} — the ability stays ready`);
+      useAbility(r, `a ${cfg.label} rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex near me' : ''}`);
+    },
+    far_trap: (r, ab, rq) => {
+      const me = r.actor, cls = ab.id, v = view.get(me), here = { q: v.tile_q, r: v.tile_r };
+      const pair = Number.isInteger(rq.min) && Number.isInteger(rq.max) && rq.min >= 1 && rq.min <= rq.max;
+      const dmin = pair ? rq.min : 20, dmax = pair ? rq.max : 30, vr = reqInt(rq.radius, 5, 0), vturns = reqInt(rq.turns, 1, 0);
+      if (!ab.attach?.effect_id || !Array.isArray(ab.attach.elements) || !ab.attach.elements.length) return mineLog(me, cls, 'pick an effect card from my hand first');
+      const key = ab.attach.effect_id;
+      const occupied = new Set([...view.keys()].filter(id => lifeOf(id) > 0).map(id => { const t = postTile(id); return t ? `${t.tile_q},${t.tile_r}` : ''; }));
+      const pick = tileInRing(here, { min: dmin, max: dmax, seed: MAP_SEED, salt: `${r.salt || ''}:${clsShort(cls)}:${hg.action}`, occupied,
+        isBlocked: (q, rr) => !hexWalkableAt(MAP_SEED, q, rr) || !!obstacleAt(q, rr) || labyrinthBlocks(q, rr) || allTraps.some(t => t.q === q && t.r === rr) || classAbilityOut.traps.some(t => t.q === q && t.r === rr) });
+      if (!pick) { useAbility(r, `${ab.attach.name || key} finds no walkable hex ${dmin}–${dmax} hexes away`); return; }
+      const ms = reqInt(rq.max_standing, null);
+      classAbilityOut.traps.push({ by: me, q: pick.q, r: pick.r, effect_id: key, elements: [...ab.attach.elements], card_id: ab.attach.card_id || null, library: true, power: TRAP_POWER, trigger: 'enter', mode: 'damage', holder: null, vision: { radius: vr, until_turn: hg.turn + vturns }, made_by: cls, ...(ms ? { max_standing: ms } : {}) });
+      useAbility(r, `${ab.attach.name || key} lies as a trap building at (${pick.q},${pick.r}), ${hexDist(here, pick)} hexes away — in my sight (radius ${vr}) until the end of turn ${hg.turn + vturns}`);
+    },
+    disable_traps: (r, ab, rq) => {
+      const me = r.actor, cls = ab.id, v = view.get(me), here = { q: v.tile_q, r: v.tile_r }, R = reqInt(rq.radius, 3, 0);
+      const got = disableTrapsNear(me, here, R);
+      if (!got.length) return mineLog(me, cls, `no trap within ${R} hexes — the ability stays ready`);
+      useAbility(r, `${got.length} trap(s) disabled: ${got.join(', ')}`);
+    },
+    step: (r, ab, rq) => {
+      const me = r.actor, cls = ab.id, tile = abilityTile(ab), peer = abilityPeer(ab), n = reqInt(rq.n, 1);
+      const nearAlly = peer && peer !== me && lifeOf(peer) > 0 && distBetween(me, peer) <= 1 && !enemyOf(me, peer) ? peer : null;
+      const who = nearAlly || me;
+      if (!tile || nextTiles.has(who)) return mineLog(me, cls, `${who === me ? 'I' : who.slice(0, 8)} already moved / no tile picked`);
+      const wv = view.get(who);
+      const dest = stepsAlong(who, { q: wv.tile_q, r: wv.tile_r }, { q: tile.q, r: tile.r }, n);
+      const takenBy = [...view.values()].some(o => o?.peer_id && o.peer_id !== who && lifeOf(o.peer_id) > 0 && (() => { const t = postTile(o.peer_id); return t.tile_q === dest.q && t.tile_r === dest.r; })()) || [...nextTiles.values()].some(t => t.q === dest.q && t.r === dest.r);
+      if ((dest.q === wv.tile_q && dest.r === wv.tile_r) || takenBy || obstacleBlocks(who, dest.q, dest.r) || labyrinthBlocks(dest.q, dest.r)) return mineLog(me, cls, `no free step toward (${tile.q},${tile.r})`);
+      nextTiles.set(who, dest); journeyResults.set(who, { outcome: 'complete', q: dest.q, r: dest.r, action: clsShort(cls) });
+      classAbilityOut.moves.push({ who, by: me, q: dest.q, r: dest.r });
+      useAbility(r, `${who === me ? 'I step' : `${who.slice(0, 8)} steps`} to (${dest.q},${dest.r})`);
+    },
+  };
+  // Post pass (phase 'post' abilities, sorted reveals): every one through its class's ability hook (C1); the
+  // map-bound ones answer with the requests above.
   for (const r of revealsThisTurn) {
     const ab = abilityOf(r);
-    if (!ab || ['class_elementalist', 'class_illusionist', 'class_rogue'].includes(ab.id)) continue;
-    // C1 ability (phase post): Healer, Overlord, Druid, Witch, Avenger, Alchemist, Ranger, Necromancer resolve in
-    // classes.mjs; the hook answers null for the map-bound ones below (Animator, Priest, Cleric, Seeker, Warrior).
-    if (CLASS_RULES[ab.id]?.phase === 'post' && classAbility(r, ab)) continue;
-    const me = r.actor, v = view.get(me);
-    const tile = abilityTile(ab), peer = abilityPeer(ab);
-    const nearAlly = peer && peer !== me && lifeOf(peer) > 0 && distBetween(me, peer) <= 1 && !enemyOf(me, peer) ? peer : null;
-    const nearEnemy = peer && peer !== me && lifeOf(peer) > 0 && distBetween(me, peer) <= 1 && enemyOf(me, peer) ? peer : null;
-    const stat = ['vitality', 'world', 'matter', 'will'].includes(ab.stat) ? ab.stat : 'vitality';
-    const here = { q: v.tile_q, r: v.tile_r };
-    const spot = tile && tileNear(me, tile) ? { q: tile.q, r: tile.r } : here;
-    // (Healer, Overlord, Druid, Witch, Avenger: classes.mjs ability hook, C1 — see classes-data/HOOKS.md)
-    switch (ab.id) {
-      case 'class_animator': { animatorCopy(r, me, tile); break; }
-      case 'class_priest': { priestShrine(r, me, tile); break; }
-      case 'class_cleric': {
-        // User ruling 2026-11-14: every trap within disable_range (class data, 3) that is not mine is disabled —
-        // a laid trap's card goes to its OWNER's discard pile, a building / dungeon trap is just gone.
-        const got = clericDisableNearby(me, here);
-        if (!got.length) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class cleric: no trap within ${clericConfig(data.classes.class_cleric?.data).range} hexes — the ability stays ready`); break; }
-        useAbility(r, `${got.length} trap(s) disabled: ${got.join(', ')}`); break;
-      }
-      // (Alchemist, Ranger: classes.mjs ability hook, C1)
-      case 'class_seeker': {
-        seekerPlant(r, me, ab, here); break;
-      }
-      case 'class_warrior': {
-        const who = nearAlly || me;
-        if (!tile || nextTiles.has(who)) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class warrior: ${who === me ? 'I' : who.slice(0, 8)} already moved / no tile picked`); break; }
-        const wv = view.get(who);
-        const dest = stepsAlong(who, { q: wv.tile_q, r: wv.tile_r }, { q: tile.q, r: tile.r }, 1);
-        const takenBy = [...view.values()].some(o => o?.peer_id && o.peer_id !== who && lifeOf(o.peer_id) > 0 && (() => { const t = postTile(o.peer_id); return t.tile_q === dest.q && t.tile_r === dest.r; })()) || [...nextTiles.values()].some(t => t.q === dest.q && t.r === dest.r);
-        if ((dest.q === wv.tile_q && dest.r === wv.tile_r) || takenBy || obstacleBlocks(who, dest.q, dest.r) || labyrinthBlocks(dest.q, dest.r)) { if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] class warrior: no free step toward (${tile.q},${tile.r})`); break; }
-        nextTiles.set(who, dest); journeyResults.set(who, { outcome: 'complete', q: dest.q, r: dest.r, action: 'warrior' });
-        classAbilityOut.moves.push({ who, by: me, q: dest.q, r: dest.r });
-        useAbility(r, `${who === me ? 'I step' : `${who.slice(0, 8)} steps`} to (${dest.q},${dest.r})`); break;
-      }
-      // (Necromancer: classes.mjs ability hook, C1; no corpse in reach → revives {who: null}, the archived creature is judged when applying)
-      default: break;
-    }
+    if (ab && CLASS_RULES[ab.id]?.phase === 'post') classAbility(r, ab, ABILITY_REQUEST_FNS);
   }
   for (const e of elementalistPending) {
     if (!effectOutcomes.some(x => x.actor === e.actor && !x.bonus && !x.channel && x.oc.status === 'done' && (x.oc.hits || []).length)) continue;
@@ -4767,7 +4767,7 @@ async function doResolution() {
   }
   // Prophet (user rework #2 2026-11-14) is a look, not an outcome: requestHand() at its first contact of the turn,
   // on the Prophet's peer after the resolution (doResolution), outside the state hash. Avenger: the lure case above.
-  // Priest (user rework 2026-11-14 #2): a Shrine, an active once-per-turn ability (case 'class_priest' above).
+  // Priest (user rework 2026-11-14 #2): a Shrine — the `build` ability request above (phase 3).
   // Rogue (passive, user ruling 2026-11-14 — supersedes 2026-11-12's single charge): two separate charges per
   // turn (class data trap_dodges_per_turn / threat_dodges_per_turn, 1 each).
   //  - trap charge: a step that would spring a trap (a laid enter-trap, a building's hidden one; an unexplored
@@ -5298,18 +5298,19 @@ async function doResolution() {
   }
   // Alchemist / Seeker (Library copies) / Ranger (a card of mine): traps laid by my class.
   for (const tp of classAbilityOut.traps) if (tp.by === PEER_ID_STRING) {
-    // CR: seeker — at most max_standing (1) planted Seeker trap stands (2026-11-17): the oldest go, their cards to my discard
-    const seekMax = tp.vision ? maxStanding(data.classes.class_seeker?.data) : null;
+    // CR: seeker — at most max_standing (1) planted Seeker trap stands (2026-11-17): the oldest go, their cards to my discard.
+    // Phase 3: the limit rides on the record (far_trap max_standing), counted per class (made_by).
+    const seekMax = Number.isInteger(tp.max_standing) && tp.max_standing >= 1 && tp.made_by ? tp.max_standing : null;
     if (seekMax) {
-      const mine = entity.traps.filter(t => t.seeker);
+      const mine = entity.traps.filter(t => t.made_by === tp.made_by);
       for (const old of mine.slice(0, Math.max(0, mine.length - (seekMax - 1)))) {
         entity.traps = entity.traps.filter(t => t !== old);
         if (old.card_id) releaseHeldCard(old.card_id, true);
-        console.log(`[${PEER_LABEL}] class seeker: my older trap ${old.effect_id} at (${old.q},${old.r}) is lifted — one Seeker trap at a time`);
+        console.log(`[${PEER_LABEL}] class ${String(tp.made_by).replace(/^class_/, '')}: my older trap ${old.effect_id} at (${old.q},${old.r}) is lifted — ${seekMax === 1 ? 'one' : seekMax} ${data.classes[tp.made_by]?.name || tp.made_by} trap${seekMax === 1 ? '' : 's'} at a time`);
       }
     }
     const id = `${PEER_ID_STRING.slice(-8)}#${hg.action}#ctrap${entity.traps.length}`;
-    entity.traps.push({ id, q: tp.q, r: tp.r, effect_id: tp.effect_id, elements: tp.elements, card_id: tp.card_id, power: tp.power, trigger: tp.trigger, mode: tp.mode, holder: tp.holder, ...(tp.library ? { library: true } : {}), ...(seekMax ? { seeker: true } : {}) });
+    entity.traps.push({ id, q: tp.q, r: tp.r, effect_id: tp.effect_id, elements: tp.elements, card_id: tp.card_id, power: tp.power, trigger: tp.trigger, mode: tp.mode, holder: tp.holder, ...(tp.library ? { library: true } : {}), ...(seekMax ? { made_by: tp.made_by } : {}) });
     if (tp.card_id) holdCard(tp.card_id);
     console.log(`[${PEER_LABEL}] class trap ${tp.effect_id} laid at (${tp.q},${tp.r}) [${tp.trigger}/${tp.mode}${tp.library ? '/library' : ''}]`);
     _autosave?.markDirty();
@@ -5324,14 +5325,15 @@ async function doResolution() {
     if (b.by === PEER_ID_STRING && entity.worldEdits.some(e => e.id === id)) continue;
     console.log(`[${PEER_LABEL}] building made: ${b.made.label} at (${b.q},${b.r}) by ${b.by.slice(0, 14)} (${b.why}${b.made.copy_of ? `, copy of (${b.made.copy_of.q},${b.made.copy_of.r})` : ''}${b.random ? ', random hex' : ', picked hex'})`);
     if (b.by !== PEER_ID_STRING) continue;
-    // CR: priest — one Shrine per Priest at a time (2026-11-17): my older Shrines become tombstones
-    const shrineMax = b.why === 'priest' ? maxStanding(data.classes.class_priest?.data) : null;
+    // CR: priest — one Shrine per Priest at a time (2026-11-17): my older Shrines become tombstones.
+    // Phase 3: the limit rides on the record (build max_standing), counted per class (made.made_by).
+    const shrineMax = Number.isInteger(b.max_standing) && b.max_standing >= 1 ? b.max_standing : null;
     if (shrineMax) {
-      const mine = entity.worldEdits.filter(e => !e.gone && e.made?.made_by === 'class_priest' && e.id !== id);
+      const mine = entity.worldEdits.filter(e => !e.gone && e.made?.made_by === b.made.made_by && e.id !== id);
       for (const old of mine.slice(0, Math.max(0, mine.length - (shrineMax - 1)))) {
         entity.worldEdits = entity.worldEdits.filter(e => e !== old);
         entity.worldEdits.push({ id: old.id, q: old.q, r: old.r, gone: true, at: hg.action });
-        console.log(`[${PEER_LABEL}] class priest: my older ${old.made?.label || 'Shrine'} at (${old.q},${old.r}) is gone — one Shrine at a time`);
+        console.log(`[${PEER_LABEL}] class ${b.why}: my older ${old.made?.label || 'Shrine'} at (${old.q},${old.r}) is gone — ${shrineMax === 1 ? `one ${b.made.label}` : `${shrineMax} of them`} at a time`);
       }
     }
     entity.worldEdits.push({ id, q: b.q, r: b.r, made: b.made, at: hg.action });
@@ -6661,7 +6663,7 @@ async function receiveForeignGift(g, sender) {
 // Vision only — nothing the resolver reads.
 function grantSeekerVision(tp) {
   revealAround(tp.q, tp.r).catch(e => console.warn(`[${PEER_LABEL}] seeker reveal failed: ${e.message}`));
-  const grant = { kind: 'vision-grant', q: tp.q, r: tp.r, radius: tp.vision.radius, until_turn: tp.vision.until_turn, from_name: 'Seeker', reason: `your ${data.effects[tp.effect_id]?.name || tp.effect_id} trap` };
+  const grant = { kind: 'vision-grant', q: tp.q, r: tp.r, radius: tp.vision.radius, until_turn: tp.vision.until_turn, from_name: data.classes[tp.made_by]?.name || 'Seeker', reason: `your ${data.effects[tp.effect_id]?.name || tp.effect_id} trap` };
   visionGrants.push(grant);
   broadcastUI(grant);
   console.log(`[${PEER_LABEL}] seeker vision: (${tp.q},${tp.r}) radius ${grant.radius} until the end of turn ${grant.until_turn}`);

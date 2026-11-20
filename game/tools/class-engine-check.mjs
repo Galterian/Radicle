@@ -43,17 +43,17 @@ eq('CLASSES_IMPLEMENTED = data/classes.json', [...CL.CLASSES_IMPLEMENTED].sort()
     const want = CL.CLASS_RULES[id].hooks.filter(h => !h.startsWith('peer:')).sort();
     const own = Object.keys(d.hooks).filter(h => !CE.HOOK_SPECS[h].std || want.includes(h)).sort();
     if (J(own) !== J(want)) hooks.push(`${id}: ${own} vs ${want}`);
-    for (const [h, p] of Object.entries(d.hooks)) if (CE.isJsMarker(p) && !(h === 'ability' && CL.PEER_ABILITIES[id] && p.impl === `peer.mjs#${CL.PEER_ABILITIES[id]}`)) markers.push(`${id}.${h}`);
+    for (const [h, p] of Object.entries(d.hooks)) if (CE.isJsMarker(p)) markers.push(`${id}.${h}`);   // phase 3: none left
     const k = Object.keys(d).sort().join(',');
     if (k !== 'data,flags,hooks,id,name,schema,source,uses,version') keys.push(`${id}: ${k}`);
   }
   eq('name / version / data = the active data/classes.json version', meta, []);
   eq('flags = classes.mjs CLASS_RULES', flags, []);
   eq('hooks = the class\'s CLASS_RULES hooks (peer: sites excluded)', hooks, []);
-  eq('JS markers only on the peer-resolved abilities (animator, priest, cleric, seeker, warrior)', markers, []);
+  eq('no JS markers (phase 3: the map-bound abilities are engine requests)', markers, []);
   eq('definition keys', keys, []);
   eq('every built-in validates (as built-in)', [...B.defs.values()].flatMap(d => CL.validateClassDef(d)), []);
-  eq('the peer-resolved ones do NOT validate as foreign', Object.keys(CL.PEER_ABILITIES).map(id => CE.validateClassDef(B.defs.get(id), { builtin: false }).some(e => /built-in classes only/.test(e))), Object.keys(CL.PEER_ABILITIES).map(() => true));
+  eq('every built-in also validates as a foreign class (pure data)', [...B.defs.values()].flatMap(d => CE.validateClassDef(d, { builtin: false }).map(e => `${d.id}: ${e}`)), []);
 }
 
 // ---- 2. identity -------------------------------------------------------------------------------------------------
@@ -114,7 +114,9 @@ console.log('-- 4. foreign classes');
   const healer = JSON.parse(J(B.defs.get('class_healer')));
   const mender = { ...healer, id: 'class_mender', name: 'Mender', version: '0.1.0', source: { collection: 'classes', version: '0.1.0', branch: 'players/test' } };
   throws('a built-in id cannot be registered', () => CL.registerForeignClass('k0', healer), /built-in/);
-  throws('a foreign class with a JS marker is refused', () => CL.registerForeignClass('k1', { ...JSON.parse(J(B.defs.get('class_priest'))), id: 'class_shrine_keeper' }), /built-in classes only/);
+  // Phase 3: no built-in carries a JS marker any more — the refused one is made up here.
+  { const pr = JSON.parse(J(B.defs.get('class_priest'))); pr.hooks.ability = { engine: 'js', impl: 'peer.mjs#priestShrine' };
+    throws('a foreign class with a JS marker is refused', () => CL.registerForeignClass('k1', { ...pr, id: 'class_shrine_keeper' }), /built-in classes only/); }
   const def = CL.registerForeignClass('players/test:class_mender', mender);
   eq('registered: isForeignClassId / foreignClassDef by key and id', [CL.isForeignClassId('class_mender'), CL.foreignClassDef('players/test:class_mender') === def, CL.foreignClassDef('class_mender') === def], [true, true, true]);
   eq('its flags join CLASS_RULES, not CLASSES_IMPLEMENTED', [J(CL.CLASS_RULES.class_mender) === J(healer.flags), CL.CLASSES_IMPLEMENTED.includes('class_mender')], [true, false]);

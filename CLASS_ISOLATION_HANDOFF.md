@@ -197,3 +197,24 @@ Total: ~1,300–1,600 lines touched/new in chaosD6, ~600 moved to Classes.
     1268 tape snapshots, threat charge ×7, avenger bonus grant/loss/fade) + groups 1-4 Swarm-1618, 1625, 1631, 1638:
     0 errors, 0 divergences. Not exercised live: Necromancer raise, Rogue trap charge, reanimated strike (unit-checked only).
   - Pin diff (dry run): + tools/engine/class-state.mjs, validator pin f5adafae351d. Not synced.
+- **Phase 2 committed** in 4acb70b (its message is another session's reply text).
+- **Necromancer 1.2.0** (user: "use the new version"): data/classes.json 1.2.0 canonical (data = 1.1.0, rebalance verdict
+  accept), 1.1.0 superseded 0.99; definition version / source 1.2.0.
+- **Phase 3 done (uncommitted):**
+  - class-engine.mjs `ABILITY_REQUESTS` = copy_building / build / far_trap / disable_traps / step (ability `out` keys);
+    peer.mjs simulate() resolves them in the post pass (`ABILITY_REQUEST_FNS`, same geometry / salts / log text as the old
+    animatorCopy / priestShrine / seekerPlant / clericDisableNearby / warriorStep, which are gone together with the
+    post-pass `switch` and the elementalist/illusionist/rogue skip list). classAbility(r, ab, requests) resolves them.
+  - Max standing is generic: build / far_trap records carry `max_standing`, counted per class (`made.made_by` / trap
+    `made_by`; the trap's old `seeker: true` flag is gone — a TMJ-restored legacy trap would not count, dev path only).
+    shrineMade(cfg, sprite, by, byName) names the builder class; the vision grant names the class that laid the trap.
+  - The 5 definitions: ability = data program (`done('', {<request>: [cfg_<class> + max_standing]})`); no JS markers
+    left; every built-in validates as foreign. Versions animator 1.2.0, priest 1.3.0, seeker 1.3.0, cleric 1.2.0,
+    warrior 1.1.0 (data unchanged; data/classes.json versions appended, old → superseded 0.99).
+  - JS oracle: PEER_ABILITIES removed, ABILITIES return the same requests. classes-check asserts each request = the old
+    config; class-engine-check: no markers, foreign-valid; validator prices requests (build / plant / disable_traps /
+    relocate); fortress-check versions moved.
+  - Checks all green. Swarms default engine: focused animator/priest/seeker/cleric/warrior Swarm-1727 (copy ×1, Shrine
+    ×11 + one-standing ×7, far trap ×5 + vision ×5 + one-standing ×4, cleric 33× miss path) + groups 1-4 Swarm-1734,
+    1741, 1749, 1755: 0 errors, 0 divergences. Not live: Cleric disabling a trap, the Warrior step (bot never clicks).
+  - Pin diff (dry run): + class-world.mjs, validator changed. Not synced (OCI sync at the end, user 2026-11-20).

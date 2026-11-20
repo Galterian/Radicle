@@ -67,7 +67,7 @@ A program sees the hook arguments as root registers (`{"var": "cs.archived"}`) p
 | `lifesteal` | | `attacker, amount` | number gained by me |
 | `lifesteal_apply` | | `amount, life, lifeMax, held` | new life |
 | `pre_cast` | | `actor, elements, salt` | `null` or `{stat, fail, dice, value}` (Elementalist) |
-| `ability` | | `actor, ab, salt` | `{used, note, log[], mine[], out: {heals, armor, illusion, discards, lures, revives, traps, tokens}}`; `null` = peer-resolved |
+| `ability` | | `actor, ab, salt` | `{used, note, log[], mine[], out: {heals, armor, illusion, discards, lures, revives, traps, tokens}}`, plus the engine requests `copy_building, build, far_trap, disable_traps, step` (phase 3, HOOKS.md "Ability requests") |
 | `transmute` | | `id, outcomes` | `{edits: [{i, statTokens, heals}], log}` |
 | `destroy_result` | | `d` | the destroy outcome's `result` |
 | `end_turn` | | `held, moved, life, lifeMax` | life gained |

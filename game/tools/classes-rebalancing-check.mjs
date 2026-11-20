@@ -576,6 +576,13 @@ export function auditLogic(def, n, cal = loadCalibration()) {
         else if (k === 'tokens') lim(k, P.stone && l.length <= nOf(P.stone) && l.every(t => Number(t.value) <= 6), `tokens ${l.length} without power.stone / > ${P.stone ? nOf(P.stone) : 0} / value > 6`);
         else if (k === 'revives') lim(k, P.revive && l.length <= 1, `revives ${l.length} without power.revive / > 1`);
         else if (k === 'lures') lim(k, P.lure && l.every(x => Wd.ctx.dist('peer:u0', x.on) <= P.lure.range), `lures beyond power.lure.range ${P.lure?.range ?? '-'}`);
+        // Class isolation phase 3: the engine requests (class-engine.mjs ABILITY_REQUESTS), priced by the keys the map-bound
+        // classes always had — one request per use, never more than the power declares.
+        else if (k === 'copy_building') lim(k, P.build && l.length <= 1, `copy_building ${l.length} without power.build / > 1`);
+        else if (k === 'build') lim(k, P.build && l.length <= 1 && l.every(x => Number(x.heal ?? 1) <= (isObj(P.build) && P.build.heal ? P.build.heal : 1) && (!isObj(P.build) || !P.build.max || (Number.isInteger(x.max_standing) && x.max_standing <= P.build.max))), `build ${J1(l)} beyond power.build ${P.build ? J1(P.build) : '-'}`);
+        else if (k === 'far_trap') lim(k, P.plant && l.length <= 1 && (!isObj(P.plant) || !P.plant.max || l.every(x => Number.isInteger(x.max_standing) && x.max_standing <= P.plant.max)), `far_trap ${J1(l)} beyond power.plant ${P.plant ? J1(P.plant) : '-'}`);
+        else if (k === 'disable_traps') lim(k, P.disable_traps && l.length <= 1 && l.every(x => Number(x.radius) <= (isObj(P.disable_traps) ? P.disable_traps.range ?? 0 : 0)), `disable_traps ${J1(l)} beyond power.disable_traps ${P.disable_traps ? J1(P.disable_traps) : '-'}`);
+        else if (k === 'step') lim(k, P.relocate && l.length <= 1 && l.every(x => Number(x.n ?? 1) <= 1), `step ${J1(l)} without power.relocate / more than 1 hex`);
         else exceeds.add(`ability output ${k} is not priced`);
       }
     }

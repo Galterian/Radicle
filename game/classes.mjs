@@ -33,7 +33,7 @@ import { pointBuy } from './effect-engine.mjs';   // byte-identical to effects.m
 import { rogueConfig, clericConfig, rogueShared } from './class-traps.mjs';
 import { manipulatorConfig, combatHit, attackHit, pickManipTarget } from './class-manipulator.mjs';
 import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from './class-chase.mjs';
-import { animatorConfig, priestConfig, seekerConfig } from './class-world.mjs';
+import { animatorConfig, priestConfig, seekerConfig, maxStanding } from './class-world.mjs';
 import { unionOf } from './class-state.mjs';   // phase 2: the generic class-state blob (snapshot class_state_json)
 
 export const STATS = ['vitality', 'world', 'matter', 'will'];
@@ -68,9 +68,9 @@ const BUNDLE = CE.loadClassDefs(undefined, { lenient: true });
 export const classBundleErrors = () => [...BUNDLE.errors];
 export const CLASS_RULES = Object.fromEntries([...BUNDLE.defs.keys()].sort().map(id => [id, JSON.parse(JSON.stringify(BUNDLE.defs.get(id).flags || {}))]));
 export const CLASSES_IMPLEMENTED = Object.keys(CLASS_RULES);
-// Abilities that resolve in peer.mjs itself (map geometry, occupancy, the move register): their definitions mark
-// the `ability` hook {"engine": "js", "impl": "peer.mjs#…"} and classHook('ability', …) returns null for them.
-export const PEER_ABILITIES = Object.freeze({ class_animator: 'animatorCopy', class_priest: 'priestShrine', class_cleric: 'clericDisableNearby', class_seeker: 'seekerPlant', class_warrior: 'warriorStep' });
+// Class isolation phase 3: no ability resolves in peer.mjs any more — the map-bound ones (Animator, Priest, Cleric,
+// Seeker, Warrior) return engine REQUESTS (class-engine.mjs ABILITY_REQUESTS) that simulate() resolves.
+export const ABILITY_REQUESTS = CE.ABILITY_REQUESTS;
 export const CLASS_NEEDS = Object.fromEntries(CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].needs).map(id => [id, CLASS_RULES[id].needs]));
 export const PASSIVE_TURN_CLASSES = new Set(CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].passiveTurn));
 
@@ -314,6 +314,14 @@ function abilityEnv(ctx, actor, ab) {
   return { ids, peer, tile, nearAlly, adjacentOf, foesNearby, v, here, stat };
 }
 const ABILITIES = {
+  // Phase 3 (2026-11-20): the map-bound abilities ask the engine (peer.mjs simulate() 'ability requests'); the
+  // note is the engine's. Animator: a copy of the nearest building; Priest: a Shrine (one standing per data
+  // max_standing); Seeker: the attached card as a far trap with vision; Cleric: disable traps; Warrior: a step.
+  class_animator: (ctx) => done('', { copy_building: [animatorConfig(cdOf(ctx, 'class_animator'))] }),
+  class_priest: (ctx) => done('', { build: [{ ...priestConfig(cdOf(ctx, 'class_priest')), max_standing: maxStanding(cdOf(ctx, 'class_priest')) }] }),
+  class_seeker: (ctx) => done('', { far_trap: [{ ...seekerConfig(cdOf(ctx, 'class_seeker')), max_standing: maxStanding(cdOf(ctx, 'class_seeker')) }] }),
+  class_cleric: (ctx) => done('', { disable_traps: [{ radius: clericConfig(cdOf(ctx, 'class_cleric')).range }] }),
+  class_warrior: () => done('', { step: [{ n: 1 }] }),
   // Illusionist (pre-pass, user ruling 2026-11-12): me and every ally within 10 hexes get one illusion life point.
   class_illusionist: (ctx, me, ab, E) => {
     const R = rulesOf('class_illusionist').illusionRange ?? ILLUSION_RANGE;
@@ -419,7 +427,6 @@ const ABILITIES = {
 };
 // CP 2026-11-19: args.moved = the actor moves in this action (peer.mjs moveCodeOf) — the Healer's unmoved_only gate.
 function ability(ctx, id, { actor, ab, salt, moved }) {
-  if (PEER_ABILITIES[id]) return null;
   const f = ABILITIES[id];
   if (!f) return notDone();
   return f(ctx, actor, { ...(ab || {}), salt, moved: moved === true }, abilityEnv(ctx, actor, ab));

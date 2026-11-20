@@ -109,7 +109,11 @@ export const HOOK_SPECS = Object.freeze({
 export const HOOK_NAMES = Object.freeze(Object.keys(HOOK_SPECS));
 export const STD_HOOKS = Object.freeze(HOOK_NAMES.filter(h => HOOK_SPECS[h].std));
 const TRAP_OUTCOMES = ['none', 'dodge', 'disable', 'spring'];
-const ABILITY_OUT = ['heals', 'armor', 'illusion', 'discards', 'lures', 'revives', 'traps', 'tokens'];
+// Class isolation phase 3: REQUESTS the engine resolves itself (map geometry, occupancy, the move register) —
+// the fixed set of placement / ability results a class may choose from (user ruling 2026-11-20 #1; peer.mjs
+// simulate() 'ability requests', classes-data/HOOKS.md). A program gives only the numbers.
+export const ABILITY_REQUESTS = Object.freeze(['copy_building', 'build', 'far_trap', 'disable_traps', 'step']);
+const ABILITY_OUT = ['heals', 'armor', 'illusion', 'discards', 'lures', 'revives', 'traps', 'tokens', ...ABILITY_REQUESTS];
 
 // The value a hook has when no program applies (or a program fails): what the JS hook returns for a class that does
 // not act in it.
