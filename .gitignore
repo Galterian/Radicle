@@ -152,3 +152,9 @@ godot/android/build/libs/debug/godot-lib.template_debug.aar
 godot/android/build/libs/release/godot-lib.template_release.aar
 # scratch from local test runs (Gun radata etc.)
 tmp/
+
+# Media live in chaosD6-Resources (game/asset-root.mjs, tools/asset_root.py); the catalogue JSONs stay tracked.
+/assets/**
+!/assets/**/
+!/assets/**/*.json
+/warlords3_screenshots/
