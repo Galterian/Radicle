@@ -16,6 +16,7 @@ import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusSte
 import { animatorConfig, priestConfig, seekerConfig, shrineMade, copyMade } from '../class-world.mjs';
 import { CLASSES, SKILLS, ELEM_TO_STAT, STATS, genWorld, argsFor, sha256Hex, hexDistance, sideOf as fxSide } from './class-fixtures.mjs';
 import { channelBreaks } from '../channel-rule.mjs';
+import * as CS from '../class-state.mjs';
 
 let fails = 0, oks = 0;
 const J = (x) => JSON.stringify(x);
@@ -87,7 +88,7 @@ function refWorld(W, ctx) {
   const classPassive = (classId) => OLD_PASSIVE.has(classId) || !!(classDataOf(classId).passive ?? HAND_CLASS_DEFAULTS[classId]?.passive);
   const classKindOf = (classId) => classPassive(classId) ? 'passive' : (data.classes[classId]?.data?.ability_kind || 'static');
   const elemsOfStat = (st) => Object.keys(ELEM_TO_STAT).filter(el => ELEM_TO_STAT[el] === st);
-  const reanimatedAll = (peers) => new Set(peers.flatMap(p => String(p?.reanimated_csv || '').split(',').filter(Boolean)));
+  const reanimatedAll = (peers) => CS.unionOf(peers.map(p => p?.class_state_json), 'raised');   // phase 2 (= peer.mjs)
   const tileNear = (id, t) => { const v = view.get(id); return !!v && !!t && Number.isInteger(t.q) && Number.isInteger(t.r) && ((Math.abs(v.tile_q - t.q) + Math.abs(v.tile_r - t.r) + Math.abs(v.tile_q + v.tile_r - t.q - t.r)) / 2) <= 1; };
   const libraryCardFor = (salt) => { const lib = effCtx.library(); return lib.length ? lib[parseInt(sha256Hex(salt).slice(0, 8), 16) % lib.length] : null; };
   return { PEER_ID_STRING, PEER_LABEL, view, data, hg, lifeOf, distBetween, enemyOf, hasPerm, statOf, sideOf, parseJson, effCtx, classColours, classDataOf, classRangeOf, handRevealOf, handDiscardOf, classKindOf, elemsOfStat, reanimatedAll, tileNear, libraryCardFor };

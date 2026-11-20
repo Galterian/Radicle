@@ -44,6 +44,7 @@ import { rogueConfig, clericConfig, chargesLeft, trapsInRange, clericRoute, disa
 import { rogueShared } from './class-traps.mjs';   // CR: import_traps — Rogue one shared charge (2026-11-17)
 import { manipulatorConfig, pickAltAction, combatHit, pickManipTarget, applyManipSwap } from './class-manipulator.mjs';
 import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from './class-chase.mjs';
+import * as CS from './class-state.mjs';   // class isolation phase 2: the generic class-state store (snapshot class_state_json)
 import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -971,9 +972,13 @@ let boundOriginalAlliance = null, boundMode = null, boundPerm = null, boundAt = 
 // C1 ruling 2026-11-16 (Necromancer destroy reanimated): a unit a CLASS raised says so in its snapshot (raised_by = the
 // class id) — a companion that class spawned (env RAISED_BY) or a corpse it raised in place (bound revive by a class_
 // perm) — with the elements already struck on it (reanim_down_csv). Both absent otherwise (other snapshots unchanged).
+// Class state (phase 2): mine (csGet / csSet) and another unit's, as its snapshot carries it (csOf).
+const csGet = (cls, key, dflt) => CS.stateGet(entity.classStore, cls, key, dflt);
+const csSet = (cls, key, v) => CS.stateSet(entity.classStore, cls, key, v);
+const csOf = (snap) => CS.parseClassState(snap?.class_state_json);
 const RAISED_BY = /^class_[a-z0-9_]+$/.test(process.env.RAISED_BY || '') ? process.env.RAISED_BY : '';
 const raisedBy = () => RAISED_BY || (boundMode === 'revive' && String(boundPerm || '').startsWith('class_') ? boundPerm : '');
-const reanimFields = () => { const by = raisedBy(); return by ? { raised_by: by, ...((entity.reanimDown || []).length ? { reanim_down_csv: entity.reanimDown.join(',') } : {}) } : {}; };
+const reanimFields = () => { const by = raisedBy(), down = by ? csGet(by, 'down', []) : []; return by ? { raised_by: by, ...(down.length ? { reanim_down_csv: down.join(',') } : {}) } : {}; };
 function becomeBound(owner, permId, mode) {
   if (IS_COMPANION) return;
   const o = peersPublic.get(owner);
@@ -1137,14 +1142,17 @@ const foreignBootClass = await clPeer.boot(process.env.FORCE_FOREIGN_CLASS ? { f
   entity.armor = 0;               // Overlord's armor life point (0/1) — folded into life / lifeMax, the first one lost
   entity.illusion = 0;            // Illusionist's illusion life point (0/1) — same, lost first, fades after the turn's 3rd action
   entity.illusionTurn = -1;
-  entity.chaseBonus = 0;          // Avenger: temporary life point from a NEW chasing monster (0/1) — folded into life / lifeMax, lost after illusion / armor
-  entity.chasers = [];            // Avenger: the wild monsters chasing me at my last resolution (sorted ids)
   entity.luredBy = null;          // wild monster: { id, turn } — the Avenger that lured me; I chase it until it dies / leaves
   entity.chaseTarget = '';        // wild monster: the enemy my last npcPlan went after (snapshot chase_target)
-  entity.stealthTurn = -1;        // Rogue threat charge: the turn my unseen step happened — monsters neither wake nor chase me in it
-  entity.rogueTrapTurn = -1;      // Rogue trap charge: the turn it was last used …
-  entity.rogueTrapN = 0;          // … and how many times in that turn (class data trap_dodges_per_turn)
-  entity.reanimated = [];         // Necromancer: corpses I raised (no second raise of the same one)
+  // Class isolation phase 2 (class-state.mjs): my class state, one store namespaced by class id → snapshot class_state_json.
+  //   class_rogue.charges.threat / .trap {turn, n}  Rogue charges (threat: monsters neither wake nor chase me that turn;
+  //                                                 trap: uses per turn, class data trap_dodges_per_turn)
+  //   class_avenger.bonus / .chasers                temporary life point from a NEW chasing monster (0/1, folded into
+  //                                                 life / lifeMax, lost after illusion / armor) / the wild monsters chasing
+  //                                                 me at my last resolution (sorted ids)
+  //   class_necromancer.raised                      corpses I raised (no second raise of the same one)
+  //   <raised_by>.down                              a reanimated unit: the elements already struck on it
+  entity.classStore = {};
   entity.worldEdits = [];         // what I did to world-generated features: { id, gone, at } | { id, q, r, at }
   entity.worldLedger = [];        // every OTHER author's world edits I have seen ({ ...edit, by }) — dimension state (js/world-ledger.js)
   entity.awakeLend = null;        // Awake ∀: { stats: { will: n } | building stat bonus, from } while the permanent stands
@@ -1177,15 +1185,14 @@ const CLASS_LOCAL = Object.fromEntries(Object.keys(CLASS_RULES).filter(id => CLA
 // Rogue trap charge (user ruling 2026-11-14): `n` uses landed this action → snapshot rogue_trap_turn / rogue_trap_n.
 function applyRogueTrapCharge(n) {
   if (!n) return;
-  if (entity.rogueTrapTurn !== hg.turn) { entity.rogueTrapTurn = hg.turn; entity.rogueTrapN = 0; }
-  entity.rogueTrapN += n;
-  console.log(`[${PEER_LABEL}] rogue: trap charge spent (${entity.rogueTrapN}/${rogueConfig(data.classes.class_rogue?.data).trapPerTurn} this turn ${hg.turn})`);
+  const used = CS.spendCharge(entity.classStore, 'class_rogue', 'trap', hg.turn, n);
+  console.log(`[${PEER_LABEL}] rogue: trap charge spent (${used}/${rogueConfig(data.classes.class_rogue?.data).trapPerTurn} this turn ${hg.turn})`);
 }
 // What the perms strip shows for the two-charge passive classes (Rogue): uses left this turn per charge.
 function rogueChargesForUI() {
   if (entity.classId !== 'class_rogue') return null;
   const cfg = rogueConfig(data.classes.class_rogue?.data);
-  const trapLeft = chargesLeft(cfg.trapPerTurn, entity.rogueTrapTurn, entity.rogueTrapN, hg.turn), threatLeft = entity.stealthTurn === hg.turn ? 0 : cfg.threatPerTurn;
+  const trapLeft = CS.chargeLeft(entity.classStore, 'class_rogue', 'trap', cfg.trapPerTurn, hg.turn), threatLeft = CS.chargeTurn(entity.classStore, 'class_rogue', 'threat') === hg.turn ? 0 : cfg.threatPerTurn;
   // CR: rogue_ui — one shared charge per turn (2026-11-17): once either charge is used, both read 0
   if (rogueShared(data.classes.class_rogue?.data) && (trapLeft < cfg.trapPerTurn || threatLeft < cfg.threatPerTurn)) return { trap_left: 0, threat_left: 0, trap_per_turn: cfg.trapPerTurn, threat_per_turn: cfg.threatPerTurn, shared: true };
   return { trap_left: trapLeft, threat_left: threatLeft, trap_per_turn: cfg.trapPerTurn, threat_per_turn: cfg.threatPerTurn };
@@ -1581,7 +1588,7 @@ const sensedTraps = () => {
 };
 const handMsg = (extra = {}) => ({ kind: 'hand', hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), turn: hg.turn, round: hg.round, casting: castingForUI(), lost_actions: entity.lostActions, destroy: queuedDestroy, queued_chain: queuedChain, aura: queuedAura, bonus: bonusForUI(), sensed_traps: sensedTraps(), channels: entity.channels.map(ch => ({ effect_id: ch.effect_id, name: data.effects[ch.effect_id]?.name || ch.effect_id, holder: ch.holder || null, stop: ch.stop })), queued_attach: queuedAttach, queued_link: queuedLink, queued_elem: queuedElem, queued_phylactery: queuedPhylactery, queued_class_ability: queuedClassAbility, class_state: classStateForUI(), possessing: entity.possessing?.peer_id || null, possess_pick: queuedPossessPick, possess_mode: entity.possessMode || null, phylactery_target: phylacteryHint(),fortresses: fortressesNearForUI(), ...extra });
 // My class as the UI shows it: colours (stat → elements) with the ones struck down, tapped / archived flags and recast / untap progress.
-const reanimatedAll = (peers) => new Set(peers.flatMap(p => String(p?.reanimated_csv || '').split(',').filter(Boolean)));
+const reanimatedAll = (peers) => CS.unionOf(peers.map(p => p?.class_state_json), 'raised');   // phase 2: every unit any class raised
 const classBlocked = () => {
   if (entity.classId !== 'class_necromancer') return null;
   const done = reanimatedAll(livePeers()), here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
@@ -1812,7 +1819,8 @@ function currentStateSnapshot(slim = false) {
     ...(entity.possessMode ? { possess_mode: entity.possessMode } : {}),   // Possess 2026-11-17: 'possess' | 'phylactery' while my Possess permanent stands
     class_id: entity.classId || null, class_down_csv: (entity.classDown || []).join(','), class_archived: entity.classArchived ? 1 : 0, class_tapped: entity.classTapped ? 1 : 0,
     class_progress_json: classProgressJson(), class_used_turn: entity.classUsedTurn ?? -1, armor: entity.armor || 0,
-    illusion: entity.illusion || 0, stealth_turn: entity.stealthTurn ?? -1, rogue_trap_turn: entity.rogueTrapTurn ?? -1, rogue_trap_n: entity.rogueTrapN || 0, reanimated_csv: (entity.reanimated || []).join(','), ...reanimFields(), replaces: replacesNow,
+    illusion: entity.illusion || 0, class_state_json: CS.classStateJson(entity.classStore),   // phase 2: the generic class state; the fields after it are derived (one phase)
+    stealth_turn: CS.chargeTurn(entity.classStore, 'class_rogue', 'threat'), rogue_trap_turn: CS.chargeTurn(entity.classStore, 'class_rogue', 'trap'), rogue_trap_n: CS.chargeOf(entity.classStore, 'class_rogue', 'trap')?.n || 0, reanimated_csv: csGet('class_necromancer', 'raised', []).join(','), ...reanimFields(), replaces: replacesNow,
     // Hero shadows (rule_hero_shadow): whose shadow I am, my death card, and (dead shadow) who killed it.
     shadow_of: SHADOW_OF, death_card_json: JSON.stringify(deathCardRef()), shadow_death_json: shadowDeath ? JSON.stringify(shadowDeath) : '',
     // Unattended characters (rule_unattended_character): a human hand?, my ally-join link and join time (the group's
@@ -1825,7 +1833,7 @@ function currentStateSnapshot(slim = false) {
     awake_lend_json: JSON.stringify(entity.awakeLend || null),
     fortress_bank_json: JSON.stringify(entity.fortressBank || null),
     monster_state: entity.monsterState || null,
-    chase_target: entity.chaseTarget || '', lured_by: entity.luredBy?.id || '', chase_bonus: entity.chaseBonus || 0, chasers_csv: (entity.chasers || []).join(','),
+    chase_target: entity.chaseTarget || '', lured_by: entity.luredBy?.id || '', chase_bonus: csGet('class_avenger', 'bonus', 0) || 0, chasers_csv: csGet('class_avenger', 'chasers', []).join(','),
     combo_active: entity.comboState?.active ? 1 : 0,
     combo_slot: entity.comboState?.slot || 0,
     combo_seq_csv: Array.isArray(entity.combo) ? entity.combo.join(',') : '',
@@ -4339,7 +4347,7 @@ async function doResolution() {
     // (applied by the unit itself: Rule 24 loop in doResolution, kind 'reanimated').
     if (r.destroy.reanimated) {
       const e = r.destroy.reanimated, ev = view.get(e);
-      const rs = ev?.raised_by ? classHook('reanimated_strike', ev.raised_by, clCtx, { down: String(ev.reanim_down_csv || '').split(',').filter(Boolean), stat, elem: r.destroy.elem || null, enemy: enemies.includes(e), pb }) : null;
+      const rs = ev?.raised_by ? classHook('reanimated_strike', ev.raised_by, clCtx, { down: [...CS.stateGet(csOf(ev), ev.raised_by, 'down', [])], stat, elem: r.destroy.elem || null, enemy: enemies.includes(e), pb }) : null;
       if (!rs) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] reanimated strike: ${String(e).slice(0, 8)} is no reanimated enemy in reach with an open ${stat} element`); continue; }
       destroyOutcomes.push({ actor: r.actor, owner: e, kind: 'reanimated', id: rs.elem, power: pb.value, die: pb.value, dice: pb.dice, result: rs.result, last: rs.last, label: ev.name || '' });
       if (r.actor === PEER_ID_STRING || e === PEER_ID_STRING) log(`[${PEER_LABEL}] ${r.actor.slice(0, 8)} emits ${stat} against reanimated ${e.slice(0, 8)}'s ${rs.elem}: dice [${pb.dice.join(',')}] → ${rs.result}${rs.last ? ' — the reanimated unit is destroyed' : ''}`);
@@ -4772,10 +4780,10 @@ async function doResolution() {
   const rogueTrapUses = new Map();      // trap-charge uses per Rogue in this simulate (on top of the snapshot's count)
   // CR: rogue_shared — one shared charge per turn (2026-11-17): a used threat charge empties the trap charge and back
   const rogueOneCharge = rogueShared(data.classes.class_rogue?.data);
-  const rogueThreatUsed = (who) => (who === PEER_ID_STRING ? entity.stealthTurn : view.get(who)?.stealth_turn) === hg.turn || classAbilityOut.stealth.includes(who);
+  const csWho = (who) => (who === PEER_ID_STRING ? entity.classStore : csOf(view.get(who)));   // phase 2: class state of a revealer
+  const rogueThreatUsed = (who) => CS.chargeTurn(csWho(who), 'class_rogue', 'threat') === hg.turn || classAbilityOut.stealth.includes(who);
   const rogueTrapRaw = (who) => {
-    const v = view.get(who) || {};
-    return who === PEER_ID_STRING ? chargesLeft(rogueCfg.trapPerTurn, entity.rogueTrapTurn, entity.rogueTrapN, hg.turn) : chargesLeft(rogueCfg.trapPerTurn, v.rogue_trap_turn, v.rogue_trap_n, hg.turn);
+    return CS.chargeLeft(csWho(who), 'class_rogue', 'trap', rogueCfg.trapPerTurn, hg.turn);
   };
   const rogueTrapLeft = (who) => {
     if (rogueOneCharge && rogueThreatUsed(who)) return 0;
@@ -4786,7 +4794,7 @@ async function doResolution() {
     rogueTrapUses.set(who, (rogueTrapUses.get(who) || 0) + 1); classAbilityOut.rogueTrap.push(who);
     if (who === PEER_ID_STRING) log(`[${PEER_LABEL}] class rogue: trap charge — ${what} at (${q},${r}) stays shut (${rogueTrapLeft(who)} left this turn)`);
   };
-  const rogueThreatReady = (who) => rogueCfg.threatPerTurn > 0 && (who === PEER_ID_STRING ? entity.stealthTurn : view.get(who)?.stealth_turn) !== hg.turn && !classAbilityOut.stealth.includes(who)
+  const rogueThreatReady = (who) => rogueCfg.threatPerTurn > 0 && CS.chargeTurn(csWho(who), 'class_rogue', 'threat') !== hg.turn && !classAbilityOut.stealth.includes(who)
     && !(rogueOneCharge && (rogueTrapRaw(who) < rogueCfg.trapPerTurn || (rogueTrapUses.get(who) || 0) > 0));   // CR: rogue_threat — not after the shared charge went on a trap
   const foesInRing = (who, t) => [...view.keys()].filter(o => o !== who && lifeOf(o) > 0 && enemyOf(who, o) && (() => { const pt = postTile(o); return !!pt && hexDistance({ tile_q: t.q, tile_r: t.r }, pt) <= rogueCfg.threatRadius; })()).sort();
   for (const [who, t] of [...nextTiles.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
@@ -5235,17 +5243,17 @@ async function doResolution() {
   let cpCbFreed = 0;
   // Avenger chase bonus: every NEW wild monster chasing me (lured now, or chase_target = me in its snapshot)
   // → +1 life max and +1 life, never more than 1 in total; fades when nobody chases me any more.
-  if (entity.classId === 'class_avenger' || entity.chaseBonus || (entity.chasers || []).length) {
+  if (entity.classId === 'class_avenger' || csGet('class_avenger', 'bonus', 0) || csGet('class_avenger', 'chasers', []).length) {
     const onBoard = entity.classId === 'class_avenger' && !entity.classArchived && entity.permanents.has('class_avenger') && entity.life > 0;
     const chasing = !onBoard ? [] : [...new Set([
       ...classAbilityOut.lures.filter(l => l.by === PEER_ID_STRING).map(l => l.on),
       ...[...view.keys()].filter(o => o !== PEER_ID_STRING && isWildMonster(view.get(o)) && (view.get(o)?.life ?? 0) > 0 && view.get(o)?.chase_target === PEER_ID_STRING),
     ])];
-    const st = classHook('chase_step', 'class_avenger', CL_BASE, { state: { chasers: entity.chasers, bonus: entity.chaseBonus }, chasing });   // C1 chase_step
+    const st = classHook('chase_step', 'class_avenger', CL_BASE, { state: { chasers: [...csGet('class_avenger', 'chasers', [])], bonus: csGet('class_avenger', 'bonus', 0) }, chasing });   // C1 chase_step
     if (st.fresh.length) console.log(`[${PEER_LABEL}] avenger: ${st.fresh.length} new monster(s) chasing me (${st.fresh.map(o => o.slice(0, 14)).join(', ')}) — ${st.chasers.length} in all`);
-    if (st.grant > 0) { const heal = Number.isInteger(st.heal) ? st.heal : st.grant; entity.chaseBonus = st.bonus; entity.lifeMax += st.grant; entity.life += heal; console.log(`[${PEER_LABEL}] avenger: +${st.grant} temporary life max${heal ? '' : ' (max only)'} (chase bonus ${st.bonus}) — life ${entity.life}/${entity.lifeMax}`); broadcastUI(handMsg({ notice: `Avenger: a new monster chases you — +1 temporary life ${heal ? '' : 'max '}(${entity.life}/${entity.lifeMax})` })); }   // CP: avenger_grant — life += st.heal (0 when max only)
-    if (st.fade) { if (cpCbMaxOnly) cpCbFreed += entity.chaseBonus || 0; entity.chaseBonus = 0; console.log(`[${PEER_LABEL}] avenger: no monster chases me any more — the chase bonus fades`); }   // CP: avenger_fade
-    entity.chasers = st.chasers;
+    if (st.grant > 0) { const heal = Number.isInteger(st.heal) ? st.heal : st.grant; csSet('class_avenger', 'bonus', st.bonus); entity.lifeMax += st.grant; entity.life += heal; console.log(`[${PEER_LABEL}] avenger: +${st.grant} temporary life max${heal ? '' : ' (max only)'} (chase bonus ${st.bonus}) — life ${entity.life}/${entity.lifeMax}`); broadcastUI(handMsg({ notice: `Avenger: a new monster chases you — +1 temporary life ${heal ? '' : 'max '}(${entity.life}/${entity.lifeMax})` })); }   // CP: avenger_grant — life += st.heal (0 when max only)
+    if (st.fade) { if (cpCbMaxOnly) cpCbFreed += csGet('class_avenger', 'bonus', 0) || 0; csSet('class_avenger', 'bonus', 0); console.log(`[${PEER_LABEL}] avenger: no monster chases me any more — the chase bonus fades`); }   // CP: avenger_fade
+    csSet('class_avenger', 'chasers', [...st.chasers]);
   }
   // Prophet (user rework #2 2026-11-14, passive, once per turn): the first resolution of the turn that ends
   // with an enemy in CONTACT (adjacent after this action's moves, not invisible) shows me its whole hand.
@@ -5342,7 +5350,7 @@ async function doResolution() {
     if (rv.who && rv.who === PEER_ID_STRING) onRevived(rv.by, 'class_necromancer');
     if (rv.by !== PEER_ID_STRING) continue;
     if (rv.who) {
-      entity.reanimated.push(rv.who);
+      csSet('class_necromancer', 'raised', [...csGet('class_necromancer', 'raised', []), rv.who]);
       const corpse = peersPublic.get(rv.who);
       if (corpse?.owner_peer_id) {
         // A summoned creature's process vanished with it: a fresh one of the same creature rises on its tile.
@@ -5419,13 +5427,14 @@ async function doResolution() {
   for (const d of destroyOutcomes) {
     if ((d.result !== 'destroyed' && d.result !== 'taken') || d.owner !== PEER_ID_STRING) continue;
     if (d.kind === 'reanimated') {
-      entity.reanimDown ||= [];
-      if (!entity.reanimDown.includes(d.id)) entity.reanimDown.push(d.id);
+      const rb = raisedBy() || d.raised_by;   // phase 2: the elements down live in the raising class's namespace
+      if (!csGet(rb, 'down', []).includes(d.id)) csSet(rb, 'down', [...csGet(rb, 'down', []), d.id]);
+      const down = csGet(rb, 'down', []);
       // d.last is judged on the elements down BEFORE this action; two enemies striking the two elements in the same
       // action (ruling 2026-11-17: the strikes may come from different enemies) both see last=false — count what is down now.
       const els = classDataOf(d.raised_by || raisedBy())?.destroy_reanimated?.elements || ['elem_harmony', 'elem_concentration'];
-      if (d.last || els.every(x => entity.reanimDown.includes(x))) reanimDestroyedBy ||= d.actor;
-      console.log(`[${PEER_LABEL}] reanimated: my ${d.id} is struck by ${d.actor.slice(0, 8)} (die ${d.die}) — ${entity.reanimDown.length} down${reanimDestroyedBy ? ', I am destroyed' : ''}`);
+      if (d.last || els.every(x => down.includes(x))) reanimDestroyedBy ||= d.actor;
+      console.log(`[${PEER_LABEL}] reanimated: my ${d.id} is struck by ${d.actor.slice(0, 8)} (die ${d.die}) — ${down.length} down${reanimDestroyedBy ? ', I am destroyed' : ''}`);
       continue;
     }
     if (d.kind === 'perm') dropPermanent(d.id);
@@ -5727,7 +5736,7 @@ async function doResolution() {
   if (myMove) {
     entity.tile = myMove;
     // Rogue: after a stealthy step, monsters neither wake nor chase me for the rest of the turn.
-    if (classAbilityOut.stealth.includes(PEER_ID_STRING)) { entity.stealthTurn = hg.turn; console.log(`[${PEER_LABEL}] rogue: threat charge spent — unseen by monsters for the rest of turn ${hg.turn}`); }
+    if (classAbilityOut.stealth.includes(PEER_ID_STRING)) { CS.spendCharge(entity.classStore, 'class_rogue', 'threat', hg.turn, 1); console.log(`[${PEER_LABEL}] rogue: threat charge spent — unseen by monsters for the rest of turn ${hg.turn}`); }
     revealAround(myMove.q, myMove.r).catch(e => console.warn(`[${PEER_LABEL}] reveal failed: ${e.message}`));
   }
   applyRogueTrapCharge(classAbilityOut.rogueTrap.filter(id => id === PEER_ID_STRING).length);
@@ -5770,11 +5779,11 @@ async function doResolution() {
   // Shield life points are the first life lost — the illusion, then the armor. They sit on top of life and
   // maximum, so the recalculation below drops the maximum back and refunds the life it would take twice.
   // C1 life_points: illusion → armor → chase bonus, one point each.
-  const lp = classHook('life_points', entity.classId, CL_BASE, { dmg: myDmg, illusion: entity.illusion, armor: entity.armor, chaseBonus: entity.chaseBonus });
+  const lp = classHook('life_points', entity.classId, CL_BASE, { dmg: myDmg, illusion: entity.illusion, armor: entity.armor, chaseBonus: csGet('class_avenger', 'bonus', 0) });
   let shieldHit = lp.absorbed;
   if (entity.illusion && !lp.illusion) { entity.illusion = lp.illusion; console.log(`[${PEER_LABEL}] the illusion takes the first point of damage`); }
   if (entity.armor && !lp.armor) { entity.armor = lp.armor; console.log(`[${PEER_LABEL}] the armor point is gone`); }
-  if (entity.chaseBonus && !lp.chaseBonus) { if (cpCbMaxOnly) cpCbFreed += entity.chaseBonus; entity.chaseBonus = lp.chaseBonus; console.log(`[${PEER_LABEL}] avenger: the chase bonus point is lost (a new chasing monster grants it again)`); }   // CP: avenger_loss
+  if (csGet('class_avenger', 'bonus', 0) && !lp.chaseBonus) { if (cpCbMaxOnly) cpCbFreed += csGet('class_avenger', 'bonus', 0); csSet('class_avenger', 'bonus', lp.chaseBonus); console.log(`[${PEER_LABEL}] avenger: the chase bonus point is lost (a new chasing monster grants it again)`); }   // CP: avenger_loss
   // The illusion fades after the turn's 3rd action (or if it is somehow left over from an earlier turn).
   if (entity.illusion && (hg.round === ROUNDS_PER_TURN - 1 || entity.illusionTurn !== hg.turn)) { entity.illusion = 0; console.log(`[${PEER_LABEL}] the illusion fades`); }
   // Noble lifesteal: the per-attacker amount I dealt this resolve, now applied
@@ -5805,7 +5814,7 @@ async function doResolution() {
       + worldFeatureValueAt(view, entity.tile.q, entity.tile.r)
       + Object.values(buildingBonusAt(MAP_SEED, entity.tile.q, entity.tile.r)?.bonus?.stat || {}).reduce((a, n) => a + n, 0)
       + (entity.permanents.has('effect_spirit_link') ? entity.links.reduce((a, l) => a + Math.max(0, view.get(l.from)?.[`stat_${l.stat}`] ?? 0), 0) : 0);
-    const newMax = Math.max(1, entity.lifeMaxBase + roundHalfUp10(base + extra) - roundHalfUp10(base) + (entity.armor || 0) + (entity.illusion || 0) + (entity.chaseBonus || 0));
+    const newMax = Math.max(1, entity.lifeMaxBase + roundHalfUp10(base + extra) - roundHalfUp10(base) + (entity.armor || 0) + (entity.illusion || 0) + (csGet('class_avenger', 'bonus', 0) || 0));
     if (newMax !== entity.lifeMax || shieldHit) {
       const delta = newMax - entity.lifeMax;
       entity.life = Math.max(1, Math.min(newMax, entity.life + delta + shieldHit + cpCbFreed));   // CP: avenger_refund — a max-only chase point never took a life point
@@ -6309,13 +6318,13 @@ async function npcPlan() {
   // sees the same transition on the following broadcast.
   if (entity.monsterState === 'sleeping') {
     const hereH = { tile_q: entity.tile.q, tile_r: entity.tile.r };
-    const trigger = livePeers().some(p => p && isHumanAlliance(p.alliance) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(hereH, p) <= 2 && p.stealth_turn !== hg.turn && !snapInvisible(p));
+    const trigger = livePeers().some(p => p && isHumanAlliance(p.alliance) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(hereH, p) <= 2 && !CS.anyChargeUsed(csOf(p), 'threat', hg.turn) && !snapInvisible(p));
     if (trigger) entity.monsterState = 'awake';
     else { queued = ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null; return; }
   }
   const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0
     && !(snapInvisible(p) && !entity.permanents.has('effect_invisibility'))   // Invisibility: monsters / companions neither see nor chase it
-    && !(p.stealth_turn === hg.turn && hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) > 1));
+    && !(CS.anyChargeUsed(csOf(p), 'threat', hg.turn) && hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) > 1));
   // Summoned / bound: follow the owner — close the gap first, fight only what is in reach.
   // Unattended (rule_unattended_character, follow 'summon'): my master is my owner here — "they will gather next to
   // you even if they are far away" — by walking (the Empty Move / Move below), never a teleport.

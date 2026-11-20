@@ -34,6 +34,7 @@ import { rogueConfig, clericConfig, rogueShared } from './class-traps.mjs';
 import { manipulatorConfig, combatHit, attackHit, pickManipTarget } from './class-manipulator.mjs';
 import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from './class-chase.mjs';
 import { animatorConfig, priestConfig, seekerConfig } from './class-world.mjs';
+import { unionOf } from './class-state.mjs';   // phase 2: the generic class-state blob (snapshot class_state_json)
 
 export const STATS = ['vitality', 'world', 'matter', 'will'];
 export const TRAP_POWER = 20;          // = effects.mjs TRAP_POWER (tools/classes-check.mjs asserts it)
@@ -410,7 +411,7 @@ const ABILITIES = {
   // Necromancer: a fallen ally creature next to me (not raised before) rises; none → an archived creature of mine (owner-judged).
   // A corpse that was itself a reanimated unit (snapshot raised_by, ruling 2026-11-16 "destroy reanimated") stays down.
   class_necromancer: (ctx, me, _ab, E) => {
-    const raised = new Set(ctx.viewValues().flatMap(p => String(p?.reanimated_csv || '').split(',').filter(Boolean)));
+    const raised = unionOf(ctx.viewValues().map(p => p?.class_state_json), 'raised');   // phase 2: every unit any class raised
     const fallen = E.ids.filter(id => id !== me && ctx.lifeOf(id) <= 0 && ctx.view(id)?.creature_id && !raised.has(id) && !ctx.view(id)?.raised_by && ctx.dist(me, id) <= 1 && ctx.sideOf(ctx.view(id).alliance) === ctx.sideOf(E.v.alliance)).sort()[0] || null;
     if (fallen) return done(`${ctx.view(fallen).name || fallen.slice(0, 8)} rises again`, { revives: [{ by: me, who: fallen, creature_id: ctx.view(fallen).creature_id, name: ctx.view(fallen).name }] });
     return done('no fallen ally in reach — an archived creature of mine enters if I have one', { revives: [{ by: me, who: null }] });

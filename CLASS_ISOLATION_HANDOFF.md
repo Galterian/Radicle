@@ -180,3 +180,20 @@ Total: ~1,300–1,600 lines touched/new in chaosD6, ~600 moved to Classes.
   classes-data / chaosD6-Classes (ruling 5) — readers: peer loadJson, js/main.js `/data/classes.json`, swarm-test
   readData, class-fixtures, fortress-check / chase-check `active()`, classes-handshake dataClassIds, logic tools,
   rebalance / proposals, stage-mobile-bundle. `dungeonStep` literals only remain in the JS oracle (data programs answer).
+- **Phase 1 committed** by the user (7de3172).
+- **Phase 2 done (uncommitted):**
+  - New `game/class-state.mjs` (pure): one store per unit, namespaced by class id; snapshot `class_state_json`
+    (canonical, empties dropped, '' when empty); charges `{turn, n}` (`chargeLeft` = `chargesLeft`, proven in the new
+    `tools/class-state-check.mjs`), `stateGet/Set`, `unionOf`, `anyChargeUsed`.
+  - peer.mjs: `entity.classStore` replaces stealthTurn / rogueTrapTurn / rogueTrapN / chaseBonus / chasers /
+    reanimated / reanimDown; every reader goes through the store (own) or `csOf(snapshot)` (others); NPC wake / chase
+    = any class's `threat` charge this turn. Old snapshot fields still written, derived from the store (DUAL WRITE —
+    drop them in a later phase together with main.js's `reanim_down_csv` read).
+  - class-engine.mjs ctx ops `class_state(id, cls)`, `class_state_union(key)`; class_necromancer.json ability reads
+    `class_state_union('raised')` (definition content changed, version 1.1.0 kept: data unchanged; old peers still see
+    reanimated_csv). JS oracle, fixtures (blob = reanimated_csv), classes-check verbatim copy, swarm-test updated.
+    SCHEMA.md / HOOKS.md document it.
+  - Checks all green (+ class-state-check 19 ok). Swarms default engine: focused rogue/avenger/necro Swarm-1610 (blob in
+    1268 tape snapshots, threat charge ×7, avenger bonus grant/loss/fade) + groups 1-4 Swarm-1618, 1625, 1631, 1638:
+    0 errors, 0 divergences. Not exercised live: Necromancer raise, Rogue trap charge, reanimated strike (unit-checked only).
+  - Pin diff (dry run): + tools/engine/class-state.mjs, validator pin f5adafae351d. Not synced.

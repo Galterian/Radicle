@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runProgram, validateLogic, SPECIAL_OPS, PURE_OP_NAMES, EffectEngineLimit, EffectProgramError } from './effect-engine.mjs';
+import { parseClassState, nsOf, unionOf } from './class-state.mjs';   // phase 2: the generic class-state blob
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CLASSES_DATA_DIR = path.join(here, 'classes-data');
@@ -45,6 +46,9 @@ export const CLASS_CTX_OPS = {
   side_of: (W, [al]) => W.c.sideOf(al),
   class_data: (W, [id]) => W.cd(id) ?? null,             // the class's data/classes.json `data` (or the definition's `data`)
   class_flag: (W, [id, k]) => W.flag(id, k),              // a key of the class's `flags`
+  // class isolation phase 2 (class-state.mjs): a unit's class state as its snapshot carries it (class_state_json)
+  class_state: (W, [id, cls]) => nsOf(parseClassState(W.c.view(id)?.class_state_json), cls),   // one class's namespace ({} if none)
+  class_state_union: (W, [key]) => [...unionOf(W.c.viewValues().map(p => p?.class_state_json), key)].sort(),   // a list key over every unit and class
   skill_action: (W, [sk]) => W.c.skillAction(sk) ?? null,
   library: (W) => [...W.c.library()],
   ctx_self: (W) => W.c?.self ?? null,

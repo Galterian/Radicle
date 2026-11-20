@@ -66,6 +66,20 @@ Legend:
 | Necromancer revive of an archived creature | `ability` → `revives: [{who: null}]` | Necromancer | peer: `peer:revive` (archive access) |
 | a class-raised unit's snapshot: `raised_by` (env `RAISED_BY` of a class companion, or a bound revive by a `class_` perm) and `reanim_down_csv` (`reanimFields()`, ~942) | – | Necromancer | peer (absent on every other unit) |
 
+## Class state (class isolation phase 2, 2026-11-20)
+
+Every unit keeps one generic store, namespaced by class id, in `game/class-state.mjs`. It is published as one snapshot field, `class_state_json`: canonical JSON with sorted keys, empty values dropped, and `''` when the store is empty. Peers read another unit's state only through it; class programs use the ctx ops `class_state(id, cls)` and `class_state_union(key)`.
+
+| Namespace.key | Was | Written by |
+|---|---|---|
+| `class_rogue.charges.threat` `{turn, n}` | `stealth_turn` | the threat charge spent (monsters neither wake nor chase that turn; NPCs check any class's `threat` charge) |
+| `class_rogue.charges.trap` `{turn, n}` | `rogue_trap_turn` / `rogue_trap_n` | trap-charge uses (`chargeLeft` = `chargesLeft`) |
+| `class_avenger.bonus` / `.chasers` | `chase_bonus` / `chasers_csv` | the chase step and life points |
+| `class_necromancer.raised` | `reanimated_csv` | a raise; "already raised" = `class_state_union('raised')` over every unit and class |
+| `<raised_by>.down` | `reanim_down_csv` | a reanimated unit's struck elements |
+
+For one phase peer.mjs still writes the old fields too, derived from the store, because the UI reads `reanim_down_csv`. Tests: `tools/class-state-check.mjs`.
+
 ## Application: doResolution / endRound
 
 | site | hook | classes | how |

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { classStateJson } from '../class-state.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.resolve(HERE, '..', '..', 'data');
@@ -88,6 +89,7 @@ export function genWorld(seed, { mutate = 0.25 } = {}) {
     for (const p of ['effect_invisibility', 'class_noble', 'class_assassin', 'skill_taunt']) if (R.p(0.1)) perms.add(p);
     const creature = R.p(0.35);
     const stones = [];
+    let raisedL = [];
     if (R.p(0.3)) for (let k = R.int(4); k-- > 0;) stones.push({ id: `${id}#d${k}`, kind: R.p(0.85) ? 'bonus' : 'shield', druid: R.p(0.85), elem: R.pick(ELEMS), value: 1 + R.int(6), q: R.p(0.8) ? tq : tq + 1, r: tr });
     const v = {
       peer_id: id, name: R.p(0.85) ? `Unit ${id.slice(5)}` : '',
@@ -99,13 +101,14 @@ export function genWorld(seed, { mutate = 0.25 } = {}) {
       character_id: creature ? '' : 'char_x',
       monster_state: creature ? R.pick(['sleeping', 'awake', '', undefined]) : '',
       owner_peer_id: creature && R.p(0.3) ? R.pick(ids) : '',
-      reanimated_csv: R.p(0.2) ? [R.pick(ids), R.pick(ids)].join(',') : '',
+      reanimated_csv: (raisedL = R.p(0.2) ? [R.pick(ids), R.pick(ids)] : []).join(','),
       tile_tokens_json: stones.length ? JSON.stringify(stones) : R.pick(['', '[]', 'null', '{"x":1}', 'not json']),
       permanents_csv: [...perms].sort().join(','),
       class_id: cls,
       stats: Object.fromEntries(STATS.map(s => [s, R.int(22)])),
     };
     if (v.monster_state === undefined) delete v.monster_state;
+    v.class_state_json = classStateJson(raisedL.length ? { class_necromancer: { raised: raisedL } } : {});   // phase 2: the same list in the blob
     if (creature && parseInt(sha256Hex(`${seed}:${id}`).slice(0, 2), 16) < 64) v.raised_by = 'class_necromancer';   // a reanimated unit (no R draw: other fixtures unchanged)
     // CR 2026-11-17 (Assassin vs an enemy below full life): life_max = life + 0..2, sometimes missing (no R draw)
     { const h = parseInt(sha256Hex(`${seed}:${id}:life_max`).slice(0, 2), 16); if (h >= 24) v.life_max = v.life + (h % 3); }
