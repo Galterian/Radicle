@@ -2150,8 +2150,51 @@
           "origin": "user_ruling",
           "parent_version": "1.1.0",
           "rebalance_links": ["class_summoner", "effect_resurrect_death_ward"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.2.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-20",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_vitality", "elem_souls", "elem_harmony"],
+            "destroy_reanimated": {
+              "elements": ["elem_harmony", "elem_concentration"],
+              "die": 6
+            },
+            "text": "Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap): tap: a fallen ally creature within one hex rises at full life, held by my class card (it falls again when the class leaves the board); with no corpse in reach a creature card of my archive enters next to me instead. User ruling 2026-11-16 (destroy reanimated): a unit I raised is destroyed once an adjacent enemy has struck both Harmony and Concentration (data destroy_reanimated) with a Will point-buy die of 6 — one element per emission, any order, not necessarily contiguous; ordinary damage still kills it; a reanimated corpse cannot be raised again. Paper text: \"Reanimate instantly a creature (ally) fallen on the battlefield on your tile or your archived creature. Destroy reanimated: point-buy non-contiguously Harmony and Concentration with 6.\"",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_necromancer"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, W, Wi.", "target": "caster", "unit": "colours", "value": ["vitality", "world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "revived", "description": "Fallen ally creature in reach rises; else an archived creature of mine enters.", "target": "target", "unit": "life", "value": {"var": "target.life_max"}},
+              {"id": "destroy_reanimated", "description": "Ruling 2026-11-16: an adjacent enemy emission strikes one open element of a unit I raised on a die of 6; both struck → the unit is destroyed.", "target": "target", "unit": "destroy", "value": {"and": [{">=": [{"var": "die"}, 6]}, {"in": [{"var": "cast.elem"}, ["elem_harmony", "elem_concentration"]]}]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "Class isolation phase 4 (2026-11-20): data unchanged; the definition changed (Necromancer: a blocked hook replaces peer.mjs classBlocked; Reaver: flag invisBreaks [EP, EM] replaces the invisibilityBreaks reaver option).",
+          "origin": "user_ruling",
+          "parent_version": "1.2.0",
+          "rebalance_links": ["class_summoner", "effect_resurrect_death_ward"],
+          "status": "canonical",
+          "version": "1.3.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -2622,8 +2665,45 @@
           "origin": "user_ruling",
           "parent_version": "1.1.0",
           "rebalance_links": ["class_barbarian", "class_monk"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.2.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-20",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_vitality", "elem_souls"],
+            "text": "Your Empty Posture is treated as an Attack action. You may emit elements during your Attack."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: V (vitality), W (souls). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static (pc override): my Empty Posture and Empty Move fight as an Attack (an EM with nobody adjacent still walks its half journey); I may emit elements during an Attack (Rule 24 emission too). Paper text: \"Your Empty Posture is treated as an Attack action. You may emit elements during your Attack.\" CR 2026-11-18 (a) (1.2.0): colours 3 → 2, Vitality + Souls (Harmony dropped); EP / EM still fight as Attack, the Attack emits and keeps the channel.",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_reaver"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, W.", "target": "caster", "unit": "colours", "value": ["vitality", "world"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "world"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "stance", "description": "EP / EM judged as Attack.", "target": "caster", "unit": "action", "value": {"rule": ["class_ep_stance", {"action": {"var": "caster.action"}, "permanents": {"var": "caster.permanents"}}]}},
+              {"id": "attack_keeps_channel", "description": "Ruling 2026-11-17: my Attack (it emits) does not break a channel I hold, and a cast in progress advances on it (only an emitted element other than the channel cost breaks the channel). A plain Attack by any other class still breaks it.", "target": "caster", "unit": "channel", "value": {"in": [{"var": "caster.action"}, ["A"]]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "stays_static", "description": "The stance stays a static ability.", "assert": {"==": [{"var": "proposal.data.ability_kind"}, "static"]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_ep_stance", "class_progress_complete", "in_contact"]
+          },
+          "notes": "Class isolation phase 4 (2026-11-20): data unchanged; the definition changed (Necromancer: a blocked hook replaces peer.mjs classBlocked; Reaver: flag invisBreaks [EP, EM] replaces the invisibilityBreaks reaver option).",
+          "origin": "user_ruling",
+          "parent_version": "1.2.0",
+          "rebalance_links": ["class_barbarian", "class_monk"],
+          "status": "canonical",
+          "version": "1.3.0",
           "vote_log": [],
           "weight": 1.0
         }

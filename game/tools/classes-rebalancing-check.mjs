@@ -249,6 +249,7 @@ export const BUILTIN_POWER = {
 export const HOOK_POWER = {
   ability: ['heal', 'armor', 'illusion', 'discard', 'stone', 'trap', 'plant', 'lure', 'revive', 'build', 'disable_traps', 'relocate'],
   config: null,   // knobs only
+  blocked: null,  // phase 4: why the class card cannot be clicked now — a UI / planning gate, never a gain
   stance: ['stance'], stance_target: ['stance'], emits: ['emit', 'stance'], plan_emits: ['plan_emit'],
   attack_out: ['attack_bonus'], lifesteal: ['lifesteal'], lifesteal_apply: ['lifesteal'],
   pre_cast: ['reroll'], transmute: ['transmute'], destroy_result: ['take_tokens'], end_turn: ['regen'],

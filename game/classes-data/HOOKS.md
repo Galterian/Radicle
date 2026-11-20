@@ -92,7 +92,24 @@ Every unit keeps one generic store, namespaced by class id, in `game/class-state
 | `class_necromancer.raised` | `reanimated_csv` | a raise; "already raised" = `class_state_union('raised')` over every unit and class |
 | `<raised_by>.down` | `reanim_down_csv` | a reanimated unit's struck elements |
 
-For one phase peer.mjs still writes the old fields too, derived from the store, because the UI reads `reanim_down_csv`. Tests: `tools/class-state-check.mjs`.
+Phase 4: the derived fields `stealth_turn`, `rogue_trap_turn`, `rogue_trap_n`, `reanimated_csv`, `chase_bonus` and `chasers_csv` are gone (no reader left). `reanim_down_csv` stays until the UI reads the store (phase 5). Tests: `tools/class-state-check.mjs`.
+
+## No class ids in peer.mjs (class isolation phase 4, 2026-11-20)
+
+peer.mjs asks what a class does, never which class it is: `hasHook(cls, h)` (flags.hooks), the class's `config` and its flags. Every namespace above is the unit's own class id.
+
+| Site | Reads | Was |
+|---|---|---|
+| step charges (simulate step / dungeon step, the perms strip, the threat / trap spend) | the stepping class's `config` `trapPerTurn`, `threatPerTurn`, `threatRadius` (0 when absent) and data `shared_charge` | Rogue |
+| Invisibility breaks (3 sites) | flag `invisBreaks` of every held class (`invisibilityBreaks(p, {codes})`) | `class_reaver` held |
+| the pre-cast boost bookkeeping | the boosting class (`pre_cast`), its `perAction` flag | Elementalist |
+| fallback action commit, the swap probe, the used mark | a class with `combat_in`; its `config` `publishRange` / `range`; `combat_in` / `pick_target` of that class | Manipulator |
+| chase bonus (step, life points, life max) | every class with `chase_step`, summed over their namespaces; `config` `maxOnly` | Avenger |
+| first contact, the hand request range, the UI notice | a class with `contact`; `config` `contact` | Prophet |
+| the card's blocked reason | the `blocked` hook (args `fallen_near`, `archive_creature`) | Necromancer |
+| a revive (raised list, companion, onRevived) | the class of the revive record (`cls`, set by classAbility) | Necromancer |
+
+Log and notice texts use the class's short id / name, so the built-ins print exactly what they printed before.
 
 ## Application: doResolution / endRound
 

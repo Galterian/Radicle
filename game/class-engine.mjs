@@ -105,6 +105,9 @@ export const HOOK_SPECS = Object.freeze({
   contact:         { args: ['foes'], result: 'id' },
   local:           { args: [], result: 'local' },
   share_skills:    { args: ['actor', 'skills', 'adj'], result: 'share' },
+  // Phase 4 (2026-11-20): why the class card cannot be clicked now (null = it can). Planning / UI only, never the
+  // resolver. args: fallen_near (a fallen ally creature next to me that nobody raised), archive_creature (one in my archive).
+  blocked:         { args: ['fallen_near', 'archive_creature'], result: 'reason' },
 });
 export const HOOK_NAMES = Object.freeze(Object.keys(HOOK_SPECS));
 export const STD_HOOKS = Object.freeze(HOOK_NAMES.filter(h => HOOK_SPECS[h].std));
@@ -122,7 +125,7 @@ export function neutralOf(hookName, args = {}) {
     case 'colours': case 'config': return {};
     case 'kind': return 'static';
     case 'ready': case 'restore': case 'emits': case 'plan_emits': case 'combat_in': return false;
-    case 'strike': case 'reanimated_strike': case 'stance': case 'stance_target': case 'pick_target': case 'contact': case 'local': return null;
+    case 'strike': case 'reanimated_strike': case 'stance': case 'stance_target': case 'pick_target': case 'contact': case 'local': case 'blocked': return null;
     case 'attack_out': return args.dmg;
     case 'lifesteal': case 'end_turn': return 0;
     case 'lifesteal_apply': return args.life;
@@ -162,6 +165,7 @@ export function resultOk(hookName, v) {
     case 'number': return isNum(v);
     case 'code': return v === null || ['A', 'B', 'M', 'P', 'EM', 'EP'].includes(v);
     case 'id': return v === null || isStr(v);
+    case 'reason': return v === null || isStr(v);
     case 'trap': return TRAP_OUTCOMES.includes(v);
     case 'step': return isObj(v) && typeof v.stealth === 'boolean' && TRAP_OUTCOMES.includes(v.trap);
     case 'strike': return v === null || (isObj(v) && ['retry', 'destroyed', 'too weak'].includes(v.result) && typeof v.ok === 'boolean' && typeof v.last === 'boolean');

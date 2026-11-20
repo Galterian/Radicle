@@ -382,6 +382,8 @@ const REF = {
   pick_target: (_W, _ctx, cls, { seed, cands }) => cls === 'class_manipulator' ? pickManipTarget(seed, cands, sha256Hex) : null,
   chase_step: (W, ctx, cls, { state, chasing }) => cls === 'class_avenger' ? chaseBonusStep(state, chasing, avengerConfig(refWorld(W, ctx).data.classes.class_avenger?.data)) : { chasers: [...new Set(chasing || [])].sort(), bonus: Number(state?.bonus) || 0, fresh: [], grant: 0, fade: false },
   contact: (_W, _ctx, cls, { foes }) => cls === 'class_prophet' ? prophetPick(foes) : null,
+  // peer.mjs classBlocked (verbatim before phase 4): only the Necromancer is ever blocked.
+  blocked: (_W, _ctx, cls, { fallen_near, archive_creature }) => cls === 'class_necromancer' && !(fallen_near || archive_creature) ? 'no fallen ally creature next to me and none in my archive' : null,
   // Bard: "for (const o of adjacentOf(r.actor, o => !enemyOf(r.actor, o) && !!byActorPre.get(o))) {" (one Bard's turn of the loop)
   share_skills: (W, ctx, cls, { actor, skills, adj }) => {
     if (cls !== 'class_bard') return { adds: [], log: [] };

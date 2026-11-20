@@ -277,6 +277,8 @@ const pickTarget = (ctx, _id, { seed, cands }) => pickManipTarget(seed, cands ||
 const chaseStep = (ctx, id, { state, chasing }) => chaseBonusStep(state, chasing, avengerConfig(cdOf(ctx, id)));
 // contact (Prophet): whom to look at among the enemies in contact.  args { foes: [{id, fought}] } → id | null
 const contact = (_ctx, _id, { foes }) => prophetPick(foes);
+// blocked (Necromancer, phase 4): nothing to raise — no fallen ally creature next to me and none in my archive.
+const blocked = (_ctx, _id, { fallen_near, archive_creature }) => (fallen_near || archive_creature ? null : 'no fallen ally creature next to me and none in my archive');
 // local (Paladin / Shaman / Kensei / Weapon Master / Summoner): the planning-time deck operation peer.mjs runs.
 const local = (_ctx, id) => rulesOf(id).local ? JSON.parse(JSON.stringify(rulesOf(id).local)) : null;
 // share_skills (Bard, static): every ally in contact plays my skills too when their action allows (rides).
@@ -465,6 +467,7 @@ const HOOKS = {
   contact: (id, ctx, a) => contact(ctx, id, a),
   local: (id, ctx) => local(ctx, id),
   share_skills: (id, ctx, a) => shareSkills(ctx, id, a),
+  blocked: (id, ctx, a) => blocked(ctx, id, a),
 };
 export const HOOK_NAMES = Object.keys(HOOKS);
 // The JS answer of a hook for a class that does not act in it (= class-engine.mjs neutralOf for every hook but the std ones).

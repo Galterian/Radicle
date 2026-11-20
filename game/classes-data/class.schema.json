@@ -42,7 +42,8 @@
         "chase_step",
         "contact",
         "local",
-        "share_skills"
+        "share_skills",
+        "blocked"
       ]
     },
     "stdHookName": {
@@ -197,7 +198,7 @@
         },
         "flags": {
           "type": "object",
-          "description": "Resolver flags = classes.mjs CLASS_RULES[id] (SCHEMA.md): phase (pre|post|local), needs, local, passiveTurn, handDefaults, stance, emits, planEmits, attackBonus, illusionRange, hooks.",
+          "description": "Resolver flags = classes.mjs CLASS_RULES[id] (SCHEMA.md): phase (pre|post|local), needs, local, passiveTurn, handDefaults, stance, emits, planEmits, attackBonus, illusionRange, perAction, invisBreaks (action codes that also break Invisibility), hooks.",
           "properties": {
             "phase": {
               "enum": [

@@ -52,7 +52,9 @@ export function invisibilityBreaks(rv, opts = {}) {
   if (!rv) return false;
   const codes = Array.isArray(rv.trance) && rv.trance.length ? rv.trance : [rv.action];
   if (codes.some(c => c === 'A' || c === 'B')) return true;
-  if (opts.reaver && codes.some(c => c === 'EP' || c === 'EM')) return true;
+  // opts.codes: more codes that break it — a class flag invisBreaks (phase 4; the Reaver's EP / EM fight as Attack).
+  const extra = Array.isArray(opts.codes) ? opts.codes : opts.reaver ? ['EP', 'EM'] : [];
+  if (extra.length && codes.some(c => extra.includes(c))) return true;
   const eff = rv.effect_id ?? rv.effect?.effect_id ?? null;
   return !!eff && eff !== 'effect_invisibility';
 }

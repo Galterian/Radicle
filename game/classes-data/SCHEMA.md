@@ -38,6 +38,7 @@ The chaosD6-Classes program (user request 2026-11-16) splits the classes out the
   - `planEmits`: Enchanter.
   - `attackBonus`: Assassin.
   - `illusionRange`: Illusionist.
+  - `invisBreaks`: action codes that also break Invisibility for a unit holding the class (Reaver: `["EP", "EM"]`, they fight as an Attack).
   - `hooks`: the non-std hooks the class answers. `peer:<site>` names a site that stays in peer.mjs and is documentation only.
 - **uses**: the libraries whose subs `call` may reach, searched in order.
 - **hooks**: hook name → program. A hook that is absent falls back to the lib default for std hooks, or to the neutral value for the others.
@@ -79,6 +80,7 @@ A program sees the hook arguments as root registers (`{"var": "cs.archived"}`) p
 | `contact` | | `foes` | id or `null` (Prophet) |
 | `local` | | – | `null` or `{op: recover\|draw\|grant, …}` |
 | `share_skills` | | `actor, skills, adj` | `{adds: [{on, skill}], log}` (Bard) |
+| `blocked` | | `fallen_near, archive_creature` | `null` or the reason the card cannot be clicked now (Necromancer; UI / planning only) |
 
 The argument shapes are described in `HOOKS.md`, which also lists the peer.mjs site that calls each hook.
 

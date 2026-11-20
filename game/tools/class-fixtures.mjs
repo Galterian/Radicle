@@ -187,6 +187,7 @@ export function argsFor(hook, classId, W, R) {
     case 'combat_in': return { args: { list: R.p(0.2) ? undefined : Array.from({ length: R.int(4) }, () => (R.p(0.1) ? null : { source: R.pick(['action', 'effect', 'trap']), amount: R.int(3), ...(R.p(0.3) ? { bonus: R.p(0.5) } : {}), why: R.pick(['Attack', 'Attack', 'Block', 'P']) })) } };   // CR: + why
     case 'pick_target': return { args: { seed: `s${R.int(1e6)}:manipulator:${ctx.turn}.${R.int(3)}`, cands: ids.filter(() => R.p(0.5)) } };
     case 'chase_step': return { args: { state: R.p(0.1) ? undefined : { chasers: ids.filter(() => R.p(0.3)), bonus: R.pick([0, 1, 2, '1', undefined, null]) }, chasing: ids.filter(() => R.p(0.4)).concat(R.p(0.2) ? [R.pick(ids)] : []) } };
+    case 'blocked': return { args: { fallen_near: R.p(0.5), archive_creature: R.p(0.5) } };
     case 'contact': return { args: { foes: R.p(0.1) ? undefined : ids.filter(() => R.p(0.5)).map(id => (R.p(0.05) ? null : { id, fought: R.p(0.3) })) } };
     case 'share_skills': {
       const sk = Object.keys(SKILLS);

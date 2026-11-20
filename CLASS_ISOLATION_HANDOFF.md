@@ -218,3 +218,21 @@ Total: ~1,300–1,600 lines touched/new in chaosD6, ~600 moved to Classes.
     ×11 + one-standing ×7, far trap ×5 + vision ×5 + one-standing ×4, cleric 33× miss path) + groups 1-4 Swarm-1734,
     1741, 1749, 1755: 0 errors, 0 divergences. Not live: Cleric disabling a trap, the Warrior step (bot never clicks).
   - Pin diff (dry run): + class-world.mjs, validator changed. Not synced (OCI sync at the end, user 2026-11-20).
+- **Phase 4 done (uncommitted):** no `class_<id>` literal is left in peer.mjs (only `class_ability` / `class_id` keys).
+  - Helpers: `hasHook(cls, h)` (flags.hooks), `clShort` / `clName`, `chargeCfgOf(cls)` (config trapPerTurn /
+    threatPerTurn / threatRadius, 0 when absent; data shared_charge), `invisCodesOf(perms)`, `CL_CHASERS` / `chaseBonusNow()`.
+  - Rogue charges per stepping class (its namespace, memoised config per simulate); Reaver → flag `invisBreaks: ["EP","EM"]`
+    (reaver 1.3.0), effects.mjs `invisibilityBreaks(p, {codes})` (old `{reaver}` still accepted); Elementalist pending
+    boost carries `cls`; Manipulator = a class with `combat_in` (config publishRange / range, seed `${salt}:${clShort}:…`
+    unchanged); Avenger = every `chase_step` class; Prophet = a class with `contact` (requestHand +2 range for it);
+    Necromancer: new hook `blocked` (args fallen_near, archive_creature → reason | null; necromancer 1.3.0) and revive
+    records carry `cls` (set in classAbility). The Cleric disable notice names my class.
+  - Snapshot: stealth_turn, rogue_trap_turn, rogue_trap_n, reanimated_csv, chase_bonus, chasers_csv dropped (no reader);
+    reanim_down_csv stays for the UI until phase 5. Unused class config imports dropped from peer.mjs.
+  - Validator: HOOK_POWER `blocked: null` (a UI gate, never priced). Schema hookName + `blocked`; docs HOOKS.md
+    ("No class ids in peer.mjs"), SCHEMA.md (blocked, invisBreaks).
+  - Checks all green. Swarms default engine: focused rogue/manipulator/avenger/prophet/necromancer/reaver/elementalist
+    Swarm-1831 (group `r`; blob namespaces ok, threat charge, chase grant/loss, necro blocked=21) + groups 1-4 Swarm-1837,
+    1843, 1850, 1856: 0 errors, 0 divergences. Still not live: Rogue trap dodge, Manipulator swap, Prophet hand look.
+  - Pin diff (dry run): engine + validator + 7 definitions + schema/docs changed. Not synced.
+  - Patches: tools/out/_patch_ci17.py (engine), _ci18 (defs), _ci19 (peer.mjs), _ci20 (tidy), _ci21 (docs).
