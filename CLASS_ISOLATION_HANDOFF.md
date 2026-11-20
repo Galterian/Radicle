@@ -157,3 +157,26 @@ Total: ~1,300–1,600 lines touched/new in chaosD6, ~600 moved to Classes.
 - **Shared between the clones:** `~/.radicle`, ports and `/tmp` (`/tmp/swarm.log`, `/tmp/chaos-A.log`).
 - Never drive the user's phone while they use it. Never curl the OCI seed. Radicle: OCI seed only, no public seeds.
 - The phone APK ships a staged copy of game/: build via `_tools/build_and_deploy.sh`, which stages first.
+
+## Progress in this clone (session chaosd6-8a, 2026-11-20)
+- swarm-run.sh fix applied by the user (a3e9ed4). Launcher C (`~/repo_radicle_b`) hangs swarm-test on its seed sync
+  before P-Agent5 joins: run with `NO_C=1`. Scratch runner `game/tools/out/_ci_run.sh <1|2|3|4|p> [shadow|data|default]`
+  (+ `_ci_summary.sh`, `_ci_checks.sh` = every phase-end check inside WSL, `_ci_sync.sh` = repo-sync dry run).
+- **Phase 0 done:** shadow strict groups 2-4 (Swarm-1259, 1318, 1325) and CLASS_ENGINE=data over the 10 plumbing
+  classes (Swarm-1333): 0 errors / divergences / class + effect-hook mismatches each.
+- **Phase 1 done (uncommitted):**
+  - classes.mjs: `CLASS_RULES` = the bundle's `flags`, sorted by id (the literal table is gone); `BUILTIN_IDS` = the
+    bundle; `CLASS_ENGINE` defaults to `data` (js / shadow on request; JS hooks stay as oracles until phase 6).
+  - Bundle loads eagerly and leniently (`loadClassDefs(…, {lenient})` → `errors`; `classBundleErrors()`), so a staged
+    Classes tree with a bad file still imports the engine; peer.mjs exits if any built-in definition is invalid.
+  - peer.mjs: `data.classes = builtinClassEntries()` (the definitions' name + data), not data/classes.json.
+    data/classes.json stays the rebalance / proposals collection; class-engine-check keeps it = the definitions.
+  - classes-check: sorted-order assertions + "every bundled definition loads".
+  - Checks all green in WSL (classes-repo-check's cache-dir cases fail only under Windows node: POSIX paths).
+  - Swarms, default engine, groups 1-4: Swarm-1527, 1533, 1540, 1547 — 0 errors, 0 divergences.
+  - Pin diff (dry run): engine classes.mjs + class-engine.mjs, validator pin f532347fd5a0 (was ccde42d34407).
+    Not synced / republished yet.
+- **Left from phase 1:** the physical move of the data/classes.json collection (content + weights) into
+  classes-data / chaosD6-Classes (ruling 5) — readers: peer loadJson, js/main.js `/data/classes.json`, swarm-test
+  readData, class-fixtures, fortress-check / chase-check `active()`, classes-handshake dataClassIds, logic tools,
+  rebalance / proposals, stage-mobile-bundle. `dungeonStep` literals only remain in the JS oracle (data programs answer).

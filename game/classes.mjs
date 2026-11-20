@@ -10,7 +10,7 @@
 // passes in (snapshots, reveals, ids, numbers) and returns a value / a record of what to apply — peer.mjs keeps the
 // plumbing (entity writes, card moves, UI notices). Hook inventory, inputs / outputs, call sites: classes-data/HOOKS.md.
 // C2 (same file): the hooks as JsonLogic data (classes-data/classes/<id>.json, engine class-engine.mjs, schema
-// classes-data/SCHEMA.md); CLASS_ENGINE=js (default) | data | shadow picks who answers classHook (bottom of file).
+// classes-data/SCHEMA.md); CLASS_ENGINE=data (default) | js | shadow picks who answers classHook (bottom of file).
 //
 // P1 status (2026-11-16): this module is NOT wired into peer.mjs yet (P2, `C1`-tagged hunks). tools/classes-check.mjs
 // proves every hook against a verbatim copy of the inline peer.mjs code; tools/class-engine-check.mjs proves the
@@ -43,7 +43,9 @@ export const TRANCE = 'skill_battle_trance';
 // = peer.mjs ELEM_TO_STAT (data/elements.json stat of each element) — used when the ctx has no elemStat.
 export const ELEM_TO_STAT = Object.freeze({ elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' });
 
-// Flags per class (key order = data/classes.json entry order).
+// Flags per class = the `flags` of its definition (class isolation phase 1, 2026-11-20: the definitions in
+// game/classes-data/classes/*.json — or CLASS_DEFS_DIR — are the only source; a new class needs no edit here).
+// Key order = sorted class id (every iteration over CLASS_RULES is per held class or commutative).
 //   phase       where its clicked ability resolves: 'pre' (simulate pre-pass, before casts), 'post' (post-pass
 //               switch), 'local' (planning, this peer only — CLASS_LOCAL), null (no click: static / passive)
 //   needs       what the click must carry (peer.mjs CLASS_NEEDS): tile | ally_or_self | enemy_near | monster_near | attach_effect
@@ -58,41 +60,12 @@ export const ELEM_TO_STAT = Object.freeze({ elem_vitality: 'vitality', elem_soul
 //               CR 2026-11-18 (b): the Enchanter's A / B / M at every site, static)
 //   planEmits   (legacy, no built-in uses it since CR 2026-11-18) these codes emit once per turn while a cast is queued
 //   hooks       the hook points it acts in (HOOKS.md); 'peer:<name>' = behaviour that stays in peer.mjs
-export const CLASS_RULES = {
-  class_weapon_master: { phase: 'local', local: { op: 'draw', n: 2, max_hand: 3 }, hooks: ['local'] },   // CR 2026-11-17: inactive until the hand holds ≤ 3 cards; CP 2026-11-19 (pick 1 a): draw 2
-  class_animator:      { phase: 'post', needs: 'tile', hooks: ['ability', 'config'] },
-  class_druid:         { phase: 'post', hooks: ['ability'] },
-  class_enchanter:     { phase: null, emits: { A: true, B: true, M: true }, hooks: ['emits'] },   // CR 2026-11-18 (b): static, every A / B / M emits
-  class_elementalist:  { phase: null, passiveTurn: true, perAction: true, hooks: ['pre_cast'] },   // CR 2026-11-17: once per ACTION
-  class_transmuter:    { phase: null, hooks: ['transmute'] },
-  class_alchemist:     { phase: 'post', needs: 'tile', hooks: ['ability'] },
-  class_summoner:      { phase: 'local', local: { op: 'grant', effect_id: 'effect_summoning' }, hooks: ['local'] },
-  class_illusionist:   { phase: 'pre', illusionRange: ILLUSION_RANGE, hooks: ['ability'] },
-  class_healer:        { phase: 'post', needs: 'ally_or_self', hooks: ['ability'] },
-  class_priest:        { phase: 'post', needs: 'tile', hooks: ['ability', 'config'] },
-  class_prophet:       { phase: null, handDefaults: { hand_reveal: { n: 'all' }, passive: true }, hooks: ['config', 'contact', 'peer:requestHand'] },
-  class_seeker:        { phase: 'post', needs: 'attach_effect', hooks: ['ability', 'config'] },
-  class_paladin:       { phase: 'local', local: { op: 'recover', kind: 'action', what: 'an action card' }, hooks: ['local'] },
-  class_cleric:        { phase: 'post', hooks: ['ability', 'config', 'step', 'dungeon_step'] },
-  class_guardian:      { phase: null, hooks: ['end_turn'] },
-  class_manipulator:   { phase: null, passiveTurn: true, hooks: ['config', 'combat_in', 'pick_target', 'peer:manipAlt'] },
-  class_bard:          { phase: null, hooks: ['share_skills'] },
-  class_shaman:        { phase: 'local', local: { op: 'recover', kind: 'effect', what: 'an effect card' }, hooks: ['local'] },
-  class_necromancer:   { phase: 'post', hooks: ['ability', 'reanimated_strike', 'peer:revive'] },
-  class_witch:         { phase: 'post', needs: 'enemy_near', handDefaults: { hand_discard: { n: 3 } }, hooks: ['ability', 'config'] },
-  class_restaurateur:  { phase: null, hooks: ['destroy_result'] },
-  class_warrior:       { phase: 'post', needs: 'tile', hooks: ['ability'] },
-  class_ranger:        { phase: 'post', needs: 'attach_effect', hooks: ['ability'] },
-  class_kensei:        { phase: 'local', local: { op: 'recover', kind: 'skill', what: 'a skill card' }, hooks: ['local'] },
-  class_reaver:        { phase: null, stance: { EP: 'A', EM: 'A' }, emits: { A: true }, hooks: ['stance', 'stance_target', 'emits'] },
-  class_barbarian:     { phase: null, stance: { EP: 'B', EM: 'B' }, emits: { B: true }, hooks: ['stance', 'emits'] },   // CR 2026-11-18 (a): EM is a Block too
-  class_overlord:      { phase: 'post', needs: 'ally_or_self', hooks: ['ability'] },
-  class_rogue:         { phase: null, passiveTurn: true, hooks: ['config', 'step', 'dungeon_step'] },
-  class_avenger:       { phase: 'post', needs: 'monster_near', hooks: ['ability', 'config', 'chase_step'] },
-  class_monk:          { phase: null, emits: { M: true, EM: true }, hooks: ['emits'] },   // CR 2026-11-17: no EP-as-Move stance; casts while moving (M / EM)
-  class_noble:         { phase: null, hooks: ['lifesteal', 'lifesteal_apply'] },
-  class_assassin:      { phase: null, attackBonus: 1, hooks: ['attack_out'] },
-};
+// The bundled class set: every definition is a built-in class (JS markers allowed, travels by name for now).
+// Lenient: an invalid file is left out (a staged chaosD6-Classes tree is judged file by file by its validator);
+// peer.mjs refuses to start while classBundleErrors() is not empty.
+const BUNDLE = CE.loadClassDefs(undefined, { lenient: true });
+export const classBundleErrors = () => [...BUNDLE.errors];
+export const CLASS_RULES = Object.fromEntries([...BUNDLE.defs.keys()].sort().map(id => [id, JSON.parse(JSON.stringify(BUNDLE.defs.get(id).flags || {}))]));
 export const CLASSES_IMPLEMENTED = Object.keys(CLASS_RULES);
 // Abilities that resolve in peer.mjs itself (map geometry, occupancy, the move register): their definitions mark
 // the `ability` hook {"engine": "js", "impl": "peer.mjs#…"} and classHook('ability', …) returns null for them.
@@ -502,19 +475,23 @@ export function classHook(hookName, classId, ctx, args = {}) {
 // Convenience wrappers peer.mjs uses where the old code called a closure.
 export const classColours = (ctx, id) => classHook('colours', id, ctx);
 export const classKindOf = (ctx, id) => classHook('kind', id, ctx);
+// builtinClassEntries() → { id: {id, name, tags, data} } of the bundled definitions, sorted by id — what peer.mjs
+// reads as data.classes (class isolation phase 1: one class-data source; tools/class-engine-check.mjs keeps
+// data/classes.json, still the rebalance / proposals collection, equal to it).
+export const builtinClassEntries = () => Object.fromEntries([...BUNDLE.defs.keys()].sort().map(id => { const d = BUNDLE.defs.get(id); return [id, { id, name: d.name, tags: [], data: JSON.parse(JSON.stringify(d.data || {})) }]; }));
 
 // ---- C2: engine switch, data hooks, foreign classes --------------------------------------------------------------
-// CLASS_ENGINE=js (default): the hooks above. data: every hook runs the program of the class's definition
+// CLASS_ENGINE=data (default since class isolation phase 1): every hook runs the program of the class's definition
 // (game/classes-data/classes/<id>.json, or CLASS_DEFS_DIR; std hooks fall back to lib classes_std); an ability marked
 // {"engine":"js","impl":"peer.mjs#…"} returns null (peer.mjs resolves it). shadow: both run, results must be
 // JSON-identical; a mismatch goes to stderr, CLASS_SHADOW_STRICT=1 throws; the JS result is returned.
+// js: the JS reference hooks above (test oracles until they move to chaosD6-Classes, phase 6).
 // CLASS_SHADOW_REPORT=1 prints a tally at exit.
 const ENGINE_ENV = (typeof process !== 'undefined' && process.env) || {};
-export const CLASS_ENGINE = ['data', 'shadow'].includes(ENGINE_ENV.CLASS_ENGINE) ? ENGINE_ENV.CLASS_ENGINE : 'js';
+export const CLASS_ENGINE = ['js', 'shadow'].includes(ENGINE_ENV.CLASS_ENGINE) ? ENGINE_ENV.CLASS_ENGINE : 'data';
 export const classShadowStats = { compared: 0, mismatches: 0, errors: 0, byHook: {} };
 const BUILTIN_IDS = new Set(CLASSES_IMPLEMENTED);
-let bundle = null;
-export const classBundle = () => (bundle ||= CE.loadClassDefs(undefined, { builtinIds: BUILTIN_IDS }));
+export const classBundle = () => BUNDLE;
 const foreignByKey = new Map(), foreignById = new Map(), foreignIds = new Set();
 const suspended = new Map();   // CH: foreign id → its CLASS_RULES entry while the class is dormant (suspendForeignClasses)
 function defOf(id) {
@@ -564,9 +541,8 @@ function shadowHook(hookName, classId, ctx, args) {
   }
   return js;
 }
-if (CLASS_ENGINE !== 'js') {
-  classBundle();   // fail fast on a bad definition
-  if (ENGINE_ENV.CLASS_SHADOW_REPORT === '1') process.on('exit', () => console.log(`[classes] ${CLASS_ENGINE}: ${bundle.defs.size} data classes; shadow compared ${classShadowStats.compared}, mismatches ${classShadowStats.mismatches}, errors ${classShadowStats.errors} ${JSON.stringify(classShadowStats.byHook)}`));
+{
+  if (ENGINE_ENV.CLASS_SHADOW_REPORT === '1') process.on('exit', () => console.log(`[classes] ${CLASS_ENGINE}: ${BUNDLE.defs.size} data classes; shadow compared ${classShadowStats.compared}, mismatches ${classShadowStats.mismatches}, errors ${classShadowStats.errors} ${JSON.stringify(classShadowStats.byHook)}`));
 }
 
 // validateClassDef(def, {libs, libMap}) → [errors] — a definition file (chaosd6.class/1). JS markers only for built-ins.

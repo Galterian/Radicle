@@ -7,7 +7,7 @@
 //    is on 2026-11-16 (copied verbatim, only the closure names bound to the test world; grep the quoted anchors in
 //    peer.mjs), compared JSON-for-JSON with classHook(...) on a deep copy of the same world.
 // Under CLASS_ENGINE=shadow|data (tools/class-engine-check.mjs runs it that way) the classHook side is the data engine.
-import { CLASS_RULES, CLASSES_IMPLEMENTED, CLASS_NEEDS, PASSIVE_TURN_CLASSES, PEER_ABILITIES, TRAP_POWER as CL_TRAP_POWER, ELEM_TO_STAT as CL_E2S, HOOK_NAMES, classHook, CLASS_ENGINE } from '../classes.mjs';
+import { CLASS_RULES, CLASSES_IMPLEMENTED, CLASS_NEEDS, PASSIVE_TURN_CLASSES, PEER_ABILITIES, TRAP_POWER as CL_TRAP_POWER, ELEM_TO_STAT as CL_E2S, HOOK_NAMES, classHook, CLASS_ENGINE, classBundleErrors } from '../classes.mjs';
 import { TRAP_POWER, pickBySalt, pointBuy } from '../effects.mjs';
 import { pointBuy as enginePointBuy } from '../effect-engine.mjs';
 import { rogueConfig, clericConfig } from '../class-traps.mjs';
@@ -26,11 +26,14 @@ const eq = (label, got, want, quietOk = false) => {
   return ok;
 };
 const N = Number(process.env.CLASSES_CHECK_N || 400);
+const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
 if (CLASS_ENGINE !== 'js') console.log(`note: CLASS_ENGINE=${CLASS_ENGINE} — classHook answers through the ${CLASS_ENGINE} engine`);
 
 // ---- 1. table -------------------------------------------------------------------------------------------------
 console.log('-- 1. table');
-eq('CLASS_RULES ids = data/classes.json ids (same order)', CLASSES_IMPLEMENTED, Object.keys(CLASSES));
+// Class isolation phase 1: CLASS_RULES = the bundled definitions, sorted by id.
+eq('every bundled definition loads', classBundleErrors(), []);
+eq('CLASS_RULES ids = data/classes.json ids (sorted)', CLASSES_IMPLEMENTED, Object.keys(CLASSES).sort());
 // peer.mjs "const CLASS_NEEDS = {" (verbatim)
 const OLD_NEEDS = {
   class_animator: 'tile', class_priest: 'tile', class_alchemist: 'tile', class_warrior: 'tile',
@@ -49,9 +52,9 @@ const HAND_CLASS_DEFAULTS = {
 };
 eq('handDefaults = peer.mjs HAND_CLASS_DEFAULTS', Object.fromEntries(CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].handDefaults).map(id => [id, CLASS_RULES[id].handDefaults])), HAND_CLASS_DEFAULTS);
 // peer.mjs "const CLASS_LOCAL = {": Paladin / Shaman / Kensei recover an action / effect / skill card, Weapon Master draws one, Summoner gets a Summoning.
-eq('local descriptors = peer.mjs CLASS_LOCAL', Object.fromEntries(CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].phase === 'local').map(id => [id, classHook('local', id, null)])), {
+eq('local descriptors = peer.mjs CLASS_LOCAL', Object.fromEntries(CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].phase === 'local').map(id => [id, classHook('local', id, null)])), sortKeys({
   class_weapon_master: { op: 'draw', n: 2, max_hand: 3 } /* CR 2026-11-17; CP 2026-11-19 (pick 1 a): draw 2 */, class_summoner: { op: 'grant', effect_id: 'effect_summoning' },
-  class_paladin: { op: 'recover', kind: 'action', what: 'an action card' }, class_shaman: { op: 'recover', kind: 'effect', what: 'an effect card' }, class_kensei: { op: 'recover', kind: 'skill', what: 'a skill card' } });
+  class_paladin: { op: 'recover', kind: 'action', what: 'an action card' }, class_shaman: { op: 'recover', kind: 'effect', what: 'an effect card' }, class_kensei: { op: 'recover', kind: 'skill', what: 'a skill card' } }));
 // peer.mjs post-pass: "if (!ab || ['class_elementalist', 'class_illusionist', 'class_rogue'].includes(ab.id)) continue;" + its switch cases
 const POST_CASES = ['class_healer', 'class_overlord', 'class_druid', 'class_witch', 'class_avenger', 'class_animator', 'class_priest', 'class_cleric', 'class_alchemist', 'class_ranger', 'class_seeker', 'class_warrior', 'class_necromancer'];
 eq('phase post = the post-pass switch cases', CLASSES_IMPLEMENTED.filter(id => CLASS_RULES[id].phase === 'post').sort(), [...POST_CASES].sort());

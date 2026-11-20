@@ -61,7 +61,7 @@ import { createSkPeer } from './skills-handshake.mjs';   // S4: foreign (player-
 import { createClPeer, clRefOf } from './classes-handshake.mjs';   // CH: foreign (player-branch) classes by ref (chaosD6-Classes)
 import { isClassSuspended, foreignClassDef } from './classes.mjs';   // CH: a dormant foreign class (classes-handshake.mjs gate); a foreign class's data
 import { SKILLS_IMPLEMENTED, TRANCE, NEGATING_SKILLS, skillHook, ridesOn as skillRidesOn } from './skills.mjs';   // S1: pure skill rules (skills-data/HOOKS.md)
-import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md)
+import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook, builtinClassEntries, classBundleErrors } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md)
 import { channelBreaks } from './channel-rule.mjs';   // CR: the channel break rule (oracle in tools/classes-check.mjs)
 import { effectHook, applyHookRecords } from './effect-hooks.mjs';   // MV: import — channels / traps / holdings / summons as hook records
 import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP, GUN_MEMBER_CORE } from './gun-member.mjs';
@@ -346,6 +346,10 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills'
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
+// Class isolation phase 1: the classes are the bundled definitions (game/classes-data), not data/classes.json.
+// A broken definition would silently drop a class on this peer only: refuse to start instead.
+if (classBundleErrors().length) { console.error(`[classes] invalid class definitions:\n  ${classBundleErrors().join('\n  ')}`); process.exit(1); }
+data.classes = builtinClassEntries();
 // Fortress stat buy (user ruling 2026-11-14): data/rules.json rule_building_fortress → js/building-bonus.js FORTRESS.
 try { const fe = (await loadJson('rules.json')).entries.find(e => e.id === 'rule_building_fortress'); if (fe) configureFortress(pickActive(fe).data?.fortress); } catch (e) { console.warn(`fortress rule not loaded (${e.message}) — building-bonus.js defaults`); }
 // Monster deck effects (user rulings 2026-11-15): data/rules.json rule_monster_deck_effects → game/monster-deck.mjs config.

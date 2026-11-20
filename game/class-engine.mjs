@@ -256,8 +256,9 @@ export function stdDefaults(libs = defaultLibs()) {
   if (std?.defaults) { const subs = new Map(Object.entries(std.subs)); for (const [h, s] of Object.entries(std.defaults)) out[h] = { logic: { call: [s] }, subs }; }
   return out;
 }
-// loadClassDefs(dir | {classes, libs}, {builtinIds}) → { defs: Map(id → def), libs: [lib], std }. Invalid files throw.
-export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_DIR, { builtinIds = null } = {}) {
+// loadClassDefs(dir | {classes, libs}, {builtinIds, lenient}) → { defs: Map(id → def), libs: [lib], std, errors }. Invalid
+// files throw; lenient: an invalid class is left out and its reasons go to `errors` ([`<id>: <reasons>`]).
+export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_DIR, { builtinIds = null, lenient = false } = {}) {
   let classes = [], libs = [];
   if (typeof src === 'string') {
     const cDir = fs.existsSync(path.join(src, 'classes')) ? path.join(src, 'classes') : src;
@@ -266,14 +267,17 @@ export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_D
     libs = jsonFiles(lDir).map(readJson);
   } else { classes = src.classes || []; libs = src.libs || defaultLibs(); }
   for (const l of libs) { const e = validateClassLib(l); if (e.length) throw new Error(`class lib ${l?.id}: ${e.join('; ')}`); }
-  const defs = new Map();
+  const defs = new Map(), errors = [];
   for (const d of classes) {
     const e = validateClassDef(d, { libs, builtin: !builtinIds || builtinIds.has(d?.id) });
-    if (e.length) throw new Error(`class ${d?.id}: ${e.join('; ')}`);
-    if (defs.has(d.id)) throw new Error(`class ${d.id} defined twice`);
+    if (!e.length && defs.has(d.id)) e.push('defined twice');
+    if (e.length) {
+      if (!lenient) throw new Error(`class ${d?.id}: ${e.join('; ')}`);
+      errors.push(`${d?.id}: ${e.join('; ')}`); continue;
+    }
     defs.set(d.id, bindClassDef(d, libs));
   }
-  return { defs, libs, std: stdDefaults(libs) };
+  return { defs, libs, std: stdDefaults(libs), errors };
 }
 
 // ------------------------------------------------------------ running
