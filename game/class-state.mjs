@@ -4,8 +4,8 @@
 //   { <class_id>: { charges: { <name>: { turn, n } }, <key>: <JSON value>, … }, … }
 // It travels as ONE snapshot field, `class_state_json`: canonical JSON (object keys sorted at every depth, empty
 // namespaces dropped), '' while the store is empty. It replaces the per-class snapshot fields (stealth_turn,
-// rogue_trap_turn / rogue_trap_n, chase_bonus, chasers_csv, reanimated_csv, reanim_down_csv), which peer.mjs still
-// writes beside it — derived from the store — for one phase. The resolver reads other units' class state only
+// rogue_trap_turn / rogue_trap_n, chase_bonus, chasers_csv, reanimated_csv, reanim_down_csv); peer.mjs wrote them
+// beside it for one phase each (gone: phase 4, reanim_down_csv phase 5). The resolver reads other units' class state only
 // through parseClassState(snapshot.class_state_json); class programs through the class_state ctx op (class-engine.mjs).
 // Pure: no peer globals, no I/O.
 

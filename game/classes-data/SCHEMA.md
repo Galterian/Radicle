@@ -1,4 +1,4 @@
-# chaosD6 class definitions — `chaosd6.class/1` and `chaosd6.class-lib/1`
+# chaosD6 class definitions — `chaosd6.class/2` (`/1` still loads) and `chaosd6.class-lib/1`
 
 The chaosD6-Classes program (user request 2026-11-16) splits the classes out the way the effects (E1–E6) and the skills (S1–S6) were split:
 
@@ -40,6 +40,13 @@ The chaosD6-Classes program (user request 2026-11-16) splits the classes out the
   - `illusionRange`: Illusionist.
   - `invisBreaks`: action codes that also break Invisibility for a unit holding the class (Reaver: `["EP", "EM"]`, they fight as an Attack).
   - `hooks`: the non-std hooks the class answers. `peer:<site>` names a site that stays in peer.mjs and is documentation only.
+- **ui** (`chaosd6.class/2` only, optional; class isolation phase 5, 2026-11-20): what the generic UI renderer of `js/main.js` shows, so the UI names no class. Keys (`class-engine.mjs UI_KEYS`), each a non-empty string:
+  - `needs_hint`: what the click must carry (replaces the generic text per `flags.needs`), e.g. the Animator's "a building within 2 hexes to copy; …".
+  - `ability_label`: the class card's text while it is ready (default `ready`).
+  - `icon`: one glyph (≤ 4 chars) on the class card (default ⚜).
+  - `notice`: what a click on a class that fires by itself says (the Prophet's "automatic — …").
+  - The peer sends every class's block as `class_ui` (hello / `class_catalog`, `classes.mjs#classUiOf`), plus `reanim` = `data.destroy_reanimated` {elements, die} for a class that raises units (the reanimated pill).
+  - `/1` definitions (published player branches) still load: `/1` is `/2` without `ui`; a `/1` file with a `ui` block is refused. Bots have no per-class block (user ruling 2026-11-20 #2): `tools/swarm-test.mjs` infers from `needs`, the data knobs, the hooks and `class-engine.mjs#abilityRecordsOf`.
 - **uses**: the libraries whose subs `call` may reach, searched in order.
 - **hooks**: hook name → program. A hook that is absent falls back to the lib default for std hooks, or to the neutral value for the others.
   - A built-in class may instead give a marker, `{"engine": "js", "impl": "peer.mjs#animatorCopy", "note": "…"}`. This is used only for the 5 abilities that need map geometry, occupancy or the move register: Animator, Priest, Cleric, Seeker and Warrior.
@@ -120,6 +127,8 @@ To mirror JS exactly, a program must follow JS's edge cases: `!(d > 1)` is not t
 Lava hexes stay walkable, and nothing is built or planted on them. This is the current behaviour, so there is no data or hook change. A class whose ability places something on the map (a building, a Shrine, a copy, a planted trap) must refuse lava hexes, as the built-in Priest, Animator and Seeker do through join-plan.mjs `hexWalkableAt` (biome.js `isWalkable` refuses lava). Unit movement onto lava is unchanged.
 
 ## Foreign classes (handshake)
+
+**Built-in classes (phase 6, user ruling 3)** travel by name + pin: the holder's snapshot `cl_key` = `clKey` of the bundled definition and its libraries (16 hex). Every peer compares it with its own bundled copy once per action; a different or missing pin means another version, so the peer withholds its state hash for the action (`CLASS VERSION GATE`, UI notice `version`). The bundled set is the pre-seeded cache; two versions of one built-in id never run side by side. See HOOKS.md "The split".
 
 A foreign class is a definition from a player branch of chaosD6-Classes. Its id is not a built-in id: a variant of a built-in is a new id that `extends` it. It travels by ref `{id, sha256, libs, repo?, branch?, commit?, name?, verdict?}` (game/classes-handshake.mjs, the twin of the effects and skills handshakes).
 

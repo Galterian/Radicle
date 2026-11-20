@@ -18,7 +18,14 @@ import { parseClassState, nsOf, unionOf } from './class-state.mjs';   // phase 2
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CLASSES_DATA_DIR = path.join(here, 'classes-data');
-export const CLASS_SCHEMA_ID = 'chaosd6.class/1';
+// Phase 5 (2026-11-20): chaosd6.class/2 = /1 + an optional `ui` block (UI_KEYS); /1 stays loadable (user ruling 4 —
+// published player branches carry /1 definitions).
+export const CLASS_SCHEMA_ID = 'chaosd6.class/2';
+export const CLASS_SCHEMA_IDS = Object.freeze(['chaosd6.class/1', CLASS_SCHEMA_ID]);
+// The `ui` block (all optional strings, shown as-is by the generic renderer of js/main.js): needs_hint = what the
+// click must carry (replaces the generic text per flags.needs), ability_label = the class card's button text,
+// icon = one glyph on the card, notice = what a click on a class that fires by itself says.
+export const UI_KEYS = Object.freeze(['needs_hint', 'ability_label', 'icon', 'notice']);
 export const CLASS_LIB_SCHEMA_ID = 'chaosd6.class-lib/1';
 export const STD_LIB_ID = 'classes_std';
 // A hook runs once per unit / reveal / outcome: a small budget (an ability over ~10 units ≈ 3k ops).
@@ -213,7 +220,15 @@ const KINDS = ['tap', 'once_per_round', 'static', 'passive'];
 export function validateClassDef(def, opts = {}) {
   const errors = [];
   if (!isObj(def)) return ['definition is not an object'];
-  if (def.schema !== CLASS_SCHEMA_ID) errors.push(`schema must be ${CLASS_SCHEMA_ID}`);
+  if (!CLASS_SCHEMA_IDS.includes(def.schema)) errors.push(`schema must be ${CLASS_SCHEMA_IDS.join(' or ')}`);
+  if (def.ui !== undefined) {
+    if (def.schema !== CLASS_SCHEMA_ID) errors.push(`ui needs schema ${CLASS_SCHEMA_ID}`);
+    else if (!isObj(def.ui)) errors.push('ui must be an object');
+    else for (const [k, v] of Object.entries(def.ui)) {
+      if (!UI_KEYS.includes(k)) errors.push(`ui.${k}: unknown key (${UI_KEYS.join(', ')})`);
+      else if (typeof v !== 'string' || !v || v.length > (k === 'icon' ? 4 : 400)) errors.push(`ui.${k} must be a non-empty string (${k === 'icon' ? '≤ 4' : '≤ 400'} chars)`);
+    }
+  }
   if (typeof def.id !== 'string' || !/^class_[a-z0-9_]+$/.test(def.id)) errors.push('id must match class_[a-z0-9_]+');
   if (typeof def.name !== 'string' || !def.name) errors.push('name required');
   if (typeof def.version !== 'string' || !/^\d+\.\d+\.\d+/.test(def.version)) errors.push('version must be semver');
@@ -290,6 +305,28 @@ export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_D
     defs.set(d.id, bindClassDef(d, libs));
   }
   return { defs, libs, std: stdDefaults(libs), errors };
+}
+
+// classUi(def) → the definition's `ui` block ({} for /1 or none) — what peer.mjs sends the UI (classStateForUI.ui).
+export const classUi = (def) => (isObj(def?.ui) ? Object.fromEntries(UI_KEYS.filter(k => typeof def.ui[k] === 'string').map(k => [k, def.ui[k]])) : {});
+// abilityRecordsOf(def) → the ability results its `ability` program can give (ABILITY_OUT keys written in it or in a
+// sub it calls), sorted. Static read, never run: the generic bot planner (tools/swarm-test.mjs) infers from it what
+// the click needs on the map (a building to copy, traps to disable, …) — user ruling 2026-11-20 #2, no per-class bot block.
+export function abilityRecordsOf(def) {
+  const prog = def?.hooks?.ability;
+  if (!prog || isJsMarker(prog)) return [];
+  const subs = def.$subs || bindClassDef(def).$subs, found = new Set(), seen = new Set();
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (!isObj(v)) return;
+    for (const [k, x] of Object.entries(v)) {
+      if (ABILITY_OUT.includes(k)) found.add(k);
+      if (k === 'call' && Array.isArray(x) && typeof x[0] === 'string' && !seen.has(x[0])) { seen.add(x[0]); walk(subs.get(x[0])?.body); }
+      walk(x);
+    }
+  };
+  walk(prog);
+  return [...found].sort();
 }
 
 // ------------------------------------------------------------ running

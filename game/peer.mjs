@@ -40,9 +40,7 @@ import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import fs from 'node:fs/promises';
 import { EFFECT_RULES, playableEffects, resolveEffect, roundHalfUp10, invisibilityBreaks, pointBuy, pointBuyPermanent, pointBuyPermanentMin, trapDamageSum, TRAP_POWER, pickBySalt, pickHandDiscards } from './effects.mjs';
-import { chargesLeft, trapsInRange, clericRoute, disabledCardMoves } from './class-traps.mjs';
-import { pickAltAction, combatHit, pickManipTarget, applyManipSwap } from './class-manipulator.mjs';
-import { isWildMonster, lureTargets, chaseBonusStep, prophetPick } from './class-chase.mjs';
+import { pickAltAction, pickManipTarget, applyManipSwap, isWildMonster, prophetPick } from './contact-prims.mjs';   // phase 6: generic primitives (were class-manipulator / class-chase)
 import * as CS from './class-state.mjs';   // class isolation phase 2: the generic class-state store (snapshot class_state_json)
 import fsSync from 'node:fs';
 import os from 'node:os';
@@ -61,7 +59,7 @@ import { createSkPeer } from './skills-handshake.mjs';   // S4: foreign (player-
 import { createClPeer, clRefOf } from './classes-handshake.mjs';   // CH: foreign (player-branch) classes by ref (chaosD6-Classes)
 import { isClassSuspended, foreignClassDef } from './classes.mjs';   // CH: a dormant foreign class (classes-handshake.mjs gate); a foreign class's data
 import { SKILLS_IMPLEMENTED, TRANCE, NEGATING_SKILLS, skillHook, ridesOn as skillRidesOn } from './skills.mjs';   // S1: pure skill rules (skills-data/HOOKS.md)
-import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook, builtinClassEntries, classBundleErrors, ABILITY_REQUESTS } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md)
+import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook, builtinClassEntries, classBundleErrors, ABILITY_REQUESTS, classUiOf, CLASS_ENGINE, installClassOracle } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md); phase 5: classUiOf (the UI's class_ui)
 import { channelBreaks } from './channel-rule.mjs';   // CR: the channel break rule (oracle in tools/classes-check.mjs)
 import { effectHook, applyHookRecords } from './effect-hooks.mjs';   // MV: import — channels / traps / holdings / summons as hook records
 import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP, GUN_MEMBER_CORE } from './gun-member.mjs';
@@ -76,7 +74,10 @@ import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRet
 import { effectResultsOf, plannedLossResults, naturalResults } from './effect-results.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
 import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, angerForcedTarget, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats } from './natural-perms.mjs';
-import { animatorConfig, priestConfig, seekerConfig, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './class-world.mjs';
+import { trapsInRange, clericRoute, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './world-prims.mjs';   // phase 6: generic primitives (were class-world / class-traps)
+// Class isolation phase 6: the JS reference hooks are a test oracle in classes-data/oracle (chaosD6-Classes) — loaded
+// only when CLASS_ENGINE=js | shadow asks for them (default data: never imported).
+if (CLASS_ENGINE !== 'data') installClassOracle(await import('./classes-data/oracle/classes-js.mjs'));
 import { awakePlan, AWAKE_CONFIG } from './awake.mjs';
 import { mergeLedger, ledgerUnits, ledgerFor } from './js/world-ledger.js';
 const awakeLast = new Map();   // caster → the Awake plan of its last real (non-quiet) resolution (∀ lend)
@@ -314,7 +315,7 @@ const skPeer = await createSkPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, d
 // CH foreign classes (classes-handshake.mjs): cl_ref on commit / reveal + the holder's snapshot (cl_ref_json) and Door,
 // cl_missing, cl_have; /chaos/<dim>/classes/1 + bus `cl`. A ready foreign class joins CLASSES_IMPLEMENTED (classOf).
 const clPeer = await createClPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } },
-  onReady: (p) => { try { CLASSES_IMPLEMENTED.add(p.ref.id); broadcastUI({ kind: 'class_catalog', class_colours: { [p.ref.id]: classColours(p.ref.id) }, class_texts: { [p.ref.id]: p.shape.text } }); } catch {} } });
+  onReady: (p) => { try { CLASSES_IMPLEMENTED.add(p.ref.id); broadcastUI({ kind: 'class_catalog', class_colours: { [p.ref.id]: classColours(p.ref.id) }, class_texts: { [p.ref.id]: p.shape.text }, class_ui: { [p.ref.id]: classUiOf(p.ref.id) } }); } catch {} } });
 
 // -------- data layer (loaded directly from the shared folder) --------
 const DATA_DIR = path.resolve(__dirname, '..', 'data');
@@ -969,14 +970,20 @@ setInterval(() => {
 let boundOriginalAlliance = null, boundMode = null, boundPerm = null, boundAt = null;   // boundAt: the action whose resolution bound me (snapshot bound_at)
 // C1 ruling 2026-11-16 (Necromancer destroy reanimated): a unit a CLASS raised says so in its snapshot (raised_by = the
 // class id) — a companion that class spawned (env RAISED_BY) or a corpse it raised in place (bound revive by a class_
-// perm) — with the elements already struck on it (reanim_down_csv). Both absent otherwise (other snapshots unchanged).
+// perm). Absent otherwise (other snapshots unchanged). The elements already struck on it live in its class_state_json
+// (<raised_by>.down; phase 5 dropped the reanim_down_csv copy — js/main.js reads the class state).
 // Class state (phase 2): mine (csGet / csSet) and another unit's, as its snapshot carries it (csOf).
 const csGet = (cls, key, dflt) => CS.stateGet(entity.classStore, cls, key, dflt);
 const csSet = (cls, key, v) => CS.stateSet(entity.classStore, cls, key, v);
 const csOf = (snap) => CS.parseClassState(snap?.class_state_json);
 const RAISED_BY = /^class_[a-z0-9_]+$/.test(process.env.RAISED_BY || '') ? process.env.RAISED_BY : '';
 const raisedBy = () => RAISED_BY || (boundMode === 'revive' && String(boundPerm || '').startsWith('class_') ? boundPerm : '');
-const reanimFields = () => { const by = raisedBy(), down = by ? csGet(by, 'down', []) : []; return by ? { raised_by: by, ...(down.length ? { reanim_down_csv: down.join(',') } : {}) } : {}; };
+const reanimFields = () => { const by = raisedBy(); return by ? { raised_by: by } : {}; };
+// Class isolation phase 5: one structured line per class event that took effect — tools/swarm-test.mjs counts them per
+// class + kind (no regex per class). Log text only, never hashed; printed beside the human line it shadows (log() in
+// the resolver, so quiet re-runs stay silent). kinds: ability (a click that took effect, the clicker), trap_charge /
+// threat_charge (the mover), disable_active / disable_passive (the disabler), swap (every peer), contact (the holder).
+const classEventLine = (cls, kind) => `[${PEER_LABEL}] [class-event] ${JSON.stringify({ class: cls, kind })}`;
 function becomeBound(owner, permId, mode) {
   if (IS_COMPANION) return;
   const o = peersPublic.get(owner);
@@ -1817,7 +1824,7 @@ function currentStateSnapshot(slim = false) {
     ...(mapSync ? { map_root: mapSync.myRoot() } : {}),   // map-sync.mjs digest root (~12 B); absent = pre-M3 build / legacy sim
     ...fxPeer.snapshotFields(),   // E4: fx_have "id@sha16,…" — foreign effects I hold and serve; absent without any
     ...skPeer.snapshotFields(),   // S4: sk_have "id@sha16,…" — foreign skills I hold and serve; absent without any
-    ...clPeer.snapshotFields(),   // CH: cl_ref_json (my foreign class) + cl_have "id@sha16,…"; absent without any
+    ...clPeer.snapshotFields(entity.classId),   // CH: cl_ref_json (my foreign class) + cl_have "id@sha16,…"; phase 6: cl_key = the pin of my built-in class
     stat_vitality: entity.stats.vitality, stat_world: entity.stats.world, stat_matter: entity.stats.matter, stat_will: entity.stats.will,
     permanents_csv: permanentsCsv(),
     stat_tokens_json: statTokensJson(), tile_tokens_json: tileTokensJson(), lost_actions: entity.lostActions,
@@ -1833,7 +1840,7 @@ function currentStateSnapshot(slim = false) {
     ...(entity.possessMode ? { possess_mode: entity.possessMode } : {}),   // Possess 2026-11-17: 'possess' | 'phylactery' while my Possess permanent stands
     class_id: entity.classId || null, class_down_csv: (entity.classDown || []).join(','), class_archived: entity.classArchived ? 1 : 0, class_tapped: entity.classTapped ? 1 : 0,
     class_progress_json: classProgressJson(), class_used_turn: entity.classUsedTurn ?? -1, armor: entity.armor || 0,
-    illusion: entity.illusion || 0, class_state_json: CS.classStateJson(entity.classStore),   // phase 2: the generic class state (phase 4: the per-class fields are gone; reanim_down_csv stays for the UI until phase 5)
+    illusion: entity.illusion || 0, class_state_json: CS.classStateJson(entity.classStore),   // phase 2: the generic class state (phase 4: the per-class fields are gone; phase 5: reanim_down_csv too)
     ...reanimFields(), replaces: replacesNow,
     // Hero shadows (rule_hero_shadow): whose shadow I am, my death card, and (dead shadow) who killed it.
     shadow_of: SHADOW_OF, death_card_json: JSON.stringify(deathCardRef()), shadow_death_json: shadowDeath ? JSON.stringify(shadowDeath) : '',
@@ -3467,6 +3474,9 @@ async function doResolution() {
   // wait is resolved dormant here and I publish no state hash. Skipped while no unit holds a foreign class.
   const clUnits = [...view.keys()].map(id => ({ id, class_id: id === PEER_ID_STRING ? (entity.classId || null) : (view.get(id)?.class_id || null), ref: id === PEER_ID_STRING ? clPeer.myRef() : (view.get(id)?.cl_ref_json || null) }));
   const clRes = clPeer.needsGate(clUnits, hg.tape, { turn: hg.turn, round: hg.round, myReveal: myLastReveal }) ? await clPeer.prepareResolution(revealsThisTurn, hg.tape, { turn: hg.turn, round: hg.round, self: PEER_ID_STRING, myReveal: myLastReveal, units: clUnits }) : null;
+  // Phase 6 (user ruling 3): built-ins by reference with a hard version gate — a unit whose built-in class pin
+  // (snapshot cl_key) differs from my bundled one, or is absent, makes me withhold this action's state hash.
+  const clVer = clPeer.gateBuiltins(clUnits.map(u => ({ ...u, cl_key: u.id === PEER_ID_STRING ? clPeer.builtinKey(entity.classId) : (view.get(u.id)?.cl_key || null) })), { turn: hg.turn, round: hg.round });
   // A building's skill rides free on the action of whoever stands there (user ruling 2026-11-12); the
   // skill pass below only uses it when the action fits (ridesFor), like a card from the hand.
   for (const r of revealsThisTurn) {
@@ -4131,7 +4141,7 @@ async function doResolution() {
   const adjacentOf = (id, pred) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && distBetween(id, o) <= 1 && pred(o)).sort();
   // Hand classes (2026-11-14): living, visible (no Invisibility) enemies within `range` hexes, sorted by id.
   const foesNearby = (id, range) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && enemyOf(id, o) && distBetween(id, o) <= range && !hasPerm(o, 'effect_invisibility')).sort();
-  const useAbility = (r, note) => { classAbilityOut.used.push({ actor: r.actor, class_id: r.classAbility.id }); if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${r.classAbility.id}: ${note}`); };
+  const useAbility = (r, note) => { classAbilityOut.used.push({ actor: r.actor, class_id: r.classAbility.id }); if (r.actor === PEER_ID_STRING) { log(`[${PEER_LABEL}] class ${r.classAbility.id}: ${note}`); log(classEventLine(r.classAbility.id, 'ability')); } };
   // C1 ability: the hook's {used, note, log, mine, out} → classAbilityOut + log (null = resolved here in peer.mjs).
   // Phase 3: `requests` (the post pass's ABILITY_REQUEST_FNS) resolves the engine requests of `out` — each request
   // decides the use itself; a pre-pass ability may not ask for one (logged, dropped).
@@ -4666,6 +4676,7 @@ async function doResolution() {
     trapGone.add(tp.id); spentIds.add(`trap:${tp.id}`);
     trapsSpent.push({ owner: tp.owner, id: tp.id, victim: route.victim, effect_id: tp.effect_id, mode: tp.mode, trigger: tp.trigger, holder: tp.holder || null, card_id: tp.card_id || null, library: !!tp.library, disabled: true, cleric_mode: mode, by: cleric, to: route.to });
     if (cleric === PEER_ID_STRING || tp.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] cleric ${cleric.slice(0, 8)} ${mode}: ${tp.owner === 'world' ? (tp.dungeon ? 'dungeon' : 'building') : tp.owner.slice(0, 8)} trap ${tp.effect_id} at (${tp.q},${tp.r}) disabled → ${route.to ? `${route.to.slice(0, 8)}'s discard pile` : 'gone'}`);
+    if (cleric === PEER_ID_STRING && entity.classId) log(classEventLine(entity.classId, `disable_${mode}`));
     return `${tp.effect_id}@${tp.q},${tp.r}`;
   };
   const disableTrapsNear = (me, here, R) => {
@@ -4807,7 +4818,7 @@ async function doResolution() {
   };
   const rogueSpendTrap = (who, cls, what, q, r) => {
     rogueTrapUses.set(who, (rogueTrapUses.get(who) || 0) + 1); classAbilityOut.rogueTrap.push(who);
-    if (who === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${clShort(cls)}: trap charge — ${what} at (${q},${r}) stays shut (${rogueTrapLeft(who, cls)} left this turn)`);
+    if (who === PEER_ID_STRING) { log(`[${PEER_LABEL}] class ${clShort(cls)}: trap charge — ${what} at (${q},${r}) stays shut (${rogueTrapLeft(who, cls)} left this turn)`); log(classEventLine(cls, 'trap_charge')); }
   };
   const rogueThreatReady = (who, cls) => stepCfg(cls).threatPerTurn > 0 && CS.chargeTurn(csWho(who), cls, 'threat') !== hg.turn && !classAbilityOut.stealth.includes(who)
     && !(stepCfg(cls).shared && (rogueTrapRaw(who, cls) < stepCfg(cls).trapPerTurn || (rogueTrapUses.get(who) || 0) > 0));   // CR: rogue_threat — not after the shared charge went on a trap
@@ -4822,7 +4833,7 @@ async function doResolution() {
     const sc = CL_STEPPERS.find(c => classStanding(who, c)) || null;
     const ring = sc ? foesInRing(who, t, sc) : [];
     const st = classHook('step', sc, clCtx, { threatReady: !!sc && rogueThreatReady(who, sc), ring, trap: laid.length > 0 || !!wtrap, wtrap: !!wtrap, building: !!buildingTileAt(t.q, t.r), trapLeft: sc ? rogueTrapLeft(who, sc) : 0 });
-    if (st.stealth) { classAbilityOut.stealth.push(who); if (who === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${clShort(sc)}: threat charge — unseen inside the threat ring of ${ring.map(o => o.slice(0, 8)).join(', ')} at (${t.q},${t.r}); no monster wakes or chases me this turn`); }
+    if (st.stealth) { classAbilityOut.stealth.push(who); if (who === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${clShort(sc)}: threat charge — unseen inside the threat ring of ${ring.map(o => o.slice(0, 8)).join(', ')} at (${t.q},${t.r}); no monster wakes or chases me this turn`); if (who === PEER_ID_STRING) log(classEventLine(sc, 'threat_charge')); }
     if (st.trap === 'none') continue;
     if (st.trap === 'dodge') { rogueSpendTrap(who, sc, wtrap ? `the hidden trap in ${wtrap.building || 'the building'}` : `${laid.length} trap(s)`, t.q, t.r); continue; }
     if (st.trap === 'disable') {
@@ -5067,6 +5078,7 @@ async function doResolution() {
         for (const list of [revealsThisTurn, pristineReveals]) { const r = list.find(x => x.actor === on); if (r) { const s = applyManipSwap(r, r.manipAlt, emitsFor(on)); if (list === revealsThisTurn) sw = s; } }
         manipSwaps.push({ by: m, on, old: sw.old, new: sw.new });
         console.log(`[${PEER_LABEL}] ${clShort(mc)}: ${m.replace('peer:', '').slice(0, 12)} forces ${on.replace('peer:', '').slice(0, 12)} to swap ${sw.old}→${sw.new}`);
+        console.log(classEventLine(mc, 'swap'));
       }
     }
   }
@@ -5287,6 +5299,7 @@ async function doResolution() {
       entity.classUsedTurn = hg.turn;
       const nm = view.get(foe)?.name || foe.slice(0, 12);
       console.log(`[${PEER_LABEL}] ${clShort(pc)}: first contact this turn with ${nm} (${foe.slice(0, 14)}) — I see the whole hand`);
+      console.log(classEventLine(pc, 'contact'));
       requestHand(foe, { n: null, why: pc });
       broadcastUI(handMsg({ notice: `${clName(pc)}: first contact with ${nm} — their hand opens (once this turn)` }));
     }
@@ -5934,7 +5947,7 @@ async function doResolution() {
     })
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
-  if (!fxRes?.abstain && !skRes?.abstain /* S4 */ && !clRes?.abstain /* CH */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
+  if (!fxRes?.abstain && !skRes?.abstain /* S4 */ && !clRes?.abstain /* CH */ && !clVer.abstain /* phase 6 */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
   if (lastStateHashes.size > 8) lastStateHashes.delete(Math.min(...lastStateHashes.keys()));
   // Per-actor action summary so the UI can float an action icon (⚔️ / 🛡 / 🤺
   // / 👁 / ➙) for every revealer this round, mirroring the damage-float path.
@@ -6023,7 +6036,7 @@ async function doResolution() {
     });
   }
   await emitEnvelope({ type: 'evt_state_hash', payload: {
-    state_hash: fxRes?.abstain || skRes?.abstain || clRes?.abstain ? '' : stateHash,   // S4: abstain also = a foreign skill I could not load; CH: … or a foreign class
+    state_hash: fxRes?.abstain || skRes?.abstain || clRes?.abstain || clVer.abstain /* phase 6: class version gate */ ? '' : stateHash,   // S4: abstain also = a foreign skill I could not load; CH: … or a foreign class
     region: regionState,
     damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: d.source || 'action', bonus: !!d.bonus }))),
     bonus_rounds: bonusRuns.length,
@@ -7260,7 +7273,7 @@ globalThis.__chaosPeerStop = async () => {
 };
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary(), class_texts: Object.fromEntries([...Object.keys(data.classes).map(id => [id, data.classes[id]?.data?.text || '']), ...clPeer.store.ready().map(p => [p.ref.id, p.shape.text])]), class_colours: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classColours(id)])), class_state: classStateForUI(), queued_class_ability: queuedClassAbility }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary(), class_texts: Object.fromEntries([...Object.keys(data.classes).map(id => [id, data.classes[id]?.data?.text || '']), ...clPeer.store.ready().map(p => [p.ref.id, p.shape.text])]), class_colours: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classColours(id)])), class_ui: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classUiOf(id)])), class_state: classStateForUI(), queued_class_ability: queuedClassAbility }));
   // Gate vision still running (team gate, user ruling 2026-11-13) — a reconnecting UI gets it again.
   for (const g of activeVisionGrants()) ws.send(JSON.stringify(g));
   try { ws.send(JSON.stringify(pvHello({ profileFile: PROFILE_FILE, name: ENTITY_NAME, team: PROFILE_TEAM, peerId: PEER_ID_STRING, notify: broadcastUI }))); } catch {}   // PV: my votes + who I am (author check) + collections for the HUD; retries an owed publish
@@ -7443,7 +7456,7 @@ wss.on('connection', (ws) => {
         // The class card clicked in the permanents strip: use its ability this action (user ruling 2026-10-30). Toggle.
         // Prophet (user rework #2 2026-11-14) is passive — its look fires by itself at the first contact of a turn.
         // Avenger is an ordinary once-per-turn click (the lure rides in the reveal as class_ability).
-        if (hasHook(entity.classId, 'contact')) { broadcastUI(handMsg({ notice: `${clName(entity.classId)}: automatic — the first enemy you are in contact with each turn shows you its whole hand` })); return; }
+        if (hasHook(entity.classId, 'contact')) { broadcastUI(handMsg({ notice: `${clName(entity.classId)}: ${classUiOf(entity.classId).notice || 'automatic — it fires by itself'}` })); return; }
         if (locked) return;
         queuedClassAbility = !queuedClassAbility && !!entity.classId && !entity.classArchived && !classPassive(entity.classId) && !classBlocked();
         broadcastUI(handMsg());

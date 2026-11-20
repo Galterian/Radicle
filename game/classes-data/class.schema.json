@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://chaosd6/classes-data/class.schema.json",
-  "title": "chaosD6 class definition (chaosd6.class/1) and class library (chaosd6.class-lib/1)",
+  "title": "chaosD6 class definition (chaosd6.class/2, /1 still loads) and class library (chaosd6.class-lib/1)",
   "description": "Structural schema. Semantic checks (known hooks, known operations of the class vocabulary, known subroutines, JS markers only on built-ins, std defaults only for std hooks) are done by class-engine.mjs#validateClassDef / validateClassLib (classes.mjs#validateClassDef); see SCHEMA.md.",
   "oneOf": [
     {
@@ -130,7 +130,10 @@
       "additionalProperties": false,
       "properties": {
         "schema": {
-          "const": "chaosd6.class/1"
+          "enum": [
+            "chaosd6.class/1",
+            "chaosd6.class/2"
+          ]
         },
         "id": {
           "type": "string",
@@ -225,6 +228,33 @@
                 "type": "string"
               },
               "description": "The hooks the class answers (hook names; `peer:<site>` = a site that stays in peer.mjs, documentation)."
+            }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "description": "chaosd6.class/2 only (class-engine.mjs UI_KEYS): what the generic UI renderer shows — needs_hint (what the click must carry; replaces the generic text per flags.needs), ability_label (the class card button text), icon (one glyph), notice (what a click on a class that fires by itself says).",
+          "additionalProperties": false,
+          "properties": {
+            "needs_hint": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            },
+            "ability_label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
+            },
+            "icon": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4
+            },
+            "notice": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400
             }
           }
         },

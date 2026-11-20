@@ -13,7 +13,7 @@ import { skKey } from '../skills-handshake.mjs';
 import * as CL from '../classes.mjs';
 import {
   classSetId, bundledClassSet, makeClRef, parseClRef, clRefOf, compactRef, clKey, prefixOf, classShape,
-  createClStore, createClSync, createMemoryCache, gateClasses, clMissingUnion, classRefsByActor, createClPeer, clProtocol,
+  createClStore, createClSync, createMemoryCache, gateClasses, gateBuiltins, clMissingUnion, classRefsByActor, createClPeer, clProtocol,
 } from '../classes-handshake.mjs';
 
 let fails = 0;
@@ -324,6 +324,27 @@ try { ({ checkClass } = await import('./classes-rebalancing-check.mjs')); } catc
   throws('a second definition under a registered id is refused', () => CL.registerForeignClass('kz2', { ...z, version: '0.3.0' }));
   CL.clearForeignClasses();
   yes('clearForeignClasses', !CL.isForeignClassId('class_marauder') && !('class_zealot' in CL.CLASS_RULES));
+}
+
+// ---------------------------------------------------------------- BR. built-ins by reference, hard version gate (phase 6, ruling 3)
+{
+  const pb = await createClPeer({ selfId: 'peer:B', dimId: 'dim-chbr', log: () => {}, validate: null, ui: () => {} });
+  const k = pb.builtinKey('class_reaver');
+  eq('a built-in pin = clKey(bundled definition + libs), 16 hex', k, clKey(makeClRef(REAVER, [STD])).slice(0, 16));
+  eq('no pin for a foreign / unknown id', [pb.builtinKey('class_marauder'), pb.builtinKey('class_nope'), pb.builtinKey(null)], [null, null, null]);
+  eq('snapshot: a built-in holder publishes cl_key (no foreign ref)', pb.snapshotFields('class_reaver'), { cl_key: k });
+  eq('snapshot: no class → no cl_key', pb.snapshotFields(null), {});
+  const keyOf = (id) => pb.builtinKey(id);
+  eq('gate: same pins → resolves', gateBuiltins([{ id: 'peer:A', class_id: 'class_reaver', cl_key: k }, { id: 'peer:M', class_id: null }], keyOf), { abstain: false, mismatches: [] });
+  eq('gate: another version → abstain (never silent)', gateBuiltins([{ id: 'peer:A', class_id: 'class_reaver', cl_key: '0123456789abcdef' }], keyOf),
+    { abstain: true, mismatches: [{ unit: 'peer:A', class_id: 'class_reaver', got: '0123456789abcdef', want: k }] });
+  eq('gate: no pin (an older build) → abstain', gateBuiltins([{ id: 'peer:A', class_id: 'class_reaver' }], keyOf).mismatches.map(m => m.got), [null]);
+  eq('gate: a foreign class is the foreign gate\'s business', gateBuiltins([{ id: 'peer:A', class_id: 'class_marauder', cl_key: '' }], keyOf), { abstain: false, mismatches: [] });
+  eq('gate: sorted by unit id (same log on every peer)', gateBuiltins([{ id: 'peer:Z', class_id: 'class_reaver' }, { id: 'peer:A', class_id: 'class_reaver' }], keyOf).mismatches.map(m => m.unit), ['peer:A', 'peer:Z']);
+  const seen = [], pu = await createClPeer({ selfId: 'peer:C', dimId: 'dim-chbr', log: () => {}, validate: null, ui: (m) => seen.push(m) });
+  pu.gateBuiltins([{ id: 'peer:A', class_id: 'class_reaver', cl_key: 'ffffffffffffffff' }], { turn: 3, round: 0 });
+  pu.gateBuiltins([{ id: 'peer:A', class_id: 'class_reaver', cl_key: 'ffffffffffffffff' }], { turn: 3, round: 1 });
+  eq('adapter: one UI notice per unit + pin (event version)', seen.map(m => [m.kind, m.event, m.ref.id, m.got, m.want]), [['class_source', 'version', 'class_reaver', 'ffffffffffffffff', k]]);
 }
 
 // ---------------------------------------------------------------- RF. a refuser's summoned companions refuse too (ruling 2026-11-19)

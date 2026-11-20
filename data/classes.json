@@ -212,8 +212,52 @@
           "origin": "user_ruling",
           "parent_version": "1.1.0",
           "rebalance_links": ["class_ranger", "class_alchemist"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.2.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-20",
+          "data": {
+            "ability_kind": "tap",
+            "colors": ["elem_souls", "elem_concentration", "elem_harmony"],
+            "near": 2,
+            "place_range": 1,
+            "text": "Tap: the building nearest to you (within 2 hexes) is copied — a new building of the same kind, with the same bonus, rises on the free hex next to you that you pick; if you pick none (or it is not free), on a random free hex next to you. With no building within 2 hexes nothing happens and the ability stays ready. The copy carries the trap its source building hides (armed, even if the source's has already sprung); a copied dungeon is an unexplored dungeon.",
+            "copy_traps": "source"
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-14. Colours: W (souls), Wi (concentration/harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap, user ruling 2026-11-14 \"create a new one, the same as the nearby building, on a nearby location chosen by you next to you (if not chosen a random location near you)\"): the building nearest to me within data.near (2) hexes — a catalogue / created map building (js/features.js isBuildingFeature: no tree, grove, wall, bridge; a broken fortress no longer counts), distance then q then r, the one under me included — is COPIED: same look, and the same bonus (js/building-bonus.js rolls the copy on its source hex: same stat bonus and power; a copy of a copy points at the first source). The copy rises on the hex I clicked if it lies data.place_range (1) from me and is free, else on a random free hex next to me. A free hex is walkable and holds no feature of its own (building, dungeon, tree, labyrinth wall — created buildings included), no obstacle, no standing fortress, no living unit after the action's moves, and no other building raised in the same action; never the creator's own hex. Random pick: sha256 over `${salt}:<class>:${action}` modulo the (q, r)-sorted free hexes — the same on every peer. No building within data.near or no free hex → nothing happens and the card stays untapped. The creator records the building as the world edit `made:q,r` {q, r, made, at} in its world_edits_json (snapshot); every peer folds all such edits of its resolution view into the js/features.js overlay before resolving (peer.mjs syncPlacedBuildings; browser main.js syncPlacedBuildings from the roster), so featureAt / buildingBonusAt / the renderer / object cards treat it as a map building from the next action on (first `at` per hex wins, then the creator id). Traps (user ruling 2026-11-15, \"They are carrying traps\"): the copy hides the trap its SOURCE building would hide — peer.mjs worldTrapAt rolls the source hex (copy_of; same 35% chance, same effect) and arms it fresh on the copy's own hex (id `wtrap:<copy hex>`), whether or not the source's trap has sprung or been disabled; springing / disabling one never touches the other. A copied dungeon is a dungeon of its own (`dng:<copy hex>`), unexplored when it rises, holding the trap its source would hold (dungeonTrap rolls the source hex). Rogue's trap charge, the Cleric's passive (step onto a trapped building) and tap (disable within 3) treat the copy like any trapped building. Traps laid by players on the source tile are cards of their owners and are not copied. A copy of a Priest's Shrine keeps the Shrine's fixed bonus (mend, no stat) and, like every Shrine, hides no trap. peer.mjs: animatorCopy + createBuilding; pure helpers game/class-world.mjs nearestBuilding / buildSite / copyMade (oracles tools/fortress-check.mjs).",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_animator"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "untapped", "description": "tap: the class card is untapped (untap by emitting every colour, any successful roll).", "when": {"rule": ["class_ability_ready", {"kind": "tap", "tapped": {"var": "caster.class_tapped"}}]}},
+              {"id": "building_near", "description": "A map building stands within data.near (2) hexes of me (else the ability stays ready).", "when": {">": [{"count": [{"var": "caster.nearby_buildings"}]}, 0]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, Wi.", "target": "caster", "unit": "colours", "value": ["world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "source", "description": "The nearest building within data.near (distance, then q, then r) is the one copied.", "target": "tile", "unit": "building", "value": {"var": "caster.nearby_buildings.0"}},
+              {"id": "site", "description": "The clicked hex when it lies 1..data.place_range (1) hexes from me and is free, else a random free hex 1..data.place_range away (cast.random_free_tile); none free → nothing happens, the ability stays ready.", "target": "tile", "unit": "building", "value": {"if": [{"and": [{"!!": {"var": "cast.tile"}}, {">=": [{"var": "cast.tile_dist"}, 1]}, {"<=": [{"var": "cast.tile_dist"}, {"var": "entry.data.place_range"}]}, {"!!": {"var": "cast.tile_free"}}]}, {"var": "cast.tile"}, {"var": "cast.random_free_tile"}]}},
+              {"id": "copy", "description": "The new building is the same kind as its source, with the same bonus (rolled on the source hex).", "target": "tile", "unit": "building", "value": {"var": "caster.nearby_buildings.0.kind"}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "Class isolation phase 5 (2026-11-20): data unchanged; the definition moved to schema chaosd6.class/2 with a ui block (the UI text js/main.js / peer.mjs hard-coded).",
+          "origin": "user_ruling",
+          "parent_version": "1.2.0",
+          "rebalance_links": ["class_ranger", "class_alchemist"],
+          "status": "canonical",
+          "version": "1.3.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1048,8 +1092,54 @@
           "origin": "user_ruling",
           "parent_version": "1.2.0",
           "rebalance_links": ["class_witch"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.3.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-20",
+          "data": {
+            "ability_kind": "once_per_round",
+            "colors": ["elem_vitality", "elem_souls", "elem_harmony", "elem_concentration"],
+            "place_range": 2,
+            "building": {
+              "label": "Shrine",
+              "power": "mend",
+              "heal": 2
+            },
+            "text": "Once per turn: a Shrine rises on the free (unoccupied) hex within 2 hexes that you pick; if you pick none (or it is not free), on a random free hex within 2 hexes. One Shrine per Priest stands at a time: a new one replaces the old. Whoever stands on your Shrine at the end of a turn (its 3rd action) heals 2 life, never above their maximum (a copy of it heals 1).",
+            "max_standing": 1
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14 (amended the same day). Colours: V (vitality), W (souls), Wi (harmony/concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (once per TURN — ability_kind once_per_round, peer classUsedTurn; user rework \"The Priest should generate a Shrine (the building that heals you +1 HP at the end of the 3rd round) on target unoccupied location nearby\"): a Shrine (data.building: label Shrine, power mend) rises on the hex I clicked if it lies 1..data.place_range (2) from me and is free, else on a random free hex within data.place_range. The Shrine is the mend building of js/building-bonus.js: whoever stands on it when the turn's 3rd action resolves gets +1 life, never above the maximum (peer.mjs building turn-end powers); it has no stat bonus. A free hex is walkable and holds no feature of its own (building, dungeon, tree, labyrinth wall — created buildings included), no obstacle, no standing fortress, no living unit after the action's moves, and no other building raised in the same action; never the creator's own hex. Random pick: sha256 over `${salt}:<class>:${action}` modulo the (q, r)-sorted free hexes — the same on every peer. No free hex → nothing happens and the ability stays ready. The creator records the building as the world edit `made:q,r` {q, r, made, at} in its world_edits_json (snapshot); every peer folds all such edits of its resolution view into the js/features.js overlay before resolving (peer.mjs syncPlacedBuildings; browser main.js syncPlacedBuildings from the roster), so featureAt / buildingBonusAt / the renderer / object cards treat it as a map building from the next action on (first `at` per hex wins, then the creator id). A Shrine hides no trap (an Animator copy of it neither — it keeps the Shrine's fixed bonus). peer.mjs: priestShrine + createBuilding; pure helpers game/class-world.mjs priestConfig / buildSite / shrineMade (oracles tools/fortress-check.mjs). CR 2026-11-17 (1.2.0): one Shrine per Priest at a time — a new one replaces the old (data max_standing 1; peer.mjs marks the older Shrine gone). CP 2026-11-19 (pick 5 a, 1.2.0 amended): the Priest's Shrine heals 2 (data building.heal; class-world.mjs shrineMade power {mend, n: 2}); a copy of it (Animator) mends 1.",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_priest"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "not_used_this_turn", "description": "Once per turn (hg.turn = 3 actions): not used yet this turn.", "when": {"rule": ["class_ability_ready", {"kind": "once_per_round", "used_this_round": {"==": [{"var": "caster.class_used_turn"}, {"var": "turn"}]}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): V, W, Wi.", "target": "caster", "unit": "colours", "value": ["vitality", "world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["vitality", "world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["vitality", "world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "site", "description": "The clicked hex when it lies 1..data.place_range (2) hexes from me and is free, else a random free hex 1..data.place_range away (cast.random_free_tile); none free → nothing happens, the ability stays ready.", "target": "tile", "unit": "building", "value": {"if": [{"and": [{"!!": {"var": "cast.tile"}}, {">=": [{"var": "cast.tile_dist"}, 1]}, {"<=": [{"var": "cast.tile_dist"}, {"var": "entry.data.place_range"}]}, {"!!": {"var": "cast.tile_free"}}]}, {"var": "cast.tile"}, {"var": "cast.random_free_tile"}]}},
+              {"id": "shrine_mends", "description": "A unit standing on the Priest's Shrine at the end of the turn's 3rd action heals data.building.heal (2) life, never above its maximum (CP 2026-11-19).", "target": "occupant", "unit": "life", "value": {"if": [{"and": [{"==": [{"var": "round"}, 2]}, {"<": [{"var": "caster.life"}, {"var": "caster.life_max"}]}]}, {"min": [{"var": "entry.data.building.heal"}, {"-": [{"var": "caster.life_max"}, {"var": "caster.life"}]}]}, 0]}},
+              {"id": "one_standing", "description": "CR 2026-11-17: at most data.max_standing (1) Shrines of this Priest stand; the new one replaces the oldest.", "target": "tile", "unit": "buildings", "value": {"min": [{"+": [{"count": [{"var": "caster.shrines"}]}, 1]}, {"var": "entry.data.max_standing"}]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "Class isolation phase 5 (2026-11-20): data unchanged; the definition moved to schema chaosd6.class/2 with a ui block (the UI text js/main.js / peer.mjs hard-coded).",
+          "origin": "user_ruling",
+          "parent_version": "1.3.0",
+          "rebalance_links": ["class_witch"],
+          "status": "canonical",
+          "version": "1.4.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1183,8 +1273,52 @@
           "origin": "user_ruling",
           "parent_version": "1.1.0",
           "rebalance_links": ["class_seeker", "effect_vision"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.2.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-20",
+          "data": {
+            "ability_kind": "once_per_round",
+            "colors": ["elem_time", "elem_space", "elem_souls", "elem_harmony", "elem_concentration"],
+            "passive": true,
+            "range": 3,
+            "contact": 3,
+            "hand_reveal": {
+              "n": "all"
+            },
+            "text": "Passive, once per turn: the first time in a turn a resolution leaves an enemy — hero or monster — within 3 hexes of you, its whole hand opens for you as a popup."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30; ability reworked 2026-11-14. Colours: W (time/space/souls), Wi (harmony/concentration). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast by emitting every colour (any successful roll). Ability (passive, once per turn; user rework #2 2026-11-14 \"automatically on first contact resolution phase\"): the first resolution of a turn that leaves me in contact (adjacent, distance 1 after the action's moves — the in_contact rule) with a living, visible enemy — hero or monster — shows me its whole hand; with several, one I fought this action, else the smallest id. No click. The look is not part of the action: my peer sends requestHand() (an evt_hand_request envelope) after its resolution and the enemy answers with evt_peek to me alone — a popup with the cards. No resolver state, no state hash; only class_used_turn changes. Paper text: \"Look at the top five cards of a nearby target player's deck.\" CR 2026-11-17 (1.2.0): the look reaches the first enemy within 3 hexes (data contact 3, range 3) — no contact needed.",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_prophet"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "not_used_this_turn", "description": "Once per turn (not per action): unused since hg.turn began (class_used_turn).", "when": {"rule": ["class_ability_ready", {"kind": "once_per_round", "used_this_round": {"==": [{"var": "caster.class_used_turn"}, {"var": "turn"}]}}]}},
+              {"id": "enemy_within_3", "description": "CR 2026-11-17: a living, visible (no Invisibility) enemy hero or monster within data.contact (3) hexes after this action's moves.", "when": {"and": [{"<=": [{"var": "dist"}, {"var": "entry.data.contact"}]}, {"!=": [{"var": "caster.alliance"}, {"var": "target.alliance"}]}, {">": [{"var": "target.life"}, 0]}, {"!": {"includes": [{"var": "target.permanents"}, "effect_invisibility"]}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, Wi.", "target": "caster", "unit": "colours", "value": ["world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "hand_open", "description": "The enemy's whole hand is shown to me.", "target": "target", "unit": "cards", "value": {"len": [{"var": "target.hand"}]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "Class isolation phase 5 (2026-11-20): data unchanged; the definition moved to schema chaosd6.class/2 with a ui block (the UI text js/main.js / peer.mjs hard-coded).",
+          "origin": "user_ruling",
+          "parent_version": "1.2.0",
+          "rebalance_links": ["class_seeker", "effect_vision"],
+          "status": "canonical",
+          "version": "1.3.0",
           "vote_log": [],
           "weight": 1.0
         }
@@ -1419,8 +1553,58 @@
           "origin": "user_ruling",
           "parent_version": "1.2.0",
           "rebalance_links": ["class_prophet"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.3.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-20",
+          "data": {
+            "ability_kind": "once_per_round",
+            "colors": ["elem_time", "elem_space", "elem_souls", "elem_earth"],
+            "attach": "effect",
+            "distance": [20, 30],
+            "vision": {
+              "radius": 5,
+              "until": "end_of_next_turn"
+            },
+            "text": "Once per turn: choose an effect card from your hand — it becomes a trap building at a random hex 20 to 30 hexes away (walkable; no unit, wall, fortress or other trap there) and springs on whoever steps there. One planted trap stands at a time: a new one replaces the old (its card returns to your discard pile). You see that hex and 5 hexes around it until the end of your next turn.",
+            "max_standing": 1
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30; ability re-ruled 2026-11-14. Colours: W (time/space/souls), M (earth). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (tap, user ruling 2026-11-14): the effect card I attach from my hand becomes a trap building (enter trigger, damage like the other class traps, the card held by it, owner = me) on a random hex data.distance [20, 30] hexes away — pure map functions (js/join-plan.mjs tileInRing / hexWalkableAt), so unrevealed land counts; no living unit, obstacle, labyrinth wall, fortress or other trap there; hashed over `${salt}:seeker:${action}` (same on every peer). I see that hex and data.vision.radius (5) hexes around it until the end of my next turn (vision-grant, until_turn = turn + 1). peer.mjs: seekerPlant + grantSeekerVision. Paper text: \"Choose a non-action card from your hand; reveal where this card is located in this Dimension. If it exists in Dimension Library, place it on top of an unknown location as a trap.\" CR 2026-11-17 (1.2.0): once per turn (not tap) and at most one planted trap standing — a new one replaces the old, its card back to my discard pile (data ability_kind once_per_round, max_standing 1). CP 2026-11-19 (pick 6 b, 1.2.0 amended): ability unchanged; Air, Water and Fire dropped (7 → 4 colours).",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_seeker"]}, {"!": {"var": "caster.class_archived"}}]}},
+              {"id": "effect_attached", "description": "An effect card of my hand is attached (CLASS_NEEDS attach_effect).", "when": {"==": [{"var": "cast.attach.kind"}, "effect"]}},
+              {"id": "not_used_this_turn", "description": "CR 2026-11-17: once per turn (hg.turn = 3 actions): not used yet this turn.", "when": {"rule": ["class_ability_ready", {"kind": "once_per_round", "used_this_round": {"==": [{"var": "caster.class_used_turn"}, {"var": "turn"}]}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, M.", "target": "caster", "unit": "colours", "value": ["world", "matter"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "matter"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "matter"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "untap", "description": "Tapped: emit every colour (any successful roll, power 1) → the ability is ready again.", "target": "caster", "unit": "untap", "value": {"rule": ["class_progress_complete", {"colours": ["world", "matter"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "trap_distance_ok", "description": "The trap hex lies data.distance[0]..data.distance[1] (20..30) hexes from me.", "target": "tile", "unit": "hexes", "value": {"and": [{">=": [{"var": "trap.dist"}, {"var": "entry.data.distance.0"}]}, {"<=": [{"var": "trap.dist"}, {"var": "entry.data.distance.1"}]}]}},
+              {"id": "trap_card", "description": "The trap carries the attached effect card.", "target": "tile", "unit": "trap", "value": {"var": "cast.attach.effect_id"}},
+              {"id": "vision_radius", "description": "I see the trap hex and this many hexes around it.", "target": "caster", "unit": "hexes", "value": {"var": "entry.data.vision.radius"}},
+              {"id": "vision_until", "description": "Until the end of my next turn.", "target": "caster", "unit": "turn", "value": {"+": [{"var": "turn"}, 1]}},
+              {"id": "one_standing", "description": "CR 2026-11-17: at most data.max_standing (1) Seeker traps of mine stand; laying a new one removes the old.", "target": "tile", "unit": "traps", "value": {"min": [{"+": [{"count": [{"var": "caster.seeker_traps"}]}, 1]}, {"var": "entry.data.max_standing"}]}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_ability_ready", "class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "Class isolation phase 5 (2026-11-20): data unchanged; the definition moved to schema chaosd6.class/2 with a ui block (the UI text js/main.js / peer.mjs hard-coded).",
+          "origin": "user_ruling",
+          "parent_version": "1.3.0",
+          "rebalance_links": ["class_prophet"],
+          "status": "canonical",
+          "version": "1.4.0",
           "vote_log": [],
           "weight": 1.0
         }

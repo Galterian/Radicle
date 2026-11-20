@@ -24,7 +24,7 @@
 //   wall (an obstacle — Creation, a building's wall arc — or a labyrinth wall, within 2 of me; 2026-11-18): +3 per hurt
 //     friend it shields (next to that friend, closer to the friend's nearest enemy than the friend is).
 // Ties: shorter move, then me → ally → building → wall, then id, then (q, r).
-import { discAround, hexDist } from './class-world.mjs';
+import { discAround, hexDist } from './world-prims.mjs';   // class isolation phase 6 (was class-world.mjs)
 
 export const AWAKE_CONFIG = { range: 10, allyNear: 1, buildingNear: 2, wallNear: 2, onBuilding: 2, perFriend: 2, perEnemy: 2, perShield: 3, safeCap: 10 };
 const KIND_ORDER = { me: 0, ally: 1, building: 2, wall: 3 };

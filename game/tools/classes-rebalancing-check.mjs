@@ -100,7 +100,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CORE_VERSION, r6, r3, sha256, isObj, canonicalJson, fileSha, readJson, pointBuyStats, fitCurve, bandVerdict } from './rebalancing-core.mjs';
 
 export { canonicalJson };
-export const VALIDATOR_VERSION = '1.3.0';   // 1.3.0 (class picks 2026-11-19): MODEL 1.3.0 below; 1.2.0 (class rebalance rulings 2026-11-17/18): MODEL 1.2.0; 1.1.0: the six weight answers
+export const VALIDATOR_VERSION = '1.4.0';   // 1.4.0 (class isolation phases 1-6, 2026-11-20): model unchanged — the pinned engines are
+// classes.mjs, class-engine.mjs, effect-engine.mjs, class-state.mjs, world-prims.mjs, contact-prims.mjs (the class-*.mjs configs are oracles
+// now), the blocked hook is a UI gate (HOOK_POWER null); 1.3.0 (class picks 2026-11-19): MODEL 1.3.0 below; 1.2.0 (class rebalance rulings 2026-11-17/18): MODEL 1.2.0; 1.1.0: the six weight answers
 export const DEFAULT_TOLERANCE = 0.30;   // user ruling 2026-11-18 (was 0.10 since 2026-11-16)
 export const PIN_FORMAT = 'chaosd6-classes-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -114,7 +116,9 @@ const ELEMS = Object.keys(ELEM_TO_STAT);
 const KINDS = ['tap', 'once_per_round', 'static', 'passive'];
 
 // ------------------------------------------------------------------ engines (logic audit only)
-const ENGINE_FILES = ['classes.mjs', 'class-engine.mjs', 'effect-engine.mjs', 'class-traps.mjs', 'class-manipulator.mjs', 'class-chase.mjs', 'class-world.mjs'];
+// class isolation phase 6: the class-*.mjs configs are oracles in classes-data/oracle now; the engine = the hook runner,
+// the class-state store and the generic primitives peer.mjs resolves the class results with.
+const ENGINE_FILES = ['classes.mjs', 'class-engine.mjs', 'effect-engine.mjs', 'class-state.mjs', 'world-prims.mjs', 'contact-prims.mjs'];
 const LIB_DIR = path.join(GAME, 'classes-data', 'lib');
 let CL = null;
 try { if (fs.existsSync(path.join(GAME, 'classes.mjs'))) CL = await import(pathToFileURL(path.join(GAME, 'classes.mjs')).href); } catch { CL = null; }

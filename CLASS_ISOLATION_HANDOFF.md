@@ -236,3 +236,44 @@ Total: ~1,300–1,600 lines touched/new in chaosD6, ~600 moved to Classes.
     1843, 1850, 1856: 0 errors, 0 divergences. Still not live: Rogue trap dodge, Manipulator swap, Prophet hand look.
   - Pin diff (dry run): engine + validator + 7 definitions + schema/docs changed. Not synced.
   - Patches: tools/out/_patch_ci17.py (engine), _ci18 (defs), _ci19 (peer.mjs), _ci20 (tidy), _ci21 (docs).
+- **Phase 5 done (uncommitted, session 67a309e0, 2026-11-20):** js/main.js and tools/swarm-test.mjs name no class id.
+  - Schema `chaosd6.class/2` = `/1` + optional `ui` {needs_hint, ability_label, icon, notice} (class-engine.mjs
+    `CLASS_SCHEMA_IDS`, `UI_KEYS`, `classUi`); `/1` still loads, `/1` with `ui` is refused. class.schema.json + SCHEMA.md.
+  - Definitions with a ui block (data unchanged, data/classes.json version appended, old → superseded 0.99):
+    animator 1.3.0, priest 1.4.0, seeker 1.4.0 (needs_hint), prophet 1.3.0 (notice). Script tools/out/_p5_defs.mjs.
+  - classes.mjs `classUiOf(id)` = ui block + `reanim` (data.destroy_reanimated {elements, die}); peer.mjs sends it as
+    `class_ui` (hello + class_catalog); the Prophet notice reads `ui.notice`.
+  - main.js: needs text / glyph / ready label from class_ui; emits only from classStateForUI.emits (Reaver/Monk
+    fallback gone); reanimated pill reads `class_state_json` `<raised_by>.down` + class_ui reanim.
+  - `reanim_down_csv` dropped from the snapshot (reanimFields → raised_by only).
+  - Bots (ruling 2): generic planner `classProfile` in swarm-test.mjs — needs, data knobs (near, place_range, range,
+    lure_range, disable_range), hooks (step/dungeon_step, contact/combat_in), `class-engine.mjs#abilityRecordsOf`.
+    Witch now uses its real range (data.range 1, was a hard-coded 3).
+  - `[class-event] {"class","kind"}` lines (peer.mjs `classEventLine`): ability, trap_charge, threat_charge,
+    disable_active/passive, swap, contact; swarm-test counts them per class (CLASS_LOG regexes gone).
+  - Checks all green (class-engine-check 55 ok incl. /1-/2 tests; chase/fortress version pins moved). Swarms default
+    engine: group p Swarm-2029 + groups 1-4 Swarm-2036, 2042, 2048, 2054: 0 errors, 0 divergences. Now live:
+    Manipulator swap (34 lines), Prophet contact (6 + 3). Still not live: Rogue trap dodge, Warrior step, Cleric disable.
+  - Pin diff (dry run): validator pin moves to 572e1dc2242a (engines changed) + 4 definitions + schema/docs. Not synced.
+  - Not done: the APK's copy of main.js (godot/android/.../nodejs-project/js) refreshes on the next build_and_deploy.sh.
+- **Phase 6 done (uncommitted, session 67a309e0, 2026-11-20) — except the republish (needs the user):**
+  - Split: class-world/traps/chase/manipulator.mjs removed (copies in tools/out/_p6_removed). Generic primitives →
+    game/world-prims.mjs + game/contact-prims.mjs (moved verbatim, tools/out/_p6_split.mjs); class configs →
+    classes-data/oracle/class-configs.mjs; the JS reference hooks + jsHook → classes-data/oracle/classes-js.mjs
+    (tools/out/_p6_oracle.mjs). classes.mjs 632 → ~250 lines: the dispatcher; `installClassOracle()` for
+    CLASS_ENGINE=js|shadow (peer.mjs + classes-check load the oracle dynamically, only in those modes); a dormant
+    foreign class now answers through its data path.
+  - Built-ins by reference (ruling 3): snapshot `cl_key` = clKey(bundled def + libs) 16 hex; classes-handshake.mjs
+    `gateBuiltins` + adapter `builtinKey` / `gateBuiltins` (log CLASS VERSION GATE, UI class_source event `version`);
+    peer.mjs withholds state_hash on a mismatch / missing pin (clVer.abstain, beside the foreign abstain).
+  - Grep gate: class-engine-check section 6 (12 game files, no class id as code; old modules gone; no static oracle
+    import; oracle HOOKS = engine hooks). 59 ok. handshake-check: BR section (pin, snapshot, gate, notice once).
+  - classes-repo-sync: engine entries + world/contact prims; mirrors oracle/*.mjs → oracle/, data/classes.json →
+    data/ (ruling 5); template README documents it. Validator 1.4.0 (model unchanged), ENGINE_FILES = classes,
+    class-engine, effect-engine, class-state, world-prims, contact-prims. Dry run: pin 220833e7049a.
+  - classes-check stays in the game as the data-vs-oracle check (imports the oracle from classes-data/oracle).
+  - Swarms: group p shadow strict Swarm-2232 (oracle loaded dynamically, Cleric disable live for the first time) +
+    groups 1-4 default Swarm-2239, 2245, 2251, 2257: 0 errors, 0 divergences, 0 version-gate lines.
+  - Left as-is: provenance doc strings naming class-*.mjs inside classes_std.json / data/classes.json /
+    logic_rules.json (editing them moves every pin for a comment).
+  - TODO (user): real classes-repo-sync (commits in /home/galt/chaosd6-classes-repo) + push rad / GitHub + announce.

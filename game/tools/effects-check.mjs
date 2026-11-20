@@ -1,14 +1,15 @@
 // Effect engine check against the worked examples from the pc rule overrides.
 //   node tools/effects-check.mjs
 import { createHash } from 'node:crypto';
-import { manipulatorConfig, pickAltAction, combatHit, pickManipTarget, applyManipSwap } from '../class-manipulator.mjs';
+import { manipulatorConfig, rogueConfig, clericConfig } from '../classes-data/oracle/class-configs.mjs';
+import { pickAltAction, combatHit, pickManipTarget, applyManipSwap } from '../contact-prims.mjs';
+import { chargesLeft, trapsInRange, clericRoute, disabledCardMoves } from '../world-prims.mjs';   // class isolation phase 6 (were class-*.mjs)
 import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum, invisibilityBreaks } from '../effects.mjs';
 import { pickBySalt, pickHandDiscards } from '../effects.mjs';
 import { awakePlan } from '../awake.mjs';
 import { possessArchivePick, phylacteryPick, releasedPossessed, releasedCompanions } from '../possess.mjs';
 import { placedBuildingsFrom } from '../js/features.js';
 import { ledgerUnits, ledgerFor } from '../js/world-ledger.js';
-import { rogueConfig, clericConfig, chargesLeft, trapsInRange, clericRoute, disabledCardMoves } from '../class-traps.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 let fails = 0;

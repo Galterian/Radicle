@@ -8,7 +8,8 @@
 //        [--branch main] [--no-commit] [--dry-run] [--keep-extra] [-m "message"] [--game-root game/]
 //
 // From --src (default game/classes-data):  classes/*.json → classes/, lib/*.json → lib/,
-//   SCHEMA.md (else the template placeholder), HOOKS.md / class.schema.json when present.
+//   SCHEMA.md (else the template placeholder), HOOKS.md / class.schema.json when present, oracle/*.mjs (phase 6: the
+//   JS reference hooks + class configs, test oracles); data/classes.json of the chaosD6 tree (user ruling 5) → data/.
 // From the template (tools/classes-repo-template): README.md, .gitattributes, tools/manifest.mjs,
 //   tools/check.mjs, tools/README.md.
 // Tools are copied BYTE-IDENTICAL (LF) — never rewritten — because the validator pins its own
@@ -55,7 +56,9 @@ const MSG = opt('-m', null);
 const KEEP = flag('--keep-extra');
 
 const ENGINE_ENTRIES = opt('--engine', null) ? list(opt('--engine'))
-  : [path.join(GAME, 'effect-engine.mjs'), path.join(GAME, 'classes.mjs')].filter(f => fs.existsSync(f));
+  // phase 6: + the generic primitives the resolver applies class results with (the validator pins them; classes.mjs
+  // no longer imports them — they lived in the class-*.mjs modules it did import)
+  : [path.join(GAME, 'effect-engine.mjs'), path.join(GAME, 'classes.mjs'), path.join(GAME, 'world-prims.mjs'), path.join(GAME, 'contact-prims.mjs')].filter(f => fs.existsSync(f));
 const VALIDATOR = (() => {
   const v = opt('--validator', process.env.CHAOSD6_CLASSES_VALIDATOR || null);
   if (v === 'none') return null;
@@ -185,6 +188,13 @@ for (const extra of ['HOOKS.md', 'class.schema.json']) {
   const f = path.join(SRC, extra);
   if (fs.existsSync(f)) write(extra, readText(f));
 }
+// phase 6 (2026-11-20): the JS reference hooks + class configs = TEST ORACLES (<src>/oracle/*.mjs), byte-identical (LF)
+const ORACLE_DIR = path.join(SRC, 'oracle');
+for (const n of fs.existsSync(ORACLE_DIR) ? fs.readdirSync(ORACLE_DIR).filter(n => n.endsWith('.mjs')).sort() : []) write(`oracle/${n}`, readText(path.join(ORACLE_DIR, n)));
+// user ruling 5 (2026-11-20): chaosD6-Classes owns the data/classes.json content and the weights (rebalance and
+// proposals keep running in the game repo, which mirrors its copy here)
+const DATA_CLASSES = path.join(CHAOS_ROOT, 'data', 'classes.json');
+if (fs.existsSync(DATA_CLASSES)) write('data/classes.json', readText(DATA_CLASSES));
 for (const d of classes) write(`classes/${d.id}.json`, JSON.stringify(d, null, 2) + '\n');
 for (const d of libs) write(`lib/${d.id}.json`, JSON.stringify(d, null, 2) + '\n');
 for (const [sub, defs] of [['classes', classes], ['lib', libs]]) {
@@ -231,6 +241,7 @@ prune('classes', (rel) => written.has(rel));
 prune('lib', (rel) => written.has(rel));
 prune('tools/engine', (rel) => written.has(rel));
 prune('tools/validator', (rel) => written.has(rel));
+prune('oracle', (rel) => written.has(rel));
 
 // 5. manifest — over what is in the repo now (== sources unless --keep-extra)
 const repoDefs = (sub, fallback) => (KEEP && fs.existsSync(path.join(REPO, sub))

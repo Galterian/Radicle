@@ -135,7 +135,7 @@ console.log('-- pin');
 {
   const p = V.computePin(cal);
   eq('pin format / validator', [p.format, p.validator, p.validator_version], ['chaosd6-classes-validator-pin/1', 'classes-rebalancing-check', V.VALIDATOR_VERSION]);
-  eq('pin hashes the engines (classes.mjs, class-engine.mjs, effect-engine.mjs, class-*.mjs, lib)', Object.keys(p.engines).sort(), ['game/class-chase.mjs', 'game/class-engine.mjs', 'game/class-manipulator.mjs', 'game/class-traps.mjs', 'game/class-world.mjs', 'game/classes-data/lib/classes_std.json', 'game/classes.mjs', 'game/effect-engine.mjs']);
+  eq('pin hashes the engines (classes.mjs, class-engine.mjs, effect-engine.mjs, class-state.mjs, world/contact prims, lib — phase 6)', Object.keys(p.engines).sort(), ['game/class-engine.mjs', 'game/class-state.mjs', 'game/classes-data/lib/classes_std.json', 'game/classes.mjs', 'game/contact-prims.mjs', 'game/effect-engine.mjs', 'game/world-prims.mjs']);
   eq('verifyPin(own pin) ok', V.verifyPin(p, cal).ok, true);
   eq('verifyPin(tampered) fails on pin_id', V.verifyPin({ ...p, pin_id: 'x' }, cal).diffs, ['pin_id']);
   const cal2 = JSON.parse(J(cal)); cal2.weights.life = 1.01;

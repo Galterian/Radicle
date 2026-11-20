@@ -738,11 +738,11 @@ function effectMatchesQueue(card, every = false, long = false) {
   const code = effectiveQueuedCode();
   return code === 'P' || code === 'EP' || clsEmits(code);
 }
-const isReaver = () => myPermanents().includes('class_reaver');
-const isMonk = () => myPermanents().includes('class_monk');
 // C1 ruling 2026-11-16: the action codes my class makes emit (peer classStateForUI.emits — Reaver A, Barbarian B,
-// Monk M / EM; a foreign class's own); older peers without the list fall back to the Reaver / Monk test.
-const clsEmits = (code) => (state.classState?.emits || [...(isReaver() ? ['A'] : []), ...(isMonk() ? ['M', 'EM'] : [])]).includes(code);
+// Monk M / EM; a foreign class's own). Class isolation phase 5: no class-id fallback any more (every peer sends it).
+const clsEmits = (code) => (state.classState?.emits || []).includes(code);
+// A unit's class state (snapshot class_state_json, game/class-state.mjs): one class's namespace, {} if none / bad JSON.
+const classStateNs = (json, cls) => { try { const s = json ? JSON.parse(json) : null; const ns = s && typeof s === 'object' ? s[cls] : null; return ns && typeof ns === 'object' && !Array.isArray(ns) ? ns : {}; } catch { return {}; } };
 // Rule 20 pc override: once a non-instant effect is picked, only the actions
 // that can carry it (Posture, Empty; Attack for a Reaver) stay selectable.
 function castLocksOut(card) {
@@ -1554,14 +1554,19 @@ function renderRoster() {
     // an adjacent enemy's chip (one click) aims this action's Will emission at it — a 6 strikes it, both struck → destroyed.
     const reanimPill = (() => {
       if (!e.raised_by) return '';
-      const down = new Set(String(e.reanim_down_csv || '').split(',').filter(Boolean));
+      // Phase 5: the struck elements = <raised_by>.down of the unit's class state; which elements / die = the raiser's
+      // data.destroy_reanimated (class_ui reanim).
+      const down = new Set(classStateNs(e.class_state_json, e.raised_by).down || []);
+      const rc = state.classUi?.[e.raised_by]?.reanim || { elements: ['elem_harmony', 'elem_concentration'], die: 6 };
+      const elName = (el) => el.replace('elem_', '');
       const can = isEnemyRow && hexDistanceTo(e) <= 1 && (e.life ?? 0) > 0;
-      const chips = ['elem_harmony', 'elem_concentration'].map(el => {
+      const chips = rc.elements.map(el => {
         const isDown = down.has(el), queued = state.destroy?.reanimated === e.peer_id && state.destroy?.elem === el;
-        const title = isDown ? `${el.replace('elem_', '')} struck` : can ? `${el.replace('elem_', '')} — click to emit Will against it (needs a 6)` : el.replace('elem_', '');
-        return `<span class="chip will${isDown ? ' down' : ''}${can && !isDown ? ' clickable' : ''}${queued ? ' active' : ''}" data-reanim-elem="${el}" title="${title}">${queued ? '⚒' : ''}${el === 'elem_harmony' ? 'H' : 'C'}</span>`;
+        const title = isDown ? `${elName(el)} struck` : can ? `${elName(el)} — click to emit Will against it (needs a ${rc.die})` : elName(el);
+        return `<span class="chip will${isDown ? ' down' : ''}${can && !isDown ? ' clickable' : ''}${queued ? ' active' : ''}" data-reanim-elem="${el}" title="${title}">${queued ? '⚒' : ''}${elName(el)[0].toUpperCase()}</span>`;
       }).join('');
-      return `<span class="pill cls" title="reanimated by ${escHtml(String(e.raised_by).replace(/^class_/, ''))} — strike Harmony and Concentration with a 6 (any order, separate actions) to destroy it">☠ ${chips}</span>`;
+      const names = rc.elements.map(el => elName(el)[0].toUpperCase() + elName(el).slice(1));
+      return `<span class="pill cls" title="reanimated by ${escHtml(String(e.raised_by).replace(/^class_/, ''))} — strike ${names.join(' and ')} with a ${rc.die} (any order, separate actions) to destroy it">☠ ${chips}</span>`;
     })();
     const team = teamLabel(e);
     const teamClass = /Team|You/.test(team) ? 'team-own' : team === 'Monster' || team === 'Enemy' ? 'team-foe' : 'team-ally';
@@ -2303,13 +2308,13 @@ function renderPerms() {
     const ch = cs.charges || null;
     const usedNow = ch ? !ch.trap_left && !ch.threat_left : cs.kind !== 'tap' && cs.used_turn === state.turn;
     const ready = !mode && !cs.blocked && (cs.kind === 'tap' ? !cs.tapped : !usedNow);
-    const need = cs.class_id === 'class_animator' ? 'a building within 2 hexes to copy; optionally the free hex next to you where the copy rises (click it) — none picked: a random free hex next to you'
-      : cs.class_id === 'class_priest' ? 'optionally the free hex within 2 hexes where the Shrine rises (click it) — none picked: a random free hex near you'
-      : cs.class_id === 'class_seeker' ? 'an effect card in hand (click it as the attached card) — it lies as a trap 20–30 hexes away, in your sight until the end of your next turn'
+    // Phase 5: the definition's ui block (chaosd6.class/2) — needs_hint replaces the generic text per needs.
+    const ui = state.classUi?.[cs.class_id] || {};
+    const need = ui.needs_hint ? ui.needs_hint
       : cs.needs === 'enemy' ?'an adjacent enemy (right-click it)' : cs.needs === 'enemy_near' ? 'an enemy within 3 hexes (right-click it first, else the nearest)' : cs.needs === 'monster_near' ? 'nothing — every wild monster within 10 hexes starts chasing you' : cs.needs === 'ally_or_self' ? 'an adjacent ally (right-click it) or nobody for yourself' : cs.needs === 'tile' ? 'a tile within one hex (click it)' : cs.needs === 'attach_effect' ? 'an effect card in hand (click it as the attached card)' : cs.needs === 'attach_nonaction' ? 'a non-action card in hand (click it as the attached card)' : null;
     const title = `${cs.name} (${cs.kind === 'tap' ? 'tap' : passive ? `passive — fires by itself, once per turn` : 'once per turn'}) — ${cs.text}\nStats: ${classStatsLine(cs.class_id, cs.colours)}.${need ? ` Needs ${need}.` : ''}${cs.blocked && !mode ? ` NOT NOW: ${cs.blocked}.` : ''}${mode === 'recast' ? ' ARCHIVED: emit every colour (any successful roll) to recast it.' : mode === 'untap' ? ' TAPPED: emit every colour (any successful roll) to untap it.' : ''} (key Q)`;
-    const cd = mode ? `${mode} ${done.size}/${cols.length}` : passive && ch ? `trap ${ch.trap_left}/${ch.trap_per_turn} · threat ${ch.threat_left}/${ch.threat_per_turn}` : passive ? (usedNow ? '✓ used this turn' : '◈ passive') : cs.blocked ? '⤵ no corpse' : state.queuedClassAbility ? '⚜ this action' : ready ? 'ready' : 'used this turn';
-    return `<div class="perm class-card${ready && !mode && !passive ? ' clickable' : ''}${cs.blocked && !mode ? ' blocked' : ''}${passive ? ' passive' : ''}${usedNow && !mode ? ' spent' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">⚜ ${cs.name}</div>${effectSourceBadge(cs.source ? { class_id: cs.class_id, source: cs.source } : cs.class_id, { compact: true })}<div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
+    const cd = mode ? `${mode} ${done.size}/${cols.length}` : passive && ch ? `trap ${ch.trap_left}/${ch.trap_per_turn} · threat ${ch.threat_left}/${ch.threat_per_turn}` : passive ? (usedNow ? '✓ used this turn' : '◈ passive') : cs.blocked ? '⤵ no corpse' : state.queuedClassAbility ? '⚜ this action' : ready ? escHtml(ui.ability_label || 'ready') : 'used this turn';
+    return `<div class="perm class-card${ready && !mode && !passive ? ' clickable' : ''}${cs.blocked && !mode ? ' blocked' : ''}${passive ? ' passive' : ''}${usedNow && !mode ? ' spent' : ''}${state.queuedClassAbility ? ' active' : ''}${mode ? ' ' + mode : ''}" data-class="${cs.class_id}" title="${title.replace(/"/g, '&quot;')}"><div class="k">Q</div><div class="nm">${escHtml(ui.icon || "⚜")} ${cs.name}</div>${effectSourceBadge(cs.source ? { class_id: cs.class_id, source: cs.source } : cs.class_id, { compact: true })}<div class="cd">${cd}</div><div class="chips">${chips}</div></div>`;
   })() : '';
   const html = classHtml + perms.map((p, k) => {
     const plans = state.bonus?.plans || [];
@@ -2704,6 +2709,7 @@ function connect() {
         if (m.entity?.stats) mergeEntities([{ peer_id: m.peer_id, stats: m.entity.stats }]);
         if (m.class_colours) state.classColours = m.class_colours;
         if (m.class_texts) state.classTexts = m.class_texts;
+        if (m.class_ui) state.classUi = m.class_ui;   // phase 5: per class {needs_hint, ability_label, icon, notice, reanim}
         if (m.class_state) state.classState = m.class_state;
         state.dimension = m.dimension || state.dimension;
         applyMap(m.map);
@@ -2788,7 +2794,7 @@ function connect() {
       }
       // Vision / Super Sense: a popup with what was seen (a tile, an enemy's hand).
       // Effect provenance (chaosD6-Effects, E4 → E6): learned / shared / missing — see effectSourceNotice().
-      if (m.kind === 'class_catalog') { state.classColours = { ...(state.classColours || {}), ...(m.class_colours || {}) }; state.classTexts = { ...(state.classTexts || {}), ...(m.class_texts || {}) }; renderRoster(); }   // CH: a foreign class became runnable here
+      if (m.kind === 'class_catalog') { state.classColours = { ...(state.classColours || {}), ...(m.class_colours || {}) }; state.classTexts = { ...(state.classTexts || {}), ...(m.class_texts || {}) }; state.classUi = { ...(state.classUi || {}), ...(m.class_ui || {}) }; renderRoster(); }   // CH: a foreign class became runnable here
       if (m.kind === 'effect_source' || m.kind === 'skill_source' || m.kind === 'class_source') effectSourceNotice(m);   // skills: chaosD6-Skills (S4 → S6); CH: classes (chaosD6-Classes)
       if ((m.kind === 'effect_source' || m.kind === 'skill_source' || m.kind === 'class_source') && m.event !== 'missing') pvSeen(m.ref);   // PV: received for testing → vote control
       if (m.kind === 'proposal_votes' || m.kind === 'proposal_vote_saved') pvOnMessage(m);   // PV: my votes / save result
@@ -3122,13 +3128,15 @@ function effectSourceNotice(m) {
   const text = ev === 'learned' ? `📥 learned ${name} from ${refText(ref)}${who ? ` (via ${who})` : ''}`
     : ev === 'shared' ? `📤 shared ${name}${who ? ` with ${who}` : ''}`
     : ev === 'missing' ? `⚠ couldn't load ${name} from ${refText(ref)} — ${klass ? 'the class sits out (dormant)' : 'cast postponed'}`
+    // class isolation phase 6 (user ruling 3): a built-in class in another version — the hard version gate
+    : ev === 'version' ? `⛔ ${who || 'a player'} plays ${name} in another version (${m.got || 'an older build'} vs ours ${m.want}) — this game publishes no state hash while it is in play; update the game`
     : `${ev}: ${name} (${refText(ref)})`;
   logUI(text, 'phase', pid ? { peerId: pid } : null);
   const now = Date.now();
   if (now - (_fxNoticeSeen.get(text) || 0) < 10000) return;
   _fxNoticeSeen.set(text, now);
   if (_fxNoticeSeen.size > 50) _fxNoticeSeen.delete(_fxNoticeSeen.keys().next().value);
-  profileBanner(text, ev === 'missing' ? 'fx-missing' : ev === 'learned' ? 'fx-learned' : 'fx-shared');
+  profileBanner(text, ev === 'missing' || ev === 'version' ? 'fx-missing' : ev === 'learned' ? 'fx-learned' : 'fx-shared');
   if (ev === 'learned' || ev === 'missing') { renderDeck(); renderPerms(); renderRoster(); }
 }
 window.chaosHud = Object.assign(window.chaosHud || {}, { effectSourceNotice, setEffectSource, showPeek });

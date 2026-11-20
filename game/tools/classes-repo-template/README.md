@@ -8,11 +8,15 @@ lib/<id>.json          shared sub-routine libraries a class lists in "uses"
 SCHEMA.md              the definition format (mirrored from chaosD6 game/classes-data/SCHEMA.md)
 HOOKS.md               the resolver hook points a class can attach to (game/classes-data/HOOKS.md)
 index.json             manifest: id -> sha256 of the canonical JSON, for classes and lib
+data/classes.json      the class data versions + weights (rebalance / proposals collection; owned here, ruling 2026-11-20 #5)
+oracle/                JS TEST ORACLES: the reference hooks (classes-js.mjs) + class configs (class-configs.mjs) the
+                       definitions are checked against (CLASS_ENGINE=shadow); never run by the game itself
 validator/pin.json     which validator build gates merges into main (commit + sha256)
 tools/                 everything needed to check a class OFFLINE — see tools/README.md
   manifest.mjs         index.json generator / checker
   check.mjs            schema + pinned engine + pinned validator:  node tools/check.mjs classes/<id>.json
-  engine/              copy of the pinned chaosD6 engine (effect-engine.mjs, classes.mjs + class-engine.mjs hook runner)
+  engine/              copy of the pinned chaosD6 engine (effect-engine.mjs, classes.mjs + class-engine.mjs hook runner,
+                       class-state.mjs, world-prims.mjs / contact-prims.mjs generic primitives)
   validator/           copy of the pinned classes validator (+ calibration)
   pins.json            sha256 of every file in engine/ and validator/
 ```
@@ -42,7 +46,10 @@ Rules:
 - **One class per file**, one class per player branch. Do not touch other files except
   `index.json` (regenerate it). New shared libraries go to `main` via the delegates.
 - New classes pick a new `id` (`class_<slug>`, lowercase, `[a-z0-9_]`). Changing a built-in
-  class keeps its `id`; the different sha256 makes it a distinct version.
+  class keeps its `id`; the different sha256 makes it a distinct version. Built-ins travel by
+  reference with a hard version gate: a game build pins each built-in (sha256 of the definition +
+  its libraries); a player holding another version makes the other peers withhold their state
+  hash — every peer of a game must ship the same `main`.
 - Branch names are permanent once announced; pick the slug carefully.
 - Never rewrite history on a branch other peers may have pinned (`commit` in their refs must stay reachable).
 - Do not edit `tools/` on a player branch: `tools/pins.json` would no longer match and every

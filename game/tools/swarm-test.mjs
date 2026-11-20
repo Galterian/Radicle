@@ -15,6 +15,7 @@ import { featureAt as buildingFeatureAt, isBuildingFeature, isLabyrinthWallAt, s
 import { setBigFeatureCatalog } from '../js/bigfeature.js';
 import { fortressAt } from '../js/building-bonus.js';
 import { parseClassState, anyChargeUsed } from '../class-state.mjs';
+import { loadClassDefs, abilityRecordsOf } from '../class-engine.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const launcher = process.argv[2] || 'http://127.0.0.1:7357';
@@ -54,18 +55,23 @@ const buildingKind = (seed, q, r) => {
 const buildingsNear = (seed, c, R, withFortress = false) => hexesWithin(c, R).filter(h => { const b = buildingKind(seed, h.q, h.r); return b === 'b' || (withFortress && b === 'f'); })
   .map(h => ({ ...h, d: hexDistance(c, h) })).sort((x, y) => x.d - y.d || x.q - y.q || x.r - y.r);
 const walkableAt = (seed, q, r) => { try { return biomeFor(seed).isWalkable(q, r) && !isLabyrinthWallAt(seed, q, r) && buildingKind(seed, q, r) !== 'f'; } catch { return false; } };
-// Resolver log lines per class (counted across every peer log) — what the bot counters are checked against.
-const CLASS_LOG = {
-  class_manipulator: /manipulator: \S+ forces \S+ to swap/g,
-  class_rogue: /rogue: (?:trap|threat) charge/g,
-  class_cleric: /cleric \S+ (?:active|passive): /g,
-  class_animator: /class class_animator: a copy of/g,
-  class_seeker: /class class_seeker: .* lies as a trap building/g,
-  class_priest: /class class_priest: a .* rises at/g,
-  class_avenger: /avenger: \S+ lures \d+/g,
-  class_prophet: /prophet: first contact/g,
-  class_witch: /witch: \S+ makes \S+ discard/g,
-  class_alchemist: /class class_alchemist: a \S+ from the Library/g,
+// Generic bot planner (class isolation phase 5, user ruling 2026-11-20 #2 — no per-class bot block): what a class
+// wants is inferred from its definition: flags.needs, the data knobs (near, place_range, range, lure_range,
+// disable_range), its hooks (step / dungeon_step = trap-aware, contact / combat_in = wants contact) and the ability
+// records its program can give (copy_building, build, disable_traps, …: class-engine.mjs#abilityRecordsOf). A class
+// outside the bundle (foreign) falls back to needs + kind. What took effect is counted from the peers'
+// `[class-event] {"class", "kind"}` lines (peer.mjs classEventLine), not from a regex per class.
+const CLASS_DEFS = (() => { try { return loadClassDefs(undefined, { lenient: true }).defs; } catch { return new Map(); } })();
+const _profiles = new Map();
+const classProfile = (cid) => {
+  if (!_profiles.has(cid)) {
+    const d = CLASS_DEFS.get(cid), hooks = new Set(d?.flags?.hooks || []), recs = new Set(d ? abilityRecordsOf(d) : []);
+    _profiles.set(cid, { recs, data: d?.data || {},
+      trapAware: hooks.has('step') || hooks.has('dungeon_step') || recs.has('disable_traps'),
+      wantsContact: hooks.has('contact') || hooks.has('combat_in'),
+      places: recs.has('copy_building') || recs.has('build') });   // a tile click where a building rises
+  }
+  return _profiles.get(cid);
 };
 // FORCE_CLASS round-robin (tools/swarm-run.sh exports FORCE_CLASS_LABELS; peer.mjs applies it). Logged once.
 const FORCED_CLASSES = (process.env.FORCE_CLASS || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -100,7 +106,7 @@ function startAgent(peerId, port, attempt = 0) {
     if (effect !== null) a.effectsCast = (a.effectsCast || 0) + 1;
   };
   // ---- My class ability (2026-11-15): use it whenever it is ready and its precondition holds ----
-  // The reveal's classAbility carries the action's raw target, so only the tile classes (Animator / Priest)
+  // The reveal's classAbility carries the action's raw target, so only the classes whose click raises a building on a tile
   // shape the action; every other class just clicks and lets the normal pick below decide the action.
   // Returns { goal, goalP, act }: goal = a hex worth walking to for the precondition (taken with chance goalP
   // by the movement code), act = this action is already queued + locked. Skips are counted per class+reason
@@ -112,9 +118,6 @@ function startAgent(peerId, port, attempt = 0) {
     a.queuedClass = true;
     a.classUses = (a.classUses || 0) + 1;
     (a.classUseBy ||= {})[cid] = (a.classUseBy[cid] || 0) + 1;
-    if (cid === 'class_witch') a.witchTaps = (a.witchTaps || 0) + 1;
-    if (cid === 'class_avenger') a.avengerLures = (a.avengerLures || 0) + 1;
-    if (cid === 'class_cleric') a.clericTaps = (a.clericTaps || 0) + 1;
   };
   // A free hex for a new building (Animator: next to me, Priest: ≤ 2), farthest band first so an Empty Move
   // toward it does not end on it. Known, walkable, no building, nobody standing there.
@@ -137,30 +140,33 @@ function startAgent(peerId, port, attempt = 0) {
     const wild = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q)
       && (p.monster_state === 'sleeping' || p.monster_state === 'awake') && !p.owner_peer_id).sort((x, y) => dist(x) - dist(y));
     // Steering goals (also for passive classes and while not ready — the walk sets the precondition up).
-    if (cid === 'class_animator') { const b = buildingsNear(seed, here, 12, true).find(b => b.d > 2); if (b) { out.goal = b; out.goalP = 0.7; } }
-    if (cid === 'class_cleric') { const t = foeTraps.find(t => t.d > 3 && t.d <= 10) || buildingsNear(seed, here, 10).find(b => b.d > 3); if (t) { out.goal = { q: t.q, r: t.r }; out.goalP = 0.6; } }
-    if (cid === 'class_rogue') { const t = foeTraps.find(t => t.d >= 1 && t.d <= 8) || buildingsNear(seed, here, 8).find(b => b.d >= 1); if (t) { out.goal = { q: t.q, r: t.r }; out.goalP = 0.5; } }
-    if (cid === 'class_avenger' && (!wild.length || dist(wild[0]) > 10)) { const w = wild.find(p => dist(p) <= 25); if (w) { out.goal = { q: w.tile_q, r: w.tile_r }; out.goalP = 0.6; } }
-    if (['class_witch', 'class_prophet', 'class_manipulator'].includes(cid) && enemies[0] && dist(enemies[0]) > 1) { out.goal = { q: enemies[0].tile_q, r: enemies[0].tile_r }; out.goalP = 0.8; }
+    const pf = classProfile(cid), D = pf.data, needs = cs.needs;
+    if (pf.recs.has('copy_building')) { const b = buildingsNear(seed, here, 12, true).find(b => b.d > (D.near ?? 2)); if (b) { out.goal = b; out.goalP = 0.7; } }
+    else if (pf.recs.has('disable_traps')) { const R = D.disable_range ?? 3, t = foeTraps.find(t => t.d > R && t.d <= 10) || buildingsNear(seed, here, 10).find(b => b.d > R); if (t) { out.goal = { q: t.q, r: t.r }; out.goalP = 0.6; } }
+    else if (pf.trapAware) { const t = foeTraps.find(t => t.d >= 1 && t.d <= 8) || buildingsNear(seed, here, 8).find(b => b.d >= 1); if (t) { out.goal = { q: t.q, r: t.r }; out.goalP = 0.5; } }
+    if (needs === 'monster_near' && (!wild.length || dist(wild[0]) > (D.lure_range ?? 10))) { const w = wild.find(p => dist(p) <= 25); if (w) { out.goal = { q: w.tile_q, r: w.tile_r }; out.goalP = 0.6; } }
+    if ((needs === 'enemy_near' || pf.wantsContact) && enemies[0] && dist(enemies[0]) > 1) { out.goal = { q: enemies[0].tile_q, r: enemies[0].tile_r }; out.goalP = 0.8; }
     // Readiness.
-    if (cs.kind === 'passive' || cs.kind === 'static') return out;   // fires by itself (Rogue, Prophet, Manipulator, …)
+    if (cs.kind === 'passive' || cs.kind === 'static') return out;   // fires by itself
     if (cs.archived) { skipClass(cid, 'archived'); return out; }
     if (cs.kind === 'tap' ? cs.tapped : cs.used_turn === turn) { skipClass(cid, cs.kind === 'tap' ? 'tapped' : 'used_this_turn'); return out; }
     if (cs.blocked) { skipClass(cid, 'blocked'); return out; }
     if (a.queuedClass) { skipClass(cid, 'already_queued'); return out; }
-    const needs = cs.needs;
     // Preconditions.
-    if (cid === 'class_witch' || needs === 'enemy_near') {
-      if (!enemies.some(p => dist(p) <= 3)) { skipClass(cid, 'no_enemy_3'); return out; }
+    if (needs === 'enemy_near') {
+      const R = D.range ?? 3;
+      if (!enemies.some(p => dist(p) <= R)) { skipClass(cid, `no_enemy_${R}`); return out; }
       useClass(cid); return out;
     }
-    if (cid === 'class_avenger' || needs === 'monster_near') {
-      if (!wild.some(p => dist(p) <= 10)) { skipClass(cid, 'no_wild_10'); return out; }
+    if (needs === 'monster_near') {
+      const R = D.lure_range ?? 10;
+      if (!wild.some(p => dist(p) <= R)) { skipClass(cid, `no_wild_${R}`); return out; }
       useClass(cid); return out;
     }
-    if (cid === 'class_cleric') {
+    if (pf.recs.has('disable_traps')) {
       // Laid enemy traps are in the snapshots; world traps hide in buildings / dungeons (unknown to the bot) — try there too.
-      if (!foeTraps.some(t => t.d <= 3) && !buildingsNear(seed, here, 3).length) { skipClass(cid, 'no_trap_3'); return out; }
+      const R = D.disable_range ?? 3;
+      if (!foeTraps.some(t => t.d <= R) && !buildingsNear(seed, here, R).length) { skipClass(cid, `no_trap_${R}`); return out; }
       useClass(cid); return out;
     }
     if (needs === 'attach_effect' || needs === 'attach_nonaction') {
@@ -171,22 +177,22 @@ function startAgent(peerId, port, attempt = 0) {
       if (i < 0) { skipClass(cid, 'no_effect_card'); return out; }
       useClass(cid, { attach: i }); a.reserved = a.hand[i].card_id; return out;
     }
-    if (cid === 'class_animator' && !buildingsNear(seed, here, 2, true).length) { skipClass(cid, 'no_building_2'); return out; }
-    if (needs === 'tile' && (cid === 'class_animator' || cid === 'class_priest')) {
+    if (pf.recs.has('copy_building') && !buildingsNear(seed, here, D.near ?? 2, true).length) { skipClass(cid, `no_building_${D.near ?? 2}`); return out; }
+    if (needs === 'tile' && pf.places) {
       useClass(cid);
       if (a.casting?.card_ids?.length) return out;   // keep the cast going (Rule 19); the peer picks a random free hex
-      const R = cid === 'class_animator' ? 1 : 2;
+      const R = D.place_range ?? 1;
       const t = buildHexNear(me, R);
       const p = slotOf('P');
       // A Posture keeps me in place and carries the tile as the ability target; without one an Empty Move toward
-      // a hex R away (Priest) still leaves it free; else an Empty Posture (no target → a random free hex).
+      // a hex R ≥ 2 away still leaves it free; else an Empty Posture (no target → a random free hex).
       if (t && p >= 0) { queue(p, skillsFor('P')); send({ kind: 'target', target: { q: t.q, r: t.r } }); a.animatorPicks = (a.animatorPicks || 0) + 1; }
-      else if (t && R === 2 && hexD(t) === 2) { queue('EMPTY', skillsFor('M', 'P')); send({ kind: 'target', target: { q: t.q, r: t.r } }); a.animatorPicks = (a.animatorPicks || 0) + 1; }
+      else if (t && R >= 2 && hexD(t) === R) { queue('EMPTY', skillsFor('M', 'P')); send({ kind: 'target', target: { q: t.q, r: t.r } }); a.animatorPicks = (a.animatorPicks || 0) + 1; }
       else { queue('EMPTY', skillsFor('P')); send({ kind: 'target', target: null }); }
       send({ kind: 'lock' });
       out.act = true; return out;
     }
-    // Alchemist, Healer, Overlord, Druid, Illusionist, … — nothing to check.
+    // Everything else (no needs the bot can check) — just click.
     useClass(cid); return out;
   };
   // Fortress stat buy (2026-11-14): standing within reach of a fortress (hand msg `fortresses`) → emit its stat
@@ -228,8 +234,8 @@ function startAgent(peerId, port, attempt = 0) {
     const amInvis = invisOf(me);
     const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q) && !(anyChargeUsed(parseClassState(p.class_state_json), 'threat', turn) && dist(p) > 1) && !(invisOf(p) && !amInvis));
     // Rogue / Cleric (user rulings 2026-11-14): enemy enter-traps the bot can see in the peers' snapshots.
-    const myClass = a.classState?.class_id || null;
-    const foeTraps = (myClass === 'class_rogue' || myClass === 'class_cleric') ? [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance))
+    const myClass = a.classState?.class_id || null, myProfile = myClass ? classProfile(myClass) : null;
+    const foeTraps = myProfile?.trapAware ? [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance))
       .flatMap(p => { try { return JSON.parse(p.traps_json || '[]'); } catch { return []; } }).filter(t => Number.isInteger(t.q) && Number.isInteger(t.r))
       .map(t => ({ ...t, d: hexDistance({ q: me.tile_q, r: me.tile_r }, { q: t.q, r: t.r }) })).sort((x, y) => x.d - y.d) : [];
     enemies.sort((x, y) => dist(x) - dist(y));
@@ -419,11 +425,11 @@ function startAgent(peerId, port, attempt = 0) {
     // Holding Resurrect with a corpse in view: walk to it (the raise needs contact).
     const corpse = a.hand.some(c => isEffect(c) && c.effect_id === 'effect_resurrect_death_ward')
       ? [...a.peers.values()].filter(p => p.peer_id !== peerId && (p.life ?? 1) <= 0 && Number.isInteger(p.tile_q) && dist(p) <= 8).sort((x, y) => dist(x) - dist(y))[0] : null;
-    // Rogue: walk onto a visible enemy trap within 8 hexes (trap charge) — hunting monsters exercises the threat charge.
-    const trapGoal = myClass === 'class_rogue' && Math.random() < 0.6 ? foeTraps.find(t => t.d >= 1 && t.d <= 8) : null;
-    if (trapGoal) { a.dest = { q: trapGoal.q, r: trapGoal.r }; a.rogueTrapWalks = (a.rogueTrapWalks || 0) + 1; }
-    // Class precondition walk (botClassPolicy goal): building for the Animator / Cleric / Rogue, a wild monster
-    // for the Avenger, an enemy for the Witch / Prophet / Manipulator.
+    // A trap-aware class without a disable ability (a trap charge): walk onto a visible enemy trap within 8 hexes —
+    // hunting monsters exercises the threat charge.
+    const trapGoal = myProfile?.trapAware && !myProfile.recs.has('disable_traps') && Math.random() < 0.6 ? foeTraps.find(t => t.d >= 1 && t.d <= 8) : null;
+    if (trapGoal) { a.dest = { q: trapGoal.q, r: trapGoal.r }; a.trapWalks = (a.trapWalks || 0) + 1; }
+    // Class precondition walk (botClassPolicy goal): a building / trap, a wild monster or an enemy (classProfile).
     else if (classGoal) a.dest = { q: classGoal.q, r: classGoal.r };
     else if (corpse) a.dest = { q: corpse.tile_q, r: corpse.tile_r };
     else if (near) a.dest = { q: near.tile_q, r: near.tile_r };
@@ -574,7 +580,7 @@ while (Date.now() < endAt) {
   await audit('live');
 }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} avenger-lures ${a.avengerLures || 0} witch-taps ${a.witchTaps || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0} cleric-taps ${a.clericTaps || 0} class-walks ${a.classWalks || 0} rogue-trap-walks ${a.rogueTrapWalks || 0} invis-casts ${a.invisCasts || 0} invis-moves ${a.invisMoves || 0} invis-breaks ${a.invisBreaks || 0} natural-strikes ${a.natStrikes || 0} tower-walks ${a.towerWalks || 0}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0} class-walks ${a.classWalks || 0} trap-walks ${a.trapWalks || 0} invis-casts ${a.invisCasts || 0} invis-moves ${a.invisMoves || 0} invis-breaks ${a.invisBreaks || 0} natural-strikes ${a.natStrikes || 0} tower-walks ${a.towerWalks || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 
@@ -607,14 +613,14 @@ console.table(counts);
   const casts = agents.reduce((s, a) => s + (a.awakeCasts || 0), 0);
   if (casts || units || blds) log(`awake: bot casts ${casts} (clicked ${agents.reduce((s, a) => s + (a.awakePicks || 0), 0)}) · unit moves ${units} / building moves ${blds} (lines, all peers) · dropped ${dropped} · fizzled (caster) ${fizzled}`);
 }
-// Manipulator swaps (FORCE_CLASS=class_manipulator): every peer logs `manipulator: <A> forces <B> to swap <old>→<new>`.
+// Swaps (Manipulator): every peer logs `<class>: <A> forces <B> to swap <old>→<new>`.
 {
   const seen = new Map();   // swap text → number of peer logs that carry it
   for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
     if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
-    for (const m of new Set([...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/manipulator: (\S+ forces \S+ to swap \S+)/g)].map(x => x[1]))) seen.set(m, (seen.get(m) || 0) + 1);
+    for (const m of new Set([...fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/\] \S+: (\S+ forces \S+ to swap \S+)/g)].map(x => x[1]))) seen.set(m, (seen.get(m) || 0) + 1);
   }
-  if (seen.size) log(`manipulator swaps: ${seen.size} distinct (${[...seen].slice(0, 6).map(([k, n]) => `${k} ×${n} logs`).join('; ')})`);
+  if (seen.size) log(`swaps: ${seen.size} distinct (${[...seen].slice(0, 6).map(([k, n]) => `${k} ×${n} logs`).join('; ')})`);
 }
 // Invisibility (FORCE_EFFECTS=effect_invisibility): landed / shown (every peer) / broken (holder) / area hits.
 {
@@ -629,9 +635,10 @@ console.table(counts);
   }
   if (inv.up || inv.shows) log(`invisibility: ${inv.up} landed, ${inv.shows} show-lines (all peers), ${inv.broken} broken (holder), ${inv.area} area hits`);
 }
-// Fortress stat buy / Animator / Seeker (2026-11-14; BOT_FORTRESS=1, FORCE_CLASS=class_animator,class_seeker,class_alchemist).
+// Fortress stat buy + what the building / trap classes left on the map (2026-11-14; BOT_FORTRESS=1). Per class: the
+// [class-event] counts below.
 {
-  const k = { banked: 0, broken: 0, animated: 0, animRandom: 0, seekerTraps: 0, seekerVision: 0 };
+  const k = { banked: 0, broken: 0, trapVision: 0 };
   for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
     if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
     const txt = fs.readFileSync(path.join(dir, f), 'utf8');
@@ -639,17 +646,13 @@ console.table(counts);
     k.broken += (txt.match(/\] fortress bld:\S+ broken/g) || []).length;
     k.fzTokens = (k.fzTokens || 0) + (txt.match(/\] fortress bld:\S+ broken .* bonus token \+\d+ \(elem_/g) || []).length;
     k.fzTokenLost = (k.fzTokenLost || 0) + (txt.match(/\] my stat \S+#fz\d+ (destroyed|taken) by /g) || []).length;
-    k.animated += (txt.match(/class class_animator: a copy of the .* rises at/g) || []).length;
-    k.animRandom += (txt.match(/class class_animator: a copy of .* — a random free hex/g) || []).length;
-    k.shrines = (k.shrines || 0) + (txt.match(/class class_priest: a .* rises at/g) || []).length;
     k.made = (k.made || 0) + (txt.match(/\] building made: /g) || []).length;
-    k.seekerTraps += (txt.match(/class class_seeker: .* lies as a trap building/g) || []).length;
-    k.seekerVision += (txt.match(/seeker vision: /g) || []).length;
+    k.trapVision += (txt.match(/seeker vision: /g) || []).length;
   }
-  log(`fortress: bot stat-buys ${agents.reduce((s, a) => s + (a.fortressBuys || 0), 0)}, banked ${k.banked}, broken ${k.broken} (bonus tokens ${k.fzTokens || 0}, destroyed by Rule 24 ${k.fzTokenLost || 0}) · animator: bot picks ${agents.reduce((s, a) => s + (a.animatorPicks || 0), 0)}, copies ${k.animated} (${k.animRandom} random) · priest: shrines ${k.shrines || 0} · building-made lines (all peers) ${k.made || 0} · seeker: traps ${k.seekerTraps}, vision ${k.seekerVision}`);
+  log(`fortress: bot stat-buys ${agents.reduce((s, a) => s + (a.fortressBuys || 0), 0)}, banked ${k.banked}, broken ${k.broken} (bonus tokens ${k.fzTokens || 0}, destroyed by Rule 24 ${k.fzTokenLost || 0}) · tile picks (bot) ${agents.reduce((s, a) => s + (a.animatorPicks || 0), 0)} · building-made lines (all peers) ${k.made || 0} · trap-vision lines ${k.trapVision}`);
 }
 // Per class (2026-11-15): who held it (every agent's peer view + the agent itself), bot uses and skip reasons
-// (botClassPolicy), the clicker's own `class class_x:` lines and the class's resolver lines across every peer log.
+// (botClassPolicy), the clicker's own `class class_x:` lines and the [class-event] kinds across every peer log.
 {
   const holders = new Map();   // label → class id
   for (const a of agents) {
@@ -660,6 +663,8 @@ console.table(counts);
   const txts = [];
   for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) if (f.endsWith('.log') && !f.endsWith('.ui.log')) txts.push(fs.readFileSync(path.join(dir, f), 'utf8'));
   const n = (re) => txts.reduce((s, t) => s + (t.match(re) || []).length, 0);
+  const events = {};   // class → kind → lines (all peers)
+  for (const tx of txts) for (const m of tx.matchAll(/\[class-event\] (\{[^\n]*\})/g)) { try { const e = JSON.parse(m[1]); ((events[e.class] ||= {})[e.kind] = (events[e.class][e.kind] || 0) + 1); } catch {} }
   const classes = [...new Set([...FORCED_CLASSES, ...agents.map(a => a.classState?.class_id).filter(Boolean)])].sort();
   log(`force-class actual: ${[...holders].sort((x, y) => x[0].localeCompare(y[0])).map(([l, c]) => `${l}${bots.has(l) ? '*' : ''}=${c.replace('class_', '')}`).join(', ')} (* = bot-driven)`);
   for (const cid of classes) {
@@ -669,8 +674,8 @@ console.table(counts);
     const skips = {};
     for (const a of agents) for (const [k, v] of Object.entries(a.classSkip || {})) if (k.startsWith(`${short}:`)) skips[k.slice(short.length + 1)] = (skips[k.slice(short.length + 1)] || 0) + v;
     const fired = n(new RegExp(`\\] class ${cid}: `, 'g'));
-    const lines = CLASS_LOG[cid] ? n(CLASS_LOG[cid]) : null;
-    log(`class ${short}: holders ${who.join(',') || 'none'} · bot uses ${uses} · class skip ${Object.entries(skips).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${v}`).join(' ') || '-'} · fired (clicker log) ${fired}${lines !== null ? ` · resolver lines (all peers) ${lines}` : ''}`);
+    const ev = Object.entries(events[cid] || {}).sort().map(([k, v]) => `${k}=${v}`).join(' ');
+    log(`class ${short}: holders ${who.join(',') || 'none'} · bot uses ${uses} · class skip ${Object.entries(skips).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k}=${v}`).join(' ') || '-'} · fired (clicker log) ${fired}${ev ? ` · events (all peers) ${ev}` : ''}`);
   }
 }
 const divergences = Object.values(counts).reduce((s, c) => s + c.divergence, 0);

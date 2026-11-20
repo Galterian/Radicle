@@ -7,16 +7,17 @@
 //    is on 2026-11-16 (copied verbatim, only the closure names bound to the test world; grep the quoted anchors in
 //    peer.mjs), compared JSON-for-JSON with classHook(...) on a deep copy of the same world.
 // Under CLASS_ENGINE=shadow|data (tools/class-engine-check.mjs runs it that way) the classHook side is the data engine.
-import { CLASS_RULES, CLASSES_IMPLEMENTED, CLASS_NEEDS, PASSIVE_TURN_CLASSES, ABILITY_REQUESTS, TRAP_POWER as CL_TRAP_POWER, ELEM_TO_STAT as CL_E2S, HOOK_NAMES, classHook, CLASS_ENGINE, classBundleErrors } from '../classes.mjs';
+import { CLASS_RULES, CLASSES_IMPLEMENTED, CLASS_NEEDS, PASSIVE_TURN_CLASSES, ABILITY_REQUESTS, TRAP_POWER as CL_TRAP_POWER, ELEM_TO_STAT as CL_E2S, HOOK_NAMES, classHook, CLASS_ENGINE, classBundleErrors, installClassOracle } from '../classes.mjs';
 import { TRAP_POWER, pickBySalt, pointBuy } from '../effects.mjs';
 import { pointBuy as enginePointBuy } from '../effect-engine.mjs';
-import { rogueConfig, clericConfig } from '../class-traps.mjs';
-import { manipulatorConfig, combatHit, attackHit, pickManipTarget } from '../class-manipulator.mjs';
-import { avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../class-chase.mjs';
-import { animatorConfig, priestConfig, seekerConfig, shrineMade, copyMade, maxStanding } from '../class-world.mjs';
+import { rogueConfig, clericConfig, manipulatorConfig, avengerConfig, prophetConfig, animatorConfig, priestConfig, seekerConfig, maxStanding } from '../classes-data/oracle/class-configs.mjs';
+import { combatHit, attackHit, pickManipTarget, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../contact-prims.mjs';
+import { shrineMade, copyMade } from '../world-prims.mjs';   // class isolation phase 6 (were class-*.mjs)
 import { CLASSES, SKILLS, ELEM_TO_STAT, STATS, genWorld, argsFor, sha256Hex, hexDistance, sideOf as fxSide } from './class-fixtures.mjs';
 import { channelBreaks } from '../channel-rule.mjs';
 import * as CS from '../class-state.mjs';
+// phase 6: the JS reference hooks are the oracle in classes-data/oracle — needed for CLASS_ENGINE=js | shadow
+if (CLASS_ENGINE !== 'data') installClassOracle(await import('../classes-data/oracle/classes-js.mjs'));
 
 let fails = 0, oks = 0;
 const J = (x) => JSON.stringify(x);

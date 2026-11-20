@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runProgram, validateLogic, SPECIAL_OPS, PURE_OP_NAMES, EffectEngineLimit, EffectProgramError } from './effect-engine.mjs';
-import { disabledCardMoves } from './class-traps.mjs';
+import { disabledCardMoves } from './world-prims.mjs';   // class isolation phase 6 (was class-traps.mjs)
 import { channelBreaks } from './channel-rule.mjs';   // chaosd6-88's break rule (Reaver / Barbarian ruling 2026-11-17)
 import { TRAP_POWER, trapDamageSum, roundHalfUp10 } from './effects.mjs';
 
@@ -270,7 +270,7 @@ export const HOOK_CTX_OPS = {
   ctx_self: (W) => W.c?.self ?? null,
   effect_known: (W, [id]) => !!W.c.effectKnown(id),
   world_edit_gone: (W, [id]) => !!W.c.worldEditGone(id),
-  disabled_card_moves: (_W, [ts]) => disabledCardMoves(ts),     // class-traps.mjs (Cleric routing, class rule)
+  disabled_card_moves: (_W, [ts]) => disabledCardMoves(ts),     // world-prims.mjs (a disabled trap's card routing)
   side_of: (W, [a]) => W.c.sideOf(a),
   hex_distance: (W, [a, b]) => W.c.hexDistance(a, b),
   creature: (W, [cid]) => W.c.creature(cid) ?? null,

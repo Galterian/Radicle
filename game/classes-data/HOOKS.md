@@ -64,7 +64,7 @@ Legend:
 | Manipulator `combatHit(probe.damage.get(m))` (~4769) | `combat_in` | Manipulator | data (= class-manipulator.mjs `combatHit`) |
 | Manipulator `pickManipTarget(` (~4773) | `pick_target` | Manipulator | data (= `pickManipTarget`) |
 | Necromancer revive of an archived creature | `ability` → `revives: [{who: null}]` | Necromancer | peer: `peer:revive` (archive access) |
-| a class-raised unit's snapshot: `raised_by` (env `RAISED_BY` of a class companion, or a bound revive by a `class_` perm) and `reanim_down_csv` (`reanimFields()`, ~942) | – | Necromancer | peer (absent on every other unit) |
+| a class-raised unit's snapshot: `raised_by` (env `RAISED_BY` of a class companion, or a bound revive by a `class_` perm) (`reanimFields()`; the struck elements: its class state `<raised_by>.down`) | – | Necromancer | peer (absent on every other unit) |
 
 ## Ability requests (class isolation phase 3, 2026-11-20)
 
@@ -92,7 +92,7 @@ Every unit keeps one generic store, namespaced by class id, in `game/class-state
 | `class_necromancer.raised` | `reanimated_csv` | a raise; "already raised" = `class_state_union('raised')` over every unit and class |
 | `<raised_by>.down` | `reanim_down_csv` | a reanimated unit's struck elements |
 
-Phase 4: the derived fields `stealth_turn`, `rogue_trap_turn`, `rogue_trap_n`, `reanimated_csv`, `chase_bonus` and `chasers_csv` are gone (no reader left). `reanim_down_csv` stays until the UI reads the store (phase 5). Tests: `tools/class-state-check.mjs`.
+Phase 4: the derived fields `stealth_turn`, `rogue_trap_turn`, `rogue_trap_n`, `reanimated_csv`, `chase_bonus` and `chasers_csv` are gone (no reader left). Phase 5: `reanim_down_csv` is gone too — `js/main.js` reads `<raised_by>.down` from `class_state_json`. Tests: `tools/class-state-check.mjs`.
 
 ## No class ids in peer.mjs (class isolation phase 4, 2026-11-20)
 
@@ -110,6 +110,35 @@ peer.mjs asks what a class does, never which class it is: `hasHook(cls, h)` (fla
 | a revive (raised list, companion, onRevived) | the class of the revive record (`cls`, set by classAbility) | Necromancer |
 
 Log and notice texts use the class's short id / name, so the built-ins print exactly what they printed before.
+
+## UI, bots and class events (class isolation phase 5, 2026-11-20)
+
+`js/main.js` and `tools/swarm-test.mjs` name no class either.
+
+| Site | Reads | Was |
+|---|---|---|
+| class card: the needs text, glyph, ready label | the definition's `ui` block (`chaosd6.class/2`: `needs_hint`, `icon`, `ability_label`), sent as `class_ui` (`classes.mjs#classUiOf`) | Animator / Priest / Seeker texts in main.js |
+| click on a class that fires by itself | `ui.notice` (fallback "automatic — it fires by itself") | the Prophet text in peer.mjs |
+| emitting action codes | `classStateForUI.emits` only | a Reaver / Monk fallback in main.js |
+| reanimated pill (roster) | `class_state_json` `<raised_by>.down`; elements + die = `class_ui[raised_by].reanim` (data `destroy_reanimated`) | `reanim_down_csv`, H / C hard-coded |
+| bot planner | `needs`, the data knobs (`near`, `place_range`, `range`, `lure_range`, `disable_range`), the hooks (`step` / `dungeon_step` → trap-aware, `contact` / `combat_in` → seeks contact), `class-engine.mjs#abilityRecordsOf` (`copy_building`, `build`, `disable_traps`, …) | ~10 `cid === 'class_…'` branches |
+| bot counters | `[class-event] {"class", "kind"}` lines | a regex per class |
+
+`[class-event]` lines (peer.mjs `classEventLine`, log only, never hashed; inside the resolver through `log()`, so quiet re-runs stay silent): `ability` (a click that took effect — the clicker, `useAbility`), `trap_charge` / `threat_charge` (the mover), `disable_active` / `disable_passive` (the disabler, per trap), `swap` (every peer), `contact` (the holder).
+
+## The split (class isolation phase 6, 2026-11-20)
+
+| What | Where now | Was |
+|---|---|---|
+| generic primitives the resolver applies class results with: `hexDist`, `discAround`, `nearestBuilding`, `buildSite`, `copyMade`, `shrineMade`, `chargesLeft`, `trapsInRange`, `clericRoute`, `disabledCardMoves` | `game/world-prims.mjs` | class-world.mjs, class-traps.mjs |
+| `isWildMonster`, `lureTargets`, `chaseBonusStep`, `prophetPick`, `pickAltAction`, `combatHit`, `attackHit`, `pickManipTarget`, `applyManipSwap` | `game/contact-prims.mjs` | class-chase.mjs, class-manipulator.mjs |
+| the class configs (`*Config`, `*_DEFAULTS`, `rogueShared`, `maxStanding`) | `classes-data/oracle/class-configs.mjs` (test oracle) | the same 4 files |
+| the JS reference hooks (`HOOKS`, `jsHook`) | `classes-data/oracle/classes-js.mjs` (test oracle) | classes.mjs |
+
+- The game runs the definitions only (`CLASS_ENGINE=data`). `js` / `shadow` need the oracle: peer.mjs and `tools/classes-check.mjs` call `installClassOracle(await import('./classes-data/oracle/classes-js.mjs'))` for those modes only. A dormant foreign class answers through its data path (no definition: std programs / neutral).
+- `classes-repo-sync` mirrors `classes-data/oracle/*.mjs` → `oracle/` and `data/classes.json` → `data/` (user ruling 5); the engine copy adds `world-prims.mjs`, `contact-prims.mjs` (and `class-state.mjs` through the import closure). The validator pins `classes.mjs`, `class-engine.mjs`, `effect-engine.mjs`, `class-state.mjs`, the two primitive modules and the libs.
+- **Built-ins by reference, hard version gate** (user ruling 3, `classes-handshake.mjs` `gateBuiltins`): a holder's snapshot carries `cl_key` = `clKey(bundled definition + libs)`, 16 hex. Once per action every peer compares the `cl_key` of each unit holding a built-in with its own bundled pin; a different or missing one → log `CLASS VERSION GATE …`, a UI notice (`class_source` event `version`), and **no state hash** from this peer for the action (`state_hash: ''`, as the foreign-class abstain). It never resolves with another version silently.
+- **Grep gate** (`tools/class-engine-check.mjs` section 6): no built-in class id as code (line comments stripped) in peer.mjs, js/main.js, tools/swarm-test.mjs, classes.mjs, class-engine.mjs, class-state.mjs, world-prims.mjs, contact-prims.mjs, classes-handshake.mjs, effect-hooks.mjs, effects.mjs, awake.mjs; the 4 class-*.mjs files are gone; no game file imports the oracle statically.
 
 ## Application: doResolution / endRound
 
@@ -154,7 +183,7 @@ Log and notice texts use the class's short id / name, so the built-ins print exa
 | Weapon Master | once_per_round | local | local | apply (draw) |
 | Manipulator | passive | – | config, combat_in, pick_target | manipAlt publish / swap |
 | Monk | static | – | stance, emits | – |
-| Necromancer | tap | post | ability, reanimated_strike | archived-creature revive; raised_by / reanim_down_csv snapshot fields |
+| Necromancer | tap | post | ability, reanimated_strike | archived-creature revive; raised_by snapshot field (struck elements in class_state_json) |
 | Noble | static | – | lifesteal, lifesteal_apply | – |
 | Overlord | tap | post | ability | – |
 | Priest | once_per_round | post | config; ability = js | priestShrine |

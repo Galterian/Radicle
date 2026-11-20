@@ -9,6 +9,7 @@
 // 4. foreign  — registerForeignClass: a player-branch class answers through its programs only.
 // 5. engines  — tools/classes-check.mjs under CLASS_ENGINE=shadow (strict) and CLASS_ENGINE=data.
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as CL from '../classes.mjs';
@@ -45,7 +46,8 @@ eq('CLASSES_IMPLEMENTED = data/classes.json', [...CL.CLASSES_IMPLEMENTED].sort()
     if (J(own) !== J(want)) hooks.push(`${id}: ${own} vs ${want}`);
     for (const [h, p] of Object.entries(d.hooks)) if (CE.isJsMarker(p)) markers.push(`${id}.${h}`);   // phase 3: none left
     const k = Object.keys(d).sort().join(',');
-    if (k !== 'data,flags,hooks,id,name,schema,source,uses,version') keys.push(`${id}: ${k}`);
+    // phase 5: a /2 definition may carry `ui`
+    if (k !== 'data,flags,hooks,id,name,schema,source,uses,version' && !(d.schema === CE.CLASS_SCHEMA_ID && k === 'data,flags,hooks,id,name,schema,source,ui,uses,version')) keys.push(`${id}: ${k}`);
   }
   eq('name / version / data = the active data/classes.json version', meta, []);
   eq('flags = classes.mjs CLASS_RULES', flags, []);
@@ -54,6 +56,27 @@ eq('CLASSES_IMPLEMENTED = data/classes.json', [...CL.CLASSES_IMPLEMENTED].sort()
   eq('definition keys', keys, []);
   eq('every built-in validates (as built-in)', [...B.defs.values()].flatMap(d => CL.validateClassDef(d)), []);
   eq('every built-in also validates as a foreign class (pure data)', [...B.defs.values()].flatMap(d => CE.validateClassDef(d, { builtin: false }).map(e => `${d.id}: ${e}`)), []);
+}
+// Phase 5 (2026-11-20): schema chaosd6.class/2 = /1 + `ui`; /1 stays loadable (user ruling 4).
+{
+  const strip = (d) => JSON.parse(JSON.stringify(d));
+  const an = strip(B.defs.get('class_animator')), v1 = { ...an, schema: 'chaosd6.class/1' }; delete v1.ui;
+  eq('ui: the 4 definitions with a ui block are /2', [...B.defs.values()].filter(d => d.ui).map(d => `${d.id}:${d.schema}`).sort(),
+    ['class_animator:chaosd6.class/2', 'class_priest:chaosd6.class/2', 'class_prophet:chaosd6.class/2', 'class_seeker:chaosd6.class/2']);
+  eq('ui: a /1 definition (no ui) still validates', CE.validateClassDef(v1, { builtin: false }), []);
+  eq('ui: a /1 definition still loads (loadClassDefs)', [...CE.loadClassDefs({ classes: [v1] }).defs.keys()], ['class_animator']);
+  eq('ui: /1 with a ui block is refused', CE.validateClassDef({ ...v1, ui: { icon: '★' } }, { builtin: false }), ['ui needs schema chaosd6.class/2']);
+  eq('ui: an unknown key / an empty or long value is refused', CE.validateClassDef({ ...an, ui: { colour: 'red', needs_hint: '', icon: '★★★★★' } }, { builtin: false }),
+    ['ui.colour: unknown key (needs_hint, ability_label, icon, notice)', 'ui.needs_hint must be a non-empty string (≤ 400 chars)', 'ui.icon must be a non-empty string (≤ 4 chars)']);
+  eq('ui: an unknown schema is refused', CE.validateClassDef({ ...v1, schema: 'chaosd6.class/3' }, { builtin: false }), ['schema must be chaosd6.class/1 or chaosd6.class/2']);
+  eq('classUi: the block / {} for none', [CE.classUi(an), CE.classUi(v1)], [an.ui, {}]);
+  eq('classUiOf: prophet notice, necromancer reanim (data.destroy_reanimated), reaver nothing',
+    [CL.classUiOf('class_prophet').notice?.slice(0, 11), CL.classUiOf('class_necromancer'), CL.classUiOf('class_reaver'), CL.classUiOf('class_nope')],
+    ['automatic —', { reanim: { elements: ['elem_harmony', 'elem_concentration'], die: 6 } }, {}, {}]);
+  // the generic bot planner (tools/swarm-test.mjs classProfile) reads these
+  eq('abilityRecordsOf: the record each clickable built-in can give',
+    Object.fromEntries([...B.defs].map(([id, d]) => [id.replace('class_', ''), CE.abilityRecordsOf(d).join(',')]).filter(([, r]) => r)),
+    { alchemist: 'traps', animator: 'copy_building', avenger: 'lures', cleric: 'disable_traps', druid: 'tokens', healer: 'heals', illusionist: 'illusion', necromancer: 'revives', overlord: 'armor', priest: 'build', ranger: 'traps', seeker: 'far_trap', warrior: 'step', witch: 'discards' });
 }
 
 // ---- 2. identity -------------------------------------------------------------------------------------------------
@@ -142,6 +165,26 @@ for (const env of [{ CLASS_ENGINE: 'shadow', CLASS_SHADOW_STRICT: '1', CLASS_SHA
   const out = `${r.stdout}${r.stderr}`;
   const last = out.trim().split('\n').filter(l => /class checks|\[classes\]/.test(l)).slice(-2).join(' | ');
   eq(`CLASS_ENGINE=${env.CLASS_ENGINE}: ${last}`, r.status === 0 && /all class checks passed/.test(out) && !/SHADOW MISMATCH|data hook:/.test(out), true);
+}
+
+// ---- 6. grep gate (class isolation phase 6, 2026-11-20) ---------------------------------------------------------
+// The game is class-oblivious: no built-in class id as CODE (line comments are stripped) in the resolver, the UI, the
+// bots, the engine and its primitives; the class-*.mjs config modules are gone; the JS oracle (classes-data/oracle)
+// is only loaded dynamically, for CLASS_ENGINE=js | shadow.
+console.log('-- 6. grep gate: no class ids in the game');
+{
+  const GAME = path.join(HERE, '..');
+  const ids = [...B.defs.keys()];
+  const idRe = new RegExp(`\\b(${ids.join('|')})\\b`, 'g');
+  const code = (f) => fs.readFileSync(path.join(GAME, f), 'utf8').split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, '')).join('\n');
+  const GATED = ['peer.mjs', 'js/main.js', 'tools/swarm-test.mjs', 'classes.mjs', 'class-engine.mjs', 'class-state.mjs', 'world-prims.mjs',
+    'contact-prims.mjs', 'classes-handshake.mjs', 'effect-hooks.mjs', 'effects.mjs', 'awake.mjs'];
+  const hits = GATED.flatMap(f => [...new Set(code(f).match(idRe) || [])].map(id => `${f}: ${id}`));
+  eq(`no class_<id> literal in ${GATED.length} game files`, hits, []);
+  eq('the class-*.mjs config modules are gone (oracles in classes-data/oracle)', ['class-world.mjs', 'class-traps.mjs', 'class-chase.mjs', 'class-manipulator.mjs'].filter(f => fs.existsSync(path.join(GAME, f))), []);
+  const staticOracle = GATED.filter(f => /^\s*import\s[^;]*from\s*['"][^'"]*classes-data\/oracle\//m.test(code(f)));
+  eq('no game file imports the oracle statically', staticOracle, []);
+  eq('the oracle exports HOOKS for every hook of the engine', Object.keys((await import('../classes-data/oracle/classes-js.mjs')).HOOKS).sort(), [...CE.HOOK_NAMES].sort());
 }
 
 console.log(fails ? `${fails} class-engine check(s) FAILED (${oks} ok)` : `all class-engine checks passed (${oks} ok)`);

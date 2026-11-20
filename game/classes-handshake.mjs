@@ -5,7 +5,10 @@
 // it and pass it on. Design note: game/classes-data/SCHEMA.md "Foreign classes (handshake)".
 //
 // Built-in classes (CLASS_RULES / data/classes.json / the bundled game/classes-data/classes/*.json) travel by NAME
-// (snapshot class_id / permanents_csv), exactly as before. A FOREIGN class — a definition from a player branch,
+// (snapshot class_id / permanents_csv) + their PIN (class isolation phase 6, user ruling 3): the holder's snapshot
+// `cl_key` = clKey(bundled definition + libs), 16 hex. The bundled set is the pre-seeded cache; a unit whose pin
+// differs from mine (or is absent: an older build) makes me abstain from the action's state hash (gateBuiltins) —
+// the hard version gate, never a silent resolve with another version. A FOREIGN class — a definition from a player branch,
 // with an id that is not a built-in — travels by NAME + REF, and every peer runs the same bytes (content addressed:
 // sha256 of the canonical JSON, libraries pinned).
 //
@@ -235,6 +238,25 @@ export function gateClasses(units, missing, statusOf, refsByActor, isBuiltin, re
   return { tags, abstain, dormant: [...dormant].sort(), missing: missingRefs };
 }
 
+/**
+ * Built-ins by reference (class isolation phase 6, user ruling 3 "hard version gate"): a built-in class travels with
+ * its PIN — the clKey of the bundled definition + its libraries, 16 hex (snapshot `cl_key` of its holder). The
+ * bundled set is the pre-seeded cache: a unit whose built-in pin differs from mine (or that publishes none) holds a
+ * version I do not run, so I abstain from the state hash of the action — never a silent resolve with another
+ * version. units: [{id, class_id, cl_key}]; keyOf(id) → my 16-hex pin of a built-in id (null: not a built-in).
+ * → { abstain, mismatches: [{ unit, class_id, got, want }] } (sorted by unit id).
+ */
+export function gateBuiltins(units, keyOf) {
+  const mismatches = [];
+  for (const u of [...units].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    const want = u?.class_id ? keyOf(u.class_id) : null;
+    if (!want) continue;
+    const got = typeof u.cl_key === 'string' && u.cl_key ? u.cl_key : null;
+    if (got !== want) mismatches.push({ unit: u.id, class_id: u.class_id, got, want });
+  }
+  return { abstain: mismatches.length > 0, mismatches };
+}
+
 // ------------------------------------------------------------------ the peer adapter (peer.mjs glue)
 const envMs = (name, dflt) => { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; };
 export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, validate: validateIn, onReady = null } = {}) {
@@ -275,6 +297,10 @@ export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {
   const isBuiltin = (id) => bundled.builtinIds.has(id);
   const peerRefs = new Map();   // peer id → its foreign class ref (snapshot cl_ref_json / Door)
   let mine = null;              // { prep, ref } — my own foreign class
+  // phase 6: the pin of every bundled built-in (gateBuiltins); a definition whose libs cannot be pinned has none
+  const builtinKeys = new Map();
+  for (const [id, def] of [...bundled.classes].sort(([a], [b]) => (a < b ? -1 : 1))) { try { builtinKeys.set(id, clKey(makeClRef(def, bundled.libs)).slice(0, 16)); } catch {} }
+  const versionNoticed = new Set();
   log(`bundled class set ${bundled.id.slice(0, 16)} (${Object.keys(bundled.set.classes).length} classes, ${bundled.libs.size} libs), validator ${validatorInfo}`);
 
   const notePeerRef = (peerId, raw) => {
@@ -338,10 +364,30 @@ export async function createClPeer({ selfId, label = selfId, dimId, ui = () => {
       const s = prep.shape || classShape(prep.def);
       return { card_id: `${prep.ref.id}#class`, kind: 'class', class_id: prep.ref.id, name: s.name, text: s.text, tags: ['foreign'], cl: ref, source: { ...ref, kind: 'class' } };
     },
-    /** Slim snapshot fields (absent with no foreign class in play). */
-    snapshotFields() {
-      const h = sync.haveCsv();
-      return { ...(mine ? { cl_ref_json: JSON.stringify(mine.ref) } : {}), ...(h ? { cl_have: h } : {}) };
+    /** Phase 6: my 16-hex pin of a built-in class id (null: not a bundled built-in). */
+    builtinKey(id) { return (id && builtinKeys.get(id)) || null; },
+    /**
+     * Snapshot fields: cl_ref_json (my foreign class), cl_have, and — phase 6, built-ins by reference — cl_key =
+     * the pin of the built-in class I hold (`classId`), which every other peer's version gate compares.
+     */
+    snapshotFields(classId = null) {
+      const h = sync.haveCsv(), k = !mine ? api.builtinKey(classId) : null;
+      return { ...(mine ? { cl_ref_json: JSON.stringify(mine.ref) } : {}), ...(h ? { cl_have: h } : {}), ...(k ? { cl_key: k } : {}) };
+    },
+    /**
+     * Phase 6 version gate, once per action: gateBuiltins over the units in my view (self = my own pin). A mismatch
+     * is logged and shown once per unit + pin pair; the result's `abstain` withholds my state hash for the action.
+     */
+    gateBuiltins(units, { turn, round } = {}) {
+      const res = gateBuiltins(units, (id) => api.builtinKey(id));
+      for (const m of res.mismatches) {
+        const k = `${m.unit}|${m.class_id}|${m.got}`;
+        if (versionNoticed.has(k)) continue;
+        versionNoticed.add(k);
+        log(`CLASS VERSION GATE T${turn}.R${(round ?? 0) + 1}: ${m.unit} holds ${m.class_id} pin ${m.got || 'none (older build)'}, mine ${m.want} — no state hash from me while it is in play`);
+        ui({ kind: 'class_source', event: 'version', ref: { id: m.class_id, kind: 'class' }, peer: { peer_id: m.unit, name: nameOf(m.unit) || undefined }, got: m.got, want: m.want });
+      }
+      return res;
     },
     /** Door fields of one member (mine: no peer id). */
     doorRef(peerId = null) { const r = peerId ? api.refOf(peerId) : mine?.ref; return r ? { cl_ref: compactRef(r) } : {}; },

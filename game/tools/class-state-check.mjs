@@ -2,7 +2,7 @@
 // charges = class-traps.mjs#chargesLeft over the old (turn, n) fields, parse cache, union order independence.
 //   node tools/class-state-check.mjs   → "all class-state checks passed (N ok)"
 import * as CS from '../class-state.mjs';
-import { chargesLeft } from '../class-traps.mjs';
+import { chargesLeft } from '../world-prims.mjs';   // class isolation phase 6 (were class-*.mjs)
 import { canonicalJson } from '../defs-repo.mjs';
 
 let okN = 0, bad = 0;

@@ -1,7 +1,8 @@
 // Oracles for the 2026-11-14 user rulings on Avenger (lure + chase bonus) and Prophet (first contact).
 //   node tools/chase-check.mjs   → must end "all chase checks passed"
 import fs from 'node:fs';
-import { AVENGER_DEFAULTS, PROPHET_DEFAULTS, avengerConfig, prophetConfig, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../class-chase.mjs';
+import { AVENGER_DEFAULTS, PROPHET_DEFAULTS, avengerConfig, prophetConfig } from '../classes-data/oracle/class-configs.mjs';
+import { isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../contact-prims.mjs';   // class isolation phase 6 (were class-*.mjs)
 
 let fails = 0;
 const eq = (label, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fails++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}: ${JSON.stringify(got)}${ok ? '' : ` (want ${JSON.stringify(want)})`}`); };
@@ -15,7 +16,7 @@ const active = (file, id) => {
 const av = active('classes.json', 'class_avenger'), pr = active('classes.json', 'class_prophet');
 // CR 2026-11-17 (data cr_2026_11_19): Avenger 1.2.0 (tap lure), Prophet 1.2.0 (contact 3); CP 2026-11-19 (pick 9 a): the Avenger's bonus is max-only.
 eq('avenger 1.2.0 canonical', [av.version, av.status], ['1.2.0', 'canonical']);
-eq('prophet 1.2.0 canonical', [pr.version, pr.status], ['1.2.0', 'canonical']);
+eq('prophet 1.3.0 canonical (phase 5: ui notice, data unchanged)', [pr.version, pr.status], ['1.3.0', 'canonical']);
 eq('avenger data = defaults but max_only', avengerConfig(av.data), { ...avengerConfig(AVENGER_DEFAULTS), maxOnly: true });
 eq('avenger config 10 / +1 / max 1, life max only', avengerConfig(av.data), { range: 10, per: 1, max: 1, maxOnly: true });
 eq('avenger has no hand_reveal any more', av.data.hand_reveal ?? null, null);
