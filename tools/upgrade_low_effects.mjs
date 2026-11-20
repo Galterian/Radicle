@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mediaPath } from '../game/asset-root.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, '..');
@@ -36,7 +37,7 @@ for (const e of (effects.entries || [])) {
   if (!u) continue;
   const spritePath = `assets/Sprites/Effects/Effects1/${u.dir}/${u.dir} - idle [${u.code}].png`;
   // Sanity: path exists on disk
-  const abs = path.join(REPO, spritePath);
+  const abs = mediaPath(spritePath);   // sprites may live in chaosD6-Resources
   if (!fs.existsSync(abs)) { console.log(`${e.id}: MISSING on disk — ${spritePath}  (skipping)`); continue; }
   const was = `${e.resources?.wbc3_code || '?'} ${e.resources?.wbc3_name || '?'} (${e.resources?.confidence || '?'})`;
   const sprites = e.resources?.sprites || {};

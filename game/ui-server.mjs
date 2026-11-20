@@ -25,6 +25,7 @@ import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { RADICLE_BARE, radicleEnv as radicleEnvReal, listPublishedDimensions as listRadicleDimensions, localDimensionBranches, localBranchBytes, forgetLocalDimension } from './radicle-adapter.mjs';
+import { assetFile } from './asset-root.mjs';
 // CHAOSD6_DIMS_FIXTURE: test launchers only — a JSON file of dimensions (listPublishedDimensions shape) read instead
 // of the Radicle storage, so join / clone / regeneration paths run without touching ~/.radicle.
 const DIMS_FIXTURE = process.env.CHAOSD6_DIMS_FIXTURE || '';
@@ -75,7 +76,7 @@ function creatureName(id) {
 }
 // Curated WBC3 art/sound collection (chaosD6/assets) — sprite sheets, hex
 // terrain tiles, portraits and voice lines referenced by data/*.json `resources`.
-const ASSETS_DIR = path.resolve(__dirname, '..', 'assets');
+// Served through assetFile(): catalogues from ../assets, media from MEDIA_ROOT (may be chaosD6-Resources).
 const LAUNCHER_MODE = process.env.LAUNCHER_MODE === '1';
 
 const MIME = { '.html':'text/html;charset=utf-8', '.js':'application/javascript;charset=utf-8', '.css':'text/css;charset=utf-8', '.json':'application/json;charset=utf-8',
@@ -1114,9 +1115,10 @@ const server = http.createServer(async (req, res) => {
   // Resources quoted in data/*.json (sprites + sounds, mapping files, schema).
   // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
   // readFile follows them, and the path-traversal check happens before.
+  // Catalogue JSONs come from this repo's assets/, media from the resolved media root (asset-root.mjs).
   if (p.startsWith('/assets/')) {
-    const abs = path.resolve(ASSETS_DIR, '.' + p.slice('/assets'.length).replace(/\.\./g, ''));
-    if (!abs.startsWith(ASSETS_DIR)) { res.writeHead(403); return res.end('forbidden'); }
+    const abs = assetFile(p.slice('/assets/'.length).replace(/\.\./g, ''));
+    if (!abs) { res.writeHead(404); return res.end('not found'); }
     return serve(abs);
   }
   const rel = p === '/' ? '/index.html' : p;

@@ -2,6 +2,7 @@
 """Copy a curated subset of extracted WBC3 terrain-features into assets/terrain_scatter/
 and build scatter_table.json describing which biomes each decoration may appear on."""
 import json, os, shutil, re, sys
+from asset_root import media_path   # PNGs go to the media root; scatter_table.json stays in this repo
 
 rows = json.load(open("/tmp/scatter_pick.json"))
 
@@ -20,6 +21,7 @@ FAMILY_TO_BIOMES = {
 
 dst_dir = "assets/terrain_scatter"
 os.makedirs(dst_dir, exist_ok=True)
+os.makedirs(media_path(dst_dir), exist_ok=True)
 entries = []
 for r in rows:
     src = os.path.join("..", r["path"])
@@ -27,7 +29,7 @@ for r in rows:
     code = r["code"].lower()
     dst_name = slug + "_" + code + ".png"
     dst_rel = dst_dir + "/" + dst_name
-    dst_abs = os.path.join(os.getcwd(), dst_rel)
+    dst_abs = media_path(dst_rel)
     if not os.path.isfile(dst_abs):
         shutil.copy2(src, dst_abs)
     biomes = FAMILY_TO_BIOMES.get(r["race"], [])
@@ -55,5 +57,5 @@ catalog = {
 }
 json.dump(catalog, open(dst_dir + "/scatter_table.json", "w"), indent=2)
 print("wrote", len(entries), "items, catalog at", dst_dir + "/scatter_table.json")
-pngs = [f for f in os.listdir(dst_dir) if f.endswith(".png")]
+pngs = [f for f in os.listdir(media_path(dst_dir)) if f.endswith(".png")]
 print("copied PNGs:", len(pngs))

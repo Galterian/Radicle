@@ -25,6 +25,36 @@ static var _frames_loaded := false
 static var _mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
 static var _missing_logged: Dictionary = {}
 
+## Desktop media root (sprites/images/sounds may live in the chaosD6-Resources repo at the same relative
+## paths; catalogue JSONs always stay in this repo's assets/). Same order as game/asset-root.mjs:
+## env CHAOSD6_ASSETS_DIR, else <repo>/assets when it holds media (assets/Sprites), else env
+## CHAOSD6_RESOURCES_REPO/assets, else the first existing RESOURCES_REPO_DIRS entry (relative to the repo root).
+const RESOURCES_REPO_DIRS := ["../chaosd6-resources-repo", "../../chaosd6-resources-repo"]
+const MEDIA_EXT := ["png", "bmp", "jpg", "jpeg", "gif", "webp", "wav", "ogg", "mp3", "ttf", "svg"]
+static var _media_root := ""
+
+
+static func media_root() -> String:
+	if _media_root != "":
+		return _media_root
+	var code_assets := repo_root().path_join("assets")
+	_media_root = code_assets
+	var env := OS.get_environment("CHAOSD6_ASSETS_DIR")
+	if _mobile:
+		return _media_root
+	if env != "":
+		_media_root = env
+	elif not DirAccess.dir_exists_absolute(code_assets.path_join("Sprites")):
+		var res_env := OS.get_environment("CHAOSD6_RESOURCES_REPO")
+		var cands: Array = [res_env] if res_env != "" else []
+		for d in RESOURCES_REPO_DIRS:
+			cands.append(repo_root().path_join(d).simplify_path())
+		for c in cands:
+			if DirAccess.dir_exists_absolute(String(c).path_join("assets")):
+				_media_root = String(c).path_join("assets")
+				break
+	return _media_root
+
 
 static func repo_root() -> String:
 	if _root == "":
@@ -57,6 +87,12 @@ static func resolve(rel: String) -> String:
 			if FileAccess.file_exists(png_twin):
 				return png_twin
 		return mp
+	if rel.begins_with("assets/") and rel.get_extension().to_lower() in MEDIA_EXT:
+		var mr := media_root()
+		if mr != repo_root().path_join("assets"):
+			var m := mr.path_join(rel.trim_prefix("assets/"))
+			if FileAccess.file_exists(m):
+				return m
 	var p := repo_root().path_join(rel)
 	if FileAccess.file_exists(p):
 		return p

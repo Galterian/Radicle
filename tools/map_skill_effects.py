@@ -4,6 +4,7 @@ from the extracted WBC3 archive. Copies the PNG under assets/Sprites/... (same
 layout the other skills use) and records wbc3_name/wbc3_code like collect_assets.py.
 Idempotent: skills that already have an effect strip are left alone."""
 import json, os, shutil
+from asset_root import media_path   # sprites go to the media root
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAPPER = os.path.dirname(ROOT)
@@ -34,7 +35,7 @@ for sid, (name, why) in PICK.items():
     sp = [x for x in ent["files"]["sprites"] if "info" not in x["path"].lower()][0]
     local = "assets/" + sp["path"].split("extracted/", 1)[1]
     src = os.path.join(MAPPER, sp["path"])
-    dst = os.path.join(ROOT, local)
+    dst = media_path(local)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
     if not os.path.isfile(dst):
         shutil.copy2(src, dst)

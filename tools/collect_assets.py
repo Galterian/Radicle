@@ -8,6 +8,7 @@ when assets/frames.json exists, the subset assets/frames_used.json.
 """
 import argparse, glob, json, os, shutil, sys
 from PIL import Image
+from asset_root import MEDIA_ROOT   # media files go here; JSON indexes stay in --assets
 
 PREFIX = 'assets/'
 
@@ -53,6 +54,7 @@ def main():
     ap.add_argument('--src', default=os.path.join(root, '..', 'extracted'))
     ap.add_argument('--data', default=os.path.join(root, 'data'))
     ap.add_argument('--assets', default=os.path.join(root, 'assets'))
+    ap.add_argument('--media', default=MEDIA_ROOT, help='where media files are copied (default: tools/asset_root.py)')
     ap.add_argument('--dry-run', action='store_true')
     args = ap.parse_args()
 
@@ -68,7 +70,7 @@ def main():
             continue
         rest = rel[len(PREFIX):]
         src = os.path.join(args.src, rest)
-        dst = os.path.join(args.assets, rest)
+        dst = os.path.join(args.media, rest)
         if not os.path.isfile(src):
             if os.path.isfile(dst):      # generated asset (e.g. assets/terrain/*.png)
                 size = os.path.getsize(dst)
@@ -92,7 +94,7 @@ def main():
                 shutil.copy2(src, dst)
         if rel.lower().endswith('.bmp'):
             png_rel = rel[:-4] + '.png'
-            png_dst = os.path.join(args.assets, rest[:-4] + '.png')
+            png_dst = os.path.join(args.media, rest[:-4] + '.png')
             index['png_twins'][rel] = png_rel
             if not args.dry_run and not os.path.isfile(png_dst):
                 im = Image.open(src).convert('RGBA')

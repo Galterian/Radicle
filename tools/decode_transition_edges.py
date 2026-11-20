@@ -21,6 +21,7 @@ import re
 import sys
 
 from PIL import Image, ImageDraw
+from asset_root import media_path   # PNGs go to the media root; terrain_transitions.json stays in this repo
 
 CHAOS_ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAPPER_ROOT = os.path.dirname(CHAOS_ROOT)
@@ -289,7 +290,7 @@ def _classify_edges(img, owning_avg, foreign_avg):
 
 def main():
     print("== decode WBC3 transition edges ==")
-    out_dir = os.path.join(CHAOS_ROOT, "assets", "terrain", "transitions")
+    out_dir = media_path("assets/terrain/transitions")
     os.makedirs(out_dir, exist_ok=True)
 
     # Pre-compute biome-average colours.
@@ -340,7 +341,7 @@ def main():
         # Convert to hex-masked PNG under assets/terrain/transitions/.
         img.putalpha(_hex_mask(TILE_W, TILE_H))
         png_rel = f"assets/terrain/transitions/{code}.png"
-        png_abs = os.path.join(CHAOS_ROOT, png_rel)
+        png_abs = media_path(png_rel)
         img.save(png_abs)
 
         if mask == 0:

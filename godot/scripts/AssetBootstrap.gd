@@ -25,6 +25,10 @@ signal bootstrap_complete(ok: bool, error: String)
 signal progress(done: int, total: int, bytes_done: int, bytes_total: int, current: String)
 
 const PROJECT_RID := "rad:zqZmP6itceBMqYwi1K1n8phQqCaj"
+# chaosD6-Resources (media split out of the Code repo). Manifest entries with "src": "resources" are fetched
+# from this repo in "radicle" mode. "" = not published yet: fall back to PROJECT_RID, which still carries the
+# media until the cutover. Set with game/tools/out/_resources_rid_patch.py <RID> --apply.
+const RESOURCES_RID := "rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14"
 const SEED_BASE := "https://92-5-138-121.sslip.io"
 const MANIFEST_RES_PATH := "res://assets_manifest.json"
 const MAX_PARALLEL := 4
@@ -48,6 +52,7 @@ const DELIVERY_MODE := "static"
 
 var _is_mobile := OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios")
 var _blob_base := ""          # e.g. ".../repos/<RID>/blob/<SHA>/"
+var _blob_base_res := ""      # same for RESOURCES_RID (media entries); equals _blob_base when unset
 var _manifest: Array = []     # [{path, size, missing?}, ...]
 var _queue: Array[int] = []   # indexes into _manifest still to fetch
 var _in_flight := 0
@@ -113,6 +118,7 @@ func _start() -> void:
 
 	if DELIVERY_MODE == "static":
 		_blob_base = "%s/pack/" % SEED_BASE
+		_blob_base_res = _blob_base
 	else:
 		_set_status("Resolving seed head…")
 		var ok: bool = await _resolve_blob_base()
@@ -174,7 +180,8 @@ func _fetch(idx: int, attempt: int) -> void:
 		else:
 			_pump()
 	)
-	var url := _blob_base + _url_encode_path(rel)
+	var base := _blob_base_res if str(entry.get("src", "")) == "resources" else _blob_base
+	var url := base + _url_encode_path(rel)
 	var err := req.request(url)
 	if err != OK:
 		req.queue_free()
@@ -193,10 +200,22 @@ func _fetch(idx: int, attempt: int) -> void:
 
 
 func _resolve_blob_base() -> bool:
+	var ok_code: bool = await _resolve_head(PROJECT_RID, false)
+	if not ok_code:
+		return false
+	_blob_base_res = _blob_base
+	if RESOURCES_RID != "" and RESOURCES_RID != PROJECT_RID:
+		var ok_res: bool = await _resolve_head(RESOURCES_RID, true)
+		if not ok_res:
+			return false
+	return true
+
+
+func _resolve_head(rid: String, resources: bool) -> bool:
 	# radicle-httpd: GET /api/v1/repos/<RID> → { "head": "<sha>", ... }
 	var req := HTTPRequest.new()
 	add_child(req)
-	req.request("%s/api/v1/repos/%s" % [SEED_BASE, PROJECT_RID])
+	req.request("%s/api/v1/repos/%s" % [SEED_BASE, rid])
 	var r: Array = await req.request_completed
 	req.queue_free()
 	var code: int = r[1]
@@ -209,7 +228,11 @@ func _resolve_blob_base() -> bool:
 		_fail("Seed returned unexpected payload (no `head`).")
 		return false
 	var sha: String = str(parsed["head"])
-	_blob_base = "%s/api/v1/repos/%s/blob/%s/" % [SEED_BASE, PROJECT_RID, sha]
+	var base := "%s/api/v1/repos/%s/blob/%s/" % [SEED_BASE, rid, sha]
+	if resources:
+		_blob_base_res = base
+	else:
+		_blob_base = base
 	return true
 
 

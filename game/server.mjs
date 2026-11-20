@@ -6,12 +6,12 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assetFile } from './asset-root.mjs';   // catalogues from ../assets, media from the media root
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT     = __dirname;
 const DATA_DIR = path.resolve(ROOT, '..', 'data');
 const SESS_DIR = path.resolve(ROOT, 'sessions');
-const ASSETS_DIR = path.resolve(ROOT, '..', 'assets');   // curated WBC3 art/sound collection
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -51,7 +51,7 @@ const server = http.createServer(async (req, res) => {
 
   if (p.startsWith('/assets/')) {
     const rel = safeRel(p.slice('/assets/'.length));
-    return serveFile(res, path.join(ASSETS_DIR, rel), MIME[path.extname(rel).toLowerCase()] || 'application/octet-stream');
+    return serveFile(res, assetFile(rel) || path.join(ROOT, '..', 'assets', rel), MIME[path.extname(rel).toLowerCase()] || 'application/octet-stream');
   }
   if (p.startsWith('/data/')) {
     const rel = safeRel(p.slice('/data/'.length));

@@ -14,11 +14,13 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from asset_root import media_path   # sprite PNGs go to the media root; the catalog stays in this repo
 
 REPO = Path(__file__).resolve().parent.parent
 EXTRACT = REPO.parent / "extracted" / "Sprites" / "Terrain Features"
 DEST = REPO / "assets" / "terrain_bigfeatures"
 CATALOG = DEST / "bigfeature_table.json"
+MEDIA_DEST = Path(media_path("assets/terrain_bigfeatures"))
 
 # Curated subset — each entry is (slug, source_rel_path, biomes, weight, label).
 # Slug matches the pattern of assets/terrain_scatter/ files so the two layers read
@@ -135,6 +137,7 @@ def main() -> int:
         print(f"missing source: {EXTRACT}", file=sys.stderr)
         return 2
     DEST.mkdir(parents=True, exist_ok=True)
+    MEDIA_DEST.mkdir(parents=True, exist_ok=True)
 
     # Index entries by biome so the Godot loader can look up a per-biome list without
     # scanning the full catalog on every hex.
@@ -146,7 +149,7 @@ def main() -> int:
         if not src.is_file():
             print(f"MISSING: {src}", file=sys.stderr)
             return 3
-        dst = DEST / slug
+        dst = MEDIA_DEST / slug
         if not dst.exists() or dst.stat().st_size != src.stat().st_size:
             shutil.copy2(src, dst)
             copied += 1

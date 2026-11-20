@@ -39,6 +39,16 @@ if command -v rsync >/dev/null; then
 else
   cp -R "$SRC"/. "$DST"/
 fi
+# Media may live in chaosD6-Resources (tools/asset_root.py decides); layer them over the catalogue JSONs.
+MEDIA_SRC=$(python3 -c 'import sys; sys.path.insert(0, "../tools"); from asset_root import MEDIA_ROOT; print(MEDIA_ROOT)')
+if [ "$(cd "$MEDIA_SRC" && pwd)" != "$(cd "$SRC" && pwd)" ]; then
+  echo "== media from $MEDIA_SRC"
+  if command -v rsync >/dev/null; then
+    rsync -a --link-dest="$(cd "$MEDIA_SRC" && pwd)" "$MEDIA_SRC"/ "$DST"/
+  else
+    cp -R "$MEDIA_SRC"/. "$DST"/
+  fi
+fi
 
 # Make sure Godot doesn't try to import anything Image-sized unexpectedly.
 # .gdignore skips sub-trees we don't want imported (sheet raw dumps, oversized

@@ -10,17 +10,28 @@
 // we recursed into them we'd pull the whole 810 MB tree.
 //
 // Output: godot/assets_manifest.json
-//   { generated, total_bytes, count, entries: [{path, size}] }
+//   { generated, total_bytes, count, entries: [{path, size, src}] }
+//   src = "resources" for media (png/bmp/wav/...; they may live in chaosD6-Resources), "code" for the JSONs.
+//   AssetBootstrap.gd (radicle mode) fetches "resources" entries from RESOURCES_RID, the rest from PROJECT_RID.
 //
-// Run:  node tools/build-asset-manifest.mjs
+// Run:  node tools/build-asset-manifest.mjs                      # media from game/asset-root.mjs (env / default)
+//       node tools/build-asset-manifest.mjs --resources <repo>   # media from <repo>/assets (chaosD6-Resources)
+//       ... --out <file>                                         # write somewhere else (compare before replacing)
 //       (regenerate before each mobile release)
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MEDIA_ROOT, isMedia } from '../game/asset-root.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
+const resArg = process.argv.indexOf('--resources');
+const mediaRoot = resArg > 0 ? path.resolve(process.argv[resArg + 1] || '.', 'assets') : MEDIA_ROOT;
+if (!fs.existsSync(mediaRoot)) { console.error(`media root not found: ${mediaRoot}`); process.exit(1); }
+// Repo-relative manifest path -> file on disk: media under the media root, everything else in this repo.
+const srcOf = (rel) => (rel.startsWith('assets/') && isMedia(rel) ? 'resources' : 'code');
+const fileOf = (rel) => (srcOf(rel) === 'resources' ? path.join(mediaRoot, rel.slice('assets/'.length)) : path.join(repoRoot, rel));
 
 const ASSET_CONFIG_JSONS = [
   'assets/terrain/terrain_tiles.json',
@@ -67,7 +78,7 @@ let all = [...new Set([...alwaysInclude, ...referenced])];
 all = all.map(p => {
   if (!p.endsWith('.bmp')) return p;
   const pngTwin = p.slice(0, -4) + '.png';
-  return fs.existsSync(path.join(repoRoot, pngTwin)) ? pngTwin : p;
+  return fs.existsSync(fileOf(pngTwin)) ? pngTwin : p;
 });
 all = [...new Set(all)].sort();
 
@@ -75,15 +86,15 @@ const entries = [];
 let totalBytes = 0;
 let missing = 0;
 for (const rel of all) {
-  const abs = path.join(repoRoot, rel);
+  const abs = fileOf(rel);
   if (!fs.existsSync(abs)) {
     missing++;
-    entries.push({ path: rel, size: 0, missing: true });
+    entries.push({ path: rel, size: 0, src: srcOf(rel), missing: true });
     continue;
   }
   const sz = fs.statSync(abs).size;
   totalBytes += sz;
-  entries.push({ path: rel, size: sz });
+  entries.push({ path: rel, size: sz, src: srcOf(rel) });
 }
 
 const manifest = {
@@ -94,10 +105,12 @@ const manifest = {
   entries,
 };
 
-const outPath = path.join(repoRoot, 'godot', 'assets_manifest.json');
+const outArg = process.argv.indexOf('--out');   // --out <file>: write elsewhere (dry comparison)
+const outPath = outArg > 0 ? path.resolve(process.argv[outArg + 1]) : path.join(repoRoot, 'godot', 'assets_manifest.json');
 fs.writeFileSync(outPath, JSON.stringify(manifest, null, 2));
 
 console.log(`wrote ${path.relative(repoRoot, outPath)}`);
+console.log(`  media:  ${mediaRoot}`);
 console.log(`  files:  ${entries.length}`);
 console.log(`  total:  ${(totalBytes / 1024 / 1024).toFixed(1)} MB`);
 if (missing) console.log(`  missing: ${missing} (listed in manifest with missing:true)`);

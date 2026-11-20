@@ -8,6 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { mediaPath } from '../game/asset-root.mjs';   // the sprite folders may live in chaosD6-Resources
 
 const ROOT = process.cwd();
 const DRY = process.argv.includes('--dry');
@@ -95,7 +96,7 @@ function buildFileName(stem, dir, kind, code, ext) {
 
 const actions = [];
 for (const scanDir of SCAN_DIRS) {
-  const abs = path.join(ROOT, scanDir);
+  const abs = mediaPath(scanDir);
   if (!fs.existsSync(abs)) continue;
   for (const name of fs.readdirSync(abs)) {
     const folderAbs = path.join(abs, name);

@@ -2,9 +2,11 @@
 assets/frames.json exists on disk (case-sensitive; frames.json keys may fall back to ../extracted).
 
 Usage (from chaosD6/): python3 tools/check_assets.py [--fix-frames]
+Media resolve through tools/asset_root.py (CHAOSD6_ASSETS_DIR, else this repo's assets/, else chaosD6-Resources).
 Exit 0 = all hard references resolved, non-zero otherwise.
 """
 import json, os, glob, re, sys
+from asset_root import MEDIA_ROOT, MEDIA_VIA, CODE_ASSETS, is_media
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXTRACTED = os.path.join(os.path.dirname(ROOT), 'extracted')
@@ -29,21 +31,29 @@ def exists_cs(base, rel):
     return True
 
 
+def in_repo(rel):
+    """Media under the resolved media root, catalogues (JSON) in the Code repo (case-sensitive)."""
+    if rel.startswith('assets/') and MEDIA_ROOT != CODE_ASSETS and is_media(rel):
+        return exists_cs(MEDIA_ROOT, rel[len('assets/'):])
+    return exists_cs(ROOT, rel)
+
+
 def found(rel):
-    if exists_cs(ROOT, rel):
+    if in_repo(rel):
         return True
     return rel.startswith('assets/') and exists_cs(EXTRACTED, rel[len('assets/'):])
 
 
 def main():
     fix = '--fix-frames' in sys.argv
+    print(f'media root: {MEDIA_ROOT} ({MEDIA_VIA})')
     hard = set()
     for f in glob.glob(os.path.join(ROOT, 'data', '*.json')) + [os.path.join(ROOT, 'assets', 'terrain', 'terrain_tiles.json')]:
         if os.path.isfile(f):
             txt = open(f, encoding='utf-8').read()
             for m in re.finditer(r'"(assets/[^"]+\.(?:png|bmp|wav|json))"', txt):
                 hard.add(m.group(1))
-    bad_hard = sorted(r for r in hard if not exists_cs(ROOT, r))
+    bad_hard = sorted(r for r in hard if not in_repo(r))
     print(f'hard references: {len(hard)}, missing: {len(bad_hard)}')
     for r in bad_hard[:20]:
         print('  MISSING', r)
@@ -59,7 +69,8 @@ def main():
             for k, v in frames.items():
                 if k in bad:
                     d = os.path.dirname(k)
-                    base = ROOT if exists_cs(ROOT, d) else EXTRACTED
+                    media_d = d.startswith('assets/') and exists_cs(MEDIA_ROOT, d[len('assets/'):])
+                    base = ROOT if exists_cs(ROOT, d) else MEDIA_ROOT if media_d else EXTRACTED
                     rel_d = d if base == ROOT else d[len('assets/'):]
                     names = [n for n in listing(os.path.join(base, rel_d)) if n.endswith('.png')]
                     fn = os.path.basename(k)

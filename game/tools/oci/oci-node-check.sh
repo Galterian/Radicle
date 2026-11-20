@@ -16,6 +16,8 @@ CFG=$RH/config.json
 DESKTOP=z6Mkrh3gkVD8E4cJgibm1NDmStUCJuVASwmtq9C1Juvag6yy
 PHONE=z6MkpdT8tvqUtLccmpR9HX2NE6ZK7rGSfXQqTCuGBLJs1tig
 RIDS="rad:zqZmP6itceBMqYwi1K1n8phQqCaj rad:z2xbfJfwT3kukR73m8LXmmuvchEwr rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5 rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"
+RESOURCES_RID="rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14"   # chaosD6-Resources (public). "" = not published yet: skipped, never seeded. Set by game/tools/out/_resources_rid_patch.py
+case "$RESOURCES_RID" in rad:z?*) RIDS="$RIDS $RESOURCES_RID" ;; esac
 RAD=$(sudo -u radicle bash -lc 'command -v rad' 2>/dev/null); [ -z "$RAD" ] && RAD=$RH/bin/rad
 asrad() { sudo -u radicle env RAD_HOME=$RH HOME=/home/radicle "$@"; }
 

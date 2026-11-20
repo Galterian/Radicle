@@ -19,6 +19,8 @@ declare -A NAME=(
   [rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ]=Effects    [rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5]=Skills
   [rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi]=Classes    [rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH]=Profiles )
 RIDS="rad:zqZmP6itceBMqYwi1K1n8phQqCaj rad:z2xbfJfwT3kukR73m8LXmmuvchEwr rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5 rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"
+RESOURCES_RID="rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14"   # chaosD6-Resources (public). "" = not published yet: skipped, never seeded. Set by game/tools/out/_resources_rid_patch.py
+case "$RESOURCES_RID" in rad:z?*) NAME[$RESOURCES_RID]=Resources; RIDS="$RIDS $RESOURCES_RID" ;; esac
 
 report() {
   echo "== services: $(systemctl is-active radicle-node radicle-httpd 2>&1 | paste -sd' ')"

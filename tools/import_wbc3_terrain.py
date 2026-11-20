@@ -8,6 +8,7 @@
 """
 import json, os, shutil
 from PIL import Image, ImageDraw
+from asset_root import media_path   # PNGs go to the media root; the JSON catalogues stay in this repo
 
 
 def _hex_mask(w, h):
@@ -93,7 +94,7 @@ TILE_MAX_PER_BIOME = 20     # cap how many variants we actually copy (keep repo 
 
 def convert_tiles():
     """Convert BMP tiles -> PNG at a uniform size; return {biome: [paths]}."""
-    out_dir = os.path.join(CHAOS_ROOT, "assets", "terrain")
+    out_dir = media_path("assets/terrain")
     os.makedirs(out_dir, exist_ok=True)
     chaos_terrain = {}
     for chaos_key, folder in CHAOS_TO_FOLDER.items():
@@ -123,7 +124,7 @@ def convert_tiles():
             # painting opaque rectangles over each other.
             img.putalpha(_hex_mask(TILE_W, TILE_H))
             dst_rel = "assets/terrain/wbc3_" + chaos_key + "_" + str(i) + ".png"
-            dst_abs = os.path.join(CHAOS_ROOT, dst_rel)
+            dst_abs = media_path(dst_rel)
             img.save(dst_abs)
             variants.append(dst_rel)
         chaos_terrain[chaos_key] = {
@@ -164,7 +165,7 @@ def copy_features():
             # Mirror the path under assets/ (strip the extracted/ prefix).
             dst_rel = src_rel.split("extracted/", 1)[1]
             dst_rel = "assets/" + dst_rel
-            dst_abs = os.path.join(CHAOS_ROOT, dst_rel)
+            dst_abs = media_path(dst_rel)
             os.makedirs(os.path.dirname(dst_abs), exist_ok=True)
             if not os.path.isfile(dst_abs):
                 shutil.copy2(src_abs, dst_abs)

@@ -209,10 +209,13 @@ func _ready() -> void:
 	# player entity to the resolved spawn hex and switch its faction to the
 	# chosen door's alliance so we land as an ally of that peer right next
 	# to their unit — matches the user's "join nearby chosen unit" ask.
-	if typeof(DimensionLauncher) == TYPE_OBJECT and "pending_join" in DimensionLauncher:
-		_apply_pending_join(DimensionLauncher.pending_join)
+	# Looked up by node path, not the autoload identifier: under `godot -s` (smoke_test.gd) autoload
+	# names are not declared at compile time, and the bare identifier failed to compile Game.gd.
+	var launcher := get_node_or_null("/root/DimensionLauncher")
+	if launcher != null and "pending_join" in launcher:
+		_apply_pending_join(launcher.pending_join)
 		# Deep-link joins resolve after the radicle-httpd fetches, i.e. after _ready.
-		DimensionLauncher.join_resolved.connect(_apply_pending_join)
+		launcher.join_resolved.connect(_apply_pending_join)
 	var p := player_entity()
 	if p != null:
 		gen.reveal_around(p.hex, REVEAL_RADIUS, "genesis")
@@ -248,7 +251,9 @@ func _apply_pending_join(pj: Variant) -> void:
 	hud.log_line("joined dimension %s as %s near %s" % [
 		String(pj.get("dim_name", "?")), alliance, Hex.key_of(landing)
 	], Color(0.65, 0.95, 0.75))
-	DimensionLauncher.pending_join = {}
+	var launcher := get_node_or_null("/root/DimensionLauncher")
+	if launcher != null:
+		launcher.pending_join = {}
 
 
 # ------------------------------------------------------------------ entities

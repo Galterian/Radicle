@@ -19,6 +19,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from asset_root import media_path   # sprites go to the media root; feature_table.json stays in this repo
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = REPO.parent / "extracted" / "warlords3_battlecry_manifest.json"
@@ -248,7 +249,7 @@ def main() -> int:
             missing.append(f"{race}/{name} (missing on disk: {src})")
             continue
         dst_rel = src_rel.replace("extracted/", "assets/", 1)
-        dst = REPO / dst_rel
+        dst = Path(media_path(dst_rel))
         if not dst.exists():
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -284,7 +285,7 @@ def main() -> int:
                 return 5
 
     # 4) verify every path exists
-    bad = [(b, e["id"]) for b, pool in by_biome.items() for e in pool if not (REPO / e["path"]).is_file()]
+    bad = [(b, e["id"]) for b, pool in by_biome.items() for e in pool if not Path(media_path(e["path"])).is_file()]
     if bad:
         print("missing sprite files:", bad, file=sys.stderr)
         return 3

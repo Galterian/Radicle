@@ -8,6 +8,7 @@ Tiles are produced at 2x (160x133) so the renderer can downscale them crisply.
 import argparse, glob, json, math, os, random, re
 import numpy as np
 from PIL import Image, ImageDraw
+from asset_root import media_path   # tile PNGs go to the media root; terrain_tiles.json stays in --out
 
 HEX_SIZE = 46
 H_SQUASH = 0.72
@@ -123,6 +124,7 @@ def main():
     root = os.path.dirname(here)
     ap.add_argument('--src', default=os.path.join(root, '..', 'extracted', 'Images', 'Terrain'))
     ap.add_argument('--out', default=os.path.join(root, 'assets', 'terrain'))
+    ap.add_argument('--media-out', default=media_path('assets/terrain'), help='where tile PNGs are written')
     ap.add_argument('--contact', default=os.path.join(root, '..', '_test', 'hex_tiles.png'))
     args = ap.parse_args()
 
@@ -130,6 +132,7 @@ def main():
     h = int(round(2 * HEX_SIZE * H_SQUASH * SCALE))
     mask = hex_mask(w, h)
     os.makedirs(args.out, exist_ok=True)
+    os.makedirs(args.media_out, exist_ok=True)
     rng = random.Random(6)
 
     index = {'hex': {'size': HEX_SIZE, 'squash': H_SQUASH, 'scale': SCALE, 'tile_w': w, 'tile_h': h,
@@ -149,7 +152,7 @@ def main():
             tile = Image.new('RGBA', (w, h), (0, 0, 0, 0))
             tile.paste(im, (0, 0), mask)
             name = f'{slug(ts)}_{i}.png'
-            tile.save(os.path.join(args.out, name))
+            tile.save(os.path.join(args.media_out, name))
             arr = np.asarray(im).reshape(-1, 3).mean(0)
             variants.append({'file': f'assets/terrain/{name}', 'source': os.path.relpath(bp, args.src).replace(os.sep, '/'),
                              'crop': [x, y, w, h], 'avg_color': '#%02x%02x%02x' % tuple(int(v) for v in arr)})
@@ -176,7 +179,7 @@ def main():
     for r, (ts, info) in enumerate(index['tilesets'].items()):
         d.text((6, r * (h + 8) + h // 2 - 6), ts, fill=(255, 255, 0, 255))
         for c, v in enumerate(info['variants']):
-            t = Image.open(os.path.join(root, v['file']))
+            t = Image.open(media_path(v['file']))
             sheet.alpha_composite(t, (220 + c * (w + 8), r * (h + 8) + 4))
     os.makedirs(os.path.dirname(args.contact), exist_ok=True)
     sheet.save(args.contact)
