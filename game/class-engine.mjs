@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runProgram, validateLogic, SPECIAL_OPS, PURE_OP_NAMES, EffectEngineLimit, EffectProgramError } from './effect-engine.mjs';
+import { parseClassState, nsOf, unionOf } from './class-state.mjs';   // phase 2: the generic class-state blob
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const CLASSES_DATA_DIR = path.join(here, 'classes-data');
@@ -45,6 +46,9 @@ export const CLASS_CTX_OPS = {
   side_of: (W, [al]) => W.c.sideOf(al),
   class_data: (W, [id]) => W.cd(id) ?? null,             // the class's data/classes.json `data` (or the definition's `data`)
   class_flag: (W, [id, k]) => W.flag(id, k),              // a key of the class's `flags`
+  // class isolation phase 2 (class-state.mjs): a unit's class state as its snapshot carries it (class_state_json)
+  class_state: (W, [id, cls]) => nsOf(parseClassState(W.c.view(id)?.class_state_json), cls),   // one class's namespace ({} if none)
+  class_state_union: (W, [key]) => [...unionOf(W.c.viewValues().map(p => p?.class_state_json), key)].sort(),   // a list key over every unit and class
   skill_action: (W, [sk]) => W.c.skillAction(sk) ?? null,
   library: (W) => [...W.c.library()],
   ctx_self: (W) => W.c?.self ?? null,
@@ -101,11 +105,18 @@ export const HOOK_SPECS = Object.freeze({
   contact:         { args: ['foes'], result: 'id' },
   local:           { args: [], result: 'local' },
   share_skills:    { args: ['actor', 'skills', 'adj'], result: 'share' },
+  // Phase 4 (2026-11-20): why the class card cannot be clicked now (null = it can). Planning / UI only, never the
+  // resolver. args: fallen_near (a fallen ally creature next to me that nobody raised), archive_creature (one in my archive).
+  blocked:         { args: ['fallen_near', 'archive_creature'], result: 'reason' },
 });
 export const HOOK_NAMES = Object.freeze(Object.keys(HOOK_SPECS));
 export const STD_HOOKS = Object.freeze(HOOK_NAMES.filter(h => HOOK_SPECS[h].std));
 const TRAP_OUTCOMES = ['none', 'dodge', 'disable', 'spring'];
-const ABILITY_OUT = ['heals', 'armor', 'illusion', 'discards', 'lures', 'revives', 'traps', 'tokens'];
+// Class isolation phase 3: REQUESTS the engine resolves itself (map geometry, occupancy, the move register) —
+// the fixed set of placement / ability results a class may choose from (user ruling 2026-11-20 #1; peer.mjs
+// simulate() 'ability requests', classes-data/HOOKS.md). A program gives only the numbers.
+export const ABILITY_REQUESTS = Object.freeze(['copy_building', 'build', 'far_trap', 'disable_traps', 'step']);
+const ABILITY_OUT = ['heals', 'armor', 'illusion', 'discards', 'lures', 'revives', 'traps', 'tokens', ...ABILITY_REQUESTS];
 
 // The value a hook has when no program applies (or a program fails): what the JS hook returns for a class that does
 // not act in it.
@@ -114,7 +125,7 @@ export function neutralOf(hookName, args = {}) {
     case 'colours': case 'config': return {};
     case 'kind': return 'static';
     case 'ready': case 'restore': case 'emits': case 'plan_emits': case 'combat_in': return false;
-    case 'strike': case 'reanimated_strike': case 'stance': case 'stance_target': case 'pick_target': case 'contact': case 'local': return null;
+    case 'strike': case 'reanimated_strike': case 'stance': case 'stance_target': case 'pick_target': case 'contact': case 'local': case 'blocked': return null;
     case 'attack_out': return args.dmg;
     case 'lifesteal': case 'end_turn': return 0;
     case 'lifesteal_apply': return args.life;
@@ -154,6 +165,7 @@ export function resultOk(hookName, v) {
     case 'number': return isNum(v);
     case 'code': return v === null || ['A', 'B', 'M', 'P', 'EM', 'EP'].includes(v);
     case 'id': return v === null || isStr(v);
+    case 'reason': return v === null || isStr(v);
     case 'trap': return TRAP_OUTCOMES.includes(v);
     case 'step': return isObj(v) && typeof v.stealth === 'boolean' && TRAP_OUTCOMES.includes(v.trap);
     case 'strike': return v === null || (isObj(v) && ['retry', 'destroyed', 'too weak'].includes(v.result) && typeof v.ok === 'boolean' && typeof v.last === 'boolean');
@@ -256,8 +268,9 @@ export function stdDefaults(libs = defaultLibs()) {
   if (std?.defaults) { const subs = new Map(Object.entries(std.subs)); for (const [h, s] of Object.entries(std.defaults)) out[h] = { logic: { call: [s] }, subs }; }
   return out;
 }
-// loadClassDefs(dir | {classes, libs}, {builtinIds}) → { defs: Map(id → def), libs: [lib], std }. Invalid files throw.
-export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_DIR, { builtinIds = null } = {}) {
+// loadClassDefs(dir | {classes, libs}, {builtinIds, lenient}) → { defs: Map(id → def), libs: [lib], std, errors }. Invalid
+// files throw; lenient: an invalid class is left out and its reasons go to `errors` ([`<id>: <reasons>`]).
+export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_DIR, { builtinIds = null, lenient = false } = {}) {
   let classes = [], libs = [];
   if (typeof src === 'string') {
     const cDir = fs.existsSync(path.join(src, 'classes')) ? path.join(src, 'classes') : src;
@@ -266,14 +279,17 @@ export function loadClassDefs(src = process.env.CLASS_DEFS_DIR || CLASSES_DATA_D
     libs = jsonFiles(lDir).map(readJson);
   } else { classes = src.classes || []; libs = src.libs || defaultLibs(); }
   for (const l of libs) { const e = validateClassLib(l); if (e.length) throw new Error(`class lib ${l?.id}: ${e.join('; ')}`); }
-  const defs = new Map();
+  const defs = new Map(), errors = [];
   for (const d of classes) {
     const e = validateClassDef(d, { libs, builtin: !builtinIds || builtinIds.has(d?.id) });
-    if (e.length) throw new Error(`class ${d?.id}: ${e.join('; ')}`);
-    if (defs.has(d.id)) throw new Error(`class ${d.id} defined twice`);
+    if (!e.length && defs.has(d.id)) e.push('defined twice');
+    if (e.length) {
+      if (!lenient) throw new Error(`class ${d?.id}: ${e.join('; ')}`);
+      errors.push(`${d?.id}: ${e.join('; ')}`); continue;
+    }
     defs.set(d.id, bindClassDef(d, libs));
   }
-  return { defs, libs, std: stdDefaults(libs) };
+  return { defs, libs, std: stdDefaults(libs), errors };
 }
 
 // ------------------------------------------------------------ running

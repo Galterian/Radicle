@@ -38,6 +38,7 @@ The chaosD6-Classes program (user request 2026-11-16) splits the classes out the
   - `planEmits`: Enchanter.
   - `attackBonus`: Assassin.
   - `illusionRange`: Illusionist.
+  - `invisBreaks`: action codes that also break Invisibility for a unit holding the class (Reaver: `["EP", "EM"]`, they fight as an Attack).
   - `hooks`: the non-std hooks the class answers. `peer:<site>` names a site that stays in peer.mjs and is documentation only.
 - **uses**: the libraries whose subs `call` may reach, searched in order.
 - **hooks**: hook name → program. A hook that is absent falls back to the lib default for std hooks, or to the neutral value for the others.
@@ -67,7 +68,7 @@ A program sees the hook arguments as root registers (`{"var": "cs.archived"}`) p
 | `lifesteal` | | `attacker, amount` | number gained by me |
 | `lifesteal_apply` | | `amount, life, lifeMax, held` | new life |
 | `pre_cast` | | `actor, elements, salt` | `null` or `{stat, fail, dice, value}` (Elementalist) |
-| `ability` | | `actor, ab, salt` | `{used, note, log[], mine[], out: {heals, armor, illusion, discards, lures, revives, traps, tokens}}`; `null` = peer-resolved |
+| `ability` | | `actor, ab, salt` | `{used, note, log[], mine[], out: {heals, armor, illusion, discards, lures, revives, traps, tokens}}`, plus the engine requests `copy_building, build, far_trap, disable_traps, step` (phase 3, HOOKS.md "Ability requests") |
 | `transmute` | | `id, outcomes` | `{edits: [{i, statTokens, heals}], log}` |
 | `destroy_result` | | `d` | the destroy outcome's `result` |
 | `end_turn` | | `held, moved, life, lifeMax` | life gained |
@@ -79,6 +80,7 @@ A program sees the hook arguments as root registers (`{"var": "cs.archived"}`) p
 | `contact` | | `foes` | id or `null` (Prophet) |
 | `local` | | – | `null` or `{op: recover\|draw\|grant, …}` |
 | `share_skills` | | `actor, skills, adj` | `{adds: [{on, skill}], log}` (Bard) |
+| `blocked` | | `fallen_near, archive_creature` | `null` or the reason the card cannot be clicked now (Necromancer; UI / planning only) |
 
 The argument shapes are described in `HOOKS.md`, which also lists the peer.mjs site that calls each hook.
 
@@ -86,7 +88,7 @@ The argument shapes are described in `HOOKS.md`, which also lists the peer.mjs s
 
 This is the effects' JsonLogic dialect: `effects-data/SCHEMA.md` describes the evaluator, the pure ops, `let`/`obj`/`quote`/`sort_by`/`reduce`/`call`, and `hash_int`/`point_buy_seed`, with W.sha as the resolver's sha256. A class program can use everything except the cast-bound forms `emit put out note return return_empty seed rng point_buy`. On top of that it gets read-only ctx queries:
 
-`view(id)`, `view_ids`, `views`, `life_of(id)`, `dist(a, b)`, `enemy_of(a, b)`, `has_perm(id, p)`, `stat_of(id, stat)`, `side_of(alliance)`, `class_data(id)`, `class_flag(id, key)`, `skill_action(skill)`, `library`, `ctx_self`, `ctx_label`, `ctx_turn`, `ctx_action`, `elem_stat(el)`, `elems_of_stat(stat)`, `sha_hex(s)`
+`view(id)`, `view_ids`, `views`, `life_of(id)`, `dist(a, b)`, `enemy_of(a, b)`, `has_perm(id, p)`, `stat_of(id, stat)`, `side_of(alliance)`, `class_data(id)`, `class_flag(id, key)`, `class_state(id, cls)` (one class's namespace of a unit's class state, snapshot `class_state_json`, `{}` if none), `class_state_union(key)` (a list key over every unit and class namespace, sorted), `skill_action(skill)`, `library`, `ctx_self`, `ctx_label`, `ctx_turn`, `ctx_action`, `elem_stat(el)`, `elems_of_stat(stat)`, `sha_hex(s)`
 
 and pure helpers:
 

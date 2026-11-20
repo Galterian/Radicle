@@ -66,6 +66,51 @@ Legend:
 | Necromancer revive of an archived creature | `ability` → `revives: [{who: null}]` | Necromancer | peer: `peer:revive` (archive access) |
 | a class-raised unit's snapshot: `raised_by` (env `RAISED_BY` of a class companion, or a bound revive by a `class_` perm) and `reanim_down_csv` (`reanimFields()`, ~942) | – | Necromancer | peer (absent on every other unit) |
 
+## Ability requests (class isolation phase 3, 2026-11-20)
+
+An ability program may return an engine **request** in its `out`, alongside the record lists (`heals`, `traps`, …). Requests are the fixed set of placement / ability results a class may choose from (user ruling 2026-11-20 #1). The program gives only the numbers; peer.mjs simulate() does the map geometry, occupancy and the move register in the post pass. Each request decides the use itself: on success the ability is used and the engine writes the note. A request that finds nothing leaves the ability ready, except `far_trap` with no hex, which spends the use. Requests only resolve for phase `post` abilities.
+
+| Request | Fields | Engine result | Was |
+|---|---|---|---|
+| `copy_building` | `near`, `place` | copy of the nearest building within `near` (distance, q, r; broken fortresses skipped) on the picked hex within `place`, else a random free one | Animator `animatorCopy` |
+| `build` | `label`, `power`, `heal`, `place`, `max_standing` | a building of that power on the picked / a random free hex within `place`; at most `max_standing` of the class's own stand (`made.made_by`) | Priest `priestShrine` |
+| `far_trap` | `min`, `max`, `radius`, `turns`, `max_standing` | the attached effect card as an `enter` trap on a random walkable hex `min..max` away, with vision `radius` until turn + `turns`; at most `max_standing` per class (`made_by`) | Seeker `seekerPlant` |
+| `disable_traps` | `radius` | every trap within `radius` that is not mine is disabled (active route) | Cleric `clericDisableNearby` |
+| `step` | `n` | the adjacent ally pointed at (else me) steps `n` hexes toward the picked tile, if unmoved and free | Warrior `warriorStep` |
+
+No definition carries a `{"engine":"js"}` marker any more, and every built-in also validates as a foreign class. The validator prices requests with the old power keys: `build`, `plant`, `disable_traps`, `relocate`.
+
+## Class state (class isolation phase 2, 2026-11-20)
+
+Every unit keeps one generic store, namespaced by class id, in `game/class-state.mjs`. It is published as one snapshot field, `class_state_json`: canonical JSON with sorted keys, empty values dropped, and `''` when the store is empty. Peers read another unit's state only through it; class programs use the ctx ops `class_state(id, cls)` and `class_state_union(key)`.
+
+| Namespace.key | Was | Written by |
+|---|---|---|
+| `class_rogue.charges.threat` `{turn, n}` | `stealth_turn` | the threat charge spent (monsters neither wake nor chase that turn; NPCs check any class's `threat` charge) |
+| `class_rogue.charges.trap` `{turn, n}` | `rogue_trap_turn` / `rogue_trap_n` | trap-charge uses (`chargeLeft` = `chargesLeft`) |
+| `class_avenger.bonus` / `.chasers` | `chase_bonus` / `chasers_csv` | the chase step and life points |
+| `class_necromancer.raised` | `reanimated_csv` | a raise; "already raised" = `class_state_union('raised')` over every unit and class |
+| `<raised_by>.down` | `reanim_down_csv` | a reanimated unit's struck elements |
+
+Phase 4: the derived fields `stealth_turn`, `rogue_trap_turn`, `rogue_trap_n`, `reanimated_csv`, `chase_bonus` and `chasers_csv` are gone (no reader left). `reanim_down_csv` stays until the UI reads the store (phase 5). Tests: `tools/class-state-check.mjs`.
+
+## No class ids in peer.mjs (class isolation phase 4, 2026-11-20)
+
+peer.mjs asks what a class does, never which class it is: `hasHook(cls, h)` (flags.hooks), the class's `config` and its flags. Every namespace above is the unit's own class id.
+
+| Site | Reads | Was |
+|---|---|---|
+| step charges (simulate step / dungeon step, the perms strip, the threat / trap spend) | the stepping class's `config` `trapPerTurn`, `threatPerTurn`, `threatRadius` (0 when absent) and data `shared_charge` | Rogue |
+| Invisibility breaks (3 sites) | flag `invisBreaks` of every held class (`invisibilityBreaks(p, {codes})`) | `class_reaver` held |
+| the pre-cast boost bookkeeping | the boosting class (`pre_cast`), its `perAction` flag | Elementalist |
+| fallback action commit, the swap probe, the used mark | a class with `combat_in`; its `config` `publishRange` / `range`; `combat_in` / `pick_target` of that class | Manipulator |
+| chase bonus (step, life points, life max) | every class with `chase_step`, summed over their namespaces; `config` `maxOnly` | Avenger |
+| first contact, the hand request range, the UI notice | a class with `contact`; `config` `contact` | Prophet |
+| the card's blocked reason | the `blocked` hook (args `fallen_near`, `archive_creature`) | Necromancer |
+| a revive (raised list, companion, onRevived) | the class of the revive record (`cls`, set by classAbility) | Necromancer |
+
+Log and notice texts use the class's short id / name, so the built-ins print exactly what they printed before.
+
 ## Application: doResolution / endRound
 
 | site | hook | classes | how |

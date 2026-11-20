@@ -73,8 +73,9 @@ export function copyMade(f, q, r, by) {
 }
 // The world-edit payload of a Priest's Shrine: the catalogue sprite (when found), only its power (no stat bonus).
 // CP 2026-11-19: cfg.heal > 1 → power {kind, n: heal} (peer.mjs turn-end mend heals n); 1 → the old {kind} payload.
-export function shrineMade(cfg, sprite, by) {
+// byName: the builder's class name in the description (phase 3: any class's `build` request; default Priest).
+export function shrineMade(cfg, sprite, by, byName = 'Priest') {
   const heal = Number.isInteger(cfg.heal) && cfg.heal > 1 ? cfg.heal : 1;
-  return { label: cfg.label, path: sprite?.path || '', desc: `A ${cfg.label} raised by a Priest: stand here at the end of a turn — +${heal} life (never above your maximum).`, theme: cfg.power,
+  return { label: cfg.label, path: sprite?.path || '', desc: `A ${cfg.label} raised by a ${byName}: stand here at the end of a turn — +${heal} life (never above your maximum).`, theme: cfg.power,
     bonus: { power: heal > 1 ? { kind: cfg.power, n: heal } : { kind: cfg.power } }, made_by: by };
 }

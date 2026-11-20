@@ -2,10 +2,10 @@
   "schema": "chaosd6.class/1",
   "id": "class_reaver",
   "name": "Reaver",
-  "version": "1.2.0",
-  "source": {"collection":"classes","version":"1.2.0"},
+  "version": "1.3.0",
+  "source": {"collection":"classes","version":"1.3.0"},
   "data": {"ability_kind":"static","colors":["elem_vitality","elem_souls"],"text":"Your Empty Posture is treated as an Attack action. You may emit elements during your Attack."},
-  "flags": {"phase":null,"stance":{"EP":"A","EM":"A"},"emits":{"A":true},"hooks":["stance","stance_target","emits"]},
+  "flags": {"phase":null,"stance":{"EP":"A","EM":"A"},"emits":{"A":true},"invisBreaks":["EP","EM"],"hooks":["stance","stance_target","emits"]},
   "uses": ["classes_std"],
   "hooks": {
     "stance": {"call":["stance_by_flag"]},

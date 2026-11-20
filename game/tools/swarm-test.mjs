@@ -14,6 +14,7 @@ import { biomeFor } from '../js/biome.js';
 import { featureAt as buildingFeatureAt, isBuildingFeature, isLabyrinthWallAt, setFeatureCatalog } from '../js/features.js';
 import { setBigFeatureCatalog } from '../js/bigfeature.js';
 import { fortressAt } from '../js/building-bonus.js';
+import { parseClassState, anyChargeUsed } from '../class-state.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const launcher = process.argv[2] || 'http://127.0.0.1:7357';
@@ -225,7 +226,7 @@ function startAgent(peerId, port, attempt = 0) {
     // Invisibility (user ruling 2026-11-14): an invisible enemy is not seen (unless I am invisible too).
     const invisOf = p => String(p?.permanents_csv || '').split(',').includes('effect_invisibility');
     const amInvis = invisOf(me);
-    const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q) && !(p.stealth_turn === turn && dist(p) > 1) && !(invisOf(p) && !amInvis));
+    const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q) && !(anyChargeUsed(parseClassState(p.class_state_json), 'threat', turn) && dist(p) > 1) && !(invisOf(p) && !amInvis));
     // Rogue / Cleric (user rulings 2026-11-14): enemy enter-traps the bot can see in the peers' snapshots.
     const myClass = a.classState?.class_id || null;
     const foeTraps = (myClass === 'class_rogue' || myClass === 'class_cleric') ? [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance))
