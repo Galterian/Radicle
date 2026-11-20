@@ -158,3 +158,6 @@ tmp/
 !/assets/**/
 !/assets/**/*.json
 /warlords3_screenshots/
+# Screenshots written by _install-and-shot.sh, _fresh-hud-check.sh, emu.sh and godot/tools/{overview,screenshot}.gd —
+# output, not sources; removed from history 2026-11-20 (_history_switch.sh). Keep them out of git.
+/_tools/*.png
