@@ -52,7 +52,16 @@ const dataJsons = fs.readdirSync(dataDir)
   .filter(f => f.endsWith('.json'))
   .map(f => `data/${f}`);
 
-const scanTargets = [...dataJsons, ...ASSET_CONFIG_JSONS];
+// Effect isolation F9 (2026-11-22): a collection whose data/index.json entry names `definitions` (effects, skills) has
+// no data file — DataLoader.gd builds it from those definition files' card blocks, so ship them (and scan their sprites).
+const dataIndex = JSON.parse(fs.readFileSync(path.join(dataDir, 'index.json'), 'utf8'));
+const defJsons = (dataIndex.collections || []).filter(c => c.definitions).flatMap(c => {
+  const dir = path.join(repoRoot, c.definitions);
+  if (!fs.existsSync(dir)) { console.warn(`[warn] missing definitions dir: ${c.definitions}`); return []; }
+  return fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => `${c.definitions}/${f}`);
+});
+
+const scanTargets = [...dataJsons, ...defJsons, ...ASSET_CONFIG_JSONS];
 const alwaysInclude = new Set([...scanTargets, ...BIG_INDEXES]);
 
 const PATH_RE = /"(assets\/[^"\n\r]+?\.(?:png|bmp|wav|json|ogg|mp3))"/g;
