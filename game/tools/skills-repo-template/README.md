@@ -7,6 +7,8 @@ skills/<id>.json       one skill definition; "id" inside == file name
 lib/<id>.json          shared sub-routine libraries a skill lists in "uses"
 SCHEMA.md              the definition format (mirrored from chaosD6 game/skills-data/SCHEMA.md)
 HOOKS.md               the resolver hook points a skill can attach to (game/skills-data/HOOKS.md)
+oracle/                JS TEST ORACLES: the reference hooks of the built-ins (skills-js.mjs) the definitions are
+                       checked against (chaosD6 tools/skills-check.mjs, skill-engine-check.mjs); the game never runs them
 index.json             manifest: id -> sha256 of the canonical JSON, for skills and lib
 validator/pin.json     which validator build gates merges into main (commit + sha256)
 tools/                 everything needed to check a skill OFFLINE — see tools/README.md

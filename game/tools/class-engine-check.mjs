@@ -185,6 +185,15 @@ console.log('-- 6. grep gate: no class ids in the game');
   const staticOracle = GATED.filter(f => /^\s*import\s[^;]*from\s*['"][^'"]*classes-data\/oracle\//m.test(code(f)));
   eq('no game file imports the oracle statically', staticOracle, []);
   eq('the oracle exports HOOKS for every hook of the engine', Object.keys((await import('../classes-data/oracle/classes-js.mjs')).HOOKS).sort(), [...CE.HOOK_NAMES].sort());
+  // skill isolation (2026-11-22): classes never name a built-in skill id; Bard asks skill_is_trance instead.
+  const skIds = fs.readdirSync(path.join(GAME, 'skills-data/skills')).filter(f => /^skill_\w+\.json$/.test(f)).map(f => f.slice(0, -5));
+  const skRe = new RegExp(`\\b(${skIds.join('|')})\\b`, 'g');
+  const defDir = path.join(GAME, 'classes-data/classes');
+  const skHits = [...fs.readdirSync(defDir).filter(f => f.endsWith('.json')).map(f => [`classes-data/classes/${f}`, fs.readFileSync(path.join(defDir, f), 'utf8')]),
+    ...['class-engine.mjs', 'classes.mjs'].map(f => [f, code(f)])].flatMap(([f, s]) => [...new Set(s.match(skRe) || [])].map(id => `${f}: ${id}`));
+  eq(`no built-in skill id (${skIds.length}) in the class definitions, class-engine.mjs, classes.mjs`, skHits, []);
+  const T = CE.CLASS_CTX_OPS.skill_is_trance;
+  eq('skill_is_trance asks ctx.skillIsTrance; a ctx without it answers false', [T({ c: { skillIsTrance: (sk) => sk === 'x' } }, ['x']), T({ c: { skillIsTrance: () => 0 } }, ['x']), T({ c: {} }, ['x']), T({}, ['x'])], [true, false, false, false]);
 }
 
 console.log(fails ? `${fails} class-engine check(s) FAILED (${oks} ok)` : `all class-engine checks passed (${oks} ok)`);

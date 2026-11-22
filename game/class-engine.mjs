@@ -57,6 +57,9 @@ export const CLASS_CTX_OPS = {
   class_state: (W, [id, cls]) => nsOf(parseClassState(W.c.view(id)?.class_state_json), cls),   // one class's namespace ({} if none)
   class_state_union: (W, [key]) => [...unionOf(W.c.viewValues().map(p => p?.class_state_json), key)].sort(),   // a list key over every unit and class
   skill_action: (W, [sk]) => W.c.skillAction(sk) ?? null,
+  // skill isolation (2026-11-22): is `sk` the trance skill (its definition's flags.trance)? — so no class names a
+  // skill id. A ctx without skillIsTrance (data-mode tools, old fixtures) answers false instead of throwing.
+  skill_is_trance: (W, [sk]) => (typeof W.c?.skillIsTrance === 'function' ? !!W.c.skillIsTrance(sk) : false),
   library: (W) => [...W.c.library()],
   ctx_self: (W) => W.c?.self ?? null,
   ctx_label: (W) => W.c?.label ?? null,

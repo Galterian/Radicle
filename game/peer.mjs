@@ -39,7 +39,7 @@ const Gun = process.env.NOGUN === '1' ? null : (await import('gun')).default;
 import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import fs from 'node:fs/promises';
-import { EFFECT_RULES, playableEffects, resolveEffect, roundHalfUp10, invisibilityBreaks, pointBuy, pointBuyPermanent, pointBuyPermanentMin, trapDamageSum, TRAP_POWER, pickBySalt, pickHandDiscards } from './effects.mjs';
+import { EFFECT_RULES, EFFECT_UI, builtinEffectEntries, playableEffects, resolveEffect, roundHalfUp10, pointBuy, pointBuyPermanent, pointBuyPermanentMin, trapDamageSum, TRAP_POWER, pickBySalt, pickHandDiscards } from './effects.mjs';
 import { pickAltAction, pickManipTarget, applyManipSwap, isWildMonster, prophetPick } from './contact-prims.mjs';   // phase 6: generic primitives (were class-manipulator / class-chase)
 import * as CS from './class-state.mjs';   // class isolation phase 2: the generic class-state store (snapshot class_state_json)
 import fsSync from 'node:fs';
@@ -58,26 +58,29 @@ import { createFxPeer } from './effects-handshake.mjs';   // foreign (player-bra
 import { createSkPeer } from './skills-handshake.mjs';   // S4: foreign (player-branch) skills by ref (chaosD6-Skills)
 import { createClPeer, clRefOf } from './classes-handshake.mjs';   // CH: foreign (player-branch) classes by ref (chaosD6-Classes)
 import { isClassSuspended, foreignClassDef } from './classes.mjs';   // CH: a dormant foreign class (classes-handshake.mjs gate); a foreign class's data
-import { SKILLS_IMPLEMENTED, TRANCE, NEGATING_SKILLS, skillHook, ridesOn as skillRidesOn } from './skills.mjs';   // S1: pure skill rules (skills-data/HOOKS.md)
+import { SKILLS_IMPLEMENTED, SKILL_RULES, NEGATING_SKILLS, skillHook, ridesOn as skillRidesOn, builtinSkillEntries, skillBundleErrors, skillUiOf, BUILDING_SKILLS as SK_BUILDING_SKILLS, SKILL_ENGINE, installSkillOracle } from './skills.mjs';   // S1: pure skill rules (skills-data/HOOKS.md)
 import { CLASS_RULES, CLASS_NEEDS as CL_NEEDS, PASSIVE_TURN_CLASSES as CL_PASSIVE, classHook, builtinClassEntries, classBundleErrors, ABILITY_REQUESTS, classUiOf, CLASS_ENGINE, installClassOracle } from './classes.mjs';   // C1: pure class rules (classes-data/HOOKS.md); phase 5: classUiOf (the UI's class_ui)
 import { channelBreaks } from './channel-rule.mjs';   // CR: the channel break rule (oracle in tools/classes-check.mjs)
 import { effectHook, applyHookRecords } from './effect-hooks.mjs';   // MV: import — channels / traps / holdings / summons as hook records
+import { standing, holding } from './effect-standing.mjs';   // F2: what a permanent does while it stands (definition `standing`)
 import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBytes, GUN_MEMBER_CAP, GUN_MEMBER_CORE } from './gun-member.mjs';
 import { orderedMerge, pickClockRef, cohortDeadline, meshZones, resolverPeers, clockFrame, notePrior, resolverBase, pickStartClock, lastKnownClock, saveClockCand } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
 import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
-import { configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
+import { setBuildingSkills, configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
 import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
 import { effectResultsOf, plannedLossResults, naturalResults } from './effect-results.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
-import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, angerForcedTarget, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats } from './natural-perms.mjs';
+import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, onlyHolderAffliction, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats, naturalKind, naturalOfKind, isContactNatural } from './natural-perms.mjs';
 import { trapsInRange, clericRoute, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './world-prims.mjs';   // phase 6: generic primitives (were class-world / class-traps)
 // Class isolation phase 6: the JS reference hooks are a test oracle in classes-data/oracle (chaosD6-Classes) — loaded
 // only when CLASS_ENGINE=js | shadow asks for them (default data: never imported).
 if (CLASS_ENGINE !== 'data') installClassOracle(await import('./classes-data/oracle/classes-js.mjs'));
+// Skill isolation (2026-11-22): the same for the skills' JS reference hooks (skills-data/oracle, SKILL_ENGINE=js | shadow).
+if (SKILL_ENGINE !== 'data') installSkillOracle(await import('./skills-data/oracle/skills-js.mjs'));
 import { awakePlan, AWAKE_CONFIG } from './awake.mjs';
 import { mergeLedger, ledgerUnits, ledgerFor } from './js/world-ledger.js';
 const awakeLast = new Map();   // caster → the Awake plan of its last real (non-quiet) resolution (∀ lend)
@@ -85,7 +88,8 @@ import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, explo
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
 import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard } from './profile.mjs';
 import { pvHandle, pvHello } from './proposal-votes.mjs';   // PV: proposal votes on foreign defs (profile side store, never the state hash)
-import { POSSESS_ID, phylacteryConfig, possessArchivePick, phylacteryPick, releasedCompanions } from './possess.mjs';   // Possess / Phylactery (user ruling 2026-11-17)
+import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
+import { phylacteryConfig, possessArchivePick, phylacteryPick, releasedCompanions } from './possess.mjs';   // Possess / Phylactery (user ruling 2026-11-17)
 import { boundReleaseOf, boundReleases, releasedBoundView } from './bound-release.mjs';   // bound-creature release judged on the frozen view (2026-11-19)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -167,6 +171,7 @@ const IS_HUMAN = !SHADOW_OF && (isHumanAlliance(ALLIANCE) || (process.env.HUMAN 
 // A returning owner that takes its unattended character over leaves the group (heroShadowSeen clears it).
 let allyOfNow = String(process.env.ALLY_OF || '').startsWith('peer:') ? String(process.env.ALLY_OF) : '';
 const JOINED_AT = new Date().toISOString();   // published joined_at: the earliest join of a group is its master
+const INSTANCE_ID = randomBytes(6).toString('hex');   // this process (snapshot `instance`): breaks a joined_at tie between two copies of one peer id
 // A private test game (user 2026-11-16, "test games to be local and private"): no Door push (publishDoor), no
 // unattended characters; the launcher also turns the Nostr bus off, binds loopback and picks an unguessable DIM_ID.
 const DIM_PRIVATE = process.env.DIM_PRIVATE === '1';
@@ -311,7 +316,8 @@ function broadcastUI(msg) {
 const fxPeer = await createFxPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } } });
 // S4 foreign skills (skills-handshake.mjs, skills-data/HANDSHAKE.md): sk_ref on commit / reveal, sk_missing, sk_have;
 // /chaos/<dim>/skills/1 + bus `sk`. Inert with no foreign skill.
-const skPeer = await createSkPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } } });
+const skPeer = await createSkPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } },
+  onReady: (p) => { try { broadcastUI({ kind: 'skill_catalog', skill_ui: { [p.ref.id]: skillUiOf(p.ref.id) } }); } catch {} } });   // skill isolation: a ready foreign skill's UI facts (main.js skill_ui)
 // CH foreign classes (classes-handshake.mjs): cl_ref on commit / reveal + the holder's snapshot (cl_ref_json) and Door,
 // cl_missing, cl_have; /chaos/<dim>/classes/1 + bus `cl`. A ready foreign class joins CLASSES_IMPLEMENTED (classOf).
 const clPeer = await createClPeer({ selfId: PEER_ID_STRING, label: PEER_LABEL, dimId: DIM_ID, ui: (m) => broadcastUI(m), nameOf: (pid) => { try { return peersPublic.get(pid)?.name || null; } catch { return null; } },
@@ -342,7 +348,7 @@ function pickActive(entry) {
 }
 
 const data = {};
-for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills', 'classes', 'effects', 'elements']) {
+for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'classes', 'elements']) {
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
@@ -350,6 +356,13 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'skills'
 // A broken definition would silently drop a class on this peer only: refuse to start instead.
 if (classBundleErrors().length) { console.error(`[classes] invalid class definitions:\n  ${classBundleErrors().join('\n  ')}`); process.exit(1); }
 data.classes = builtinClassEntries();
+// Effect isolation F9: the effect cards are the definitions' card blocks (game/effects-data), not data/effects.json.
+data.effects = builtinEffectEntries();
+// Skill isolation: the skill cards are the definitions' card blocks (game/skills-data), not data/skills.json; a broken
+// definition refuses to start (like the classes). The building skill list comes from their flags.buildingSkill.
+if (skillBundleErrors().length) { console.error(`[skills] invalid skill definitions:\n  ${skillBundleErrors().join('\n  ')}`); process.exit(1); }
+data.skills = builtinSkillEntries();
+setBuildingSkills(SK_BUILDING_SKILLS, (id) => data.skills[id]?.name);
 // Fortress stat buy (user ruling 2026-11-14): data/rules.json rule_building_fortress → js/building-bonus.js FORTRESS.
 try { const fe = (await loadJson('rules.json')).entries.find(e => e.id === 'rule_building_fortress'); if (fe) configureFortress(pickActive(fe).data?.fortress); } catch (e) { console.warn(`fortress rule not loaded (${e.message}) — building-bonus.js defaults`); }
 // Monster deck effects (user rulings 2026-11-15): data/rules.json rule_monster_deck_effects → game/monster-deck.mjs config.
@@ -486,8 +499,11 @@ gunHttp?.listen(PEER_PORT_GUN, BIND_HOST);
 // is unique to this process, wiped at boot and again on exit.
 const GUN_LABEL = String(PEER_LABEL).replace(/[^a-z0-9._-]+/gi, '_');
 const GUN_DIR = path.join(os.tmpdir(), 'chaosd6-gun', _slug(DIM_NAME), `${GUN_LABEL}-${process.pid}`);
-// Only our own label's leftovers: sibling peers of this dimension may be live.
-try { for (const d of fsSync.readdirSync(path.dirname(GUN_DIR))) if (d.startsWith(`${GUN_LABEL}-`)) fsSync.rmSync(path.join(path.dirname(GUN_DIR), d), { recursive: true, force: true }); } catch {}
+// Only our own label's leftovers: sibling peers of this dimension may be live — and so may another process with our
+// label (a duplicate lurker that has not noticed us yet; swarm-2346 wiped the live copy's folder and it crashed): a
+// folder whose pid still runs is left alone, and only `<label>-<pid>` is ours (not a `<label>-r1-<pid>` replacement).
+const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+try { for (const d of fsSync.readdirSync(path.dirname(GUN_DIR))) if (d.startsWith(`${GUN_LABEL}-`)) { const rest = d.slice(GUN_LABEL.length + 1), pid = Number(rest); if (/^\d+$/.test(rest) && (pid === process.pid || !pidAlive(pid))) fsSync.rmSync(path.join(path.dirname(GUN_DIR), d), { recursive: true, force: true }); } } catch {}
 if (!NOGUN) try { fsSync.mkdirSync(GUN_DIR, { recursive: true }); } catch {}
 // Gun's Node build always loads SEA, and lib/server.js defaults `opt.faith`
 // to true, which routes data coming back from the store through
@@ -744,9 +760,13 @@ const linksJson = () => JSON.stringify(entity.links);
 const permCopiesJson = () => JSON.stringify(entity.permCopies);
 // Rule 23: two copies of one effect cast together (Rule 22 chain: the shared
 // elements go out once, so the cast takes one more emission than a single).
-// Some ∀ bonuses turn the doubled effect into an instant instead.
-const EVERY_INSTANT = new Set(['effect_the_void', 'effect_light_darkness', 'effect_teleportation', 'effect_emotions_bombard']);
-const castInstant = (c, every) => every ? EVERY_INSTANT.has(c.effect_id) : !!c.is_instant;
+// Some ∀ bonuses turn the doubled effect into an instant instead (definition flag everyInstant, F2).
+const castInstant = (c, every) => every ? !!EFFECT_RULES[c.effect_id]?.everyInstant : !!c.is_instant;
+// F2 (definition flags): the permanent I hold doubled that my next cast goes out through (everyWidens: Aura ∀ — spent by
+// it), and whether a permanent of mine keeps a cast going across a Rule 24 emission (keepsCastOnDestroy: Aura).
+const everyWidener = () => [...entity.permanents].filter(id => EFFECT_RULES[id]?.everyWidens && entity.everyPerms.has(id)).sort()[0] || null;
+const keepsCastOnDestroy = () => [...entity.permanents].some(id => EFFECT_RULES[id]?.keepsCastOnDestroy);
+let planEmitSpends = null;   // F2: the permanent whose plan_emit (Empower) paid for this action's extra emission — spent after it
 const statSumOf = (st) => (st?.vitality || 0) + (st?.world || 0) + (st?.matter || 0) + (st?.will || 0);
 // Stat buy (Summoning, Golems, Elementals, Resurrect): every emission banks my
 // stat for the element going out — the card's elements in turn — until the
@@ -763,10 +783,37 @@ const castLength = (c, every) => castInstant(c, every) ? 1 : (c.summon !== undef
 // A creature as a card (the archive holds these; Summoning / Resurrect play them).
 const creatureCard = (creatureId) => { const e = data.creatures[creatureId]; return e ? { card_id: `${creatureId}#${randomBytes(3).toString('hex')}`, kind: 'creature', creature_id: creatureId, name: e.name, stat_sum: statSumOf(e.data?.stats), text: e.data?.innate_effect_text || '' } : null; };
 // Which permanents hold a creature (and what they are called in the log).
-const SUMMON_PERMS = { effect_summoning: 'Summoning', effect_golems_earth: 'Golems', effect_golems_water: 'Golems', effect_golems_air: 'Golems', effect_elementals_air: 'Elementals', effect_elementals_water: 'Elementals', effect_elementals_earth: 'Elementals', effect_resurrect_death_ward: 'Resurrect' };
-const RESURRECT = 'effect_resurrect_death_ward';
-// Permanents with a fixed life: how many turns past the one they were placed in.
-const PERM_TURNS = { effect_oblivion: 1, effect_balefire: 1 };   // Balefire(6) vanishes with the end of my next turn
+// F5: a stat-buy permanent that holds a creature says so in its flags — summon {kind: library | golem | elemental |
+// resurrect, label (log name), need (fixed stat-buy total)}; Resurrect also carries flag resurrect (Death Ward).
+const isSummonPerm = (id) => !!EFFECT_RULES[id]?.summon;
+const summonLabel = (id) => EFFECT_RULES[id]?.summon?.label || null;
+// F6: Possess / Phylactery is a game primitive (possess.mjs); the effect that uses it carries flag possess.
+const isPossessPerm = (id) => !!EFFECT_RULES[id]?.possess;
+const possessPermOf = (perms) => [...(perms || [])].filter(isPossessPerm).sort()[0] || null;
+const phylReachOf = (id) => phylacteryConfig(data.effects[id]?.data?.phylactery).reach;
+// F7: a Spirit Link permanent — cast (flag spiritLink) or a monster's natural link (naturalKind 'link').
+const isLinkPerm = (id) => !!EFFECT_RULES[id]?.spiritLink || naturalKind(id) === 'link';
+// F7: an Awake permanent (map surgery 'awake', game/awake.mjs) and one whose ∀ copy outlasts its broken channel.
+const isAwakePerm = (id) => EFFECT_RULES[id]?.surgery === 'awake';
+// F8: what the browser UI needs to know about an effect id (main.js names none) — flags + the definition's `ui` block.
+const effectUiOf = (id) => {
+  const r = EFFECT_RULES[id] || {}, u = EFFECT_UI[id] || {}, o = {};
+  if (r.everyInstant) o.every_instant = true;
+  if (r.hides) o.hides = true;
+  if (isLinkPerm(id)) o.link = true;
+  if (r.everyWidens) o.perm_action = 'aura'; else if (r.bonusPlans) o.perm_action = 'bonus'; else if (r.blessAttach) o.perm_action = 'bless';
+  if (u.target_hint) o.target_hint = u.target_hint;
+  if (u.perm_help) o.perm_help = u.perm_help;
+  if (r.summon) o.summon = true;
+  if (r.possess) o.possess = true;
+  return o;
+};
+const effectUiMap = () => Object.fromEntries(Object.keys(EFFECT_RULES).sort().map(id => [id, effectUiOf(id)]).filter(([, o]) => Object.keys(o).length));
+// Skill isolation: the same for the skills (skills.mjs skillUiOf: the definition's `ui` block + the resolver facts the UI needs).
+const skillUiMap = () => Object.fromEntries(SKILLS_IMPLEMENTED.map(id => [id, skillUiOf(id)]).filter(([, o]) => o && Object.keys(o).length));
+const everyOutlasts = (id) => !!EFFECT_RULES[id]?.everyOutlastsChannel && entity.everyPerms.has(id);
+// Permanents with a fixed life (definition flag permTurns, F2): how many turns past the one they were placed in
+// (Oblivion, Balefire(6): it vanishes with the end of my next turn).
 const dropPermanent = (id) => {
   // A natural permanent stands in copies (rule_monster_natural_permanents): one falls at a time — its held card goes
   // to my ARCHIVE (user ruling 2026-11-15: out of circulation) — and only the last copy takes the permanent itself.
@@ -782,21 +829,21 @@ const dropPermanent = (id) => {
   if (id in entity.permCopies) { entity.permCopies = dropOneCopy(entity.permCopies, id).copies; archiveNatural(); console.log(`[${PEER_LABEL}] natural ${id}: the last copy is destroyed — the permanent falls`); }
   const had = entity.permanents.has(id);
   entity.permanents.delete(id); delete entity.permPower[id]; delete entity.permUntil[id]; entity.everyPerms.delete(id);
-  if (id === 'effect_shield') entity.shieldElems = entity.shieldElems.filter(x => !x.permanent);
+  entity.shieldElems = entity.shieldElems.filter(x => !(x.permanent && x.perm === id));   // F2: a ∀ shield element (everyPermanent) goes with its permanent
   // MV: perm_falls — the effect under a falling Blessing and a trap it holds (Traps Mastery) go with it, cards → discard.
   applyHookRecords(effectHook('perm_falls', {}, { id, channels: entity.channels, traps: entity.traps }), {
     release_card: (x) => releaseHeldCard(x.card_id, x.to_discard ?? true),
     channels: (x) => { entity.channels = x.list; },
     traps: (x) => { entity.traps = x.list; },
   });
-  if (id === 'effect_spirit_link') entity.links = [];
-  if (id === 'effect_awake') entity.awakeLend = null;   // Awake ∀: the lent stat goes with the permanent
-  if (id === 'effect_possess_phylactery' && entity.possessedBy) { console.log(`[${PEER_LABEL}] the Possess permanent in my holding is gone — I am my own again`); entity.possessedBy = null; }
+  if (isLinkPerm(id)) entity.links = [];
+  if (isAwakePerm(id)) entity.awakeLend = null;   // Awake ∀: the lent stat goes with the permanent
+  if (isPossessPerm(id) && entity.possessedBy) { console.log(`[${PEER_LABEL}] the Possess permanent in my holding is gone — I am my own again`); entity.possessedBy = null; }
   // Possess (2026-11-17): my Possess / Phylactery falls — the creature I play leaves (its card back to my archive
   // via onSummonEnd, unless it died: then possessEnd already dropped its summon entry).
-  if (had && id === POSSESS_ID) { const was = entity.possessMode; entity.possessMode = null; if (entity.possessing) { console.log(`[${PEER_LABEL}] possess: my ${was === 'phylactery' ? 'Phylactery' : 'Possess'} permanent falls — I play my own hero again`); entity.possessing = null; } onSummonEnd(id); }
-  if (had && id in SUMMON_PERMS) onSummonEnd(id);
-  if (had && id === RESURRECT) entity.wards = [];
+  if (had && isPossessPerm(id)) { const was = entity.possessMode; entity.possessMode = null; if (entity.possessing) { console.log(`[${PEER_LABEL}] possess: my ${was === 'phylactery' ? 'Phylactery' : 'Possess'} permanent falls — I play my own hero again`); entity.possessing = null; } onSummonEnd(id); }
+  if (had && isSummonPerm(id)) onSummonEnd(id);
+  if (had && entity.wards.some(v => entity.wardBy[v] === id)) { entity.wards = entity.wards.filter(v => entity.wardBy[v] !== id); for (const v of Object.keys(entity.wardBy)) if (entity.wardBy[v] === id) delete entity.wardBy[v]; }   // F3: the wards this permanent placed
   // The card that made this permanent leaves the holding for the discard pile.
   if (had) releaseHeld(id);
 };
@@ -813,13 +860,14 @@ const releaseHeld = (permId) => { for (let i = heldCards.length - 1; i >= 0; i--
 entity.possessMode = null;
 entity.possessedBy = process.env.POSSESSED_BY && process.env.OWNER_PEER_ID ? process.env.POSSESSED_BY : null;
 const possessedUnit = () => {
-  if (!entity.possessing || entity.possessMode !== 'possess' || !entity.permanents.has(POSSESS_ID)) return null;
+  if (!entity.possessing || entity.possessMode !== 'possess' || !possessPermOf(entity.permanents)) return null;
   const v = peersPublic.get(entity.possessing.peer_id);
   return v && (v.life ?? 0) > 0 && v.possessed_by === PEER_ID_STRING ? v : null;
 };
 const releaseHeldCard = (cid, toDiscard = true) => { if (!cid) return; for (let i = heldCards.length - 1; i >= 0; i--) if (heldCards[i].card_id === cid) { const c = heldCards.splice(i, 1)[0]; if (toDiscard) discard.push(c); console.log(`[${PEER_LABEL}] ${c.name} is spent — ${toDiscard ? 'to the discard pile' : 'the card leaves my deck'}`); } };
 entity.summons = [];        // [{ peer_id, creature_id, name, bound, perm, mode }] — creatures my permanents hold
 entity.wards = [];          // peer ids under my Death Ward
+entity.wardBy = {};         // ward peer id → the permanent that placed it (F3: dropped with it)
 const companions = [];      // processes I spawned: { peer_id, label, proc, port, perm }
 let summonSeq = 0;
 const vanishedThisAction = [];   // { peer_id, name, q, r, bound } — for the UI (💨), rides out with the state hash
@@ -828,7 +876,7 @@ const freePort = () => new Promise((res, rej) => { const sv = net.createServer()
 // A stat buy is paid: spawn the creature next to me, or note the one bound /
 // raised for me, or set a Death Ward on an ally.
 async function onSummoned(permId, sm) {
-  const label = SUMMON_PERMS[permId] || permId;
+  const label = summonLabel(permId) || permId;
   // MV: summon_paid — effects-data/hooks/summon.json: archive_take → ward | revive_player | summon_add (revive / bind) |
   // summon_end (one creature per permanent) + drop_perm (one Elementals / one Golems, ruling 2026-11-12) + spawn — in order.
   let spawning = null;
@@ -836,12 +884,13 @@ async function onSummoned(permId, sm) {
   applyHookRecords(effectHook('summon_paid', {}, { perm_id: permId, sm, summons: entity.summons, permanents: [...entity.permanents], held: heldCards.map(c => c.effect_id || c.skill_id), wards: [...entity.wards] }), {
     release_held: (x) => releaseHeld(x.perm),   // a same-type recast (Golems / Elementals / Summoning / Resurrect): the old card → discard (ruling 2026-11-19); the new one is still in hand
     ward_clear: (x) => {   // DW: ward_clear — a Resurrect recast: the Death Ward the earlier cast placed is gone (ruling 2026-11-19; wards_csv in my next snapshot)
-      entity.wards = entity.wards.filter(id => !x.peers.includes(id));
+      entity.wards = entity.wards.filter(id => !x.peers.includes(id)); for (const id of x.peers) delete entity.wardBy[id];
       console.log(`[${PEER_LABEL}] a new Resurrect — my earlier Death Ward on ${x.peers.map(id => id.slice(0, 12)).join(', ')} is gone`);
     },
     archive_take: (x) => { const i = archive.findIndex(c => c.card_id === x.card_id); if (i >= 0) archive.splice(i, 1); },
     ward: (x) => {
       if (!entity.wards.includes(x.peer_id)) entity.wards.push(x.peer_id);
+      entity.wardBy[x.peer_id] = permId;
       console.log(`[${PEER_LABEL}] Death Ward on ${sm.name || x.peer_id.slice(0, 12)}: when they would die they stand at 1 hp on their entry hex`);
     },
     revive_player: () => { console.log(`[${PEER_LABEL}] ${label} paid (${sm.need}): ${sm.name} is back among the living — the permanent is spent`); dropPermanent(permId); },
@@ -851,7 +900,7 @@ async function onSummoned(permId, sm) {
       else console.log(`[${PEER_LABEL}] ${label} ∀: ${sm.name} (${x.summon.peer_id.slice(0, 12)}) is bound to me`);
     },
     summon_end: (x) => { console.log(`[${PEER_LABEL}] a new ${label} — the creature it held is released`); onSummonEnd(x.perm); },
-    drop_perm: (x) => { console.log(`[${PEER_LABEL}] the new ${label} replaces my ${SUMMON_PERMS[x.id] || x.id}`); dropPermanent(x.id); },
+    drop_perm: (x) => { console.log(`[${PEER_LABEL}] the new ${label} replaces my ${summonLabel(x.id) || x.id}`); dropPermanent(x.id); },
     spawn: (x) => {   // always the last record
       const cre = data.creatures[x.creature_id];
       if (!cre) return;
@@ -941,7 +990,7 @@ async function spawnCompanionWorker(env) {
 // A creature-holding permanent is gone: its creature vanishes (companion: told
 // directly; bound: it watches my snapshot); its card goes to my archive.
 function onSummonEnd(permId) {
-  const label = SUMMON_PERMS[permId] || permId;
+  const label = summonLabel(permId) || permId;
   for (let i = entity.summons.length - 1; i >= 0; i--) {
     const sm = entity.summons[i];
     if (sm.perm !== permId) continue;
@@ -991,7 +1040,7 @@ function becomeBound(owner, permId, mode) {
   if (boundOriginalAlliance === null) boundOriginalAlliance = entity.alliance;
   entity.alliance = npcAllianceOf(side); MY_SIDE = side;
   ownerPeerId = owner; ownerSeenHolding = true; boundMode = mode; boundPerm = permId; boundAt = hg.action;
-  console.log(`[${PEER_LABEL}] ${mode === 'revive' ? 'raised' : 'bound'} by ${owner.slice(0, 12)}'s ${SUMMON_PERMS[permId] || permId} — I fight for side ${side} now`);
+  console.log(`[${PEER_LABEL}] ${mode === 'revive' ? 'raised' : 'bound'} by ${owner.slice(0, 12)}'s ${summonLabel(permId) || permId} — I fight for side ${side} now`);
   publishPublicState().catch(() => {});
 }
 // Resurrect reached me: back at full life (a creature also becomes the raiser's ally).
@@ -1039,10 +1088,10 @@ function boundSnapshotFields() {
 function applyBoundRelease(rel) {
   if (IS_COMPANION || !ownerPeerId || !rel || rel.owner !== ownerPeerId || rel.perm !== boundPerm || rel.at !== boundAt) return false;
   if (boundMode === 'revive') {
-    console.log(`[${PEER_LABEL}] the ${SUMMON_PERMS[boundPerm] || 'permanent'} that raised me is gone — I fall again (${rel.why})`);
+    console.log(`[${PEER_LABEL}] the ${summonLabel(boundPerm) || 'permanent'} that raised me is gone — I fall again (${rel.why})`);
     entity.life = 0;
   } else {
-    console.log(`[${PEER_LABEL}] the ${SUMMON_PERMS[boundPerm] || 'permanent'} that bound me is gone — back to my own side (${rel.why})`);
+    console.log(`[${PEER_LABEL}] the ${summonLabel(boundPerm) || 'permanent'} that bound me is gone — back to my own side (${rel.why})`);
     entity.alliance = rel.alliance || boundOriginalAlliance || ALLIANCE; MY_SIDE = sideOf(entity.alliance);
   }
   boundOriginalAlliance = null; boundMode = null; boundPerm = null; boundAt = null; ownerPeerId = null; ownerSeenHolding = false; boundSeenListed = false; boundWasReleased = true;
@@ -1201,6 +1250,12 @@ const chargeCfgOf = (cls) => {
 // Invisibility: the extra action codes that break it for a unit holding these permanents (class flag invisBreaks;
 // the Reaver's EP / EM fight as an Attack).
 const invisCodesOf = (perms) => [...perms].flatMap(p => CLASS_RULES[p]?.invisBreaks || []);
+// F3: the permanent that hides its holder (definition flag `hides`: Invisibility), and whether it breaks on the holder's
+// plays this action (its `breaks` program; dealt = the holder dealt damage — known only after the run; extra = invisCodesOf).
+const hidingPerm = (perms) => [...perms].filter(p => p && EFFECT_RULES[p]?.hides).sort()[0] || null;
+const hideBreaks = (pid, holder, plays, dealt, every, extra) => standing('breaks', pid, null, { holder, self: pid,
+  plays: plays.filter(Boolean).map(rv => ({ action: rv.action ?? null, trance: rv.trance ?? null, effect_id: rv.effect_id ?? rv.effect?.effect_id ?? null })),
+  dealt_damage: !!dealt, every: !!every, extra_codes: [...extra] });
 // The chase bonus (Avenger) over every class with a chase_step hook — a store holds only its unit's classes.
 const CL_CHASERS = clWith('chase_step');
 const chaseBonusNow = () => CL_CHASERS.reduce((a, c) => a + (csGet(c, 'bonus', 0) || 0), 0);
@@ -1332,7 +1387,7 @@ const pushAction = (code) => { const b = ACTION_BY_CODE[code]; deck.push({ card_
 // A skill card of the given skill (dealt at start, or from a profile deck / a kill's gift).
 function makeSkillCard(id) {
   const s = data.skills[id];
-  const trance = id === TRANCE;
+  const trance = !!SKILL_RULES[id]?.trance;
   return { card_id: `${id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: id, name: s.name, requires: trance ? '*' : s.data.action_type, is_trance: trance, text: s.data.text, tags: s.tags, is_permanent: !!s.data.is_permanent };
 }
 // A {kind, id} profile / gift card as an in-game card, or null when this build doesn't know it.
@@ -1451,12 +1506,13 @@ function makeEffectCard(id) {
       // library creature ("Library's top"); Golems / Elementals: a random one of their
       // kind, fixed need 24 / 30; Resurrect decides at queue time (what lies next to me).
       summon: (() => {
-        const kind = id === 'effect_summoning' ? null : id.startsWith('effect_golems') ? 'golem' : id.startsWith('effect_elementals') ? 'elemental' : id === 'effect_resurrect_death_ward' ? 'resurrect' : undefined;
-        if (kind === undefined) return null;
-        if (kind === 'resurrect') return { pending: true, need: 0 };
+        const sk = rule.summon?.kind;   // F5: flag summon.kind
+        if (!sk) return null;
+        if (sk === 'resurrect') return { pending: true, need: 0 };
+        const kind = sk === 'library' ? null : sk;
         const ids = Object.keys(data.creatures).filter(cid => (data.creatures[cid].data?.built_in || null) === kind);
         const cid = ids[Math.floor(Math.random() * ids.length)];
-        return { creature_id: cid, name: data.creatures[cid].name, need: kind ? (d.stat_buy_total || (kind === 'golem' ? 24 : 30)) : statSumOf(data.creatures[cid].data?.stats) };
+        return { creature_id: cid, name: data.creatures[cid].name, need: kind ? (d.stat_buy_total || rule.summon.need || 24) : statSumOf(data.creatures[cid].data?.stats) };
       })(),
     });
   }
@@ -1509,11 +1565,12 @@ let queuedPhylactery = null; // { auto: true } (2026-11-17: the resolver picks t
 let queuedPossessPick = null; // card_id of the archive creature my next Possess plays (UI pick; none → the strongest, possessArchivePick)
 // The Possess payload of my reveal: the archive creature the cast plays (null → the cast becomes the Phylactery).
 // Phylactery ranking (possess.mjs phylacteryPick): a permanent that holds a unit; one that hurts or hinders its enemies.
-const phylHoldsCreature = (p) => p in SUMMON_PERMS || p === POSSESS_ID || p === 'effect_phantom';
+const phylHoldsCreature = (p) => isSummonPerm(p) || isPossessPerm(p) || !!EFFECT_RULES[p]?.phantom;
 const phylHostile = (p) => { const r = EFFECT_RULES[p] || {}; return !!(r.damage || r.lock || r.lockRestOfTurn || r.statPenalty || r.channel || r.trap || r.trapAttach || r.banish) || /^effect_(love|awe|fear|anger|domination|petrify|mists|earthquake)$/.test(p); };
 // UI hint (local, from the snapshots I hold — the resolver judges again from its view): what a click would shatter.
 const phylacteryHint = () => {
-  if (!entity.permanents.has(POSSESS_ID) || entity.possessMode !== 'phylactery' || entity.life <= 0) return null;
+  const pp = possessPermOf(entity.permanents);
+  if (!pp || entity.possessMode !== 'phylactery' || entity.life <= 0) return null;
   const me = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   const pv = (id) => (id === PEER_ID_STRING ? me : peersPublic.get(id));
   const pick = phylacteryPick({ me: PEER_ID_STRING, ids: [...peersPublic.keys()].filter(id => id !== PEER_ID_STRING), alive: (id) => (peersPublic.get(id)?.life ?? 0) > 0,
@@ -1521,7 +1578,7 @@ const phylacteryHint = () => {
     dist: (a, b) => { const x = pv(a), y = pv(b); return x && y && Number.isInteger(y.tile_q) ? hexDistance({ tile_q: x.tile_q, tile_r: x.tile_r }, { tile_q: y.tile_q, tile_r: y.tile_r }) : Infinity; },
     perms: (id) => String(peersPublic.get(id)?.permanents_csv || '').split(',').filter(Boolean),
     power: (id, p) => { try { return JSON.parse(peersPublic.get(id)?.perm_power_json || '{}')[p] || 1; } catch { return 1; } },
-    holdsCreature: phylHoldsCreature, hostile: phylHostile }, phylacteryConfig(data.effects[POSSESS_ID]?.data?.phylactery).reach);
+    holdsCreature: phylHoldsCreature, hostile: phylHostile }, phylReachOf(pp));
   return pick ? { ...pick, name: peersPublic.get(pick.peer_id)?.name || pick.peer_id } : null;
 };
 const possessPayload = () => { const c = possessArchivePick(archive, queuedPossessPick, (cid) => !!data.creatures[cid]); return c ? { creature_id: c.creature_id, card_id: c.card_id, name: c.name } : null; };
@@ -1534,17 +1591,23 @@ const possessPayload = () => { const c = possessArchivePick(archive, queuedPosse
 // Card ids, so a plan survives hand changes within the planning phase. A
 // non-instant effect may run across consecutive bonus plans (its steps).
 let queuedBonus = [];      // [{ actionCardId|null (Empty), extraCardId|null (Battle Trance 2nd option), skillCardIds: [], effectCardId|null, target, destroy|null }]
-const BALEFIRE_PLANS = 9;  // bonus plans a Balefire(6) holder may commit per action (the hand is the real cap)
+// F4: a permanent that grants bonus plans says so in its flags — bonusPlans (per action), bonusOncePerTurn (Haste:
+// spent the action a reveal carries it, grey until the next turn), bonusOneEmission (Balefire(6): every card an instant,
+// but still one element emission per action across main + bonus plans).
+const bonusPerms = (perms) => [...new Set(perms || [])].filter(p => p && EFFECT_RULES[p]?.bonusPlans > 0).sort();
+const planSum = (ids) => ids.reduce((s, p) => s + EFFECT_RULES[p].bonusPlans, 0);
+const oncePerTurnBonus = () => bonusPerms(entity.permanents).filter(p => EFFECT_RULES[p].bonusOncePerTurn);
+const oneEmissionBonus = () => bonusPerms(entity.permanents).filter(p => EFFECT_RULES[p].bonusOneEmission);
 // Haste (user ruling 2026-11-12): its bonus round is once per TURN — spent the
 // action a reveal carries it, grey until the next turn starts.
 entity.hasteUsedTurn = -1;
-const hasteLeft = () => entity.permanents.has('effect_haste') && entity.hasteUsedTurn !== hg.turn ? 1 : 0;
-const bonusAllowance = () => hasteLeft() + (entity.permanents.has('effect_balefire') ? BALEFIRE_PLANS : 0);
+const hasteLeft = () => oncePerTurnBonus().length && entity.hasteUsedTurn !== hg.turn ? planSum(oncePerTurnBonus()) : 0;
+const bonusAllowance = () => hasteLeft() + planSum(bonusPerms(entity.permanents).filter(p => !EFFECT_RULES[p].bonusOncePerTurn));
 // The bonus rounds as they travel in the reveal (card ids stay local).
 const bonusWire = (list) => Array.isArray(list) && list.length ? list.map(b => ({ action: b.action, trance: b.trance || null, target: wrapTarget(b.target), skills: b.skillIds, skill_names: b.skillNames, effect: b.effect, destroy: b.destroy || null })) : null;
 const bonusForUI = () => ({
-  max: bonusAllowance(), balefire: entity.permanents.has('effect_balefire') ? BALEFIRE_PLANS : 0,
-  haste_spent: entity.permanents.has('effect_haste') && !hasteLeft(),
+  max: bonusAllowance(), balefire: planSum(oneEmissionBonus()),
+  haste_spent: oncePerTurnBonus().length > 0 && !hasteLeft(),
   plans: queuedBonus.map(b => {
     const a = b.actionCardId ? hand.find(c => c.card_id === b.actionCardId) : null;
     return { action: a ? a.code : (b.target && typeof b.target === 'object' ? 'EM' : 'EP'), skills: b.skillCardIds.map(id => hand.find(c => c.card_id === id)?.name).filter(Boolean), effect: hand.find(c => c.card_id === b.effectCardId)?.name || null, destroy: b.destroy || null, card_ids: [b.actionCardId, b.extraCardId, ...b.skillCardIds, b.effectCardId].filter(Boolean) };
@@ -1556,7 +1619,7 @@ let target = null;         // peer_id string | { q, r } tile object | null
 // card. ∀ (two copies): the nearest visible enemy creature within 10 hexes is
 // bound to me instead of summoning a new one.
 function prepareSummon(card, every) {
-  if (!card || !(card.effect_id in SUMMON_PERMS)) return;
+  if (!card || !isSummonPerm(card.effect_id)) return;
   // MV: summon_plan — effects-data/hooks/summon.json: Resurrect (dead neighbour, right-clicked first → archived creature →
   // Death Ward on an adjacent ally → pending), Summoning (∀: bind the nearest enemy creature within 10 → archived → the
   // dealt one), Golems / Elementals keep the creature they were dealt with ({op:'keep'}).
@@ -1600,7 +1663,7 @@ const describeTile = (q, r) => {
 // Super Sense (user spec 2026-10-29): while I hold it, the traps on the six tiles around me are known to me
 // without springing them (the UI shows them; the cards stay where they are).
 const sensedTraps = () => {
-  if (!entity.permanents.has('effect_super_sense')) return [];
+  if (![...entity.permanents].some(id => EFFECT_RULES[id]?.sensesTraps)) return [];   // F2: definition flag sensesTraps
   const ring = new Set(hexNeighbours(entity.tile.q, entity.tile.r).map(t => `${t.q},${t.r}`));
   return livePeers().filter(p => p.peer_id !== PEER_ID_STRING).flatMap(p => parseJsonArr(p.traps_json).filter(t => ring.has(`${t.q},${t.r}`)).map(t => ({ q: t.q, r: t.r, effect_id: t.effect_id, name: data.effects[t.effect_id]?.name || t.effect_id, elements: t.elements || [], trigger: t.trigger, by: p.peer_id, by_name: p.name || p.peer_id })));
 };
@@ -1823,7 +1886,9 @@ function currentStateSnapshot(slim = false) {
     map_blocks: dimMap ? dimMap.blockCount() : 0,
     ...(mapSync ? { map_root: mapSync.myRoot() } : {}),   // map-sync.mjs digest root (~12 B); absent = pre-M3 build / legacy sim
     ...fxPeer.snapshotFields(),   // E4: fx_have "id@sha16,…" — foreign effects I hold and serve; absent without any
+    fx_set: fxPeer.setId.slice(0, 16),   // E4: my bundled effect set (effects + libs + hooks) — F9: the version gate reads it, so it rides on the slim envelope snapshot too
     ...skPeer.snapshotFields(),   // S4: sk_have "id@sha16,…" — foreign skills I hold and serve; absent without any
+    sk_set: skPeer.setId.slice(0, 16),   // SV: my bundled skill set — the version gate reads it, so it rides on the slim envelope snapshot too
     ...clPeer.snapshotFields(entity.classId),   // CH: cl_ref_json (my foreign class) + cl_have "id@sha16,…"; phase 6: cl_key = the pin of my built-in class
     stat_vitality: entity.stats.vitality, stat_world: entity.stats.world, stat_matter: entity.stats.matter, stat_will: entity.stats.will,
     permanents_csv: permanentsCsv(),
@@ -1846,7 +1911,7 @@ function currentStateSnapshot(slim = false) {
     shadow_of: SHADOW_OF, death_card_json: JSON.stringify(deathCardRef()), shadow_death_json: shadowDeath ? JSON.stringify(shadowDeath) : '',
     // Unattended characters (rule_unattended_character): a human hand?, my ally-join link and join time (the group's
     // master is its earliest human join), my master (unattended), how many follow me, and `out` (left the dimension).
-    human: IS_HUMAN ? 1 : 0, ally_of: allyOfNow, joined_at: JOINED_AT, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), out: outNow ? 1 : 0,
+    human: IS_HUMAN ? 1 : 0, ally_of: allyOfNow, joined_at: JOINED_AT, instance: INSTANCE_ID, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), out: outNow ? 1 : 0,
     // Dimension Out (rule_dimension_out): the turn I leave at (-1 = none) — every UI counts it down on my unit.
     dim_out_until_turn: dimOut ? dimOut.until_turn : -1, dim_out_start_turn: dimOut ? dimOut.start_turn : -1,
     world_edits_json: JSON.stringify(entity.worldEdits || []),
@@ -1869,8 +1934,6 @@ function currentStateSnapshot(slim = false) {
   // HUD telemetry only (hexes held + their sketch, see mapSketchAdd) — the resolver never reads these.
   // map_sketch travels on the bus `state` event, the discovery mirror and the Door — not Gun (gun-member.mjs).
   s.map_tiles = dimMap ? dimMap.size() : 0; s.map_sketch = dimMap ? mapSketchCsv() : '';
-  s.fx_set = fxPeer.setId.slice(0, 16);   // E4: my bundled effect set (effects + libs) — a mismatch is logged, never resolved on
-  s.sk_set = skPeer.setId.slice(0, 16);   // S4: my built-in skill set — a mismatch is logged, never resolved on
   s.cl_set = clPeer.setId.slice(0, 16);   // CH: my built-in class set — a mismatch is logged, never resolved on
   return s;
 }
@@ -1902,7 +1965,7 @@ function livePeers() { return [...peersPublic.values()]; }
 // (GunLive85 M6 run: "clock catch-up +2 from peer:gX" on every peer, 57 phase offsets vs 0 with Gun off).
 function clockPeers() { return livePeers().filter(p => p.peer_id === PEER_ID_STRING || wireHeard.has(p.peer_id)); }
 // Invisibility as a peer snapshot tells it (bots / NPC planning only; the resolver uses invisibleNow).
-const snapInvisible = (p) => String(p?.permanents_csv || '').split(',').includes('effect_invisibility');
+const snapInvisible = (p) => !!hidingPerm(String(p?.permanents_csv || '').split(','));
 // What the browser gets: every snapshot plus the region tier relative to us.
 // (`map_sketch` stays here: the peer sends the share it computes from it in `telemetry`.)
 function peersForUI() { return livePeers().map(({ map_sketch, ...p }) => ({ ...p, tier: tierOf(p) })); }
@@ -1937,7 +2000,21 @@ function noteTile(q, r) { if (typeof q === 'number' && typeof r === 'number') kn
 const wireHeard = new Set();
 // Per peer: its held snapshot from before the merge that moved its resolved_action forward (merge-order.mjs notePrior).
 const snapPrior = new Map();
+// Never two copies of one monster: a non-hero peer that hears a fresh, living process publishing ITS peer id with an
+// earlier joined_at (tie: lower `instance`) is the duplicate (a lurker spawned twice in a race) and leaves; the earlier copy
+// plays on.
+function dupSelfSeen(p) {
+  if (IS_HUMAN || entity.kind === 'character' || dupSelfSeen.done) return;
+  if (!p.joined_at || p.instance === INSTANCE_ID || !(Date.parse(p.last_seen || 0) > Date.now() - PEER_STALE_MS) || (p.life ?? 1) <= 0) return;
+  if (!p.instance && p.joined_at === JOINED_AT) return;   // my own statement echoed back (a peer without `instance`)
+  const theirs = Date.parse(p.joined_at), mine = Date.parse(JOINED_AT);
+  if (!(theirs < mine || (theirs === mine && p.instance && String(p.instance) < INSTANCE_ID))) return;   // the earlier copy (tie: lower instance) stays
+  dupSelfSeen.done = true;
+  console.log(`[${PEER_LABEL}] duplicate: another process already plays ${PEER_ID_STRING} (joined ${p.joined_at}, I joined ${JOINED_AT}) — this copy exits`);
+  setTimeout(() => process.exit(0), 200);
+}
 function mergePeerState(p, via = 'wire') {
+  if (p && typeof p === 'object' && p.peer_id === PEER_ID_STRING) dupSelfSeen(p);
   if (!p || typeof p !== 'object' || !p.peer_id || p.peer_id === PEER_ID_STRING) return false;
   if (!isFresh(p)) return false;
   if (via !== 'gun') wireHeard.add(p.peer_id);
@@ -2276,6 +2353,14 @@ function discoverTrapMonsters(cq, cr) {
     if (parseInt(h.slice(0, 8), 16) / 0x100000000 >= WORLD_TRAP_MONSTER_RATE) continue;
     const label = `lurker_${q}_${r}`.replace(/-/g, 'm');
     if (peersPublic.has(`peer:${label}`) || companions.some(c => c.label === label)) continue;
+    // One spawner (swarm-2227: three heroes uncovered the hex within the gossip delay and each started the lurker under
+    // the same peer id): the live, fresh, unowned HUMAN hero (only they scan, IS_HUMAN) with the smallest peer id among those that could have uncovered it
+    // at a distance (4 ≤ d ≤ REVEAL_RADIUS, snapshot tiles). The others look again later, in case it never does.
+    const at = { tile_q: q, tile_r: r };
+    const spawners = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && !p.shadow_of && (p.life ?? 0) > 0 && (p.peer_id === PEER_ID_STRING || (p.human && isFresh(p))))
+      .filter(p => { const t = p.peer_id === PEER_ID_STRING ? { tile_q: entity.tile.q, tile_r: entity.tile.r } : p; const d = Number.isInteger(t.tile_q) ? hexDistance(t, at) : Infinity; return d >= 4 && d <= R; })
+      .map(p => p.peer_id).sort();
+    if (spawners.length && spawners[0] !== PEER_ID_STRING) { lurkersChecked.delete(key); continue; }
     if (companions.filter(c => c.wild).length >= MAX_WILD_CHILDREN) { lurkersChecked.delete(key); continue; }
     const cid = WILD_MONSTERS[parseInt(h.slice(8, 16), 16) % WILD_MONSTERS.length];
     const name = data.creatures[cid].name;
@@ -2908,11 +2993,11 @@ async function doPlanningEnd() {
   else if (typeof q0 === 'number' && hand[q0]?.kind === 'action') { card = hand[q0]; code = card.code; }
   // Lost actions (Lightning, Space-bending, Oblivion, Fossilization): this
   // action is sat out as a bare Empty Posture — no card, no skills, no cast.
-  // An Oblivion lock holds only while its caster still has the permanent (Rule 24 lets me destroy it).
+  // A lock of a lockWhileStanding effect (Oblivion) holds only while its caster still has the permanent (Rule 24 lets me destroy it).
   entity.lockList = entity.lockList.filter(l => {
-    if (l.effect_id !== 'effect_oblivion' || l.by === PEER_ID_STRING) return true;
+    if (!EFFECT_RULES[l.effect_id]?.lockWhileStanding || l.by === PEER_ID_STRING) return true;
     const pv = peersPublic.get(l.by);
-    return !pv || String(pv.permanents_csv || '').split(',').includes('effect_oblivion');
+    return !pv || String(pv.permanents_csv || '').split(',').includes(l.effect_id);
   });
   syncLost();
   // A Sleep / Confusion affliction lifts once its holder no longer has the permanent (Rule 24 lets my allies destroy it).
@@ -2930,12 +3015,16 @@ async function doPlanningEnd() {
   const adjacentFoeSnaps = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.life > 0 && sideOf(p.alliance) !== MY_SIDE
     && hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) <= 1);
   const natHolds = (p, eff) => String(p.permanents_csv || '').split(',').includes(eff) && (parseCopies(p.perm_copies_json)[eff] || 0) > 0;
-  const delayHolders = adjacentFoeSnaps.filter(p => String(p.permanents_csv || '').split(',').includes('effect_delay_time')).length
-    + adjacentFoeSnaps.filter(p => natHolds(p, 'effect_domination')).length;
+  const natKindHeld = (p, kind) => naturalOfKind(String(p.permanents_csv || '').split(','), kind).some(e => natHolds(p, e));   // F7: by naturalKind
+  // F2: every standing permanent with an adjacent_lost program (Delay Time) of each adjacent enemy holder counts.
+  const standingLost = (p) => { const perms = String(p.permanents_csv || '').split(',').filter(Boolean), ev = new Set(String(p.every_csv || '').split(',').filter(Boolean));
+    return holding(perms, 'adjacent_lost').reduce((s, pid) => s + standing('adjacent_lost', pid, null, { holder: p.peer_id, victim: PEER_ID_STRING, every: ev.has(pid) }), 0); };
+  const delayHolders = adjacentFoeSnaps.reduce((s, p) => s + standingLost(p), 0)
+    + adjacentFoeSnaps.filter(p => natKindHeld(p, 'lose_action')).length;
   const delayed = lostToHolders(delayHolders, ROUNDS_PER_TURN, hg.round);
   if (delayed) console.log(`[${PEER_LABEL}] delay time / natural domination: ${delayHolders} holder(s) adjacent — action ${hg.round + 1}/${ROUNDS_PER_TURN} is lost`);
   // Natural Petrify: an enemy holder in contact locks me for the rest of the turn (every turn it finds me in contact).
-  const petrifier = adjacentFoeSnaps.filter(p => natHolds(p, 'effect_petrify')).map(p => p.peer_id).sort()[0];
+  const petrifier = adjacentFoeSnaps.filter(p => natKindHeld(p, 'stone')).map(p => p.peer_id).sort()[0];
   if (petrifier && entity.petrifiedTurn !== hg.turn) { entity.petrifiedTurn = hg.turn; console.log(`[${PEER_LABEL}] natural petrify: ${petrifier.slice(0, 14)} in contact — I am stone for the rest of turn ${hg.turn}`); }
   const petrified = entity.petrifiedTurn === hg.turn;
   if (petrified) console.log(`[${PEER_LABEL}] natural petrify: action ${hg.round + 1}/${ROUNDS_PER_TURN} is lost`);
@@ -2986,11 +3075,11 @@ async function doPlanningEnd() {
     const booting = !v && Date.now() - (entity.possessing.at || 0) < 30_000 && companions.some(c => c.peer_id === entity.possessing.peer_id);
     if (!booting) {
       console.log(`[${PEER_LABEL}] possess: ${entity.possessing.name || entity.possessing.peer_id.slice(0, 14)} ${v && (v.life ?? 0) <= 0 ? 'is dead' : 'is gone'} — my Possess permanent falls, I play my own hero again`);
-      for (let i = entity.summons.length - 1; i >= 0; i--) if (entity.summons[i].perm === POSSESS_ID) entity.summons.splice(i, 1);   // died: no card back
-      dropPermanent(POSSESS_ID); publishPublicState().catch(() => {});
+      for (let i = entity.summons.length - 1; i >= 0; i--) if (isPossessPerm(entity.summons[i].perm)) entity.summons.splice(i, 1);   // died: no card back
+      dropPermanent(possessPermOf(entity.permanents) || possessPermOf(Object.keys(EFFECT_RULES))); publishPublicState().catch(() => {});
     }
   }
-  if (entity.possessing && !entity.permanents.has(POSSESS_ID)) entity.possessing = null;
+  if (entity.possessing && !possessPermOf(entity.permanents)) entity.possessing = null;
   possessedNow = possessedUnit();
   let proxy = null;
   if (possessedNow && !skipping && !queuedPhylactery) {
@@ -2999,7 +3088,7 @@ async function doPlanningEnd() {
     card = null; code = 'EP'; queued = []; queuedSkills = []; queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; casting = null; queuedBonus = [];
   }
   // Phylactery (2026-11-17): one click → `{auto: true}`; the resolver picks the target on every peer alike.
-  const phylactery = (!skipping && entity.permanents.has(POSSESS_ID) && entity.possessMode === 'phylactery' && queuedPhylactery) ? { auto: true } : null;
+  const phylactery = (!skipping && possessPermOf(entity.permanents) && entity.possessMode === 'phylactery' && queuedPhylactery) ? { auto: true } : null;
 
   // Battle Trance: two options [c1, c2]; the resolver picks per enemy which one
   // is actually played (Rule 17 instant on top of the whole action).
@@ -3037,7 +3126,7 @@ async function doPlanningEnd() {
   const emitsLong = wants('P') || wants('EP') || (!options && code === 'EP') || clHeld('emits').some(c => ['A', 'B', 'M', 'EM'].some(x => wants(x) && classHook('emits', c, CL_BASE, { code: x, site: 'plan' }))) || enchanterNow;
   const emits = (c, every) => castInstant(c, every) || emitsLong;
   if (enchanterNow) { entity.classUsedTurn = hg.turn; console.log(`[${PEER_LABEL}] enchanter: this ${code} emits an element too (once per turn)`); }
-  const auraEvery = entity.permanents.has('effect_aura') && entity.everyPerms.has('effect_aura');
+  const auraEvery = !!everyWidener();
   // The plan being emitted this action: the cast in progress, else what is queued.
   let plan = null, chainStep = 1;
   if (casting) {
@@ -3082,17 +3171,22 @@ async function doPlanningEnd() {
   let destroy = null;
   if (queuedDestroy && !trance && (wants('P') || wants('EP') || optionCodes.some(x => clEmits(x)))) {   // C1 ruling 2026-11-16: Reaver A, Barbarian B, Monk M / EM
     destroy = { stat: queuedDestroy.stat, ...(queuedDestroy.building ? { building: queuedDestroy.building } : {}), ...(queuedDestroy.class ? { class: queuedDestroy.class, elem: queuedDestroy.elem || null } : {}), ...(queuedDestroy.reanimated ? { reanimated: queuedDestroy.reanimated, elem: queuedDestroy.elem || null } : {}), ...(queuedDestroy.recast ? { recast: true } : {}), ...(queuedDestroy.untap ? { untap: true } : {}) };   // C1 reanimated: ruling 2026-11-16
-    if (!entity.permanents.has('effect_aura')) {
+    if (!keepsCastOnDestroy()) {
       if (casting) console.log(`[${PEER_LABEL}] cast of ${casting.entries.map(e => e.effectId).join('→')} dropped to emit against a token`);
       plan = null; casting = null;
     }
   }
   let effectStep = 1, effectOf = 0, chainTotal = 0, chainEnd = 0, every = false, effectKept = null;
   // Empower (user spec 2026-10-29): the permanent is spent to put two elements of this cast out in one action.
+  // F2: any permanent of mine with a plan_emit program (definition `standing`); the first that answers pays.
   let empowered = false;
-  if (plan && entity.permanents.has('effect_empower')) {
+  planEmitSpends = null;
+  if (plan) for (const pid of holding(entity.permanents, 'plan_emit')) {
     const at0 = chainAt(plan.entries, chainStep);
-    if (at0 && at0.step < at0.of) { chainStep += 1; empowered = true; console.log(`[${PEER_LABEL}] empower: ${at0.entry.effectId} emits two elements this action`); }
+    if (!at0) break;
+    const pe = standing('plan_emit', pid, null, { holder: PEER_ID_STRING, step: at0.step, of: at0.of, every: entity.everyPerms.has(pid) });
+    const extra = Math.min(pe.extra, at0.of - at0.step);
+    if (extra > 0) { chainStep += extra; empowered = true; planEmitSpends = pe.spend ? pid : null; console.log(`[${PEER_LABEL}] ${pid}: ${at0.entry.effectId} emits ${extra + 1} elements this action`); break; }
   }
   if (plan) {
     const at = chainAt(plan.entries, chainStep);
@@ -3199,7 +3293,7 @@ async function doPlanningEnd() {
   const bonus = [];
   // Balefire(6): every card is an instant, but still ONE element emission per action — the main
   // plan's cast / destroy counts, then at most one emitting bonus plan keeps its effect.
-  const balefire = entity.permanents.has('effect_balefire');
+  const balefire = oneEmissionBonus().length > 0;
   let emissions = (plan ? 1 : 0) + (destroy ? 1 : 0);
   if (queuedBonus.length && !trance) {
     const used = new Set();
@@ -3248,7 +3342,7 @@ async function doPlanningEnd() {
       });
     }
   }
-  if (bonus.length && entity.permanents.has('effect_haste') && !balefire) { entity.hasteUsedTurn = hg.turn; console.log(`[${PEER_LABEL}] haste: bonus round spent for turn ${hg.turn}`); }
+  if (bonus.length && oncePerTurnBonus().length && !balefire) { entity.hasteUsedTurn = hg.turn; console.log(`[${PEER_LABEL}] haste: bonus round spent for turn ${hg.turn}`); }
   // Manipulator (passive, user ruling 2026-11-14): near an enemy Manipulator I commit a fallback Action — one
   // random OTHER Action card of my hand (EP if none). If its ability fires on me this action, every peer
   // replaces my action by it (class-manipulator.mjs). Committed in the hash, so it is fixed before the reveal.
@@ -3291,7 +3385,7 @@ async function doPlanningEnd() {
     effectName: effectCard?.name || null,
     effectElements: effectCard ? [...effectCard.element_cost] : null,
     effectTypes: effectCard?.effect_types || null,
-    effectPermanent: !!effectCard?.is_permanent || (every && effectCard?.effect_id === 'effect_shield'),
+    effectPermanent: !!effectCard?.is_permanent || (every && !!EFFECT_RULES[effectCard?.effect_id]?.everyPermanent),
     effectDamage: !!effectCard?.is_damage,
     effectPointBuy: !!effectCard?.is_point_buy,
     effectScope: effectCard?.scope || null,
@@ -3300,7 +3394,7 @@ async function doPlanningEnd() {
     effectFx: effectCard?.fx || null,   // E4: ref of a foreign (player-branch) effect card; null for every built-in
     effectAttach: attachCard ? { effect_id: attachCard.effect_id, name: attachCard.name, elements: [...attachCard.element_cost], card_id: attachCard.card_id } : null,
     effectLink, empowered,
-    effectPossess: effectCard?.effect_id === POSSESS_ID ? possessPayload() : null,   // Possess 2026-11-17: the archive creature it plays
+    effectPossess: isPossessPerm(effectCard?.effect_id) ? possessPayload() : null,   // Possess 2026-11-17: the archive creature it plays
     effectElem: effectCard && (EFFECT_RULES[effectCard.effect_id]?.altTileToken || TILE_TOKEN_CHOICE[effectCard.effect_id]) ? (queuedElem || null) : null,
     effectStep, effectOf,
     skipping, destroy, phylactery, proxy, classAbility, manipAlt,
@@ -3477,6 +3571,11 @@ async function doResolution() {
   // Phase 6 (user ruling 3): built-ins by reference with a hard version gate — a unit whose built-in class pin
   // (snapshot cl_key) differs from my bundled one, or is absent, makes me withhold this action's state hash.
   const clVer = clPeer.gateBuiltins(clUnits.map(u => ({ ...u, cl_key: u.id === PEER_ID_STRING ? clPeer.builtinKey(entity.classId) : (view.get(u.id)?.cl_key || null) })), { turn: hg.turn, round: hg.round });
+  // Effect isolation F9: built-in effects by reference, the same hard gate — a unit whose bundled effect set pin
+  // (snapshot fx_set) differs from mine, or is absent from a full snapshot, makes me withhold this action's state hash;
+  // a peer I only know from its Gun slim record (no permanents_csv) is skipped until its full snapshot arrives.
+  const fxVer = fxPeer.gateBuiltins([...view.keys()].filter(id => id !== PEER_ID_STRING).map(id => ({ id, fx_set: view.get(id)?.fx_set || null, full: view.get(id)?.permanents_csv !== undefined })), { turn: hg.turn, round: hg.round });
+  const skVer = skPeer.gateBuiltins([...view.keys()].filter(id => id !== PEER_ID_STRING).map(id => ({ id, sk_set: view.get(id)?.sk_set || null, full: view.get(id)?.permanents_csv !== undefined })), { turn: hg.turn, round: hg.round });
   // A building's skill rides free on the action of whoever stands there (user ruling 2026-11-12); the
   // skill pass below only uses it when the action fits (ridesFor), like a card from the hand.
   for (const r of revealsThisTurn) {
@@ -3508,9 +3607,10 @@ async function doResolution() {
   // Invisibility outside simulate (combo victim pick): the same test as simulate's invisibleNow, on the reveals as played.
   const invisibleAtReveal = (id) => {
     const perms = new Set(id === PEER_ID_STRING ? [...entity.permanents] : String(view.get(id)?.permanents_csv || '').split(','));
-    if (!perms.has('effect_invisibility')) return false;
-    const every = id === PEER_ID_STRING ? entity.everyPerms.has('effect_invisibility') : String(view.get(id)?.every_csv || '').split(',').includes('effect_invisibility');
-    return every || !invisibilityBreaks(pristineReveals.find(o => o.actor === id), { codes: invisCodesOf(perms) });
+    const pid = hidingPerm(perms);
+    if (!pid) return false;
+    const every = id === PEER_ID_STRING ? entity.everyPerms.has(pid) : String(view.get(id)?.every_csv || '').split(',').includes(pid);
+    return !hideBreaks(pid, id, [pristineReveals.find(o => o.actor === id)], false, every, invisCodesOf(perms));
   };
   const natFx = [];   // effect-results toasts (2026-11-18): natural Mists / Anger / Love / Awe / Fear acting this action (non-quiet runs only; UI only)
   const simulate = (reveals, quiet, opts = {}) => {
@@ -3549,7 +3649,7 @@ async function doResolution() {
     const by = v?.possessed_by || null;
     // 2026-11-17: the Possess permanent stands in the POSSESSOR's holding (possess_mode 'possess') and the unit is
     // its companion (owner_peer_id); the 2026-10-30 form (permanent in the unit's own holding) is still read.
-    const held = permsOfRaw(id).includes(POSSESS_ID) || (v?.owner_peer_id === by && permsOfRaw(by).includes(POSSESS_ID) && view.get(by)?.possess_mode === 'possess');
+    const held = permsOfRaw(id).some(isPossessPerm) || (v?.owner_peer_id === by && permsOfRaw(by).some(isPossessPerm) && view.get(by)?.possess_mode === 'possess');
     return by && by !== id && held && (view.get(by)?.life ?? 0) > 0 ? by : null;
   };
   const sideOfId = (id) => { const by = possessorOf(id); const v = view.get(by || id); return v ? sideOf(v.alliance) : null; };
@@ -3571,12 +3671,14 @@ async function doResolution() {
   // Invisibility (user ruling 2026-11-14): judged on the reveals as played (before skills / stances
   // rewrite r.action), so every peer agrees. A unit whose reveal breaks it (Attack / Block / a cast) is
   // already seen this action; ∀ (every_csv) keeps it hidden until it deals damage.
-  const invisBreakers = new Set(revealsThisTurn.filter(r => invisibilityBreaks(r, { codes: invisCodesOf(permsOfRaw(r.actor)) })).map(r => r.actor));
-  const invisEvery = (id) => id === PEER_ID_STRING ? entity.everyPerms.has('effect_invisibility') : String(view.get(id)?.every_csv || '').split(',').includes('effect_invisibility');
-  const invisibleNow = (id) => hasPerm(id, 'effect_invisibility') && (invisEvery(id) || !invisBreakers.has(id));
+  // F3: the hiding permanent (flag `hides`) and its `breaks` program; ∀ is judged after the run (dealt damage), not here.
+  const hidingOf = (id) => hidingPerm(permsOfRaw(id));
+  const invisBreakers = new Set(revealsThisTurn.filter(r => { const pid = hidingOf(r.actor); return !!pid && hideBreaks(pid, r.actor, [r], false, false, invisCodesOf(permsOfRaw(r.actor))); }).map(r => r.actor));
+  const invisEvery = (id) => { const pid = hidingOf(id); return !!pid && (id === PEER_ID_STRING ? entity.everyPerms.has(pid) : String(view.get(id)?.every_csv || '').split(',').includes(pid)); };
+  const invisibleNow = (id) => !!hidingOf(id) && (invisEvery(id) || !invisBreakers.has(id));
   // `viewer` cannot see `id`: an enemy that is invisible now, unless the viewer is invisible too (paper text).
   const hiddenFrom = (viewer, id) => viewer !== id && invisibleNow(id) && enemyOf(viewer, id) && !invisibleNow(viewer);
-  for (const id of [...invisBreakers].sort()) if (hasPerm(id, 'effect_invisibility') && !invisEvery(id)) log(`[${PEER_LABEL}] invisibility: ${id.slice(0, 8)} shows itself (Attack / Block / cast) — its permanent falls`);
+  for (const id of [...invisBreakers].sort()) if (hidingOf(id) && !invisEvery(id)) log(`[${PEER_LABEL}] invisibility: ${id.slice(0, 8)} shows itself (Attack / Block / cast) — its permanent falls`);
   const effAction = new Map(revealsThisTurn.map(r => [r.actor, r.action]));
   // Battle Trance actors carry two options; prohibitions edit the options, a
   // Bluff negates the whole trance.
@@ -3615,7 +3717,7 @@ async function doResolution() {
   const roundDisabled = new Map();    // id → Set(elem) cast this action
   const roundGlobalDisabled = new Set(); // ∀ Disable cast this action: nobody emits these
   // Spirit Link: the linked ally's CURRENT base stat rides on mine while I hold the permanent.
-  const linkedStat = (id, sk) => parseJson(view.get(id)?.links_json, []).filter(l => l.stat === sk && hasPerm(id, 'effect_spirit_link')).reduce((a, l) => a + statRaw(view.get(l.from), sk), 0);
+  const linkedStat = (id, sk) => parseJson(view.get(id)?.links_json, []).filter(l => l.stat === sk && permsOf(id).some(isLinkPerm)).reduce((a, l) => a + statRaw(view.get(l.from), sk), 0);
   // Fortress stat buy (user ruling 2026-11-14): the unit's running bank. (Its break bonus is a stat token in
   // stat_tokens_json; a legacy fortress_bonus_json from an older peer is ignored.)
   const fortressBankIn = (id) => { try { const o = JSON.parse(view.get(id)?.fortress_bank_json || 'null'); return o && typeof o === 'object' ? o : null; } catch { return null; } };
@@ -3645,7 +3747,7 @@ async function doResolution() {
   const castComplete = (o) => !!o.effect && Array.isArray(o.effect.elements) && o.effect.elements.length > 0 && (o.effect.is_instant || (o.effect.step ?? 1) >= (o.effect.of ?? 1));
   const castsDamage = (o) => castComplete(o) && !!EFFECT_RULES[o.effect.effect_id]?.damage;
   // Aura ∀ widens a cast to everyone within 10 hexes — only while the caster really holds a doubled Aura.
-  const auraEveryOf = (id) => hasPerm(id, 'effect_aura') && csvSet(view.get(id)?.every_csv).has('effect_aura');
+  const auraEveryOf = (id) => { const ev = csvSet(view.get(id)?.every_csv); return permsOf(id).some(p => EFFECT_RULES[p]?.everyWidens && ev.has(p)); };   // F2: everyWidens
   const castBoost = new Map();          // Elementalist: extra die riding on the actor's cast this action (set in the class pre-pass)
   const castOf = (o) => ({ actor: o.actor, effect_id: o.effect.effect_id, elements: o.effect.elements, salt: o.salt || '', target: o.target, is_instant: !!o.effect.is_instant, every: !!o.effect.every, aura: !!o.effect.aura && auraEveryOf(o.actor), step: o.effect.step ?? 1, of: o.effect.of ?? 1, kept: Array.isArray(o.effect.kept) ? o.effect.kept : null, summon: o.effect.summon || null, attach: o.effect.attach || null, card_id: o.effect.card_id || null, link: o.effect.link || null, elem: o.effect.elem || null, ...(o.effect.possess ? { possess: o.effect.possess } : {}), boost: castBoost.get(o.actor) || 0, ...(o.effect.fx ? { fx: o.effect.fx } : {}), ...awakeOf(o) });
   // Awake (user request 2026-11-17): what moves where — game/awake.mjs judges it from this view on every peer (the
@@ -3653,7 +3755,7 @@ async function doResolution() {
   // effects.mjs turns into a move (unit) or a building relocation. Memo per simulate() run (same view throughout).
   const awakeMemo = new Map();
   function awakeOf(o) {
-    if (o.effect?.effect_id !== 'effect_awake') return {};
+    if (!isAwakePerm(o.effect?.effect_id)) return {};
     const v = view.get(o.actor);
     if (!v || !Number.isInteger(v.tile_q)) return {};
     const picked = o.target?.kind === 'tile' && Number.isInteger(o.target.ref?.q) && Number.isInteger(o.target.ref?.r) ? o.target.ref : null;
@@ -3771,7 +3873,7 @@ async function doResolution() {
   // vs my 8, counter fire → (16−8−8) + (16−8) = 8 → 1). Caster-side only.
   // Two Counter Spells aimed at each other cancel in actor order — the
   // lexically first actor's counter lands first and strips the other's.
-  skillHook('counter_pre', 'skill_counter_spell', skCtx);   // S1 counter_pre
+  skillHook('counter_pre', null, skCtx);   // S1 counter_pre
   // Pass 1 — prohibitions on a whole action (they go first: an Attack Intimidation negates never gets to
   // Grapple). Move / Posture skills also ride on Empty Move / Empty Posture.
   skillHook('negate_action', null, skCtx);   // S1 negate_action (Bluff, Intimidation)
@@ -3785,15 +3887,24 @@ async function doResolution() {
     r.effect = null; r.noEmit = true;
   }
   // Afflictions from sprung perm-traps hold while the holder keeps the permanent.
-  const afflictedBy = (id, effectId) => parseJson(view.get(id)?.afflictions_json, []).filter(a => a.effect_id === effectId && a.by !== id && hasPerm(a.by, effectId)).map(a => a.by);
-  // Confusion: the victim can only Empty Posture (a trance collapses to it too).
+  // F2: what each such affliction does is its effect's `afflicted` program (definition `standing`): Sleep — no casting
+  // while in contact with the holder; Confusion — only an Empty Posture (a trance collapses to it too).
+  const afflictRule = (id) => {
+    let no_cast = false, only = null;
+    for (const a of parseJson(view.get(id)?.afflictions_json, [])) {
+      if (a.by === id || !hasPerm(a.by, a.effect_id) || !holding([a.effect_id], 'afflicted').length) continue;
+      const v = standing('afflicted', a.effect_id, null, { holder: a.by, victim: id, in_contact: distBetween(id, a.by) <= 1, every: csvSet(view.get(a.by)?.every_csv).has(a.effect_id) });
+      no_cast = no_cast || v.no_cast; only = only ?? v.only;
+    }
+    return { no_cast, only };
+  };
   for (const r of revealsThisTurn) {
-    if (!afflictedBy(r.actor, 'effect_confusion').length) continue;
-    tranceOpts.delete(r.actor); effAction.set(r.actor, 'EP'); r.target = null; noMove.add(r.actor);
-    if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] confused — only an Empty Posture this action`);
+    const only = afflictRule(r.actor).only;
+    if (!only) continue;
+    tranceOpts.delete(r.actor); effAction.set(r.actor, only); r.target = null; noMove.add(r.actor);
+    if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] afflicted — only ${only} this action`);
   }
-  // Sleep: no casting while in contact with the holder.
-  const asleepFor = (id) => afflictedBy(id, 'effect_sleep').some(by => distBetween(id, by) <= 1);
+  const asleepFor = (id) => afflictRule(id).no_cast;
   // Monster natural permanents (user rulings 2026-11-15, rule_monster_natural_permanents; maths in natural-perms.mjs):
   // a living holder of the permanent with copies standing (perm_copies_json). Contact afflictions (Love / Awe / Fear /
   // Anger) sit in the VICTIM's afflictions_json ({effect_id, by, natural}) — added by the victim after the action it
@@ -3801,6 +3912,7 @@ async function doResolution() {
   const copiesOf = (id) => id === PEER_ID_STRING ? entity.permCopies : parseCopies(view.get(id)?.perm_copies_json);
   const naturalHas = (id, eff) => lifeOf(id) > 0 && hasPerm(id, eff) && (copiesOf(id)[eff] || 0) > 0;
   const naturalAffl = (id) => parseJson(view.get(id)?.afflictions_json, []);
+  const naturalOf = (id, kind) => naturalOfKind(permsOf(id), kind).filter(e => naturalHas(id, e));   // F7: held natural perms of a kind
   const natBlockLogged = new Set();
   const natName = (id) => String(id).replace(/^peer:/, '');
   const natBlocked = (attacker, victim) => {
@@ -3815,12 +3927,12 @@ async function doResolution() {
   // Anger: an afflicted enemy in contact with the holder may only aim at it (Rule 15 autotarget override) — its
   // character target (Attack / Move / cast) becomes the holder; a tile target (a step) is left alone.
   for (const r of revealsThisTurn) {
-    const by = angerForcedTarget({ actor: r.actor, afflictions: naturalAffl(r.actor), holds: naturalHas, dist: distBetween });
+    const fa = onlyHolderAffliction({ actor: r.actor, afflictions: naturalAffl(r.actor), holds: naturalHas, dist: distBetween }), by = fa?.by || null;
     if (!by || r.target?.kind === 'tile') continue;
     const aimed = r.target?.kind === 'character' ? r.target.ref : null;
     if (aimed === by || !(aimed || codeIs(r.actor, 'A') || r.effect)) continue;
     r.target = { kind: 'character', ref: by };
-    if (!quiet) natFx.push({ effect_id: 'effect_anger', on: r.actor, by, kind: 'aim' });
+    if (!quiet) natFx.push({ effect_id: fa.effect_id, on: r.actor, by, kind: 'aim' });
     if (r.actor === PEER_ID_STRING || by === PEER_ID_STRING) log(`[${PEER_LABEL}] natural anger: ${natName(r.actor)} may only aim at ${natName(by)}${aimed ? ` (not ${natName(aimed)})` : ''}`);
   }
   // Combat damage straight off the resolution matrix: Attack has a base of 1,
@@ -3856,7 +3968,7 @@ async function doResolution() {
     self: PEER_ID_STRING, label: PEER_LABEL,
     view: (id) => view.get(id), viewIds: () => [...view.keys()], viewValues: () => [...view.values()],
     lifeOf, dist: distBetween, enemyOf, hasPerm, statOf, sideOf,
-    classData: (id) => data.classes[id]?.data, skillAction: (sk) => data.skills[sk]?.data?.action_type,
+    classData: (id) => data.classes[id]?.data, skillAction: (sk) => data.skills[sk]?.data?.action_type, skillIsTrance: (sk) => !!SKILL_RULES[sk]?.trance,   // skill isolation: Bard (classes oracle) asks, never names the trance skill
     library: () => effCtx.library(), elemStat: (el) => ELEM_TO_STAT[el],
     get turn() { return hg.turn; }, get action() { return hg.action; }, sha: (s) => sha256Hex(s),
   };
@@ -3884,7 +3996,7 @@ async function doResolution() {
       if (r.target?.kind !== 'character') {
         const cands = revealsThisTurn
           .filter(o => o.actor !== r.actor && enemyOf(r.actor, o.actor) && !hiddenFrom(r.actor, o.actor) && distBetween(r.actor, o.actor) <= 1)
-          .map(o => ({ id: o.actor, cost: skillHook('block_cost', 'skill_ranged_weapon', skCtx, { attacker: r.actor, defender: o.actor }),   /* S1 block_cost */ lands: hitDmg(codeNow(o.actor)) > 0 ? 0 : 1, life: lifeOf(o.actor) }));
+          .map(o => ({ id: o.actor, cost: skillHook('block_cost', null, skCtx, { attacker: r.actor, defender: o.actor }),   /* S1 block_cost */ lands: hitDmg(codeNow(o.actor)) > 0 ? 0 : 1, life: lifeOf(o.actor) }));
         const pick = classHook('stance_target', c, clCtx, { cands });   // C1 stance_target (cost, lands, life, id)
         if (pick) r.target = { kind: 'character', ref: pick };
         else if (cur === 'EM') r.moveAs = 'EM';
@@ -3911,10 +4023,10 @@ async function doResolution() {
   // Posture. After the class / building stances, so a Reaver's or a stance building's Attack is caught as well.
   for (const r of revealsThisTurn) {
     if (!codeIs(r.actor, 'A')) continue;
-    const by = [...view.keys()].filter(id => id !== r.actor && enemyOf(id, r.actor) && naturalHas(id, 'effect_mists') && distBetween(id, r.actor) <= 1).sort()[0];
+    const by = [...view.keys()].filter(id => id !== r.actor && enemyOf(id, r.actor) && naturalOf(id, 'no_attack').length && distBetween(id, r.actor) <= 1).sort()[0];
     if (!by) continue;
     replace(r.actor, 'A', 'EP');
-    if (!quiet) natFx.push({ effect_id: 'effect_mists', on: r.actor, by, kind: 'ban' });
+    if (!quiet) natFx.push({ effect_id: naturalOf(by, 'no_attack')[0], on: r.actor, by, kind: 'ban' });
     if (r.actor === PEER_ID_STRING || by === PEER_ID_STRING) log(`[${PEER_LABEL}] natural mists of ${natName(by)}: ${natName(r.actor)} cannot Attack in contact — Empty Posture`);
   }
   for (const r of revealsThisTurn) {
@@ -3943,7 +4055,7 @@ async function doResolution() {
     if (idx !== undefined) return r.trance[idx] === 'A';
     return !r.vs && declared && r.trance.includes('A');
   };
-  skillHook('trance_assign', TRANCE, skCtx, { byActor, codeVs, attacksOn });   // S1 trance_assign (Battle Trance)
+  skillHook('trance_assign', null, skCtx, { byActor, codeVs, attacksOn });   // S1 trance_assign (Battle Trance)
 
   // Movement intents. Rule 8:
   //  - EM ("Empty journey") moves halfway toward the target tile — round(d/2)
@@ -4041,7 +4153,7 @@ async function doResolution() {
   }
   // Natural Creation: an enemy whose Matter is below the holder's cannot enter the holder's adjacent hexes (no hp —
   // it falls with the permanent). Judged on the destination against the holders' tiles before this action's moves.
-  const creationHolders = [...view.keys()].filter(id => naturalHas(id, 'effect_creation')).sort()
+  const creationHolders = [...view.keys()].filter(id => naturalOf(id, 'ward').length).sort()
     .map(id => { const v = view.get(id); return { id, q: v.tile_q, r: v.tile_r, matter: statOf(id, 'matter') }; });
   if (creationHolders.length) for (const [key, list] of [...byDest]) {
     const [cq, cr] = key.split(',').map(Number);
@@ -4140,7 +4252,7 @@ async function doResolution() {
   const abilityPeer = (ab) => ab?.target?.kind === 'character' ? ab.target.ref : null;
   const adjacentOf = (id, pred) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && distBetween(id, o) <= 1 && pred(o)).sort();
   // Hand classes (2026-11-14): living, visible (no Invisibility) enemies within `range` hexes, sorted by id.
-  const foesNearby = (id, range) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && enemyOf(id, o) && distBetween(id, o) <= range && !hasPerm(o, 'effect_invisibility')).sort();
+  const foesNearby = (id, range) => [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && enemyOf(id, o) && distBetween(id, o) <= range && !hidingPerm(permsOf(o))).sort();
   const useAbility = (r, note) => { classAbilityOut.used.push({ actor: r.actor, class_id: r.classAbility.id }); if (r.actor === PEER_ID_STRING) { log(`[${PEER_LABEL}] class ${r.classAbility.id}: ${note}`); log(classEventLine(r.classAbility.id, 'ability')); } };
   // C1 ability: the hook's {used, note, log, mine, out} → classAbilityOut + log (null = resolved here in peer.mjs).
   // Phase 3: `requests` (the post pass's ABILITY_REQUEST_FNS) resolves the engine requests of `out` — each request
@@ -4190,14 +4302,22 @@ async function doResolution() {
   // Blessing / Curse ∀ (user ruling 2026-10-30): a holder of TWO Blessings loses the second one the moment
   // an enemy effect is about to touch them — damage, a lock, a penalty token, a forced move, an
   // affliction, a possession — and that part of the effect is negated. One negation per holder per action.
-  const blessFired = [];                // { holder, caster, effect_id } — the ∀ copy is spent (holder applies after the run)
+  // F3: the guarding permanent's `harm_in` program decides (Blessing: only ∀); blessAnswer → {perm, negate, spend} | null.
+  const blessFired = [];                // { holder, caster, effect_id, perm, spend } — spent by the holder after the run
   const blessUsed = new Set();
-  const blessedEvery = (id) => hasPerm(id, 'effect_blessing_curse') && csvSet(view.get(id)?.every_csv).has('effect_blessing_curse') && !blessUsed.has(id);
+  const blessAnswer = (id, caster = null, effectId = null) => {
+    if (blessUsed.has(id)) return null;
+    const every = csvSet(view.get(id)?.every_csv);
+    for (const pid of holding(permsOf(id), 'harm_in')) { const r = standing('harm_in', pid, null, { holder: id, caster, effect_id: effectId, every: every.has(pid) }); if (r) return { perm: pid, ...r }; }
+    return null;
+  };
+  const blessedEvery = (id) => !!blessAnswer(id);
   const blessNegate = (oc, caster, effectId) => {
     const hurt = new Set([...oc.hits.map(h => h.victim), ...oc.locks.map(l => l.on), ...oc.statTokens.filter(t => t.value < 0).map(t => t.on), ...oc.moves.filter(m => m.who !== caster).map(m => m.who), ...(oc.possess?.bind ? [oc.possess.bind] : []), ...(oc.peeks || []).filter(p => p.kind === 'hand').map(p => p.of)]);
     for (const v of [...hurt].sort()) {
-      if (v === caster || !enemyOf(caster, v) || !blessedEvery(v)) continue;
-      blessUsed.add(v); blessFired.push({ holder: v, caster, effect_id: effectId });
+      const ans = v === caster || !enemyOf(caster, v) ? null : blessAnswer(v, caster, effectId);
+      if (!ans) continue;
+      blessUsed.add(v); blessFired.push({ holder: v, caster, effect_id: effectId, perm: ans.perm, spend: ans.spend });
       oc.hits = oc.hits.filter(h => h.victim !== v); oc.locks = oc.locks.filter(l => l.on !== v);
       oc.statTokens = oc.statTokens.filter(t => !(t.on === v && t.value < 0)); oc.moves = oc.moves.filter(m => m.who !== v);
       if (oc.possess?.bind === v) oc.possess = null;
@@ -4229,14 +4349,24 @@ async function doResolution() {
     // Disable (a permanent on the would-be victim) fires by itself: the enemy's
     // cast is discarded and its last element is barred to that enemy for the
     // turn (∀: to everyone). One Disable stops one cast.
+    // F2: any permanent of a would-be victim with a cast_in program (definition `standing`) — the first victim in id
+    // order whose first such permanent answers stops the cast.
     if (oc.status === 'done') {
       const hurt = new Set([...oc.hits.map(h => h.victim), ...oc.locks.map(l => l.on), ...oc.statTokens.filter(t => t.value < 0).map(t => t.on), ...oc.moves.filter(m => m.who !== r.actor).map(m => m.who)]);
-      const holder = [...hurt].filter(v => v !== r.actor && enemyOf(r.actor, v) && hasPerm(v, 'effect_disable') && !disableUsed.has(v)).sort()[0];
+      let holder = null, fired = null;
+      for (const v of [...hurt].filter(v => v !== r.actor && enemyOf(r.actor, v) && !disableUsed.has(v)).sort()) {
+        const ev = csvSet(view.get(v)?.every_csv);
+        for (const pid of holding(permsOf(v), 'cast_in')) {
+          const ci = standing('cast_in', pid, null, { holder: v, caster: r.actor, effect_id: eff.effect_id, last_elem: eff.elements[eff.elements.length - 1], every: ev.has(pid) });
+          if (ci) { fired = { ...ci, perm: pid }; break; }
+        }
+        if (fired) { holder = v; break; }
+      }
       if (holder) {
         disableUsed.add(holder);
-        const elem = eff.elements[eff.elements.length - 1];
-        const global = csvSet(view.get(holder)?.every_csv).has('effect_disable');
-        disableTriggers.push({ holder, caster: r.actor, elem, global });
+        const elem = fired.elem;
+        const global = fired.bar === 'all';
+        disableTriggers.push({ holder, caster: r.actor, elem, global, perm: fired.perm, spend: fired.spend });
         if (global) roundGlobalDisabled.add(elem); else { if (!roundDisabled.has(r.actor)) roundDisabled.set(r.actor, new Set()); roundDisabled.get(r.actor).add(elem); }
         Object.assign(oc, { status: 'blocked', hits: [], tokens: [], statTokens: [], locks: [], zones: [], heals: [], permanents: [], moves: [], shieldElem: null, disableElem: null, voidFor: [] });
         oc.notes.push(`${holder.slice(0, 8)}'s Disable bars ${elem}`);
@@ -4260,7 +4390,7 @@ async function doResolution() {
       nextTiles.set(mv.who, { q: mv.q, r: mv.r });
       journeyResults.set(mv.who, { outcome: 'complete', q: mv.q, r: mv.r, action: mv.reason });
     }
-    for (const rl of oc.relocations || []) relocations.push(rl);
+    for (const rl of oc.relocations || []) relocations.push(rl.kind === 'building' || rl.kind === 'wall' ? { ...rl, via: eff.effect_id } : rl);
   }
 
   // Channel-token ticks (Harm, Combustion, The Void, Light/Darkness). general_ux_channeling:
@@ -4304,13 +4434,14 @@ async function doResolution() {
   // Natural Earthquake: while the monster's copies stand, every enemy in contact takes Earthquake's delta damage
   // (Earth→Matter, the effect's own rule) at the end of each engine turn — its last action — like a channel tick.
   if (!bonusRound && hg.round === ROUNDS_PER_TURN - 1) for (const id of [...view.keys()].sort()) {
-    if (!naturalHas(id, 'effect_earthquake')) continue;
-    const elements = data.effects.effect_earthquake?.data?.element_cost || ['elem_earth'];
-    const oc = resolveEffect(effCtx, { actor: id, effect_id: 'effect_earthquake', elements, salt: `natural:${id}:${hg.turn}`, target: null, is_instant: true, every: false, aura: false, step: elements.length, of: elements.length, kept: null, summon: null, _channel_tick: true });
+    for (const tick of naturalOf(id, 'turn_tick')) {   // F7: naturalKind turn_tick (Earthquake) — the effect ticks itself
+    const elements = data.effects[tick]?.data?.element_cost || ['elem_earth'];
+    const oc = resolveEffect(effCtx, { actor: id, effect_id: tick, elements, salt: `natural:${id}:${hg.turn}`, target: null, is_instant: true, every: false, aura: false, step: elements.length, of: elements.length, kept: null, summon: null, _channel_tick: true });
     if (oc.status !== 'done') continue;
-    blessNegate(oc, id, 'effect_earthquake');
-    effectOutcomes.push({ actor: id, eff: { effect_id: 'effect_earthquake', elements }, oc, channel: true });
-    if (id === PEER_ID_STRING || oc.hits.some(h => h.victim === PEER_ID_STRING)) log(`[${PEER_LABEL}] natural earthquake tick by ${natName(id)} (T${hg.turn} end)${oc.hits.length ? ` → ${oc.hits.map(h => natName(h.victim)).join(',')}` : ' — nobody in contact'}`);
+    blessNegate(oc, id, tick);
+    effectOutcomes.push({ actor: id, eff: { effect_id: tick, elements }, oc, channel: true });
+    if (id === PEER_ID_STRING || oc.hits.some(h => h.victim === PEER_ID_STRING)) log(`[${PEER_LABEL}] natural ${tick.replace(/^effect_/, '')} tick by ${natName(id)} (T${hg.turn} end)${oc.hits.length ? ` → ${oc.hits.map(h => natName(h.victim)).join(',')}` : ' — nobody in contact'}`);
+    }
   }
 
   // Rule 24 — emit against a token. The closest adjacent enemy's permanents
@@ -4407,10 +4538,13 @@ async function doResolution() {
       // Destroy order (user ruling 2026-11-14): permanents → character stat bonus tokens (Artifice, Fortress) → tile tokens.
       return rule24Order(out);
     };
+    // F6: the Possess permanent that holds a possessed unit — in its own holding (2026-10-30 form) or its possessor's.
+    const possessPermFor = (id) => possessPermOf(permsOfRaw(id)) || possessPermOf(permsOfRaw(possessorOf(id)));
     const possessedAllies = [...view.keys()].filter(id => id !== r.actor && lifeOf(id) > 0 && distBetween(r.actor, id) <= 1 && possessorOf(id) && enemyOf(r.actor, possessorOf(id))
-      && sideOf(view.get(id).alliance) === sideOf(view.get(r.actor).alliance) && permStats('effect_possess_phylactery').includes(stat)).sort();
+      && sideOf(view.get(id).alliance) === sideOf(view.get(r.actor).alliance) && permStats(possessPermFor(id)).includes(stat)).sort();
+    const pa = possessedAllies[0], pap = pa ? possessPermFor(pa) : null;
     const pick = possessedAllies.length
-      ? { e: possessedAllies[0], c: [{ owner: possessedAllies[0], kind: 'perm', id: 'effect_possess_phylactery', power: permPowerOf(possessedAllies[0]).effect_possess_phylactery || 6 }] }
+      ? { e: pa, c: [{ owner: pa, kind: 'perm', id: pap, power: permPowerOf(pa)[pap] || 6 }] }
       : enemies.map(e => ({ e, c: candidatesOf(e) })).filter(x => x.c.length).sort((a, b) => a.e.localeCompare(b.e))[0];
     if (!pick) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] emit ${stat} against a token: nothing of that colour on an adjacent enemy`); continue; }
     const tgt = pick.c[0];
@@ -4426,9 +4560,9 @@ async function doResolution() {
   // view, alike on every peer (possess.mjs phylacteryPick: nearest visible enemy within reach holding a
   // non-class permanent → its highest-power one, creature holders / hostile ones on ties). Nothing in reach →
   // nothing happens and the Phylactery stays.
-  const phylReach = phylacteryConfig(data.effects[POSSESS_ID]?.data?.phylactery).reach;
   for (const r of revealsThisTurn) {
-    if (!r.phylactery?.auto || !view.get(r.actor) || lifeOf(r.actor) <= 0 || !hasPerm(r.actor, POSSESS_ID) || view.get(r.actor)?.possess_mode !== 'phylactery') continue;
+    if (!r.phylactery?.auto || !view.get(r.actor) || lifeOf(r.actor) <= 0 || !possessPermOf(permsOf(r.actor)) || view.get(r.actor)?.possess_mode !== 'phylactery') continue;
+    const phylReach = phylReachOf(possessPermOf(permsOf(r.actor)));
     const pick = phylacteryPick({ me: r.actor, ids: [...view.keys()], alive: (id) => lifeOf(id) > 0 && !(invisibleNow(id) && !invisibleNow(r.actor)),
       enemy: enemyOf, dist: distBetween, perms: permsOfRaw, power: (id, p) => permPowerOf(id)[p] || 1, holdsCreature: phylHoldsCreature, hostile: phylHostile }, phylReach);
     if (!pick) { if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] phylactery: no enemy permanent within ${phylReach} — nothing to shatter`); continue; }
@@ -4438,8 +4572,8 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     const ph = r.phylactery;
     // The holder is whoever's Possess stands somewhere: in a possessed unit's holding (normal) or their own.
-    const possessed = [...view.keys()].filter(id => possessorOf(id) === r.actor && permsOfRaw(id).includes(POSSESS_ID)).sort()[0] || null;
-    if (!ph?.peer_id || !ph.perm || !view.get(r.actor) || !(possessed || (hasPerm(r.actor, POSSESS_ID) && view.get(r.actor)?.possess_mode === 'phylactery'))) continue;
+    const possessed = [...view.keys()].filter(id => possessorOf(id) === r.actor && permsOfRaw(id).some(isPossessPerm)).sort()[0] || null;
+    if (!ph?.peer_id || !ph.perm || !view.get(r.actor) || !(possessed || (possessPermOf(permsOf(r.actor)) && view.get(r.actor)?.possess_mode === 'phylactery'))) continue;
     if (String(ph.perm).startsWith('class_') || lifeOf(ph.peer_id) <= 0 || !enemyOf(r.actor, ph.peer_id) || !permsOfRaw(ph.peer_id).includes(ph.perm)) {
       if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] phylactery: ${ph.peer_id.slice(0, 8)} holds no ${ph.perm} I may shatter`);
       continue;
@@ -4447,8 +4581,8 @@ async function doResolution() {
     const power = permPowerOf(ph.peer_id)[ph.perm] || 1;
     destroyOutcomes.push({ actor: r.actor, owner: ph.peer_id, kind: 'perm', id: ph.perm, power, die: power, dice: [], result: 'destroyed', phylactery: true });
     // The Possess permanent is spent for it, wherever it stands.
-    if (possessed) destroyOutcomes.push({ actor: r.actor, owner: possessed, kind: 'perm', id: 'effect_possess_phylactery', power: 6, die: 6, dice: [], result: 'destroyed', phylactery: true });
-    else channelsBroken.push({ owner: r.actor, effect_id: 'effect_possess_phylactery', why: 'phylactery spent' });
+    if (possessed) destroyOutcomes.push({ actor: r.actor, owner: possessed, kind: 'perm', id: possessPermOf(permsOfRaw(possessed)), power: 6, die: 6, dice: [], result: 'destroyed', phylactery: true });
+    else channelsBroken.push({ owner: r.actor, effect_id: possessPermOf(permsOf(r.actor)), why: 'phylactery spent' });
     if (r.actor === PEER_ID_STRING || ph.peer_id === PEER_ID_STRING) log(`[${PEER_LABEL}] ${r.actor.slice(0, 8)}'s phylactery shatters ${ph.peer_id.slice(0, 8)}'s ${ph.perm}`);
   }
 
@@ -4474,10 +4608,16 @@ async function doResolution() {
     const list = damage.get(victim) || [];
     // Super Sense (user spec 2026-10-29): the holder evades one point of the first damage that lands;
     // the permanent is spent for it (dropped by the owner after the run).
-    if (amount > 0 && hasPerm(victim, 'effect_super_sense') && !senseFired.has(victim)) {
-      senseFired.add(victim); amount -= 1;
-      channelsBroken.push({ owner: victim, effect_id: 'effect_super_sense', why: 'one point of damage evaded' });
-      if (victim === PEER_ID_STRING || attacker === PEER_ID_STRING) log(`[${PEER_LABEL}] super sense: ${victim.slice(0, 8)} evades one point of ${attacker.slice(0, 8)}'s ${source} damage`);
+    // F2: every permanent of the victim with a damage_in program (definition `standing`), asked once per action.
+    if (amount > 0) for (const pid of holding(permsOf(victim), 'damage_in')) {
+      const k = `${victim}|${pid}`;
+      if (amount <= 0 || senseFired.has(k)) continue;
+      senseFired.add(k);
+      const was = amount;
+      const di = standing('damage_in', pid, null, { holder: victim, attacker, amount, source, every: csvSet(view.get(victim)?.every_csv).has(pid) });
+      amount = di.amount;
+      if (di.spend) channelsBroken.push({ owner: victim, effect_id: pid, why: `${was - amount} point(s) of damage evaded` });
+      if ((victim === PEER_ID_STRING || attacker === PEER_ID_STRING) && amount !== was) log(`[${PEER_LABEL}] ${pid}: ${victim.slice(0, 8)} evades ${was - amount} point(s) of ${attacker.slice(0, 8)}'s ${source} damage`);
     }
     list.push({ attacker, amount, source, ...(why ? { why } : {}) });
     damage.set(victim, list);
@@ -4528,17 +4668,17 @@ async function doResolution() {
     if (code === 'A' && defCode === 'B' && skillHook('attack_vs_block', null, skCtx, { attacker: r.actor, defender: defId })) defCode = 'EP';
     let dmg = bonusRound ? (code === 'A' ? 1 : 0) : edgeDmg(code, defCode);
     if (code === 'A') {
-      dmg = skillHook('attack_out', 'skill_powerful_attack', skCtx, { attacker: r.actor, dmg });   // S1 attack_out
+      dmg = skillHook('attack_out', null, skCtx, { attacker: r.actor, dmg });   // S1 attack_out
       // Assassin: +1 if the attacker has already connected this round. The flag
       // is set when a previous addDmg(..., attacker, >0) landed — so same-round
       // "first hit then rider" scales up for them. Resolver-local; no state leak.
       for (const c of CL_ATTACK_OUT) dmg = classHook('attack_out', c, clCtx, { attacker: r.actor, dmg, scored: [...assassinScored], defender: defId });   // C1 attack_out (Assassin +1) // CR: assassin — vs a hurt enemy only (2026-11-17)
       // Taunt: a nearby taunter is the only legal Attack target. Only revealers
       // count — their snapshots ride in the reveal, so every peer sees the same set.
-      if (skillHook('attack_target', 'skill_taunt', skCtx, { attacker: r.actor, defender: defId })) dmg = 0;   // S1 attack_target
+      if (skillHook('attack_target', null, skCtx, { attacker: r.actor, defender: defId })) dmg = 0;   // S1 attack_target
     }
-    // Inner Fire: one point of non-effect damage becomes two.
-    if (dmg === 1 && hasPerm(r.actor, 'effect_inner_fire')) dmg = 2;
+    // Inner Fire: one point of non-effect damage becomes two. F2: every combat_out program the attacker holds (definition `standing`).
+    for (const pid of holding(permsOf(r.actor), 'combat_out')) dmg = standing('combat_out', pid, null, { holder: r.actor, code, dmg, every: csvSet(view.get(r.actor)?.every_csv).has(pid) });
     // Buildings: an Attack from a war shrine hits harder; cover softens a Block;
     // a sanctuary takes no combat damage; a stronghold turns aside the first point(s).
     {
@@ -4570,7 +4710,7 @@ async function doResolution() {
   }
   // Dodge: "one less damage done to you this action" — one point off the
   // combat damage I take this round, not one per attacker.
-  skillHook('damage_in', 'skill_dodge', skCtx, { damage });   // S1 damage_in
+  skillHook('damage_in', null, skCtx, { damage });   // S1 damage_in
 
   // Effect damage (Rule 21): each leg rounded half-up / 10 on its own. Before
   // rounding, Force Shield's die comes off the first leg that would otherwise
@@ -4578,7 +4718,7 @@ async function doResolution() {
   // / Rule 21 "defender has tokens to destroy") absorbs one landing hit
   // instead — the defender loses their lowest token. Nothing here touches
   // state: tokens to drop, heals, locks, … ride out in `effectOutcomes`.
-  let brokenShield = false;
+  const brokenShield = [];   // ids of my effect shields spent this action
   const permanentsToAdd = [];
   // Fire tokens left on tiles earlier: whoever steps onto one this action takes
   // its point-buy damage (Rule 20) and the token vanishes.
@@ -4612,7 +4752,8 @@ async function doResolution() {
     let d = 0;
     applyHookRecords(effectHook('trap_spring', trapHookCtx, { trap: tp, victim }), {
       bless: () => {
-        blessUsed.add(victim); blessFired.push({ holder: victim, caster: tp.owner, effect_id: tp.effect_id });
+        const ans = blessAnswer(victim, tp.owner, tp.effect_id);
+        blessUsed.add(victim); blessFired.push({ holder: victim, caster: tp.owner, effect_id: tp.effect_id, perm: ans?.perm ?? null, spend: ans ? ans.spend : null });
         if (victim === PEER_ID_STRING || tp.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] Blessing ∀ of ${victim.slice(0, 8)} negates the ${tp.effect_id} trap — the second Blessing is spent`);
       },
       damage: (x) => {
@@ -4917,12 +5058,13 @@ async function doResolution() {
       const defId = hit.victim;
       const defV = view.get(defId);
       if (!defV) continue;
-      let shield = skillHook('effect_in', 'skill_force_shield', skCtx, { defender: defId });   // S1 effect_in
+      const shieldSkill = permsOf(defId).find(p => SKILL_RULES[p]?.effectShield) || null;   // skill isolation: the defender's effect shield (flags.effectShield)
+      let shield = skillHook('effect_in', shieldSkill, skCtx, { defender: defId });   // S1 effect_in
       let spent = 0;
       const legs = hit.legs.map(l => ({ ...l }));
       let dmg = 0;
-      const zoned = eff.effect_id !== 'effect_blizzard' && untouchable(defId, actor, EFFECT_RULES[eff.effect_id]?.scope === 'everyone');
-      if (!quiet && defId !== actor && hasPerm(defId, 'effect_invisibility') && EFFECT_RULES[eff.effect_id]?.scope === 'everyone') log(`[${PEER_LABEL}] invisibility: ${defId.slice(0, 8)} is caught in ${actor.slice(0, 8)}'s ${eff.effect_id} (area hits the invisible)`);
+      const zoned = !EFFECT_RULES[eff.effect_id]?.ignoresZones && untouchable(defId, actor, EFFECT_RULES[eff.effect_id]?.scope === 'everyone');
+      if (!quiet && defId !== actor && hidingPerm(permsOf(defId)) && EFFECT_RULES[eff.effect_id]?.scope === 'everyone') log(`[${PEER_LABEL}] invisibility: ${defId.slice(0, 8)} is caught in ${actor.slice(0, 8)}'s ${eff.effect_id} (area hits the invisible)`);
       // The token lands where the target stood; a target that moved off this
       // action is not burned — the token stays on that tile instead.
       const after = postTile(defId);
@@ -4931,7 +5073,7 @@ async function doResolution() {
       for (const leg of legs) {
         if (leg.kind === 'token' && movedOff) { leg.dealt = 0; continue; }
         let sum = leg.sum;
-        if (shield) { const fs = skillHook('effect_leg', 'skill_force_shield', skCtx, { shield, sum }); if (fs.spent) spent = fs.spent; shield = fs.shield; sum = fs.sum; }   // S1 effect_leg
+        if (shield) { const fs = skillHook('effect_leg', shieldSkill, skCtx, { shield, sum }); if (fs.spent) spent = fs.spent; shield = fs.shield; sum = fs.sum; }   // S1 effect_leg
         let d = roundHalfUp10(sum);
         if (d > 0 && zoned) d = 0;
         if (d > 0 && absorbedByShieldToken(defId)) d = 0;
@@ -4940,11 +5082,11 @@ async function doResolution() {
       }
       const effName = data.effects[eff.effect_id]?.name || eff.effect_id;
       if (dmg > 0 && natBlocked(actor, defId)) dmg = 0;
-      if (dmg > 0) dmg = skillHook('defend_in', 'skill_sanctuary', skCtx, { code: 'effect', defender: defId, dmg, byActor });   // SKR-06 Sanctuary: no effect damage either
+      if (dmg > 0) dmg = skillHook('defend_in', null, skCtx, { code: 'effect', defender: defId, dmg, byActor });   // SKR-06 Sanctuary: no effect damage either
       if (dmg > 0) addDmg(defId, actor, dmg, 'effect', effName);
       if (dmg > 0 && hit.selfDamageEqual) addDmg(actor, actor, dmg, 'effect', `${effName} (it hurts its caster too)`);
       if (dmg > 0 && hit.healDealt) oc.heals.push({ on: actor, amount: dmg });
-      if (spent && defId === PEER_ID_STRING) brokenShield = true;
+      if (spent && defId === PEER_ID_STRING && shieldSkill && !brokenShield.includes(shieldSkill)) brokenShield.push(shieldSkill);   // the spent shield's id(s)
       if (actor === PEER_ID_STRING || defId === PEER_ID_STRING) log(`[${PEER_LABEL}] cast ${eff.effect_id} [${eff.elements.join('+')}] ${actor.slice(0, 8)} → ${defId.slice(0, 8)}: ${legs.map(l => `${l.kind} Σ${l.sum}`).join(' + ')}${spent ? ` (shield −${spent})` : ''}${zoned ? ' (no-damage zone)' : ''} → ${dmg} dmg`);
     }
   }
@@ -4956,7 +5098,7 @@ async function doResolution() {
     const total = list.reduce((a, d) => a + d.amount, 0);
     const life = lifeOf(victim);
     if (life <= 0 || total < life) continue;
-    const warder = [...view.values()].filter(v => v?.peer_id && v.peer_id !== victim && (v.life ?? 0) > 0 && hasPerm(v.peer_id, 'effect_resurrect_death_ward') && csvSet(v.wards_csv).has(victim)).map(v => v.peer_id).sort()[0];
+    const warder = [...view.values()].filter(v => v?.peer_id && v.peer_id !== victim && (v.life ?? 0) > 0 && permsOf(v.peer_id).some(p => EFFECT_RULES[p]?.resurrect) && csvSet(v.wards_csv).has(victim)).map(v => v.peer_id).sort()[0];
     if (!warder) continue;
     let over = total - (life - 1);
     for (let i = list.length - 1; i >= 0 && over > 0; i--) { const cut = Math.min(list[i].amount, over); list[i].amount -= cut; over -= cut; }
@@ -5005,7 +5147,7 @@ async function doResolution() {
   };
   const asEP = (x) => ({ actor: x.actor, action: 'EP', target: null, skills: [], trance: null, effect: null, destroy: null, salt: x.salt || '' });
   // Bonus plans: Haste grants one; a standing Balefire(6) turns every card into an instant (user spec 2026-10-29).
-  const allowanceOf = (id) => { const perms = id === PEER_ID_STRING ? [...entity.permanents] : String(view.get(id)?.permanents_csv || '').split(','); return (perms.includes('effect_haste') ? 1 : 0) + (perms.includes('effect_balefire') ? BALEFIRE_PLANS : 0); };
+  const allowanceOf = (id) => { const perms = id === PEER_ID_STRING ? [...entity.permanents] : String(view.get(id)?.permanents_csv || '').split(','); return planSum(bonusPerms(perms)); };
   if (clRes) clPeer.suspend(clRes);   // CH: the dormant foreign classes sit out the bonus runs and the action (resumed right after)
   for (const r of [...revealsThisTurn].filter(r => Array.isArray(r.bonus) && r.bonus.length).sort((a, b) => a.actor.localeCompare(b.actor))) {
     const list = r.bonus.filter(b => b && b.action).slice(0, allowanceOf(r.actor));
@@ -5034,7 +5176,7 @@ async function doResolution() {
     real.tokensSpent.push(...b.res.tokensSpent); real.destroyOutcomes.push(...b.res.destroyOutcomes);
     real.permanentsToAdd.push(...b.res.permanentsToAdd); real.roundZones.push(...b.res.roundZones);
     for (const [id, pen] of b.res.counterPen) real.counterPen.set(id, { ...pen, ...(real.counterPen.get(id) || {}) });
-    real.brokenShield = real.brokenShield || b.res.brokenShield;
+    for (const id of b.res.brokenShield) if (!real.brokenShield.includes(id)) real.brokenShield.push(id);
     real.lifestealForMe.amount += b.res.lifestealForMe.amount;
     real.disableTriggers.unshift(...b.res.disableTriggers);
     real.wardFired.unshift(...b.res.wardFired);
@@ -5170,7 +5312,7 @@ async function doResolution() {
     if (rl.by !== PEER_ID_STRING) return;
     entity.worldEdits = entity.worldEdits.filter(e => e.id !== `moved:${from}` && e.id !== `made:${to}`);
     entity.worldEdits.push({ id: `moved:${from}`, q: rl.from.q, r: rl.from.r, vacated: true, at: hg.action });
-    entity.worldEdits.push({ id: `made:${to}`, q: rl.q, r: rl.r, made: isWall ? { label: f.label || 'Impassable Wall', path: f.path || '', desc: f.desc || '', biome: f.biome || '', kind: 'wall', blocking: true, copy_of: { q: rl.from.q, r: rl.from.r }, made_by: 'effect_awake' } : copyMade(f, rl.from.q, rl.from.r, 'effect_awake'), at: hg.action });
+    entity.worldEdits.push({ id: `made:${to}`, q: rl.q, r: rl.r, made: isWall ? { label: f.label || 'Impassable Wall', path: f.path || '', desc: f.desc || '', biome: f.biome || '', kind: 'wall', blocking: true, copy_of: { q: rl.from.q, r: rl.from.r }, made_by: rl.via } : copyMade(f, rl.from.q, rl.from.r, rl.via), at: hg.action });
     _autosave?.markDirty();
   };
   // Map surgery moved something of mine: the token / trap / obstacle takes its new tile.
@@ -5186,8 +5328,8 @@ async function doResolution() {
   }
   // A channel of mine broke (I moved / attacked / emitted another element): the permanent falls.
   // Awake ∀ (paper "Permanent — combine both Awakes into one permanent"): only the Harmony channel ends; the permanent stays.
-  for (const cb of channelsBroken) if (cb.owner === PEER_ID_STRING && cb.effect_id === 'effect_awake' && entity.everyPerms.has('effect_awake')) { entity.channels = entity.channels.filter(c => c.effect_id !== 'effect_awake'); console.log(`[${PEER_LABEL}] effect_awake channel ends (${cb.why || 'concentration lost'}) — the ∀ permanent stays${entity.awakeLend ? ` (+${JSON.stringify(entity.awakeLend.stats)})` : ''}`); }
-  for (const cb of channelsBroken) if (cb.owner === PEER_ID_STRING && entity.permanents.has(cb.effect_id) && !(cb.effect_id === 'effect_awake' && entity.everyPerms.has('effect_awake'))) { dropPermanent(cb.effect_id); console.log(`[${PEER_LABEL}] ${cb.effect_id} ${cb.why ? `dropped (${cb.why})` : 'channel broken (concentration lost)'}`); }
+  for (const cb of channelsBroken) if (cb.owner === PEER_ID_STRING && everyOutlasts(cb.effect_id)) { entity.channels = entity.channels.filter(c => c.effect_id !== cb.effect_id); console.log(`[${PEER_LABEL}] ${cb.effect_id} channel ends (${cb.why || 'concentration lost'}) — the ∀ permanent stays${entity.awakeLend ? ` (+${JSON.stringify(entity.awakeLend.stats)})` : ''}`); }
+  for (const cb of channelsBroken) if (cb.owner === PEER_ID_STRING && entity.permanents.has(cb.effect_id) && !everyOutlasts(cb.effect_id)) { dropPermanent(cb.effect_id); console.log(`[${PEER_LABEL}] ${cb.effect_id} ${cb.why ? `dropped (${cb.why})` : 'channel broken (concentration lost)'}`); }
   // My Earth obstacles wear down under enemy Matter; at 0 hp they are gone.
   for (const h of obstacleHits) {
     if (h.owner !== PEER_ID_STRING) continue;
@@ -5411,25 +5553,28 @@ async function doResolution() {
   }
   // My Blessing ∀ negated an enemy effect: the second Blessing card goes to the discard pile, the first stands.
   for (const bf of blessFired) {
-    if (bf.holder !== PEER_ID_STRING) continue;
-    entity.everyPerms.delete('effect_blessing_curse');
-    const second = heldCards.find(c => c.effect_id === 'effect_blessing_curse');
-    if (second) releaseHeldCard(second.card_id);
-    console.log(`[${PEER_LABEL}] my Blessing ∀ negated ${bf.caster.slice(0, 8)}'s ${bf.effect_id} — one Blessing remains`);
+    if (bf.holder !== PEER_ID_STRING || !bf.perm) continue;
+    if (bf.spend === 'every') {
+      entity.everyPerms.delete(bf.perm);
+      const second = heldCards.find(c => c.effect_id === bf.perm);
+      if (second) releaseHeldCard(second.card_id);
+      console.log(`[${PEER_LABEL}] my Blessing ∀ negated ${bf.caster.slice(0, 8)}'s ${bf.effect_id} — one Blessing remains`);
+    } else if (bf.spend === 'perm') { dropPermanent(bf.perm); console.log(`[${PEER_LABEL}] my ${bf.perm} negated ${bf.caster.slice(0, 8)}'s ${bf.effect_id} — the permanent is spent`); }
   }
   // Afflictions on me (Sleep: no casting in contact with the holder; Confusion: Empty Posture only) hold while the holder keeps the permanent.
   for (const a of afflictionsOut) if (a.on === PEER_ID_STRING && !entity.afflictions.some(x => x.effect_id === a.effect_id && x.by === a.by)) entity.afflictions.push({ effect_id: a.effect_id, by: a.by, ...(a.until_action !== undefined ? { until_action: a.until_action } : {}) });
   // My Death Ward fired: the permanent is spent (its card goes to the discard pile).
   for (const w of wardFired) {
     if (w.warder !== PEER_ID_STRING) continue;
-    entity.wards = entity.wards.filter(x => x !== w.victim);
-    dropPermanent(RESURRECT);
+    const wp = entity.wardBy[w.victim] || [...entity.permanents].filter(p => EFFECT_RULES[p]?.resurrect).sort()[0];
+    entity.wards = entity.wards.filter(x => x !== w.victim); delete entity.wardBy[w.victim];
+    dropPermanent(wp);
     console.log(`[${PEER_LABEL}] my Death Ward saved ${w.victim.slice(0, 8)} — the permanent is spent`);
   }
   // My Disable fired: the permanent is spent, the bar stands for the turn.
   for (const t of disableTriggers) {
     if (t.holder !== PEER_ID_STRING) continue;
-    dropPermanent('effect_disable');
+    if (t.spend) dropPermanent(t.perm);   // F2: the cast_in permanent that fired (Disable)
     entity.disables.push({ elem: t.elem, on: t.global ? '*' : t.caster, until_turn: hg.turn });
     console.log(`[${PEER_LABEL}] my Disable spent: ${t.elem} barred ${t.global ? 'for everyone' : `to ${t.caster.slice(0, 8)}`} this turn`);
   }
@@ -5441,13 +5586,13 @@ async function doResolution() {
     // Channel permanents (general_ux_channeling) stand on their SMALLEST die; others on the highest.
     entity.permPower[id] = EFFECT_RULES[id]?.fixedPower
       ?? (EFFECT_RULES[id]?.channel ? pointBuyPermanentMin : pointBuyPermanent)(entity.stats[ELEM_TO_STAT[el]] ?? 0, seed, sha256Hex);
-    if (id in PERM_TURNS) entity.permUntil[id] = hg.turn + PERM_TURNS[id];
+    if (EFFECT_RULES[id]?.permTurns) entity.permUntil[id] = hg.turn + EFFECT_RULES[id].permTurns;
     if (myLastReveal?.effectId === id && myLastReveal.effectEvery) entity.everyPerms.add(id);
     console.log(`[${PEER_LABEL}] permanent ${id} up: die ${entity.permPower[id]}${myLastReveal?.effectEvery ? ' (∀ doubled)' : ''}`);
     // Awake ∀ (paper "add the target's Stat to your Stat", 2026-11-18): while the permanent stands I get the awakened
     // ally's Will (Harmony's stat) or the moved building's stat bonus; me / a wall lend nothing. Read by every
     // resolver from my snapshot (awake_lend_json).
-    if (id === 'effect_awake') {
+    if (isAwakePerm(id)) {
       const pl = awakeLast.get(PEER_ID_STRING);
       const st = ELEM_TO_STAT.elem_harmony || 'will';
       let stats = null;
@@ -5516,7 +5661,7 @@ async function doResolution() {
     }
     for (const h of oc.heals) if (h.on === PEER_ID_STRING) healForMe += h.amount;
     for (const h of oc.heals) if (h.on === PEER_ID_STRING || actor === PEER_ID_STRING) console.log(`[${PEER_LABEL}] heal: ${eff.effect_id} by ${actor.slice(0, 14)} → ${h.on.slice(0, 14)} +${h.amount} life`);
-    if (oc.shieldElem?.on === PEER_ID_STRING) entity.shieldElems.push({ elem: oc.shieldElem.elem, until_turn: hg.turn, permanent: !!oc.every });
+    if (oc.shieldElem?.on === PEER_ID_STRING) entity.shieldElems.push({ elem: oc.shieldElem.elem, until_turn: hg.turn, ...(oc.every && EFFECT_RULES[eff.effect_id]?.everyPermanent ? { permanent: true, perm: eff.effect_id } : { permanent: false }) });
     if (oc.disableElem && actor === PEER_ID_STRING) entity.disables.push({ elem: oc.disableElem.elem, on: oc.disableElem.on, until_turn: hg.turn });
     if (actor === PEER_ID_STRING) drawForMe += oc.draw || 0;
     if (oc.summon) {
@@ -5544,7 +5689,7 @@ async function doResolution() {
       const pc = oc.possess.creature;
       console.log(`[${PEER_LABEL}] possess: ${actor} ${pc ? `plays ${pc.name || pc.creature_id} from its archive` : 'gets the Phylactery (no creature in its archive)'}`);
       if (actor === PEER_ID_STRING) {
-        if (entity.summons.some(x => x.perm === POSSESS_ID)) { console.log(`[${PEER_LABEL}] possess: a new Possess — the creature I played goes back to my archive`); onSummonEnd(POSSESS_ID); }
+        { const old = entity.summons.find(x => isPossessPerm(x.perm)); if (old) { console.log(`[${PEER_LABEL}] possess: a new Possess — the creature I played goes back to my archive`); onSummonEnd(old.perm); } }
         entity.possessing = null;
         const ai = pc ? archive.findIndex(c => c.kind === 'creature' && (pc.card_id ? c.card_id === pc.card_id : c.creature_id === pc.creature_id)) : -1;
         const cre = pc && ai >= 0 ? data.creatures[pc.creature_id] : null;
@@ -5553,7 +5698,7 @@ async function doResolution() {
           if (pc.card_id === queuedPossessPick) queuedPossessPick = null;
           entity.possessMode = 'possess';
           const cardId = myLastReveal?.effectCardId || null;
-          spawnCompanion(POSSESS_ID, { creature_id: pc.creature_id, name: cre.name, env: { CHARACTER_ID: '', CREATURE_ID: pc.creature_id, ENTITY_NAME: `${cre.name} (${PEER_LABEL}'s possessed)`, POSSESSED_BY: PEER_ID_STRING } })
+          spawnCompanion(eff.effect_id, { creature_id: pc.creature_id, name: cre.name, env: { CHARACTER_ID: '', CREATURE_ID: pc.creature_id, ENTITY_NAME: `${cre.name} (${PEER_LABEL}'s possessed)`, POSSESSED_BY: PEER_ID_STRING } })
             .then(tag => {
               if (!tag) { console.log(`[${PEER_LABEL}] possess: ${cre.name} cannot enter — the card goes back to my archive, the permanent is the Phylactery`); archive.push(creatureCard(pc.creature_id)); entity.possessMode = 'phylactery'; return; }
               entity.possessing = { peer_id: `peer:${tag}`, card_id: cardId, creature_id: pc.creature_id, name: cre.name, at: Date.now() };
@@ -5601,23 +5746,22 @@ async function doResolution() {
     const targetOf = (actor) => { const t = byActor.get(actor)?.target; return t?.kind === 'character' ? t.ref : null; };
     const autoTarget = (actor, range) => [...view.keys()].filter(id => id !== actor && (view.get(id)?.life ?? 0) > 0 && foes(actor, id) && near(actor, id, range))
       .sort((a, b) => (view.get(a)?.life ?? 0) - (view.get(b)?.life ?? 0) || a.localeCompare(b))[0] || null;
-    const items = effectResultsOf(effectOutcomes, { rules: EFFECT_RULES, nameOf, enemyOf: foes, targetOf, autoTarget, tileOf: tileNow, disableTriggers, blessFired, afflictionsOut, tag: fxTag });
+    const items = effectResultsOf(effectOutcomes, { rules: EFFECT_RULES, ui: EFFECT_UI, nameOf, enemyOf: foes, targetOf, autoTarget, tileOf: tileNow, disableTriggers, blessFired, afflictionsOut, tag: fxTag });
     // Delay Time / natural Domination / natural Petrify cost the revealer this action (judged at its planning).
     const permsIn = (id) => id === PEER_ID_STRING ? [...entity.permanents] : String(view.get(id)?.permanents_csv || '').split(',');
     const natIn = (id, eff) => permsIn(id).includes(eff) && ((id === PEER_ID_STRING ? entity.permCopies : parseCopies(view.get(id)?.perm_copies_json))?.[eff] || 0) > 0;
     const units = revealsThisTurn.map(r => r.actor).filter((id, i, a) => a.indexOf(id) === i && (view.get(id)?.life ?? 0) > 0).map(id => ({ id,
       foes: [...view.keys()].filter(o => o !== id && (view.get(o)?.life ?? 0) > 0 && foes(o, id) && near(o, id, 1))
-        .map(o => ({ id: o, delay: permsIn(o).includes('effect_delay_time'), domination: natIn(o, 'effect_domination'), petrify: natIn(o, 'effect_petrify') })) }))
+        .map(o => ({ id: o, delay: holding(permsIn(o).filter(Boolean), 'adjacent_lost')[0] || null, domination: naturalOfKind(permsIn(o), 'lose_action').find(e => natIn(o, e)) || null, petrify: naturalOfKind(permsIn(o), 'stone').find(e => natIn(o, e)) || null })) }))
       .filter(u => u.foes.some(f => f.delay || f.domination || f.petrify));
     items.push(...plannedLossResults(units, { roundsPerTurn: ROUNDS_PER_TURN, round: hg.round, lostToHolders, nameOf, tileOf: tileNow, tag: fxTag }));
     // Natural Love / Awe / Fear / Anger: a NEW contact affliction after this action's moves, judged for every unit as its
     // own peer does below (contactAfflictions), from the snapshots — UI only.
     const afterOf = (id) => { const t = nextTiles.get(id); const v = view.get(id); return t ? { tile_q: t.q, tile_r: t.r } : v ? { tile_q: v.tile_q, tile_r: v.tile_r } : null; };
-    const CONTACT_FX = ['effect_love', 'effect_awe', 'effect_fear', 'effect_anger'];
     for (const id of [...view.keys()].sort()) {
       const v = view.get(id); const at = afterOf(id);
       if (!v || (v.life ?? 0) <= 0 || !at) continue;
-      const holders = [...view.keys()].filter(o => o !== id && foes(o, id) && (view.get(o)?.life ?? 0) > 0).flatMap(o => CONTACT_FX.filter(e => natIn(o, e))
+      const holders = [...view.keys()].filter(o => o !== id && foes(o, id) && (view.get(o)?.life ?? 0) > 0).flatMap(o => permsIn(o).filter(e => isContactNatural(e) && natIn(o, e)).sort()
         .map(e => { const ao = afterOf(o); return { id: o, effect_id: e, dist: ao ? hexDistance(at, ao) : Infinity }; }));
       if (!holders.length) continue;
       let mine = []; try { mine = id === PEER_ID_STRING ? entity.afflictions : JSON.parse(v.afflictions_json || '[]'); } catch {}
@@ -5651,7 +5795,7 @@ async function doResolution() {
     // Benefit = I took less, dealt more, or was healed more (or healed an ally more) than in the round without it.
     const paysOff = (without) => takenBy(real, PEER_ID_STRING) < takenBy(without, PEER_ID_STRING) || dealtBy(real, PEER_ID_STRING) > dealtBy(without, PEER_ID_STRING) || healedTo(real, PEER_ID_STRING) > healedTo(without, PEER_ID_STRING) || healedOthers(real, PEER_ID_STRING) > healedOthers(without, PEER_ID_STRING);
     const roundWithout = (edit) => { const alt = structuredClone(pristineReveals); const mine = alt.find(r => r.actor === PEER_ID_STRING); if (!mine) return null; edit(mine); return runRound(alt, true); };
-    const stripSkill = (w, id) => { w.skills = (w.skills || []).filter(s => s !== id); if (id === TRANCE && w.trance) { w.action = w.trance[0]; w.trance = null; } };
+    const stripSkill = (w, id) => { w.skills = (w.skills || []).filter(s => s !== id); if (!!SKILL_RULES[id]?.trance && w.trance) { w.action = w.trance[0]; w.trance = null; } };
     const returned = [];
     myLastReveal.returnedCardIds = [];
     const fx = real.skillFx || [];
@@ -5782,16 +5926,17 @@ async function doResolution() {
     const natHolds = (v, eff) => (v.life ?? 0) > 0 && String(v.permanents_csv || '').split(',').includes(eff) && (parseCopies(v.perm_copies_json)[eff] || 0) > 0;
     // Love / Awe / Fear / Anger: an enemy holder in contact after this action afflicts me (not while I stand on my tower).
     if (entity.life > 0) {
-      const holders = others.filter(v => sideOf(v.alliance) !== MY_SIDE).flatMap(v => ['effect_love', 'effect_awe', 'effect_fear', 'effect_anger'].filter(e => natHolds(v, e))
+      const holders = others.filter(v => sideOf(v.alliance) !== MY_SIDE).flatMap(v => String(v.permanents_csv || '').split(',').filter(e => isContactNatural(e) && natHolds(v, e)).sort()
         .map(e => ({ id: v.peer_id, effect_id: e, dist: hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, { tile_q: tileAfter(v).q, tile_r: tileAfter(v).r }) })));
       const add = contactAfflictions({ mine: entity.afflictions, holders, onTower: entity.tile.q === START_TILE.q && entity.tile.r === START_TILE.r });
       for (const a of add) { entity.afflictions.push(a); console.log(`[${PEER_LABEL}] natural ${a.effect_id}: in contact with ${a.by.slice(0, 14)} — afflicted until I visit my tower (${START_TILE.q},${START_TILE.r}) or its permanents fall`); }
     }
     // Spirit Link: my natural link follows the nearest allied creature; alone, no link. Two copies standing = the ∀
     // double cast (user ruling 2026-11-15): all four stats linked (every_csv carries it); one copy = Vitality only.
-    const slCopies = entity.permCopies.effect_spirit_link || 0;
-    if (entity.life > 0 && entity.permanents.has('effect_spirit_link') && slCopies > 0) {
-      if (slCopies >= 2) entity.everyPerms.add('effect_spirit_link'); else entity.everyPerms.delete('effect_spirit_link');
+    const slPerm = naturalOfKind(entity.permanents, 'link')[0] || null;   // F7: naturalKind 'link'
+    const slCopies = slPerm ? entity.permCopies[slPerm] || 0 : 0;
+    if (entity.life > 0 && slPerm && slCopies > 0) {
+      if (slCopies >= 2) entity.everyPerms.add(slPerm); else entity.everyPerms.delete(slPerm);
       const ally = nearestAlliedCreature({ peer_id: PEER_ID_STRING, tile_q: entity.tile.q, tile_r: entity.tile.r, side: MY_SIDE },
         others.map(v => ({ ...v, tile_q: tileAfter(v).q, tile_r: tileAfter(v).r, side: sideOf(v.alliance) })), hexDistance);
       const want = ally ? naturalLinkStats(slCopies).map(st => ({ from: ally.peer_id, stat: st, value: ally[`stat_${st}`] ?? 0 })) : [];
@@ -5848,7 +5993,7 @@ async function doResolution() {
       + [...view.values()].flatMap(v => parseJsonArr(v?.tile_tokens_json)).filter(t => t.kind === 'bonus' && t.q === entity.tile.q && t.r === entity.tile.r).reduce((a, t) => a + t.value, 0)
       + worldFeatureValueAt(view, entity.tile.q, entity.tile.r)
       + Object.values(buildingBonusAt(MAP_SEED, entity.tile.q, entity.tile.r)?.bonus?.stat || {}).reduce((a, n) => a + n, 0)
-      + (entity.permanents.has('effect_spirit_link') ? entity.links.reduce((a, l) => a + Math.max(0, view.get(l.from)?.[`stat_${l.stat}`] ?? 0), 0) : 0);
+      + ([...entity.permanents].some(isLinkPerm) ? entity.links.reduce((a, l) => a + Math.max(0, view.get(l.from)?.[`stat_${l.stat}`] ?? 0), 0) : 0);
     const newMax = Math.max(1, entity.lifeMaxBase + roundHalfUp10(base + extra) - roundHalfUp10(base) + (entity.armor || 0) + (entity.illusion || 0) + chaseBonusNow());
     if (newMax !== entity.lifeMax || shieldHit) {
       const delta = newMax - entity.lifeMax;
@@ -5902,7 +6047,7 @@ async function doResolution() {
     try { dropDeathCard(damage.get(PEER_ID_STRING)); } catch (e) { console.warn(`[${PEER_LABEL}] death card failed: ${e.message}`); }
     // Possess (2026-11-17): nobody plays the possessed creature any more — my Possess / Phylactery falls with me (the
     // creature leaves the board, its card back to my archive).
-    if (entity.permanents.has(POSSESS_ID)) { console.log(`[${PEER_LABEL}] possess: I died — my ${entity.possessMode === 'phylactery' ? 'Phylactery' : 'Possess'} permanent falls with me`); dropPermanent(POSSESS_ID); }
+    { const pp = possessPermOf(entity.permanents); if (pp) { console.log(`[${PEER_LABEL}] possess: I died — my ${entity.possessMode === 'phylactery' ? 'Phylactery' : 'Possess'} permanent falls with me`); dropPermanent(pp); } }
     // A Fortress token lasts until Rule 24 destroys it or I die (2026-11-15) — a Resurrect does not bring it back.
     const fzLost = entity.statTokens.filter(t => t.effect_id === FORTRESS_TOKEN_EFFECT);
     if (fzLost.length) { entity.statTokens = entity.statTokens.filter(t => t.effect_id !== FORTRESS_TOKEN_EFFECT); console.log(`[${PEER_LABEL}] death: my Fortress token(s) ${fzLost.map(t => `${t.stat} +${t.value}`).join(', ')} are gone`); }
@@ -5914,9 +6059,10 @@ async function doResolution() {
   // Sanctuary lasts while I rest: declaring anything but the plain Empty
   // Posture — another action, a trance, or a skill riding on the EP — ends it
   // from the next round (damage this round was already judged on the EP).
-  const leftSanctuary = skillHook('end_round', 'skill_sanctuary', null, { reveal: myR });   // S1 end_round
-  if (leftSanctuary) entity.permanents.delete('skill_sanctuary');
-  if (brokenShield) { entity.permanents.delete('skill_force_shield'); delete entity.permPower.skill_force_shield; console.log(`[${PEER_LABEL}] force shield spent`); }
+  // Skill isolation: every held "invincible while" skill (flags.invincibleWhile) asks its end_round; the effect
+  // shields spent this action (resolveAction's brokenShield ids) drop with their power.
+  for (const p of [...entity.permanents]) if (SKILL_RULES[p]?.invincibleWhile && skillHook('end_round', p, null, { reveal: myR })) entity.permanents.delete(p);   // S1 end_round
+  for (const p of brokenShield) { entity.permanents.delete(p); delete entity.permPower[p]; console.log(`[${PEER_LABEL}] ${(data.skills[p]?.name || p).toLowerCase()} spent`); }
   const playedCodes = myR?.trance ? new Set([...myR.played].map(i => myR.trance[i])) : null;
   for (const { id, stat: st, power /* SKR-10 fixed power */ } of skillHook('perm_landing', null, { skillData: (s) => data.skills[s]?.data }, { skillIds: (myLastReveal?.skillIds || []).filter(id => !myLastReveal.skStripped?.includes(id)) /* S4 */, playedCodes, stats: entity.stats })) {   // S1 perm_landing
     {
@@ -5947,7 +6093,7 @@ async function doResolution() {
     })
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
-  if (!fxRes?.abstain && !skRes?.abstain /* S4 */ && !clRes?.abstain /* CH */ && !clVer.abstain /* phase 6 */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
+  if (!fxRes?.abstain && !skRes?.abstain /* S4 */ && !clRes?.abstain /* CH */ && !clVer.abstain /* phase 6 */ && !fxVer.abstain /* F9 */ && !skVer.abstain /* SV */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
   if (lastStateHashes.size > 8) lastStateHashes.delete(Math.min(...lastStateHashes.keys()));
   // Per-actor action summary so the UI can float an action icon (⚔️ / 🛡 / 🤺
   // / 👁 / ➙) for every revealer this round, mirroring the damage-float path.
@@ -6036,7 +6182,7 @@ async function doResolution() {
     });
   }
   await emitEnvelope({ type: 'evt_state_hash', payload: {
-    state_hash: fxRes?.abstain || skRes?.abstain || clRes?.abstain || clVer.abstain /* phase 6: class version gate */ ? '' : stateHash,   // S4: abstain also = a foreign skill I could not load; CH: … or a foreign class
+    state_hash: fxRes?.abstain || skRes?.abstain || clRes?.abstain || clVer.abstain /* phase 6: class version gate */ || fxVer.abstain /* F9: effect version gate */ || skVer.abstain /* SV: skill version gate */ ? '' : stateHash,   // S4: abstain also = a foreign skill I could not load; CH: … or a foreign class
     region: regionState,
     damage_applied: [...damage.entries()].flatMap(([t, list]) => list.map(d => ({ target: t, amount: d.amount, attacker: d.attacker, source: d.source || 'action', bonus: !!d.bonus }))),
     bonus_rounds: bonusRuns.length,
@@ -6142,7 +6288,7 @@ async function endRound() {
     if (complete && !retry && !returned.has(r.effectCardId)) {
       // A permanent that took hold keeps its card(s) in the holding; anything else is discarded.
       const held = r.castStatus === 'done' && (r.effectPermanent || !!EFFECT_RULES[r.effectId]?.permanent)
-        && (entity.permanents.has(r.effectId) || (r.effectId === 'effect_possess_phylactery' && entity.possessing?.card_id === r.effectCardId));   // Possess stands in the possessed unit's holding; its card stays mine
+        && (entity.permanents.has(r.effectId) || (isPossessPerm(r.effectId) && entity.possessing?.card_id === r.effectCardId));   // Possess stands in the possessed unit's holding; its card stays mine
       const leave = held ? holdCard : dropCard;
       leave(r.effectCardId); if (r.effectCardId2) leave(r.effectCardId2);
     }
@@ -6150,7 +6296,7 @@ async function endRound() {
     if (r.castKept) { const at = chainAt(ch.entries, ch.step); if (at) at.entry.kept = r.castKept; }
     if ((emitted >= ch.total || (complete && ch.entries.length === 1)) && !retry) {
       casting = null;
-      if (ch.aura) { dropPermanent('effect_aura'); console.log(`[${PEER_LABEL}] aura ∀ spent on ${ch.entries.map(e => e.effectId).join('→')}`); }
+      if (ch.aura) { const w = everyWidener(); if (w) { dropPermanent(w); console.log(`[${PEER_LABEL}] ${w} ∀ spent on ${ch.entries.map(e => e.effectId).join('→')}`); } }
     } else {
       casting = { entries: ch.entries, emitted, aura: ch.aura };
       carryOn = true;
@@ -6164,18 +6310,19 @@ async function endRound() {
   }
   if (myLastReveal?.skipping && entity.lockList.length) { entity.lockList[0].n -= 1; syncLost(); }
   // Empower is spent by the double emission it paid for.
-  if (myLastReveal?.empowered && entity.permanents.has('effect_empower')) { dropPermanent('effect_empower'); console.log(`[${PEER_LABEL}] empower spent`); }
+  if (myLastReveal?.empowered && planEmitSpends && entity.permanents.has(planEmitSpends)) { dropPermanent(planEmitSpends); console.log(`[${PEER_LABEL}] ${planEmitSpends} spent`); }
+  planEmitSpends = null;
   // Invisibility (user ruling 2026-11-14) is destroyed once I use Attack or Block or start casting a spell
-  // (invisibilityBreaks — the same test the resolver used to unhide me this action, bonus plans included);
+  // (its `breaks` program — the same test the resolver used to unhide me this action, bonus plans included);
   // doubled (∀) it holds until I actually deal damage.
-  if (entity.permanents.has('effect_invisibility') && myLastReveal) {
-    const codes = invisCodesOf(entity.permanents);
+  const hp = hidingPerm(entity.permanents);
+  if (hp && myLastReveal) {
     const plays = [{ action: myLastReveal.code, trance: myLastReveal.code === 'BT' ? myLastReveal.trance : null, effect_id: myLastReveal.effectId },
       ...(myLastReveal.bonus || []).slice(0, myLastReveal.bonusUsed ?? 0)];
-    const why = entity.everyPerms.has('effect_invisibility')
-      ? (myLastReveal.dealtDamage ? 'dealt damage (∀)' : null)
-      : (plays.some(p => invisibilityBreaks(p, { codes })) ? (myLastReveal.effectId && myLastReveal.effectId !== 'effect_invisibility' ? `cast ${myLastReveal.effectId}` : `played ${myLastReveal.code}`) : null);
-    if (why) { dropPermanent('effect_invisibility'); console.log(`[${PEER_LABEL}] invisibility broken: ${why} — the permanent is destroyed`); }
+    const every = entity.everyPerms.has(hp);
+    const why = !hideBreaks(hp, PEER_ID_STRING, plays, myLastReveal.dealtDamage, every, invisCodesOf(entity.permanents)) ? null
+      : every ? 'dealt damage (∀)' : (myLastReveal.effectId && myLastReveal.effectId !== hp ? `cast ${myLastReveal.effectId}` : `played ${myLastReveal.code}`);
+    if (why) { dropPermanent(hp); console.log(`[${PEER_LABEL}] invisibility broken: ${why} — the permanent is destroyed`); }
   }
   queued = []; queuedSkills = []; queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; queuedDestroy = null; queuedAttach = null; queuedLink = null; queuedElem = null; queuedPhylactery = null; queuedBonus = []; queuedClassAbility = false; target = null; locked = false; myLastReveal = null; myPlayedCardIds = null;
   if (carryOn && casting) {
@@ -6218,7 +6365,7 @@ async function endTurn() {
   willDiscard.clear();
   const before = hand.length;
   // Haste ∀: one more card each turn.
-  const handCap = HAND_SIZE + (entity.everyPerms.has('effect_haste') ? 1 : 0) + (entity.buildingDraw || 0);
+  const handCap = HAND_SIZE + [...entity.everyPerms].reduce((s, p) => s + (EFFECT_RULES[p]?.everyHandSize || 0), 0) + (entity.buildingDraw || 0);
   entity.buildingDraw = 0;
   while (hand.length < handCap) { reshuffleIfEmpty(); if (!deck.length) break; hand.push(deck.shift()); }
 
@@ -6358,7 +6505,7 @@ async function npcPlan() {
     else { queued = ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null; return; }
   }
   const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0
-    && !(snapInvisible(p) && !entity.permanents.has('effect_invisibility'))   // Invisibility: monsters / companions neither see nor chase it
+    && !(snapInvisible(p) && !hidingPerm(entity.permanents))   // Invisibility: monsters / companions neither see nor chase it
     && !(CS.anyChargeUsed(csOf(p), 'threat', hg.turn) && hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) > 1));
   // Summoned / bound: follow the owner — close the gap first, fight only what is in reach.
   // Unattended (rule_unattended_character, follow 'summon'): my master is my owner here — "they will gather next to
@@ -7221,7 +7368,10 @@ const uiHttp = http.createServer(async (req, res) => {
       if (await serve(USER_DATA_DIR, u.slice('/user-data'.length))) return;
     } else if (u.startsWith('/data/')) {
       // The UI's rulebook + sprite/sound/portrait `resources` — the same files
-      // the resolver loaded (DATA_DIR), falling back to a bundled copy.
+      // the resolver loaded (DATA_DIR), falling back to a bundled copy. F9: a definitions collection (effects) is built
+      // from its definitions, like data.effects.
+      const dc = definitionsCollectionText(DATA_DIR, u.slice('/data'.length));
+      if (dc) { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' }); res.end(dc); return; }
       if (await serve(DATA_DIR, u.slice('/data'.length))) return;
       if (await serve(__dirname, u)) return;
     } else {
@@ -7273,7 +7423,7 @@ globalThis.__chaosPeerStop = async () => {
 };
 wss.on('connection', (ws) => {
   uiClients.add(ws);
-  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary(), class_texts: Object.fromEntries([...Object.keys(data.classes).map(id => [id, data.classes[id]?.data?.text || '']), ...clPeer.store.ready().map(p => [p.ref.id, p.shape.text])]), class_colours: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classColours(id)])), class_ui: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classUiOf(id)])), class_state: classStateForUI(), queued_class_ability: queuedClassAbility }));
+  ws.send(JSON.stringify({ kind: 'hello', peer_id: PEER_ID_STRING, alliance: entity.alliance, entity, hand, deck_count: deck.length, discard_count: discard.length, archive, archive_count: archive.length, will_archive: [...willArchive], held: heldCards.map(c => ({ card_id: c.card_id, name: c.name, perm: c.effect_id || c.skill_id })), deck_min: DECK_MIN, circulating: circulating(), dimension: DIM_NAME, door: DOOR_ID, turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, phase: currentPhase, phase_ends_in: Math.max(0, phaseEndsAt - Date.now()), peers: peersForUI(), map: mapSummary(), class_texts: Object.fromEntries([...Object.keys(data.classes).map(id => [id, data.classes[id]?.data?.text || '']), ...clPeer.store.ready().map(p => [p.ref.id, p.shape.text])]), class_colours: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classColours(id)])), class_ui: Object.fromEntries([...Object.keys(data.classes), ...clPeer.store.ready().map(p => p.ref.id)].map(id => [id, classUiOf(id)])), class_state: classStateForUI(), queued_class_ability: queuedClassAbility, effect_ui: effectUiMap(), skill_ui: skillUiMap(), building_skills: [...SK_BUILDING_SKILLS] }));
   // Gate vision still running (team gate, user ruling 2026-11-13) — a reconnecting UI gets it again.
   for (const g of activeVisionGrants()) ws.send(JSON.stringify(g));
   try { ws.send(JSON.stringify(pvHello({ profileFile: PROFILE_FILE, name: ENTITY_NAME, team: PROFILE_TEAM, peerId: PEER_ID_STRING, notify: broadcastUI }))); } catch {}   // PV: my votes + who I am (author check) + collections for the HUD; retries an owed publish
@@ -7348,7 +7498,7 @@ wss.on('connection', (ws) => {
             if (queuedEffect2 === -1) queuedEffect2 = null;
           }
         }
-        queuedAura = !!m.aura && queuedEffect !== null && entity.permanents.has('effect_aura') && entity.everyPerms.has('effect_aura');
+        queuedAura = !!m.aura && queuedEffect !== null && !!everyWidener();
         if (queuedEffect !== null && !casting) prepareSummon(hand[queuedEffect], queuedEffect2 !== null);
 
         broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, queued_effect2: queuedEffect2 }));
@@ -7358,7 +7508,7 @@ wss.on('connection', (ws) => {
         if (typeof t === 'string') target = t;
         else if (t && typeof t === 'object' && typeof t.q === 'number' && typeof t.r === 'number') target = { q: t.q, r: t.r };
         else target = null;
-        if (queuedEffect !== null && !casting && hand[queuedEffect]?.effect_id === RESURRECT) { prepareSummon(hand[queuedEffect], false); broadcastUI(handMsg()); }
+        if (queuedEffect !== null && !casting && EFFECT_RULES[hand[queuedEffect]?.effect_id]?.resurrect) { prepareSummon(hand[queuedEffect], false); broadcastUI(handMsg()); }
       }
       if (m.kind === 'lock') { locked = true; }
       if (m.kind === 'bonus') {
@@ -7403,7 +7553,7 @@ wss.on('connection', (ws) => {
           queued = [pi >= 0 ? pi : 'EMPTY'];
           queuedSkills = queuedSkills.filter(i => hand[i]?.kind === 'skill' && !hand[i].is_trance && (hand[i].requires === 'P' || hand[i].requires === 'M'));
           queuedExtra = null;
-          if (!entity.permanents.has('effect_aura')) { queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; }
+          if (!keepsCastOnDestroy()) { queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; }
         }
         broadcastUI(handMsg({ queued, queued_skills: queuedSkills, queued_extra: queuedExtra, queued_effect: queuedEffect, queued_effect2: queuedEffect2 }));
       }
@@ -7423,8 +7573,9 @@ wss.on('connection', (ws) => {
         // Blessing/Curse held: the effect card clicked replaces the one under it (old card to the discard pile,
         // user spec 2026-10-29). My own holding — published in channels_json, so every peer ticks the new one.
         const c = typeof m.slot === 'number' ? hand[m.slot] : null;
-        const old = entity.channels.find(ch => ch.holder === 'effect_blessing_curse');
-        if (!locked && c?.kind === 'effect' && entity.permanents.has('effect_blessing_curse') && old && EFFECT_RULES[c.effect_id] && !EFFECT_RULES[c.effect_id].blessAttach) {
+        const blessPerms = [...entity.permanents].filter(p => EFFECT_RULES[p]?.blessAttach);
+        const old = entity.channels.find(ch => blessPerms.includes(ch.holder));
+        if (!locked && c?.kind === 'effect' && old && EFFECT_RULES[c.effect_id] && !EFFECT_RULES[c.effect_id].blessAttach) {
           releaseHeldCard(old.card_id);
           entity.channels = entity.channels.filter(ch => ch !== old);
           entity.channels.push({ ...old, effect_id: c.effect_id, elements: [...c.element_cost], card_id: c.card_id, startedTurn: hg.turn, startedAction: hg.action });
@@ -7441,8 +7592,8 @@ wss.on('connection', (ws) => {
         const hint = phylacteryHint();
         let notice = null;
         if (queuedPhylactery) queuedPhylactery = null;
-        else if (!entity.permanents.has(POSSESS_ID) || entity.possessMode !== 'phylactery') notice = 'no Phylactery in your permanents';
-        else if (!hint) notice = `💀 Phylactery inactive — no enemy with a permanent within ${phylacteryConfig(data.effects[POSSESS_ID]?.data?.phylactery).reach} hexes`;
+        else if (!possessPermOf(entity.permanents) || entity.possessMode !== 'phylactery') notice = 'no Phylactery in your permanents';
+        else if (!hint) notice = `💀 Phylactery inactive — no enemy with a permanent within ${phylReachOf(possessPermOf(entity.permanents))} hexes`;
         else { queuedPhylactery = { auto: true }; notice = `💀 Phylactery: ${hint.name}'s ${hint.perm} shatters at the end of this action`; }
         broadcastUI(handMsg({ queued_phylactery: queuedPhylactery, ...(notice ? { notice } : {}) }));
       }

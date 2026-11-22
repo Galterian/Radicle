@@ -146,6 +146,18 @@ if (!flag('--keep-extra') && fs.existsSync(libDir)) {
   }
 }
 
+// F9e (2026-11-22): the JS references of the built-ins = TEST ORACLES (<src>/../oracle/*.mjs; effects-js, standing-js,
+// natural-kinds-js, hooks-js), byte-identical (LF) to oracle/. They import the game's primitives (../../effect-prims.mjs
+// etc.), so they run from a chaosD6 tree, not from this repo alone (as classes-data/oracle in chaosD6-Classes).
+const ORACLE_SRC = path.join(path.dirname(SRC), 'oracle'), oracleDir = path.join(REPO, 'oracle');
+const oracles = fs.existsSync(ORACLE_SRC) ? fs.readdirSync(ORACLE_SRC).filter(n => n.endsWith('.mjs')).sort() : [];
+for (const n of oracles) write(`oracle/${n}`, lf(fs.readFileSync(path.join(ORACLE_SRC, n), 'utf8')));
+if (!flag('--keep-extra') && fs.existsSync(oracleDir)) {
+  for (const n of fs.readdirSync(oracleDir)) {
+    if (n.endsWith('.mjs') && !oracles.includes(n)) { changes.push(`D oracle/${n}`); if (!DRY) fs.unlinkSync(path.join(oracleDir, n)); }
+  }
+}
+
 // 4. manifest — over what is in the repo's effects/ now (== sources unless --keep-extra)
 let all = defs;
 if (flag('--keep-extra') && fs.existsSync(effDir)) {

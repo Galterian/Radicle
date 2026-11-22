@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://chaosd6/effects-data/effect.schema.json",
-  "title": "chaosD6 effect definition (chaosd6.effect/1) and effect library (chaosd6.effect-lib/1)",
+  "title": "chaosD6 effect definition (chaosd6.effect/2; /1 = /2 without `standing`) and effect library (chaosd6.effect-lib/1)",
   "description": "Structural schema. Semantic checks (known operations, known subroutines, outcome keys, statuses) are done by effect-engine.mjs#validateEffectDef / validateLib; see SCHEMA.md.",
   "oneOf": [{ "$ref": "#/$defs/effect" }, { "$ref": "#/$defs/lib" }],
   "$defs": {
@@ -19,7 +19,7 @@
       "required": ["schema", "id", "name", "version", "elements", "kind", "duration", "flags", "logic"],
       "additionalProperties": false,
       "properties": {
-        "schema": { "const": "chaosd6.effect/1" },
+        "schema": { "enum": ["chaosd6.effect/1", "chaosd6.effect/2"] },
         "id": { "type": "string", "pattern": "^effect_[a-z0-9_]+$" },
         "name": { "type": "string", "minLength": 1 },
         "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+" },
@@ -44,7 +44,36 @@
           "description": "Resolver metadata peer.mjs / bots read (exactly the EFFECT_RULES entry: damage, scope, range, permanent, statBuy, fixedPower, channel, trap, tileTarget, …). Not read by the logic."
         },
         "uses": { "type": "array", "items": { "type": "string" }, "description": "Library ids whose subroutines `call` may use (searched in order)." },
-        "logic": { "$ref": "#/$defs/logic" }
+        "logic": { "$ref": "#/$defs/logic" },
+        "standing": {
+          "type": "object",
+          "description": "chaosd6.effect/2 only (effect isolation F2): what the permanent does while it stands — hook → program (game/effect-standing.mjs; SCHEMA.md \"Standing programs\").",
+          "additionalProperties": false,
+          "properties": { "combat_out": { "$ref": "#/$defs/logic" }, "damage_in": { "$ref": "#/$defs/logic" }, "cast_in": { "$ref": "#/$defs/logic" }, "adjacent_lost": { "$ref": "#/$defs/logic" }, "plan_emit": { "$ref": "#/$defs/logic" }, "afflicted": { "$ref": "#/$defs/logic" }, "harm_in": { "$ref": "#/$defs/logic" }, "breaks": { "$ref": "#/$defs/logic" } }
+        },
+        "bot": {
+          "type": "object",
+          "description": "chaosd6.effect/2 only (effect isolation F8): how bots treat the card — monster deck themes and npc casting hints (game/monster-deck.mjs). Never read by a resolver.",
+          "additionalProperties": false,
+          "properties": {
+            "tags": { "type": "array", "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }, "description": "Creature tags the effect suits (+5 thematic score)." },
+            "names": { "type": "array", "items": { "type": "string", "maxLength": 200 }, "description": "Case-insensitive patterns on the creature's name / id the effect suits (+9)." },
+            "defence": { "type": "boolean", "description": "A self-protecting card (the monster mix's defensive pick; npc casts it as defence)." },
+            "ai": { "const": false, "description": "Bots cannot drive it: never a thematic pick, never cast by npcPlan." },
+            "contact": { "type": "boolean", "description": "A defensive / control cast only with an enemy in contact." },
+            "heals_self": { "type": "boolean", "description": "Also sensible when the caster is hurt." }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "description": "chaosd6.effect/2 only (effect isolation F8): presentation hints for the browser / Godot HUD.",
+          "additionalProperties": false,
+          "properties": {
+            "target_hint": { "type": "string", "maxLength": 400, "description": "The targeting help line while the card is selected." },
+            "toast_hits": { "type": "boolean", "description": "Its effect-result toast lists every unit hit." },
+            "perm_help": { "type": "string", "maxLength": 600, "description": "The perms-strip tooltip while it stands." }
+          }
+        }
       }
     },
     "lib": {

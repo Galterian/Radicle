@@ -11,6 +11,7 @@
 // Counts and filters are data-driven: data/rules.json rule_monster_deck_effects → data.monster_deck.
 
 import { createHash } from 'node:crypto';
+import { EFFECT_BOT } from './effects.mjs';
 
 export const MONSTER_DECK_DEFAULTS = {
   thematic: 4,                 // effect cards chosen per creature (recorded as deck_effects)
@@ -22,7 +23,7 @@ export const MONSTER_DECK_DEFAULTS = {
   // Effects the monster AI cannot drive (they need a tile, an attached card, an ally stat, bonus plans, a
   // companion process …) are never thematic picks and are never cast by npcPlan.
   ai_exclude_keys: ['tileTarget', 'trapAttach', 'blessAttach', 'spiritLink', 'possess', 'statBuy', 'phantom', 'trap', 'draw'],
-  ai_exclude_effects: ['effect_aura', 'effect_invisibility', 'effect_emotions_bombard'],
+  ai_exclude_effects: [],      // extra ids (data may list some); since F8 an effect says so itself: bot.ai = false
   // npcPlan: chance to start a cast when a sensible one is in hand (the monster's own RNG; plans are committed).
   cast_chance: { damage: 0.6, defence: 0.4, control: 0.45 },
   threat_range: 2,             // a defensive cast is sensible with an enemy this close
@@ -39,38 +40,12 @@ export const MONSTER_DECK_DEFAULTS = {
 };
 
 export const ELEM_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
-// Self-protecting effects (the "1 defensive" of the mix).
-export const DEFENCE = new Set(['effect_shield', 'effect_disable', 'effect_the_void', 'effect_light_darkness', 'effect_fossilization', 'effect_potion_brew', 'effect_nature_embrace', 'effect_inner_fire', 'effect_super_sense', 'effect_mutate']);
-// Theme hints: creature tag → effects that suit it; name keyword → effects that suit it.
-export const TAG_THEMES = {
-  bruiser: ['effect_super_force', 'effect_throw', 'effect_harm', 'effect_fossilization', 'effect_inner_fire'],
-  brute: ['effect_super_force', 'effect_throw', 'effect_harm', 'effect_potion_brew', 'effect_inner_fire'],
-  'dragon-kin': ['effect_fireball', 'effect_dark_matter', 'effect_shield', 'effect_inner_fire', 'effect_meteor_shower'],
-  boss: ['effect_meteor_shower', 'effect_fireball', 'effect_lightning', 'effect_disable', 'effect_oblivion'],
-  flyer: ['effect_lightning', 'effect_throw', 'effect_blizzard', 'effect_sound_wave', 'effect_the_void'],
-  caster: ['effect_lightning', 'effect_fireball', 'effect_drain', 'effect_ice_blast', 'effect_disable', 'effect_combustion', 'effect_the_void'],
-  control: ['effect_oblivion', 'effect_delay_time', 'effect_banish', 'effect_aging', 'effect_disable'],
-  lock: ['effect_fossilization', 'effect_oblivion', 'effect_delay_time', 'effect_aging'],
-  mental: ['effect_combustion', 'effect_oblivion', 'effect_disable', 'effect_empower', 'effect_the_void'],
-  pack: ['effect_super_force', 'effect_throw', 'effect_potion_brew', 'effect_nature_embrace'],
-  defender: ['effect_shield', 'effect_fossilization', 'effect_potion_brew', 'effect_nature_embrace', 'effect_the_void'],
-  support: ['effect_potion_brew', 'effect_nature_embrace', 'effect_turn_life', 'effect_shield'],
-};
-export const NAME_THEMES = [
-  [/serpent|harbor|aquitect|steam/i, ['effect_ice_blast', 'effect_blizzard']],
-  [/ember|hellkite|dragon|kite/i, ['effect_fireball', 'effect_inner_fire', 'effect_light_darkness']],
-  [/cloud|cliff|storm/i, ['effect_lightning', 'effect_throw']],
-  [/spider|tangle/i, ['effect_drain', 'effect_aging']],
-  [/angel|mercy/i, ['effect_turn_life', 'effect_potion_brew', 'effect_shield']],
-  [/horror|infect|abomination/i, ['effect_drain', 'effect_aging', 'effect_combustion']],
-  [/basilisk/i, ['effect_fossilization', 'effect_oblivion']],
-  [/sphynx|sphinx/i, ['effect_oblivion', 'effect_delay_time']],
-  [/giant|behemoth|gargantuan|ogre|minotaur|thoctar/i, ['effect_super_force', 'effect_harm']],
-  [/shaman|mystic|everbark|loxodon/i, ['effect_nature_embrace', 'effect_potion_brew']],
-  [/apes|rhox|nacatl/i, ['effect_throw', 'effect_super_force']],
-  [/battlemage|mind/i, ['effect_lightning', 'effect_combustion']],
-  [/pathrazer|ulamog|etherium/i, ['effect_dark_matter', 'effect_banish']],
-];
+// What each effect means to the bots (effect isolation F8, 2026-11-21): the definition's `bot` block — tags / names
+// (creature tags and name patterns it suits), defence (the "1 defensive" of the mix), ai: false (bots cannot drive it),
+// contact (cast only with an enemy in contact), heals_self (also sensible when I am hurt). effects.mjs#EFFECT_BOT.
+const botOf = (id) => EFFECT_BOT[id] || {};
+const nameRes = new Map();
+const nameHits = (pat, text) => { if (!nameRes.has(pat)) nameRes.set(pat, new RegExp(pat, 'i')); return nameRes.get(pat).test(text); };
 
 export const sha256Hex = (s) => createHash('sha256').update(String(s)).digest('hex');
 const frac = (s) => parseInt(sha256Hex(s).slice(0, 8), 16) / 0x100000000;
@@ -79,10 +54,10 @@ export const monsterDeckConfig = (d) => ({ ...MONSTER_DECK_DEFAULTS, ...(d || {}
 // Can the monster AI drive this effect at all?
 export function npcCastable(id, rules, cfg = MONSTER_DECK_DEFAULTS) {
   const r = rules[id];
-  if (!r || cfg.ai_exclude_effects.includes(id)) return false;
+  if (!r || botOf(id).ai === false || (cfg.ai_exclude_effects || []).includes(id)) return false;
   return !cfg.ai_exclude_keys.some(k => r[k]);
 }
-export const effectKind = (id, rules) => rules[id]?.damage ? 'damage' : DEFENCE.has(id) ? 'defence' : 'control';
+export const effectKind = (id, rules) => rules[id]?.damage ? 'damage' : botOf(id).defence ? 'defence' : 'control';
 // Affordable for these stats: few enough emissions, every element backed by a decent stat, delta damage strong
 // enough to hurt. `elements` = the effect's element_cost.
 export function affordable(stats, elements, rule, cfg = MONSTER_DECK_DEFAULTS) {
@@ -110,8 +85,9 @@ export function scoreThematic(creature, id, effects, rules) {
   const els = effects[id]?.data?.element_cost || [];
   const st = creature.data?.stats || {};
   const avg = els.reduce((s, el) => s + (st[ELEM_STAT[el]] ?? 0), 0) / Math.max(1, els.length);
-  const tagHit = (creature.tags || []).some(t => (TAG_THEMES[t] || []).includes(id)) ? 5 : 0;
-  const nameHit = NAME_THEMES.some(([re, ids]) => re.test(`${creature.name || ''} ${creature.id}`) && ids.includes(id)) ? 9 : 0;
+  const b = botOf(id);
+  const tagHit = (creature.tags || []).some(t => (b.tags || []).includes(t)) ? 5 : 0;
+  const nameHit = (b.names || []).some(pat => nameHits(pat, `${creature.name || ''} ${creature.id}`)) ? 9 : 0;
   const innate = creature.data?.innate_effect === id ? 10 : 0;
   return avg + tagHit + nameHit + innate - (els.length - 1) + frac(`${creature.id}:${id}`);
 }
@@ -189,8 +165,8 @@ export function npcCastChoice({ hand, me, foes, friends = [], rules, cfg = MONST
     } else {
       // self / self_or_ally / no scope: a defensive or control card, sensible with an enemy close.
       const near = byDist.filter(p => p.dist <= cfg.threat_range).length;
-      ok = near > 0 && (id !== 'effect_delay_time' || byDist.some(p => p.dist <= 1));
-      if (id === 'effect_potion_brew' || id === 'effect_nature_embrace') ok = ok || me.life < me.lifeMax;
+      ok = near > 0 && (!botOf(id).contact || byDist.some(p => p.dist <= 1));
+      if (botOf(id).heals_self) ok = ok || me.life < me.lifeMax;
       // Ally: a self_or_ally card (Potion Brew) goes on the friend in contact it helps more than me — more hurt
       // (lower life share), or as hurt but weaker (smaller life max). Planning keeps that target in the reveal
       // (peer.mjs effectTakesUnit); effects.mjs lands it on the friend if still allied and within 1, else on me.

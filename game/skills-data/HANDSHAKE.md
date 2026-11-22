@@ -32,8 +32,14 @@ difference is that a definition's wire kind is `'skill'`.
 
 ## Built-in vs foreign, identity
 
-- **Built-in** = every id in `SKILL_RULES` ∪ `data/skills.json` ∪ `game/skills-data/skills/*.json`
-  (`bundledSkillSet().builtinIds`). Built-ins travel by name in the reveal's `skills` list, exactly as before.
+- **Built-in** = every id of the definitions bundle: the files `game/skills-data/skills/*.json` (or
+  `SKILL_DEFS_DIR`) ∪ the ids skills.mjs's loader accepted (`bundledSkillSet().builtinIds`). Skill isolation removed
+  the `data/skills.json` read and the `SKILL_RULES` table fallback: `data/skills.json` is a frozen record, and the
+  game knows no skill id the definitions do not name. Built-ins travel by name in the reveal's `skills` list.
+- **No definition files** is an error state, not a fallback: `bundledSkillSet()` returns `source: 'none'`, no
+  built-ins, and `errors` (the adapter logs each as `SKILL BUNDLE ERROR: …`, together with skills.mjs's
+  `skillBundleErrors()`). Its set id hashes the libs only, so no healthy peer shares its pin and the version gate
+  below keeps both sides out of each other's hash vote.
 - **Foreign** = any other id. It must come with a ref, and its id must not be a built-in one. Skills dispatch by
   id (`skills.mjs` hooks test `r.skills` ids), so a branch variant of Dodge is a NEW id that `extends:
   'skill_dodge'` (the S5 validator prices it against Dodge). A definition that reuses a built-in id is refused.
@@ -43,9 +49,41 @@ difference is that a definition's wire kind is `'skill'`.
 ```
 ref     = { id, sha256, libs: { <lib id>: <sha256> }, repo?, branch?, commit?, name?, verdict? }   (E4 shape, skills-repo parseSkillRef)
 skKey   = sha256(canonical { skill: ref.sha256, libs: ref.libs })      one runnable skill (own namespace, ≠ fxKey)
-set id  = sha256(canonical { libs: {id: sha}, skills: {id: sha} })      the bundled skill set; until S2 ships
-          skills-data/skills/*.json it hashes the SKILL_RULES table ({id, rule}); logged at start, `sk_set` = 16 hex
+set id  = sha256(canonical { libs: {id: sha}, skills: {id: sha} })      the bundled skill set: every definition
+          file hashed IN FULL (resolver fields, flags, hooks, card and ui blocks) + every lib; logged at start,
+          `sk_set` = its 16-hex prefix
 ```
+
+## Built-in skills by reference: the version gate
+
+The twin of the effects F9 gate (`effects-handshake.mjs` `gateEffectSet` / adapter `gateBuiltins`) and the
+classes' phase-6 gate. Built-in skills travel by name, so two peers resolve the same action alike only if they
+run the same bundled definitions. Every peer publishes `sk_set` (the 16-hex pin of its bundled set), on the slim
+envelope snapshot too. One pin covers the whole set, not one per skill: a hand is private, and the libs are shared
+by every skill anyway.
+
+- Pure: `gateSkillSet(units, mine)`. `units = [{id, sk_set, full}]` are the units in my view (not me), sorted by
+  id; `mine` is my 16-hex pin. For each unit:
+  - same pin: fine;
+  - no pin and `full === false` (I hold just its Gun slim record, which keeps core fields only): **unknown**,
+    skipped until its full snapshot arrives;
+  - anything else is a **mismatch**: another pin, or a FULL snapshot without a pin. `full` is judged by KEY
+    presence of `permanents_csv`, so an empty `permanents_csv: ''` (a fresh monster) still means full.
+  
+  It returns `{ abstain: mismatches.length > 0, mismatches: [{unit, got, want}], unknown: [ids] }`.
+- Adapter: `skPeer.gateBuiltins(units, {turn, round})`, once per action. It runs the gate against
+  `bundled.id.slice(0, 16)` and reports each mismatch **once per unit|pin** (a new pin of the same unit is
+  reported again):
+  `SKILL VERSION GATE T<turn>.R<round+1>: <unit> runs built-in skill set <got | none (full snapshot without a pin)>, mine <want> — no state hash from me while it is in play`
+  and UI `{kind:'skill_source', event:'version', ref:{id:'builtin_skills', kind:'skill', name:'the built-in skills'},
+  peer:{peer_id, name}, got, want}`. It returns the gate result.
+- **Abstain:** while `abstain` is true I publish `state_hash: ''` for the action and keep no local hash to
+  compare against. A version mismatch is never resolved silently with other skills.
+- The old soft `onPeerState` warning ("ships another built-in skill set") stays, as it does on the effects side.
+- peer.mjs wiring (skill isolation, chaosd6-8a): `sk_set` moves onto the slim snapshot next to `fx_set`;
+  `const skVer = skPeer.gateBuiltins(…)` sits next to `fxVer`; `!skVer.abstain` / `|| skVer.abstain` go at the two
+  state-hash sites. The regex checks for these are in `tools/skills-handshake-check.mjs` (section VG), commented
+  out until that wiring lands.
 
 ## Wire (every field is absent unless a foreign skill is in play)
 
@@ -55,7 +93,7 @@ set id  = sha256(canonical { libs: {id: sha}, skills: {id: sha} })      the bund
 | reveal payload | `sk_ref: [ref…]` | the same refs; **the only thing a foreign skill resolves from** (by `ref.id` = the id in `skills`) |
 | reveal payload | `sk_missing: [sha256…]` | foreign skill refs committed this action that THIS revealer cannot run (not obtained / refused) |
 | slim snapshot | `sk_have: "id@sha16,…"` | foreign skills I hold and serve: this is how "notify the next player" works |
-| full heartbeat | `sk_set: sha16` | my bundled skill set (informational, like `fx_set`) |
+| snapshot (slim + full) | `sk_set: sha16` | my bundled skill set pin, read by the version gate (always present, like `fx_set`) |
 | state-hash region | `sk: "sk:<key16>,stripped:<key16>,…"` | only on entries of revealers that carried a foreign skill id |
 
 Fetch order (as E4): announced holders (most recent `sk_have`) → the owner → local clone `CHAOSD6_SKILLS_DIR` →
@@ -86,7 +124,7 @@ built-ins, foreign ids in code-unit order. No resolver call site needs to change
 peer's bundled `skills_std`. A peer that ships another std has another `sk_set`, which is logged.)
 
 UI events: `{kind:'skill_source', event:'learned'|'shared'|'missing', ref:{…, kind:'skill'}, peer}` (the S6 handler
-in main.js).
+in main.js), plus `event:'version'` from the version gate (`ref.id = 'builtin_skills'`, with `got` / `want`).
 
 ## Deterministic fallback: the rule
 
@@ -144,7 +182,7 @@ makes this unlikely.
 
 | variable | effect |
 |---|---|
-| `FORCE_FOREIGN_SKILL=<def.json>` | dev/test: that definition on top of my deck; libs come from my bundled set; branch `SK_FORCE_BRANCH` or `players/local/<slug>`, plus `SK_FORCE_REPO`, `SK_FORCE_COMMIT`. Fixture: `node tools/skills-handshake-check.mjs --write-fixture <f>` (Quick Dodge = Dodge under `skill_quick_dodge`, extends `skill_dodge`, S5 verdict ok) |
+| `FORCE_FOREIGN_SKILL=<def.json>` | dev/test: that definition on top of my deck; libs come from my bundled set; branch `SK_FORCE_BRANCH` or `players/local/<slug>`, plus `SK_FORCE_REPO`, `SK_FORCE_COMMIT`. Fixture: `node tools/skills-handshake-check.mjs --write-fixture <f>` (Quick Dodge = Dodge under `skill_quick_dodge`, extends `skill_dodge`, without Dodge's built-in-only `deal_order` / `card` / `ui` / flags `buildingSkill` `passOrder` `planLock`; S5 verdict ok) |
 | `SK_ACCEPT=0` | refuse every foreign skill |
 | `SK_VALIDATOR=0` | no S5 gate |
 | `SK_HTTPD=0` | no radicle-httpd fallback |

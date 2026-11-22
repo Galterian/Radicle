@@ -28,9 +28,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { playableEffects, EFFECT_RULES } from './effects.mjs';
+import { playableEffects, EFFECT_RULES, builtinEffectCatalog } from './effects.mjs';
 import { fancyLabel } from './js/names.js';
-import { SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE } from './skills.mjs';   // S1
+import { SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE, builtinSkillCatalog } from './skills.mjs';   // S1; skill isolation: + builtinSkillCatalog
 
 // S1: the skills the resolver plays, the negating ones and Battle Trance come from skills.mjs (SKILL_RULES).
 export const PROFILE_SKILLS = [...SKILLS_IMPLEMENTED];
@@ -107,7 +107,7 @@ const _catalogs = new Map();
 export function loadCatalog(dataDir) {
   if (_catalogs.has(dataDir)) return _catalogs.get(dataDir);
   const read = (n) => Object.fromEntries(JSON.parse(fs.readFileSync(path.join(dataDir, `${n}.json`), 'utf8')).entries.map(e => [e.id, pickActive(e)]));
-  const characters = read('characters'), creatures = read('creatures'), classes = read('classes'), skills = read('skills'), effects = read('effects');
+  const characters = read('characters'), creatures = read('creatures'), classes = read('classes'), skills = Object.fromEntries(builtinSkillCatalog().entries.map(e => [e.id, pickActive(e)])), effects = Object.fromEntries(builtinEffectCatalog().entries.map(e => [e.id, pickActive(e)]));   // F9 / skill isolation: effect + skill cards = definitions
   const portraitOf = (r) => r?.portrait?.path || r?.sprites?.info?.path || null;
   const soundOf = (r) => r?.sounds?.select?.[0]?.path || r?.sounds?.ready?.[0]?.path || r?.sounds?.order?.[0]?.path || null;
   const units = [

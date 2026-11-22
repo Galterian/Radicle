@@ -20,7 +20,11 @@ func load_all() -> void:
 		load_order = ["concept", "stats", "elements", "rules", "battle_system", "actions", "effects", "skills",
 			"classes", "terrain_items", "characters", "creatures", "game_modes"]
 	for kind in load_order:
-		var parsed = Assets.read_json(root.path_join("data/%s.json" % kind))
+		# Effect isolation F9: a collection whose index entry names `definitions` (effects) is built from the
+		# definitions' card blocks, like game/defs-collection.mjs; its data file (a frozen record) is the fallback.
+		var parsed = _from_definitions(root, _definitions_dir(index, kind), kind)
+		if parsed == null:
+			parsed = Assets.read_json(root.path_join("data/%s.json" % kind))
 		if parsed == null:
 			continue
 		files[kind] = parsed
@@ -28,6 +32,44 @@ func load_all() -> void:
 		for e in _entry_list(parsed, kind):
 			if typeof(e) == TYPE_DICTIONARY and e.has("id"):
 				entries[kind][e.id] = e
+
+
+static func _definitions_dir(index: Variant, kind: String) -> String:
+	if typeof(index) != TYPE_DICTIONARY:
+		return ""
+	for c in index.get("collections", []):
+		if typeof(c) == TYPE_DICTIONARY and str(c.get("id", "")) == kind and c.has("definitions"):
+			return str(c["definitions"])
+	return ""
+
+
+## {"entries": [...]} from <root>/<rel>/*.json `card` blocks (one canonical version each), or null when the
+## directory is missing / holds no card (the data file is read instead).
+static func _from_definitions(root: String, rel: String, kind: String) -> Variant:
+	if rel == "":
+		return null
+	var dir_path := root.path_join(rel)
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return null
+	var names := Array(dir.get_files())
+	names.sort()
+	var out: Array = []
+	for f in names:
+		if not str(f).ends_with(".json"):
+			continue
+		var d = Assets.read_json(dir_path.path_join(f))
+		if typeof(d) != TYPE_DICTIONARY or typeof(d.get("card", null)) != TYPE_DICTIONARY:
+			continue
+		var card: Dictionary = d["card"]
+		var e := {"id": d.get("id", ""), "name": card.get("name", ""), "tags": card.get("tags", []),
+			"versions": [{"version": d.get("version", ""), "status": "canonical", "weight": 1.0, "data": card.get("data", {})}]}
+		if card.has("resources"):
+			e["resources"] = card["resources"]
+		out.append(e)
+	if out.is_empty():
+		return null
+	return {"collection": kind, "entries": out}
 
 
 ## Files are either {"<kind>": [...]} / {"entries": [...]} or a bare array.

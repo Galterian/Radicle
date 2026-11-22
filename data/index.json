@@ -49,16 +49,18 @@
     {
       "id": "effects",
       "file": "effects.json",
+      "definitions": "game/effects-data/effects",
       "entries": 66,
-      "writes": "vote-driven",
-      "purpose": "paper rules"
+      "writes": "chaosD6-Effects",
+      "purpose": "paper rules; since effect isolation F9 (2026-11-22) the cards are the definitions' card blocks — effects.json is a frozen record (no new versions; author effects in chaosD6-Effects)"
     },
     {
       "id": "skills",
       "file": "skills.json",
+      "definitions": "game/skills-data/skills",
       "entries": 14,
-      "writes": "vote-driven",
-      "purpose": "paper rules"
+      "writes": "chaosD6-Skills",
+      "purpose": "paper rules; since skill isolation (2026-11-22) the cards are the definitions' card blocks — skills.json is a frozen record (no new versions; author skills in chaosD6-Skills)"
     },
     {
       "id": "classes",

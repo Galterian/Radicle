@@ -10,7 +10,6 @@
 //   shatters one enemy permanent outright, no roll, then the Phylactery is spent. The target is judged by every
 //   peer from the same view: the NEAREST enemy within `reach` that holds a destroyable permanent (class cards
 //   never), and on it the permanent worth the most to remove.
-export const POSSESS_ID = 'effect_possess_phylactery';
 export const PHYLACTERY_DEFAULTS = { reach: 2 };
 export const phylacteryConfig = (d) => ({ ...PHYLACTERY_DEFAULTS, ...(d || {}) });
 

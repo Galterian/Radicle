@@ -2118,8 +2118,44 @@
           "origin": "user_ruling",
           "parent_version": "1.0.0",
           "rebalance_links": ["class_transmuter"],
-          "status": "canonical",
+          "status": "superseded",
           "version": "1.1.0",
+          "vote_log": [],
+          "weight": 0.99
+        },
+        {
+          "author_peer_id": "",
+          "created_at": "2026-11-22",
+          "data": {
+            "ability_kind": "static",
+            "colors": ["elem_time", "elem_space", "elem_souls", "elem_harmony"],
+            "text": "When you use a skill, any player around uses it if possible."
+          },
+          "logic": {
+            "description": "Class permanent, user ruling 2026-10-30. Colours: W (time/space/souls), Wi (harmony). Destroyed colour by colour (adjacent enemy emits one of its elements, die of 6, one per action, any order) → archive; recast / untap by emitting every colour (any successful roll). Ability (once per action): static: every ally in contact who revealed an action plays the skills I played too, when their action (or Empty option for M / P skills) allows it; Battle Trance and Counter Spell (judged before) are not shared. Paper text: \"When you use a skill, any player around uses it if possible.\" CP 2026-11-19 (pick 7 a, 1.1.0): ability unchanged; Air, Water, Earth and Fire dropped (8 → 4 colours).",
+            "prerequisites": [
+              {"id": "class_card_held", "description": "The class card stands in the caster's permanents (not archived).", "when": {"and": [{"includes": [{"var": "caster.permanents"}, "class_bard"]}, {"!": {"var": "caster.class_archived"}}]}}
+            ],
+            "effects": [
+              {"id": "colours", "description": "The class colours (stat groups of its elements): W, Wi.", "target": "caster", "unit": "colours", "value": ["world", "will"]},
+              {"id": "colour_falls", "description": "An adjacent enemy's emission of one of the colour's elements strikes the colour down on a die of 6 (one colour per action).", "target": "caster", "unit": "colour", "value": {"rule": ["class_colour_falls", {"die": {"var": "die"}, "elem": {"var": "cast.elem"}, "colour_elems": {"var": "cast.colour_elems"}, "adjacent": {"rule": ["in_contact", {"dist": {"var": "dist"}}]}}]}},
+              {"id": "to_archive", "description": "Every colour down → the card leaves the board for the owner's archive.", "target": "caster", "unit": "archive", "value": {"rule": ["class_colours_all_down", {"colours": ["world", "will"], "down": {"var": "caster.class_down"}}]}},
+              {"id": "recast", "description": "From the archive: emit every colour (any successful roll, power 1) → back on the board as initially.", "target": "caster", "unit": "recast", "value": {"rule": ["class_progress_complete", {"colours": ["world", "will"], "done": {"var": "caster.class_progress.done"}}]}},
+              {"id": "skills_shared", "description": "My skills ride on adjacent allies' reveals when their action allows.", "target": "ally", "unit": "skills", "value": {"var": "caster.skills_played"}}
+            ],
+            "validation": [
+              {"id": "colors_within_one", "description": "Colour count stays within +-1 of canonical.", "assert": {"<=": [{"abs": [{"-": [{"count": [{"var": "proposal.data.colors"}]}, {"count": [{"var": "entry.data.colors"}]}]}]}, 1]}},
+              {"id": "ability_kind_valid", "description": "ability_kind is once_per_round | static | tap.", "assert": {"in": [{"var": "proposal.data.ability_kind"}, ["once_per_round", "static", "tap"]]}},
+              {"id": "has_text", "description": "The ability text is kept.", "assert": {">": [{"len": [{"var": "proposal.data.text"}]}, 10]}}
+            ],
+            "references": ["class_colour_falls", "class_colours_all_down", "class_progress_complete", "in_contact"]
+          },
+          "notes": "skill isolation: share_skills asks skill_is_trance instead of naming the trance skill (data unchanged)",
+          "origin": "user_ruling",
+          "parent_version": "1.1.0",
+          "rebalance_links": ["class_transmuter"],
+          "status": "canonical",
+          "version": "1.2.0",
           "vote_log": [],
           "weight": 1.0
         }

@@ -46,9 +46,35 @@ import { hash32 } from './map.js';
 const DIRS = [[+1, 0], [+1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
 const STATS = ['vitality', 'world', 'matter', 'will'];
 const STAT_NAME = { vitality: 'Vitality', world: 'World', matter: 'Matter', will: 'Will' };
-// Skills a building can lend: the non-permanent ones the resolver implements.
-export const BUILDING_SKILLS = ['skill_dodge', 'skill_powerful_attack', 'skill_intimidation', 'skill_grapple', 'skill_disruption_move', 'skill_bluff', 'skill_counter_spell'];
-const SKILL_NAME = { skill_dodge: 'Dodge', skill_powerful_attack: 'Powerful Attack', skill_intimidation: 'Intimidation', skill_grapple: 'Grapple', skill_disruption_move: 'Disruption Move', skill_bluff: 'Bluff', skill_counter_spell: 'Counter Spell' };
+// Skills a building can lend: the non-permanent ones the resolver implements. Skill isolation (2026-11-22): the
+// list is no longer written here — it is the skill definitions' flags.buildingSkill order (skills.mjs
+// BUILDING_SKILLS; today dodge, powerful_attack, intimidation, grapple, disruption_move, bluff, counter_spell). It is
+// part of the (seed, q, r) contract (its length and order pick the skill), so the caller MUST supply it before a
+// skill building is rolled: peer.mjs from skills.mjs, the browser (main.js) from the peer's hello. Unset → a skill
+// building's `power.skill` throws when read (never a silently different roll). `names` (id → display name) feed
+// bonusText; an id without a name shows the id.
+export const BUILDING_SKILLS = [];
+const SKILL_NAME = {};
+let _buildingSkillsSet = false;
+export function setBuildingSkills(ids, names = null) {
+  if (!Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string' || !id)) throw new Error(`setBuildingSkills: a non-empty list of skill ids is required (got ${JSON.stringify(ids)})`);
+  BUILDING_SKILLS.length = 0; BUILDING_SKILLS.push(...ids);
+  for (const k of Object.keys(SKILL_NAME)) delete SKILL_NAME[k];
+  const nameOf = typeof names === 'function' ? names : (id) => names?.[id];
+  for (const id of ids) { const n = nameOf(id); if (typeof n === 'string' && n) SKILL_NAME[id] = n; }
+  _buildingSkillsSet = true;
+  _memo.clear();
+  return BUILDING_SKILLS;
+}
+export const buildingSkillsSet = () => _buildingSkillsSet;
+// The skill a skill building on (q, r) lends. Unset list: an enumerable getter that throws on read, so the bonus
+// object keeps its shape for callers that never look at the skill (fortressAt / dungeonAt in tools and join-plan).
+function skillPower(kind, u) {
+  if (_buildingSkillsSet) return { kind, skill: pickBy(u, BUILDING_SKILLS) };
+  const p = { kind };
+  Object.defineProperty(p, 'skill', { enumerable: true, configurable: true, get() { throw new Error('building-bonus.js: setBuildingSkills() was not called — the building skill list (skills.mjs BUILDING_SKILLS / hello.building_skills) is unknown, refusing to roll a skill building'); } });
+  return p;
+}
 const STANCE_NAME = { P: 'Posture', B: 'Block' };
 
 // FNV-1a alone barely moves its top bits when only the last characters differ (neighbour hexes rolled alike),
@@ -138,7 +164,7 @@ function buildingBonus(seed, q, r, f) {
   }
   const stat = ruleFor(STAT_HINTS, text, null) && roll(seed, q, r, 'shint') < 0.6 ? ruleFor(STAT_HINTS, text, null) : pickBy(roll(seed, q, r, 'stat'), STATS);
   if (kind === 'fortress') return { power: { kind, stat, value: fortressValue(seed, q, r) } };
-  const power = kind === 'skill' ? { kind, skill: pickBy(roll(seed, q, r, 'skill'), BUILDING_SKILLS) }
+  const power = kind === 'skill' ? skillPower(kind, roll(seed, q, r, 'skill'))
     : kind === 'stance' ? { kind, code: roll(seed, q, r, 'stance') < 0.6 ? 'P' : 'B' }
     : { kind };
   return { ...extras, stat: { [stat]: 5 + Math.floor(roll(seed, q, r, 'sval') * 6) }, power };

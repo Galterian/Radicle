@@ -1,9 +1,9 @@
 {
-  "schema": "chaosd6.effect/1",
+  "schema": "chaosd6.effect/2",
   "id": "effect_emotions_bombard",
   "name": "Emotions bombard",
-  "version": "1.0.0",
-  "source": {"collection":"effects","version":"1.0.0"},
+  "version": "1.3.0",
+  "source": {"collection":"effects","version":"1.1.0"},
   "elements": ["elem_vitality","elem_harmony"],
   "cost": 2,
   "kind": "permanent",
@@ -11,7 +11,9 @@
   "every": {"behaviour":"resolver","note":"blocks adjacent enemy casts (std prelude); ∀ instant handled by peer.mjs (EVERY_INSTANT)"},
   "text": "Enemy cannot cast effects while in contact with you.",
   "every_text": "Instant — cast as two sequencing instant actions in one go.",
-  "flags": {"permanent":true},
+  "flags": {"permanent":true,"everyInstant":true},
+  "bot": {"ai":false},
+  "card": {"name":"Emotions bombard","tags":["permanent","lock"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Pinkred sparkles","wbc3_code":"EZ50","wbc3_race":"Effects1","match_reason":"pink sparkles for an emotional assault","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Pinkred sparkles/Pinkred sparkles - idle [EZ50].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ23.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}]}},"data":{"effect_types":["permanent"],"element_cost":["elem_vitality","elem_harmony"],"every_bonus":"Instant — cast as two sequencing instant actions in one go.","text":"Enemy cannot cast effects while in contact with you."},"logic":{"description":"Implemented permanent. While it stands, every enemy in contact with the caster has its casts blocked (resolveEffect status blocked, \"emotions bombard in contact\"). ∀ double cast: the two Emotions bombard are resolved as an instant chain in one go (EVERY_INSTANT). Placed with a point-buy die as Rule 24 power.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"permanent_power","description":"Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.","target":"caster","unit":"die","value":{"var":"die"}},{"id":"destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"max_of":[{"map":[{"filter":[{"var":"caster.tokens"},{"==":[{"var":"elem"},{"root":"elements.0"}]}]},{"var":"value"}]}]}}]}},{"id":"block_radius","description":"Enemy casts are blocked while the enemy is within this distance of the holder.","target":"all_enemies","unit":"hexes","value":1}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_vitality"]}]}},{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_harmony"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","using_rule_24"]}},
   "uses": ["std","e2a"],
   "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
 }

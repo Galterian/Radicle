@@ -9,8 +9,18 @@ pre-S1 inline code on ≥ 300 seeded random worlds (2000 by default; `SKILLS_CHE
 examples of the user's rulings. No wire / snapshot / state-hash field changed.
 
 **S2:** the data hooks below also exist as JsonLogic programs in `skills/<id>.json` (schema and the data / JS split:
-`SCHEMA.md`); `SKILL_ENGINE=data|shadow` runs them, the pass hooks (counter_pre, negate_action, negate_kind,
-trance_assign) stay JS. Identity: `node tools/skill-engine-check.mjs`.
+`SCHEMA.md`); since MV 2026-11-17 the pass hooks too. Identity: `node tools/skill-engine-check.mjs`.
+
+**Skill isolation (2026-11-22): where the JS hooks live now.** The game runs the definitions only (`SKILL_ENGINE=data`,
+the default). The JS hook bodies named in this file (`counterPre`, `negateAction`, `negateKind`, `tranceAssign`,
+`blockIn`, `attackOut`, `defendIn` / `sanctuary` / `sanctuaryBreaks`, `damageIn`, `effectIn` / `effectLeg`,
+`permLanding`, `planLock` + `PLAN_LOCKS`, `permStats`, `disposition`, the `HOOKS` table) moved verbatim to the TEST
+ORACLE `skills-data/oracle/skills-js.mjs`, together with the frozen pre-isolation tables the checks compare against
+(`SKILL_RULES_REF`, `DEAL_ORDER_REF`, `PASS_ORDER_REF`, `BUILDING_SKILLS_REF`). `SKILL_ENGINE=js | shadow` use them after
+`installSkillOracle(await import('./skills-data/oracle/skills-js.mjs'))`; skills.mjs keeps only generic code (`ridesOn`,
+`ridesFor`, a data-driven `sanctuaryBreaks`) and names no skill. The skill names in the tables below are documentation:
+which skill acts where is decided by the definitions (`flags.hooks`, the hook programs, `flags.passOrder` for the pass
+order, `deal_order` for the folds with a null id).
 
 ## Where a skill acts in one action (resolver order)
 
@@ -81,7 +91,8 @@ doResolution() after the run:
 - Movement veto text 'move negated by Overrun' (also used by Confusion through the same `noMove`).
 - `entity.permanents` / `permPower` writes, `pointBuyPermanent` dice (salt `${salt}:perm:${id}:${action}`).
 - Bots: `npcPlan` and `tools/swarm-test.mjs` only choose skills that ride (`requires`), no per-skill policy.
-- UI tables: `profile.mjs` now imports the lists from skills.mjs; `js/skill_card.js` glyphs, `js/building-bonus.js` `BUILDING_SKILLS` (S6).
+- UI tables: `profile.mjs` imports the lists from skills.mjs; since the skill isolation the glyphs / tags / rest hint
+  come from the definitions' `ui` (`skillUiOf`) and `BUILDING_SKILLS` from `flags.buildingSkill` (skills.mjs).
 
 ## Unmodelled paper text (after the 2026-11-16 SKILL REBALANCE)
 

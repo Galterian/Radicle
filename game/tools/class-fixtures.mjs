@@ -6,6 +6,8 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { classStateJson } from '../class-state.mjs';
+import { builtinEffectEntries } from '../effects.mjs';
+import { builtinSkillEntries, TRANCE } from '../skills.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.resolve(HERE, '..', '..', 'data');
@@ -18,8 +20,8 @@ const readCollection = (name) => {
   return out;
 };
 export const CLASSES = readCollection('classes');
-export const SKILLS = readCollection('skills');
-export const EFFECTS = readCollection('effects');
+export const SKILLS = builtinSkillEntries();   // skill isolation (2026-11-22): the cards = the definitions' card blocks (deal order)
+export const EFFECTS = builtinEffectEntries();   // effect isolation F9: the cards = the definitions' card blocks
 export const ELEM_TO_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
 export const ELEMS = Object.keys(ELEM_TO_STAT);
 export const STATS = ['vitality', 'world', 'matter', 'will'];
@@ -130,6 +132,7 @@ export function genWorld(seed, { mutate = 0.25 } = {}) {
     sideOf,
     classData: (id) => dataOf.get(id),
     skillAction: (sk) => SKILLS[sk]?.data?.action_type,
+    skillIsTrance: (sk) => sk === TRANCE,
     library: () => LIBRARY,
     elemStat: (el) => ELEM_TO_STAT[el],
     turn: 3 + R.int(20), action: 10 + R.int(60),

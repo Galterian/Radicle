@@ -32,6 +32,10 @@ const TOKEN_BUILDING = {
   elem_earth: 'assets/Sprites/Buildings/Shared/Stone Golem (guardian statue)/Stone Golem (guardian statue) - base [BWGS].png',
   elem_vitality: 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png',
 };
+// Skill isolation (2026-11-22): per-skill UI facts { tag, glyph, color, card_glyph?, card_color?, rest_hint?, trance, … }
+// keyed by skill id = skills.mjs SKILL_UI, sent by the peer as hello.skill_ui; main.js calls setSkillUi() with it.
+let _skillUi = {};
+export function setSkillUi(map) { _skillUi = map instanceof Map ? Object.fromEntries(map) : (map && typeof map === 'object' ? { ...map } : {}); }
 // Threat area: an enemy goes for whoever steps within this many hexes of it.
 const THREAT_RADIUS = 2;
 // Enemies my planned journey (pathPlan, else the destination) walks into the
@@ -313,23 +317,11 @@ export function createRenderer(canvas, state) {
   };
   // Skill glyphs float in a row next to the action icon they rode on and
   // vanish with it. One picture per skill, closest Unicode match to its text.
-  const SKILL_ICON = {
-    skill_battle_trance:   { glyph: '🌀', color: '#ffb66e' },  // two actions, one trance
-    skill_powerful_attack: { glyph: '💥', color: '#ff6b6b' },  // +1 damage
-    skill_overrun:         { glyph: '🐂', color: '#ff6b6b' },  // charge, negates the target's move
-    skill_grapple:         { glyph: '✊', color: '#ff6b6b' },  // hold → target plays EP
-    skill_ranged_weapon:   { glyph: '🏹', color: '#ff6b6b' },  // Block does not strike back
-    skill_barricade:       { glyph: '🧱', color: '#6ad99f' },  // permanent wall
-    skill_taunt:           { glyph: '📣', color: '#6ad99f' },  // only legal target
-    skill_sanctuary:       { glyph: '⛩', color: '#6ad99f' },  // untouchable while resting
-    skill_force_shield:    { glyph: '🔰', color: '#6ad99f' },
-    skill_dodge:           { glyph: '💨', color: '#6ad9ff' },  // −1 damage taken
-    skill_bluff:           { glyph: '🎭', color: '#6ad9ff' },  // target plays EP
-    skill_disruption_move: { glyph: '🌪', color: '#6ad9ff' },  // target plays EP
-    skill_intimidation:    { glyph: '😠', color: '#dfe3e8' },  // target plays EP
-    skill_counter_spell:   { glyph: '✨', color: '#dfe3e8' },
-    default:               { glyph: '✦',  color: '#c9b8ff' },
-  };
+  // Skill isolation (2026-11-22): the per-skill glyph / colour is the definition's `ui` block
+  // (skills-data/skills/*.json ui.glyph / ui.color), handed in at runtime by setSkillUi() (main.js, from the
+  // peer's hello.skill_ui); an unknown skill (or before the hello) keeps the default spark.
+  const SKILL_ICON_DEFAULT = { glyph: '✦', color: '#c9b8ff' };
+  const skillIcon = (id) => { const u = _skillUi[id]; return u && u.glyph && u.color ? { glyph: u.glyph, color: u.color } : SKILL_ICON_DEFAULT; };
 
   function hexPath(x, y) {
     const corners = hexCorners(x, y);
@@ -986,7 +978,7 @@ export function createRenderer(canvas, state) {
         liveWriteIdx++;
         if (t < 0) continue;   // scheduled for later (normal action after a Haste bonus round)
         const spec = f.effect ? { glyph: f.glyph || '✺', color: '#e6a4ff' }
-          : f.skill ? (SKILL_ICON[f.skill] || SKILL_ICON.default) : (ACTION_ICON[f.action] || ACTION_ICON.EP);
+          : f.skill ? skillIcon(f.skill) : (ACTION_ICON[f.action] || ACTION_ICON.EP);
         const k = ease(t);
         const from = tilePx(f.fromQ, f.fromR);
         const to   = tilePx(f.toQ, f.toR);

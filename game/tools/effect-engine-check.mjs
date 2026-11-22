@@ -10,7 +10,9 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as JS from '../effects.mjs';
+import * as FXM from '../effects.mjs';
+import * as ORC from '../effects-data/oracle/effects-js.mjs';   // F9e: the JS reference moved to the oracle
+const JS = { ...FXM, EFFECT_RULES_JS: ORC.EFFECT_RULES_JS, resolveEffectJs: ORC.resolveEffectJs };
 import * as DE from '../effect-engine.mjs';
 
 const args = process.argv.slice(2);
@@ -73,8 +75,13 @@ const M = (v, w, m, wi) => ({ vitality: v, world: w, matter: m, will: wi });
 const defs = DE.loadEffectDefs();
 console.log(`data effects: ${[...defs.keys()].join(', ')}`);
 
-// 1. flags = EFFECT_RULES
-for (const def of defs.values()) ok(`${def.id}: flags equal EFFECT_RULES`, JSON.stringify(def.flags) === JSON.stringify(JS.EFFECT_RULES[def.id]));
+// 1. flags = EFFECT_RULES_JS (the JS oracle); EFFECT_RULES (what the game reads) = the definitions' flags (F1)
+for (const def of defs.values()) ok(`${def.id}: flags equal EFFECT_RULES_JS`, JSON.stringify(def.flags) === JSON.stringify(JS.EFFECT_RULES_JS[def.id]));
+ok('EFFECT_RULES = the definitions (ids, flags)', JSON.stringify(Object.keys(JS.EFFECT_RULES)) === JSON.stringify([...defs.keys()].sort())
+  && [...defs.values()].every(d => JSON.stringify(d.flags) === JSON.stringify(JS.EFFECT_RULES[d.id])));
+ok('EFFECT_RULES_JS has no effect without a definition', Object.keys(JS.EFFECT_RULES_JS).every(id => defs.has(id)));
+ok(`default EFFECT_ENGINE = data (got ${JS.EFFECT_ENGINE})`, process.env.EFFECT_ENGINE ? true : JS.EFFECT_ENGINE === 'data');
+ok('noRulesOutcome = resolveEffectJs of an unknown effect (key order too)', JSON.stringify(JS.noRulesOutcome()) === JSON.stringify(JS.resolveEffectJs({}, { effect_id: '', actor: 'A', elements: [] })));
 
 // 2. dice primitives identical
 {
@@ -217,7 +224,7 @@ for (const def of defs.values()) {
   ok('bare object literal (not an op) rejected at load', !!rejected, rejected || '');
   // The comparison itself can fail: a Lightning whose ∀ multiplier is 3 instead of 2 must differ.
   const lt = defs.get('effect_lightning');
-  const bad = JSON.parse(JSON.stringify(lt).replace('{"if":[{"var":"cast.every"},2,1]}', '{"if":[{"var":"cast.every"},3,1]}'));
+  const bad = { ...JSON.parse(JSON.stringify(lt)), logic: JSON.parse(JSON.stringify(lt.logic).replace('{"if":[{"var":"cast.every"},2,1]}', '{"if":[{"var":"cast.every"},3,1]}')) };   // the program only (F9: card.logic comes first)
   const badDef = DE.loadEffectDefs({ effects: [bad], libs: [JSON.parse(JSON.stringify(Object.fromEntries([['schema', DE.LIB_SCHEMA_ID], ['id', 'std'], ['version', '1'], ['subs', Object.fromEntries(lt.$subs)]])))] }).get('effect_lightning');
   const lc = { actor: 'C', effect_id: 'effect_lightning', elements: ['elem_fire', 'elem_air'], salt: 'abc', target: { kind: 'character', ref: 'E' }, every: true };
   const saved = stats.effect_lightning ? { ...stats.effect_lightning } : null;

@@ -1,16 +1,19 @@
 {
-  "schema": "chaosd6.skill/1",
+  "schema": "chaosd6.skill/2",
   "id": "skill_grapple",
   "name": "Grapple",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": {"collection":"skills","version":"1.0.0"},
+  "deal_order": 3,
   "action_type": "A",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "Negate enemy's Posture or Empty Posture (enemy may replace with another action; Empty Move is still possible). While sharing a tile, neither may use Posture or Empty Posture.",
-  "flags": {"action":"A","permanent":false,"negating":true,"hooks":["negate_kind"],"negates":["P"],"negate":{"codes":["P"],"who":"target","mode":"ep"}},
+  "flags": {"action":"A","permanent":false,"negating":true,"hooks":["negate_kind"],"negates":["P"],"negate":{"codes":["P"],"who":"target","mode":"ep"},"passOrder":{"negate_kind":1},"buildingSkill":3},
   "uses": ["skills_std", "skills_pass"],
   "hooks": {
     "negate_kind": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"A"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"if":[{"and":[{"bool":[{"var":"t"}]},{"code_is":[{"var":"t"},"P"]}]},{"concat":[[{"obj":{"op":"replace","id":{"var":"t"},"from":"P","to":"EP"}}],{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},"P"]}]},[]]}]}]}
-  }
+  },
+  "ui": {"tag":"Gr","glyph":"✊","color":"#ff6b6b"},
+  "card": {"name":"Grapple","tags":["attack","lock"],"resources":{"source":"warlords3_battlecry","match_reason":"body impact sounds; grey arcs wrap the target like a grip","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Whack.wav","usage":"play when the skill resolves (pick randomly if several)"},{"path":"assets/Sounds/SoundFX/Thump.wav","usage":"play when the skill resolves (pick randomly if several)"}]},"wbc3_name":"Grey crescent arcs","wbc3_code":"EZ61","wbc3_race":"Effects1"},"data":{"action_type":"A","is_permanent":false,"point_buy_stat":null,"text":"Negate enemy's Posture or Empty Posture (enemy may replace with another action; Empty Move is still possible). While sharing a tile, neither may use Posture or Empty Posture."},"rebalance_links":["skill_intimidation"],"logic":{"description":"Instant riding on an Attack card against an enemy in contact. A target that declared Posture has it replaced by Empty Posture (their non-instant cast is interrupted; Empty Move stays possible). The paper 'while sharing a tile neither may Posture' clause is not implemented. Rule 8 pc override: returns to hand when the target was not Posturing.","prerequisites":[{"id":"rides_on_attack","description":"The caster's action this turn is an Attack card.","when":{"in":[{"var":"caster.action"},["A"]]}},{"id":"enemy_in_contact","description":"The target is an enemy in contact.","when":{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}}],"effects":[{"id":"target_action_after","description":"The target's action after the grapple: Posture becomes Empty Posture, anything else is unchanged.","target":"target","unit":"actions","value":{"if":[{"==":[{"var":"target.action"},"P"]},"EP",{"var":"target.action"}]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays an Attack skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["in_contact","is_enemy","rule_8_instant_returns"]}}
 }

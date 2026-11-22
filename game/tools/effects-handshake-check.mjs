@@ -7,11 +7,13 @@ process.env.CHAOSD6_EFFECTS_CACHE ||= 'memory';   // createFxPeer below: never t
 process.env.FX_HTTPD = '0';
 import { canonicalJson, effectHash } from '../effects-repo.mjs';
 import { encodeFrame, createFrameDecoder, createBusRpc } from '../map-sync.mjs';
-import { resolveEffect, resolveEffectJs, isForeignEffectId, EFFECT_RULES } from '../effects.mjs';
+import { resolveEffect, isForeignEffectId, EFFECT_RULES } from '../effects.mjs';
+import { resolveEffectJs } from '../effects-data/oracle/effects-js.mjs';   // F9e: the JS reference moved to the oracle
 import {
   effectSetId, libShaMap, bundledEffectSet, makeFxRef, parseFxRef, compactRef, fxKey, prefixOf,
   createFxStore, createFxSync, createMemoryCache, blobFrames, assembleBlob, gateReveals, missingUnion, createFxPeer,
   foreignCardFromRef,   // FXG
+  gateEffectSet,   // F9
 } from '../effects-handshake.mjs';
 import { addArchivedCard, dropRandomDeckCard, loadProfile, validateCharacter, foreignRefOf } from '../profile.mjs';   // FXG
 
@@ -453,6 +455,24 @@ function world(stats, tiles, sides) {
   yes('RF: spawnCompanion env starts with ...process.env', /^\s*\.\.\.process\.env,/.test(envBlock));
   eq('RF: spawnCompanion env does not reset FX/SK/CL_ACCEPT, FOREIGN_REFUSERS/ORDER, PEER_LABEL pattern ok',
     [/\b(FX|SK|CL)_ACCEPT\s*:/.test(envBlock), /FOREIGN_(REFUSERS|ORDER)\s*:/.test(envBlock), /OWNER_PEER_ID: wild \? '' : PEER_ID_STRING/.test(envBlock), /PEER_ID_STRING\s*=\s*`peer:\$\{PEER_LABEL\}`/.test(peerSrc)], [false, false, true, true]);
+}
+
+// ---- F9: built-in effects by reference — the effect version gate (one pin for the bundled set) ----
+{
+  const mine = bundledEffectSet().id.slice(0, 16);
+  eq('F9 gate: same pin everywhere → no abstain', gateEffectSet([{ id: 'peer:b', fx_set: mine }, { id: 'peer:a', fx_set: mine }], mine), { abstain: false, mismatches: [], unknown: [] });
+  eq('F9 gate: another pin → abstain (sorted by unit); no pin on a Gun slim record = unknown, not a mismatch',
+    gateEffectSet([{ id: 'peer:z', fx_set: '0123456789abcdef', full: true }, { id: 'peer:m', fx_set: mine, full: true }, { id: 'peer:c', full: false }, { id: 'peer:b', fx_set: 'ffffffffffffffff', full: false }], mine),
+    { abstain: true, mismatches: [{ unit: 'peer:b', got: 'ffffffffffffffff', want: mine }, { unit: 'peer:z', got: '0123456789abcdef', want: mine }], unknown: ['peer:c'] });
+  eq('F9 gate: only slim pinless units → no abstain', gateEffectSet([{ id: 'peer:c', full: false }, { id: 'peer:d', fx_set: '', full: false }], mine).abstain, false);
+  eq('F9 gate: a FULL snapshot without a pin → mismatch (a client cannot dodge the gate by not publishing it)', gateEffectSet([{ id: 'peer:x', full: true }], mine), { abstain: true, mismatches: [{ unit: 'peer:x', got: null, want: mine }], unknown: [] });
+  eq('F9 gate: alone in my view → no abstain', gateEffectSet([], mine).abstain, false);
+  const peerSrc9 = fs.readFileSync(new URL('../peer.mjs', import.meta.url), 'utf8');
+  eq('F9 gate: peer.mjs judges "full" by KEY presence (an empty permanents_csv = a full snapshot with no permanents) and sends fx_set on the slim envelope snapshot too',
+    [/full: view\.get\(id\)\?\.permanents_csv !== undefined/.test(peerSrc9), (peerSrc9.match(/function currentStateSnapshot[\s\S]*?if \(slim\) return s;/) || [''])[0].includes('fx_set: fxPeer.setId.slice(0, 16)')], [true, true]);
+  const emptyPerms = { permanents_csv: '' };   // a fresh monster: a full snapshot, no permanents, (here) no fx_set
+  eq('F9 gate: a full snapshot with an empty permanents_csv and no fx_set → mismatch', gateEffectSet([{ id: 'peer:y', fx_set: emptyPerms.fx_set || null, full: emptyPerms.permanents_csv !== undefined }], mine).abstain, true);
+  eq('F9 gate: peer.mjs withholds the state hash on fxVer.abstain (lastStateHashes + published state_hash)', [/!fxVer\.abstain \/\* F9 \*\/[^\n]*\) lastStateHashes/.test(peerSrc9), /\|\| fxVer\.abstain \/\* F9: effect version gate \*\/[^\n]*\? '' : stateHash/.test(peerSrc9)], [true, true]);
 }
 
 console.log(fails ? `${fails} handshake check(s) FAILED` : 'all handshake checks passed');

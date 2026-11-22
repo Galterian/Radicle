@@ -7,8 +7,11 @@ import { animatorConfig, priestConfig, seekerConfig } from '../classes-data/orac
 import { nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from '../world-prims.mjs';   // class isolation phase 6 (were class-*.mjs)
 import { placedBuildingsFrom, setPlacedBuildings, featureAt, setFeatureCatalog, isBuildingFeature } from '../js/features.js';
 import { buildingBonusAt, fortressAt, dungeonAt, dungeonExplored } from '../js/building-bonus.js';
+import { setBuildingSkills } from '../js/building-bonus.js';
+import { BUILDING_SKILLS } from '../skills.mjs';
+setBuildingSkills(BUILDING_SKILLS);   // skill isolation: the building skill list comes from the skill definitions (flags.buildingSkill)
 import { tileInRing } from '../join-plan.mjs';
-import { rollDice, placeStatBonusToken, rule24Order, playableEffects, EFFECT_RULES, TRAP_POWER } from '../effects.mjs';
+import { rollDice, placeStatBonusToken, rule24Order, playableEffects, EFFECT_RULES, TRAP_POWER, builtinEffectEntries } from '../effects.mjs';
 
 const sha = s => createHash('sha256').update(s).digest('hex');
 let fails = 0;
@@ -302,7 +305,7 @@ eq('seeker defaults', seekerConfig({}), { min: 20, max: 30, radius: 5, turns: 1 
   const src = fs.readFileSync(new URL('../peer.mjs', import.meta.url), 'utf8');
   const cut = (start, end) => { const i = src.indexOf(start); if (i < 0) throw new Error(`peer.mjs anchor missing: ${start}`); const j = src.indexOf(end, i); return src.slice(i, j + end.length); };
   setFeatureCatalog(JSON.parse(fs.readFileSync(new URL('../../assets/features/feature_table.json', import.meta.url), 'utf8')));
-  const data = { effects: Object.fromEntries(JSON.parse(fs.readFileSync(new URL('../../data/effects.json', import.meta.url), 'utf8')).entries.map(e => [e.id, { id: e.id, data: active('effects.json', e.id).data }])) };
+  const data = { effects: builtinEffectEntries() };   // F9: the cards = the definitions' card blocks
   const WORLD_TRAP_EFFECTS = playableEffects(data.effects).filter(id => EFFECT_RULES[id]?.damage && (data.effects[id]?.data?.element_cost || []).length).sort();
   const SEED = '0xabc';
   const mk = () => new Function('deps', `

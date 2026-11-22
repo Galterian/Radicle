@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import { manipulatorConfig, rogueConfig, clericConfig } from '../classes-data/oracle/class-configs.mjs';
 import { pickAltAction, combatHit, pickManipTarget, applyManipSwap } from '../contact-prims.mjs';
 import { chargesLeft, trapsInRange, clericRoute, disabledCardMoves } from '../world-prims.mjs';   // class isolation phase 6 (were class-*.mjs)
-import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum, invisibilityBreaks } from '../effects.mjs';
+import { diceCount, pointBuy, resolveEffect, roundHalfUp10, trapDamageSum } from '../effects.mjs';
+import { invisibilityBreaks } from '../effects-data/oracle/effects-js.mjs';   // F9e: the JS reference (Invisibility's break rule)
 import { pickBySalt, pickHandDiscards } from '../effects.mjs';
 import { awakePlan } from '../awake.mjs';
 import { possessArchivePick, phylacteryPick, releasedPossessed, releasedCompanions } from '../possess.mjs';
@@ -652,9 +653,9 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
 // Effect result toasts (effect-results.mjs): success over the locked enemy; failed over the declared target.
 {
   const { effectResultsOf, plannedLossResults, isPenaltyRule } = await import('../effect-results.mjs');
-  const { EFFECT_RULES } = await import('../effects.mjs');
+  const { EFFECT_RULES, EFFECT_UI } = await import('../effects.mjs');
   const enemyOf = (a, b) => (a < 'M') !== (b < 'M');   // A..L one side, M..Z the other
-  const base = { rules: EFFECT_RULES, enemyOf, tileOf: (id) => ({ q: id.charCodeAt(0) - 65, r: 0 }), tag: '1:0' };
+  const base = { rules: EFFECT_RULES, ui: EFFECT_UI, enemyOf, tileOf: (id) => ({ q: id.charCodeAt(0) - 65, r: 0 }), tag: '1:0' };
   const oc = (status, extra = {}) => ({ status, hits: [], tokens: [], statTokens: [], locks: [], moves: [], peeks: [], notes: [], ...extra });
   eq('penalty: fossilization / oblivion / lightning / aging / banish', ['effect_fossilization', 'effect_oblivion', 'effect_lightning', 'effect_aging', 'effect_banish'].map(id => isPenaltyRule(EFFECT_RULES[id])), [true, true, true, true, true]);
   eq('no penalty: fireball / shield / potion brew', ['effect_fireball', 'effect_shield', 'effect_potion_brew'].map(id => isPenaltyRule(EFFECT_RULES[id])), [false, false, false]);
@@ -664,16 +665,16 @@ const dmgTo = (oc, id) => { const h = oc.hits.find(h => h.victim === id); return
   eq('fossil roll failed over the declared Y', bad.map(i => [i.on, i.ok, i.why]), [['Y', false, 'roll failed']]);
   const auto = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_oblivion' }, oc: oc('fizzled', { notes: ['nobody in reach'] }) }], { ...base, autoTarget: () => null });
   eq('nobody in reach → over the caster', auto.map(i => [i.on, i.why]), [['A', 'nobody in reach']]);
-  const dis = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_lightning' }, oc: oc('blocked', { notes: ['peer:Z\'s Disable bars elem_air'] }) }], { ...base, disableTriggers: [{ holder: 'Z', caster: 'A', elem: 'elem_air' }] });
+  const dis = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_lightning' }, oc: oc('blocked', { notes: ['peer:Z\'s Disable bars elem_air'] }) }], { ...base, disableTriggers: [{ holder: 'Z', caster: 'A', elem: 'elem_air', perm: 'effect_disable' }] });
   eq('Disable: lightning failed over Z + Disable success over A', dis.map(i => [i.effect_id, i.on, i.ok]), [['effect_lightning', 'Z', false], ['effect_disable', 'A', true]]);
   const bl = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fossilization' }, oc: oc('done') }], { ...base, blessFired: [{ holder: 'X', caster: 'A', effect_id: 'effect_fossilization' }] });
   eq('Blessing ∀ negation → failed over X', bl.map(i => [i.on, i.ok, i.why]), [['X', false, 'Blessing ∀']]);
   eq('casting step → nothing', effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fossilization' }, oc: oc('casting') }], base), []);
   eq('fireball done → nothing (damage only)', effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_fireball' }, oc: oc('done', { hits: [{ victim: 'X' }] }) }], base), []);
   const lt = (n, R, r) => n > 0 && r >= Math.max(1, R - n);
-  const pl = plannedLossResults([{ id: 'X', foes: [{ id: 'A', delay: true }] }, { id: 'Y', foes: [{ id: 'B', petrify: true }] }], { roundsPerTurn: 3, round: 2, lostToHolders: lt });
+  const pl = plannedLossResults([{ id: 'X', foes: [{ id: 'A', delay: 'effect_delay_time' }] }, { id: 'Y', foes: [{ id: 'B', petrify: 'effect_petrify' }] }], { roundsPerTurn: 3, round: 2, lostToHolders: lt });
   eq('planned losses: Delay Time on X (last action), Petrify on Y', pl.map(i => [i.effect_id, i.on]), [['effect_delay_time', 'X'], ['effect_petrify', 'Y']]);
-  eq('Delay Time not on the first action', plannedLossResults([{ id: 'X', foes: [{ id: 'A', delay: true }] }], { roundsPerTurn: 3, round: 0, lostToHolders: lt }), []);
+  eq('Delay Time not on the first action', plannedLossResults([{ id: 'X', foes: [{ id: 'A', delay: 'effect_delay_time' }] }], { roundsPerTurn: 3, round: 0, lostToHolders: lt }), []);
   // Round 2 (user ruling 2026-11-18): Blizzard hits and natural Mists / Anger / Love / Awe / Fear get toasts.
   const bz = effectResultsOf([{ actor: 'A', eff: { effect_id: 'effect_blizzard', name: 'Blizzard' }, oc: oc('done', { hits: [{ victim: 'X' }, { victim: 'Y' }, { victim: 'B' }] }) }], base);
   eq('Blizzard success over each enemy hit (not the ally B)', bz.map(i => [i.name, i.on, i.ok]), [['Blizzard', 'X', true], ['Blizzard', 'Y', true]]);

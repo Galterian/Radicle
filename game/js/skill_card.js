@@ -30,26 +30,26 @@
 import { assetUrl } from './sprites.js';
 import { effectSource, setEffectSource, makeSourceBadge, sourceTitle } from './effect_source.js';
 
-// Unicode fallbacks mirror renderer.js's SKILL_ICON — same glyphs so the three
+// Unicode fallbacks mirror renderer.js's skill icons — same glyphs so the three
 // surfaces (canvas floating icon, deck slot, roster permanent, hover card) all
 // agree on how a given skill reads before (and after) sprites arrive.
+// Skill isolation (2026-11-22): the per-skill glyph / colour is the definition's `ui` block (ui.card_glyph /
+// ui.card_color when the card differs from the canvas icon, else ui.glyph / ui.color), handed in at runtime by
+// setSkillUi(hello.skill_ui) (main.js). Until then (or for an unknown id) the default spark + violet.
 export const SKILL_GLYPHS = {
-  skill_battle_trance:   { glyph: '🌀', color: '#ffb66e' },
-  skill_powerful_attack: { glyph: '💥', color: '#ff6b6b' },
-  skill_overrun:         { glyph: '🐂', color: '#ff6b6b' },
-  skill_grapple:         { glyph: '✊', color: '#ff6b6b' },
-  skill_ranged_weapon:   { glyph: '🏹', color: '#ff6b6b' },
-  skill_barricade:       { glyph: '🧱', color: '#6ad99f' },
-  skill_taunt:           { glyph: '📣', color: '#6ad99f' },
-  skill_sanctuary:       { glyph: '⛩', color: '#6ad99f' },
-  skill_force_shield:    { glyph: '🔰', color: '#6ad99f' },
-  skill_dodge:           { glyph: '💨', color: '#6ad9ff' },
-  skill_bluff:           { glyph: '🎭', color: '#6ad9ff' },
-  skill_disruption_move: { glyph: '🌪', color: '#6ad9ff' },
-  skill_intimidation:    { glyph: '😠', color: '#dfe3e8' },
-  skill_counter_spell:   { glyph: '✨', color: '#dfe3e8' },
   default:               { glyph: '✦',  color: '#c9b8ff' },
 };
+let _skillUi = {};            // id -> skills.mjs SKILL_UI entry { tag, glyph, color, card_glyph?, card_color?, trance, … }
+export function setSkillUi(map) {
+  _skillUi = map instanceof Map ? Object.fromEntries(map) : (map && typeof map === 'object' ? { ...map } : {});
+  for (const k of Object.keys(SKILL_GLYPHS)) if (k !== 'default') delete SKILL_GLYPHS[k];
+  for (const [id, u] of Object.entries(_skillUi)) {
+    const glyph = u?.card_glyph || u?.glyph, color = u?.card_color || u?.color;
+    if (glyph && color) SKILL_GLYPHS[id] = { glyph, color };
+  }
+  for (const info of _entries.values()) info.isTrance = !!_skillUi[info.id]?.trance;
+  // (no _notify(): the catalog listeners are one-shot "catalog landed" waiters — firing them here would drop them early)
+}
 
 const _entries = new Map();   // id -> parsed info
 // name index for inline-icon decoration: `lowercased name` -> id. Longer names
@@ -104,7 +104,7 @@ function _ingest(entry, isPermanentDefault) {
     requires: data.action_type || data.requires || null,
     elementCost: Array.isArray(data.element_cost) ? data.element_cost.slice() : [],
     pointBuyStat: typeof data.point_buy_stat === 'string' ? data.point_buy_stat : null,
-    isTrance: entry.id === 'skill_battle_trance',
+    isTrance: !!_skillUi[entry.id]?.trance,   // skill isolation: SKILL_UI trance (setSkillUi), not an id literal
   };
   _entries.set(entry.id, info);
   // Provenance (chaosD6-Effects, E6): a player-branch effect carries `source` on the catalog

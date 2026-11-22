@@ -8,7 +8,8 @@
 //        [--branch main] [--no-commit] [--dry-run] [--keep-extra] [-m "message"] [--game-root game/]
 //
 // From --src (default game/skills-data):  skills/*.json → skills/, lib/*.json → lib/,
-//   SCHEMA.md (else the template placeholder), HOOKS.md / skill.schema.json / skill-lib.schema.json when present.
+//   SCHEMA.md (else the template placeholder), HOOKS.md / skill.schema.json / skill-lib.schema.json when present,
+//   oracle/*.mjs (skill isolation 2026-11-22: the JS reference hooks + REF tables, test oracles — not in tools/engine).
 // From the template (tools/skills-repo-template): README.md, .gitattributes, tools/manifest.mjs,
 //   tools/check.mjs, tools/README.md.
 // Tools are copied BYTE-IDENTICAL (LF) — never rewritten — because the validator pins its own
@@ -185,6 +186,10 @@ for (const extra of ['HOOKS.md', 'skill.schema.json', 'skill-lib.schema.json']) 
   const f = path.join(SRC, extra);
   if (fs.existsSync(f)) write(extra, readText(f));
 }
+// skill isolation (2026-11-22): the JS reference hooks = TEST ORACLES (<src>/oracle/*.mjs), byte-identical (LF). Never
+// part of the engine closure: skills.mjs only receives the oracle through installSkillOracle().
+const ORACLE_DIR = path.join(SRC, 'oracle');
+for (const n of fs.existsSync(ORACLE_DIR) ? fs.readdirSync(ORACLE_DIR).filter(n => n.endsWith('.mjs')).sort() : []) write(`oracle/${n}`, readText(path.join(ORACLE_DIR, n)));
 for (const d of skills) write(`skills/${d.id}.json`, JSON.stringify(d, null, 2) + '\n');
 for (const d of libs) write(`lib/${d.id}.json`, JSON.stringify(d, null, 2) + '\n');
 for (const [sub, defs] of [['skills', skills], ['lib', libs]]) {
@@ -231,6 +236,7 @@ prune('skills', (rel) => written.has(rel));
 prune('lib', (rel) => written.has(rel));
 prune('tools/engine', (rel) => written.has(rel));
 prune('tools/validator', (rel) => written.has(rel));
+prune('oracle', (rel) => written.has(rel));
 
 // 5. manifest — over what is in the repo now (== sources unless --keep-extra)
 const repoDefs = (sub, fallback) => (KEEP && fs.existsSync(path.join(REPO, sub))

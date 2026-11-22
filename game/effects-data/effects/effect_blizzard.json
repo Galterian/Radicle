@@ -1,8 +1,8 @@
 {
-  "schema": "chaosd6.effect/1",
+  "schema": "chaosd6.effect/2",
   "id": "effect_blizzard",
   "name": "Blizzard",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "source": {"collection":"effects","version":"1.0.0"},
   "elements": ["elem_air","elem_water"],
   "cost": 2,
@@ -10,7 +10,10 @@
   "duration": "instant",
   "every": {"behaviour":"none"},
   "text": "After casting, no one — not even you (except Blizzard effects) — can deal any damage at adjacent tiles and your tile until end of round.",
-  "flags": {"damage":"pointbuy","scope":"all_enemies","zone":"no_damage"},
+  "flags": {"damage":"pointbuy","scope":"all_enemies","zone":"no_damage","ignoresZones":true},
+  "bot": {"tags":["flyer"],"names":["serpent|harbor|aquitect|steam"]},
+  "ui": {"toast_hits":true},
+  "card": {"name":"Blizzard","tags":["damage","channeling"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Cyan star sparkles","wbc3_code":"EZ53","wbc3_race":"Effects1","match_reason":"cyan snowflake sparkles","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Cyan star sparkles/Cyan star sparkles - idle [EZ53].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/RainH.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/LongWhoosh.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage","point_buy","channeling"],"element_cost":["elem_air","elem_water"],"text":"After casting, no one — not even you (except Blizzard effects) — can deal any damage at adjacent tiles and your tile until end of round."},"rebalance_links":["effect_light_darkness"],"logic":{"description":"Implemented point-buy damage (Air, Water → Matter) to every living enemy in contact, Σ kept ÷10 rounded half up each, and then the caster hex plus its six neighbours become a no-damage zone until the end of the turn: nobody — not even the caster — deals damage there, except Blizzard casts themselves. A failed roll re-emits only that element.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"point_buy_dice","description":"Rule 20: one point-buy per emission on the caster stat behind the element going out; this is the total number of d6 the whole cast rolls (6·n nearest the stat, ties to more dice).","target":"caster","unit":"die","value":{"sum":[{"map":[{"var":"elements"},{"rule":["point_buy_dice_count",{"stat":{"stat_of":[{"root":"caster"},{"var":""}]}}]}]}]}},{"id":"point_buy_damage","description":"Σ of the kept dice (one per element, the highest die of each successful roll) ÷10, rounded half up; a failed roll re-emits only that element (cast status retry).","target":"all_enemies","unit":"damage","value":{"round_div10":[{"sum":[{"var":"cast.kept"}]}]}},{"id":"no_damage_zone_hexes","description":"The caster hex and its six neighbours become a no-damage zone until the end of the turn.","target":"tile","unit":"hexes","value":7}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_water (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_water"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}},{"id":"keeps_type_point_buy","description":"effect_types keeps \"point_buy\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"point_buy"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","point_buy_dice_count"]}},
   "uses": ["std","e2a"],
   "logic": {"seq": [
       {"call":["prelude"]},

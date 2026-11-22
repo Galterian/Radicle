@@ -41,6 +41,7 @@ import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tile
   dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
 import { randomBytes } from 'node:crypto';
+import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
 
 const pexec = promisify(execFile);
@@ -1111,7 +1112,11 @@ const server = http.createServer(async (req, res) => {
       return res.end(`commit ${sha} not found in ${RADICLE_BARE}\n${e.message}`);
     }
   }
-  if (p.startsWith('/data/')) return serve(path.join(DATA_DIR, p.slice('/data/'.length).replace(/\.\./g, '')));
+  if (p.startsWith('/data/')) {
+    const dc = definitionsCollectionText(DATA_DIR, p.slice('/data'.length));
+    if (dc) { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(dc); }
+    return serve(path.join(DATA_DIR, p.slice('/data/'.length).replace(/\.\./g, '')));
+  }
   // Resources quoted in data/*.json (sprites + sounds, mapping files, schema).
   // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
   // readFile follows them, and the path-traversal check happens before.

@@ -39,6 +39,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleProfileApi, profilePath, loadProfile, characterOf, teamCharacters, topCharacter } from './profile.mjs';
 
 const SEED_HOST = () => process.env.RADICLE_SEED_HOST || '92-5-138-121.sslip.io';
@@ -544,6 +545,8 @@ export async function runMenu({ port, dataDir, assetsDir = '', gameDir, userData
       } else if (u.startsWith('/user-data/') && userDataDir) {
         if (await serve(userDataDir, u.slice('/user-data'.length))) return;
       } else if (u.startsWith('/data/')) {
+        const dc = dataDir && definitionsCollectionText(dataDir, u.slice('/data'.length));
+        if (dc) { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' }); res.end(dc); return; }
         if (await serve(dataDir, u.slice('/data'.length))) return;
         if (await serve(gameDir, u)) return;
       } else {

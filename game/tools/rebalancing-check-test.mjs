@@ -141,7 +141,7 @@ const tampered = JSON.parse(JSON.stringify(cal)); tampered.weights.damage += 0.0
 ok('calibration change → new pin', computePin(tampered).pin_id !== pin.pin_id);
 ok('verifyPin(foreign pin) reports the diff', !verifyPin({ ...pin, source_sha256: '0'.repeat(64), pin_id: 'x' }).ok);
 ok('stamp carries the pin', rs.stamp.pin_id === pin.pin_id);
-ok('validator version 1.1.0 (ref-pinned libs)', VALIDATOR_VERSION === '1.1.0' && pin.validator_version === '1.1.0');
+ok('validator version 1.3.0 (ref-pinned libs; F9 flags reference = the JS oracle file)', VALIDATOR_VERSION === '1.3.0' && pin.validator_version === '1.3.0');
 
 // 7. libs bound from the ref / commit (1.1.0): a foreign effect is priced against ITS libs, not the bundled ones
 {

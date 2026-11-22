@@ -16,6 +16,11 @@ import { setBigFeatureCatalog } from '../js/bigfeature.js';
 import { fortressAt } from '../js/building-bonus.js';
 import { parseClassState, anyChargeUsed } from '../class-state.mjs';
 import { loadClassDefs, abilityRecordsOf } from '../class-engine.mjs';
+// F8: the bots read what an effect is from its definition (flags / naturalKind), never from its id.
+import { EFFECT_RULES } from '../effects.mjs';
+import { loadEffectDefs } from '../effect-engine.mjs';
+import { naturalKind } from '../natural-perms.mjs';
+import { ELEM_STAT } from '../monster-deck.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const launcher = process.argv[2] || 'http://127.0.0.1:7357';
@@ -172,7 +177,7 @@ function startAgent(peerId, port, attempt = 0) {
     if (needs === 'attach_effect' || needs === 'attach_nonaction') {
       const busy = new Set(a.casting?.card_ids || []);
       const ok = (c) => !!c && !busy.has(c.card_id) && (needs === 'attach_effect' ? c.kind === 'effect' : c.kind !== 'action');
-      let i = a.hand.findIndex(c => ok(c) && c.effect_id !== 'effect_invisibility');
+      let i = a.hand.findIndex(c => ok(c) && !EFFECT_RULES[c.effect_id]?.hides);
       if (i < 0) i = a.hand.findIndex(ok);
       if (i < 0) { skipClass(cid, 'no_effect_card'); return out; }
       useClass(cid, { attach: i }); a.reserved = a.hand[i].card_id; return out;
@@ -218,7 +223,8 @@ function startAgent(peerId, port, attempt = 0) {
     return false;
   };
   // Rule 24 stat of each natural permanent (its element_cost, data/effects.json): what an emission against it must use.
-  const NATURAL_STAT = { effect_earthquake: 'matter', effect_creation: 'matter', effect_spirit_link: 'world', effect_love: 'matter', effect_awe: 'matter', effect_fear: 'matter', effect_anger: 'matter', effect_domination: 'world', effect_petrify: 'vitality', effect_mists: 'matter' };
+  const FX_DEFS = loadEffectDefs();
+  const NATURAL_STAT = Object.fromEntries([...FX_DEFS.values()].filter(d => d.flags?.naturalKind).map(d => [d.id, ELEM_STAT[d.elements[0]] || 'matter']));
   const plan = (turn, round) => {
     const me = a.peers.get(peerId);
     if (!me || (me.life ?? 1) <= 0) return;
@@ -230,7 +236,7 @@ function startAgent(peerId, port, attempt = 0) {
     const dist = p => hexDistance({ q: me.tile_q, r: me.tile_r }, { q: p.tile_q, r: p.tile_r });
     // A Rogue who spent the threat charge this turn (stealth_turn) is not chased unless already adjacent (user ruling 2026-11-14).
     // Invisibility (user ruling 2026-11-14): an invisible enemy is not seen (unless I am invisible too).
-    const invisOf = p => String(p?.permanents_csv || '').split(',').includes('effect_invisibility');
+    const invisOf = p => String(p?.permanents_csv || '').split(',').some(id => EFFECT_RULES[id]?.hides);
     const amInvis = invisOf(me);
     const enemies = [...a.peers.values()].filter(p => p.peer_id !== peerId && sideOf(p.alliance) !== sideOf(me.alliance) && p.life > 0 && Number.isInteger(p.tile_q) && !(anyChargeUsed(parseClassState(p.class_state_json), 'threat', turn) && dist(p) > 1) && !(invisOf(p) && !amInvis));
     // Rogue / Cleric (user rulings 2026-11-14): enemy enter-traps the bot can see in the peers' snapshots.
@@ -312,7 +318,7 @@ function startAgent(peerId, port, attempt = 0) {
       a.natStrikes = (a.natStrikes || 0) + 1; return;
     }
     let myAffl = []; try { myAffl = JSON.parse(me.afflictions_json || '[]').filter(x => x?.natural); } catch {}
-    const homeBound = myAffl.some(x => x.effect_id === 'effect_fear' || ((x.effect_id === 'effect_love' || x.effect_id === 'effect_awe') && near && x.by === near.peer_id));
+    const homeBound = myAffl.some(x => naturalKind(x.effect_id) === 'no_damage' || (naturalKind(x.effect_id) === 'spare_holder' && near && x.by === near.peer_id));
     if (homeBound && Number.isInteger(me.entry_q) && Number.isInteger(me.entry_r) && !(me.tile_q === me.entry_q && me.tile_r === me.entry_r) && Math.random() < 0.5) {
       a.dest = { q: me.entry_q, r: me.entry_r };
       queue('EMPTY', skillsFor('M', 'P')); send({ kind: 'target', target: { q: a.dest.q, r: a.dest.r } }); send({ kind: 'lock' });
@@ -348,7 +354,7 @@ function startAgent(peerId, port, attempt = 0) {
       }
     }
     // Invisibility in hand and not invisible yet: cast it (Posture / Empty Posture, 2 emissions), mostly.
-    const invIdx = amInvis ? -1 : a.hand.findIndex(c => isEffect(c) && c.effect_id === 'effect_invisibility');
+    const invIdx = amInvis ? -1 : a.hand.findIndex(c => isEffect(c) && EFFECT_RULES[c.effect_id]?.hides);
     if (invIdx >= 0 && Math.random() < 0.7) {
       const p = slotOf('P');
       queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, invIdx);
@@ -358,7 +364,7 @@ function startAgent(peerId, port, attempt = 0) {
     }
     // Awake (2026-11-17): cast it now and then on a Posture / Empty Posture — ~35% with a clicked hex 1–4 away,
     // ~15% clicking my own hex (I am the one to move), else no click (the resolver picks the most beneficial move).
-    const awIdx = a.hand.findIndex(c => isEffect(c) && c.effect_id === 'effect_awake');
+    const awIdx = a.hand.findIndex(c => isEffect(c) && EFFECT_RULES[c.effect_id]?.surgery === 'awake');
     if (awIdx >= 0 && Math.random() < 0.4) {
       const p = slotOf('P');
       queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, awIdx);
@@ -378,12 +384,12 @@ function startAgent(peerId, port, attempt = 0) {
     // Resurrect only with a fallen unit or an ally next to me (else it has nothing to aim at).
     const nextToMe = [...a.peers.values()].filter(p => p.peer_id !== peerId && Number.isInteger(p.tile_q) && dist(p) <= 1);
     const canRaise = nextToMe.some(p => (p.life ?? 1) <= 0 || (sideOf(p.alliance) === sideOf(me.alliance) && p.life > 0));
-    const sumIdx = a.hand.findIndex(c => isEffect(c) && (c.effect_types || []).includes('stat_buy') && (c.effect_id !== 'effect_resurrect_death_ward' || canRaise));
+    const sumIdx = a.hand.findIndex(c => isEffect(c) && (c.effect_types || []).includes('stat_buy') && (!EFFECT_RULES[c.effect_id]?.resurrect || canRaise));
     if (sumIdx >= 0 && near && Math.random() < 0.5) {
       const p = slotOf('P');
       const dead = nextToMe.find(p => (p.life ?? 1) <= 0);
       queue(p >= 0 ? p : 'EMPTY', skillsFor('P'), null, sumIdx);
-      send({ kind: 'target', target: (a.hand[sumIdx].effect_id === 'effect_resurrect_death_ward' && dead) ? dead.peer_id : near.peer_id }); send({ kind: 'lock' });
+      send({ kind: 'target', target: (EFFECT_RULES[a.hand[sumIdx].effect_id]?.resurrect && dead) ? dead.peer_id : near.peer_id }); send({ kind: 'lock' });
       a.summons = (a.summons || 0) + 1;
       return;
     }
@@ -423,7 +429,7 @@ function startAgent(peerId, port, attempt = 0) {
     // Hunt the nearest living monster (that is what stresses the resolver);
     // wander 3–9 hexes only when none is known.
     // Holding Resurrect with a corpse in view: walk to it (the raise needs contact).
-    const corpse = a.hand.some(c => isEffect(c) && c.effect_id === 'effect_resurrect_death_ward')
+    const corpse = a.hand.some(c => isEffect(c) && EFFECT_RULES[c.effect_id]?.resurrect)
       ? [...a.peers.values()].filter(p => p.peer_id !== peerId && (p.life ?? 1) <= 0 && Number.isInteger(p.tile_q) && dist(p) <= 8).sort((x, y) => dist(x) - dist(y))[0] : null;
     // A trap-aware class without a disable ability (a trap charge): walk onto a visible enemy trap within 8 hexes —
     // hunting monsters exercises the threat charge.
@@ -599,7 +605,7 @@ for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir)
   counts[f].bus = bus ? `sent ${bus[3]} rx ${bus[4]} (${bus[1]}/${bus[2]} relays)` : '?';
 }
 console.table(counts);
-// Awake (FORCE_EFFECTS=effect_awake): bot casts / clicked, and the resolver's move lines across every peer log.
+// Awake (FORCE_EFFECTS=<the surgery 'awake' effect>): bot casts / clicked, and the resolver's move lines across every peer log.
 {
   let units = 0, blds = 0, dropped = 0, fizzled = 0;
   for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
@@ -608,7 +614,7 @@ console.table(counts);
     units += (txt.match(/\] awake: \S+ moves (itself|\S+) to \(/g) || []).length;
     blds += (txt.match(/\] awake: \S+ moves the .* → \(/g) || []).length;
     dropped += (txt.match(/\] awake: .* dropped/g) || []).length;
-    fizzled += (txt.match(/cast effect_awake fizzled/g) || []).length;
+    for (const id of Object.keys(EFFECT_RULES).filter(x => EFFECT_RULES[x]?.surgery === 'awake')) fizzled += txt.split(`cast ${id} fizzled`).length - 1;
   }
   const casts = agents.reduce((s, a) => s + (a.awakeCasts || 0), 0);
   if (casts || units || blds) log(`awake: bot casts ${casts} (clicked ${agents.reduce((s, a) => s + (a.awakePicks || 0), 0)}) · unit moves ${units} / building moves ${blds} (lines, all peers) · dropped ${dropped} · fizzled (caster) ${fizzled}`);
@@ -622,13 +628,13 @@ console.table(counts);
   }
   if (seen.size) log(`swaps: ${seen.size} distinct (${[...seen].slice(0, 6).map(([k, n]) => `${k} ×${n} logs`).join('; ')})`);
 }
-// Invisibility (FORCE_EFFECTS=effect_invisibility): landed / shown (every peer) / broken (holder) / area hits.
+// Invisibility (FORCE_EFFECTS=<a `hides` effect>): landed / shown (every peer) / broken (holder) / area hits.
 {
   const inv = { up: 0, shows: 0, broken: 0, area: 0 };
   for (const dir of dirs) for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
     if (!f.endsWith('.log') || f.endsWith('.ui.log')) continue;
     const txt = fs.readFileSync(path.join(dir, f), 'utf8');
-    inv.up += (txt.match(/permanent effect_invisibility up/g) || []).length;
+    for (const id of Object.keys(EFFECT_RULES).filter(x => EFFECT_RULES[x]?.hides)) inv.up += txt.split(`permanent ${id} up`).length - 1;
     inv.shows += (txt.match(/invisibility: \S+ shows itself/g) || []).length;
     inv.broken += (txt.match(/invisibility broken:/g) || []).length;
     inv.area += (txt.match(/area hits the invisible/g) || []).length;

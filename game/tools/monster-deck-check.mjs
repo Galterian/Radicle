@@ -3,7 +3,7 @@
 // cast choice (game/monster-deck.mjs npcCastChoice) in stub situations.
 //   node tools/monster-deck-check.mjs   → ends "all monster deck checks passed"
 import fs from 'node:fs';
-import { EFFECT_RULES, playableEffects } from '../effects.mjs';
+import { EFFECT_RULES, playableEffects, builtinEffectEntries } from '../effects.mjs';
 import { LogicEngine } from '../logic-engine.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcCastable, affordable, affordableFor, effectKind, npcStuckCard } from '../monster-deck.mjs';
 
@@ -12,7 +12,7 @@ const eq = (label, got, want) => { n++; const ok = JSON.stringify(got) === JSON.
 const rd = (f) => JSON.parse(fs.readFileSync(new URL(`../../data/${f}.json`, import.meta.url), 'utf8'));
 const live = (v) => v.status !== 'rejected' && v.status !== 'superseded';
 const act = (e) => [...e.versions.filter(live)].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0] ?? e.versions[0];
-const effects = Object.fromEntries(rd('effects').entries.map(e => [e.id, { id: e.id, name: e.name, data: act(e).data }]));
+const effects = builtinEffectEntries();   // F9: the cards = the definitions' card blocks
 const playable = playableEffects(effects);
 const ruleE = rd('rules').entries.find(e => e.id === 'rule_monster_deck_effects');
 eq('rules.json has rule_monster_deck_effects', !!ruleE, true);

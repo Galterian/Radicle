@@ -1,6 +1,10 @@
 # Skill definitions as data (chaosD6-Skills, milestone S2)
 
-A skill is one JSON file `skills/<skill_id>.json` (schema `chaosd6.skill/1`). Its `hooks` map the hook points of
+A skill is one JSON file `skills/<skill_id>.json` (schema `chaosd6.skill/2` for the built-ins — `deal_order`, `card`,
+`ui`; `chaosd6.skill/1` still loads, for foreign skills, which are never dealt). Since the skill isolation
+(2026-11-22) the game is skill-oblivious: every table it used to hard-code (deal order, SKILL_RULES, TRANCE, the pass
+order, the building skills, the plan locks, the cards, the UI tags / glyphs) comes from these files, and a new skill
+needs changes only here. Its `hooks` map the hook points of
 `game/skills.mjs#skillHook` (inventory, call sites, resolver order: `HOOKS.md`) to programs in the effects'
 JsonLogic dialect (`game/effects-data/SCHEMA.md` — same evaluator, op budget, depth limit). Shared subroutines and
 the std programs live in `lib/<id>.json` (schema `chaosd6.skill-lib/1`). Engine: `game/skill-engine.mjs`, dispatch:
@@ -11,19 +15,27 @@ game/skills-data/
   SCHEMA.md  skill.schema.json  HOOKS.md
   skills/skill_dodge.json …          one definition per skill (14 built-ins)
   lib/skills_std.json                subroutines + the std programs of the per-skill hooks
+  lib/skills_pass.json               subroutines of the pass-hook programs (edit records)
+  oracle/skills-js.mjs               TEST ORACLE: the JS reference hooks + the frozen pre-isolation tables (never run by the game)
 ```
 S3 (`tools/skills-repo-sync.mjs`) mirrors this layout into the chaosD6-Skills repo; S5's validator reads the same files.
 A content hash of a skill must cover the skill file AND every library it `uses`.
 
 ## Engine switch
 
-`SKILL_ENGINE=js` (default) | `data` | `shadow`, read once by `skills.mjs`:
-- `js` — unchanged: the S1 JS hooks.
-- `data` — every hook marked **data** below runs the program of the skill's definition (`SKILL_DEFS_DIR=<dir>` points
-  the loader elsewhere); the **js** hooks stay on JS.
+`SKILL_ENGINE=data` (default since the skill isolation) | `js` | `shadow`, read once by `skills.mjs`:
+- `data` — every hook runs the program of the skill's definition (`SKILL_DEFS_DIR=<dir>` points the loader elsewhere).
+  A hook marked `{"engine": "js", "impl": "skills.mjs#…"}` runs the oracle's JS hook when the oracle is installed, else
+  its neutral value; `"impl": "peer.mjs#…"` (Force Shield `end_round`) is always neutral — peer.mjs does that part.
+- `js` — the JS reference hooks of the TEST ORACLE `oracle/skills-js.mjs` (moved out of skills.mjs verbatim).
 - `shadow` — both run; results must be JSON-identical (key order included; for `damage_in` the edited damage map and
   the pushed `skillFx`); a mismatch goes to stderr (`[skills] SHADOW MISMATCH …`), `SKILL_SHADOW_STRICT=1` throws;
   the JS result is returned. `SKILL_SHADOW_REPORT=1` prints a tally at exit.
+- `js` and `shadow` need the oracle: `SK.installSkillOracle(await import('./skills-data/oracle/skills-js.mjs'))` (the
+  caller does it — skills.mjs has no dynamic import, so skills-repo-sync's engine closure never pulls the oracle in).
+  Without it the first hook call throws `SKILL_ENGINE=js needs the JS oracle: call installSkillOracle() …`.
+- The bundle is loaded eagerly and leniently at import: an invalid definition is left out and reported by
+  `skillBundleErrors()` (peer.mjs should refuse to start while it is not empty).
 - A program error or limit in `data` mode gives the hook's **neutral value** (what the JS hook returns when the skill
   is not in play) and a `[skills] data hook:` line on stderr — deterministic on every peer. A ctx query that throws
   propagates (same as JS).
@@ -31,17 +43,30 @@ A content hash of a skill must cover the skill file AND every library it `uses`.
 
 API (skills.mjs): `skillHook(hook, id, ctx, args)`, `resolveSkillProgram(def, hook, ctx, args)` (run ONE definition —
 S5's audit), `validateSkillDef(def, {libs|libMap})`, `registerForeignSkill(key, id, flags, hooks[, opts])`,
-`isForeignSkillId(id)`, `foreignSkillDef(keyOrId)`, `clearForeignSkills()` (tests), `skillBundle()`, `SKILL_ENGINE`,
-`skillShadowStats`. skill-engine.mjs: `loadSkillDefs`, `validateSkillDef`, `validateSkillLib`, `HOOK_SPECS`,
-`SKILL_OPS`, `SKILL_CTX_OPS`, `SKILL_LIMITS`, `runHookProgram`, `neutralOf`, `resultOk`.
+`isForeignSkillId(id)`, `foreignSkillDef(keyOrId)`, `clearForeignSkills()` (tests), `skillBundle()`,
+`skillBundleErrors()`, `SKILL_ENGINE`, `skillShadowStats`, `installSkillOracle(mod)`, `skillOracle()`; the derived tables
+`SKILL_RULES` (flags, deal order), `SKILLS_IMPLEMENTED` (deal order), `NEGATING_SKILLS`, `TRANCE` (the id with
+`flags.trance`), `BUILDING_SKILLS` (`flags.buildingSkill` order), `PLAN_LOCKS` (`flags.planLock` / `selfLock.codes`),
+`builtinSkillEntries()` (`{id: {id, name, tags, data}}` from the cards, deal order — what peer.mjs used to read from
+data/skills.json), `builtinSkillCatalog()` (a data/skills.json-shaped collection for the browser / Godot), `SKILL_UI` /
+`skillUiOf(id)` (the `ui` block + `trance`, `keeps_target`, `attack_reach` (flags.reach, 1 = contact), `rest_keeps`
+(flags.invincibleWhile or null)), `sanctuaryBreaks(reveal[, keeps])`, `ridesOn`, `ridesFor`, `passHookData`.
+skill-engine.mjs: `loadSkillDefs(src, {builtinIds, lenient})` (→ `{defs, libs, std, errors}`), `validateSkillDef`,
+`validateCard`, `validateUi`, `validateSkillLib`, `HOOK_SPECS` (pass `order` derived from the built-ins' flags.passOrder),
+`PASS_HOOKS`, `derivePassOrders(defs)`, `setBuiltinPassOrders(defs)`, `SKILL_OPS`, `SKILL_CTX_OPS`, `SKILL_LIMITS`,
+`runHookProgram`, `neutralOf`, `resultOk`.
 
 ## Definition fields
 
 | field | meaning |
 |---|---|
-| `schema` | `"chaosd6.skill/1"` |
-| `id`, `name`, `version` | `skill_[a-z0-9_]+`, display name, semver of THIS definition |
-| `source` | provenance of the metadata (`data/skills.json` active version) |
+| `schema` | `"chaosd6.skill/2"` (built-ins) or `"chaosd6.skill/1"` (foreign; no `deal_order` / `card` / `ui`) |
+| `id`, `name`, `version` | `skill_[a-z0-9_]+`, display name, semver of THIS definition (bumped by the isolation) |
+| `source` | provenance of the metadata (`data/skills.json` active version it was copied from — data/skills.json is a frozen record now) |
+| `deal_order` | /2 built-ins (required, integer ≥ 1, unique across the built-ins): position in the deal order (`SKILLS_IMPLEMENTED`, every "in deal order" fold). A foreign skill has none — it is never dealt |
+| `card` | /2: `{name, tags, resources, data, rebalance_links, logic}` — exactly the data/skills.json entry (name / tags / resources) and its active version (data / rebalance_links / logic); `card.data` keys `action_type, is_permanent, point_buy_stat, text` (required) `, element, fixed_power` must equal the top-level fields (same shape as an effect's card) |
+| `ui` | /2: `{tag, glyph, color}` (strings, required for a built-in) + optional `card_glyph`, `card_color` (when the skill card glyph differs from the map icon), `rest_hint` (the rest-slot hint text, Sanctuary) |
+| `fixed_power` | permanent only, 1..6: lands with that Rule 24 power, no roll (Force Shield 6) |
 | `action_type` | `A · M · B · P` — the action card it rides on (M / P also on EM / EP; Battle Trance on anything) |
 | `is_permanent`, `point_buy_stat` | permanent (Rule 12 landing, Rule 24 destruction) and its stat `stat_vitality · stat_world · stat_matter · stat_will · any`; `null` for an instant |
 | `element`, `text` | optional, from data/skills.json (documentation) |
@@ -58,6 +83,19 @@ S5's audit), `validateSkillDef(def, {libs|libMap})`, `registerForeignSkill(key, 
 
 Shared keys (`attackBonus`, `damageOff`, `trance`) mean the same in both and carry the same value. Every other key
 belongs to exactly one vocabulary; an unknown key is an error for the validator.
+
+`SKILL_RULES[id]` is now the deep-cloned `flags` of the definition (resolver keys first); tools/skill-engine-check.mjs and
+skills-check.mjs compare its resolver keys with the oracle's frozen pre-isolation table (`SKILL_RULES_REF`).
+
+**Isolation flags** (validated by skill-engine.mjs; resolver-side, ignored by the validator's pricing):
+
+| key | meaning | rule |
+|---|---|---|
+| `passOrder` | `{<pass hook>: n}` — this built-in's place in the pass (`HOOK_SPECS[hook].order` = the built-ins sorted by n, then id): `counter_pre` Counter Spell 1; `negate_action` Bluff 1, Intimidation 2; `negate_kind` Grapple 1, Disruption Move 2, Overrun 3; `trance_assign` Battle Trance 1 | pass hooks only, integer ≥ 1, (hook, n) unique; a /2 built-in with a pass program must have it |
+| `buildingSkill` | 0-based slot in the building-bonus skill list (`BUILDING_SKILLS`, part of the (seed, q, r) contract): Dodge 0, Powerful Attack 1, Intimidation 2, Grapple 3, Disruption Move 4, Bluff 5, Counter Spell 6 | integer ≥ 0, unique |
+| `planLock` | the codes a skill that paid off still allows this round (`plan_lock`) | non-empty list of `A B M P EM EP`; Powerful Attack uses the existing `selfLock {codes: ['A'], until}` instead (`PLAN_LOCKS` reads `planLock`, else `selfLock.codes`) |
+| `trance` | the skill plays two actions (`TRANCE`, lib `ps_non_perm`) | Battle Trance |
+| `reach`, `invincibleWhile` | UI facts (`skillUiOf`: `attack_reach`, `rest_keeps`) | Ranged Weapon 2; Sanctuary `[M, EM, EP]` |
 
 ## Hooks
 
@@ -105,7 +143,7 @@ Disruption Move, Overrun, Battle Trance) — programs in the skill files + `lib/
 They edit the resolver's registers in place and later skills read the edits of earlier ones in the same pass
 (Intimidation sees Bluff's EP; Overrun's target choice reads codes rewritten by Grapple). The dispatcher
 (skills.mjs `dataPass`) runs one program per (reveal, skill) — reveals sorted by actor (`counter_pre`) or in live order,
-skills in `HOOK_SPECS[hook].order` — with root registers `{skill, r, actor, phase, carry}`; the program returns edit
+skills in `HOOK_SPECS[hook].order` (derived from the built-ins' `flags.passOrder`) — with root registers `{skill, r, actor, phase, carry}`; the program returns edit
 records (`skill-engine.mjs PASS_OPS`) that are applied in order before the next program runs, so `code_is` /
 `reveal_of` see them:
 
@@ -158,6 +196,9 @@ New pure op in effect-engine.mjs (S2): `bool x` = JS `!!x` (JsonLogic `!!` treat
 (`stat_matter` → `matter`), `rides`, `plan_target`, `perm_landing`, `perm_stats`, `disposition` (the S1 rules, see
 HOOKS.md). A skill file lists the std hooks it relies on as `{"call": ["perm_stats"]}` (same program).
 
+`skills_pass` 1.1.0 (skill isolation): `ps_non_perm` tests `skill_flag [id, "trance"]` instead of the Battle Trance id
+literal (same result: Battle Trance is the only skill with `flags.trance`). No library names a skill id.
+
 ## Foreign skills (S4)
 
 `registerForeignSkill(key, id, flags, hooks[, {meta, uses, libs, name, version}])` validates (`builtin: false` — no JS
@@ -182,6 +223,8 @@ or the std default on its metadata. A pass program of a foreign skill runs after
 
 ## Validate
 
-`node tools/skill-engine-check.mjs` (files, flags, ≥ 600 seeded cases per skill per data hook vs the JS hooks,
-rejection, limits, foreign API, skills-check under shadow / data) and `SKILL_ENGINE=shadow SKILL_SHADOW_STRICT=1 node
-tools/skills-check.mjs`. Pricing: `node tools/skills-rebalancing-check.mjs check skills-data/skills/<id>.json`.
+`node tools/skill-engine-check.mjs` (files, /2 card / ui / deal_order, flags vs the frozen old table, ≥ 600 seeded
+cases per skill per data hook vs the ORACLE's JS hooks, rejection, limits, foreign API, skills-check under shadow / js /
+data, the lenient loader, the engine without the oracle, the grep gate: no built-in skill id as code in the game files)
+and `SKILL_ENGINE=shadow SKILL_SHADOW_STRICT=1 node tools/skills-check.mjs` (derived tables = the old literals, worked
+examples, identity vs the pre-S1 code). Pricing: `node tools/skills-rebalancing-check.mjs check skills-data/skills/<id>.json`.

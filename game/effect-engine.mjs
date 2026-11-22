@@ -25,7 +25,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const EFFECTS_DATA_DIR = path.join(here, 'effects-data');
-export const EFFECT_SCHEMA_ID = 'chaosd6.effect/1';
+// chaosd6.effect/2 (effect isolation F2, 2026-11-21) = /1 + the optional `standing` block (what the permanent does
+// while it stands — game/effect-standing.mjs); a /1 file still loads (a /1 file with `standing` is refused).
+export const EFFECT_SCHEMA_ID = 'chaosd6.effect/2';
+export const EFFECT_SCHEMA_IDS = Object.freeze(['chaosd6.effect/1', 'chaosd6.effect/2']);
 export const LIB_SCHEMA_ID = 'chaosd6.effect-lib/1';
 export const ENGINE_LIMITS = Object.freeze({ maxOps: 200000, maxDepth: 96, maxRange: 1024 });
 
@@ -341,10 +344,91 @@ export function validateLogic(logic, subs, known = new Set(ALL_OPS)) {   // `kno
   if (subs) for (const c of calls) if (typeof c !== 'string' || !subs.has(c)) errors.push(`call to unknown subroutine ${c}`);
   return errors;
 }
+// Standing programs (game/effect-standing.mjs; F2): their hook names, read-only queries and vocabulary live here so the
+// loader can validate a definition without importing the runtime.
+export const STANDING_HOOK_NAMES = Object.freeze(['combat_out', 'damage_in', 'cast_in', 'adjacent_lost', 'plan_emit', 'afflicted', 'harm_in', 'breaks']);
+export const STANDING_CTX_OPS = Object.freeze({
+  has_perm: (c, [id, p]) => !!c.hasPerm?.(id, p),
+  enemy_of: (c, [a, b]) => !!c.enemyOf?.(a, b),
+  dist: (c, [a, b]) => (c.dist ? c.dist(a, b) : Infinity),
+  life_of: (c, [id]) => (c.lifeOf ? c.lifeOf(id) : 0),
+});
+// The cast-bound forms are not available to a standing program (it runs outside a cast).
+export const STANDING_DENY = new Set(['emit', 'put', 'out', 'note', 'return', 'return_empty', 'seed', 'rng', 'point_buy']);
+export const STANDING_OPS = Object.freeze([...SPECIAL, ...Object.keys(PURE_OPS), ...Object.keys(STANDING_CTX_OPS)].filter(op => !STANDING_DENY.has(op)).sort());
+export function validateStanding(standing, subs) {
+  if (standing === undefined) return [];
+  if (!standing || typeof standing !== 'object' || Array.isArray(standing)) return ['standing must be an object {hook: program}'];
+  const errs = [], known = new Set(STANDING_OPS);
+  for (const [h, prog] of Object.entries(standing)) {
+    if (!STANDING_HOOK_NAMES.includes(h)) { errs.push(`standing.${h}: unknown hook (${STANDING_HOOK_NAMES.join(', ')})`); continue; }
+    errs.push(...validateLogic(prog, subs, known).map(e => `standing.${h}: ${e}`));
+  }
+  return errs;
+}
+// F8: how bots treat the card (`bot`) and how the UI shows it (`ui`) — chaosd6.effect/2 only; never read by a resolver.
+export const BOT_KEYS = Object.freeze({
+  tags: (v) => Array.isArray(v) && v.every(t => typeof t === 'string' && /^[a-z][a-z0-9-]*$/.test(t)),   // creature tags the effect suits (monster deck themes)
+  names: (v) => Array.isArray(v) && v.every(t => { try { return typeof t === 'string' && t.length <= 200 && !!new RegExp(t, 'i'); } catch { return false; } }),   // creature-name patterns it suits
+  defence: (v) => typeof v === 'boolean',      // a self-protecting card (the "1 defensive" of the monster mix)
+  ai: (v) => v === false,                      // bots cannot drive it — never picked, never cast by npcPlan
+  contact: (v) => typeof v === 'boolean',      // a defensive / control cast only with an enemy in contact
+  heals_self: (v) => typeof v === 'boolean',   // also sensible when the caster is hurt
+});
+export const UI_KEYS = Object.freeze({
+  target_hint: (v) => typeof v === 'string' && v.length <= 400,   // the targeting help line while the card is selected
+  toast_hits: (v) => typeof v === 'boolean',                       // its effect-result toast lists every unit hit
+  perm_help: (v) => typeof v === 'string' && v.length <= 600,      // the perms-strip tooltip while it stands
+});
+const validateBlock = (name, keys, v) => {
+  if (v === undefined) return [];
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return [`${name} must be an object`];
+  return Object.entries(v).flatMap(([k, x]) => !keys[k] ? [`${name}.${k}: unknown key`] : keys[k](x) ? [] : [`${name}.${k}: malformed ${JSON.stringify(x)?.slice(0, 80)}`]);
+};
+// F9: the card the game deals (data/effects.json retired for effects) — `card` {name, tags, resources, data, rebalance_links, logic}; data
+// is what peer.mjs reads as data.effects[id].data (element_cost must equal the definition's elements); logic = the
+// data-layer block (game/logic-engine.mjs: description / prerequisites / effects / validation), checked by logic-check.
+const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const strs = (v) => Array.isArray(v) && v.every(t => typeof t === 'string' && t.length <= 60);
+export const CARD_DATA_KEYS = Object.freeze({
+  effect_types: strs,
+  element_cost: (v) => Array.isArray(v) && v.every(e => ALL_ELEMS.includes(e)),
+  text: (v) => typeof v === 'string' && v.length <= 2000,
+  every_bonus: (v) => typeof v === 'string' && v.length <= 1000,
+  permanent_power: (v) => Number.isInteger(v) && v >= 1 && v <= 36,
+  natural_permanent: isObj,
+  hidden_from: (v) => typeof v === 'string' && v.length <= 60,
+  breaks_on: strs,
+  area_hits: (v) => typeof v === 'boolean',
+  stat_buy_total: (v) => Number.isInteger(v) && v >= 1 && v <= 60,
+  possess: isObj,
+  phylactery: isObj,
+  creature_innate: (v) => typeof v === 'boolean',
+  in_player_deck: (v) => typeof v === 'boolean',
+});
+export function validateCard(card, elements) {
+  if (card === undefined) return [];
+  if (!isObj(card)) return ['card must be an object'];
+  const errs = Object.keys(card).filter(k => !['name', 'tags', 'resources', 'data', 'rebalance_links', 'logic'].includes(k)).map(k => `card.${k}: unknown key`);
+  if (typeof card.name !== 'string' || !card.name || card.name.length > 80) errs.push('card.name required');
+  if (card.tags !== undefined && !strs(card.tags)) errs.push('card.tags must be strings');
+  if (card.resources !== undefined && !isObj(card.resources)) errs.push('card.resources must be an object');
+  if (card.logic !== undefined && !isObj(card.logic)) errs.push('card.logic must be an object');
+  if (card.rebalance_links !== undefined && !(strs(card.rebalance_links) && card.rebalance_links.every(t => /^[a-z]+_[a-z0-9_]+$/.test(t)))) errs.push('card.rebalance_links must be entry ids');
+  if (!isObj(card.data)) return [...errs, 'card.data must be an object'];
+  errs.push(...validateBlock('card.data', CARD_DATA_KEYS, card.data));
+  for (const k of ['effect_types', 'element_cost', 'text']) if (card.data[k] === undefined) errs.push(`card.data.${k} required`);
+  if (JSON.stringify(card.data.element_cost) !== JSON.stringify(elements)) errs.push('card.data.element_cost must equal elements');
+  return errs;
+}
 export function validateEffectDef(def, subs) {
   const errors = [];
   if (!def || typeof def !== 'object') return ['definition is not an object'];
-  if (def.schema !== EFFECT_SCHEMA_ID) errors.push(`schema must be ${EFFECT_SCHEMA_ID}`);
+  if (!EFFECT_SCHEMA_IDS.includes(def.schema)) errors.push(`schema must be ${EFFECT_SCHEMA_IDS.join(' or ')}`);
+  if (def.standing !== undefined && def.schema !== EFFECT_SCHEMA_ID) errors.push(`standing needs schema ${EFFECT_SCHEMA_ID}`);
+  errors.push(...validateStanding(def.standing, subs));
+  for (const b of ['bot', 'ui', 'card']) if (def[b] !== undefined && def.schema !== EFFECT_SCHEMA_ID) errors.push(`${b} needs schema ${EFFECT_SCHEMA_ID}`);
+  errors.push(...validateBlock('bot', BOT_KEYS, def.bot), ...validateBlock('ui', UI_KEYS, def.ui), ...validateCard(def.card, def.elements));
   if (typeof def.id !== 'string' || !/^effect_[a-z0-9_]+$/.test(def.id)) errors.push('id must match effect_[a-z0-9_]+');
   if (typeof def.version !== 'string' || !/^\d+\.\d+\.\d+/.test(def.version)) errors.push('version must be semver');
   if (typeof def.name !== 'string' || !def.name) errors.push('name required');

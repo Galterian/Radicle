@@ -8,8 +8,15 @@
 // 2026-11-16 SKILL REBALANCE (user rulings): Force Shield, Taunt, Ranged Weapon, Sanctuary, Overrun, Disruption Move and
 //    Powerful Attack are now INTENTIONALLY different from the pre-S1 code. Their REF_* lines below are replaced by the
 //    reference of the ruling (marked `ruling 2026-11-16`), and section 2b holds the worked examples of the rulings.
+// Skill isolation (2026-11-22): the tables are derived from the definitions (deal_order, flags, card); section 1
+//    compares them with the oracle's frozen copies of the old literals (skills-data/oracle/skills-js.mjs REF tables).
+//    skillHook runs SKILL_ENGINE (default data); js / shadow install the oracle first.
 import fs from 'node:fs';
-import { SKILL_RULES, SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE, HOOK_NAMES, skillHook, ridesOn, ridesFor } from '../skills.mjs';
+import * as SK from '../skills.mjs';
+import * as SE from '../skill-engine.mjs';
+const OR = await import('../skills-data/oracle/skills-js.mjs');   // the REF tables (importing ≠ installing)
+if (SK.SKILL_ENGINE !== 'data') SK.installSkillOracle(await import('../skills-data/oracle/skills-js.mjs'));
+const { SKILL_RULES, SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE, HOOK_NAMES, skillHook, ridesOn, ridesFor } = SK;
 
 let fails = 0, oks = 0;
 const eq = (label, got, want, quietOk = false) => {
@@ -49,6 +56,35 @@ for (const id of SKILLS_IMPLEMENTED) {
   for (const h of r.hooks) if (!HOOK_NAMES.includes(h) && !['plan', 'move'].includes(h)) { fails++; console.log(`FAIL ${id}: unknown hook ${h}`); }
 }
 console.log(`ok   ${SKILLS_IMPLEMENTED.length} skills: flags match data, hooks known`);
+// Skill isolation: every table the game used to hard-code is derived from the definitions — equal to the old literals.
+{
+  const defs = [...SK.skillBundle().defs.values()];
+  eq('skill bundle loads without errors', SK.skillBundleErrors(), []);
+  eq('deal order = the definitions sorted by deal_order', SKILLS_IMPLEMENTED, defs.filter(d => Number.isInteger(d.deal_order)).sort((a, b) => a.deal_order - b.deal_order).map(d => d.id));
+  eq('deal_order = 1..14 (old deal order positions)', OLD_IMPLEMENTED.map(id => SK.skillBundle().defs.get(id)?.deal_order), OLD_IMPLEMENTED.map((_, i) => i + 1), true);
+  eq('oracle DEAL_ORDER_REF = the old deal order', [...OR.DEAL_ORDER_REF], OLD_IMPLEMENTED, true);
+  const resolverKeys = (id) => Object.fromEntries(Object.keys(OR.SKILL_RULES_REF[id]).map(k => [k, SKILL_RULES[id]?.[k]]));
+  for (const id of OLD_IMPLEMENTED) eq(`SKILL_RULES ${id} (resolver keys) = the old table`, resolverKeys(id), OR.SKILL_RULES_REF[id], true);
+  eq('TRANCE = the id with flags.trance = the old literal', TRANCE, OR.TRANCE, true);
+  eq('NEGATING_SKILLS = old-table negating', [...NEGATING_SKILLS].sort(), Object.keys(OR.SKILL_RULES_REF).filter(id => OR.SKILL_RULES_REF[id].negating).sort(), true);
+  eq('HOOK_SPECS pass order (flags.passOrder) = the old arrays', Object.fromEntries(SE.PASS_HOOKS.map(h => [h, SE.HOOK_SPECS[h].order])), OR.PASS_ORDER_REF);
+  eq('BUILDING_SKILLS (flags.buildingSkill) = the old js/building-bonus.js list', [...SK.BUILDING_SKILLS], [...OR.BUILDING_SKILLS_REF]);
+  eq('PLAN_LOCKS (flags.planLock / selfLock.codes) = the old table', SK.PLAN_LOCKS, OR.PLAN_LOCKS);
+  // builtinSkillEntries() = what peer.mjs pickActive gave data.skills from data/skills.json (key order too), deal order.
+  const want = Object.fromEntries(skillsJson.entries.map(e => { const v = pickActive(e); return [e.id, { id: e.id, name: e.name, tags: e.tags || [], data: v.data }]; }));
+  const got = SK.builtinSkillEntries();
+  eq('builtinSkillEntries(): ids in deal order', Object.keys(got), SKILLS_IMPLEMENTED, true);
+  for (const id of Object.keys(want)) eq(`builtinSkillEntries().${id} = data/skills.json active {id, name, tags, data} (byte-equal)`, got[id], want[id], true);
+  const cat = SK.builtinSkillCatalog();
+  eq('builtinSkillCatalog(): one canonical version per skill = the card data, resources kept', cat.entries.map(e => [e.id, e.versions.length, JSON.stringify(e.versions[0].data) === JSON.stringify(want[e.id].data), JSON.stringify(e.resources) === JSON.stringify(skillsJson.entries.find(x => x.id === e.id).resources)]), SKILLS_IMPLEMENTED.map(id => [id, 1, true, true]), true);
+  // skillUiOf: the ui block + the resolver facts (trance, keeps_target, attack_reach, rest_keeps)
+  const ui = Object.fromEntries(SKILLS_IMPLEMENTED.map(id => { const u = SK.skillUiOf(id); return [id, [typeof u.tag, typeof u.glyph, typeof u.color, u.trance, u.keeps_target, u.attack_reach, u.rest_keeps]]; }));
+  eq('skillUiOf: ui strings + trance / keeps_target / attack_reach / rest_keeps', ui, Object.fromEntries(SKILLS_IMPLEMENTED.map(id => [id, ['string', 'string', 'string', id === 'skill_battle_trance', id === 'skill_counter_spell', id === 'skill_ranged_weapon' ? 2 : 1, id === 'skill_sanctuary' ? ['M', 'EM', 'EP'] : null]])), true);
+  eq('skillUiOf(unknown) = null', SK.skillUiOf('skill_nope'), null, true);
+  // sanctuaryBreaks (generic, keeps = flags.invincibleWhile) = the oracle's
+  const rs = [null, { declared: 'M' }, { declared: 'EP', skills: ['skill_x'], buildingSkill: 'skill_x' }, { declared: 'BT', trance: ['M', 'A'] }, { action: 'B' }, { declared: 'EM', effect: {} }, { declared: 'EP', destroy: {} }, { declared: 'EP', skills: ['skill_dodge'] }];
+  eq('sanctuaryBreaks (skills.mjs, data-derived) = the oracle', rs.map(r => SK.sanctuaryBreaks(r)), rs.map(r => OR.sanctuaryBreaks(r)), true);
+}
 
 // ---- seeded PRNG + random worlds ---------------------------------------------------------------------
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -553,7 +589,8 @@ const rv = (actor, action, target = null, extra = {}) => ({ actor, action, targe
 }
 {
   // Intimidation: DO NOT CHANGE (user) — still negates every adjacent Attack, then counters a skill.
-  eq('intimidation unchanged: SKILL_RULES', SKILL_RULES.skill_intimidation, { action: 'P', permanent: false, negating: true, hooks: ['negate_action'], range: 1, negates: ['A'] });
+  const want = { action: 'P', permanent: false, negating: true, hooks: ['negate_action'], range: 1, negates: ['A'] };
+  eq('intimidation unchanged: SKILL_RULES (resolver keys)', Object.fromEntries(Object.keys(want).map(k => [k, SKILL_RULES.skill_intimidation[k]])), want);
 }
 
 // ---- 3. identity: random worlds -----------------------------------------------------------------------

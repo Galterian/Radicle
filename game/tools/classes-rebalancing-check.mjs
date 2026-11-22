@@ -499,7 +499,7 @@ function auditWorld(seed, n) {
     enemyOf: (a, b) => { const x = view.get(a), y = view.get(b); return !!x && !!y && side(x.alliance) !== side(y.alliance); },
     hasPerm: (id, p) => String(view.get(id)?.permanents_csv || '').split(',').includes(p),
     statOf: (id, st) => view.get(id)?.stats?.[st] ?? 0, sideOf: side,
-    classData: () => n.data, skillAction: () => 'A', library: () => LIB_CARDS, elemStat: (el) => ELEM_TO_STAT[el],
+    classData: () => n.data, skillAction: () => 'A', skillIsTrance: () => false, library: () => LIB_CARDS, elemStat: (el) => ELEM_TO_STAT[el],
     turn: 5, action: 17 + int(9), sha: sha256,
   };
   const ids = [...view.keys()];

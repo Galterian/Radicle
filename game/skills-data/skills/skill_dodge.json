@@ -1,16 +1,19 @@
 {
-  "schema": "chaosd6.skill/1",
+  "schema": "chaosd6.skill/2",
   "id": "skill_dodge",
   "name": "Dodge / Evasion",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": {"collection":"skills","version":"1.0.0"},
+  "deal_order": 8,
   "action_type": "M",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "−1 combat damage (one less damage done to you this action).",
-  "flags": {"action":"M","permanent":false,"negating":true,"hooks":["damage_in"],"damageOff":1},
+  "flags": {"action":"M","permanent":false,"negating":true,"hooks":["damage_in"],"damageOff":1,"buildingSkill":0},
   "uses": ["skills_std"],
   "hooks": {
     "damage_in": {"let":[{"hits":{"filter":[{"map":[{"var":"damage"},{"if":[{"has_skill":[{"at":[{"var":"e"},0]},{"var":"skill"}]},{"let":[{"h":{"find":[{"map":[{"at":[{"var":"e"},1]},{"obj":{"i":{"var":"i"},"source":{"var":"d.source"},"amount":{"var":"d.amount"},"attacker":{"var":"d.attacker"}}},"d"]},{"and":[{"===":[{"var":"x.source"},"action"]},{">":[{"var":"x.amount"},0]}]},"x"]}},{"if":[{"var":"h"},{"obj":{"victim":{"at":[{"var":"e"},0]},"i":{"var":"h.i"},"amount":{"-":[{"var":"h.amount"},1]},"attacker":{"var":"h.attacker"}}},null]}]},null]},"e"]},{"var":"y"},"y"]}},{"obj":{"edits":{"map":[{"var":"hits"},{"obj":{"victim":{"var":"h.victim"},"i":{"var":"h.i"},"amount":{"var":"h.amount"}}},"h"]},"fx":{"map":[{"var":"hits"},{"obj":{"by":{"var":"h.victim"},"skill":{"var":"skill"},"on":{"var":"h.attacker"},"what":"damage","building":{"from_building":[{"var":"h.victim"},{"var":"skill"}]}}},"h"]}}}]}
-  }
+  },
+  "ui": {"tag":"Do","glyph":"💨","color":"#6ad9ff"},
+  "card": {"name":"Dodge / Evasion","tags":["move","defense"],"resources":{"source":"warlords3_battlecry","match_reason":"whoosh of a dodge; faint after-image rings of the dodge","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect faint white rings/Spell effect faint white rings - idle [EZ08].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/swoosh2.wav","usage":"play when the skill resolves (pick randomly if several)"},{"path":"assets/Sounds/SoundFX/swooshlr.wav","usage":"play when the skill resolves (pick randomly if several)"}]},"wbc3_name":"Spell effect: faint white rings","wbc3_code":"EZ08","wbc3_race":"Effects1"},"data":{"action_type":"M","is_permanent":false,"point_buy_stat":null,"text":"−1 combat damage (one less damage done to you this action)."},"rebalance_links":["skill_bluff"],"logic":{"description":"Instant riding on a Move card (or an empty action). One point comes off the total combat damage the caster takes this action: one hit is reduced by 1, not one per attacker. Effect damage is not reduced. Rule 8 pc override: returns to hand when the caster took no combat damage.","prerequisites":[{"id":"rides_on_move","description":"The caster's action is Move (or an empty action, which carries Move skills).","when":{"in":[{"var":"caster.action"},["M","EM","EP"]]}}],"effects":[{"id":"combat_damage_prevented","description":"1 when any combat damage would land on the caster this action, else 0 (never more than 1 in total).","target":"caster","unit":"damage","value":{"min":[1,{"max0":[{"var":"outcome.combat_damage_taken"}]}]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Move skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["rule_8_instant_returns"]}}
 }

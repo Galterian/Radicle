@@ -19,6 +19,7 @@
 //   sideOf(alliance)                     'A' | 'B' | 'C' | …
 //   classData(id)                        the active data/classes.json version's `data` (or undefined)
 //   skillAction(skillId)                 data/skills.json action_type of a skill (Bard)
+//   skillIsTrance(skillId)               true for the trance skill (skills.mjs TRANCE, flags.trance) (Bard; JS oracle)
 //   library()                            [{effect_id, elements}] — the Library (Alchemist)
 //   turn, action                         hg.turn, hg.action
 //   sha(s)                               sha256 hex (peer.mjs sha256Hex)
@@ -28,7 +29,7 @@ export const STATS = ['vitality', 'world', 'matter', 'will'];
 export const TRAP_POWER = 20;          // = effects.mjs TRAP_POWER (tools/classes-check.mjs asserts it)
 export const STRIKE_DIE = 6;           // a class colour falls to a die of 6 (user ruling 2026-10-30)
 export const ILLUSION_RANGE = 10;      // Illusionist: allies within 10 hexes (user ruling 2026-11-12)
-export const TRANCE = 'skill_battle_trance';
+// (TRANCE left, skill isolation 2026-11-22: classes.mjs names no skill id — the Bard oracle asks ctx.skillIsTrance.)
 // = peer.mjs ELEM_TO_STAT (data/elements.json stat of each element) — used when the ctx has no elemStat.
 export const ELEM_TO_STAT = Object.freeze({ elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' });
 

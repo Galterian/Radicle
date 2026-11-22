@@ -88,6 +88,10 @@ fs.writeFileSync(path.join(g, 'tools', 'skills-validator.mjs'), [
 fs.writeFileSync(path.join(g, 'tools', 'skills-validator-calibration.json'), '{ "k": 1 }\n');
 const src = path.join(g, 'skills-data'); fs.mkdirSync(path.join(src, 'skills'), { recursive: true }); fs.mkdirSync(path.join(src, 'lib'));
 fs.writeFileSync(path.join(src, 'SCHEMA.md'), '# skills schema\n'); fs.writeFileSync(path.join(src, 'HOOKS.md'), '# hooks\r\n');
+// skill isolation: the JS oracle (<src>/oracle/*.mjs) is mirrored byte-identical (LF) to oracle/, never into tools/engine
+fs.mkdirSync(path.join(src, 'oracle'));
+fs.writeFileSync(path.join(src, 'oracle', 'skills-js.mjs'), "import { MAXP } from '../../skills.mjs';\r\nexport const HOOKS = { max: () => MAXP };\r\n");
+fs.writeFileSync(path.join(src, 'oracle', 'old-js.mjs'), "export const OLD = 1;\n");
 const repo = path.join(tmp, 'repo');
 const sync = (...a) => { const r = node([path.join(HERE, 'skills-repo-sync.mjs'), '--repo', repo, '--src', src, '--game-root', g, ...a]); if (r.status) throw new Error(r.stdout + r.stderr); return r.stdout; };
 const put = (d, sub = 'skills', pretty = 2) => fs.writeFileSync(path.join(src, sub, `${d.id}.json`), JSON.stringify(d, null, pretty));
@@ -96,10 +100,13 @@ const dry = sync('--dry-run');
 ok(dry.includes('dry run') && !fs.existsSync(repo), '--dry-run writes nothing');
 sync('-m', 'one');
 const c1 = sh(repo, 'rev-parse', 'HEAD');
+ok(fs.existsSync(path.join(repo, 'oracle', 'old-js.mjs')) && fs.readFileSync(path.join(repo, 'oracle', 'skills-js.mjs'), 'utf8') === "import { MAXP } from '../../skills.mjs';\nexport const HOOKS = { max: () => MAXP };\n", 'oracle/*.mjs mirrored from src (LF)');
 fs.unlinkSync(path.join(src, 'skills', 'skill_beta.json')); put(A2, 'skills', 0); put(C); put(LIB2, 'lib');
+fs.unlinkSync(path.join(src, 'oracle', 'old-js.mjs'));
 sync('-m', 'two');
 const c2 = sh(repo, 'rev-parse', 'HEAD');
 ok(c1 !== c2 && sh(repo, 'rev-list', '--count', 'HEAD') === '2', 'sync committed twice locally');
+ok(!fs.existsSync(path.join(repo, 'oracle', 'old-js.mjs')) && fs.existsSync(path.join(repo, 'oracle', 'skills-js.mjs')), 'a stale oracle file is pruned');
 ok(sh(repo, 'remote') === '', 'sync added no remote (local only)');
 ok(node([path.join(repo, 'tools', 'manifest.mjs'), '--check']).stdout.includes('ok (2 skills, 1 libs)'), 'repo index.json fresh (manifest --check)');
 ok(['README.md', 'SCHEMA.md', 'HOOKS.md', '.gitattributes', 'validator/pin.json', 'tools/README.md', 'tools/check.mjs'].every(f => fs.existsSync(path.join(repo, f))), 'skeleton files present (README, SCHEMA, HOOKS, pin, tools/README, check)');
@@ -232,6 +239,10 @@ ok(r.status === 0 && /tools: engine [^\n]*effect-engine\.mjs/.test(r.stdout) && 
 r = node([path.join(HERE, 'skills-repo-sync.mjs'), '--repo', path.join(tmp, 'real'), '--no-commit']);
 const realPins = r.status === 0 ? JSON.parse(fs.readFileSync(path.join(tmp, 'real', 'tools', 'pins.json'), 'utf8')) : null;
 ok(realPins && !realPins.unresolved.length && realPins.engine.files['effect-engine.mjs']?.sha256 === sha256Hex(fs.readFileSync(path.join(GAME, 'effect-engine.mjs'), 'utf8').replace(/\r\n/g, '\n')), 'real sync: engine pinned to game/effect-engine.mjs, nothing unresolved', r.stdout + r.stderr);
+// skill isolation: the oracle is mirrored to oracle/ (byte-identical, LF) and stays out of the engine closure
+const realOracle = path.join(GAME, 'skills-data', 'oracle', 'skills-js.mjs');
+if (fs.existsSync(realOracle)) ok(realPins && fs.readFileSync(path.join(tmp, 'real', 'oracle', 'skills-js.mjs'), 'utf8') === fs.readFileSync(realOracle, 'utf8').replace(/\r\n/g, '\n')
+  && !Object.keys(realPins.engine.files).some(f => /oracle/.test(f)) && !Object.keys(realPins.validator.files || {}).some(f => /oracle/.test(f)), 'real sync: oracle/skills-js.mjs mirrored, not in tools/engine or tools/validator', JSON.stringify(Object.keys(realPins?.engine?.files || {})));
 if (realPins?.validator?.entry) {
   const probe = path.join(tmp, 'real', 'skills', 'skill_s3_probe.json');
   fs.writeFileSync(probe, JSON.stringify({ id: 'skill_s3_probe' }));

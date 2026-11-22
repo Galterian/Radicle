@@ -14,21 +14,19 @@
 export const NATURAL_DEFAULTS = { copies: 2, power: 6, applies_to: 'wild_creatures' };
 export const naturalConfig = (d) => ({ ...NATURAL_DEFAULTS, ...(d || {}) });
 
-// What each natural permanent does while it stands (the semantics the user accepted 2026-11-15).
-export const NATURAL_KINDS = {
-  effect_earthquake: 'turn_tick',      // end of every engine turn: Earthquake's delta damage to every enemy in contact
-  effect_creation: 'ward',             // enemies with Matter < mine cannot enter my adjacent hexes
-  effect_spirit_link: 'link',          // linked to the nearest allied creature (alone: nothing)
-  effect_love: 'spare_holder',         // an enemy that came in contact cannot damage me until it visits its tower
-  effect_awe: 'spare_holder',
-  effect_fear: 'no_damage',            // … cannot damage anyone until it visits its tower
-  effect_anger: 'only_holder',         // … in contact with me may only attack / damage me (forced target)
-  effect_domination: 'lose_action',    // an enemy in contact loses one action per turn (Delay Time model)
-  effect_petrify: 'stone',             // an enemy in contact is locked for the rest of the turn, each turn
-  effect_mists: 'no_attack',           // adjacent enemies cannot Attack while in contact
-};
-// Natural permanents that leave a contact affliction on the enemy (lifted at its tower or when the perms fall).
-export const CONTACT_AFFLICTIONS = ['effect_love', 'effect_awe', 'effect_fear', 'effect_anger'];
+// What each natural permanent does while it stands (the semantics the user accepted 2026-11-15). Since effect
+// isolation F7 (2026-11-21) the KIND is the definition's flag `naturalKind` (effects.mjs installs the lookup); the kinds
+// below are the game's primitives; the old id table is the JS reference effects-data/oracle/natural-kinds-js.mjs (F9e).
+export const NATURAL_KIND_NAMES = ['turn_tick', 'ward', 'link', 'spare_holder', 'no_damage', 'only_holder', 'lose_action', 'stone', 'no_attack'];
+// Kinds that leave a contact affliction on the enemy (lifted at its tower or when the perms fall).
+export const CONTACT_KINDS = ['spare_holder', 'no_damage', 'only_holder'];
+let kindOf = () => null;
+// installNaturalKinds(fn): (effectId) → its natural kind | null (effects.mjs: the definitions' flag naturalKind).
+export function installNaturalKinds(fn) { kindOf = typeof fn === 'function' ? fn : () => null; }
+export const naturalKind = (id) => (id ? kindOf(id) || null : null);
+export const isContactNatural = (id) => CONTACT_KINDS.includes(naturalKind(id));
+// The held permanents of one natural kind, in code-unit id order.
+export const naturalOfKind = (permIds, kind) => [...new Set(permIds || [])].filter(id => naturalKind(id) === kind).sort();
 
 // The innate effect a creature starts with as natural permanents, or null (15 creatures have none).
 export function naturalPermFor(creatureData, effectsById, cfg = NATURAL_DEFAULTS) {
@@ -60,33 +58,36 @@ export function dropOneCopy(copies, id) {
 // → the affliction that blocks this damage, or null. Self-damage is never blocked.
 export function naturalDamageBlock({ attacker, victim, afflictions, holds, dist }) {
   if (!attacker || !victim || attacker === victim) return null;
-  const list = (afflictions || []).filter(a => a && a.natural && CONTACT_AFFLICTIONS.includes(a.effect_id) && a.by && a.by !== attacker && holds(a.by, a.effect_id))
+  const list = (afflictions || []).filter(a => a && a.natural && isContactNatural(a.effect_id) && a.by && a.by !== attacker && holds(a.by, a.effect_id))
     .sort((a, b) => a.effect_id.localeCompare(b.effect_id) || String(a.by).localeCompare(String(b.by)));
   for (const a of list) {
-    if (a.effect_id === 'effect_fear') return a;
-    if ((a.effect_id === 'effect_love' || a.effect_id === 'effect_awe') && victim === a.by) return a;
-    if (a.effect_id === 'effect_anger' && victim !== a.by && dist(attacker, a.by) <= 1) return a;
+    const k = naturalKind(a.effect_id);
+    if (k === 'no_damage') return a;
+    if (k === 'spare_holder' && victim === a.by) return a;
+    if (k === 'only_holder' && victim !== a.by && dist(attacker, a.by) <= 1) return a;
   }
   return null;
 }
 
-// Anger: the holder an afflicted actor in contact must aim at (the first by id), or null.
-export function angerForcedTarget({ actor, afflictions, holds, dist }) {
-  return (afflictions || []).filter(a => a && a.natural && a.effect_id === 'effect_anger' && a.by && a.by !== actor && holds(a.by, 'effect_anger') && dist(actor, a.by) <= 1)
-    .map(a => a.by).sort()[0] || null;
+// Anger (kind only_holder): the affliction whose holder an afflicted actor in contact must aim at (the first by holder
+// id, then effect id), or null; angerForcedTarget → that holder.
+export function onlyHolderAffliction({ actor, afflictions, holds, dist }) {
+  return (afflictions || []).filter(a => a && a.natural && naturalKind(a.effect_id) === 'only_holder' && a.by && a.by !== actor && holds(a.by, a.effect_id) && dist(actor, a.by) <= 1)
+    .sort((a, b) => String(a.by).localeCompare(String(b.by)) || a.effect_id.localeCompare(b.effect_id))[0] || null;
 }
+export const angerForcedTarget = (o) => onlyHolderAffliction(o)?.by || null;
 
 // The contact afflictions a unit picks up after an action: holders = [{ id, effect_id, dist }] of living ENEMY
 // natural holders (dist from my post-move tile). None while I stand on my tower (it lifts them).
 export function contactAfflictions({ mine, holders, onTower }) {
   if (onTower) return [];
   const have = (e, by) => (mine || []).some(a => a.effect_id === e && a.by === by);
-  return (holders || []).filter(h => CONTACT_AFFLICTIONS.includes(h.effect_id) && h.dist <= 1 && !have(h.effect_id, h.id))
+  return (holders || []).filter(h => isContactNatural(h.effect_id) && h.dist <= 1 && !have(h.effect_id, h.id))
     .sort((a, b) => a.id.localeCompare(b.id) || a.effect_id.localeCompare(b.effect_id))
     .map(h => ({ effect_id: h.effect_id, by: h.id, natural: 1 }));
 }
 // Visiting one's tower (the unit's entry hex) lifts every natural contact affliction.
-export const liftAtTower = (afflictions, onTower) => onTower ? (afflictions || []).filter(a => !(a.natural && CONTACT_AFFLICTIONS.includes(a.effect_id))) : (afflictions || []);
+export const liftAtTower = (afflictions, onTower) => onTower ? (afflictions || []).filter(a => !(a.natural && isContactNatural(a.effect_id))) : (afflictions || []);
 
 // Creation: may `mover` (Matter m) enter `dest`? holders = [{ id, q, r, matter }] enemy natural Creation holders.
 // → the holder that bars the hex, or null. A hex the mover already stands on is not "entered".

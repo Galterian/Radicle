@@ -95,7 +95,7 @@ The argument shapes are described in `HOOKS.md`, which also lists the peer.mjs s
 
 This is the effects' JsonLogic dialect: `effects-data/SCHEMA.md` describes the evaluator, the pure ops, `let`/`obj`/`quote`/`sort_by`/`reduce`/`call`, and `hash_int`/`point_buy_seed`, with W.sha as the resolver's sha256. A class program can use everything except the cast-bound forms `emit put out note return return_empty seed rng point_buy`. On top of that it gets read-only ctx queries:
 
-`view(id)`, `view_ids`, `views`, `life_of(id)`, `dist(a, b)`, `enemy_of(a, b)`, `has_perm(id, p)`, `stat_of(id, stat)`, `side_of(alliance)`, `class_data(id)`, `class_flag(id, key)`, `class_state(id, cls)` (one class's namespace of a unit's class state, snapshot `class_state_json`, `{}` if none), `class_state_union(key)` (a list key over every unit and class namespace, sorted), `skill_action(skill)`, `library`, `ctx_self`, `ctx_label`, `ctx_turn`, `ctx_action`, `elem_stat(el)`, `elems_of_stat(stat)`, `sha_hex(s)`
+`view(id)`, `view_ids`, `views`, `life_of(id)`, `dist(a, b)`, `enemy_of(a, b)`, `has_perm(id, p)`, `stat_of(id, stat)`, `side_of(alliance)`, `class_data(id)`, `class_flag(id, key)`, `class_state(id, cls)` (one class's namespace of a unit's class state, snapshot `class_state_json`, `{}` if none), `class_state_union(key)` (a list key over every unit and class namespace, sorted), `skill_action(skill)`, `skill_is_trance(skill)` (true for the trance skill, i.e. its definition's `flags.trance`, so no class program names a skill id; a ctx without `skillIsTrance` answers false), `library`, `ctx_self`, `ctx_label`, `ctx_turn`, `ctx_action`, `elem_stat(el)`, `elems_of_stat(stat)`, `sha_hex(s)`
 
 and pure helpers:
 

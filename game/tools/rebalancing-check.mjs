@@ -37,7 +37,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-export const VALIDATOR_VERSION = '1.1.0';   // 1.1.0 (2026-11-18): the audit binds the ref-pinned libs (opts.libs / libShas), stamp.libs
+export const VALIDATOR_VERSION = '1.3.0';   // 1.3.0 (2026-11-22, effect isolation F9): the flags reference = the JS oracle game/effects-data/oracle/effects-js.mjs (moved out of effects.mjs, pinned as an engine file; verdicts unchanged), built-ins from the definitions' card blocks, flags tileTokenChoice / tokenRetryKeeps. 1.2.0 (2026-11-21, effect isolation F1–F5, F7): the flags reference runs resolveEffectJs + EFFECT_RULES_JS explicitly (verdicts unchanged); F2 flags (everyInstant, everyPermanent, permTurns, lockWhileStanding, keepsCastOnDestroy, everyWidens, sensesTraps; F3: hides; F7: naturalKind, everyOutlastsChannel, ignoresZones; F5: summon; F4: bonusPlans, bonusOncePerTurn, bonusOneEmission, everyHandSize) and `standing` programs — only the calibrated built-ins' (STANDING_CALIBRATED), priced at their named weight. 1.1.0 (2026-11-18): the audit binds the ref-pinned libs (opts.libs / libShas), stamp.libs
 export const DEFAULT_TOLERANCE = 0.30;   // user ruling 2026-11-18 (was 0.10, before that 0.15)
 export const PIN_FORMAT = 'chaosd6-effects-validator-pin/1';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -61,10 +61,12 @@ export function canonicalJson(v) {
 // The audit runs a definition's `logic` (E1 effect-engine.mjs#resolveEffectData) and the reference behaviour of
 // its declared `flags` (effects.mjs#resolveEffect) on the same seeded duels. Both are loaded once here so that
 // checkEffect() stays synchronous. Missing engine → no audit (reported, and the pin says so).
-const ENGINE_FILES = { effects: path.join(GAME, 'effects.mjs'), effect_engine: path.join(GAME, 'effect-engine.mjs') };
+const ENGINE_FILES = { effects: path.join(GAME, 'effects.mjs'), effect_engine: path.join(GAME, 'effect-engine.mjs'), effects_js: path.join(GAME, 'effects-data', 'oracle', 'effects-js.mjs'), effect_prims: path.join(GAME, 'effect-prims.mjs') };
 const LIB_DIR = path.join(GAME, 'effects-data', 'lib');
-let REF = null, DATA_ENGINE = null;
+let REF = null, DATA_ENGINE = null, ORACLE = null;
 try { REF = await import(pathToFileURL(ENGINE_FILES.effects).href); } catch { REF = null; }
+// F9: the JS flags interpreter (EFFECT_RULES_JS + resolveEffectJs) is the test oracle in effects-data/oracle/.
+try { if (fs.existsSync(ENGINE_FILES.effects_js)) ORACLE = await import(pathToFileURL(ENGINE_FILES.effects_js).href); } catch { ORACLE = null; }
 try { if (fs.existsSync(ENGINE_FILES.effect_engine)) DATA_ENGINE = await import(pathToFileURL(ENGINE_FILES.effect_engine).href); } catch { DATA_ENGINE = null; }
 const fileSha = (p) => (fs.existsSync(p) ? sha256(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n')) : null);
 function libsFor(uses) {
@@ -123,6 +125,8 @@ function engineHashes() {
   return {
     'game/effects.mjs': fileSha(ENGINE_FILES.effects),
     'game/effect-engine.mjs': fileSha(ENGINE_FILES.effect_engine),
+    ...(fileSha(ENGINE_FILES.effects_js) ? { 'game/effects-data/oracle/effects-js.mjs': fileSha(ENGINE_FILES.effects_js) } : {}),
+    ...(fileSha(ENGINE_FILES.effect_prims) ? { 'game/effect-prims.mjs': fileSha(ENGINE_FILES.effect_prims) } : {}),
     ...Object.fromEntries(libs.map(f => [`game/effects-data/lib/${f}`, sha256(canonicalJson(JSON.parse(fs.readFileSync(path.join(LIB_DIR, f), 'utf8').replace(/^﻿/, ''))))])),
   };
 }
@@ -269,6 +273,26 @@ export const RULE_KEYS = {
   possess: (v) => typeof v === 'boolean',
   vision: (v) => typeof v === 'boolean',
   completesWithoutTarget: (v) => typeof v === 'boolean',
+  // effect isolation F2 (2026-11-21): resolver metadata, not priced beyond what the named built-ins carry
+  everyInstant: (v) => typeof v === 'boolean',
+  everyPermanent: (v) => typeof v === 'boolean',
+  permTurns: (v) => Number.isInteger(v) && v >= 1 && v <= 3,
+  hides: (v) => typeof v === 'boolean',
+  everyOutlastsChannel: (v) => typeof v === 'boolean',
+  ignoresZones: (v) => typeof v === 'boolean',
+  bonusPlans: (v) => Number.isInteger(v) && v >= 1 && v <= 9,   // F4: bonus plans per action while it stands (Haste 1, Balefire 9)
+  bonusOncePerTurn: (v) => typeof v === 'boolean',              // F4: … only once per turn (Haste)
+  bonusOneEmission: (v) => typeof v === 'boolean',              // F4: … every card an instant, one emission per action (Balefire)
+  everyHandSize: (v) => Number.isInteger(v) && v >= 1 && v <= 2,
+  tileTokenChoice: (v, c, E) => Array.isArray(v) && v.length >= 2 && v.length <= c.token_elems && v.every(e => !!E[e]) && new Set(v).size === v.length,   // F9e: the bonus tile token may be any of these
+  tokenRetryKeeps: (v) => typeof v === 'boolean',   // F9e: a failed token roll keeps the lock + tokens bought (retry buys the owed ones)
+  summon: (v) => !!v && typeof v === 'object' && ['library', 'golem', 'elemental', 'resurrect'].includes(v.kind) && typeof v.label === 'string' && v.label.length <= 40
+    && (v.need === undefined || (Number.isInteger(v.need) && v.need >= 1 && v.need <= 60)) && Object.keys(v).every(k => ['kind', 'label', 'need'].includes(k)),   // F5: the creature a stat-buy permanent holds   // F4: ∀ — hand size + n each turn (Haste)   // F7: its damage passes no-damage zones (Blizzard)   // F7: ∀ — the permanent stays when its channel breaks (Awake)
+  naturalKind: (v) => ['turn_tick', 'ward', 'link', 'spare_holder', 'no_damage', 'only_holder', 'lose_action', 'stone', 'no_attack'].includes(v),   // F7: what a monster's natural copy does (natural-perms.mjs primitives)   // F3: while it stands and does not break, enemies do not see its holder
+  lockWhileStanding: (v) => typeof v === 'boolean',
+  keepsCastOnDestroy: (v) => typeof v === 'boolean',
+  everyWidens: (v) => typeof v === 'boolean',
+  sensesTraps: (v) => typeof v === 'boolean',
 };
 function activeVersionOf(entry) {
   const vs = (entry.versions || []).filter(v => !['rejected', 'superseded'].includes(v.status));
@@ -474,6 +498,35 @@ function patchOf(n0, n1) {
   return p;
 }
 
+// ------------------------------------------------------------------ standing programs (effect isolation F2)
+// What a permanent does while it stands (definition `standing`, game/effect-standing.mjs) is not simulated by this
+// model. A program identical (canonical JSON) to a calibrated built-in's is priced as that built-in's named weight
+// (unless the definition is that built-in or extends it — then `named` already counts it); any other standing program
+// is refused until the model prices that hook. hook:sha256(canonical program)[0..16] → the built-in carrying it.
+export const STANDING_CALIBRATED = Object.freeze({
+  'harm_in:d1cf818248cb7e49': 'effect_blessing_curse',
+  'afflicted:d385ee9b1bd913bd': 'effect_confusion',
+  'adjacent_lost:6b86b273ff34fce1': 'effect_delay_time',
+  'cast_in:5fbff53abc1119b7': 'effect_disable',
+  'plan_emit:d338b1e174f46963': 'effect_empower',
+  'combat_out:591729279035e099': 'effect_inner_fire',
+  'breaks:59808c0d42541c97': 'effect_invisibility',
+  'afflicted:7d2fa1dc7c03ac98': 'effect_sleep',
+  'damage_in:935f5f2ba211437b': 'effect_super_sense',
+});
+export function standingOf(def, n) {
+  const st = def && typeof def === 'object' ? def.standing : undefined;
+  if (st === undefined) return { errors: [], from: [] };
+  if (!isObj(st)) return { errors: ['standing must be an object {hook: program}'], from: [] };
+  const errors = [], from = [];
+  for (const [h, prog] of Object.entries(st)) {
+    const b = STANDING_CALIBRATED[`${h}:${sha256(canonicalJson(prog)).slice(0, 16)}`];
+    if (!b) errors.push(`standing.${h}: not a calibrated standing program (validator ${VALIDATOR_VERSION} prices only the built-ins' programs)`);
+    else if (b !== n.id && b !== n.extends) from.push(b);
+  }
+  return { errors, from };
+}
+
 // ------------------------------------------------------------------ checkEffect
 // opts: { baseline: effect id | definition | null (auto: own id / extends a built-in), tolerance (default 0.10), calibration }
 export function checkEffect(def, opts = {}) {
@@ -486,6 +539,8 @@ export function checkEffect(def, opts = {}) {
   const base = { validator: { version: VALIDATOR_VERSION, pin_id: pin.pin_id }, effect_id: n.id ?? null, def_sha256, tolerance: tol, libs: { source: L.source, shas: L.shas } };
   const stamp = (verdict, ratio) => ({ effect_id: n.id ?? null, def_sha256, pin_id: pin.pin_id, libs: L.shas, verdict, ratio, tolerance: tol });
   const errors = validateNorm(n, cal);
+  const SO = standingOf(def, n);
+  errors.push(...SO.errors);
   if (errors.length) return { ...base, valid: false, errors, verdict: 'reject', reasons: ['invalid definition'], suggestions: [], stamp: stamp('reject', null) };
   if (L.errors.length) return { ...base, valid: false, errors: L.errors, verdict: 'reject', reasons: ['libraries refused (not the ones the ref pins, or invalid)'], suggestions: [], stamp: stamp('reject', null) };
   if (!cal.fit) throw new Error('calibration has no fit — run `node tools/rebalancing-check.mjs calibrate --write`');
@@ -495,7 +550,11 @@ export function checkEffect(def, opts = {}) {
     const why = audit.errors?.length ? audit.errors : audit.exceeds?.length ? audit.exceeds.map(x => `logic exceeds its declared flags — ${x}`) : [audit.why];
     return { ...base, valid: !audit.errors?.length, errors: audit.errors || [], audit, verdict: 'reject', reasons: why, suggestions: [], stamp: stamp('reject', null) };
   }
-  const pw = powerOf(n, cal);
+  let pw = powerOf(n, cal);
+  if (SO.from.length) {   // F2: a reused built-in standing program weighs what that built-in's named weight says
+    const sv = r6(SO.from.reduce((s, b) => s + (cal.weights.named[b] ?? 0), 0));
+    pw = { ...pw, value: r6(pw.value + sv), components: { ...pw.components, standing: sv } };
+  }
   const { expected: exp, ratio } = ratioOf(pw, cal.fit);
 
   // Baseline: the parent this definition is judged against.
@@ -554,18 +613,19 @@ export function checkEffect(def, opts = {}) {
 }
 
 // ------------------------------------------------------------------ built-ins + calibration
-// Built-ins = data/effects.json active versions + effects.mjs EFFECT_RULES (flags-only definitions; effects without
-// an engine rule are not playable and skipped). With { prefer: 'e1' } an E1 file game/effects-data/effects/<id>.json
-// replaces the flags-only def when present (its card types still come from data/effects.json: E1 has no instant marker yet).
+// Built-ins = the definitions' card blocks (game/effects-data/effects/<id>.json `card.data`; effect isolation F9 retired
+// data/effects.json) + effects.mjs EFFECT_RULES (flags-only definitions; effects without an engine rule are not playable
+// and skipped). With { prefer: 'e1' } the definition itself replaces the flags-only def (its card types still come from
+// the card: E1 has no instant marker yet).
 export async function loadBuiltinDefs({ prefer = 'data' } = {}) {
   const EFFECT_RULES = REF?.EFFECT_RULES || {};
-  const j = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'effects.json'), 'utf8'));
   const dir = path.join(GAME, 'effects-data', 'effects');
+  const cards = fs.readdirSync(dir).filter(f => f.endsWith('.json')).map(f => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8').replace(/^﻿/, ''))).filter(d => d.card);
   const defs = [];
   let e1 = 0;
-  for (const e of [...j.entries].sort((a, b) => a.id.localeCompare(b.id))) {
-    const v = activeVersionOf(e);
-    if (!v || !EFFECT_RULES[e.id]) continue;
+  for (const c of cards.sort((a, b) => a.id.localeCompare(b.id))) {
+    const e = { id: c.id }, v = { version: c.version, data: c.card.data };
+    if (!EFFECT_RULES[e.id]) continue;
     const f = path.join(dir, `${e.id}.json`);
     if (prefer === 'e1' && fs.existsSync(f)) {
       const d = JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, ''));
@@ -576,7 +636,7 @@ export async function loadBuiltinDefs({ prefer = 'data' } = {}) {
     }
     defs.push({ id: e.id, version: v.version, element_cost: v.data.element_cost, effect_types: v.data.effect_types, ...(v.data.every_bonus ? { every_bonus: v.data.every_bonus } : {}), ...(v.data.stat_buy_total != null ? { stat_buy_total: v.data.stat_buy_total } : {}), ...(v.data.natural_permanent?.copies != null && EFFECT_RULES[e.id].permanent ? { copies: v.data.natural_permanent.copies } : {}), rule: JSON.parse(JSON.stringify(EFFECT_RULES[e.id])) });
   }
-  return { source: `data/effects.json + effects.mjs EFFECT_RULES${e1 ? ` (${e1} from game/effects-data/effects)` : ''}`, defs };
+  return { source: `effect definitions' card blocks + effects.mjs EFFECT_RULES${e1 ? ` (${e1} definitions)` : ''}`, defs };
 }
 // Least squares V = a + b·C over the built-ins, then one refit without the gross outliers
 // (|r − 1| > 0.6 on the first fit) so a few hand-tagged peer hooks do not drag the curve.
@@ -684,13 +744,15 @@ function scenarioRun(resolve, n, N, cal) {
   }
   return { N, done, errors, actions: r6(actions / N), mean: Object.fromEntries(DIMS.map(k => [k, r6(tot[k] / N)])) };
 }
-// The reference behaviour of a flags object = effects.mjs#resolveEffect with the flags registered under the
-// effect's id for the duration of the run (restored afterwards — the dice seeds include the id, so it must match).
+// The reference behaviour of a flags object = the JS flags interpreter (oracle effects-js.mjs#resolveEffectJs) with the flags
+// registered under the effect's id in EFFECT_RULES_JS for the duration of the run (restored afterwards — the dice
+// seeds include the id, so it must match). Effect isolation F1: resolveEffect runs the definitions, not flags.
 function referenceResolver(n) {
+  const T = ORACLE?.EFFECT_RULES_JS || REF.EFFECT_RULES_JS || REF.EFFECT_RULES, run = ORACLE?.resolveEffectJs || REF.resolveEffectJs || REF.resolveEffect;
   return (ctx, cast) => {
-    const had = Object.prototype.hasOwnProperty.call(REF.EFFECT_RULES, n.id), old = REF.EFFECT_RULES[n.id];
-    REF.EFFECT_RULES[n.id] = n.rule;
-    try { return REF.resolveEffect(ctx, cast); } finally { if (had) REF.EFFECT_RULES[n.id] = old; else delete REF.EFFECT_RULES[n.id]; }
+    const had = Object.prototype.hasOwnProperty.call(T, n.id), old = T[n.id];
+    T[n.id] = n.rule;
+    try { return run(ctx, cast); } finally { if (had) T[n.id] = old; else delete T[n.id]; }
   };
 }
 function logicResolver(def, subs = libsFor(def.uses).subs) {

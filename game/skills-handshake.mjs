@@ -3,7 +3,7 @@
 // The skills twin of effects-handshake.mjs (E4): "players create skills on branches; peers lacking a skill
 // are told its branch, load it, and pass it on — the same as effects". Design note: game/skills-data/HANDSHAKE.md.
 //
-// Built-in skills (SKILL_RULES / data/skills.json / the bundled game/skills-data/skills/*.json) travel by NAME in
+// Built-in skills (the bundled definitions game/skills-data/skills/*.json — skill isolation) travel by NAME in
 // the reveal's `skills` list, exactly as before. A FOREIGN skill — a definition from a player branch of
 // chaosD6-Skills, with an id that is not a built-in — travels by NAME + REF, and every peer runs the same bytes
 // (content addressed: sha256 of the canonical JSON, libraries pinned).
@@ -16,7 +16,8 @@
 //   commit  payload.sk_ref = [ref…]       the foreign skill cards riding on my action (fetch window commit→reveal)
 //   reveal  payload.sk_ref = [ref…]       the same refs; THE ONLY thing a foreign skill resolves from
 //           payload.sk_missing = [sha256…] foreign refs committed this action that THIS revealer cannot run
-//   state   sk_have = "id@sha16,…" (slim snapshot)   sk_set = sha16 of my bundled skill set (full heartbeat)
+//   state   sk_have = "id@sha16,…" (slim snapshot)   sk_set = sha16 of my bundled skill set (the version gate
+//           gateSkillSet reads it: a unit with another pin → no state hash from me while it is in play)
 //   fetch   libp2p /chaos/<dim>/skills/1 (own protocol, same framing + messages as /effects/1, wire kind 'skill'),
 //           Nostr bus `sk` events when no direct link, then git (CHAOSD6_SKILLS_DIR) / radicle-httpd.
 //
@@ -60,26 +61,62 @@ export function skKey(ref) { return sha256Hex(canonicalJson({ skill: ref.sha256,
 
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
 const jsonFiles = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => path.join(dir, f)) : []);
-function dataSkillIds() {
-  try { return readJson(path.join(HERE, '..', 'data', 'skills.json')).entries.map(e => e.id).filter(Boolean); } catch { return []; }
+const DEFAULT_DEFS_DIR = () => process.env.SKILL_DEFS_DIR || SKILLS_DATA_DIR;
+/** The ids the definitions loader accepted: skills.mjs's eager bundle for the default dir, else skill-engine's
+ *  loader on `dir` (lenient where supported). → { ids: Set|null, errors: [string] } (ids null = loader unavailable). */
+function loaderIds(dir) {
+  const errors = [];
+  try {
+    if (path.resolve(dir) === path.resolve(DEFAULT_DEFS_DIR()) && typeof SK.skillBundle === 'function') {
+      const b = SK.skillBundle();
+      if (typeof SK.skillBundleErrors === 'function') for (const e of SK.skillBundleErrors() || []) errors.push(String(e?.message || e));
+      return { ids: new Set(b?.defs instanceof Map ? b.defs.keys() : []), errors };
+    }
+  } catch (e) { errors.push(`skills.mjs bundle: ${e.message}`); return { ids: null, errors }; }
+  return { ids: null, errors };
 }
 /**
- * The bundled skill set: game/skills-data/skills/*.json + lib/*.json (S2). Until S2 ships definition files the
- * set hashes the SKILL_RULES table entries ({id, rule}) so the id is still stable per build.
- * builtinIds = SKILL_RULES ∪ data/skills.json ∪ bundled files — every id that travels by name.
+ * The bundled skill set: game/skills-data/skills/*.json + lib/*.json. The set id hashes every definition file IN
+ * FULL (resolver fields, flags, hooks, card + ui blocks) plus every lib, so any edit to a built-in is another pin.
+ * builtinIds = the definitions bundle (the files, ∪ the ids skills.mjs's loader accepted) — every id that travels
+ * by name. No data/skills.json read and no SKILL_RULES table fallback (skill isolation): a build without definition
+ * files is an ERROR state — source 'none', `errors` says why, no built-ins, and its set id (libs only) is a pin no
+ * healthy peer shares, so the version gate keeps every hash it could poison out of the vote.
  */
-export function bundledSkillSet(dir = process.env.SKILL_DEFS_DIR || SKILLS_DATA_DIR) {
-  const skills = new Map(), libs = new Map();
-  for (const f of jsonFiles(path.join(dir, 'lib'))) { try { const l = readJson(f); if (l?.id) libs.set(l.id, l); } catch {} }
-  for (const f of jsonFiles(path.join(dir, 'skills'))) { try { const d = readJson(f); if (d?.id) skills.set(d.id, d); } catch {} }
+export function bundledSkillSet(dir = DEFAULT_DEFS_DIR()) {
+  const skills = new Map(), libs = new Map(), errors = [];
+  const sDir = fs.existsSync(path.join(dir, 'skills')) ? path.join(dir, 'skills') : dir;
+  const lDir = fs.existsSync(path.join(dir, 'lib')) ? path.join(dir, 'lib') : path.join(sDir, '..', 'lib');
+  for (const f of jsonFiles(lDir)) { try { const l = readJson(f); if (l?.id) libs.set(l.id, l); } catch (e) { errors.push(`${path.basename(f)}: ${e.message}`); } }
+  for (const f of jsonFiles(sDir)) {
+    try { const d = readJson(f); if (d?.id) skills.set(d.id, d); } catch (e) { errors.push(`${path.basename(f)}: ${e.message}`); }
+  }
   const set = { libs: libShaMap(libs), skills: {} };
-  let source = 'files';
-  if (!skills.size) {
-    source = 'table';
-    for (const id of Object.keys(SK.SKILL_RULES || {}).sort()) set.skills[id] = skillHash({ id, rule: SK.SKILL_RULES[id] });
-  } else for (const id of [...skills.keys()].sort()) set.skills[id] = skillHash(skills.get(id));
-  const builtinIds = new Set([...Object.keys(SK.SKILL_RULES || {}), ...dataSkillIds(), ...skills.keys()]);
-  return { skills, libs, set, id: skillSetId(set), builtinIds, source };
+  for (const id of [...skills.keys()].sort()) set.skills[id] = skillHash(skills.get(id));
+  const source = skills.size ? 'files' : 'none';
+  if (!skills.size) errors.unshift(`no skill definition files in ${sDir} — no built-in skills (error state; the version gate abstains against every peer)`);
+  const fromLoader = skills.size ? loaderIds(dir) : { ids: null, errors: [] };
+  errors.push(...fromLoader.errors);
+  const builtinIds = new Set([...skills.keys(), ...(fromLoader.ids || [])]);
+  return { skills, libs, set, id: skillSetId(set), builtinIds, source, errors };
+}
+
+/**
+ * Built-in skills by reference (skill isolation, the twin of effects F9 gateEffectSet): every peer publishes the
+ * 16-hex pin of its bundled skill set (snapshot `sk_set` = skillSetId over the definition files — cards and ui
+ * included — and the libs). A unit whose pin differs from mine runs skills I do not run: I abstain from the state
+ * hash of the action. A unit WITHOUT a pin is unknown only while I hold just its Gun slim record (`full: false`) —
+ * skipped until its full snapshot arrives; a FULL snapshot without a pin is a mismatch.
+ * units: [{id, sk_set, full}] (not me); mine: my 16-hex pin → { abstain, mismatches: [{ unit, got, want }], unknown }.
+ */
+export function gateSkillSet(units, mine) {
+  const mismatches = [], unknown = [];
+  for (const u of [...units].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    const got = typeof u?.sk_set === 'string' && u.sk_set ? u.sk_set : null;
+    if (!got && u?.full === false) unknown.push(u.id);
+    else if (got !== mine) mismatches.push({ unit: u.id, got, want: mine });
+  }
+  return { abstain: mismatches.length > 0, mismatches, unknown };
 }
 
 /** A ref for skill `def` with its libraries pinned. `libs`: Map|array of lib objects or {name: sha}. */
@@ -269,7 +306,7 @@ export function gateSkills(reveals, missing, statusOf, refsByActor, isBuiltin) {
 
 // ------------------------------------------------------------------ the peer adapter (peer.mjs glue)
 const envMs = (name, dflt) => { const v = Number(process.env[name]); return Number.isFinite(v) && v >= 0 ? v : dflt; };
-export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, engine: engineIn, validate: validateIn } = {}) {
+export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {}, log: logIn = null, nameOf = () => null, engine: engineIn, validate: validateIn, onReady = null } = {}) {
   const log = logIn || ((line) => console.log(`[${label}] sk: ${line}`));
   const bundled = bundledSkillSet();
   const engine = engineIn !== undefined ? engineIn : skillsEngine();
@@ -293,7 +330,7 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
   }
   const refOut = (ref, verdict) => ({ ...compactRef(ref), kind: 'skill', ...(verdict ? { verdict } : {}) });
   const notice = (event, prep, peer) => ui({ kind: 'skill_source', event, ref: refOut(prep.ref, prep.verdict), peer: peer ? { peer_id: peer, name: nameOf(peer) || undefined } : null });
-  const store = createSkStore({ bundled, validate, engine, log });   // ready = registered with skills.mjs (registerForeignSkill)
+  const store = createSkStore({ bundled, validate, engine, log, onReady });   // onReady: peer.mjs broadcasts skill_catalog; ready = registered with skills.mjs (registerForeignSkill)
   let request = null;
   let active = false;
   const sync = createSkSync({
@@ -306,7 +343,9 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
   const REVEAL_WAIT = envMs('SK_REVEAL_WAIT_MS', 1500), RESOLVE_WAIT = envMs('SK_RESOLVE_WAIT_MS', 4000);
   const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r('missing'), ms).unref?.())]);
   const missingNoticed = new Set();
+  const versionNoticed = new Set();   // unit|pin pairs the version gate already reported
   log(`bundled skill set ${bundled.id.slice(0, 16)} (${bundled.source}: ${Object.keys(bundled.set.skills).length} skills, ${bundled.libs.size} libs), engine ${engine ? 'skills.mjs' : 'none (foreign skills refused)'}, validator ${validatorInfo}`);
+  for (const e of bundled.errors || []) log(`SKILL BUNDLE ERROR: ${e}`);
   const isBuiltin = (id) => bundled.builtinIds.has(id);
 
   const api = {
@@ -350,6 +389,22 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
     },
     /** Slim snapshot fields (absent with no foreign skill held). */
     snapshotFields() { const h = sync.haveCsv(); return h ? { sk_have: h } : {}; },
+    /**
+     * Version gate, once per action: gateSkillSet over the units in my view (not me) against my bundled set pin
+     * (the 16-hex prefix, as sk_set is published). A mismatch is logged and shown once per unit + pin; the result's
+     * `abstain` withholds my state hash for the action.
+     */
+    gateBuiltins(units, { turn, round } = {}) {
+      const res = gateSkillSet(units, bundled.id.slice(0, 16));
+      for (const m of res.mismatches) {
+        const k = `${m.unit}|${m.got}`;
+        if (versionNoticed.has(k)) continue;
+        versionNoticed.add(k);
+        log(`SKILL VERSION GATE T${turn}.R${(round ?? 0) + 1}: ${m.unit} runs built-in skill set ${m.got || 'none (full snapshot without a pin)'}, mine ${m.want} — no state hash from me while it is in play`);
+        ui({ kind: 'skill_source', event: 'version', ref: { id: 'builtin_skills', kind: 'skill', name: 'the built-in skills' }, peer: { peer_id: m.unit, name: nameOf(m.unit) || undefined }, got: m.got, want: m.want });
+      }
+      return res;
+    },
     onPeerState(p) {
       if (!p?.peer_id) return;
       if (typeof p.sk_have === 'string' && p.sk_have) { active = true; sync.noteHave(p.peer_id, p.sk_have); }

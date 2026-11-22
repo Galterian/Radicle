@@ -11,8 +11,10 @@
 //    hook records applied through applyHookRecords with the handlers _mv_peer_hunks.py installs — identical state + logs.
 // 5. failures: a data error / bad shape → the neutral value, counted; effectHook(…, 'shadow') reports 0 mismatches.
 import * as H from '../effect-hooks.mjs';
+import { JS_HOOKS } from '../effects-data/oracle/hooks-js.mjs';   // F9e: the JS reference hooks = the oracle
+H.installJsHooks(JS_HOOKS);
 import { channelBreaks } from '../channel-rule.mjs';
-import { TRAP_POWER, trapDamageSum, roundHalfUp10 } from '../effects.mjs';
+import { TRAP_POWER, trapDamageSum, roundHalfUp10 } from '../effect-prims.mjs';
 
 let fails = 0, oks = 0;
 const ok = (label, cond, extra = '') => { if (cond) { oks++; console.log(`ok   ${label}`); } else { fails++; console.log(`FAIL ${label}${extra ? ` — ${String(extra).slice(0, 700)}` : ''}`); } };

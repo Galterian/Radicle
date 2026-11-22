@@ -91,6 +91,26 @@ export function bundledEffectSet(dir = process.env.EFFECT_DEFS_DIR || EFFECTS_DA
   return { effects, libs, hooks, set, id: effectSetId(set) };
 }
 
+/**
+ * Built-in effects by reference (effect isolation F9, the classes' phase-6 hard version gate): every peer publishes
+ * the 16-hex pin of its bundled effect set (snapshot `fx_set` = effectSetId over the definitions — cards included —
+ * the libs and the hook programs). A unit whose pin differs from mine runs effects I do not run: I abstain from the
+ * state hash of the action — never a silent resolve with another version. One pin for the whole set, not one per
+ * effect: a hand is private, and the libs / hooks are shared by every effect anyway. A unit WITHOUT a pin is unknown
+ * only while I hold just its Gun slim record (gun-member.mjs keeps core fields only; `full: false`) — skipped until its
+ * full snapshot arrives; a FULL snapshot without a pin is a mismatch (every build since E4, 2026-11-15, publishes one).
+ * units: [{id, fx_set, full}] (not me); mine: my 16-hex pin → { abstain, mismatches: [{ unit, got, want }], unknown }.
+ */
+export function gateEffectSet(units, mine) {
+  const mismatches = [], unknown = [];
+  for (const u of [...units].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    const got = typeof u?.fx_set === 'string' && u.fx_set ? u.fx_set : null;
+    if (!got && u?.full === false) unknown.push(u.id);
+    else if (got !== mine) mismatches.push({ unit: u.id, got, want: mine });
+  }
+  return { abstain: mismatches.length > 0, mismatches, unknown };
+}
+
 /** A ref for `def` with its libraries pinned. `libs`: Map|array of lib objects or {name: sha}. */
 export function makeFxRef(def, libs, { repo = '', branch = '', commit = '', verdict = null, ns = '', review = false } = {}) {   // PV: ns / review
   const uses = [...(def.uses || [])].sort();
@@ -549,7 +569,7 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   const notice = (event, prep, peer) => ui({ kind: 'effect_source', event, ref: { ...compactRef(prep.ref), ...(prep.verdict ? { verdict: prep.verdict } : {}) }, peer: peer ? { peer_id: peer, name: nameOf(peer) || undefined } : null });
   const store = createFxStore({
     bundled, builtinRules, validate, log,
-    onReady: (p) => registerForeignEffect(p.key, p.def.id, p.def.flags, p.run),
+    onReady: (p) => registerForeignEffect(p.key, p.def.id, p.def.flags, p.run, p.def),
   });
   let request = null, busRpc = null;
   let active = false;
@@ -563,6 +583,7 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
   const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r('missing'), ms).unref?.())]);
   const postponedCount = new Map();   // card id -> consecutive postponements of my cast
   const missingNoticed = new Set();
+  const versionNoticed = new Set();   // F9: unit|pin pairs the version gate already reported
   log(`bundled set ${bundled.id.slice(0, 16)} (${bundled.effects.size} effects, libs ${Object.entries(bundled.set.libs).map(([k, v]) => `${k}@${v.slice(0, 8)}`).join(' ')}, hooks ${Object.entries(bundled.set.hooks || {}).map(([k, v]) => `${k}@${v.slice(0, 8)}`).join(' ') || '-'}), validator ${validatorInfo}`);
   // PS: one greppable line per peer for the partial-swarm summary (tools/out/_swarm_partial_summary.sh).
   if (foreignSelectActive()) log(`foreign role: ${foreignRole(label)} (holders ${(foreignHolders() || ['all']).join(',')}; refusers ${foreignRefusers().join(',') || 'none'})`);
@@ -610,6 +631,21 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
     },
     /** Slim snapshot fields (absent with no foreign effect held). */
     snapshotFields() { const h = sync.haveCsv(); return h ? { fx_have: h } : {}; },
+    /**
+     * F9 version gate, once per action: gateEffectSet over the units in my view (not me) against my bundled set pin.
+     * A mismatch is logged and shown once per unit + pin; the result's `abstain` withholds my state hash for the action.
+     */
+    gateBuiltins(units, { turn, round } = {}) {
+      const res = gateEffectSet(units, bundled.id.slice(0, 16));
+      for (const m of res.mismatches) {
+        const k = `${m.unit}|${m.got}`;
+        if (versionNoticed.has(k)) continue;
+        versionNoticed.add(k);
+        log(`EFFECT VERSION GATE T${turn}.R${(round ?? 0) + 1}: ${m.unit} runs built-in effect set ${m.got || 'none (full snapshot without a pin)'}, mine ${m.want} — no state hash from me while it is in play`);
+        ui({ kind: 'effect_source', event: 'version', ref: { id: 'builtin_effects', kind: 'effect', name: 'the built-in effects' }, peer: { peer_id: m.unit, name: nameOf(m.unit) || undefined }, got: m.got, want: m.want });
+      }
+      return res;
+    },
     /** Every merged peer state. */
     onPeerState(p) {
       if (!p?.peer_id) return;

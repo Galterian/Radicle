@@ -160,6 +160,13 @@ export function writeDataFile(file, json) {
 }
 export const getPath = (obj, p) => (p === undefined || p === null || p === '' ? obj : String(p).split('.').reduce((o, k) => (o === undefined || o === null ? undefined : o[k]), obj));
 
+// Effect isolation F9: a collection whose index.json entry names `definitions` is read from the definitions' card
+// blocks (defs-collection.mjs), not its data file. Such a collection is authored in its own repo (chaosD6-Effects);
+// logic-apply skips it, rebalance check refuses proposals on it.
+export { definitionsCollection, definitionsDirOf } from './defs-collection.mjs';
+
+import { definitionsCollection, definitionsDirOf, resolveDefinitionsDir } from './defs-collection.mjs';
+
 export class LogicEngine {
   constructor({ dataDir = DATA_DIR, collections = null } = {}) {
     this.dataDir = dataDir;
@@ -172,7 +179,10 @@ export class LogicEngine {
     // logic_rules.json is the vocabulary itself, not a VersionedEntry collection
     const files = (collections || this.index.collections.map(c => c.id)).filter(id => id !== 'logic_rules');
     for (const id of files) {
-      const json = JSON.parse(fs.readFileSync(path.join(dataDir, `${id}.json`), 'utf8'));
+      const def = definitionsDirOf(this.index, id);
+      const dir = def && resolveDefinitionsDir(dataDir, def);
+      if (def && !dir) throw new Error(`collection ${id}: definitions directory ${def} not found`);
+      const json = def ? definitionsCollection(id, dir) : JSON.parse(fs.readFileSync(path.join(dataDir, `${id}.json`), 'utf8'));
       this.collections.set(id, json);
       for (const e of json.entries || []) this.catalog.set(e.id, { collection: id, entry: e });
     }

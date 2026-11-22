@@ -13,6 +13,7 @@ import * as SKM from '../skills.mjs';
 import {
   skillSetId, bundledSkillSet, makeSkRef, parseSkRef, compactRef, skKey, prefixOf, skillShape, skillsEngine,
   createSkStore, createSkSync, createMemoryCache, gateSkills, skMissingUnion, skillRefsByActor, createSkPeer, skProtocol,
+  gateSkillSet,
 } from '../skills-handshake.mjs';
 
 let fails = 0;
@@ -23,8 +24,16 @@ const throws = (label, fn) => { try { fn(); eq(label, 'no throw', 'throws'); } c
 // The test player-branch skill: Quick Dodge = the bundled Dodge definition (chaosd6.skill/1, S2) under its own id,
 // i.e. a player branch of Dodge. S5 verdict ok; it uses skills_std, so the ref pins that lib.
 const readJ = (u) => JSON.parse(fs.readFileSync(new URL(u, import.meta.url), 'utf8'));
-const DODGE = readJ('../skills-data/skills/skill_dodge.json');
+const DODGE_FILE = readJ('../skills-data/skills/skill_dodge.json');
 const STD = readJ('../skills-data/lib/skills_std.json');
+// A player branch carries no built-in-only fields (skill isolation /2): not dealt (deal_order), no building slot /
+// pass order / plan lock (part of the (seed,q,r) contract and the built-in fold), no card/ui block of Dodge's.
+const BUILTIN_ONLY_FLAGS = ['buildingSkill', 'passOrder', 'planLock'];
+const DODGE = (() => {
+  const { deal_order, card, ui, ...d } = DODGE_FILE;
+  d.flags = Object.fromEntries(Object.entries(d.flags || {}).filter(([k]) => !BUILTIN_ONLY_FLAGS.includes(k)));
+  return d;
+})();
 export const QUICK_DODGE = { ...DODGE, id: 'skill_quick_dodge', name: 'Quick Dodge', version: '0.1.0', source: { collection: 'players', version: '0.1.0' }, extends: 'skill_dodge',
   text: 'One less combat damage to you this action (player branch of Dodge).' };
 const wf = process.argv.indexOf('--write-fixture');
@@ -356,6 +365,68 @@ try { ({ checkSkill } = await import('./skills-rebalancing-check.mjs')); } catch
   eq('RF: a companion of a non-refuser does not refuse', (await as('P-Agent4-sum1', { OWNER_PEER_ID: 'peer:P-Agent4' })).refused, false);
   eq('RF: SK_ACCEPT=0 inherited by the companion env → refuses', await as('P-Agent4-sum2', { OWNER_PEER_ID: 'peer:P-Agent4', SK_ACCEPT: '0' }), { refused: true, role: 'all', why: 'SK_ACCEPT=0 (refuse all)' });
   setEnv(saved);
+}
+
+// ---------------------------------------------------------------- VG. built-in skills by reference — the skill version gate (twin of effects F9)
+{
+  const mine = bundled.id.slice(0, 16);
+  // The set comes from the definition files only (no data/skills.json, no SKILL_RULES table fallback).
+  const files = fs.readdirSync(new URL('../skills-data/skills/', import.meta.url)).filter(f => f.endsWith('.json')).map(f => f.replace(/\.json$/, '')).sort();
+  eq('VG bundle: source = the definition files', bundled.source, 'files');
+  eq('VG bundle: no bundle errors', bundled.errors, []);
+  eq('VG bundle: set hashes every definition file', Object.keys(bundled.set.skills), files);
+  yes('VG bundle: every sha = skillHash(the whole file, card/ui included)', files.every(id => bundled.set.skills[id] === skillHash(readJ(`../skills-data/skills/${id}.json`))));
+  eq('VG bundle: builtinIds = the definitions bundle', [...bundled.builtinIds].sort(), files);
+  const os = await import('node:os'), path = await import('node:path');
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'sk-vg-'));
+  fs.mkdirSync(path.join(empty, 'skills')); fs.mkdirSync(path.join(empty, 'lib'));
+  fs.copyFileSync(new URL('../skills-data/lib/skills_std.json', import.meta.url), path.join(empty, 'lib', 'skills_std.json'));
+  const none = bundledSkillSet(empty);
+  eq('VG bundle: no definition files → error state (source none, no built-ins, an error line)', [none.source, none.builtinIds.size, /no skill definition files/.test(none.errors[0] || '')], ['none', 0, true]);
+  yes('VG bundle: that build\'s pin differs from a healthy one', none.id.slice(0, 16) !== mine);
+  fs.rmSync(empty, { recursive: true, force: true });
+
+  eq('VG gate: same pin everywhere → no abstain', gateSkillSet([{ id: 'peer:b', sk_set: mine }, { id: 'peer:a', sk_set: mine }], mine), { abstain: false, mismatches: [], unknown: [] });
+  eq('VG gate: another pin → abstain (sorted by unit); no pin on a Gun slim record = unknown, not a mismatch',
+    gateSkillSet([{ id: 'peer:z', sk_set: '0123456789abcdef', full: true }, { id: 'peer:m', sk_set: mine, full: true }, { id: 'peer:c', full: false }, { id: 'peer:b', sk_set: 'ffffffffffffffff', full: false }], mine),
+    { abstain: true, mismatches: [{ unit: 'peer:b', got: 'ffffffffffffffff', want: mine }, { unit: 'peer:z', got: '0123456789abcdef', want: mine }], unknown: ['peer:c'] });
+  eq('VG gate: only slim pinless units → no abstain', gateSkillSet([{ id: 'peer:c', full: false }, { id: 'peer:d', sk_set: '', full: false }], mine).abstain, false);
+  eq('VG gate: a FULL snapshot without a pin → mismatch', gateSkillSet([{ id: 'peer:x', full: true }], mine), { abstain: true, mismatches: [{ unit: 'peer:x', got: null, want: mine }], unknown: [] });
+  eq('VG gate: alone in my view → no abstain', gateSkillSet([], mine).abstain, false);
+  const emptyPerms = { permanents_csv: '' };   // a fresh monster: a full snapshot, no permanents, (here) no sk_set
+  eq('VG gate: a full snapshot with an empty permanents_csv and no sk_set → mismatch', gateSkillSet([{ id: 'peer:y', sk_set: emptyPerms.sk_set || null, full: emptyPerms.permanents_csv !== undefined }], mine).abstain, true);
+
+  // The adapter: log + UI once per unit|pin, returns the gate result.
+  const lines = [], seen = [];
+  const pg = await createSkPeer({ selfId: 'peer:V', dimId: 'dim-vg', log: (l) => lines.push(l), ui: (m) => seen.push(m), nameOf: (id) => (id === 'peer:z' ? 'Zed' : null), engine: stubEngine(), validate: null });
+  eq('VG adapter: want = my 16-hex set pin', pg.setId.slice(0, 16), mine);
+  const units = [{ id: 'peer:z', sk_set: '0123456789abcdef', full: true }, { id: 'peer:x', full: true }, { id: 'peer:c', full: false }, { id: 'peer:m', sk_set: mine, full: true }];
+  const r1 = pg.gateBuiltins(units, { turn: 4, round: 1 });
+  eq('VG adapter: returns the gate result', r1, gateSkillSet(units, mine));
+  const vl = () => lines.filter(l => l.startsWith('SKILL VERSION GATE'));
+  eq('VG adapter: one log line per mismatching unit', vl(), [
+    `SKILL VERSION GATE T4.R2: peer:x runs built-in skill set none (full snapshot without a pin), mine ${mine} — no state hash from me while it is in play`,
+    `SKILL VERSION GATE T4.R2: peer:z runs built-in skill set 0123456789abcdef, mine ${mine} — no state hash from me while it is in play`]);
+  eq('VG adapter: ui version events', seen, [
+    { kind: 'skill_source', event: 'version', ref: { id: 'builtin_skills', kind: 'skill', name: 'the built-in skills' }, peer: { peer_id: 'peer:x' }, got: null, want: mine },
+    { kind: 'skill_source', event: 'version', ref: { id: 'builtin_skills', kind: 'skill', name: 'the built-in skills' }, peer: { peer_id: 'peer:z', name: 'Zed' }, got: '0123456789abcdef', want: mine }]);
+  const r2 = pg.gateBuiltins(units, { turn: 4, round: 2 });
+  eq('VG adapter: the same unit|pin again → still abstains, no second log / ui', [r2.abstain, vl().length, seen.length], [true, 2, 2]);
+  pg.gateBuiltins([{ id: 'peer:z', sk_set: 'aaaaaaaaaaaaaaaa', full: true }], { turn: 5 });
+  eq('VG adapter: a NEW pin of the same unit is reported (round absent → R1)', [vl().length, vl()[2]?.split(',')[0], seen.length, seen[2]?.got], [3, 'SKILL VERSION GATE T5.R1: peer:z runs built-in skill set aaaaaaaaaaaaaaaa', 3, 'aaaaaaaaaaaaaaaa']);
+  eq('VG adapter: match → no abstain, nothing logged', [pg.gateBuiltins([{ id: 'peer:m', sk_set: mine, full: true }], { turn: 6, round: 0 }).abstain, vl().length], [false, 3]);
+
+  // VG (peer.mjs wiring, chaosd6-8a agent F) — twins of the F9 regex tests in effects-handshake-check:
+  //   1. sk_set on the SLIM snapshot (inside currentStateSnapshot before `if (slim) return s;`), not only the full heartbeat
+  //   2. `const skVer = skPeer.gateBuiltins(...)` right next to `const fxVer`, same units, full by permanents_csv KEY presence
+  //   3. `!skVer.abstain` guarding lastStateHashes.set and `|| skVer.abstain` blanking the published state_hash
+  const peerSrcVG = fs.readFileSync(new URL('../peer.mjs', import.meta.url), 'utf8');
+  eq('VG gate: peer.mjs sends sk_set on the slim envelope snapshot too',
+    (peerSrcVG.match(/function currentStateSnapshot[\s\S]*?if \(slim\) return s;/) || [''])[0].includes('sk_set: skPeer.setId.slice(0, 16)'), true);
+  eq('VG gate: peer.mjs computes skVer next to fxVer (full by permanents_csv key presence)',
+    /const fxVer = fxPeer\.gateBuiltins\([^\n]*\n\s*const skVer = skPeer\.gateBuiltins\(\[\.\.\.view\.keys\(\)\]\.filter\(id => id !== PEER_ID_STRING\)\.map\(id => \(\{ id, sk_set: view\.get\(id\)\?\.sk_set \|\| null, full: view\.get\(id\)\?\.permanents_csv !== undefined \}\)\)/.test(peerSrcVG), true);
+  eq('VG gate: peer.mjs withholds the state hash on skVer.abstain (lastStateHashes + published state_hash)',
+    [/!skVer\.abstain \/\* SV \*\/\) lastStateHashes/.test(peerSrcVG), /\|\| skVer\.abstain \/\* SV: skill version gate \*\/ \? '' : stateHash/.test(peerSrcVG)], [true, true]);
 }
 
 console.log(fails ? `${fails} skills handshake check(s) FAILED` : 'all skills handshake checks passed');

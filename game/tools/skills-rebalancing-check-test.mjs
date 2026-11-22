@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Tests for tools/skills-rebalancing-check.mjs (S5). `node tools/skills-rebalancing-check-test.mjs` → ends "all skills rebalancing checks passed".
 //  1. the 14 built-ins: calibrated, curve verdict = calibration, ok or a listed known outlier; as itself (baseline) ok;
-//     BUILTIN_FLAGS agree with data/skills.json and game/skills.mjs SKILL_RULES
+//     the built-ins come from game/skills-data/skills (card blocks + validator flags): card.data = the top level =
+//     skills.mjs SKILL_RULES / builtinSkillEntries(); BUILTIN_FLAGS = the frozen 2026-11-16 table below; deal order
+//     = SKILLS_IMPLEMENTED; the /2 resolver keys are ignored for pricing; a foreign deal_order → reject
 //  2. logic audit: every built-in's flags reproduce game/skills.mjs exactly on the seeded duels; a branch whose flags
 //     under-declare its parent's hooks → reject; a logic program (no program engine yet) → reject
 //  3. synthetic skills: overpowered → reject, strong → nerf (+ a weaker in-band change), weak → boost; malformed → reject
@@ -12,7 +14,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkSkill, loadCalibration, loadBuiltinDefs, computePin, verifyPin, canonicalJson, auditLogic, normalizeDef, BUILTIN_FLAGS, VALIDATOR_VERSION, DEFAULT_TOLERANCE, PIN_FORMAT } from './skills-rebalancing-check.mjs';
+import { checkSkill, loadCalibration, loadBuiltinDefs, computePin, verifyPin, canonicalJson, auditLogic, normalizeDef, BUILTIN_FLAGS, BUILTIN_DEAL_ORDER, FLAG_KEYS, VALIDATOR_VERSION, DEFAULT_TOLERANCE, PIN_FORMAT } from './skills-rebalancing-check.mjs';
 import * as core from './rebalancing-core.mjs';
 import * as fxv from './rebalancing-check.mjs';
 
@@ -29,7 +31,29 @@ try { SK = await import('../skills.mjs'); } catch { SK = null; }
 // 1. built-ins
 const { defs: builtins } = await loadBuiltinDefs();
 ok('14 built-in skills', builtins.length === 14, String(builtins.length));
-const data = JSON.parse(fs.readFileSync(path.join(GAME, '..', 'data', 'skills.json'), 'utf8'));
+const s2dir = path.join(GAME, 'skills-data', 'skills');
+const defFile = (id) => core.readJson(path.join(s2dir, `${id}.json`));
+// The validator flags of the 2026-11-16 skill rebalance (validator 1.1.0's own table before skill isolation; the
+// definitions carry them now). A change here must be a deliberate rebalance (recalibrate + re-audit).
+const FROZEN_FLAGS = {
+  skill_powerful_attack: { attackBonus: 1, selfLock: { codes: ['A'], until: 'end_of_round' } },
+  skill_overrun: { negate: { codes: ['M', 'EM'], who: 'target', mode: 'no_move' }, swap: true },
+  skill_grapple: { negate: { codes: ['P'], who: 'target', mode: 'ep' } },
+  skill_ranged_weapon: { reach: 2, trapImmune: true },
+  skill_taunt: { tauntGuard: true, blockDenied: true },
+  skill_force_shield: { effectShield: true },
+  skill_barricade: { immuneTo: ['A', 'B'] },
+  skill_sanctuary: { invincibleWhile: ['M', 'EM', 'EP'] },
+  skill_disruption_move: { negate: { codes: ['P'], who: 'target', mode: 'em' }, voidEmission: true },
+  skill_dodge: { damageOff: 1 },
+  skill_bluff: { negate: { codes: ['A', 'M', 'B', 'P', 'EM'], who: 'target', mode: 'ep' } },
+  skill_intimidation: { negate: { codes: ['A'], who: 'adjacent', mode: 'ep' }, altCounterSkill: true },
+  skill_battle_trance: { trance: true },
+  skill_counter_spell: { counterSkill: true, counterElement: true },
+};
+const entries = typeof SK?.builtinSkillEntries === 'function' ? new Map(Object.entries(SK.builtinSkillEntries())) : null;   // { id: {id, name, tags, data} }
+// (before the /2 card blocks builtinSkillEntries() is empty → the per-skill card checks are skipped)
+if (entries && !entries.size) console.log('builtinSkillEntries: empty (no card blocks yet)');
 const tally = {};
 for (const d of builtins) {
   const curve = checkSkill(d, { baseline: null });
@@ -40,15 +64,47 @@ for (const d of builtins) {
   ok(`${d.id} ok or known outlier`, curve.verdict === 'ok' || outliers.has(d.id), `${curve.verdict} ${curve.judged_ratio}`);
   const self = checkSkill(d);
   ok(`${d.id} as itself → ok (baseline)`, self.verdict === 'ok' && self.mode === 'baseline' && self.judged_ratio === 1, `${self.verdict} ${self.mode} ${self.judged_ratio}`);
-  const e = data.entries.find(x => x.id === d.id);
-  const v = e.versions.filter(x => !['rejected', 'superseded'].includes(x.status)).sort((a, b) => b.weight - a.weight)[0];
-  ok(`${d.id} matches data/skills.json`, v.data.action_type === d.action_type && !!v.data.is_permanent === d.is_permanent && (v.data.point_buy_stat ?? null) === d.point_buy_stat && (v.data.fixed_power ?? null) === (d.fixed_power ?? null));
+  // the priced shape is read off the card block; it must agree with the definition's top level (what the engine
+  // loads), the resolver keys (SKILL_RULES = the definition's flags) and the dealt card (builtinSkillEntries)
+  const file = defFile(d.id);
+  const same = (x) => x.action_type === d.action_type && !!x.is_permanent === d.is_permanent && (x.point_buy_stat ?? null) === d.point_buy_stat && (x.fixed_power ?? null) === (d.fixed_power ?? null);
+  ok(`${d.id} priced shape = its definition's top level`, same(file), JSON.stringify({ d, file: { a: file.action_type, p: file.is_permanent, s: file.point_buy_stat, f: file.fixed_power } }));
+  if (file.card) ok(`${d.id} priced shape = its card.data`, same(file.card.data || {}), JSON.stringify(file.card.data));
+  ok(`${d.id} version = the card's source version`, d.version === (file.source?.version ?? file.version), `${d.version}`);
+  if (entries?.size) ok(`${d.id} = skills.mjs builtinSkillEntries() data`, entries.has(d.id) && same(entries.get(d.id).data || {}), JSON.stringify(entries.get(d.id)?.data));
   if (SK?.SKILL_RULES) {
     const r = SK.SKILL_RULES[d.id];
     ok(`${d.id} matches skills.mjs SKILL_RULES`, r && r.action === d.action_type && r.permanent === d.is_permanent && (r.pointBuyStat ?? null) === (d.point_buy_stat ? d.point_buy_stat.replace(/^stat_/, '') : null), JSON.stringify(r));
   }
+  ok(`${d.id} validator flags = the frozen 2026-11-16 table`, canonicalJson(d.flags) === canonicalJson(FROZEN_FLAGS[d.id]), JSON.stringify(d.flags));
 }
 ok('BUILTIN_FLAGS covers exactly the built-ins', Object.keys(BUILTIN_FLAGS).sort().join() === builtins.map(d => d.id).sort().join());
+ok('BUILTIN_FLAGS = the frozen table (derived from the definitions)', canonicalJson(BUILTIN_FLAGS) === canonicalJson(FROZEN_FLAGS));
+ok('FLAG_KEYS covers every frozen flag', Object.values(FROZEN_FLAGS).every(f => Object.keys(f).every(k => FLAG_KEYS[k])));
+if (SK?.SKILLS_IMPLEMENTED) ok('the built-ins = skills.mjs SKILLS_IMPLEMENTED', [...SK.SKILLS_IMPLEMENTED].sort().join() === builtins.map(d => d.id).sort().join(), [...SK.SKILLS_IMPLEMENTED].join());
+const dealIds = Object.keys(BUILTIN_DEAL_ORDER).sort((a, b) => BUILTIN_DEAL_ORDER[a] - BUILTIN_DEAL_ORDER[b]);
+if (dealIds.length) {
+  ok('deal_order: every built-in, 1..14 unique', dealIds.length === 14 && dealIds.every((id, i) => BUILTIN_DEAL_ORDER[id] === i + 1), JSON.stringify(BUILTIN_DEAL_ORDER));
+  if (SK?.SKILLS_IMPLEMENTED) ok('deal_order = SKILLS_IMPLEMENTED order', dealIds.join() === [...SK.SKILLS_IMPLEMENTED].join(), dealIds.join());
+} else console.log('deal_order: no /2 definitions yet (skipped)');
+{
+  // /2 resolver keys are not power: a built-in carrying deal_order / card / ui / passOrder / buildingSkill / planLock
+  // prices exactly as without them
+  const gr = builtins.find(d => d.id === 'skill_grapple');
+  const g2 = { ...gr, deal_order: BUILTIN_DEAL_ORDER.skill_grapple ?? 3, card: { name: 'Grapple', tags: [], resources: {}, data: { action_type: 'A', is_permanent: false, point_buy_stat: null } }, ui: { tag: 'GR', glyph: 'x', color: '#000' }, flags: { ...gr.flags, passOrder: { negate_kind: 1 }, buildingSkill: 3, planLock: [] } };
+  const r2 = checkSkill(g2), r0 = checkSkill(gr, { baseline: null }), r2c = checkSkill(g2, { baseline: null });
+  ok('/2 keys ignored for pricing (built-in with deal_order, card, ui, passOrder, buildingSkill, planLock) → ok as itself, same power', r2.verdict === 'ok' && r2.judged_ratio === 1 && canonicalJson(r2c.power) === canonicalJson(r0.power), `${r2.verdict} ${r2.errors?.join('; ')} ${r2.judged_ratio}`);
+  const foreignDeal = { ...gr, id: 'skill_test_dealt', deal_order: 15 };
+  const rfd = checkSkill(foreignDeal);
+  ok('foreign skill claiming deal_order → reject', rfd.verdict === 'reject' && rfd.valid === false && rfd.errors.some(e => /deal_order is reserved/.test(e)), `${rfd.verdict} ${rfd.errors?.join('; ')}`);
+  ok('the same foreign skill without deal_order → valid', checkSkill({ ...gr, id: 'skill_test_dealt' }).valid);
+  const wrongSlot = checkSkill({ ...gr, deal_order: 9 });
+  ok('built-in with another built-in\'s deal_order → reject', !dealIds.length || (wrongSlot.verdict === 'reject' && wrongSlot.errors.some(e => /deal_order 9/.test(e))), `${wrongSlot.verdict} ${wrongSlot.errors?.join('; ')}`);
+  const liarCard = checkSkill({ ...g2, id: 'skill_test_card_liar', deal_order: undefined, card: { ...g2.card, data: { ...g2.card.data, action_type: 'P' } } });
+  ok('card.data disagreeing with the priced top level → reject', liarCard.verdict === 'reject' && liarCard.errors.some(e => /card\.data\.action_type/.test(e)), `${liarCard.verdict} ${liarCard.errors?.join('; ')}`);
+}
+const vsrc = fs.readFileSync(path.join(HERE, 'skills-rebalancing-check.mjs'), 'utf8');
+ok('validator reads no data/skills.json (built-ins from the definitions)', !/data\/skills\.json|'data', 'skills\.json'/.test(vsrc));
 console.log(`built-ins: ${builtins.length} (curve verdicts ${JSON.stringify(tally)}; known outliers ${outliers.size}: ${[...outliers].join(', ')})`);
 
 // 2. logic audit
@@ -85,34 +141,35 @@ if (SK?.skillHook) {
   }
   const paKeep = checkSkill({ ...builtins.find(d => d.id === 'skill_powerful_attack'), id: 'skill_test_pa_copy', extends: 'skill_powerful_attack' });
   ok('Powerful Attack branch keeping its lock audits clean', paKeep.audit?.ran && paKeep.audit.identical && paKeep.verdict === 'ok', JSON.stringify(paKeep.audit));
-  // S2 programs (game/skills-data/skills/<id>.json) under the validator's flags: run by resolveSkillProgram
-  const s2dir = path.join(GAME, 'skills-data', 'skills');
-  const META = ['action', 'permanent', 'pointBuyStat', 'negating', 'hooks', 'range', 'negates', 'keepsTarget', 'attackBonus', 'damageOff', 'trance'];
-  let s2n = 0; const s2missing = [];
+  // the whole definition files (game/skills-data/skills/<id>.json: resolver + validator flags, hook programs and,
+  // from schema /2, deal_order / card / ui) as they are: run by resolveSkillProgram
+  const resolverOnly = (flags) => Object.fromEntries(Object.entries(flags || {}).filter(([k]) => !FLAG_KEYS[k]));
+  let s2n = 0;
   if (SK?.resolveSkillProgram && fs.existsSync(s2dir)) for (const d of builtins) {
-    const file = path.join(s2dir, `${d.id}.json`);
-    if (!fs.existsSync(file)) continue;
-    const s2 = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const meta = Object.fromEntries(Object.entries(s2.flags || {}).filter(([k]) => META.includes(k)));
-    const def2 = { ...s2, flags: { ...meta, ...BUILTIN_FLAGS[d.id] } };
-    if (d.fixed_power != null && s2.fixed_power == null && s2.data?.fixed_power == null) { def2.fixed_power = d.fixed_power; s2missing.push(`${d.id}.fixed_power`); }
-    const r = checkSkill(def2);
-    ok(`S2 ${d.id}: programs audited (resolveSkillProgram), identical, ok as itself`, r.verdict === 'ok' && r.audit?.ran && /resolveSkillProgram/.test(r.audit.engine) && r.audit.identical, `${r.verdict} ${r.reasons.join('; ')} ${JSON.stringify(r.audit)}`);
+    if (!fs.existsSync(path.join(s2dir, `${d.id}.json`))) continue;
+    const r = checkSkill(defFile(d.id));
+    ok(`S2 ${d.id}: the definition file validates, programs audited (resolveSkillProgram), identical, ok as itself`, r.verdict === 'ok' && r.audit?.ran && /resolveSkillProgram/.test(r.audit.engine) && r.audit.identical && r.judged_ratio === 1, `${r.verdict} ${r.errors?.join('; ')} ${r.reasons.join('; ')} ${JSON.stringify(r.audit)}`);
     s2n++;
   }
-  // a FOREIGN skill with programs: a renamed copy of Ranged Weapon's S2 definition
+  // a FOREIGN skill with programs: a renamed copy of Ranged Weapon's definition (a foreign skill is /1-shaped: not
+  // dealt, so no deal_order; no card / ui of a built-in)
   const rwFile = path.join(s2dir, 'skill_ranged_weapon.json');
   if (SK?.resolveSkillProgram && fs.existsSync(rwFile)) {
-    const rw = JSON.parse(fs.readFileSync(rwFile, 'utf8'));
-    const meta = Object.fromEntries(Object.entries(rw.flags || {}).filter(([k]) => META.includes(k)));
-    const bow = { ...rw, id: 'skill_test_longbow', flags: { ...meta, reach: 2, trapImmune: true } };
+    const { deal_order: _dealt, card: _card, ui: _ui, ...rw } = defFile('skill_ranged_weapon');
+    const meta = resolverOnly(rw.flags);
+    const bow = { ...rw, schema: 'chaosd6.skill/1', id: 'skill_test_longbow', flags: { ...meta, reach: 2, trapImmune: true } };
+    if (_dealt !== undefined) {
+      const rdl = checkSkill({ ...bow, deal_order: _dealt });
+      ok('foreign program keeping the built-in\'s deal_order → reject', rdl.verdict === 'reject' && rdl.errors?.some(e => /deal_order is reserved/.test(e)), `${rdl.verdict} ${rdl.errors?.join('; ')}`);
+    }
     const rb = checkSkill(bow);
     ok('foreign program (renamed Ranged Weapon) audited on its own programs, identical', rb.audit?.ran && /resolveSkillProgram/.test(rb.audit.engine) && rb.audit.identical && rb.valid, `${rb.verdict} ${JSON.stringify(rb.audit)}`);
     const bowLiar = { ...bow, id: 'skill_test_longbow_liar', flags: { ...meta, trapImmune: true } };
     const rbl = checkSkill(bowLiar);
     ok('foreign program doing more than its flags → reject', rbl.verdict === 'reject' && rbl.reasons.some(x => x.includes('logic exceeds')), `${rbl.verdict} ${rbl.reasons.join('; ')}`);
   }
-  console.log(`S2 programs audited: ${s2n}/14${s2missing.length ? ` (S2 files lack ${s2missing.join(', ')} — supplied from data/skills.json for the test)` : ''}`);
+  ok('every built-in definition file audited as is', !SK?.resolveSkillProgram || s2n === 14, `${s2n}/14`);
+  console.log(`S2 programs audited: ${s2n}/14 (definition files as they are; audit engine SKILL_ENGINE=${SK?.SKILL_ENGINE ?? '?'})`);
   const docLogic = checkSkill({ ...builtins.find(d => d.id === 'skill_grapple'), logic: { description: 'S2 data definition' } });
   ok('built-in with a (documentary) logic block → audited on its hooks, ok', docLogic.verdict === 'ok' && docLogic.audit?.ran === true, `${docLogic.verdict} ${JSON.stringify(docLogic.audit)}`);
   const s2shape = checkSkill({ id: 'skill_dodge', data: { action_type: 'M', is_permanent: false, point_buy_stat: null }, flags: { damageOff: 1 }, logic: {} });
@@ -204,10 +261,14 @@ ok('bad baseline id → reject', checkSkill(strong, { baseline: 'skill_nope' }).
 ok('pin stable', canonicalJson(pin) === canonicalJson(computePin()));
 ok('pin format/version', pin.format === PIN_FORMAT && PIN_FORMAT === 'chaosd6-skills-validator-pin/1' && pin.validator_version === VALIDATOR_VERSION && /^[0-9a-f]{64}$/.test(pin.pin_id));
 ok('pin carries source, core, calibration, engines', [pin.source_sha256, pin.core_sha256, pin.calibration_sha256, pin.engines_sha256].every(h => /^[0-9a-f]{64}$/.test(h)) && 'game/skills.mjs' in pin.engines && 'game/skill-engine.mjs' in pin.engines && 'game/effect-engine.mjs' in pin.engines);
+// skill isolation: the pin = the engine closure + libs (as the classes / effects validators); the JS oracle and the
+// definitions are not engine (the definitions are what is checked; the built-in set is version-gated in play)
+ok('pin engines = skills.mjs, skill-engine.mjs, effect-engine.mjs + the skills libs (no oracle, no definitions)', canonicalJson(Object.keys(pin.engines).sort()) === canonicalJson(['game/effect-engine.mjs', 'game/skill-engine.mjs', 'game/skills.mjs', ...fs.readdirSync(path.join(GAME, 'skills-data', 'lib')).filter(f => f.endsWith('.json')).sort().map(f => `game/skills-data/lib/${f}`)].sort()), JSON.stringify(Object.keys(pin.engines)));
 ok('equal weights over the six basic actions (ruling 2026-11-16)', mixUniform);
 ok('Force Shield fixed power 6 is priced as die 6 (no roll)', builtins.find(d => d.id === 'skill_force_shield').fixed_power === 6 && checkSkill(builtins.find(d => d.id === 'skill_force_shield'), { baseline: null }).power.cost.retries === 0);
 ok('Powerful Attack pays for its Attack lock', checkSkill(builtins.find(d => d.id === 'skill_powerful_attack'), { baseline: null }).power.cost.self_lock > 0);
 ok('engines: skills.mjs hashed when present', !SK || /^[0-9a-f]{64}$/.test(pin.engines['game/skills.mjs'] || ''));
+ok('engines: skills.mjs hash = its bytes', !SK || pin.engines['game/skills.mjs'] === core.fileSha(path.join(GAME, 'skills.mjs')));
 ok('verifyPin(own) ok', verifyPin(pin).ok);
 const tampered = JSON.parse(JSON.stringify(cal)); tampered.weights.negated_action += 0.01;
 ok('calibration change → new pin', computePin(tampered).pin_id !== pin.pin_id);
@@ -218,9 +279,10 @@ ok('stamp carries the pin', rs.stamp.pin_id === pin.pin_id);
 // The effects validator is untouched by S5: same source bytes, does not import the core, pin id as of 2026-11-16.
 // Source sha refreshed 2026-11-18: the effects tolerance ruling (DEFAULT_TOLERANCE 0.30) changed its bytes (was 82ffc898fd83).
 // Refreshed again 2026-11-18: effects validator 1.1.0 binds the ref-pinned libs (was 6e0b08de5c3a).
+// Refreshed 2026-11-21: effects validator 1.2.0, effect isolation F1–F2 — the flags reference names the JS oracle, F2 flags + standing programs (was f1834ad7a808).
 const fxPin = fxv.computePin();
 const fxSrc = fs.readFileSync(path.join(HERE, 'rebalancing-check.mjs'), 'utf8');
-ok('effects validator source unchanged', fxPin.source_sha256 === 'f1834ad7a8080d7faa4f71db92e59663d9f563f35cee6c59c1f01ff9f289c166', fxPin.source_sha256);
+ok('effects validator source unchanged', fxPin.source_sha256 === '0dc61ea8f9b549cdb1e4c4e1dcc641c52c02952d04047c804f6b4a8ce1eb4d2a', fxPin.source_sha256);
 ok('effects validator does not import rebalancing-core', !fxSrc.includes('rebalancing-core'));
 if (fxPin.engines_sha256 === '3d66fc7429b93dc618eba71b3666fc422ac25e4d7276131b36e0340565321727') ok('effects pin id unchanged', fxPin.pin_id === '5f8ddbb4640e0842606e6ddfab91c1d50bea0695bf814b8e7cfd6f5c3114d7a0', fxPin.pin_id);
 else console.log(`note: effects engines changed since 2026-11-16 (effects.mjs / effect-engine.mjs / libs) → effects pin ${fxPin.pin_id.slice(0, 12)}; not caused by S5`);

@@ -7,7 +7,7 @@
 import { pointBuy } from '../../effect-engine.mjs';
 import { unionOf } from '../../class-state.mjs';
 import * as CE from '../../class-engine.mjs';
-import { STATS, TRAP_POWER, STRIKE_DIE, ILLUSION_RANGE, TRANCE, ELEM_TO_STAT, REANIMATED_ELEMS, classHook, classColours, classKindOf, oracleSupport } from '../../classes.mjs';
+import { STATS, TRAP_POWER, STRIKE_DIE, ILLUSION_RANGE, ELEM_TO_STAT, REANIMATED_ELEMS, classHook, classColours, classKindOf, oracleSupport } from '../../classes.mjs';
 import { rogueConfig, clericConfig, rogueShared, manipulatorConfig, avengerConfig, prophetConfig, animatorConfig, priestConfig, seekerConfig, maxStanding } from './class-configs.mjs';
 import { combatHit, attackHit, pickManipTarget, isWildMonster, lureTargets, chaseBonusStep, prophetPick } from '../../contact-prims.mjs';
 const { elemStatOf, pickBySalt, parseJsonList, cdOf, rulesOf } = oracleSupport;
@@ -214,7 +214,7 @@ function shareSkills(ctx, _id, { actor, skills, adj }) {
   for (const o of adj || []) {
     let have = [...(o.skills || [])];
     for (const sk of skills || []) {
-      const req = ctx.skillAction(sk); if (!req || sk === TRANCE || have.includes(sk)) continue;
+      const req = ctx.skillAction(sk); if (!req || ctx.skillIsTrance(sk) || have.includes(sk)) continue;   // skill isolation: was sk === TRANCE (classes.mjs)
       if (rides(o.codes, req)) { have = [...have, sk]; adds.push({ on: o.id, skill: sk }); if (o.id === ctx.self || actor === ctx.self) log.push(`[${ctx.label}] bard ${actor.slice(0, 8)}: ${o.id.slice(0, 8)} plays ${sk} too`); }
     }
   }

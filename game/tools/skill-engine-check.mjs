@@ -1,21 +1,30 @@
 // Skill data-engine check (chaosD6-Skills S2): game/skills-data/skills/*.json (+ lib/skills_std.json) run on
 // game/skill-engine.mjs must give exactly what the JS hooks of game/skills.mjs give.
 //   node tools/skill-engine-check.mjs            → ends with "all skill-engine checks passed"
-// 1. files: the 14 definitions + lib validate; metadata = data/skills.json; flags = SKILL_RULES (+ the S5 validator's
-//    BUILTIN_FLAGS); hooks = SKILL_RULES hooks; pass hooks as data (MV), section 2 also compares the JS pass vs the data pass.
+// 1. files: the 14 definitions + lib validate; metadata = data/skills.json; flags ⊇ the oracle's frozen old SKILL_RULES
+//    (+ its frozen copy of the S5 validator's BUILTIN_FLAGS); hooks = the old table's hooks; card / ui / deal_order (/2);
+//    pass hooks as data (MV), section 2 also compares the JS pass vs the data pass.
 // 2. identity: for every data hook and every skill that has a program for it (std hooks: every skill), ≥ 600 seeded
 //    random cases (SKILL_ENGINE_CHECK_N, default 700) — the JS hook vs resolveSkillProgram(def, …), JSON-identical,
 //    on the random worlds of tools/skills-check.mjs (same generator); programs never mutate the ctx.
 // 3. bad programs rejected at load; op budget / depth limit → the hook's neutral value; denied ops.
 // 4. foreign skills (S4 API): registerForeignSkill / isForeignSkillId, folding after the built-ins.
-// 5. tools/skills-check.mjs under SKILL_ENGINE=shadow (strict) and SKILL_ENGINE=data.
+// 5. tools/skills-check.mjs under SKILL_ENGINE=shadow (strict), js and data.
+// 6. skill isolation: the lenient loader (errors, /2 rules: deal_order, card, ui, passOrder / buildingSkill uniqueness),
+//    SKILL_ENGINE=js without the oracle throws, and the GREP GATE (no built-in skill id as code in the game files).
+// Skill isolation (2026-11-22): the "JS" side of section 2 is the ORACLE's hooks (skills-data/oracle/skills-js.mjs
+// jsHook) called directly — never the dispatcher — so the comparison holds whatever SKILL_ENGINE says.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import * as SK from '../skills.mjs';
 import * as SE from '../skill-engine.mjs';
-import { BUILTIN_FLAGS, FLAG_KEYS } from './skills-rebalancing-check.mjs';
+import { FLAG_KEYS } from './skills-rebalancing-check.mjs';
+const OR = await import('../skills-data/oracle/skills-js.mjs');   // the JS reference hooks + REF tables (test oracle)
+if (SK.SKILL_ENGINE !== 'data') SK.installSkillOracle(OR);
+const JSH = OR.jsHook;   // the oracle's hook, not the dispatcher
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(here, '..');
@@ -23,7 +32,7 @@ let fails = 0, oks = 0;
 const ok = (label, cond, extra = '') => { if (cond) { oks++; console.log(`ok   ${label}`); } else { fails++; console.log(`FAIL ${label}${extra ? ` — ${String(extra).slice(0, 600)}` : ''}`); } };
 const J = (x) => JSON.stringify(x);
 const { SKILL_RULES, SKILLS_IMPLEMENTED, TRANCE, skillHook, resolveSkillProgram } = SK;
-if (SK.SKILL_ENGINE !== 'js') console.log(`note: SKILL_ENGINE=${SK.SKILL_ENGINE} — the "JS" side below is the ${SK.SKILL_ENGINE} dispatcher`);
+console.log(`note: SKILL_ENGINE=${SK.SKILL_ENGINE} — the "JS" side below is the oracle (skills-js.mjs jsHook)`);
 
 // ---- data -------------------------------------------------------------------------------------------------
 const skillsJson = JSON.parse(fs.readFileSync(path.join(GAME, '..', 'data', 'skills.json'), 'utf8'));
@@ -44,23 +53,39 @@ for (const l of bundle.libs) ok(`lib ${l.id}: schema required / known keys`, lib
 const HOOK_SET = new Set(SK.HOOK_NAMES);
 ok('skill-engine HOOK_SPECS = skills.mjs HOOK_NAMES (same order)', J(SE.HOOK_NAMES) === J(SK.HOOK_NAMES));
 ok('the denied (outcome / dice) ops are not in the skill vocabulary', SE.DENIED_OPS.every(o => !SE.SKILL_OPS.includes(o)));
+// The isolation flags (SCHEMA.md): pass order, building-skill slot, plan lock.
+const ISOLATION_KEYS = new Set(['passOrder', 'buildingSkill', 'planLock']);
+const semverGt = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i]; return false; };
 for (const [id, def] of bundle.defs) {
-  const d = DATA[id], r = SKILL_RULES[id];
+  const d = DATA[id], r = OR.SKILL_RULES_REF[id];   // the frozen pre-isolation table (resolver keys)
   const sub = Object.fromEntries(Object.keys(r).map(k => [k, def.flags[k]]));
   const vk = Object.fromEntries(Object.keys(def.flags).filter(k => FLAG_KEYS[k]).map(k => [k, def.flags[k]]));
   const wantHooks = r.hooks.filter(h => HOOK_SET.has(h));
   const marks = Object.entries(def.hooks).filter(([, h]) => SE.isJsMarker(h)).map(([n]) => n);
-  ok(`${id}: schema keys, metadata = data/skills.json, flags = SKILL_RULES + BUILTIN_FLAGS, hooks = SKILL_RULES hooks, no JS marker but Force Shield end_round`,
+  const extra = Object.keys(def.flags).filter(k => !(k in r) && !FLAG_KEYS[k] && !ISOLATION_KEYS.has(k));
+  ok(`${id}: schema keys, metadata = data/skills.json (source.version), version bumped, flags ⊇ the old SKILL_RULES + the frozen validator flags, hooks = the old table's hooks, no JS marker but Force Shield end_round`,
     req.every(k => k in def) && Object.keys(def).every(k => allowed.includes(k))
-    && def.name === DATA[id].name && def.version === d.version && def.action_type === d.data.action_type && def.is_permanent === !!d.data.is_permanent
+    && def.name === DATA[id].name && def.source?.version === d.version && semverGt(def.version, d.version) && def.action_type === d.data.action_type && def.is_permanent === !!d.data.is_permanent
     && def.point_buy_stat === (d.data.point_buy_stat ?? null) && def.text === d.data.text
-    && J(sub) === J(r) && J(vk) === J(BUILTIN_FLAGS[id]) && Object.keys(def.flags).every(k => k in r || FLAG_KEYS[k])
+    && J(sub) === J(r) && J(vk) === J(OR.VALIDATOR_FLAGS_REF[id]) && J(SKILL_RULES[id]) === J(def.flags)
     && J(Object.keys(def.hooks)) === J(wantHooks)
     && marks.every(n => SE.HOOK_SPECS[n].engine === 'js' || (id === 'skill_force_shield' && n === 'end_round'))
     && Object.keys(def.hooks).every(n => SE.HOOK_SPECS[n].engine === 'data' || marks.includes(n))
     && J(SK.validateSkillDef(def)) === '[]',
-    J({ sub, r, vk, b: BUILTIN_FLAGS[id], hooks: Object.keys(def.hooks), wantHooks, errs: SK.validateSkillDef(def) }));
+    J({ sub, r, vk, b: OR.VALIDATOR_FLAGS_REF[id], extra, hooks: Object.keys(def.hooks), wantHooks, errs: SK.validateSkillDef(def) }));
+  if (extra.length) console.log(`     note ${id}: data-only flags ${extra.join(', ')}`);
+  // /2: the card block = the data/skills.json entry (name, tags, resources) + its active version (data, rebalance_links, logic)
+  const e = skillsJson.entries.find(x => x.id === id), v = e && pickActive(e);
+  const wantCard = e && { name: e.name, tags: e.tags, ...(e.resources ? { resources: e.resources } : {}), data: v.data, ...(v.rebalance_links ? { rebalance_links: v.rebalance_links } : {}), ...(v.logic ? { logic: v.logic } : {}) };
+  const sorted = (o) => J(Object.fromEntries(Object.keys(o || {}).sort().map(k => [k, o[k]])));
+  ok(`${id}: schema /2, deal_order = old position, card = data/skills.json (entry + active version), ui {tag, glyph, color}`,
+    def.schema === 'chaosd6.skill/2' && def.deal_order === OR.DEAL_ORDER_REF.indexOf(id) + 1
+    && sorted(def.card) === sorted(wantCard) && ['tag', 'glyph', 'color'].every(k => typeof def.ui?.[k] === 'string'),
+    J({ deal: def.deal_order, cardKeys: Object.keys(def.card || {}), wantKeys: Object.keys(wantCard || {}), ui: def.ui }));
 }
+ok('derived pass orders (flags.passOrder) = the old HOOK_SPECS arrays', J(Object.fromEntries(SE.PASS_HOOKS.map(h => [h, SE.HOOK_SPECS[h].order]))) === J(OR.PASS_ORDER_REF), J(SE.PASS_HOOKS.map(h => SE.HOOK_SPECS[h].order)));
+ok('derivePassOrders(definitions) = HOOK_SPECS order', J(SE.derivePassOrders([...bundle.defs.values()])) === J(OR.PASS_ORDER_REF));
+ok('the oracle exports a JS hook for every hook of the engine', J(Object.keys(OR.HOOKS).sort()) === J([...SE.HOOK_NAMES].sort()));
 
 // ---- random worlds (the generator + bind of tools/skills-check.mjs, verbatim) --------------------------------
 const ELEM_TO_STAT = { elem_vitality: 'vitality', elem_souls: 'world', elem_time: 'world', elem_space: 'world', elem_air: 'matter', elem_water: 'matter', elem_earth: 'matter', elem_fire: 'matter', elem_concentration: 'will', elem_harmony: 'will' };
@@ -178,16 +203,16 @@ for (let s = 1; s <= N; s++) {
     if (R.p(0.2)) byActor.delete(dfd);
     // block_in: the blocker is the attacker id here (old call sites pass no blocker: covered too)
     const bArgs = R.p(0.15) ? { defender: dfd } : { defender: dfd, blocker: atk };
-    for (const def of owners('block_in')) cmp('block_in', def, skillHook('block_in', def.id, ctx, bArgs), resolveSkillProgram(def, 'block_in', ctx, bArgs), false);
-    for (const def of owners('block_cost')) cmp('block_cost', def, skillHook('block_cost', def.id, ctx, { attacker: atk, defender: dfd }), resolveSkillProgram(def, 'block_cost', ctx, { attacker: atk, defender: dfd }), 0);
+    for (const def of owners('block_in')) cmp('block_in', def, JSH('block_in', def.id, ctx, bArgs), resolveSkillProgram(def, 'block_in', ctx, bArgs), false);
+    for (const def of owners('block_cost')) cmp('block_cost', def, JSH('block_cost', def.id, ctx, { attacker: atk, defender: dfd }), resolveSkillProgram(def, 'block_cost', ctx, { attacker: atk, defender: dfd }), 0);
     const aCode = R.p(0.6) ? 'A' : R.pick(CODES);
-    for (const def of owners('attack_range')) cmp('attack_range', def, skillHook('attack_range', def.id, ctx, { attacker: atk, code: aCode }), resolveSkillProgram(def, 'attack_range', ctx, { attacker: atk, code: aCode }), 1);
-    for (const def of owners('attack_out')) cmp('attack_out', def, skillHook('attack_out', def.id, ctx, { attacker: atk, dmg }), resolveSkillProgram(def, 'attack_out', ctx, { attacker: atk, dmg }), dmg);
-    for (const def of owners('attack_target')) cmp('attack_target', def, skillHook('attack_target', def.id, ctx, { attacker: atk, defender: dfd }), resolveSkillProgram(def, 'attack_target', ctx, { attacker: atk, defender: dfd }), false);
-    for (const def of owners('attack_vs_block')) cmp('attack_vs_block', def, skillHook('attack_vs_block', def.id, ctx, { attacker: atk, defender: dfd }), resolveSkillProgram(def, 'attack_vs_block', ctx, { attacker: atk, defender: dfd }), false);
-    for (const def of owners('defend_in')) { const a = { code, defender: dfd, dmg, byActor }; cmp('defend_in', def, skillHook('defend_in', def.id, ctx, a), resolveSkillProgram(def, 'defend_in', ctx, a), dmg); }
-    for (const def of owners('effect_in')) cmp('effect_in', def, skillHook('effect_in', def.id, ctx, { defender: dfd }), resolveSkillProgram(def, 'effect_in', ctx, { defender: dfd }), 0);
-    for (const def of owners('effect_leg')) { const a = { shield: R.p(0.2) ? 0 : 1 + R.int(6), sum: R.int(40) }; cmp('effect_leg', def, skillHook('effect_leg', def.id, null, a), resolveSkillProgram(def, 'effect_leg', null, a), { ...a, spent: 0 }); }
+    for (const def of owners('attack_range')) cmp('attack_range', def, JSH('attack_range', def.id, ctx, { attacker: atk, code: aCode }), resolveSkillProgram(def, 'attack_range', ctx, { attacker: atk, code: aCode }), 1);
+    for (const def of owners('attack_out')) cmp('attack_out', def, JSH('attack_out', def.id, ctx, { attacker: atk, dmg }), resolveSkillProgram(def, 'attack_out', ctx, { attacker: atk, dmg }), dmg);
+    for (const def of owners('attack_target')) cmp('attack_target', def, JSH('attack_target', def.id, ctx, { attacker: atk, defender: dfd }), resolveSkillProgram(def, 'attack_target', ctx, { attacker: atk, defender: dfd }), false);
+    for (const def of owners('attack_vs_block')) cmp('attack_vs_block', def, JSH('attack_vs_block', def.id, ctx, { attacker: atk, defender: dfd }), resolveSkillProgram(def, 'attack_vs_block', ctx, { attacker: atk, defender: dfd }), false);
+    for (const def of owners('defend_in')) { const a = { code, defender: dfd, dmg, byActor }; cmp('defend_in', def, JSH('defend_in', def.id, ctx, a), resolveSkillProgram(def, 'defend_in', ctx, a), dmg); }
+    for (const def of owners('effect_in')) cmp('effect_in', def, JSH('effect_in', def.id, ctx, { defender: dfd }), resolveSkillProgram(def, 'effect_in', ctx, { defender: dfd }), 0);
+    for (const def of owners('effect_leg')) { const a = { shield: R.p(0.2) ? 0 : 1 + R.int(6), sum: R.int(40) }; cmp('effect_leg', def, JSH('effect_leg', def.id, null, a), resolveSkillProgram(def, 'effect_leg', null, a), { ...a, spent: 0 }); }
   }
   // damage_in (edits): JS and data each on their own copy of the damage map + skillFx
   {
@@ -197,7 +222,7 @@ for (let s = 1; s <= N; s++) {
     for (const def of owners('damage_in')) {
       const dA = structuredClone(base), dB = structuredClone(base);
       const cA = { ...ctx, skillFx: [] }, cB = { ...ctx, skillFx: [] };
-      skillHook('damage_in', def.id, cA, { damage: dA });
+      JSH('damage_in', def.id, cA, { damage: dA });
       resolveSkillProgram(def, 'damage_in', cB, { damage: dB });
       count('damage_in', def.id, J([[...dA], cA.skillFx]) === J([[...dB], cB.skillFx]), cA.skillFx.length > 0, `js ${J([[...dA], cA.skillFx])} data ${J([[...dB], cB.skillFx])}`);
     }
@@ -205,27 +230,27 @@ for (let s = 1; s <= N; s++) {
   // end_round / std hooks
   {
     const myR = R.p(0.1) ? (R.p(0.5) ? undefined : null) : { declared: R.p(0.3) ? undefined : R.pick([...CODES, 'BT']), action: R.pick(CODES), trance: R.p(0.3) ? [R.pick(CODES), R.pick(CODES)] : R.p(0.5) ? null : undefined, skills: R.p(0.5) ? [] : R.p(0.1) ? undefined : [R.pick(SKILLS_IMPLEMENTED)], buildingSkill: R.p(0.3) ? R.pick(SKILLS_IMPLEMENTED) : undefined, effect: R.p(0.3) ? {} : null, ...(R.p(0.15) ? { destroy: { stat: 'will' } } : {}) };
-    for (const def of owners('end_round')) cmp('end_round', def, skillHook('end_round', def.id, null, { reveal: myR }), resolveSkillProgram(def, 'end_round', null, { reveal: myR }), false);
+    for (const def of owners('end_round')) cmp('end_round', def, JSH('end_round', def.id, null, { reveal: myR }), resolveSkillProgram(def, 'end_round', null, { reveal: myR }), false);
     const codes = R.p(0.3) ? [R.pick(CODES), R.pick(CODES)] : [R.pick(CODES)], rq = R.pick(CODES);
-    for (const def of owners('rides')) cmp('rides', def, skillHook('rides', def.id, null, { codes, req: rq }), resolveSkillProgram(def, 'rides', null, { codes, req: rq }), false);
+    for (const def of owners('rides')) cmp('rides', def, JSH('rides', def.id, null, { codes, req: rq }), resolveSkillProgram(def, 'rides', null, { codes, req: rq }), false);
     const pool = [...SKILLS_IMPLEMENTED, 'skill_unknown'];
-    for (const def of owners('plan_target')) { const sk = Array.from({ length: R.int(4) }, () => R.pick(pool)); if (R.p(0.3)) sk.push(def.id); cmp('plan_target', def, skillHook('plan_target', null, null, { skillIds: sk }), resolveSkillProgram(def, 'plan_target', null, { skillIds: sk }), false); }
+    for (const def of owners('plan_target')) { const sk = Array.from({ length: R.int(4) }, () => R.pick(pool)); if (R.p(0.3)) sk.push(def.id); cmp('plan_target', def, JSH('plan_target', null, null, { skillIds: sk }), resolveSkillProgram(def, 'plan_target', null, { skillIds: sk }), false); }
     for (const def of owners('perm_landing')) {
       const skillIds = Array.from({ length: R.int(4) }, () => R.pick(pool)); if (R.p(0.7)) skillIds.splice(R.int(skillIds.length + 1), 0, def.id);
       const playedCodes = R.p(0.4) ? null : new Set(Array.from({ length: R.int(3) }, () => R.pick(CODES)));
       const stats = {}; for (const k of ['vitality', 'world', 'matter', 'will']) if (!R.p(0.05)) stats[k] = R.int(6) * 3;
       const c = R.p(0.5) ? { skillData } : ctx;
-      cmp('perm_landing', def, skillHook('perm_landing', null, c, { skillIds, playedCodes, stats }), resolveSkillProgram(def, 'perm_landing', c, { skillIds, playedCodes, stats }), []);
+      cmp('perm_landing', def, JSH('perm_landing', null, c, { skillIds, playedCodes, stats }), resolveSkillProgram(def, 'perm_landing', c, { skillIds, playedCodes, stats }), []);
     }
-    for (const def of owners('perm_stats')) { const c = R.p(0.5) ? { skillData } : ctx; cmp('perm_stats', def, skillHook('perm_stats', def.id, c), resolveSkillProgram(def, 'perm_stats', c), ['vitality']); }
+    for (const def of owners('perm_stats')) { const c = R.p(0.5) ? { skillData } : ctx; cmp('perm_stats', def, JSH('perm_stats', def.id, c), resolveSkillProgram(def, 'perm_stats', c), ['vitality']); }
     const fx = Array.from({ length: R.int(5) }, () => ({ by: R.pick(ids), skill: R.pick(SKILLS_IMPLEMENTED), on: R.pick(ids), ...(R.p(0.5) ? { ridden: [R.pick(SKILLS_IMPLEMENTED)] } : R.p(0.8) ? { countered: [R.pick(SKILLS_IMPLEMENTED)] } : {}), building: R.p(0.2) }));
     const self = R.pick(ids);
     for (const def of owners('disposition')) {
       if (R.p(0.3)) fx.push({ by: self, skill: def.id, on: R.pick(ids), what: 'x', building: R.p(0.3) });
-      cmp('disposition', def, skillHook('disposition', def.id, { skillData }, { fx, self }), resolveSkillProgram(def, 'disposition', { skillData }, { fx, self }), 'judge');
+      cmp('disposition', def, JSH('disposition', def.id, { skillData }, { fx, self }), resolveSkillProgram(def, 'disposition', { skillData }, { fx, self }), 'judge');
     }
     const paid = R.p(0.1) ? undefined : R.p(0.5);
-    for (const def of owners('plan_lock')) cmp('plan_lock', def, skillHook('plan_lock', def.id, { skillData }, { paid }), resolveSkillProgram(def, 'plan_lock', { skillData }, { paid }), null);
+    for (const def of owners('plan_lock')) cmp('plan_lock', def, JSH('plan_lock', def.id, { skillData }, { paid }), resolveSkillProgram(def, 'plan_lock', { skillData }, { paid }), null);
   }
   if (snap(B) !== before) mutated++;
   // MV 2026-11-17 — pass hooks (edit records): the JS pass on one copy of the world, the data pass (passHookData) on
@@ -235,7 +260,7 @@ for (let s = 1; s <= N; s++) {
     const passes = [['counter_pre', 'skill_counter_spell'], ['negate_action', null], ['negate_kind', null]];
     for (const [h, id] of passes) {
       const pre = snap(PA);
-      skillHook(h, id, PA.skCtx); SK.passHookData(h, PB.skCtx);
+      JSH(h, id, PA.skCtx); SK.passHookData(h, PB.skCtx);
       const a = snap(PA), b = snap(PB);
       count(h, 'pass', a === b, a !== pre, `js ${a.slice(0, 300)} data ${b.slice(0, 300)}`);
     }
@@ -256,7 +281,7 @@ for (let s = 1; s <= N; s++) {
     };
     const fa = fin(PA), fb = fin(PB);
     const pre = snap(PA);
-    skillHook('trance_assign', TRANCE, PA.skCtx, fa); SK.passHookData('trance_assign', PB.skCtx, fb);
+    JSH('trance_assign', TRANCE, PA.skCtx, fa); SK.passHookData('trance_assign', PB.skCtx, fb);
     const a = snap(PA) + J(PA.revealsThisTurn.map(r => [r.vs ? [...r.vs] : null, r.played ? [...r.played] : null]));
     const b = snap(PB) + J(PB.revealsThisTurn.map(r => [r.vs ? [...r.vs] : null, r.played ? [...r.played] : null]));
     count('trance_assign', 'pass', a === b, PA.revealsThisTurn.some(r => r.vs && r.vs.size), `js ${a.slice(-300)} data ${b.slice(-300)}`);
@@ -274,9 +299,9 @@ console.log(`     ${cases} cases over ${rows.length} (hook, skill) pairs`);
 // pass hooks through resolveSkillProgram = the JS hook of the built-in
 {
   const w = genWorld(77), A = bind(structuredClone(w)), Bw = bind(structuredClone(w));
-  skillHook('counter_pre', 'skill_counter_spell', A.skCtx);
+  JSH('counter_pre', 'skill_counter_spell', A.skCtx);
   resolveSkillProgram(bundle.defs.get('skill_counter_spell'), 'counter_pre', Bw.skCtx);
-  ok('MV: resolveSkillProgram on a built-in pass program = the JS hook (Counter Spell alone)', snap(A) === snap(Bw));
+  ok('MV: resolveSkillProgram on a built-in pass program = the oracle hook (Counter Spell alone)', snap(A) === snap(Bw));
 }
 
 // ---- 3. bad programs, limits -----------------------------------------------------------------------------
@@ -331,15 +356,101 @@ console.log('-- 4. foreign skills');
   ok('defend_in: a foreign permanent stops damage', skillHook('defend_in', null, ctx2, { code: 'P', defender: holder, dmg: 3, byActor: new Map() }) === 0);
   SK.clearForeignSkills();
   ok('clearForeignSkills restores the built-in result', skillHook('attack_out', 'skill_powerful_attack', B.skCtx, { attacker: atk, dmg: 2 }) === before && !SKILL_RULES.skill_test_fury);
+  // Skill isolation: a foreign skill never takes part in the built-in-only orderings (deal order, pass order, building
+  // skills) — whatever deal_order / flags.passOrder / flags.buildingSkill it carries; its pass program runs after the pass.
+  const snapOrders = () => J([SKILLS_IMPLEMENTED, SK.BUILDING_SKILLS, SE.PASS_HOOKS.map(h => SE.HOOK_SPECS[h].order), Object.keys(SK.builtinSkillEntries()), SK.PLAN_LOCKS]);
+  const o0 = snapOrders();
+  SK.registerForeignSkill('key:sneak@1', 'skill_test_sneak', { action: 'A', negating: true, hooks: ['negate_kind'], passOrder: { negate_kind: 1, counter_pre: 1 }, buildingSkill: 0, planLock: ['M'] },
+    { negate_kind: [{ obj: { op: 'no_move', id: { var: 'actor' } } }] });
+  ok('a foreign skill with passOrder / buildingSkill / planLock leaves deal order, pass orders, BUILDING_SKILLS, cards, PLAN_LOCKS unchanged', snapOrders() === o0, snapOrders());
+  {
+    const w = genWorld(11), PA = bind(structuredClone(w)), PB = bind(structuredClone(w));
+    JSH('negate_kind', null, PA.skCtx);
+    for (const r of PA.revealsThisTurn) PA.noMove.add(r.actor);   // what the foreign program adds (every reveal) — after the built-ins
+    skillHook('negate_kind', null, PB.skCtx);
+    ok('its pass program runs after the built-ins\' pass (no reordering)', J([...PA.noMove].sort()) === J([...PB.noMove].sort()) && J(PA.skillFx) === J(PB.skillFx), J([[...PA.noMove], [...PB.noMove]]));
+  }
+  SK.clearForeignSkills();
+  ok('a foreign /2 definition with deal_order is not dealt (validateSkillDef as foreign: valid, SKILLS_IMPLEMENTED unchanged)', J(SE.validateSkillDef({ ...base({}), schema: 'chaosd6.skill/2', deal_order: 1 }, { builtin: false })) === '[]' && snapOrders() === o0);
 }
 
 // ---- 5. skills-check under the data engines -----------------------------------------------------------------
-console.log('-- 5. tools/skills-check.mjs under SKILL_ENGINE=shadow (strict) / data');
-for (const [mode, extra] of [['shadow', { SKILL_SHADOW_STRICT: '1', SKILL_SHADOW_REPORT: '1' }], ['data', {}]]) {
+console.log('-- 5. tools/skills-check.mjs under SKILL_ENGINE=shadow (strict) / js / data');
+for (const [mode, extra] of [['shadow', { SKILL_SHADOW_STRICT: '1', SKILL_SHADOW_REPORT: '1' }], ['js', {}], ['data', {}]]) {
   const r = spawnSync(process.execPath, [path.join(here, 'skills-check.mjs')], { cwd: GAME, env: { ...process.env, SKILL_ENGINE: mode, SKILLS_CHECK_N: process.env.SKILLS_CHECK_N || '600', ...extra }, encoding: 'utf8', maxBuffer: 64 << 20 });
   const tallyLine = (r.stdout.match(/\[skills\] shadow:.*$/m) || [''])[0];
   ok(`skills-check SKILL_ENGINE=${mode}${mode === 'shadow' ? ' (strict), 0 mismatches' : ''} passes`, r.status === 0 && /all skill checks passed/.test(r.stdout) && (mode !== 'shadow' || /mismatches 0,/.test(tallyLine)) && !/data hook:/.test(r.stderr), (tallyLine || '') + (r.stderr || r.stdout).slice(-500));
   if (tallyLine) console.log(`     ${tallyLine}`);
+}
+
+// ---- 6. skill isolation: lenient loader, /2 rules, engine without the oracle, grep gate ------------------------------
+console.log('-- 6a. lenient loader + chaosd6.skill/2 rules');
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skill-iso-'));
+  fs.mkdirSync(path.join(tmp, 'skills')); fs.mkdirSync(path.join(tmp, 'lib'));
+  for (const l of bundle.libs) fs.writeFileSync(path.join(tmp, 'lib', `${l.id}.json`), J(l));
+  const real = (id) => JSON.parse(J(bundle.defs.get(id)));
+  const put = (name, d) => fs.writeFileSync(path.join(tmp, 'skills', `${name}.json`), J(d));
+  put('a_dodge', real('skill_dodge'));
+  put('b_dup_deal', { ...real('skill_grapple'), deal_order: bundle.defs.get('skill_dodge').deal_order, flags: { ...real('skill_grapple').flags, buildingSkill: 40 } });
+  put('c_bad_schema', { ...real('skill_bluff'), schema: 'chaosd6.skill/9' });
+  put('d_v1_card', { ...real('skill_taunt'), schema: 'chaosd6.skill/1' });
+  put('e_no_ui', (() => { const d = real('skill_barricade'); delete d.ui; return d; })());
+  put('f_card_mismatch', (() => { const d = real('skill_sanctuary'); d.card.data.text = 'other'; return d; })());
+  put('g_bad_pass', (() => { const d = real('skill_intimidation'); d.flags.passOrder = { attack_out: 1 }; return d; })());
+  put('h_dup_building', (() => { const d = real('skill_counter_spell'); d.flags.buildingSkill = bundle.defs.get('skill_dodge').flags.buildingSkill; return d; })());
+  put('i_bad_lock', (() => { const d = real('skill_powerful_attack'); d.flags.planLock = ['Z']; return d; })());
+  put('j_pass_no_order', (() => { const d = real('skill_overrun'); delete d.flags.passOrder; return d; })());
+  put('k_ok_battle_trance', real('skill_battle_trance'));
+  put('l_dup_pass', (() => { const d = real('skill_disruption_move'); d.flags.passOrder = { ...d.flags.passOrder, trance_assign: bundle.defs.get('skill_battle_trance').flags.passOrder.trance_assign }; return d; })());
+  const L = SE.loadSkillDefs(tmp, { lenient: true });
+  const errOf = (id) => L.errors.filter(e => e.startsWith(`${id}:`)).join(' | ');
+  ok('lenient: the valid files load (dodge, battle trance), the bad ones are left out', J([...L.defs.keys()].sort()) === J(['skill_battle_trance', 'skill_dodge']), J([...L.defs.keys()]));
+  ok('lenient: one error per bad file', L.errors.length === 10, J(L.errors));
+  const want = [['skill_grapple', /deal_order \d+ already used by skill_dodge/], ['skill_bluff', /schema must be/], ['skill_taunt', /deal_order needs schema chaosd6\.skill\/2/], ['skill_barricade', /ui required/],
+    ['skill_sanctuary', /card\.data\.text must equal text/], ['skill_intimidation', /flags\.passOrder\.attack_out: not a pass hook/], ['skill_counter_spell', /flags\.buildingSkill \d+ already used by skill_dodge/],
+    ['skill_powerful_attack', /flags\.planLock must be/], ['skill_overrun', /needs flags\.passOrder\.negate_kind/], ['skill_disruption_move', /flags\.passOrder\.trance_assign \d+ already used by skill_battle_trance/]];
+  for (const [id, re] of want) ok(`lenient: ${id} rejected — ${re.source}`, re.test(errOf(id)), errOf(id));
+  ok('strict (default): the same tree throws', (() => { try { SE.loadSkillDefs(tmp); return false; } catch (e) { return /^skill skill_/.test(e.message); } })());
+  ok('validateSkillDef: a foreign /2 needs no deal_order / card / ui', J(SE.validateSkillDef({ ...base({}), schema: 'chaosd6.skill/2' }, { builtin: false })) === '[]');
+  ok('validateSkillDef: a /2 built-in without deal_order / card / ui is refused', SE.validateSkillDef({ ...base({}), schema: 'chaosd6.skill/2' }, { builtin: true }).filter(e => /required \(a chaosd6\.skill\/2 built-in\)/.test(e)).length === 3);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+console.log('-- 6b. SKILL_ENGINE=js | shadow without the oracle');
+{
+  const url = new URL('../skills.mjs', import.meta.url).href;
+  const probe = `const SK = await import(${J(url)}); try { const v = SK.skillHook('rides', null, null, { codes: ['A'], req: 'A' }); console.log('RESULT ' + v); } catch (e) { console.log('THROWS ' + e.message); }`;
+  for (const mode of ['js', 'shadow', 'data']) {
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', probe], { cwd: GAME, env: { ...process.env, SKILL_ENGINE: mode }, encoding: 'utf8' });
+    const out = (r.stdout || '') + (r.stderr || '');
+    if (mode === 'data') ok('SKILL_ENGINE=data runs without the oracle', /RESULT true/.test(out), out.slice(0, 300));
+    else ok(`SKILL_ENGINE=${mode} without the oracle throws a clear error`, /THROWS SKILL_ENGINE=\w+ needs the JS oracle: call installSkillOracle\(\)/.test(out), out.slice(0, 300));
+  }
+  ok('installSkillOracle refuses a non-oracle module', (() => { try { SK.installSkillOracle({}); return false; } catch { return true; } })());
+}
+console.log('-- 6c. grep gate: no built-in skill id as code in the game');
+{
+  const ids = [...bundle.defs.keys()];
+  const idRe = new RegExp(`\\b(${ids.join('|')})\\b`, 'g');
+  const code = (f) => fs.readFileSync(path.join(GAME, f), 'utf8').split('\n').map(l => l.replace(/(^|\s)\/\/.*$/, ''));
+  // Allowlist by line CONTENT (not line number): js/main.js's DEV_FIXTURE skill-source notice demo names a skill id.
+  const ALLOW = [{ file: 'js/main.js', id: 'skill_grapple', line: /effectSourceNotice\(\{ kind: 'skill_source', event: 'missing'/ }];
+  const allowed = (f, id, l) => ALLOW.some(a => a.file === f && a.id === id && a.line.test(l));
+  const GATED = ['peer.mjs', 'js/main.js', 'js/renderer.js', 'js/skill_card.js', 'js/building-bonus.js', 'tools/swarm-test.mjs', 'skills.mjs', 'skill-engine.mjs',
+    'skills-handshake.mjs', 'profile.mjs', 'classes.mjs', 'monster-deck.mjs'];
+  let total = 0;
+  for (const f of GATED) {
+    if (!fs.existsSync(path.join(GAME, f))) { ok(`grep gate ${f}: present`, false, 'missing'); continue; }
+    const hits = [];
+    code(f).forEach((l, i) => { for (const m of new Set(l.match(idRe) || [])) if (!allowed(f, m, l)) hits.push(`${i + 1}:${m}`); });
+    total += hits.length;
+    ok(`grep gate ${f}: no built-in skill id as code`, hits.length === 0, `${hits.length} hit(s): ${hits.join(' ')}`);
+  }
+  console.log(`     ${total} hit(s) over ${GATED.length} files (${ids.length} ids from the bundle)`);
+  const src = fs.readFileSync(path.join(GAME, 'skills.mjs'), 'utf8');
+  ok('skills.mjs has no dynamic-import text (skills-repo-sync closure scan would copy the oracle into tools/engine)', !/\bimport\s*\(/.test(src));
+  const staticOracle = GATED.filter(f => fs.existsSync(path.join(GAME, f)) && /^\s*import\s[^;]*from\s*['"][^'"]*skills-data\/oracle\//m.test(code(f).join('\n')));
+  ok('no game file imports the skill oracle statically', staticOracle.length === 0, staticOracle.join());
 }
 
 console.log(fails ? `${fails} skill-engine check(s) FAILED (${oks} ok)` : `all skill-engine checks passed (${oks} ok)`);

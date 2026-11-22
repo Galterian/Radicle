@@ -1,9 +1,10 @@
 {
-  "schema": "chaosd6.skill/1",
+  "schema": "chaosd6.skill/2",
   "id": "skill_barricade",
   "name": "Barricade",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": {"collection":"skills","version":"1.0.0"},
+  "deal_order": 6,
   "action_type": "B",
   "is_permanent": true,
   "point_buy_stat": "stat_vitality",
@@ -14,5 +15,7 @@
     "defend_in": {"if":[{"and":[{"or":[{"===":[{"var":"code"},"A"]},{"===":[{"var":"code"},"B"]}]},{"bool":{"has_perm":[{"var":"defender"},{"var":"skill"}]}}]},0,{"var":"dmg"}]},
     "perm_landing": {"call":["perm_landing"]},
     "perm_stats": {"call":["perm_stats"]}
-  }
+  },
+  "ui": {"tag":"Ba","glyph":"🧱","color":"#6ad99f"},
+  "card": {"name":"Barricade","tags":["block","permanent"],"resources":{"source":"warlords3_battlecry","match_reason":"WBC3 rampart still around the hero; stone-grey ring around the holder's tile","confidence":"medium","wbc3_name":"Grey ring arcs","wbc3_code":"EZ54","wbc3_race":"Effects1","sprites":{"static":{"path":"assets/Sprites/Buildings/Shared/Ramparts/Ramparts - base [BWRA].png","usage":"single still image, anchor bottom-center on the hex (team colour slots FB-FE already tinted red)"},"effect":{"path":"assets/Sprites/Effects/Effects1/Grey ring arcs/Grey ring arcs - idle [EZ54].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Build.wav","usage":"play when the skill resolves (pick randomly if several)"}]}},"data":{"action_type":"B","is_permanent":true,"point_buy_stat":"stat_vitality","text":"Nearby enemies cannot use Attack against you."},"rebalance_links":["skill_taunt"],"logic":{"description":"Permanent skill played with a Block card; placed with a point-buy die of Vitality. While held: combat damage from an enemy's Attack or Block against the holder is 0 (effect damage is unaffected). Destroyable under Rule 24 by a die >= its power. Not playable while already held.","prerequisites":[{"id":"rides_on_block","description":"The caster's action this turn is a Block card.","when":{"in":[{"var":"caster.action"},["B"]]}},{"id":"not_already_held","description":"The permanent is not already in the caster's holding.","when":{"!":{"includes":[{"var":"caster.permanents"},"skill_barricade"]}}}],"effects":[{"id":"placement_dice","description":"Number of d6 the placement point-buy rolls against Vitality.","target":"caster","unit":"die","value":{"rule":["point_buy_dice_count",{"stat":{"var":"caster.stats.vitality"}}]}},{"id":"combat_damage_taken","description":"Combat damage the holder takes from the defender's action: 0 for Attack/Block, otherwise the normal matrix damage.","target":"caster","unit":"damage","value":{"if":[{"in":[{"var":"defender.action"},["A","B"]]},0,{"rule":["rps_edge",{"actor":{"var":"defender.action"},"defender":{"var":"caster.action"}}]}]}},{"id":"destroyed_by_rule_24","description":"A Rule 24 point-buy die destroys the permanent when it reaches the placement power.","target":"caster","unit":"tokens","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"var":"caster.perm_power.skill_barricade"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Block skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"stays_permanent","description":"Remains a permanent.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"A permanent needs a point-buy stat: 'any' or one of the four stats.","assert":{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}}],"references":["point_buy_dice_count","rps_edge","using_rule_24"]}}
 }

@@ -29,7 +29,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LogicEngine, DATA_DIR, activeVersion, writeDataFile } from '../logic-engine.mjs';
+import { LogicEngine, DATA_DIR, activeVersion, writeDataFile, definitionsDirOf } from '../logic-engine.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -76,6 +76,8 @@ function check(file) {
   const entryId = prop.entry_id || prop.entry?.id || null;
   const version = prop.version;
   if (!collection || !version) throw new Error('proposal needs { collection, version, entry_id | entry }');
+  // Effect isolation F9: effects are definitions (chaosD6-Effects) — balanced by tools/rebalancing-check.mjs, not here.
+  if (definitionsDirOf(eng.index, collection)) throw new Error(`${collection} is read from ${definitionsDirOf(eng.index, collection)}: author it in its repo and run tools/${collection === 'skills' ? 'skills-' : ''}rebalancing-check.mjs — no proposals on data/${collection}.json`);
   const existing = prop.entry_id ? eng.entryOf(prop.entry_id) : null;
   if (prop.entry_id && !existing) throw new Error(`no entry ${prop.entry_id}`);
   const canonical = existing ? activeVersion(existing) : null;
@@ -108,7 +110,7 @@ function check(file) {
       const alt = compensateOnSameEntry(collection, canonical, version, current);
       if (alt) { out.compensation = alt; console.log(`compensation on the same entry possible: ${alt.description} → score ${alt.score}`); }
       const linked = linkedClosure(entryId, 2);
-      const scored = linked.map(id => ({ id, collection: eng.collectionOf(id), v: eng.activeOf(id) })).filter(x => SCORED.includes(x.collection)).map(x => ({ ...x, score: scoreOf(x.collection, x.v.data) }));
+      const scored = linked.map(id => ({ id, collection: eng.collectionOf(id), v: eng.activeOf(id) })).filter(x => SCORED.includes(x.collection) && !definitionsDirOf(eng.index, x.collection)).map(x => ({ ...x, score: scoreOf(x.collection, x.v.data) }));
       const total = scored.reduce((a, x) => a + Math.max(0.001, x.score), 0);
       for (const x of scored) {
         const share = -delta * (Math.max(0.001, x.score) / total);

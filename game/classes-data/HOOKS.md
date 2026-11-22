@@ -43,7 +43,7 @@ Legend:
 | Reaver auto-target `.sort((a, b) => a.cost - b.cost \|\| a.lands - b.lands …` | `stance_target` | Reaver | data |
 | pre-pass Elementalist `const best = [...new Set(r.effect.elements.map(` (~3839) | `pre_cast` | Elementalist | data (`point_buy_seed`) |
 | pre-pass Illusionist `ab?.id === 'class_illusionist'` | `ability` (phase pre) | Illusionist | data |
-| Bard `for (const o of adjacentOf(r.actor, o => !enemyOf(r.actor, o) && !!byActorPre.get(o)))` (~3855) | `share_skills` | Bard | data |
+| Bard `for (const o of adjacentOf(r.actor, o => !enemyOf(r.actor, o) && !!byActorPre.get(o)))` (~3855) | `share_skills` | Bard | data (skill isolation 2026-11-22: the trance skill is skipped via the ctx op `skill_is_trance(sk)` → ctx `skillIsTrance`, never by its id; a ctx without it answers false) |
 | Rule 24 `const emitsNow = ['P', 'EP'].includes(r.declared) \|\| …` (~4043) | `emits` site `destroy` | Reaver, Barbarian, Monk | data (ruling 2026-11-16: Barbarian B and Monk M / EM emit here too) |
 | `// --- my own class: recast from the archive / untap the ability` (~4046) | `restore` (std) | all | data |
 | `// --- C1 ruling 2026-11-16, Necromancer "destroy reanimated"` (~4153) | `reanimated_strike` (asked of the unit's `raised_by` class) | Necromancer | data → `destroyOutcomes` kind `reanimated`; the unit applies it itself (Rule 24 loop, then life 0 next to the Phantom line) |

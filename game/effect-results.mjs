@@ -4,6 +4,9 @@
 // peer), sent to the local UI only (broadcastUI {kind:'effect_result'}) — no network field, no state-hash input.
 //
 // Item: { key, effect_id, name, on, by, ok, why, q, r } — `on` is the unit the toast floats over.
+// No effect id is named here (effect isolation F8): rules = EFFECT_RULES, ui = EFFECT_UI (the definitions' `ui` block),
+// natural permanents by their naturalKind.
+import { naturalKind } from './natural-perms.mjs';
 
 // An effect penalises an enemy when its rule (EFFECT_RULES) does one of these to its recipients.
 export function isPenaltyRule(rule) {
@@ -12,20 +15,20 @@ export function isPenaltyRule(rule) {
     || rule.push || rule.vision || (rule.swapTokens && rule.scope === 'self_or_enemy'));
 }
 
-// Damage effects that also get toasts (user ruling 2026-11-18): their hits count as the penalty.
-export const TOAST_HITS = new Set(['effect_blizzard']);
-const toasted = (id, rule) => isPenaltyRule(rule) || TOAST_HITS.has(id);
+// Damage effects that also get toasts (user ruling 2026-11-18, Blizzard): ui.toast_hits — their hits count as the penalty.
+const toastHits = (id, ui) => !!ui?.[id]?.toast_hits;
+const toasted = (id, rule, ui) => isPenaltyRule(rule) || toastHits(id, ui);
 
 const WHY = { retry: 'roll failed', fizzled: 'nobody in reach', blocked: 'blocked' };
 
 // outcomes: resolver effectOutcomes [{ actor, eff, oc, bonus?, channel? }]
 // opts: { rules, nameOf(effect_id), enemyOf(a, b), targetOf(actor) → id|null (declared character target),
 //         autoTarget(actor, range) → id|null (the enemy the engine would aim at), tileOf(id) → {q, r}|null,
-//         disableTriggers [{holder, caster, elem}], blessFired [{holder, caster, effect_id}],
+//         disableTriggers [{holder, caster, elem, perm}], blessFired [{holder, caster, effect_id}], ui (EFFECT_UI),
 //         afflictionsOut [{on, effect_id, by}], tag (turn:round string for the keys) }
 export function effectResultsOf(outcomes, opts) {
   const names = new Map((outcomes || []).filter(o => o?.eff?.name).map(o => [o.eff.effect_id, o.eff.name]));
-  const { rules = {}, nameOf: nameOf0 = (id) => id, enemyOf = () => true, targetOf = () => null, autoTarget = () => null, tileOf = () => null, tag = '' } = opts || {};
+  const { rules = {}, ui = {}, nameOf: nameOf0 = (id) => id, enemyOf = () => true, targetOf = () => null, autoTarget = () => null, tileOf = () => null, tag = '' } = opts || {};
   const nameOf = (id) => names.get(id) || nameOf0(id);   // the revealed card name first
   const items = [];
   const seen = new Set();
@@ -40,10 +43,10 @@ export function effectResultsOf(outcomes, opts) {
   for (const { actor, eff, oc, channel } of outcomes || []) {
     const id = eff?.effect_id;
     const rule = rules[id];
-    if (!id || !oc || !toasted(id, rule) || oc.status === 'casting') continue;
+    if (!id || !oc || !toasted(id, rule, ui) || oc.status === 'casting') continue;
     if (oc.status === 'done') {
       const victims = new Set([
-        ...(TOAST_HITS.has(id) ? (oc.hits || []).map(h => h.victim) : []),
+        ...(toastHits(id, ui) ? (oc.hits || []).map(h => h.victim) : []),
         ...(oc.locks || []).map(l => l.on),
         ...(oc.statTokens || []).filter(t => t.value < 0).map(t => t.on),
         ...(oc.moves || []).filter(m => m.who !== actor).map(m => m.who),
@@ -62,14 +65,15 @@ export function effectResultsOf(outcomes, opts) {
     push(id, on, actor, false, disabled ? 'Disable' : resisted ? 'resisted' : (WHY[oc.status] || oc.status));
   }
   for (const b of opts?.blessFired || []) push(b.effect_id, b.holder, b.caster, false, 'Blessing ∀');
-  for (const d of opts?.disableTriggers || []) push('effect_disable', d.caster, d.holder, true);
+  for (const d of opts?.disableTriggers || []) if (d.perm) push(d.perm, d.caster, d.holder, true);   // the permanent that stopped it (Disable)
   for (const a of opts?.afflictionsOut || []) push(a.effect_id, a.on, a.by, true);
   return items;
 }
 
 // Actions lost at planning to standing permanents (Delay Time, natural Domination, natural Petrify): judged by
 // the victim's peer from adjacency; every peer recomputes the same from the action's starting tiles for the toast.
-// units: [{ id, foes: [{ id, delay, domination, petrify }] }] (adjacent living enemies with what they hold).
+// units: [{ id, foes: [{ id, delay, domination, petrify }] }] (adjacent living enemies; each field = the effect id of the
+// permanent doing it — an adjacent_lost standing program / a natural lose_action / a natural stone — or null).
 export function plannedLossResults(units, { roundsPerTurn, round, lostToHolders, nameOf = (id) => id, tileOf = () => null, tag = '' }) {
   const items = [];
   for (const u of units || []) {
@@ -78,8 +82,8 @@ export function plannedLossResults(units, { roundsPerTurn, round, lostToHolders,
     const pet = u.foes.filter(f => f.petrify).map(f => f.id).sort()[0];
     const t = tileOf(u.id);
     const mk = (effect_id, by) => ({ key: `${tag}:${effect_id}:${by}:${u.id}:1`, effect_id, name: nameOf(effect_id), on: u.id, by, ok: true, why: 'action lost', ...(t ? { q: t.q, r: t.r } : {}) });
-    if (lost) { const h = holders.map(f => f.id).sort()[0]; items.push(mk(u.foes.find(f => f.id === h).delay ? 'effect_delay_time' : 'effect_domination', h)); }
-    else if (pet) items.push(mk('effect_petrify', pet));
+    if (lost) { const h = holders.map(f => f.id).sort()[0]; const f = u.foes.find(x => x.id === h); items.push(mk(f.delay || f.domination, h)); }
+    else if (pet) items.push(mk(u.foes.find(f => f.id === pet).petrify, pet));
   }
   return items;
 }
@@ -87,11 +91,12 @@ export function plannedLossResults(units, { roundsPerTurn, round, lostToHolders,
 // Monster natural permanents acting on an enemy (user ruling 2026-11-18): Mists (an Attack in contact became an
 // Empty Posture), Anger (an aim forced onto the holder), Love / Awe / Fear (damage withheld by an affliction, or a
 // new contact affliction). events [{ effect_id, on, by, kind: 'ban'|'aim'|'block'|'afflict' }] → success items.
+// event kind → natural kind (natural-perms.mjs) → text.
 export const NATURAL_WHY = {
-  ban: { effect_mists: 'cannot Attack in contact' },
-  aim: { effect_anger: 'may only aim at it' },
-  block: { effect_love: 'cannot damage it', effect_awe: 'cannot damage it', effect_fear: 'cannot damage anyone', effect_anger: 'cannot damage others' },
-  afflict: { effect_love: 'afflicted until its tower', effect_awe: 'afflicted until its tower', effect_fear: 'afflicted until its tower', effect_anger: 'afflicted until its tower' },
+  ban: { no_attack: 'cannot Attack in contact' },
+  aim: { only_holder: 'may only aim at it' },
+  block: { spare_holder: 'cannot damage it', no_damage: 'cannot damage anyone', only_holder: 'cannot damage others' },
+  afflict: { spare_holder: 'afflicted until its tower', no_damage: 'afflicted until its tower', only_holder: 'afflicted until its tower' },
 };
 export function naturalResults(events, { nameOf = (id) => id, tileOf = () => null, tag = '' } = {}) {
   const items = [], seen = new Set();
@@ -101,7 +106,7 @@ export function naturalResults(events, { nameOf = (id) => id, tileOf = () => nul
     if (seen.has(key)) continue;
     seen.add(key);
     const t = tileOf(ev.on);
-    const why = NATURAL_WHY[ev.kind]?.[ev.effect_id] || ev.why || '';
+    const why = NATURAL_WHY[ev.kind]?.[naturalKind(ev.effect_id)] || ev.why || '';
     items.push({ key, effect_id: ev.effect_id, name: nameOf(ev.effect_id), on: ev.on, by: ev.by, ok: true, ...(why ? { why } : {}), ...(t ? { q: t.q, r: t.r } : {}) });
   }
   return items;
