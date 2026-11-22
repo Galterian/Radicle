@@ -170,22 +170,19 @@ console.log('-- 6. bot / ui blocks (F8): validated, read by monster-deck / effec
 }
 
 // ---- 7. card blocks (F9) ---------------------------------------------------------------------------------------------
-console.log('-- 7. card blocks (F9): the cards the game deals = the frozen data/effects.json, read from the definitions');
+console.log('-- 7. card blocks (F9): the cards the game deals = the definitions\' card blocks (data/effects.json deleted 2026-11-22)');
 {
-  const j = JSON.parse(fs.readFileSync(path.join(HERE, '..', '..', 'data', 'effects.json'), 'utf8'));
-  const act = (e) => { const l = e.versions.filter(v => v.status !== 'rejected' && v.status !== 'superseded'); l.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)); return l[0] ?? e.versions[0]; };
-  // User ruling 2026-11-22: the definition names win — these cards were renamed after data/effects.json froze.
-  const RULED_NAMES = { effect_elementals_air: 'Air Elemental', effect_elementals_earth: 'Earth Elemental', effect_elementals_water: 'Water Elemental',
-    effect_golems_air: 'Air Golem', effect_golems_earth: 'Earth Golem', effect_golems_water: 'Water Golem', effect_meteor_shower: 'Meteor Shower',
-    effect_space_bending: 'Space Bending', effect_spirit_link: 'Spirit Link', effect_super_force: 'Super Force', effect_traps_mastery: 'Traps Mastery' };
-  const nameOf = (e) => RULED_NAMES[e.id] ?? e.name;
-  eq('ruled names: card name = definition name, and the frozen file still has the old one', Object.keys(RULED_NAMES).filter(id => defs.get(id)?.card?.name !== RULED_NAMES[id] || defs.get(id)?.name !== RULED_NAMES[id] || j.entries.find(e => e.id === id)?.name === RULED_NAMES[id]), []);
-  eq('every card name = its definition name', [...defs.values()].filter(d => d.card && d.card.name !== d.name).map(d => d.id), []);
-  const old = Object.fromEntries(j.entries.map(e => [e.id, { id: e.id, name: nameOf(e), tags: e.tags || [], data: act(e).data }]));
+  // data/effects.json was checked byte-equal to the cards until the user deleted it (2026-11-22, with "definition names
+  // win" for the 11 renamed cards); since then the definitions are the only record.
+  const cardOf = (d) => ({ id: d.id, name: d.card.name, tags: d.card.tags || [], data: d.card.data });
+  const fromDefs = Object.fromEntries([...defs.values()].filter(d => d.card).map(d => [d.id, cardOf(d)]));
+  eq('data/effects.json is gone (the definitions are the only card record)', fs.existsSync(path.join(HERE, '..', '..', 'data', 'effects.json')), false);
+  eq('every built-in has a card', [...defs.values()].filter(d => !d.card).map(d => d.id), []);
+  eq('every card name = its definition name (user ruling 2026-11-22: definition names win)', [...defs.values()].filter(d => d.card && d.card.name !== d.name).map(d => d.id), []);
   const now = FX.builtinEffectEntries();
-  eq('builtinEffectEntries = data/effects.json active versions (ids, name, tags, data; key order too)', Object.keys(now).sort().map(id => J(now[id]) === J(old[id]) ? id : `${id} DIFFERS`), Object.keys(old).sort());
+  eq('builtinEffectEntries = the cards (ids, name, tags, data; key order too)', Object.keys(now).sort().map(id => J(now[id]) === J(fromDefs[id]) ? id : `${id} DIFFERS`), Object.keys(fromDefs).sort());
   const cat = FX.builtinEffectCatalog();
-  eq('builtinEffectCatalog keeps every entry\'s resources', cat.entries.filter(e => J(e.resources) !== J(j.entries.find(x => x.id === e.id)?.resources)).map(e => e.id), []);
+  eq('builtinEffectCatalog keeps every card\'s resources', cat.entries.filter(e => J(e.resources) !== J(defs.get(e.id)?.card?.resources)).map(e => e.id), []);
   eq('every built-in has a card, every card one canonical version = the definition\'s', cat.entries.map(e => [e.id, e.versions.length, e.versions[0].version === defs.get(e.id).version]).filter(x => x[1] !== 1 || !x[2]), []);
   const base = JSON.parse(J(defs.get('effect_fireball')));
   const v = (d) => DE.validateEffectDef(d, defs.get('effect_fireball').$subs);
@@ -198,14 +195,15 @@ console.log('-- 7. card blocks (F9): the cards the game deals = the frozen data/
     v({ ...base, card: { ...base.card, name: '' } }),
     v({ ...base, card: { ...base.card, power: 3 } }),
   ].map(e => e.length > 0), [true, true, true, true, true]);
-  eq('card.logic / card.rebalance_links = data/effects.json active versions (F9b, the logic layer)', j.entries.filter(e => { const c = defs.get(e.id)?.card || {}, v = act(e); return J(c.logic) !== J(v.logic) || J(c.rebalance_links || []) !== J(v.rebalance_links || []); }).map(e => e.id), []);
+  eq('every card carries its data-layer logic (F9b)', [...defs.values()].filter(d => d.card && !d.card.logic).map(d => d.id), []);
   const LE = await import('../logic-engine.mjs');
   const eng = new LE.LogicEngine();
-  eq('the logic engine reads effects from the definitions (index.json `definitions`), same active data', [LE.definitionsDirOf(eng.index, 'effects'), j.entries.filter(e => J(eng.activeOf(e.id)?.data) !== J(act(e).data)).map(e => e.id)], ['game/effects-data/effects', []]);
+  eq('the logic engine reads effects from the definitions (index.json `definitions`), same active data', [LE.definitionsDirOf(eng.index, 'effects'), Object.keys(fromDefs).filter(id => J(eng.activeOf(id)?.data) !== J(fromDefs[id].data))], ['game/effects-data/effects', []]);
   const DC = await import('../defs-collection.mjs');
   const served = JSON.parse(DC.definitionsCollectionText(path.join(HERE, '..', '..', 'data'), '/effects.json') || 'null');
-  const ent = (e) => J({ id: e.id, name: nameOf(e), tags: e.tags || [], resources: e.resources, data: act(e).data, logic: act(e).logic });
-  eq('/data/effects.json served from the definitions = the frozen file entry by entry (F9c: browser / Godot UI)', [served?.entries?.length, (served?.entries || []).filter(e => ent(e) !== ent(j.entries.find(x => x.id === e.id) || { versions: [{}] })).map(e => e.id)], [j.entries.length, []]);
+  const ent = (e) => J({ id: e.id, name: e.name, tags: e.tags || [], resources: e.resources, data: e.versions?.[0]?.data, logic: e.versions?.[0]?.logic });
+  const want = (id) => { const c = defs.get(id)?.card || {}; return J({ id, name: c.name, tags: c.tags || [], resources: c.resources, data: c.data, logic: c.logic }); };
+  eq('/data/effects.json served from the definitions = the cards entry by entry (F9c: browser / Godot UI)', [served?.entries?.length, (served?.entries || []).filter(e => ent(e) !== want(e.id)).map(e => e.id)], [Object.keys(fromDefs).length, []]);
   eq('only the top-level file of a definitions collection is rewritten (nested paths, a plain collection → the file as is)', [DC.definitionsCollectionText(path.join(HERE, '..', '..', 'data'), '/x/effects.json'), DC.definitionsCollectionText(path.join(HERE, '..', '..', 'data'), '/rules.json')], [null, null]);
   const peer = fs.readFileSync(path.join(HERE, '..', 'peer.mjs'), 'utf8');
   eq('peer.mjs no longer loads data/effects.json (collection list) and takes data.effects from the definitions', [/'classes', 'effects', 'elements'/.test(peer), /data\.effects = builtinEffectEntries\(\)/.test(peer)], [false, true]);

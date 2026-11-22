@@ -52,7 +52,7 @@
       "definitions": "game/effects-data/effects",
       "entries": 66,
       "writes": "chaosD6-Effects",
-      "purpose": "paper rules; since effect isolation F9 (2026-11-22) the cards are the definitions' card blocks — effects.json is a frozen record (no new versions; author effects in chaosD6-Effects)"
+      "purpose": "paper rules; since effect isolation F9 (2026-11-22) the cards are the definitions' card blocks; effects.json was deleted 2026-11-22 (git history keeps it) — `file` is only the served name /data/effects.json, built from the definitions (author effects in chaosD6-Effects)"
     },
     {
       "id": "skills",

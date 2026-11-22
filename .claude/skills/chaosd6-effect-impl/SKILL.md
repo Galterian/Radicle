@@ -29,10 +29,10 @@ Order of work (each step has a verification; stop at the first failure):
    - UI: `game/js/main.js` perms strip `action:` map (~line 720: `'aura'|'bonus'|null`), `SUMMON_PERM_IDS`, labels; hand msg fields in peer `uiHttp`/WS handler (`m.kind === …`).
    Verify: `node --check game/peer.mjs`.
 
-4. **Data logic description** — `game/tools/logic/effects.logic.json` entry for the effect: update `description`
-   (say it is implemented / how), prerequisites/effects blocks if the maths changed; apply with
-   `node tools/logic-apply.mjs tools/logic/effects.logic.json --replace` then `node tools/logic-check.mjs` → `all logic checks passed`.
-   (See skill `chaosd6-logic-layer`.)
+4. **Data logic description** — the definition's `card.logic` block (game/effects-data/effects/<id>.json; since F9 the
+   cards live there — data/effects.json and tools/logic/effects.logic.json were deleted 2026-11-22): update `description`
+   (say it is implemented / how), prerequisites/effects blocks if the maths changed, bump the definition's version, then
+   `node tools/logic-check.mjs` → `all logic checks passed`. (See skill `chaosd6-logic-layer`.)
 
 5. **Swarm regression** — force the effect into bot decks and run 4 minutes (skill `chaosd6-swarm-test`):
    `export FORCE_EFFECTS=effect_x,effect_y NO_C=1 && bash tools/swarm-run.sh 4` (via WSL, foreground).

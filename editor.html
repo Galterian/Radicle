@@ -469,7 +469,11 @@ function updateStatus() {
   if (dirty.length) { el.textContent = `${total} files · ${dirty.length} unsaved: ${dirty.join(", ")}`; el.classList.add("dirty"); $("#save").disabled = false; }
   else { el.textContent = `${total} files · all saved`; el.classList.remove("dirty"); $("#save").disabled = true; }
 }
-function markDirty(filename) { if (state.files[filename]) state.files[filename].dirty = true; updateStatus(); }
+function markDirty(filename) {
+  const f = state.files[filename];
+  if (f?.readOnly) { toast(`${filename} is read-only here — author it in its definitions repo`, "err"); return; }
+  if (f) f.dirty = true; updateStatus();
+}
 
 /* ============================================================ */
 /*  Confirm dialog                                              */
@@ -528,6 +532,7 @@ async function loadFromHandle(dh) {
     let data; try { data = JSON.parse(text); } catch (e) { toast("skipped malformed " + name, "err"); continue; }
     state.files[name] = { name, handle, data, dirty: false, originalText: text, originalData: JSON.parse(text) };
   }
+  await loadDefinitionCollections();
   renderAll(); updateStatus(); $("#forget").style.display = "";
 }
 
@@ -557,8 +562,30 @@ async function listHttpDataFiles() {
     const r = await fetch("data/index.json", { cache: "no-store" });
     if (!r.ok) return [];
     const idx = await r.json();
-    return [...new Set(["index.json", ...(idx.collections || []).map(c => c.file).filter(Boolean)])];
+    return [...new Set(["index.json", ...(idx.collections || []).filter(c => !c.definitions).map(c => c.file).filter(Boolean)])];
   } catch (e) { return []; }
+}
+// Effect isolation F9 (2026-11-22): a collection whose index.json entry names `definitions` (effects, skills) has no
+// data file — its cards are the definition files' `card` blocks (game/effects-data/effects/*.json …, authored in
+// chaosD6-Effects / chaosD6-Skills). Built here like game/defs-collection.mjs, over HTTP (the definitions live beside
+// data/, outside a picked data folder), and READ-ONLY: never marked dirty, never saved.
+async function loadDefinitionCollections() {
+  const idx = state.files["index.json"]?.data;
+  for (const c of (idx?.collections || []).filter(c => c.definitions && c.file)) {
+    if (!/^https?:$/.test(location.protocol)) { toast(`${c.file}: open the editor over http to view (cards live in ${c.definitions})`, "err"); continue; }
+    try {
+      const r = await fetch(c.definitions + "/", { cache: "no-store" });
+      const names = r.ok ? [...new Set([...(await r.text()).matchAll(/href="([^"?#]+\.json)"/gi)].map(m => decodeURIComponent(m[1].split("/").pop())))].sort() : [];
+      const defs = [];
+      for (const n of names) { try { const d = await (await fetch(c.definitions + "/" + encodeURIComponent(n), { cache: "no-store" })).json(); if (d && d.card) defs.push(d); } catch (e) {} }
+      if (!defs.length) continue;   // no card blocks: keep the data file if one was loaded
+      defs.sort((a, b) => a.id.localeCompare(b.id));
+      const data = { collection: c.id, source: c.definitions, entries: defs.map(d => ({ id: d.id, name: d.card.name, tags: d.card.tags || [], ...(d.card.resources ? { resources: d.card.resources } : {}),
+        versions: [{ version: d.version, status: "canonical", weight: 1, data: d.card.data, ...(d.card.rebalance_links ? { rebalance_links: d.card.rebalance_links } : {}), ...(d.card.logic ? { logic: d.card.logic } : {}) }] })) };
+      const text = JSON.stringify(data);
+      state.files[c.file] = { name: c.file, handle: null, data, dirty: false, readOnly: true, originalText: text, originalData: JSON.parse(text) };
+    } catch (e) { toast(`${c.file}: definitions not readable (${e.message})`, "err"); }
+  }
 }
 async function loadFromHttp() {
   if (!/^https?:$/.test(location.protocol)) return false;
@@ -575,6 +602,7 @@ async function loadFromHttp() {
   if (!Object.keys(files).length) return false;
   state.dirHandle = null;
   state.files = files;
+  await loadDefinitionCollections();
   renderAll(); updateStatus();
   return true;
 }
