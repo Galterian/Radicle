@@ -263,11 +263,14 @@ function commonPeerEnv() {
 // Test-team allies stand this far from player-1 (user ruling 2026-11-13):
 // 'strong' inside STRONG_RADIUS, 'reachable' just past it, inside REACH_RADIUS.
 const TEAM_TIER_RING = { strong: { min: 2, max: 6 }, reachable: { min: 9, max: 10 } };
+// AI skirmish roster size (startDimension): rival heroes (npc_c) and NPC builders (npc_a).
+const AI_RIVALS = Math.max(0, Number(process.env.AI_RIVALS ?? 2));
+const AI_BUILDERS = Math.max(0, Number(process.env.AI_BUILDERS ?? 2));
 
 // `override` (profile launches, user ruling 2026-11-13) replaces the hero and/or
 // the default ally: { hero: profile character | null (random), allies: [profile
 // characters] (bots, alliance npc_a) | null (the Pride Guardian), tier }.
-async function startDimension({ dimensionName, publicIp, mode }, override = null) {
+async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, override = null) {
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   // Test my character / Test my team / Test Random character are LOCAL and PRIVATE (user 2026-11-16): no Door, no
   // Nostr bus, loopback only, an unguessable DIM_ID, never unattended — and so never "one dimension at a time"
@@ -285,11 +288,16 @@ async function startDimension({ dimensionName, publicIp, mode }, override = null
   const pc = override?.hero || null;
   const hero = pc ? { id: pc.base_character, name: pc.name } : randomCharacter();
   const file = profilePath();
+  // AI skirmish (2026-11-22, game/llm-brain.mjs): Create Dimension (any non-test launch; body.ai false / AI_SKIRMISH=0
+  // turns it off, body.ai true turns it on for a test) adds a rival team (npc_c, hostile to everyone) and NPC builders
+  // (npc_a, raise Barricades) and gives every bot an AI_ROLE for the local llama-server (LLM_URL, default
+  // http://127.0.0.1:8095). Without a reachable server the same units are played by the rules (npcPlan).
+  const ai = typeof aiFlag === 'boolean' ? aiFlag : (!test && process.env.AI_SKIRMISH !== '0');
   const roster = [
     { label: 'player-1', alliance: 'player', character: hero.id, creature: '',                                          name: pc ? pc.name : `You (${hero.name})`, tile: { q: 1, r: 2 }, profile: pc },
-    { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 } },
-    { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 } },
-    { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 } },
+    { label: 'ally-1',   alliance: 'npc_a',  character: 'char_pride_guardian',          creature: '',                      name: 'Ally — Pride Guardian', tile: { q: 0, r: 3 }, aiRole: 'team' },
+    { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, aiRole: 'monster' },
+    { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, aiRole: 'monster' },
   ];
   if (override?.allies?.length) {
     // "Test my team": the next characters of the team order replace the Pride
@@ -302,8 +310,28 @@ async function startDimension({ dimensionName, publicIp, mode }, override = null
       const tile = tileInRing(roster[0].tile, { ...ring, seed, salt: c.id, occupied });
       if (!tile) throw new Error(`no walkable hex ${ring.min}–${ring.max} hexes from player-1 for ${c.name}`);
       occupied.add(`${tile.q},${tile.r}`);
-      roster.splice(1 + i, 0, { label: `ally-${i + 1}`, alliance: 'npc_a', character: c.base_character, creature: '', name: c.name, tile, profile: c });
+      roster.splice(1 + i, 0, { label: `ally-${i + 1}`, alliance: 'npc_a', character: c.base_character, creature: '', name: c.name, tile, profile: c, aiRole: 'team' });
     });
+  }
+  if (ai) {
+    // The rival team walks in from 7–9 hexes; the builders start 2–3 hexes from the hero.
+    const seed = seedForDimension(DIM_ID);
+    const occupied = new Set(roster.map(p => `${p.tile.q},${p.tile.r}`));
+    const place = (salt, ring) => {
+      const tile = tileInRing(roster[0].tile, { ...ring, seed, salt, occupied });
+      if (!tile) throw new Error(`AI skirmish: no walkable hex ${ring.min}–${ring.max} hexes from player-1 for ${salt}`);
+      occupied.add(`${tile.q},${tile.r}`);
+      return tile;
+    };
+    for (let i = 1; i <= AI_RIVALS; i++) {
+      const c = randomCharacter();
+      roster.push({ label: `rival-${i}`, alliance: 'npc_c', character: c.id, creature: '', name: `Rival — ${c.name}`, tile: place(`rival-${i}`, { min: 7, max: 9 }), aiRole: 'rival' });
+    }
+    for (let i = 1; i <= AI_BUILDERS; i++) {
+      const c = randomCharacter();
+      roster.push({ label: `builder-${i}`, alliance: 'npc_a', character: c.id, creature: '', name: `Builder — ${c.name}`, tile: place(`builder-${i}`, { min: 2, max: 3 }), aiRole: 'builder' });
+    }
+    console.log(`[launcher] AI skirmish: ${roster.filter(p => p.aiRole).map(p => `${p.label}=${p.aiRole}`).join(', ')} — llama-server ${process.env.LLM_URL || 'http://127.0.0.1:8095'}`);
   }
   // http and gun live in different base ranges (7401, 7501) and don't collide,
   // so probe them in parallel. libp2p (7410) sits inside http's search region,
@@ -342,6 +370,7 @@ async function startDimension({ dimensionName, publicIp, mode }, override = null
       ...commonPeerEnv(),
       ...netEnv,
       ...(p.profile ? profileEnv(file, p.profile) : {}),
+      AI_ROLE:           ai && p.aiRole ? p.aiRole : '',
     });
     if (!(await waitForPort(p.http))) throw new Error(`peer-${p.label} did not come up on :${p.http}`);
     try {

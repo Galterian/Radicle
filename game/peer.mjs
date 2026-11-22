@@ -68,13 +68,14 @@ import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBy
 import { orderedMerge, pickClockRef, cohortDeadline, meshZones, resolverPeers, clockFrame, notePrior, resolverBase, pickStartClock, lastKnownClock, saveClockCand } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
 import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
-import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor } from './js/features.js';
+import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
 import { configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
 import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
 import { effectResultsOf, plannedLossResults, naturalResults } from './effect-results.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
+import { llmConfig, aiRoleFor, askLlm, systemPrompt, userPrompt, echoesOption, askThisAction } from './llm-brain.mjs';
 import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, angerForcedTarget, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats } from './natural-perms.mjs';
 import { animatorConfig, priestConfig, seekerConfig, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './class-world.mjs';
 import { maxStanding } from './class-world.mjs';   // CR: import_world — Priest one Shrine / Seeker one trap standing (2026-11-17)
@@ -1194,6 +1195,12 @@ function recoverFromDiscard(pred, what) {
 // `{ id: 'made:q,r', q, r, made, at }` in their creator's world_edits_json → the features.js overlay.
 // Since 2026-11-18 world edits are dimension state (js/world-ledger.js): an author who left still counts through
 // every unit's world_ledger_json, and this peer keeps (entity.worldLedger, published + autosaved) what it has seen.
+// NPC builders (AI skirmish 2026-11-22): the world-edit payload of a Barricade — an impassable wall (features.js
+// overlay: blocks moves like a labyrinth wall; Awake may move it). A builder keeps BUILDER_MAX_STANDING standing.
+const BUILDER_MAX_STANDING = 3;
+function barricadeMade() {
+  return { label: 'Barricade', path: LAB_WALL_PATHS[0], desc: 'A barricade raised by an NPC builder: nobody passes.', biome: '', kind: 'wall', blocking: true, made_by: 'npc_builder' };
+}
 function syncPlacedBuildings(view) {
   const units = [...view.entries()].map(([id, v]) => ({ peer_id: id, world_edits_json: id === PEER_ID_STRING ? JSON.stringify(entity.worldEdits || []) : v?.world_edits_json, world_ledger_json: v?.world_ledger_json }));
   if (!units.some(u => u.peer_id === PEER_ID_STRING)) units.push({ peer_id: PEER_ID_STRING, world_edits_json: JSON.stringify(entity.worldEdits || []) });
@@ -1367,6 +1374,9 @@ if (entity.kind === 'character' && !profileChar) {
 // summon) holds its creature card's deck_effects (thematic, data/creatures.json) + MONSTER_DECK_CFG.random random
 // playable effects fixed per instance (seed: map seed, peer label, creature id — a restart rebuilds the same deck).
 const IS_MONSTER = entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN;
+// AI skirmish (2026-11-22, llm-brain.mjs): the role this bot plays for the local llama-server — '' = rules only.
+const AI_ROLE = aiRoleFor({ role: process.env.AI_ROLE || '', isHuman: IS_HUMAN });
+const LLM = llmConfig(process.env);
 // A monster's innate effect is never a deck card: it stands as natural permanents (below), no further copies.
 const INNATE_ID = IS_MONSTER ? (data.creatures[CREATURE_ID]?.data?.innate_effect || null) : null;
 if (IS_MONSTER && !profileChar && data.creatures[CREATURE_ID]) {
@@ -1475,6 +1485,7 @@ let queuedAura = false;    // cast the plan through my Aura ∀: everyone within
 let queuedDestroy = null;  // { stat } — Rule 24: emit that stat's element against an enemy token instead of casting
 let queuedAttach = null;   // hand index of a second effect card the queued effect works on (Traps Mastery lays it as its trap; Space Bending alt)
 let queuedLink = null;     // { peer_id, stat } — Spirit Link: the ally stat clicked in the unit list
+let queuedBuild = null;    // { q, r } (null q/r = any free hex) — NPC builder: raise a Barricade with this Posture (AI skirmish)
 let queuedElem = null;     // element id — general_ux_tokens: the element a token-making cast should create (Artifice tile token)
 let queuedPhylactery = null; // { auto: true } (2026-11-17: the resolver picks the nearest enemy's best permanent) — Phylactery holder: shatter this action
 let queuedPossessPick = null; // card_id of the archive creature my next Possess plays (UI pick; none → the strongest, possessArchivePick)
@@ -1816,6 +1827,7 @@ function currentStateSnapshot(slim = false) {
     human: IS_HUMAN ? 1 : 0, ally_of: allyOfNow, joined_at: JOINED_AT, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), out: outNow ? 1 : 0,
     // Dimension Out (rule_dimension_out): the turn I leave at (-1 = none) — every UI counts it down on my unit.
     dim_out_until_turn: dimOut ? dimOut.until_turn : -1, dim_out_start_turn: dimOut ? dimOut.start_turn : -1,
+    ai_role: AI_ROLE,   // AI skirmish: 'builder' lets every resolver raise my Barricades (reveal `build`)
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     world_ledger_json: JSON.stringify(entity.worldLedger || []),
     awake_lend_json: JSON.stringify(entity.awakeLend || null),
@@ -2710,6 +2722,7 @@ function enterPhase(name) {
   // M6 step 1: a new planning window / deadline on the wire at once (deduped). Reveal / resolution are
   // announced by the commit / reveal envelopes themselves — no extra frame (keeps it ≈ 2 frames per action).
   if (name === 'planning') publishClock(currentStateSnapshot(true));
+  if (name === 'planning' && AI_ROLE && LLM.url && !IS_HUMAN) llmKick();
   broadcastUI({ kind: 'phase', name, seconds: Math.round(ms / 100) / 10, heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
 }
 
@@ -3238,11 +3251,17 @@ async function doPlanningEnd() {
       manipAlt = { code: alt.code, cardId: alt.card_id, target: at };
     }
   }
+  // NPC builders (AI skirmish 2026-11-22): a Barricade intent rides on a plain Posture / Empty Posture (no cast,
+  // no trance, not a lost action) — committed in the hash like the rest of the plan.
+  const build = AI_ROLE === 'builder' && queuedBuild && !skipping && !proxy && !phylactery && !effectCard && !trance && (code === 'P' || code === 'EP')
+    ? { q: Number.isInteger(queuedBuild.q) ? queuedBuild.q : null, r: Number.isInteger(queuedBuild.r) ? queuedBuild.r : null } : null;
+  if (queuedBuild && !build) console.log(`[${PEER_LABEL}] npc builder: no Barricade this action — ${skipping ? 'a lost action' : proxy ? 'a proxy action' : phylactery ? 'phylactery' : effectCard ? `casting ${effectCard.effect_id}` : trance ? 'Battle Trance' : `played ${code}, not a Posture`}`);
+  queuedBuild = null;
   const revealCode = trance ? 'BT' : code;
   myLastSalt = randomBytes(12).toString('hex');
   const effectTag = effectCard ? `${effectCard.effect_id}${every ? '∀' : ''}:${effectCard.element_cost.join('+')}:${effectStep}/${effectOf}:${(effectKept || []).map(v => v ?? '-').join(',')}` : '';
   const bonusTag = bonus.map(b => `${b.action}${b.trance ? `[${b.trance.join('+')}]` : ''}:${targetTag(b.target)}:${b.skillIds.join(',')}:${b.effect ? `${b.effect.effect_id}${b.effect.step}/${b.effect.of}` : ''}:${b.destroy ? b.destroy.stat : ''}`).join('|');
-  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${effectTag}::${destroy ? destroy.stat : ''}::${bonusTag}${manipAlt ? `::manip:${manipAlt.code}:${targetTag(manipAlt.target)}` : ''}::${myLastSalt}`);
+  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${effectTag}::${destroy ? destroy.stat : ''}::${bonusTag}${manipAlt ? `::manip:${manipAlt.code}:${targetTag(manipAlt.target)}` : ''}${build ? `::build:${build.q},${build.r}` : ''}::${myLastSalt}`);
   myLastReveal = {
     code: revealCode, trance: options, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null,
     optionCardIds: [card ? card.card_id : null, extraCard ? extraCard.card_id : null],
@@ -3272,6 +3291,7 @@ async function doPlanningEnd() {
     effectElem: effectCard && (EFFECT_RULES[effectCard.effect_id]?.altTileToken || TILE_TOKEN_CHOICE[effectCard.effect_id]) ? (queuedElem || null) : null,
     effectStep, effectOf,
     skipping, destroy, phylactery, proxy, classAbility, manipAlt,
+    build, say: takeSay(),   // AI skirmish: Barricade intent; the unit's line (shown with the reveal, never the commit)
     bonus,
   };
   await emitEnvelope({
@@ -3330,6 +3350,8 @@ async function doReveal() {
       target: targetObj,
       combo_step: null,
       salt: myLastReveal.salt,
+      ...(myLastReveal.build ? { build: myLastReveal.build } : {}),
+      ...(myLastReveal.say ? { say: myLastReveal.say } : {}),   // AI skirmish: UI speech balloon (llm-brain.mjs cleanSay on every side)
     },
   });
   // Optional discovery mirror (buckets reveals by the global action index).
@@ -3370,7 +3392,8 @@ async function doResolution() {
     if (revealsThisTurn.some(r => r.actor === env.actor_peer_id)) continue;
     const effArr = Array.isArray(env.payload.effects) ? env.payload.effects : [];
     const eff0 = effArr[0] || null;
-    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0, salt: env.payload.salt || '', destroy: env.payload.destroy || null, phylactery: env.payload.phylactery || null, proxy: env.payload.proxy || null, classAbility: env.payload.class_ability || null, bonus: env.payload.bonus || null, manipAlt: env.payload.manip_alt || null });
+    noteRecentAct(env.actor_peer_id, env.payload.action);
+    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0, salt: env.payload.salt || '', destroy: env.payload.destroy || null, phylactery: env.payload.phylactery || null, proxy: env.payload.proxy || null, classAbility: env.payload.class_ability || null, bonus: env.payload.bonus || null, manipAlt: env.payload.manip_alt || null, build: env.payload.build || null });
     const s = env.state;
     if (s && s.peer_id === env.actor_peer_id && Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) {
       view.set(env.actor_peer_id, { ...(view.get(env.actor_peer_id) || {}), ...s });
@@ -3402,7 +3425,7 @@ async function doResolution() {
   syncPlacedBuildings(view);
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
-    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null, salt: myLastReveal.salt, destroy: myLastReveal.destroy || null, phylactery: myLastReveal.phylactery || null, proxy: myLastReveal.proxy ? { for: myLastReveal.proxy.for, action: myLastReveal.proxy.action, target: wrapTarget(myLastReveal.proxy.target) } : null, classAbility: myLastReveal.classAbility ? { id: myLastReveal.classAbility.id, target: wrapTarget(myLastReveal.classAbility.target), attach: myLastReveal.classAbility.attach || null, stat: myLastReveal.classAbility.stat || null } : null, bonus: bonusWire(myLastReveal.bonus), manipAlt: myLastReveal.manipAlt ? { code: myLastReveal.manipAlt.code, target: wrapTarget(myLastReveal.manipAlt.target) } : null, effect: myLastReveal.effectId ? {
+    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null, salt: myLastReveal.salt, destroy: myLastReveal.destroy || null, phylactery: myLastReveal.phylactery || null, proxy: myLastReveal.proxy ? { for: myLastReveal.proxy.for, action: myLastReveal.proxy.action, target: wrapTarget(myLastReveal.proxy.target) } : null, classAbility: myLastReveal.classAbility ? { id: myLastReveal.classAbility.id, target: wrapTarget(myLastReveal.classAbility.target), attach: myLastReveal.classAbility.attach || null, stat: myLastReveal.classAbility.stat || null } : null, bonus: bonusWire(myLastReveal.bonus), manipAlt: myLastReveal.manipAlt ? { code: myLastReveal.manipAlt.code, target: wrapTarget(myLastReveal.manipAlt.target) } : null, build: myLastReveal.build || null, effect: myLastReveal.effectId ? {
       effect_id: myLastReveal.effectId, name: myLastReveal.effectName, elements: myLastReveal.effectElements || [], types: myLastReveal.effectTypes || [],
       is_permanent: myLastReveal.effectPermanent, is_damage: myLastReveal.effectDamage, is_point_buy: myLastReveal.effectPointBuy, scope: myLastReveal.effectScope,
       is_instant: myLastReveal.effectInstant, every: myLastReveal.effectEvery, aura: myLastReveal.effectAura, step: myLastReveal.effectStep, of: myLastReveal.effectOf, kept: myLastReveal.effectKept, summon: myLastReveal.effectSummon || null,
@@ -4731,6 +4754,18 @@ async function doResolution() {
       default: break;
     }
   }
+  // NPC builders (AI skirmish 2026-11-22): a live unit whose snapshot says ai_role 'builder' and that played a plain
+  // Posture / Empty Posture with a `build` intent raises a Barricade (an impassable wall) on the hex it named next to
+  // it — else on a random free hex next to it (reveal salt), nothing if none is free. Same createBuilding pipeline as
+  // the Animator / Priest: the builder records `made:q,r`, every peer folds it in from the next resolution on.
+  for (const r of revealsThisTurn) {
+    if (!r.build || r.proxied || (r.action !== 'P' && r.action !== 'EP') || r.effect) continue;
+    const me = r.actor;
+    if (view.get(me)?.ai_role !== 'builder' || lifeOf(me) <= 0) continue;
+    const picked = Number.isInteger(r.build.q) && Number.isInteger(r.build.r) ? { q: r.build.q, r: r.build.r } : null;
+    const site = createBuilding(r, me, { made: barricadeMade(), range: 1, picked, why: 'builder' });
+    if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] npc builder: ${site ? `a Barricade rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex next to me' : ''}` : 'no free hex next to me — nothing built'}`);
+  }
   for (const e of elementalistPending) {
     if (!effectOutcomes.some(x => x.actor === e.actor && !x.bonus && !x.channel && x.oc.status === 'done' && (x.oc.hits || []).length)) continue;
     // CR: elementalist — once per ACTION (2026-11-17): a perAction class is never marked used for the turn
@@ -5321,6 +5356,15 @@ async function doResolution() {
         entity.worldEdits.push({ id: old.id, q: old.q, r: old.r, gone: true, at: hg.action });
         console.log(`[${PEER_LABEL}] class priest: my older ${old.made?.label || 'Shrine'} at (${old.q},${old.r}) is gone — one Shrine at a time`);
       }
+    }
+    if (b.why === 'builder') {
+      const mine = entity.worldEdits.filter(e => !e.gone && e.made?.made_by === 'npc_builder' && e.id !== id);
+      for (const old of mine.slice(0, Math.max(0, mine.length - (BUILDER_MAX_STANDING - 1)))) {
+        entity.worldEdits = entity.worldEdits.filter(e => e !== old);
+        entity.worldEdits.push({ id: old.id, q: old.q, r: old.r, gone: true, at: hg.action });
+        console.log(`[${PEER_LABEL}] npc builder: my oldest Barricade at (${old.q},${old.r}) comes down — ${BUILDER_MAX_STANDING} standing at most`);
+      }
+      builderBuiltTurn = hg.turn;
     }
     entity.worldEdits.push({ id, q: b.q, r: b.r, made: b.made, at: hg.action });
     _autosave?.markDirty();
@@ -6296,7 +6340,173 @@ function npcCast(enemies, nearest) {
   console.log(`[${PEER_LABEL}] ${NPC_CAST_TAG}: start ${c.effect_id} (${ch.kind}, ${c.element_cost.join('+')}) ${ch.target ? `${onFriend ? 'on ally' : 'at'} ${ch.target.slice(0, 14)}` : 'on myself / around me'} — ${pIdx >= 0 ? 'Posture' : 'Empty Posture'}`);
   return true;
 }
+// ---- AI skirmish (2026-11-22): the llama-server pick (llm-brain.mjs) ----
+// llmKick() when the planning window opens: the options that are legal for this action (built from the same view the
+// rules use) go to the model. npcPlan() at the deadline runs the rules, then llmApply() replaces their pick by the
+// model's option when the answer is in, still legal and the rules left the pick free (awake, no owner to follow, no
+// cast running — Rule 19). No answer in time → the rules' plan stands. Private plan only: no resolver change.
+let npcFree = false;         // npcPlanRules reached the free pick (weighted A/M/P/B, cast start, idle heal)
+let llmTurn = null;          // { action, options, answer, read }
+let llmDownUntil = 0;        // server unreachable: rules only until then
+let llmLastSay = -99;        // hg.action of my last line
+let pendingSay = null;       // { action, text } — goes out with this action's reveal
+let builderBuiltTurn = -1;   // the engine turn my last Barricade rose in (one per turn)
+const llmStats = { asked: 0, used: 0, late: 0, failed: 0 };
+const recentActs = new Map();   // peer_id -> its last revealed action codes (≤ 3, newest last): habits the model reads
+const recentSeen = new Set();
+function noteRecentAct(id, code) {
+  if (!id || typeof code !== 'string' || id === PEER_ID_STRING) return;
+  const k = `${hg.action}:${id}`;
+  if (recentSeen.has(k)) return;
+  recentSeen.add(k); if (recentSeen.size > 500) recentSeen.clear();
+  const a = recentActs.get(id) || []; a.push(code); if (a.length > 3) a.shift(); recentActs.set(id, a);
+}
+function takeSay() {
+  const s = pendingSay && pendingSay.action === hg.action ? pendingSay.text : '';
+  pendingSay = null;
+  return s;
+}
+// The units the rules treat as enemies (seen, alive, other side; Rogue stealth hides beyond contact).
+function npcEnemies() {
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  return livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0
+    && !(snapInvisible(p) && !entity.permanents.has('effect_invisibility'))   // Invisibility: monsters / companions neither see nor chase it
+    && !(p.stealth_turn === hg.turn && hexDistance(here, p) > 1));
+}
+const _nameOf = (p) => p?.name || String(p?.peer_id || '?').slice(0, 12);
+// The numbered options for this action: { label (what the model reads), plan }. null = the rules decide alone.
+function llmOptions() {
+  if (entity.life <= 0 || casting || entity.monsterState === 'sleeping' || IS_COMPANION || SHADOW_OF || entity.lostActions > 0) return null;
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const dist = (p) => hexDistance(here, p);
+  const enemies = npcEnemies().sort((a, b) => dist(a) - dist(b) || a.peer_id.localeCompare(b.peer_id));
+  const lurer = entity.luredBy ? enemies.find(p => p.peer_id === entity.luredBy.id) : null;   // Avenger lure: my only prey
+  const has = (code) => hand.some(c => c.kind === 'action' && c.code === code);
+  const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+  const freeNear = hexNeighbours(entity.tile.q, entity.tile.r).filter(t => dimMap.has(t.q, t.r) && !occ.has(`${t.q},${t.r}`) && !isLabyrinthWallAt(MAP_SEED, t.q, t.r) && !buildingFeatureAt(MAP_SEED, t.q, t.r));
+  const opts = [];
+  for (const e of (lurer ? [lurer] : enemies).slice(0, 4)) {
+    const d = dist(e);
+    if (d <= 1 && has('A')) opts.push({ label: `Attack ${_nameOf(e)}`, plan: { code: 'A', target: e.peer_id } });
+    else if (d > 1 && !IS_GOLEM && AI_ROLE !== 'builder') opts.push({ label: `Move toward ${_nameOf(e)}`, plan: has('M') ? { code: 'M', target: e.peer_id } : { code: 'EM', target: { q: e.tile_q, r: e.tile_r } } });
+  }
+  // Hurt with an enemy in contact: one step away from the nearest one (a Move card, else an Empty Move).
+  const near = enemies[0];
+  if (near && dist(near) <= 1 && !IS_GOLEM && entity.life * 2 <= entity.lifeMax && AI_ROLE !== 'monster') {
+    const away = freeNear.map(t => ({ t, d: hexDistance({ tile_q: t.q, tile_r: t.r }, near) })).sort((a, b) => b.d - a.d || a.t.q - b.t.q || a.t.r - b.t.r)[0];
+    if (away && away.d > 1) opts.push({ label: `Step back away from ${_nameOf(near)}`, plan: { code: has('M') ? 'M' : 'EM', target: { q: away.t.q, r: away.t.r } } });
+  }
+  if (has('B')) opts.push({ label: 'Block', plan: { code: 'B' } });
+  opts.push(has('P') ? { label: 'Posture (gather an element)', plan: { code: 'P' } } : { label: 'Empty Posture (gather an element)', plan: { code: 'EP' } });
+  // The cast the monster-deck chooser finds sensible now (its chance roll skipped: the model decides).
+  if (NPC_CASTS && hand.some(c => c.kind === 'effect')) {
+    const statsOf = (p) => ({ vitality: p.stat_vitality ?? 0, world: p.stat_world ?? 0, matter: p.stat_matter ?? 0, will: p.stat_will ?? 0 });
+    const friendSnaps = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && (p.life ?? 0) > 0 && sideOf(p.alliance) === MY_SIDE && Number.isInteger(p.tile_q));
+    const ch = npcCastChoice({ hand, me: { stats: entity.stats, life: entity.life, lifeMax: entity.lifeMax, permanents: entity.permanents },
+      foes: enemies.map(p => ({ peer_id: p.peer_id, dist: dist(p), life: p.life ?? 0, stats: statsOf(p) })),
+      friends: friendSnaps.map(p => ({ peer_id: p.peer_id, dist: dist(p), life: p.life, lifeMax: p.life_max ?? null })),
+      rules: EFFECT_RULES, cfg: MONSTER_DECK_CFG, ally: !IS_MONSTER, rand: () => 0 });
+    if (ch) {
+      const c = hand[ch.index];
+      const at = ch.target ? livePeers().find(p => p?.peer_id === ch.target) : null;
+      opts.push({ label: `Cast ${c.name || c.effect_id}${at ? ` at ${_nameOf(at)}` : ''} (${c.element_cost.length} action${c.element_cost.length === 1 ? '' : 's'})`, plan: { cast: ch.index, cardId: c.card_id, aim: ch.target || null } });
+    }
+  }
+  // Builder: one Barricade a turn, never with an enemy in contact; the hex nearest the nearest enemy first.
+  if (AI_ROLE === 'builder' && builderBuiltTurn !== hg.turn && !(near && dist(near) <= 1)) {
+    const code = has('P') ? 'P' : 'EP';
+    const spots = near ? [...freeNear].sort((a, b) => hexDistance({ tile_q: a.q, tile_r: a.r }, near) - hexDistance({ tile_q: b.q, tile_r: b.r }, near) || a.q - b.q || a.r - b.r) : freeNear;
+    spots.slice(0, 3).forEach((t, i) => opts.push({ label: `Build a barricade ${i === 0 && near ? `between you and ${_nameOf(near)}` : `on free hex ${i + 1} next to you`}`, plan: { code, build: { q: t.q, r: t.r } } }));
+  }
+  return opts.slice(0, 9);
+}
+let _llmSystem = null;
+function llmKick() {
+  llmTurn = null;
+  if (Date.now() < llmDownUntil || !askThisAction(hg.action, PEER_ID_STRING, LLM.every)) return;
+  const options = llmOptions();
+  if (!options || options.length < 2) return;
+  const budget = Math.min(LLM.timeoutMs, phaseEndsAt - Date.now() - 400);
+  if (budget < 300) return;
+  const action = hg.action;
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const unit = (p) => ({ name: _nameOf(p), life: p.life ?? 0, lifeMax: p.life_max ?? null, dist: hexDistance(here, p), recent: recentActs.get(p.peer_id) || [] });
+  const foes = npcEnemies().map(unit).sort((a, b) => a.dist - b.dist);
+  const friends = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && (p.life ?? 0) > 0 && sideOf(p.alliance) === MY_SIDE && Number.isInteger(p.tile_q) && !snapInvisible(p)).map(unit).sort((a, b) => a.dist - b.dist);
+  const handTxt = hand.map(c => c.kind === 'action' ? c.code : c.kind === 'effect' ? (c.name || c.effect_id) : null).filter(Boolean).join(', ');
+  _llmSystem ||= systemPrompt({ role: AI_ROLE, name: ENTITY_NAME });
+  const user = userPrompt({ turn: hg.turn, round: hg.round, roundsPerTurn: ROUNDS_PER_TURN, me: { life: entity.life, lifeMax: entity.lifeMax, hand: handTxt }, foes, friends, options });
+  const t = { action, options, answer: null, read: false };
+  llmTurn = t;
+  llmStats.asked++;
+  askLlm(LLM, { system: _llmSystem, user, n: options.length, timeoutMs: budget }).then((ans) => {
+    if (!ans || ans.error) {
+      llmStats.failed++;
+      const down = ans?.error && !/^(timeout|http|malformed)/.test(ans.error);
+      if (down) { llmDownUntil = Date.now() + 30_000; console.log(`[${PEER_LABEL}] llm: ${LLM.url} unreachable (${ans.error}) — rules only for 30 s`); }
+      else if (llmStats.failed <= 3 || llmStats.failed % 20 === 0) console.log(`[${PEER_LABEL}] llm: no answer (${ans?.error || 'none'}, ${ans?.ms ?? '?'} ms) — the rules' plan stands`);
+      return;
+    }
+    if (t.read || llmTurn !== t) { llmStats.late++; return; }
+    t.answer = ans;
+  });
+  if (llmStats.asked % 30 === 0) console.log(`[${PEER_LABEL}] llm stats (${AI_ROLE}): asked ${llmStats.asked}, used ${llmStats.used}, late ${llmStats.late}, failed ${llmStats.failed}`);
+}
+// The model's option replaces the rules' free pick. true when applied.
+function llmApply() {
+  const t = llmTurn;
+  if (!t || t.action !== hg.action) return false;
+  t.read = true;
+  const ans = t.answer;
+  if (!ans || !npcFree || casting) return false;
+  const opt = t.options[ans.choice - 1];
+  const p = opt?.plan;
+  if (!p) return false;
+  if (p.cast != null) {
+    const c = hand[p.cast];
+    if (!c || c.card_id !== p.cardId) return false;
+    if (p.aim && !livePeers().some(x => x?.peer_id === p.aim && (x.life ?? 0) > 0)) return false;
+    const pIdx = hand.findIndex(x => x.kind === 'action' && x.code === 'P');
+    queued = [pIdx >= 0 ? pIdx : 'EMPTY']; queuedSkills = []; queuedExtra = null; queuedDestroy = null;
+    queuedEffect = p.cast; queuedEffect2 = null; queuedChain = []; queuedAura = false; target = p.aim; npcCastAim = p.aim;
+  } else {
+    if (typeof p.target === 'string' && !livePeers().some(x => x?.peer_id === p.target && (x.life ?? 0) > 0)) return false;
+    const empty = p.code === 'EP' || p.code === 'EM';
+    const slot = empty ? -1 : hand.findIndex(c => c.kind === 'action' && c.code === p.code);
+    if (!empty && slot < 0) return false;
+    queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; npcCastAim = null;
+    queued = slot >= 0 ? [slot] : [p.code];
+    const rides = slot >= 0 ? p.code : p.code === 'EM' ? 'M' : 'P';
+    queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && c.requires === rides ? i : -1).filter(i => i >= 0);
+    queuedExtra = null;
+    target = p.target ?? null;
+    if (!(p.code === 'P' || p.code === 'EP' || clEmits(p.code))) queuedDestroy = null;
+    queuedBuild = p.build || null;
+  }
+  llmStats.used++;
+  const say = ans.say && hg.action - llmLastSay >= LLM.sayEvery && !echoesOption(ans.say, opt.label) ? ans.say : '';
+  if (say) { pendingSay = { action: hg.action, text: say }; llmLastSay = hg.action; }
+  console.log(`[${PEER_LABEL}] llm (${AI_ROLE}): option ${ans.choice}/${t.options.length} "${opt.label}" in ${ans.ms} ms${say ? ` — says "${say}"` : ''}`);
+  return true;
+}
+// Builder without (or before) an answer: no enemy in contact → Posture / Empty Posture, and a Barricade on a free hex
+// next to me once a turn (the resolver picks the hex from the reveal salt). In contact the rules' pick stands.
+function builderFallback() {
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  if (npcEnemies().some(p => hexDistance(here, p) <= 1)) return;
+  const pi = hand.findIndex(c => c.kind === 'action' && c.code === 'P');
+  queued = pi >= 0 ? [pi] : ['EP'];
+  queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && c.requires === 'P' ? i : -1).filter(i => i >= 0);
+  queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; npcCastAim = null; target = null;
+  if (builderBuiltTurn !== hg.turn) queuedBuild = { q: null, r: null };
+}
 async function npcPlan() {
+  npcFree = false; queuedBuild = null;
+  await npcPlanRules();
+  const used = AI_ROLE ? llmApply() : false;
+  if (AI_ROLE === 'builder' && !used && npcFree) builderFallback();
+}
+async function npcPlanRules() {
   queuedDestroy = null;
   // Monster awakening (user ruling 2026-11-05): a wild monster — a non-companion
   // non-player creature — enters as `sleeping` and does nothing. The first time
@@ -6309,9 +6519,7 @@ async function npcPlan() {
     if (trigger) entity.monsterState = 'awake';
     else { queued = ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null; return; }
   }
-  const enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0
-    && !(snapInvisible(p) && !entity.permanents.has('effect_invisibility'))   // Invisibility: monsters / companions neither see nor chase it
-    && !(p.stealth_turn === hg.turn && hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, p) > 1));
+  const enemies = npcEnemies();
   // Summoned / bound: follow the owner — close the gap first, fight only what is in reach.
   // Unattended (rule_unattended_character, follow 'summon'): my master is my owner here — "they will gather next to
   // you even if they are far away" — by walking (the Empty Move / Move below), never a teleport.
@@ -6353,6 +6561,7 @@ async function npcPlan() {
   // Avenger lure (user rework #2 2026-11-14): the lurer stays my prey until it dies or leaves the map;
   // while it is unseen (Invisibility / Rogue stealth) I go after whoever else is nearest.
   if (entity.luredBy) { const lp = peersPublic.get(entity.luredBy.id); if (!lp || (lp.life ?? 0) <= 0) { console.log(`[${PEER_LABEL}] avenger lure: ${entity.luredBy.id.slice(0, 14)} is gone — the chase ends`); entity.luredBy = null; } }
+  npcFree = true;   // from here on the pick is free: the model's option may replace it (llmApply)
   // No enemy in sight: an allied bot may still heal itself / a hurt friend in contact (Turn Life, Potion Brew …).
   if (!enemies.length && NPC_CASTS && !IS_MONSTER && npcCast([], null)) { entity.chaseTarget = ''; return; }
   if (!enemies.length) { entity.chaseTarget = ''; queued = []; queuedSkills = []; queuedExtra = null; target = null; return; }

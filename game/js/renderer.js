@@ -3,6 +3,44 @@ import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward, hex
 import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame } from './sprites.js';
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
+
+// A speech balloon (AI skirmish): word-wrapped to ~150 px, at most 3 lines, its tail pointing down at (x, yTip).
+// Friends get a blue rim, foes a red one. Plain fillText — the text never reaches the DOM.
+function drawSpeech(ctx, text, x, yTip, alpha, foe) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
+  const maxW = 150, lh = 13, pad = 5;
+  const lines = [];
+  let cur = '';
+  for (const w of String(text).split(' ')) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(next).width > maxW && cur) { lines.push(cur); cur = w; } else cur = next;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > 3) { lines.length = 3; lines[2] = `${lines[2].slice(0, -1)}…`; }
+  const w = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width))) + pad * 2;
+  const h = lines.length * lh + pad * 2;
+  const bx = x - w / 2, by = yTip - 6 - h, rr = 6;
+  ctx.beginPath();
+  ctx.moveTo(bx + rr, by);
+  ctx.arcTo(bx + w, by, bx + w, by + h, rr);
+  ctx.arcTo(bx + w, by + h, bx, by + h, rr);
+  ctx.lineTo(x + 5, by + h); ctx.lineTo(x, yTip); ctx.lineTo(x - 5, by + h);
+  ctx.arcTo(bx, by + h, bx, by, rr);
+  ctx.arcTo(bx, by, bx + w, by, rr);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(250,247,238,0.95)';
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = foe ? '#c94a4a' : '#4a86c9';
+  ctx.stroke();
+  ctx.fillStyle = '#1b1d22';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  lines.forEach((l, i) => ctx.fillText(l, x, by + pad + i * lh));
+  ctx.restore();
+}
 import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
 import { buildingBonusAt } from './building-bonus.js';
 import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
@@ -288,7 +326,8 @@ export function createRenderer(canvas, state) {
     const stillIcons = (state.ui.floatingIcons || []).some(f => now - f.startAt < f.duration);
     const stillBadges = Object.values(state.ui.revealBadges || {}).some(b => now - b.startAt < b.duration);
     const stillToasts = (state.ui.effectToasts || []).some(f => now - f.startAt < f.duration);
-    if ((stillMoving || stillFloating || stillIcons || stillBadges || stillToasts) && !rafId) {
+    const stillSpeech = Object.values(state.ui.speech || {}).some(b => now - b.startAt < b.duration);
+    if ((stillMoving || stillFloating || stillIcons || stillBadges || stillToasts || stillSpeech) && !rafId) {
       rafId = requestAnimationFrame(() => { rafId = 0; render(); scheduleIfAnimating(); });
     }
   }
@@ -848,6 +887,11 @@ export function createRenderer(canvas, state) {
         ctx.fillStyle = e.locked ? '#ffb66e' : '#a08eff';
         ctx.fillText(`[${e.queuedCode}]`, x, top - 18);
       }
+      // AI skirmish speech balloon (the `say` of the unit's reveal): above the head and the reveal chip, fading
+      // out over its last fifth.
+      const sp = e.speech;
+      const st = sp ? (now - sp.startAt) / sp.duration : 1;
+      if (sp && st >= 0 && st < 1 && !dead) drawSpeech(ctx, sp.text, x, Math.min(top - 26, y - 54), st < 0.8 ? 1 : 1 - (st - 0.8) / 0.2, sideOf(e.alliance) !== mySide);
 
       ctx.restore();
     }

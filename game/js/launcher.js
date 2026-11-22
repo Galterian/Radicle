@@ -36,7 +36,8 @@ async function launch() {
   if (mode === 'host') {
     const name = document.getElementById('host-name').value.trim() || 'Ashfall-Micro';
     const publicIp = document.getElementById('host-ip').value || null;
-    body = { mode: 'host', dimensionName: name, publicIp };
+    const ai = document.getElementById('host-ai');
+    body = { mode: 'host', dimensionName: name, publicIp, ...(ai ? { ai: ai.checked } : {}) };
   } else if (mode === 'restore') {
     const tmjPath = document.getElementById('pick-restore').value;
     if (!tmjPath) { msg.textContent = 'no saved dimension picked'; btn.disabled = false; hideEntering(); return; }

@@ -1266,6 +1266,11 @@ func _on_net_evt(env: Dictionary, from_peer: bool) -> void:
 	if t == "evt_action_reveal":
 		var payload: Variant = env.get("payload", {})
 		if typeof(payload) == TYPE_DICTIONARY:
+			# AI skirmish (game/llm-brain.mjs): the unit's line rides on its reveal. The webview HUD draws the
+			# balloon; here it is a HUD log line.
+			var say := String((payload as Dictionary).get("say", "")).strip_edges().left(60)
+			if say != "":
+				hud.log_line("💬 %s: %s" % [String(env.get("actor_peer_id", "?")).substr(0, 14), say], Color(0.95, 0.92, 0.75))
 			var d: Variant = (payload as Dictionary).get("destroy", null)
 			if typeof(d) == TYPE_DICTIONARY and String((d as Dictionary).get("stat", "")) != "":
 				var actor := String(env.get("peer_id", "?"))

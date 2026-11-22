@@ -453,7 +453,8 @@ function startAgent(peerId, port, attempt = 0) {
 }
 
 // ---- 1. host ----
-const host = await api('/api/launch', { mode: 'host', dimensionName: DIM });
+// AI skirmish (llm-brain.mjs) only with SWARM_AI=1: rival team + NPC builders + AI_ROLE bots; else the classic roster.
+const host = await api('/api/launch', { mode: 'host', dimensionName: DIM, ai: process.env.SWARM_AI === '1' });
 if (!host.ok) { console.error('host failed', host); process.exit(1); }
 log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
 // PS: partial foreign swarms — FOREIGN_HOLDERS / FOREIGN_REFUSERS reach every peer through the launcher's env (foreign-select.mjs).
