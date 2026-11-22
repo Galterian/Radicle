@@ -41,7 +41,7 @@ const LAB_DIRS = [[+1, 0], [+1, -1], [0, -1], [-1, 0], [-1, +1], [0, +1]];
 const LAB_TURNS = [-1, 0, 0, +1];
 // WBC3 wall sprites reused verbatim from feature_table.json (`kind: "wall"`).
 // Picked deterministically per wall hex so the run isn't a repeating texture.
-const LAB_WALL_PATHS = [
+export const LAB_WALL_PATHS = [
   'assets/Sprites/Buildings/Shared/Walls (neutral, 2x2 joint)/Walls (neutral, 2x2 joint) - base [BWN0].png',
   'assets/Sprites/Buildings/Shared/Walls (neutral, 2x1 horizontal)/Walls (neutral, 2x1 horizontal) - base [BWN1].png',
   'assets/Sprites/Buildings/Shared/Walls (neutral, 1x2 vertical)/Walls (neutral, 1x2 vertical) - base [BWN2].png',

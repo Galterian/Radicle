@@ -69,6 +69,7 @@ class-card destructibility; Razorfin stats (Σ 30, life 4).
 - Run bots and triage logs/divergences → `chaosd6-swarm-test`
 - data/*.json rules, named rules, proposals, rebalance → `chaosd6-logic-layer`
 - Shell/WSL/UNC/npm/CRLF/patch mechanics → `chaosd6-env`
+- AI skirmish: llama-server (desktop / OCI), `game/llm-brain.mjs`, `npcPlan` = `npcPlanRules` + `llmApply`, AI roles, NPC builders / Barricades, speech balloons → `chaosd6-llm`
 
 ## Habits the user expects
 

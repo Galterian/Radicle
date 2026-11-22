@@ -59,6 +59,14 @@ ssh -i keys/oci_seeder ubuntu@$(terraform output -raw public_ip) \
    `game/radicle-adapter.mjs`'s Firebase hook — set `FIREBASE_PROJECT_ID`
    and `FIREBASE_API_KEY` on the VM once if you want it visible in `/explore`).
 
+## llama-server (AI skirmish bots)
+
+`infra/oci/llm-setup.sh` (from WSL, repo root) installs llama.cpp's `llama-server` + Qwen3-1.7B Q4_K_M into
+`/opt/chaosd6-llm` (user `chaosllm`) and runs it as `chaosd6-llm.service` on **127.0.0.1:8095** (2 threads,
+2 slots, Nice 10, MemoryMax 4G — radicle keeps priority). Loopback only by default. `--public` adds an API key
+(`/etc/chaosd6-llm/api-key`) and the caddy route `/llm/*` so phone peers can use
+`LLM_URL=https://92-5-138-121.sslip.io/llm LLM_KEY=<key>`. Details: `.claude/skills/chaosd6-llm/SKILL.md`.
+
 ## Teardown
 
 ```sh

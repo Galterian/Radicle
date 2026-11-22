@@ -232,6 +232,8 @@ Two players on one machine: `game/tools/dev-restart.sh` (two launchers, A on 735
 | `DOOR_LIVE_MS` | 180000 | "live" threshold in the join list |
 | `RADICLE_SEED`, `RADICLE_EXPLORER_BASE`, `RADICLE_ALIAS` | rosa.radicle.network, https://radicle.network, "" | explorer URLs in logs |
 | `WITH_DISCOVERY`, `DISCOVERY_URL` | off | LAN mirror |
+| `AI_SKIRMISH`, `AI_RIVALS`, `AI_BUILDERS` | 1, 2, 2 | Create Dimension adds a rival team (npc_c) and NPC builders (npc_a); every bot gets an `AI_ROLE` |
+| `LLM_URL`, `LLM_KEY`, `LLM_EVERY`, `LLM_TIMEOUT_MS` | http://127.0.0.1:8095, "", 3, 4500 | bot controller (`game/llm-brain.mjs`): llama-server + Qwen3-1.7B Q4_K_M; `LLM_URL=0` = rules only. Install: `tools/llm/llm-desktop.sh install` (desktop), `infra/oci/llm-setup.sh` (OCI). See `.claude/skills/chaosd6-llm` |
 
 ## 12. Known loose ends
 

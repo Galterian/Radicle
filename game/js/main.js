@@ -544,6 +544,14 @@ function setLogFilter(peerId) {
 // "Save image…" because the stage is a canvas.
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// AI skirmish speech balloons: how long a line stays up, and the receiver-side clean-up (same rule as
+// llm-brain.mjs cleanSay — one printable line, at most 60 characters; never trust a peer's string).
+const SPEECH_MS = 4500;
+function cleanSayUI(s) {
+  if (typeof s !== 'string') return '';
+  const t = s.replace(/[\u0000-\u001f\u007f<>`]/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > 60 ? `${t.slice(0, 59)}…` : t;
+}
 function logUI(text, kind = 'evt', opts = null) {
   const li = document.createElement('li');
   li.className = kind;
@@ -2813,6 +2821,18 @@ function connect() {
       }
       if (m.kind === 'evt') {
         const env = m.env;
+        // AI skirmish (game/llm-brain.mjs): a unit's line rides on its reveal → a speech balloon over it (renderer.js
+        // drawSpeech) and a log line. Once per (turn, action, unit): my own reveal and the mesh echo carry the same line.
+        if (env.type === 'evt_action_reveal' && typeof env.payload?.say === 'string') {
+          const text = cleanSayUI(env.payload.say);
+          const key = `${env.turn}:${env.round}:${env.actor_peer_id}`;
+          state._saidKeys ||= new Set();
+          if (text && !state._saidKeys.has(key)) {
+            state._saidKeys.add(key); if (state._saidKeys.size > 500) state._saidKeys = new Set([...state._saidKeys].slice(-100));
+            (state.ui.speech ||= {})[env.actor_peer_id] = { text, startAt: performance.now(), duration: SPEECH_MS };
+            logUI(`💬 ${peerShort(env.actor_peer_id)}: “${text}”`, 'evt', { peerId: env.actor_peer_id });
+          }
+        }
         // Fold commit/reveal/state_hash/push into one row per (actor, turn, round).
         if (env.type === 'evt_action_commit' || env.type === 'evt_action_reveal' || env.type === 'evt_state_hash' || env.type === 'evt_radicle_push') {
           onEnvelopeFold(env, !!m.from_peer);
@@ -3728,6 +3748,7 @@ function wireInput() {
           queuedCode: isMe ? queuedLabel() : null,
           locked: isMe ? state.locked : false,
           revealBadge: state.ui.revealBadges?.[p.peer_id] || null,
+          speech: state.ui.speech?.[p.peer_id] || null,   // AI skirmish speech balloon
           lostActions: p.lost_actions || 0,
           emitTrail: state.ui.emitTrails?.[p.peer_id]?.elems || null,
           gone: isGone(p),
