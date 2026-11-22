@@ -77,6 +77,12 @@ cp -r "${GAME_DIR}/package.json" "${STAGE_DIR}/package.json"
 if [ -d "${GAME_DIR}/../data" ]; then
     rsync -a "${GAME_DIR}/../data/" "${STAGE_DIR}/data/"
 fi
+# Rules editor (2026-11-22): mobile-menu.mjs serves /rules/ from editor.html + editor/ (editor-api.mjs looks in the
+# repo root first, then beside the game code — on the phone that is STAGE_DIR).
+if [ -f "${GAME_DIR}/../editor.html" ]; then
+    cp "${GAME_DIR}/../editor.html" "${STAGE_DIR}/editor.html"
+    rsync -a --delete "${GAME_DIR}/../editor/" "${STAGE_DIR}/editor/"
+fi
 
 # Prune production node_modules into the staging area. We DO NOT reuse the
 # dev-side node_modules (138 MB) or the committed package-lock.json: the

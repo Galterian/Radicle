@@ -24,6 +24,13 @@
 //! `refs/heads/ActiveDimensions/<Name>` in our namespace, parent = our own
 //! previous tip there. `init()` seeds every RID of a comma-separated list.
 //!
+//! `POST /publish` with `mode: "definition"` (feature "defs") is the phone half
+//! of game/editor-publish.mjs: ONE new skill / effect / class on
+//! `refs/heads/players/<team>/<slug>` of chaosD6-Skills / -Effects / -Classes =
+//! the repo's canonical `main` tree + `<subdir>/<id>.json` + the index.json
+//! manifest entry, built exactly like the desktop git plumbing so that the same
+//! inputs give the same commit oid on both.
+//!
 //! Every entry point returns a String; failures come back as "error: <msg>".
 
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
@@ -46,7 +53,7 @@ use radicle::identity::RepoId;
 use radicle::node::policy::Scope;
 use radicle::node::{Alias, FetchResult, Handle as _, NodeId};
 use radicle::profile::{Config, Home, Profile};
-use radicle::storage::{ReadStorage as _, SignRepository as _, WriteStorage as _};
+use radicle::storage::{ReadRepository as _, ReadStorage as _, SignRepository as _, WriteStorage as _};
 use radicle::{Node, Storage};
 use radicle_node::fingerprint::Fingerprint;
 use radicle_node::runtime::Runtime;
@@ -61,8 +68,16 @@ static LOGGING: Once = Once::new();
 const BRIDGE_FILE: &str = "bridge.json";
 /// The only file a profile branch holds (same as profile-sync.mjs / profiles-push.mjs).
 const PROFILE_FILE: &str = "profile.json";
-/// What the bridge serves (bridge.json `features`): POST /save, POST /publish.
-const BRIDGE_FEATURES: [&str; 2] = ["save", "publish"];
+/// What the bridge serves (bridge.json `features`): POST /save, POST /publish,
+/// POST /publish `mode: "definition"` (defs).
+const BRIDGE_FEATURES: [&str; 3] = ["save", "publish", "defs"];
+/// Definition branches (game/editor-publish.mjs branchOf): refs/heads/players/<team-slug>/<slug>.
+const PLAYERS_REF_PREFIX: &str = "refs/heads/players/";
+/// The only directories a definition publish may write (+ DEFS_MANIFEST at the root).
+const DEFS_DIRS: [&str; 3] = ["skills", "effects", "classes"];
+const DEFS_MANIFEST: &str = "index.json";
+const DEFS_MAX_FILES: usize = 8;
+const DEFS_FILE_MAX: usize = 256 << 10;
 /// Dimension branches (chaosD6-Dimensions): refs/heads/ActiveDimensions/<Name>,
 /// holding ActiveDimensions/<Name>/… only.
 const DIMENSIONS_REF_PREFIX: &str = "refs/heads/ActiveDimensions/";
@@ -408,7 +423,7 @@ fn serve(stream: TcpStream, home: &Home, token: &str) {
         return respond(&stream, 400, serde_json::json!({ "ok": false, "error": "short body" }));
     }
     if publish {
-        return match parse_publish(&body).and_then(|req| publish_commit(home, &req)) {
+        return match publish_any(home, &body) {
             Ok((oid, false)) => respond(&stream, 200, serde_json::json!({ "ok": true, "oid": oid })),
             Ok((oid, true)) => respond(&stream, 200, serde_json::json!({ "ok": true, "oid": oid, "unchanged": true })),
             Err(e) => {
@@ -465,10 +480,20 @@ struct PublishRequest {
     seed: String,
 }
 
-fn parse_publish(body: &[u8]) -> Res<PublishRequest> {
+/// POST /publish: `mode` absent / "snapshot" → a dimension snapshot,
+/// "definition" → one definition on a players/ branch.
+fn publish_any(home: &Home, body: &[u8]) -> Res<(String, bool)> {
+    let v: serde_json::Value = serde_json::from_slice(body).map_err(err)?;
+    match v.get("mode").and_then(|m| m.as_str()) {
+        Some("definition") => parse_definition(&v).and_then(|req| definition_commit(home, &req)),
+        None | Some("snapshot") => parse_publish(&v).and_then(|req| publish_commit(home, &req)),
+        Some(m) => Err(format!("unknown publish mode {m:?}")),
+    }
+}
+
+fn parse_publish(v: &serde_json::Value) -> Res<PublishRequest> {
     use serde_json::Value;
-    let v: Value = serde_json::from_slice(body).map_err(err)?;
-    let s = |k: &str| v[k].as_str().map(str::to_string).ok_or_else(|| format!("missing {k}"));
+    let s =|k: &str| v[k].as_str().map(str::to_string).ok_or_else(|| format!("missing {k}"));
     let files = v["files"].as_object().ok_or("missing files")?.iter()
         .map(|(p, c)| c.as_str().map(|c| (p.clone(), c.as_bytes().to_vec())).ok_or_else(|| format!("files[{p}] is not a string")))
         .collect::<Res<Vec<_>>>()?;
@@ -693,6 +718,341 @@ fn publish_commit(home: &Home, req: &PublishRequest) -> Res<(String, bool)> {
     Ok((oid.to_string(), false))
 }
 
+// ---- definition branches (chaosD6-Skills / -Effects / -Classes, POST /publish mode "definition") ----
+
+/// index.json[key][id] = sha256, as game/editor-publish.mjs commitGit rewrites the manifest.
+struct ManifestUpdate {
+    key: String,
+    id: String,
+    sha256: String,
+}
+
+/// One new definition (game/editor-publish.mjs publishBridge) on a players/ branch.
+struct DefinitionRequest {
+    rid: String,
+    /// refs/heads/players/<team-slug>/<slug>.
+    git_ref: String,
+    /// The canonical branch the definition builds on (refs/heads/main).
+    base: String,
+    /// <subdir>/<id>.json → exact file bytes.
+    files: Vec<(String, Vec<u8>)>,
+    manifest: Option<ManifestUpdate>,
+    name: String,
+    email: String,
+    timestamp: i64,
+    /// Subject, body and trailers, verbatim (`git commit-tree -F -` does no cleanup either).
+    message: String,
+    /// Delegate seed to fetch the repo from when it isn't local yet.
+    seed: String,
+}
+
+fn parse_definition(v: &serde_json::Value) -> Res<DefinitionRequest> {
+    use serde_json::Value;
+    let s = |k: &str| v[k].as_str().map(str::to_string).ok_or_else(|| format!("missing {k}"));
+    let files = v["files"].as_object().ok_or("missing files")?.iter()
+        .map(|(p, c)| c.as_str().map(|c| (p.clone(), c.as_bytes().to_vec())).ok_or_else(|| format!("files[{p}] is not a string")))
+        .collect::<Res<Vec<_>>>()?;
+    match &v["remove"] {
+        Value::Null => {}
+        Value::Array(a) if a.is_empty() => {}
+        _ => return Err("a definition publish removes nothing (remove must be empty)".into()),
+    }
+    let manifest = match &v["manifest"] {
+        Value::Null => None,
+        m @ Value::Object(_) => {
+            let f = |k: &str| m[k].as_str().map(str::to_string).ok_or_else(|| format!("missing manifest.{k}"));
+            if m["file"].as_str().unwrap_or(DEFS_MANIFEST) != DEFS_MANIFEST {
+                return Err(format!("manifest.file must be {DEFS_MANIFEST}"));
+            }
+            Some(ManifestUpdate { key: f("key")?, id: f("id")?, sha256: f("sha256")? })
+        }
+        _ => return Err("manifest must be an object".into()),
+    };
+    Ok(DefinitionRequest {
+        rid: s("rid")?,
+        git_ref: s("ref")?,
+        base: s("base")?,
+        files,
+        manifest,
+        name: s("name")?,
+        email: s("email")?,
+        timestamp: v["timestamp"].as_i64().ok_or("missing timestamp")?,
+        message: s("message")?,
+        seed: s("seed")?,
+    })
+}
+
+/// ^refs/heads/players/[A-Za-z0-9][A-Za-z0-9_-]{0,39}/[a-z0-9][a-z0-9-]{0,63}$
+fn players_ref_ok(git_ref: &str) -> bool {
+    let Some((team, slug)) = git_ref.strip_prefix(PLAYERS_REF_PREFIX).and_then(|r| r.split_once('/')) else { return false };
+    let (t, s) = (team.as_bytes(), slug.as_bytes());
+    (1..=40).contains(&t.len()) && t[0].is_ascii_alphanumeric() && t.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'_' || *c == b'-')
+        && (1..=64).contains(&s.len()) && (s[0].is_ascii_lowercase() || s[0].is_ascii_digit())
+        && s.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+}
+
+/// A canonical branch to build on: refs/heads/<name>, never a players/ branch.
+fn base_ref_ok(base: &str) -> bool {
+    base.strip_prefix("refs/heads/").is_some_and(|n| !n.is_empty() && !n.starts_with("players/")) && git2::Reference::is_valid_name(base)
+}
+
+/// <skills|effects|classes>/<name>.json, one level deep.
+fn def_path_ok(p: &str) -> bool {
+    let Some((dir, file)) = p.split_once('/') else { return false };
+    check_rel_path(p).is_ok() && DEFS_DIRS.contains(&dir) && file.len() > 5 && file.ends_with(".json") && !file.starts_with('.')
+        && file.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'-' | b'.'))
+}
+
+fn check_definition(req: &DefinitionRequest) -> Res<()> {
+    if !players_ref_ok(&req.git_ref) {
+        return Err(format!("refusing {} (a definition goes on refs/heads/players/<team>/<slug>)", req.git_ref));
+    }
+    if !base_ref_ok(&req.base) {
+        return Err(format!("refusing base {}", req.base));
+    }
+    if req.files.is_empty() || req.files.len() > DEFS_MAX_FILES {
+        return Err(format!("a definition publish holds 1..={DEFS_MAX_FILES} files"));
+    }
+    for (p, content) in &req.files {
+        let manifest_file = p == DEFS_MANIFEST && req.manifest.is_none();
+        if !manifest_file && !def_path_ok(p) {
+            return Err(format!("path {p:?} is outside {}/<id>.json", DEFS_DIRS.join("|")));
+        }
+        if content.len() > DEFS_FILE_MAX {
+            return Err(format!("{p} is larger than {DEFS_FILE_MAX} bytes"));
+        }
+    }
+    if let Some(m) = &req.manifest {
+        let id_ok = (1..=80).contains(&m.id.len()) && m.id.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_');
+        let sha_ok = m.sha256.len() == 64 && m.sha256.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c));
+        if !DEFS_DIRS.contains(&m.key.as_str()) || !id_ok || !sha_ok {
+            return Err(format!("bad manifest entry {}[{}] = {}", m.key, m.id, m.sha256));
+        }
+        let file = format!("{}/{}.json", m.key, m.id);
+        if !req.files.iter().any(|(p, _)| *p == file) {
+            return Err(format!("manifest entry {}[{}] without {file}", m.key, m.id));
+        }
+    }
+    Ok(())
+}
+
+// JSON.stringify(value, null, 2) of node/V8, byte for byte, for what JSON.parse can return.
+
+/// A canonical array index ("0", "17"; < 2^32-1): JS objects list those first, ascending.
+fn js_array_index(k: &str) -> Option<u32> {
+    if k.is_empty() || (k.len() > 1 && k.starts_with('0')) || !k.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    k.parse::<u32>().ok().filter(|n| *n != u32::MAX)
+}
+
+/// Number.prototype.toString: shortest round-trip digits, exponent outside 1e-7 < |x| < 1e21.
+fn js_number(n: &serde_json::Number) -> String {
+    const SAFE: u64 = 1 << 53;
+    if let Some(u) = n.as_u64() && u <= SAFE {
+        return u.to_string();
+    }
+    if let Some(i) = n.as_i64() && i.unsigned_abs() <= SAFE {
+        return i.to_string();
+    }
+    let f = n.as_f64().unwrap_or(0.0);
+    if f == 0.0 {
+        return "0".into();
+    }
+    let e = format!("{f:e}");
+    let exp: i32 = e.rsplit_once('e').and_then(|(_, x)| x.parse().ok()).unwrap_or(0);
+    if (-6..21).contains(&exp) {
+        format!("{f}")
+    } else if exp > 0 {
+        e.replace('e', "e+")
+    } else {
+        e
+    }
+}
+
+fn js_write(out: &mut String, v: &serde_json::Value, depth: usize) {
+    use serde_json::Value;
+    let pad = |out: &mut String, d: usize| out.extend(std::iter::repeat_n("  ", d));
+    match v {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::Number(n) => out.push_str(&js_number(n)),
+        // serde_json escapes exactly JSON.stringify's set: " \ \b \f \n \r \t, other C0 as \u00xx.
+        Value::String(s) => out.push_str(&serde_json::to_string(s).expect("string")),
+        Value::Array(a) if a.is_empty() => out.push_str("[]"),
+        Value::Object(o) if o.is_empty() => out.push_str("{}"),
+        Value::Array(a) => {
+            out.push('[');
+            for (i, x) in a.iter().enumerate() {
+                out.push_str(if i == 0 { "\n" } else { ",\n" });
+                pad(out, depth + 1);
+                js_write(out, x, depth + 1);
+            }
+            out.push('\n');
+            pad(out, depth);
+            out.push(']');
+        }
+        Value::Object(o) => {
+            let mut idx: Vec<(u32, &String, &Value)> = o.iter().filter_map(|(k, x)| js_array_index(k).map(|n| (n, k, x))).collect();
+            idx.sort_by_key(|(n, ..)| *n);
+            let named = o.iter().filter(|(k, _)| js_array_index(k).is_none());
+            out.push('{');
+            for (i, (k, x)) in idx.into_iter().map(|(_, k, x)| (k, x)).chain(named).enumerate() {
+                out.push_str(if i == 0 { "\n" } else { ",\n" });
+                pad(out, depth + 1);
+                out.push_str(&serde_json::to_string(k).expect("key"));
+                out.push_str(": ");
+                js_write(out, x, depth + 1);
+            }
+            out.push('\n');
+            pad(out, depth);
+            out.push('}');
+        }
+    }
+}
+
+fn js_pretty(v: &serde_json::Value) -> String {
+    let mut out = String::new();
+    js_write(&mut out, v, 0);
+    out
+}
+
+/// commitGit's manifest rewrite: `manifest[key] = sorted({ ...manifest[key], [id]: sha256 })`, the rest of index.json
+/// kept in order, written as JSON.stringify(manifest, null, 2) + "\n". None (index.json left alone) when the old text
+/// is not JSON or not an object/array — exactly when the desktop skips it. A non-object manifest[key] counts as {}.
+fn manifest_update(old: &[u8], m: &ManifestUpdate) -> Option<Vec<u8>> {
+    use serde_json::{Map, Value};
+    let mut v: Value = serde_json::from_slice(old).ok()?;
+    match &mut v {
+        Value::Object(o) => {
+            let mut map = match o.get(&m.key) {
+                Some(Value::Object(x)) => x.clone(),
+                _ => Map::new(),
+            };
+            map.insert(m.id.clone(), Value::String(m.sha256.clone()));
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));   // Array.prototype.sort on strings
+            let sorted: Map<String, Value> = keys.into_iter().map(|k| (k.clone(), map[k].clone())).collect();
+            o.insert(m.key.clone(), Value::Object(sorted));
+        }
+        // JSON.stringify drops the named property set on an array: the array is only re-printed.
+        Value::Array(_) => {}
+        _ => return None,
+    }
+    Some(format!("{}\n", js_pretty(&v)).into_bytes())
+}
+
+/// What git does to GIT_AUTHOR_NAME / _EMAIL (ident.c strbuf_addstr_without_crud): trim "crud" at both ends, drop
+/// '\n' '<' '>' inside.
+fn git_ident(s: &str) -> String {
+    let crud = |c: char| (c as u32) <= 32 || ".,:;<>\"\\'".contains(c);
+    s.trim_matches(crud).chars().filter(|c| !matches!(c, '\n' | '<' | '>')).collect()
+}
+
+/// The commit commitGit (game/editor-publish.mjs) makes: tree = `main`'s tree + `files` + the manifest rewrite;
+/// parent = `tip` (+ `main` when main is not in tip's history), else `main`; author = committer = name/email at
+/// timestamp +0000. `tip` whose tree already is that tree → (tip, true): no empty commit.
+fn definition_tree_commit(raw: &git2::Repository, main: git2::Oid, tip: Option<&git2::Commit>, req: &DefinitionRequest) -> Res<(git2::Oid, bool)> {
+    let main_c = raw.find_commit(main).map_err(err)?;
+    let main_tree = main_c.tree().map_err(err)?;
+    let mut files = req.files.clone();
+    if let Some(m) = &req.manifest {
+        let old = main_tree.get_path(Path::new(DEFS_MANIFEST)).ok()
+            .filter(|e| e.kind() == Some(git2::ObjectType::Blob))
+            .and_then(|e| raw.find_blob(e.id()).ok())
+            .map(|b| b.content().to_vec());
+        if let Some(text) = old.and_then(|o| manifest_update(&o, m)) {
+            files.retain(|(p, _)| p != DEFS_MANIFEST);
+            files.push((DEFS_MANIFEST.to_string(), text));
+        }
+    }
+    let tree_id = build_tree(raw, Some(main_tree.id()), "", None, &[], &files)?;
+    if let Some(t) = tip && t.tree_id() == tree_id {
+        return Ok((t.id(), true));
+    }
+    let mut parents: Vec<git2::Commit> = Vec::new();
+    match tip {
+        Some(t) => {
+            parents.push(t.clone());
+            if t.id() != main && !raw.graph_descendant_of(t.id(), main).map_err(err)? {
+                parents.push(main_c.clone());
+            }
+        }
+        None => parents.push(main_c.clone()),
+    }
+    let sig = git2::Signature::new(&git_ident(&req.name), &git_ident(&req.email), &git2::Time::new(req.timestamp, 0)).map_err(err)?;
+    let tree = raw.find_tree(tree_id).map_err(err)?;
+    let refs: Vec<&git2::Commit> = parents.iter().collect();
+    let oid = raw.commit(None, &sig, &sig, &req.message, &tree, &refs).map_err(err)?;
+    Ok((oid, false))
+}
+
+/// `base` in local storage: the canonical ref the node keeps (what `git fetch rad://<rid> main` reads on a desktop),
+/// else — not written yet — the delegates' quorum for the identity's default branch.
+fn base_oid(repo: &radicle::storage::git::Repository, base: &str) -> Res<Option<git2::Oid>> {
+    match repo.backend.refname_to_id(base) {
+        Ok(oid) => return Ok(Some(oid)),
+        Err(e) if e.code() == git2::ErrorCode::NotFound => {}
+        Err(e) => return Err(err(e)),
+    }
+    Ok(match repo.canonical_head() {
+        Ok((name, oid)) if name.as_str() == base => Some(oid.into()),
+        _ => None,
+    })
+}
+
+/// Commit `req` on `req.git_ref` in our own namespace (see definition_tree_commit), sign refs, announce (also when
+/// unchanged, so a retry re-announces). Returns (oid, unchanged).
+fn definition_commit(home: &Home, req: &DefinitionRequest) -> Res<(String, bool)> {
+    check_definition(req)?;
+    let rid = rid(&req.rid)?;
+    if !home.policies_mut().map_err(err)?.is_seeding(&rid).map_err(err)? {
+        return Err(format!("{rid} is not seeded by this node (RadicleBoot.gd seeds chaosD6-Skills / -Effects / -Classes)"));
+    }
+    let signer = signing_key(home)?;
+    let me = NodeId::from(*signer.public_key());
+    let config = Config::load(&home.config()).map_err(err)?;
+    let storage = Storage::open(home.storage(), UserInfo { alias: config.node.alias.clone(), key: me }).map_err(err)?;
+    let mut node = Node::new(home.socket_from_env());
+
+    let main_of = |s: &Storage| -> Res<Option<git2::Oid>> {
+        if !s.contains(&rid).map_err(err)? {
+            return Ok(None);
+        }
+        base_oid(&s.repository(rid).map_err(err)?, &req.base)
+    };
+    let main = match main_of(&storage)? {
+        Some(m) => m,
+        None => {
+            // Not replicated yet: the same fetch as the snapshot / save paths, then look again.
+            let from = NodeId::from_str(&req.seed).map_err(err)?;
+            if let FetchResult::Failed { reason } = node.fetch(rid, from, Duration::from_secs(45), None).map_err(err)? {
+                return Err(format!("cannot read {} of {rid}: fetch from {from}: {reason}", req.base));
+            }
+            main_of(&storage)?.ok_or_else(|| format!("cannot read {} of {rid} (not replicated from {from} yet)", req.base))?
+        }
+    };
+
+    let repo = storage.repository_mut(rid).map_err(err)?;
+    let raw = &repo.backend;
+    let nsref = format!("refs/namespaces/{me}/{}", req.git_ref);
+    let tip = match raw.find_reference(&nsref) {
+        Ok(r) => Some(r.peel_to_commit().map_err(err)?),
+        Err(e) if e.code() == git2::ErrorCode::NotFound => None,
+        Err(e) => return Err(err(e)),
+    };
+    let (oid, unchanged) = definition_tree_commit(raw, main, tip.as_ref(), req)?;
+    if !unchanged {
+        raw.reference(&nsref, oid, true, "chaosD6 definition publish").map_err(err)?;
+        repo.sign_refs(&signer).map_err(err)?;
+    }
+    if let Err(e) = node.announce_refs_for(rid, [me]) {
+        log::warn!(target: "node", "announce {rid} after definition publish: {e}");
+    }
+    log::info!(target: "node", "definition {} → {oid}{} (main {main})", req.git_ref, if unchanged { " (unchanged)" } else { "" });
+    Ok((oid.to_string(), unchanged))
+}
+
 // ---- JNI glue: io.chaosd6.radicle.RadicleNative ----
 
 fn jstr(env: &mut JNIEnv, s: &JString) -> Res<String> {
@@ -862,5 +1222,171 @@ mod tests {
         let over = build_tree(&raw, Some(next), keep, None, &[], &[f("ActiveDimensions/Moon/x.json/inner", "i")]).unwrap();
         assert!(paths(&raw, over).contains(&"ActiveDimensions/Moon/x.json/inner=i".to_string()));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    const SHA_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const SHA_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    fn def_req(files: &[(&str, &str)], manifest: Option<(&str, &str, &str)>) -> DefinitionRequest {
+        DefinitionRequest {
+            rid: "rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5".into(),
+            git_ref: "refs/heads/players/Gold-Team/ice-wall".into(),
+            base: "refs/heads/main".into(),
+            files: files.iter().map(|(p, c)| (p.to_string(), c.as_bytes().to_vec())).collect(),
+            manifest: manifest.map(|(key, id, sha)| ManifestUpdate { key: key.into(), id: id.into(), sha256: sha.into() }),
+            name: "Gold Team".into(),
+            email: "z6Mkexample@chaosd6".into(),
+            timestamp: 1_790_000_000,
+            message: "skill_ice_wall 0.1.0: Ice Wall\n\nChaosd6-Author: z6Mkexample\n".into(),
+            seed: "z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT".into(),
+        }
+    }
+
+    #[test]
+    fn definition_refs_and_paths() {
+        for ok in ["refs/heads/players/Gold-Team/ice-wall", "refs/heads/players/a/b", "refs/heads/players/T_1/9-x",
+            &format!("refs/heads/players/{}/{}", "A".repeat(40), "a".repeat(64))] {
+            assert!(players_ref_ok(ok), "{ok}");
+        }
+        for bad in ["refs/heads/main", "refs/heads/players/", "refs/heads/players/Gold", "refs/heads/players/Gold/", "refs/heads/players//x",
+            "refs/heads/players/-Gold/x", "refs/heads/players/Gold/Ice", "refs/heads/players/Gold/-x", "refs/heads/players/Gold/a/b",
+            "refs/heads/players/Go.ld/x", "refs/heads/players/Gold/x.lock", "refs/heads/players/Gold/a_b", "refs/heads/teams/Gold",
+            "refs/heads/votes/x/y", &format!("refs/heads/players/{}/x", "A".repeat(41)), &format!("refs/heads/players/a/{}", "a".repeat(65))] {
+            assert!(!players_ref_ok(bad), "{bad}");
+        }
+        assert!(base_ref_ok("refs/heads/main"));
+        for bad in ["refs/heads/", "refs/heads/players/a/b", "main", "refs/tags/v1", "refs/heads/a..b"] {
+            assert!(!base_ref_ok(bad), "{bad}");
+        }
+        for ok in ["skills/skill_ice_wall.json", "effects/effect_x.json", "classes/class_y-1.json"] {
+            assert!(def_path_ok(ok), "{ok}");
+        }
+        for bad in ["lib/x.json", "skills/a/b.json", "skills/.json", "skills/x.txt", "skills/../index.json", "README.md", "skills/", "index.json",
+            "/skills/x.json", "skills/.hidden.json", "skills/a b.json"] {
+            assert!(!def_path_ok(bad), "{bad}");
+        }
+
+        let good = def_req(&[("skills/skill_ice_wall.json", "{}\n")], Some(("skills", "skill_ice_wall", SHA_A)));
+        assert!(check_definition(&good).is_ok());
+        let refused = |r: DefinitionRequest| check_definition(&r).is_err();
+        assert!(refused(DefinitionRequest { git_ref: "refs/heads/main".into(), ..def_req(&[("skills/a.json", "1")], None) }));
+        assert!(refused(DefinitionRequest { base: "refs/heads/players/x/y".into(), ..def_req(&[("skills/a.json", "1")], None) }));
+        assert!(refused(def_req(&[], None)));
+        assert!(refused(def_req(&[("lib/a.json", "1")], None)));
+        assert!(refused(def_req(&[("README.md", "1")], None)));
+        assert!(refused(def_req(&[("skills/skill_ice_wall.json", "{}"), ("index.json", "{}")], Some(("skills", "skill_ice_wall", SHA_A)))));
+        assert!(!refused(def_req(&[("skills/a.json", "1"), ("index.json", "{}")], None)));
+        assert!(refused(def_req(&[("skills/skill_ice_wall.json", "{}")], Some(("lib", "skill_ice_wall", SHA_A)))));
+        assert!(refused(def_req(&[("skills/skill_ice_wall.json", "{}")], Some(("skills", "skill_ice_wall", "abc")))));
+        assert!(refused(def_req(&[("skills/skill_ice_wall.json", "{}")], Some(("skills", "Skill_Ice", SHA_A)))));
+        assert!(refused(def_req(&[("skills/other.json", "{}")], Some(("skills", "skill_ice_wall", SHA_A)))));
+        let big = "x".repeat(DEFS_FILE_MAX + 1);
+        assert!(refused(def_req(&[("skills/a.json", &big)], None)));
+        let many: Vec<(String, &str)> = (0..=DEFS_MAX_FILES).map(|i| (format!("skills/a{i}.json"), "1")).collect();
+        assert!(refused(def_req(&many.iter().map(|(p, c)| (p.as_str(), *c)).collect::<Vec<_>>(), None)));
+
+        // The request shape game/editor-publish.mjs publishBridge sends.
+        let body = serde_json::json!({ "rid": "rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5", "ref": "refs/heads/players/Gold-Team/ice-wall",
+            "mode": "definition", "base": "refs/heads/main", "files": { "skills/skill_ice_wall.json": "{}\n" }, "remove": [],
+            "manifest": { "file": "index.json", "key": "skills", "id": "skill_ice_wall", "sha256": SHA_A },
+            "name": "Gold Team", "email": "z6Mk@chaosd6", "timestamp": 1_790_000_000, "message": "m\n", "seed": "z6Mk" });
+        let r = parse_definition(&body).unwrap();
+        assert_eq!((r.files.len(), r.manifest.as_ref().unwrap().id.as_str(), r.timestamp), (1, "skill_ice_wall", 1_790_000_000));
+        let mut b2 = body.clone();
+        b2["remove"] = serde_json::json!(["skills/x.json"]);
+        assert!(parse_definition(&b2).is_err());
+        b2["remove"] = serde_json::json!([]);
+        b2["manifest"]["file"] = "other.json".into();
+        assert!(parse_definition(&b2).is_err());
+    }
+
+    #[test]
+    fn js_stringify() {
+        // Expected strings are node's JSON.stringify(JSON.parse(text), null, 2).
+        let p = |t: &str| js_pretty(&serde_json::from_str(t).unwrap());
+        assert_eq!(p(r#"{"b":1,"a":[],"c":{},"d":[1,"x",null,true]}"#), "{\n  \"b\": 1,\n  \"a\": [],\n  \"c\": {},\n  \"d\": [\n    1,\n    \"x\",\n    null,\n    true\n  ]\n}");
+        assert_eq!(p(r#"{"z":0,"10":1,"2":2,"01":3,"a":4}"#), "{\n  \"2\": 2,\n  \"10\": 1,\n  \"z\": 0,\n  \"01\": 3,\n  \"a\": 4\n}");
+        assert_eq!(p(r#"["\u0001\"\\\n\t/é\u2028"]"#), "[\n  \"\\u0001\\\"\\\\\\n\\t/é\u{2028}\"\n]");
+        assert_eq!(p("[1.0, -0.0, 0.1, 1.5e-7, 1e-6, 1e21, 123456789012345678901, 2.5e300, -3, 9007199254740993]"),
+            "[\n  1,\n  0,\n  0.1,\n  1.5e-7,\n  0.000001,\n  1e+21,\n  123456789012345680000,\n  2.5e+300,\n  -3,\n  9007199254740992\n]");
+    }
+
+    #[test]
+    fn manifest_rewrite() {
+        let m = ManifestUpdate { key: "skills".into(), id: "skill_ice_wall".into(), sha256: SHA_A.into() };
+        let old = format!("{{\n  \"format\": 1,\n  \"hash\": \"sha256(canonical-json)\",\n  \"skills\": {{\n    \"skill_zap\": \"{SHA_B}\",\n    \"skill_dodge\": \"{SHA_B}\"\n  }},\n  \"lib\": {{\n    \"b\": \"1\",\n    \"a\": \"2\"\n  }}\n}}\n");
+        let new = String::from_utf8(manifest_update(old.as_bytes(), &m).unwrap()).unwrap();
+        assert_eq!(new, format!("{{\n  \"format\": 1,\n  \"hash\": \"sha256(canonical-json)\",\n  \"skills\": {{\n    \"skill_dodge\": \"{SHA_B}\",\n    \"skill_ice_wall\": \"{SHA_A}\",\n    \"skill_zap\": \"{SHA_B}\"\n  }},\n  \"lib\": {{\n    \"b\": \"1\",\n    \"a\": \"2\"\n  }}\n}}\n"));
+        // Missing map → appended at the end; existing id → overwritten.
+        let new = String::from_utf8(manifest_update(b"{\"format\":1}", &m).unwrap()).unwrap();
+        assert_eq!(new, format!("{{\n  \"format\": 1,\n  \"skills\": {{\n    \"skill_ice_wall\": \"{SHA_A}\"\n  }}\n}}\n"));
+        let again = String::from_utf8(manifest_update(new.as_bytes(), &ManifestUpdate { sha256: SHA_B.into(), ..m }).unwrap()).unwrap();
+        assert!(again.contains(SHA_B) && !again.contains(SHA_A));
+        let m = ManifestUpdate { key: "skills".into(), id: "skill_ice_wall".into(), sha256: SHA_A.into() };
+        for skip in ["not json", "null", "3", "\"s\""] {
+            assert!(manifest_update(skip.as_bytes(), &m).is_none(), "{skip}");
+        }
+        assert_eq!(manifest_update(b"[1]", &m).unwrap(), b"[\n  1\n]\n");
+        assert_eq!(git_ident(" Gold Team. "), "Gold Team");
+        assert_eq!(git_ident("a<b>c"), "abc");
+    }
+
+    #[test]
+    fn definition_commits() {
+        let dir = std::env::temp_dir().join(format!("ffi-defs-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        let raw = git2::Repository::init_bare(&dir).unwrap();
+        let f = |p: &str, c: &str| (p.to_string(), c.as_bytes().to_vec());
+        let main_tree = build_tree(&raw, None, "", None, &[], &[f("README.md", "r"), f("skills/skill_dodge.json", "{}\n"),
+            f("lib/x.json", "{}\n"), f("index.json", &format!("{{\"format\":1,\"skills\":{{\"skill_dodge\":\"{SHA_B}\"}}}}"))]).unwrap();
+        let seed = git2::Signature::new("seed", "seed@x", &git2::Time::new(1, 0)).unwrap();
+        let main = raw.commit(None, &seed, &seed, "main\n", &raw.find_tree(main_tree).unwrap(), &[]).unwrap();
+
+        let req = def_req(&[("skills/skill_ice_wall.json", "{\n  \"id\": \"skill_ice_wall\"\n}\n")], Some(("skills", "skill_ice_wall", SHA_A)));
+        let (c1, unchanged) = definition_tree_commit(&raw, main, None, &req).unwrap();
+        assert!(!unchanged);
+        let c1c = raw.find_commit(c1).unwrap();
+        assert_eq!(c1c.parent_ids().collect::<Vec<_>>(), [main]);
+        assert_eq!(paths(&raw, c1c.tree_id()), ["README.md=r", &format!("index.json={{\n  \"format\": 1,\n  \"skills\": {{\n    \"skill_dodge\": \"{SHA_B}\",\n    \"skill_ice_wall\": \"{SHA_A}\"\n  }}\n}}\n"),
+            "lib/x.json={}\n", "skills/skill_dodge.json={}\n", "skills/skill_ice_wall.json={\n  \"id\": \"skill_ice_wall\"\n}\n"]);
+        assert_eq!((c1c.author().name().ok(), c1c.author().email().ok(), c1c.author().when().seconds(), c1c.author().when().offset_minutes()),
+            (Some("Gold Team"), Some("z6Mkexample@chaosd6"), 1_790_000_000, 0));
+        assert_eq!(c1c.committer().name().ok(), Some("Gold Team"));
+        assert_eq!(c1c.message_bytes(), req.message.as_bytes());
+        // Same inputs → same oid (deterministic), and on top of an equal tip → unchanged.
+        assert_eq!(definition_tree_commit(&raw, main, None, &req).unwrap(), (c1, false));
+        assert_eq!(definition_tree_commit(&raw, main, Some(&c1c), &req).unwrap(), (c1, true));
+        // New version → fast-forward on the tip only.
+        let req2 = def_req(&[("skills/skill_ice_wall.json", "{\n  \"v\": 2\n}\n")], Some(("skills", "skill_ice_wall", SHA_B)));
+        let (c2, _) = definition_tree_commit(&raw, main, Some(&c1c), &req2).unwrap();
+        assert_eq!(raw.find_commit(c2).unwrap().parent_ids().collect::<Vec<_>>(), [c1]);
+        // main moved → second parent main, tree built on the new main.
+        let main2_tree = build_tree(&raw, Some(main_tree), "", None, &[], &[f("skills/skill_new.json", "n")]).unwrap();
+        let main2 = raw.commit(None, &seed, &seed, "main 2\n", &raw.find_tree(main2_tree).unwrap(), &[&raw.find_commit(main).unwrap()]).unwrap();
+        let (c3, _) = definition_tree_commit(&raw, main2, Some(&c1c), &req2).unwrap();
+        let c3c = raw.find_commit(c3).unwrap();
+        assert_eq!(c3c.parent_ids().collect::<Vec<_>>(), [c1, main2]);
+        assert!(paths(&raw, c3c.tree_id()).contains(&"skills/skill_new.json=n".to_string()));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// game/editor-publish.mjs commitGit (desktop git) and this node must give the same commit for the same
+    /// definition. CHAOSD6_DEFS_CROSS = a JSON file written by a JS harness: { gitdir (bare repo holding main + the
+    /// desktop commits), cases: [ { body (the bridge request publishBridge sent), main, tip|null, expect (desktop oid) } ] }.
+    #[test]
+    fn definition_matches_desktop_git() {
+        let Ok(file) = std::env::var("CHAOSD6_DEFS_CROSS") else { return };
+        let x: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        let raw = git2::Repository::open_bare(x["gitdir"].as_str().unwrap()).unwrap();
+        let cases = x["cases"].as_array().unwrap();
+        assert!(!cases.is_empty());
+        for c in cases {
+            let req = parse_definition(&c["body"]).unwrap();
+            check_definition(&req).unwrap();
+            let main = git2::Oid::from_str(c["main"].as_str().unwrap()).unwrap();
+            let tip = c["tip"].as_str().map(|t| raw.find_commit(git2::Oid::from_str(t).unwrap()).unwrap());
+            let (oid, _) = definition_tree_commit(&raw, main, tip.as_ref(), &req).unwrap();
+            assert_eq!(oid.to_string(), c["expect"].as_str().unwrap(), "{}", req.git_ref);
+        }
     }
 }

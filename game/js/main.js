@@ -20,7 +20,7 @@ onFeaturesChanged(clearBuildingBonusMemo); onBigFeaturesChanged(clearBuildingBon
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf, skillInfo, setSkillUi as setCardSkillUi } from './skill_card.js';
-import { effectSourceBadge, sourceEpoch, setEffectSource, refText, refId, sourceMark, DEV_FIXTURE } from './effect_source.js';
+import { effectSourceBadge, sourceEpoch, setEffectSource, refText, refId, sourceMark, DEV_FIXTURE, votedLow } from './effect_source.js';
 import { pvInit, pvSeen, pvOnMessage } from './proposal_vote_ui.js';   // PV: proposal votes on foreign (player-branch) cards
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
@@ -2339,7 +2339,7 @@ function renderPerms() {
       : fxUi(p.id).possess ? possessPermLine()
       : p.die ? `⚄${p.die}` : 'perm';
     const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
-    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${fxUi(p.id).summon ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}${votedLow(p.id) ? ' voted-low' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${fxUi(p.id).summon ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div></div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;

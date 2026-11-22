@@ -42,6 +42,7 @@ import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tile
 import { seedForDimension } from './js/map.js';
 import { randomBytes } from 'node:crypto';
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
+import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API), launcher only
 import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
 
 const pexec = promisify(execFile);
@@ -1110,6 +1111,7 @@ ${body.trim() ? `<pre>${esc(body)}</pre>` : ''}
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = decodeURIComponent(url.pathname);
+  if (LAUNCHER_MODE && await handleEditorRequest(req, res, url, { repoRoot: path.resolve(__dirname, '..'), dataDir: DATA_DIR, gameDir: __dirname, profileFile: profilePath(), port: PORT })) return;
   const serve = async (abs, cache = 'no-store') => {
     try { const b = await fs.readFile(abs); res.writeHead(200, { 'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream', 'Cache-Control': cache }); res.end(b); }
     catch { res.writeHead(404); res.end('not found'); }

@@ -41,6 +41,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleProfileApi, profilePath, loadProfile, characterOf, teamCharacters, topCharacter } from './profile.mjs';
+import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API)
 
 const SEED_HOST = () => process.env.RADICLE_SEED_HOST || '92-5-138-121.sslip.io';
 const DIMS_RID = () => process.env.RADICLE_DIMS_RID || 'rad:z2xbfJfwT3kukR73m8LXmmuvchEwr';
@@ -474,6 +475,7 @@ export async function runMenu({ port, dataDir, assetsDir = '', gameDir, userData
     let u;
     try { u = decodeURIComponent((req.url || '/').split('?')[0]); } catch { res.writeHead(400); res.end(); return; }
     try {
+      if (await handleEditorRequest(req, res, req.url || '/', { repoRoot: path.resolve(gameDir, '..'), dataDir, gameDir, profileFile: file, port })) return;
       if (u.startsWith('/api/')) {
         if (await handleProfileApi(req, res, u, { file, dataDir })) return;
         if (u === '/api/dimensions' && req.method === 'GET') {

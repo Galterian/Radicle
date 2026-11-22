@@ -25,7 +25,10 @@ radicle-log = { workspace = true }
 # phone. A path dep because `workspace = true` can't turn default features off.
 radicle-node = { path = "../radicle-node", default-features = false, features = ["socket2"] }
 radicle-signals = { workspace = true }
-serde_json = { workspace = true }
+# preserve_order: a definition publish rewrites index.json keeping its key order (as JSON.parse/stringify do);
+# radicle and radicle-node already turn it on. float_roundtrip: parse numbers exactly as JSON.parse does (no new crates,
+# Cargo.lock does not change).
+serde_json = { workspace = true, features = ["preserve_order", "float_roundtrip"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"

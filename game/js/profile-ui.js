@@ -5,6 +5,7 @@
 //   Edit a character profile <character> | Create New character
 //   Test my team <count> <tier> | Edit order
 //   Create Dimension <name> | Load old Dimension <saved>
+//   Open rules editor [New skill | New effect | New class] | sign-in status (GET /rules/api/editor/session)
 // then a Dimensions list (user ruling 2026-11-15): per dimension "⚑ New Door · Join top character" / "⚑ Join my
 // team" (30–50 hexes from a Door — a stale one in a quiet dimension), one chip per Door with its exact map share
 // (⬡ % of the dimension's known hexes, "mine %" of my saved copy), and the alive units the Doors know
@@ -291,7 +292,8 @@ export const assetUrl = (p) => p ? `/${String(p).replace(/\\/g, '/').replace(/^\
 // DOM
 const S = { profile: null, limits: DEFAULT_LIMITS, catalog: null, error: null, busy: false, body: null, sync: null,
   // Dimensions section: GET /api/dimensions items (null = loading), its error, "show more"; saved dims (GET /api/dimensions/local).
-  dims: null, dimsError: null, dimsAll: false, dimsLoading: false, local: [], dimName: null, teamCount: null, teamTier: 'strong' };
+  dims: null, dimsError: null, dimsAll: false, dimsLoading: false, local: [], dimName: null, teamCount: null, teamTier: 'strong',
+  editor: undefined };   // GET /rules/api/editor/session (undefined = checking, null = unavailable)
 const DIMS_SHOWN = 10, DOORS_SHOWN = 8, UNITS_SHOWN = 10;
 
 function h(tag, props = {}, ...kids) {
@@ -559,10 +561,15 @@ function renderPanel() {
         launchProfile(launchBody.restore(it.path), `loading ${it.dim_name || it.dim_id}`);
       }, { disabled: !saved.length, class: 'pp-btn pp-alt', title: saved.length ? 'continue a dimension saved on this device' : 'no saved dimensions on this device yet' }),
       loadSel));
+  // 5. Open rules editor [New skill | effect | class] | sign-in status — the node's own /rules/ (EDITOR_SPEC ruling 1).
+  row(btn('Open rules editor', () => openRulesEditor(), { title: 'browse the rules, skills, effects and classes; editable with your team identity' }),
+    [h('div', { id: 'pp-ed-ctl', class: 'pp-seg' })],
+    h('span', { id: 'pp-ed-side', class: 'pp-ed-side' }));
   root.append(grid);
   root.append(h('div', { id: 'pp-msg', class: 'pp-msg' }));
   root.append(h('div', { id: 'pp-dims', class: 'pp-dims' }));
   renderDims();
+  renderEditorRow();
   refreshJoinTeamButtons();
 }
 
@@ -780,7 +787,7 @@ function renderSync() {
   // No team yet (or the name is taken by other keys): name it here; the first sync claims teams/<slug>.
   if (st.state === 'no-team' || st.state === 'awaiting-approval') {
     const preview = h('span', { class: 'pp-hint' });
-    const nameIn = h('input', { type: 'text', class: 'pp-team-in', maxLength: 30, placeholder: 'team name', value: S.profile?.team_name || '' });
+    const nameIn = h('input', { type: 'text', id: 'pp-team-in', class: 'pp-team-in', maxLength: 30, placeholder: 'team name', value: S.profile?.team_name || '' });
     const upd = () => { const s = teamSlugUI(nameIn.value); preview.textContent = s ? `→ branch teams/${s}` : 'letters or digits needed'; claim.disabled = !s; };
     const claim = h('button', { type: 'button', class: 'pp-btn pp-small', text: st.state === 'no-team' ? 'Save team name' : 'Use this name',
       title: 'saves the team name; the first device to sync it owns the branch (it cannot be deleted)', onclick: () => saveTeamName(nameIn.value) });
@@ -804,12 +811,17 @@ async function saveTeamName(name) {
     S.profile = out.profile || S.profile;
     renderPanel();
     await syncNow();
+    editorLogin();
   } catch (e) { setMsg(e.message, true); }
 }
 async function applySync(st) {
   const moved = S.sync && st && st.oid && st.oid !== S.sync.oid;
   const same = JSON.stringify(st) === JSON.stringify(S.sync);
+  // Team / owners changed (name saved, this device approved, a device added) → the rules editor signs in again.
+  const edKey = (x) => `${x?.state}|${x?.team}|${(x?.owners || []).join(',')}`;
+  const relogin = S.sync && edKey(S.sync) !== edKey(st);
   S.sync = st;
+  if (relogin) editorLogin();
   if (same) return;
   if (moved && !document.getElementById('pe-overlay')) { await reloadProfile().catch(() => {}); renderPanel(); } else renderSync();
 }
@@ -826,6 +838,58 @@ async function approveDevice(r, btn) {
   }
   try { await applySync(await api('POST', '/api/profile/sync/approve', { id: r.id })); setMsg(`approved ${shortDeviceId(r.id)}`); } catch (e) { setMsg(e.message, true); }
 }
+
+// Rules editor (EDITOR_SPEC: game/editor-api.mjs). The team identity IS the device key: signed in = the profile has
+// a team name and this device is one of its owners. Desktop opens /rules/ in a new tab; the phone's menu WebView
+// has no tabs, so it navigates in place (its menu server mounts /rules/ too).
+export const rulesEditorUrl = (kind = null) => `/rules/${kind ? `#/new/${kind}` : ''}`;
+export function editorStatus(ses) {
+  if (!ses) return { text: 'editor unavailable', bad: true };
+  if (ses.logged_in) return { text: `Signed in as ${ses.team?.name || '?'} · ${shortDeviceId(ses.identity?.id)}`, note: 'you can add skills, effects and classes' };
+  if (ses.reason === 'no team') return { text: 'Read-only — set a team name below to sign in', action: 'team' };
+  if (ses.reason === 'not an owner') return { text: "Read-only — waiting for the team owner's approval" };
+  return { text: `Read-only — ${ses.reason || 'not signed in'}` };
+}
+function openRulesEditor(kind = null) {
+  const url = rulesEditorUrl(kind);
+  if (IS_MENU || IS_MOBILE) { location.href = url; return; }
+  if (!window.open(url, '_blank')) location.href = url;   // popup blocked → same tab
+}
+async function editorSession() {
+  try { S.editor = await api('GET', '/rules/api/editor/session'); } catch { S.editor = null; }
+  renderEditorRow();
+}
+async function editorLogin() {
+  if (!S.editor?.token) return editorSession();
+  try {
+    const r = await fetch('/rules/api/editor/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Editor-Token': S.editor.token }, body: '{}' });
+    const out = await r.json();
+    if (!r.ok || out?.ok === false) throw new Error(out?.error || `HTTP ${r.status}`);
+    S.editor = out;
+    renderEditorRow();
+  } catch { await editorSession(); }   // token from an older server start → fetch a fresh session
+}
+const focusTeamInput = () => {
+  const el = document.getElementById('pp-team-in') || document.getElementById('pp-sync');
+  el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  if (el?.tagName === 'INPUT') el.focus();
+};
+function renderEditorRow() {
+  const ctl = document.getElementById('pp-ed-ctl'), side = document.getElementById('pp-ed-side');
+  if (!ctl || !side) return;
+  ctl.innerHTML = ''; side.innerHTML = '';
+  if (S.editor === undefined) { side.append(h('span', { class: 'pp-hint', text: 'editor: checking…' })); return; }
+  const st = editorStatus(S.editor);
+  if (S.editor?.logged_in) {
+    for (const k of S.editor.kinds || ['skill', 'effect', 'class']) {
+      ctl.append(h('button', { type: 'button', class: 'pp-btn pp-small pp-alt', text: `New ${k}`, title: `author a new ${k} on your team branch (validated + rebalancing check)`, onclick: () => openRulesEditor(k) }));
+    }
+  }
+  side.append(h('span', { class: `pp-hint${st.bad ? ' bad' : ''}`, text: st.text, title: S.editor?.identity?.id || undefined }));
+  if (st.note) side.append(h('span', { class: 'pp-hint', text: st.note }));
+  if (st.action === 'team') side.append(h('button', { type: 'button', class: 'pp-btn pp-small', text: 'Set team name', onclick: focusTeamInput }));
+}
+
 let _syncTimer = null;
 function pollSync() {
   clearInterval(_syncTimer);
@@ -845,6 +909,7 @@ export async function initProfilePanel(root) {
   ]);
   renderPanel();
   if (!S.error) pollSync();
+  editorSession();
   loadDims(false);
 }
 

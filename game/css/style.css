@@ -257,6 +257,9 @@ main {
 .slot.queued-extra .card .cd { color: #ffb66e; }
 .slot.disabled { opacity: 0.35; filter: grayscale(0.8); cursor: not-allowed; }
 .slot.disabled:hover { transform: none; border-color: #26303f; }
+/* User ruling 2026-11-22: a player card whose test votes are too low (review flag: 10+ votes, mean ≤ −3) is GREY
+   wherever it shows — hand, archive, class pill, skill cards, perms strip — but still playable (no cursor change). */
+.slot:has(.fx-src-low), .ac:has(.fx-src-low), .pill:has(.fx-src-low), .skill-card:has(.fx-src-low), .perm.voted-low { filter: grayscale(1); opacity: 0.55; }
 .slot.discard { opacity: 0.4; filter: grayscale(0.6); }
 .slot.discard::after {
   content: ''; position: absolute; inset: 0;
@@ -1231,6 +1234,13 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 .profile-panel .pp-side { display: flex; align-items: center; gap: 4px; padding-left: 6px; border-left: 1px solid #2a3c5c; min-width: 0; }
 .profile-panel .pp-pair { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .profile-panel .pp-pair .pp-select { min-width: 0; max-width: 11em; flex: 1 1 auto; }
+/* rules editor row: New skill / effect / class as one segmented group that wraps on the phone; status text wraps. */
+.profile-panel .pp-ctl > .pp-seg { display: flex; flex-wrap: wrap; flex: 1 1 auto; }
+.profile-panel .pp-seg > .pp-btn { border-radius: 0; margin-left: -1px; }
+.profile-panel .pp-seg > .pp-btn:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.profile-panel .pp-seg > .pp-btn:last-child { border-radius: 0 4px 4px 0; }
+.profile-panel .pp-seg > .pp-btn:only-child { border-radius: 4px; }
+.profile-panel .pp-ed-side { flex-wrap: wrap; gap: 2px 6px; }
 .profile-panel .pp-input { width: 100%; box-sizing: border-box; background: #141a24; color: #e8ecf1; border: 1px solid #1a2130; border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 12px; }
 .launcher-card .profile-panel input.pp-input { min-width: 0; flex: 1 1 6em; padding: 3px 6px; }
 .profile-panel .pp-btn { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; padding: 3px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; white-space: nowrap; }

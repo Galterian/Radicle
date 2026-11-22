@@ -170,7 +170,7 @@ export function sourceTitle(src) {
     `Player ${KINDS.has(src.kind) ? src.kind : 'effect'} — from ${src.repo} branch ${src.branch}`,
     src.author ? `author: ${src.author}` : '',
     `validator: ${v ? `${v.glyph} ${v.label}` : 'not checked'}`,
-    src.review ? 'players: ⚑ REVIEW — 10+ test votes with a mean of −3 or lower' : '',   // PV
+    src.review ? 'players: ⚑ REVIEW — 10+ test votes with a mean of −3 or lower (shown grey; still playable)' : '',   // PV
     src.commit ? `commit ${_short(src.commit, 7)}` : '',
     src.sha256 ? `sha256 ${_short(src.sha256, 12)}` : '',
   ].filter(Boolean).join('\n');
@@ -180,13 +180,16 @@ export function sourceTitle(src) {
 export function sourceBadgeHtml(src, { compact = false } = {}) {
   if (!src) return '';
   const v = src.verdict ? VERDICTS[src.verdict] : null;
-  return `<span class="fx-src${v ? ' ' + v.cls : ''}${compact ? ' compact' : ''}" title="${_esc(sourceTitle(src))}">`
+  return `<span class="fx-src${v ? ' ' + v.cls : ''}${compact ? ' compact' : ''}${src.review ? ' fx-src-low' : ''}" title="${_esc(sourceTitle(src))}">`   // fx-src-low: the card around it turns grey (style.css)
     + `<span class="fx-src-br">${_esc(sourceLabel(src, compact))}</span>`
     + (!compact && src.author ? `<span class="fx-src-au">${_esc(src.author)}</span>` : '')
     + (v ? `<span class="fx-src-v" aria-label="${_esc(v.label)}">${v.glyph}</span>` : '')
     + (src.review ? '<span class="fx-src-rv" aria-label="players flagged it for review" style="color:#ff9b5b;margin-left:2px">⚑</span>' : '')   // PV: votes n ≥ 10, mean ≤ −3
     + '</span>';
 }
+// User ruling 2026-11-22: a player card whose test votes are too low (the review flag: 10+ votes, mean −3 or lower)
+// is shown GREY — still playable (votes are profile data, never game rules).
+export const votedLow = (x) => !!effectSource(x)?.review;
 // Convenience: badge HTML for anything effectSource() takes ('' when built-in).
 export const effectSourceBadge = (x, opts) => sourceBadgeHtml(effectSource(x), opts);
 export const cardSourceBadge = effectSourceBadge;
