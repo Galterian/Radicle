@@ -10,6 +10,7 @@
 //     tools/*rebalancing-check.mjs validators the handshakes load at runtime, plus JSON files they read beside them
 //   - effects-data/, skills-data/, classes-data/ (data programs, hooks, libs), replaced wholesale
 //   - the building catalogues (js/catalog/) and the rulebook data/*.json (NOT data/dimensions — the bundle's own)
+//   - the rules editor: repo-root editor.html + editor/*.js|css → the bundle root (served at /rules/ by the menu)
 // Then it checks that every relative import inside the staged bundle resolves, and that each copy is byte-identical.
 //
 //   node tools/stage-mobile-bundle.mjs            # stage
@@ -64,6 +65,12 @@ for (const d of DATA_DIRS) {
 copies.push([path.join(ROOT, 'assets/features/feature_table.json'), path.join(DEST, 'js/catalog/feature_table.json')]);
 copies.push([path.join(ROOT, 'assets/terrain_bigfeatures/bigfeature_table.json'), path.join(DEST, 'js/catalog/bigfeature_table.json')]);
 for (const f of fs.readdirSync(path.join(ROOT, 'data')).filter(f => f.endsWith('.json'))) copies.push([path.join(ROOT, 'data', f), path.join(DEST, 'data', f)]);
+// Rules editor (2026-11-22): mobile-menu.mjs serves /rules/ from the repo-root editor.html + editor/ — on the phone
+// editor-api.mjs finds them beside the game code, so they land at the bundle root.
+if (fs.existsSync(path.join(ROOT, 'editor.html'))) {
+  copies.push([path.join(ROOT, 'editor.html'), path.join(DEST, 'editor.html')]);
+  for (const f of fs.readdirSync(path.join(ROOT, 'editor')).filter(f => /\.(js|css)$/.test(f))) copies.push([path.join(ROOT, 'editor', f), path.join(DEST, 'editor', f)]);
+}
 
 const same = (a, b) => fs.existsSync(b) && fs.readFileSync(a).equals(fs.readFileSync(b));
 const stale = copies.filter(([a, b]) => !same(a, b));
@@ -73,7 +80,7 @@ if (CHECK_ONLY) {
   process.exit(stale.length ? 1 : 0);
 }
 
-for (const d of DATA_DIRS) fs.rmSync(path.join(DEST, d), { recursive: true, force: true });   // drop deleted defs too
+for (const d of [...DATA_DIRS, 'editor']) fs.rmSync(path.join(DEST, d), { recursive: true, force: true });   // drop deleted defs / editor modules too
 for (const [a, b] of copies) { fs.mkdirSync(path.dirname(b), { recursive: true }); fs.copyFileSync(a, b); }
 
 // Verify: byte-identical copies, and every relative import inside the staged bundle resolves.

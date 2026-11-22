@@ -303,7 +303,10 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
     taken.add(`${tile.q},${tile.r}`);
     const tag = `${label}-ally${i + 1}`;
     console.log(`[team] ${c.name} (${c.base_character}) enters as ${tag} (${allySide}) at (${tile.q},${tile.r}), ${hexDistance(home, tile)} hexes from me (${tier})`);
-    await startWorker(tag, c.name, { ...profileEnv(file, c), ALLIANCE: allySide, CREATURE_ID: '', START_TILE: JSON.stringify(tile) });
+    // AI skirmish (llm-route.mjs): no llama on the phone — my allies ask my teammates' nodes (signed with this device's
+    // key, direct libp2p) or the OCI route (<profile dir>/llm.json); none reachable → the rules play them, as before.
+    const ai = process.env.AI_SKIRMISH !== '0' ? { AI_ROLE: 'team', LLM_PROFILE_FILE: file, LLM_URL: process.env.LLM_URL || '' } : {};
+    await startWorker(tag, c.name, { ...profileEnv(file, c), ALLIANCE: allySide, CREATURE_ID: '', START_TILE: JSON.stringify(tile), ...ai });
   }
   for (const m of monsters) {
     console.log(`[regen] ${m.name} (${m.creature_id}) comes back as ${m.label} at its last tile (${m.tile.q},${m.tile.r})${m.life ? ` with ${m.life} life` : ''}`);

@@ -74,7 +74,8 @@ import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
 import { effectResultsOf, plannedLossResults, naturalResults } from './effect-results.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
-import { llmConfig, aiRoleFor, askLlm, systemPrompt, userPrompt, echoesOption, askThisAction } from './llm-brain.mjs';
+import { llmConfig, aiRoleFor, systemPrompt, userPrompt, echoesOption, askThisAction } from './llm-brain.mjs';
+import { LLM_PROTO, loadTeamAuth, remoteConfig, attachLlmRpc, createLlmRouter } from './llm-route.mjs';   // local → own team → OCI
 import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, onlyHolderAffliction, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats, naturalKind, naturalOfKind, isContactNatural } from './natural-perms.mjs';
 import { trapsInRange, clericRoute, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './world-prims.mjs';   // phase 6: generic primitives (were class-world / class-traps)
 // Class isolation phase 6: the JS reference hooks are a test oracle in classes-data/oracle (chaosD6-Classes) — loaded
@@ -1461,6 +1462,11 @@ const IS_MONSTER = entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN;
 // AI skirmish (2026-11-22, llm-brain.mjs): the role this bot plays for the local llama-server — '' = rules only.
 const AI_ROLE = aiRoleFor({ role: process.env.AI_ROLE || '', isHuman: IS_HUMAN });
 const LLM = llmConfig(process.env);
+// Routing (llm-route.mjs): my team's device key + owners (team AI bots: LLM_PROFILE_FILE; my hero: PROFILE_FILE), the
+// OCI route (LLM_REMOTE_URL/KEY or <profile dir>/llm.json). The hero serves my team's bots from its llama-server.
+const LLM_SERVE = IS_HUMAN && process.env.LLM_SERVE !== '0';
+const LLM_AUTH = AI_ROLE || LLM_SERVE ? loadTeamAuth(process.env.LLM_PROFILE_FILE || PROFILE_FILE) : null;
+let llmRouter = null;   // created once libp2p is up (below fxPeer.attach)
 // A monster's innate effect is never a deck card: it stands as natural permanents (below), no further copies.
 const INNATE_ID = IS_MONSTER ? (data.creatures[CREATURE_ID]?.data?.innate_effect || null) : null;
 if (IS_MONSTER && !profileChar && data.creatures[CREATURE_ID]) {
@@ -1937,6 +1943,7 @@ function currentStateSnapshot(slim = false) {
     combo_seq_csv: Array.isArray(entity.combo) ? entity.combo.join(',') : '',
     // Profile (user ruling 2026-11-13) — display only, outside the per-action state hash (id / tile / life).
     team_name: PROFILE_TEAM, profile_char_id: profileChar ? PROFILE_CHAR_ID : (process.env.SHADOW_PROFILE_CHAR_ID || ''), resources_id: profileChar?.resources?.id || '',
+    llm_srv: llmRouter?.serving() ? 1 : 0,   // AI skirmish: my llama-server answers my team's bots (llm-route.mjs, signed)
   };
   if (slim) return s;
   // Live clock + network hints so a joining peer can align its turn counter
@@ -2215,6 +2222,18 @@ await fxPeer.attach({ libp2p, openConnTo, getBus: () => bus, netStat, forceBus: 
 await skPeer.attach({ libp2p, openConnTo, getBus: () => bus, netStat, forceBus: process.env.SK_FORCE_BUS === '1' });
 // CH: foreign-class fetch/serve — libp2p /chaos/<dim>/classes/1 (same framing), bus `cl` fallback.
 await clPeer.attach({ libp2p, openConnTo, getBus: () => bus, netStat, forceBus: process.env.CL_FORCE_BUS === '1' });
+// AI skirmish routing (llm-route.mjs): /chaos/<dim>/llm/1 — direct libp2p ONLY (prompts hold a hand: never the public
+// relay bus); a teammate's node serves only after its device key signs as one of my team profile's owners.
+if (AI_ROLE || LLM_SERVE) {
+  let handle = null;
+  const request = await attachLlmRpc({ libp2p, proto: LLM_PROTO(DIM_ID), openConnTo, handle: LLM_SERVE ? (m) => (handle ? handle(m) : { op: 'denied', why: 'starting' }) : null });
+  llmRouter = createLlmRouter({ cfg: LLM, remote: remoteConfig(process.env, process.env.LLM_PROFILE_FILE || PROFILE_FILE), auth: LLM_AUTH, selfId: PEER_ID_STRING,
+    request: LLM_AUTH ? request : null, serve: LLM_SERVE, serveSlots: Math.max(1, Number(process.env.LLM_SERVE_SLOTS) || 2), log: (t) => console.log(`[${PEER_LABEL}] llm: ${t}`),
+    candidates: () => livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.llm_srv && p.human && LLM_AUTH?.team && p.team_name === LLM_AUTH.team && sideOf(p.alliance) === MY_SIDE).map(p => p.peer_id) });
+  handle = llmRouter.handle;
+  setTimeout(() => llmRouter.refreshTeam().catch(() => {}), 3_000).unref?.();
+  setInterval(() => llmRouter.refreshTeam().catch(() => {}), 15_000).unref?.();
+}
 // FXG: foreign profile cards that were not in the content cache at boot — fetched from the peers that announce
 // them (fx_have / sk_have) or git / httpd; a card that arrives joins my deck (random spot) or archive. Private state.
 if (profileForeignPending.length) for (const ms of [8_000, 30_000, 90_000]) setTimeout(async () => {
@@ -2840,7 +2859,7 @@ function enterPhase(name) {
   // M6 step 1: a new planning window / deadline on the wire at once (deduped). Reveal / resolution are
   // announced by the commit / reveal envelopes themselves — no extra frame (keeps it ≈ 2 frames per action).
   if (name === 'planning') publishClock(currentStateSnapshot(true));
-  if (name === 'planning' && AI_ROLE && LLM.url && !IS_HUMAN) llmKick();
+  if (name === 'planning' && AI_ROLE && llmRouter?.available() && !IS_HUMAN) llmKick();
   broadcastUI({ kind: 'phase', name, seconds: Math.round(ms / 100) / 10, heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
 }
 
@@ -6634,18 +6653,17 @@ function llmKick() {
   const t = { action, options, answer: null, read: false };
   llmTurn = t;
   llmStats.asked++;
-  askLlm(LLM, { system: _llmSystem, user, n: options.length, timeoutMs: budget }).then((ans) => {
+  llmRouter.ask({ system: _llmSystem, user, n: options.length, timeoutMs: budget }).then((ans) => {
     if (!ans || ans.error) {
       llmStats.failed++;
-      const down = ans?.error && !/^(timeout|http|malformed)/.test(ans.error);
-      if (down) { llmDownUntil = Date.now() + 30_000; console.log(`[${PEER_LABEL}] llm: ${LLM.url} unreachable (${ans.error}) — rules only for 30 s`); }
+      if (ans?.down) { llmDownUntil = Date.now() + 30_000; console.log(`[${PEER_LABEL}] llm: no model reachable (${ans.error}) — rules only for 30 s`); }
       else if (llmStats.failed <= 3 || llmStats.failed % 20 === 0) console.log(`[${PEER_LABEL}] llm: no answer (${ans?.error || 'none'}, ${ans?.ms ?? '?'} ms) — the rules' plan stands`);
       return;
     }
     if (t.read || llmTurn !== t) { llmStats.late++; return; }
     t.answer = ans;
   });
-  if (llmStats.asked % 30 === 0) console.log(`[${PEER_LABEL}] llm stats (${AI_ROLE}): asked ${llmStats.asked}, used ${llmStats.used}, late ${llmStats.late}, failed ${llmStats.failed}`);
+  if (llmStats.asked % 30 === 0) { const r = llmRouter.stats; console.log(`[${PEER_LABEL}] llm stats (${AI_ROLE}): asked ${llmStats.asked}, used ${llmStats.used}, late ${llmStats.late}, failed ${llmStats.failed}; via local ${r.local}, team ${r.team}, remote ${r.remote}`); }
 }
 // The model's option replaces the rules' free pick. true when applied.
 function llmApply() {
@@ -6681,7 +6699,7 @@ function llmApply() {
   llmStats.used++;
   const say = ans.say && hg.action - llmLastSay >= LLM.sayEvery && !echoesOption(ans.say, opt.label) ? ans.say : '';
   if (say) { pendingSay = { action: hg.action, text: say }; llmLastSay = hg.action; }
-  console.log(`[${PEER_LABEL}] llm (${AI_ROLE}): option ${ans.choice}/${t.options.length} "${opt.label}" in ${ans.ms} ms${say ? ` — says "${say}"` : ''}`);
+  console.log(`[${PEER_LABEL}] llm (${AI_ROLE}): option ${ans.choice}/${t.options.length} "${opt.label}" in ${ans.ms} ms${ans.via && ans.via !== 'local' ? ` via ${ans.via}` : ''}${say ? ` — says "${say}"` : ''}`);
   return true;
 }
 // Builder without (or before) an answer: no enemy in contact → Posture / Empty Posture, and a Barricade on a free hex

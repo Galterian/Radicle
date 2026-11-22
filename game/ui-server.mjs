@@ -374,6 +374,8 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
       ...netEnv,
       ...(p.profile ? profileEnv(file, p.profile) : {}),
       AI_ROLE:           ai && p.aiRole ? p.aiRole : '',
+      // llm-route.mjs: my team's bots may also ask my teammates' nodes (signed with this device's key) — team role only.
+      ...(ai && p.aiRole === 'team' ? { LLM_PROFILE_FILE: file } : {}),
     });
     if (!(await waitForPort(p.http))) throw new Error(`peer-${p.label} did not come up on :${p.http}`);
     try {
