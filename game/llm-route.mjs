@@ -75,11 +75,18 @@ export function verifyLine(id, line, sig) {
 export const teamSigned = (auth, id, line, sig) => isTeamMember(auth) && auth.owners.has(id) && verifyLine(id, line, sig);
 
 // <profile dir>/llm.json → { remote_url, remote_key } (the OCI route; written by the user, never committed).
+// LLM_REMOTE_FILE = that llm.json for a bot without a profile (the skirmish rivals / builders, 2026-11-23).
+// No remote_url: the OCI 8B's host (big_url …/llm-big → …/llm); no remote_key on that same host: big_key (one key on OCI).
 export function remoteConfig(env = {}, profileFile = '') {
   let f = {};
-  try { if (profileFile) f = JSON.parse(fs.readFileSync(path.join(path.dirname(profileFile), 'llm.json'), 'utf8')) || {}; } catch {}
-  const url = String(env.LLM_REMOTE_URL ?? f.remote_url ?? '').replace(/\/+$/, '');
-  return { url: url === '0' ? '' : url, key: String(env.LLM_REMOTE_KEY ?? f.remote_key ?? '') };
+  const file = env.LLM_REMOTE_FILE || (profileFile ? path.join(path.dirname(profileFile), 'llm.json') : '');
+  try { if (file) f = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
+  const big = String(f.big_url || '').replace(/\/+$/, '');
+  const derived = /\/llm-big$/.test(big) ? big.replace(/\/llm-big$/, '/llm') : '';
+  const url = String(env.LLM_REMOTE_URL ?? f.remote_url ?? derived).replace(/\/+$/, '');
+  let sameHost = false;
+  try { sameHost = !!big && new URL(url).host === new URL(big).host; } catch {}
+  return { url: url === '0' ? '' : url, key: String(env.LLM_REMOTE_KEY ?? f.remote_key ?? (sameHost ? f.big_key || '' : '')) };
 }
 
 const okAnswer = (a, n) => a && Number.isInteger(a.choice) && a.choice >= 1 && a.choice <= n && typeof a.say === 'string' && a.say.length <= SAY_MAX + 2;

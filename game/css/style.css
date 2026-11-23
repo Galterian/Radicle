@@ -841,7 +841,7 @@ html.mobile .dimout-btn { font-size: 13px; padding: 6px 10px; min-height: 34px; 
 }
 #object-card .oc-pill.hp { color: #ffe6b0; border-color: #4a3a1f; background: #1a1409; }
 #object-card .oc-pill.thresh { color: #e3a04a; border-color: #4a301f; background: #1a0f09; }
-#object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; }
+#object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; white-space: pre-line; }
 #object-card .oc-coords { color: #6a7a92; margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
 #object-card .oc-close {
   position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
@@ -1090,7 +1090,7 @@ html.mobile #object-card { max-width: 56vw; }
 #object-card .oc-body { flex: 1 1 auto; min-width: 0; }
 #object-card .oc-name { font-weight: 600; font-size: 13px; color: #e8ecf1; padding-right: 18px; }
 #object-card .oc-kind { color: #8aa0bf; margin-top: 2px; text-transform: lowercase; }
-#object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; }
+#object-card .oc-desc { color: #c8d4e3; margin-top: 6px; line-height: 1.35; white-space: pre-line; }
 #object-card .oc-coords { color: #6a7a92; margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; }
 #object-card .oc-close {
   position: absolute; top: 4px; right: 4px; width: 20px; height: 20px;
@@ -1513,3 +1513,14 @@ html.mobile .slot.skill .card .fx-src::before { content: '⎇'; }
 .pf-banner.fx-shared  { border-color: #6ad99f; color: #c9f5dc; font-weight: 500; font-size: 13px; }
 .pf-banner.fx-missing { border-color: #e8c272; color: #ffe1a0; }
 .ros-builder { margin-left: 4px; padding: 0 5px; border-radius: 4px; font-size: 10px; background: #3a2f1a; color: #ffd98a; border: 1px solid #8a6a2a; }
+/* AI skirmish banter strip (main.js banterStrip): unobtrusive and click-through except its ✕ */
+#banter-strip { position: fixed; left: 8px; bottom: 8px; max-width: min(420px, 70%); padding: 4px 22px 4px 8px; border-radius: 8px; background: rgba(10, 14, 22, 0.55);
+  color: #e8ecf1; font-size: 12px; line-height: 1.35; pointer-events: none; transition: opacity 1.2s ease; z-index: 5; }
+#banter-strip.idle { opacity: 0; }
+#banter-strip ol { list-style: none; margin: 0; padding: 0; }
+#banter-strip li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#banter-strip b.friend { color: #8cc4ff; }
+#banter-strip b.foe { color: #ff9a9a; }
+#banter-strip .banter-x { position: absolute; top: 2px; right: 3px; pointer-events: auto; background: transparent; border: 0; color: #9fb0c8; cursor: pointer; font-size: 11px; padding: 0 3px; }
+#banter-strip.idle .banter-x { pointer-events: none; }
+html.mobile #banter-strip { font-size: 11px; max-width: 80%; }

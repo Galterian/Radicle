@@ -45,7 +45,7 @@ export function genConfig(env = {}, { file = '' } = {}) {
     key: desktop ? String(env.LLM_BIG_KEY ?? f.local_big_key ?? '') : ociKey,
     fallback: desktop && oci && oci !== url ? { url: oci, key: ociKey } : null,
     model: env.LLM_BIG_MODEL || 'qwen3-8b',
-    timeoutMs: Math.max(30_000, Number(env.LLM_BIG_TIMEOUT_MS) || 20 * 60_000),
+    timeoutMs: Math.max(30_000, Number(env.LLM_BIG_TIMEOUT_MS) || (/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url) ? 20 : 60) * 60_000), timeoutSet: !!Number(env.LLM_BIG_TIMEOUT_MS),
     attempts: Math.max(1, Math.min(6, Number(env.GEN_ATTEMPTS) || 3)),
     maxTokens: Math.max(512, Number(env.GEN_MAX_TOKENS) || 2048),
   };
@@ -292,6 +292,21 @@ export function longFetch(url, { method = 'POST', headers = {}, body = '', signa
 }
 
 // schema: the JSON schema the answer is held to (default: an effect definition; null = free text, e.g. a test review).
+/** A streamed answer gone round in circles → why (string), else ''. 40+ closing brackets in a row (no real JSON nests
+ *  that deep), or the last 240 characters one chunk of ≤ 40 characters over and over. */
+export function answerLoop(text) {
+  const tail = text.slice(-240);
+  const closers = /[\]}](?:[\s,]*[\]}]){39,}[\s,]*$/.exec(tail);
+  if (closers) return 'closing brackets repeat';
+  if (tail.length < 240) return '';
+  for (let p = 1; p <= 40; p++) {
+    let same = true;
+    for (let i = p; i < tail.length && same; i++) if (tail[i] !== tail[i - p]) same = false;
+    if (same) return `the same ${p}-character chunk repeats`;
+  }
+  return '';
+}
+
 // The desktop's own 8B unreachable (nothing listens / no route) and cfg.fallback set → cfg becomes the OCI one (mutated:
 // the next attempts of this generation go straight there; cfg.fell_back_from = the local url) and the call is repeated.
 const UNREACHABLE = /^(ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN|ECONNRESET|EADDRNOTAVAIL)$/;
@@ -299,7 +314,9 @@ export async function complete(cfg, messages, opts = {}) {
   const r = await completeOnce(cfg, messages, opts);
   if (!r.error || !cfg.fallback || !UNREACHABLE.test(r.error)) return r;
   const from = cfg.url;
-  Object.assign(cfg, { url: cfg.fallback.url, key: cfg.fallback.key, fallback: null, fell_back_from: from });
+  // OCI is far slower than a desktop 8B (2026-11-23: ~8 prompt / 0.75 answer tok/s): 60 min per call unless set
+  Object.assign(cfg, { url: cfg.fallback.url, key: cfg.fallback.key, fallback: null, fell_back_from: from, timeoutMs: cfg.timeoutSet ? cfg.timeoutMs : Math.max(cfg.timeoutMs, 60 * 60_000) });
+  opts = { ...opts, timeoutMs: undefined };
   opts.onFallback?.({ from, to: cfg.url, error: r.error });
   const again = await completeOnce(cfg, messages, opts);
   return { ...again, ms: again.ms + r.ms, fell_back: { from, error: r.error } };
@@ -324,9 +341,10 @@ async function completeOnce(cfg, messages, { fetchImpl = longFetch, timeoutMs = 
       const j = await r.json();
       return { text: j?.choices?.[0]?.message?.content ?? '', ms: Date.now() - t0, usage: j?.usage || null, timings: j?.timings || null };
     }
-    let text = '', buf = '', n = 0, timings = null, usage = null;
+    let text = '', buf = '', n = 0, timings = null, usage = null, looped = '';
     const dec = new TextDecoder();
-    for await (const chunk of r.body) {
+    // A degenerate answer (seen 2026-11-23: the 8B wrote ']}}]}}…' to the token cap — 50 min on OCI) is cut at once.
+    stream: for await (const chunk of r.body) {
       buf += dec.decode(chunk, { stream: true });
       let k;
       while ((k = buf.indexOf('\n')) >= 0) {
@@ -337,12 +355,16 @@ async function completeOnce(cfg, messages, { fetchImpl = longFetch, timeoutMs = 
         let j; try { j = JSON.parse(data); } catch { continue; }
         if (j.prompt_progress) onProgress({ phase: 'prompt', done: j.prompt_progress.processed ?? 0, total: j.prompt_progress.total ?? 0, cached: j.prompt_progress.cache ?? 0 });
         const piece = j.choices?.[0]?.delta?.content;
-        if (typeof piece === 'string' && piece) { text += piece; n++; onProgress({ phase: 'answer', done: n }); }
+        if (typeof piece === 'string' && piece) {
+          text += piece; n++; onProgress({ phase: 'answer', done: n });
+          if (n % 16 === 0 && (looped = answerLoop(text))) break stream;   // leaving the loop closes the connection
+        }
         if (j.timings) timings = j.timings;
         if (j.usage) usage = j.usage;
       }
     }
-    if (!usage && timings) usage = { prompt_tokens: (timings.prompt_n ?? 0) + (timings.cache_n ?? 0), completion_tokens: timings.predicted_n ?? n };
+    if (looped) return { error: `loop: ${looped} — answer cut after ${n} tokens`, text, ms: Date.now() - t0 };
+    if (!usage && timings) usage ={ prompt_tokens: (timings.prompt_n ?? 0) + (timings.cache_n ?? 0), completion_tokens: timings.predicted_n ?? n };
     return { text, ms: Date.now() - t0, usage, timings };
   } catch (e) {
     return { error: e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 'timeout' : (e?.cause?.code || e?.code || e?.message || 'error'), ms: Date.now() - t0 };
@@ -425,7 +447,8 @@ export async function generateDef(spec, { idea, cfg = genConfig(process.env), fe
   if (!cfg.url) return { ok: false, error: 'no big model configured (LLM_BIG_URL)', tries: [] };
   if (!idea || !String(idea).trim()) return { ok: false, error: `describe the ${spec.kind}`, tries: [] };
   taken ||= spec.taken();
-  const messages = [{ role: 'system', content: spec.systemPrompt() }, { role: 'user', content: `New ${spec.kind}: ${String(idea).trim().slice(0, 1000)}\n/no_think` }];
+  // compact (2026-11-23): pretty-printed JSON cost the 8B a third more tokens — at 0.75 tok/s on OCI that is minutes
+  const messages = [{ role: 'system', content: `${spec.systemPrompt()}\n\nWrite the JSON object compactly on ONE line: no indentation, no line breaks.` },{ role: 'user', content: `New ${spec.kind}: ${String(idea).trim().slice(0, 1000)}\n/no_think` }];
   if (prior && typeof prior === 'object') {
     messages.push({ role: 'assistant', content: JSON.stringify(spec.strip(prior)).slice(0, 12_000) });
     messages.push({ role: 'user', content: `Change it: ${String(changes || 'make it work as described').trim().slice(0, 2000)}\nKeep the id "${prior.id}". Answer with the whole corrected JSON object.\n/no_think` });

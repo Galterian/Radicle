@@ -63,11 +63,11 @@ assert.equal(await askLlm(llmConfig({ LLM_URL: '0' }), { system: 's', user: 'u',
 assert.deepEqual(banterSchema(3).properties.lines.items.properties.who.enum, [1, 2, 3]);
 assert.match(banterUserPrompt({ units: [{ name: 'Grok', what: 'Orc', role: 'monster', friend: false }, { name: 'Mira', role: 'builder', friend: true }], place: 'Ashen Wastes' }), /1\. Grok \(Orc\) — a wild monster.*enemy.*\n2\. Mira — the hero's builder/);
 const bl = parseBanter(JSON.stringify({ lines: [{ who: 1, line: 'Me smash *tiny* wall!' }, { who: 1, line: 'again me' }, { who: 2, line: 'Not my <b>wall</b>, Grok.' },
-  { who: 3, line: 'nobody' }, { who: 1, line: 'Me smash tiny wall!' }, { who: 1, line: 'One two three four five six seven eight nine ten eleven twelve thirteen' }] }), 2);
+  { who: 3, line: 'nobody' }, { who: 1, line: 'Me smash tiny wall!' }, { who: 1, line: 'One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen' }] }), 2);
 assert.deepEqual(bl.map(l => l.who), [0, 1, 0]);
 assert.equal(bl[0].line, 'Me smash tiny wall!');
 assert.equal(bl[1].line, 'Not my  b wall /b , Grok.'.replace(/\s+/g, ' '));
-assert.ok(bl[2].line.length <= SAY_MAX && bl[2].line.endsWith('…') && !/\s…$/.test(bl[2].line) && /twelve…$|eleven…$|ten…$/.test(bl[2].line));
+assert.ok(bl[2].line.length <= 90 && bl[2].line.endsWith('…') && !/\s…$/.test(bl[2].line) && /(teen|fifteen|sixteen)…$/.test(bl[2].line), bl[2].line);   // banter: 90, cut at a word
 assert.equal(parseBanter('{"lines": "x"}', 2), null);
 let bseen = null;
 const bok = await askBanter(llmConfig({}), { units: [{ name: 'A', role: 'hero', friend: true }, { name: 'B', role: 'monster', friend: false }], fetchImpl: async (url, init) => {
@@ -79,3 +79,13 @@ assert.equal(bseen.response_format.json_schema.name, 'banter');
 assert.equal(await askBanter(llmConfig({}), { units: [{ name: 'A' }] }), null);   // one unit: no scene
 assert.equal(await askBanter(llmConfig({ LLM_URL: '0' }), { units: [{ name: 'A' }, { name: 'B' }] }), null);
 console.log('all llm checks passed');
+{
+  const { fixSelfAddress, BANTER_SAY_MAX } = await import('../llm-brain.mjs');
+  const names = ['Rhox Brute', 'Summit Apes', 'You (Cynder Pyromancer)'];
+  const out = fixSelfAddress([{ who: 0, line: "Rhox, your alchemy's not working." }, { who: 1, line: "Summit Apes, you're too proud." }, { who: 2, line: 'Nice try, Rhox.' }], names);
+  assert.equal(out[0].line, "Your alchemy's not working.");
+  assert.equal(out[1].line, "Rhox Brute, you're too proud.");
+  assert.equal(out[2].line, 'Nice try, Rhox.');
+  assert.equal(BANTER_SAY_MAX, 90);
+  console.log('banter self-address checks passed');
+}

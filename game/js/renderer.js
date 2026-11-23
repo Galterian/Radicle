@@ -4,13 +4,14 @@ import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResou
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 
-// A speech balloon (AI skirmish): word-wrapped to ~150 px, at most 3 lines, its tail pointing down at (x, yTip).
-// Friends get a blue rim, foes a red one. Plain fillText — the text never reaches the DOM.
-function drawSpeech(ctx, text, x, yTip, alpha, foe) {
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-  ctx.font = '11px system-ui, -apple-system, Segoe UI, sans-serif';
-  const maxW = 150, lh = 13, pad = 5;
+// Speech balloons (AI skirmish): the speaker's name on top, the line word-wrapped to ~180 px (≤ 3 lines), the tail
+// pointing down at the unit. Friends get a blue rim, foes a red one. Drawn AFTER every unit (a conversation layer on
+// top), a newer balloon lifted above an older one it would cover. Plain fillText — the text never reaches the DOM.
+const SPEECH_FONT = '12px system-ui, -apple-system, Segoe UI, sans-serif';
+const SPEECH_NAME_FONT = 'bold 10px system-ui, -apple-system, Segoe UI, sans-serif';
+function layoutSpeech(ctx, text, name) {
+  ctx.font = SPEECH_FONT;
+  const maxW = 180, lh = 14, pad = 6, nameH = name ? 12 : 0;
   const lines = [];
   let cur = '';
   for (const w of String(text).split(' ')) {
@@ -19,27 +20,54 @@ function drawSpeech(ctx, text, x, yTip, alpha, foe) {
   }
   if (cur) lines.push(cur);
   if (lines.length > 3) { lines.length = 3; lines[2] = `${lines[2].slice(0, -1)}…`; }
-  const w = Math.min(maxW, Math.max(...lines.map(l => ctx.measureText(l).width))) + pad * 2;
-  const h = lines.length * lh + pad * 2;
-  const bx = x - w / 2, by = yTip - 6 - h, rr = 6;
-  ctx.beginPath();
-  ctx.moveTo(bx + rr, by);
-  ctx.arcTo(bx + w, by, bx + w, by + h, rr);
-  ctx.arcTo(bx + w, by + h, bx, by + h, rr);
-  ctx.lineTo(x + 5, by + h); ctx.lineTo(x, yTip); ctx.lineTo(x - 5, by + h);
-  ctx.arcTo(bx, by + h, bx, by, rr);
-  ctx.arcTo(bx, by, bx + w, by, rr);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(250,247,238,0.95)';
-  ctx.fill();
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = foe ? '#c94a4a' : '#4a86c9';
-  ctx.stroke();
-  ctx.fillStyle = '#1b1d22';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  lines.forEach((l, i) => ctx.fillText(l, x, by + pad + i * lh));
-  ctx.restore();
+  const textW = Math.max(...lines.map(l => ctx.measureText(l).width));
+  ctx.font = SPEECH_NAME_FONT;
+  const nameW = name ? ctx.measureText(name).width : 0;
+  const w = Math.min(maxW, Math.max(nameW, textW)) + pad * 2;
+  return { lines, w, h: nameH + lines.length * lh + pad * 2, lh, pad, nameH };
+}
+function drawSpeechBalloons(ctx, balloons) {
+  const placed = [];
+  for (const b of balloons.sort((a, c) => a.startAt - c.startAt)) {   // older first: the newest ends on top
+    const L = layoutSpeech(ctx, b.text, b.name);
+    const bx = b.x - L.w / 2;
+    let by = b.yTip - 8 - L.h;
+    for (let guard = 0; guard < 6; guard++) {
+      const hit = placed.find(r => bx < r.x + r.w + 4 && bx + L.w + 4 > r.x && by < r.y + r.h + 4 && by + L.h + 4 > r.y);
+      if (!hit) break;
+      by = hit.y - L.h - 6;
+    }
+    placed.push({ x: bx, y: by, w: L.w, h: L.h });
+    const rr = 7, tx = Math.max(bx + rr + 6, Math.min(bx + L.w - rr - 6, b.x));
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, b.alpha)) * 0.94;
+    ctx.beginPath();
+    ctx.moveTo(bx + rr, by);
+    ctx.arcTo(bx + L.w, by, bx + L.w, by + L.h, rr);
+    ctx.arcTo(bx + L.w, by + L.h, bx, by + L.h, rr);
+    ctx.lineTo(tx + 5, by + L.h); ctx.lineTo(b.x, b.yTip); ctx.lineTo(tx - 5, by + L.h);
+    ctx.arcTo(bx, by + L.h, bx, by, rr);
+    ctx.arcTo(bx, by, bx + L.w, by, rr);
+    ctx.closePath();
+    ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+    ctx.fillStyle = 'rgba(250,247,238,0.96)';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = b.foe ? '#c94a4a' : '#4a86c9';
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    if (b.name) {
+      ctx.font = SPEECH_NAME_FONT;
+      ctx.fillStyle = b.foe ? '#a33434' : '#2f6aa8';
+      ctx.fillText(b.name, bx + L.pad, by + L.pad - 1);
+    }
+    ctx.font = SPEECH_FONT;
+    ctx.fillStyle = '#1b1d22';
+    L.lines.forEach((l, i) => ctx.fillText(l, bx + L.pad, by + L.pad + L.nameH + i * L.lh));
+    ctx.restore();
+  }
 }
 import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
 import { buildingBonusAt } from './building-bonus.js';
@@ -66,13 +94,45 @@ const DRUID_OBELISK = 'assets/terrain_scatter/standing_stone_obelisk_on_round_ba
 // Effect-placed Earth / Vitality tile tokens (Fossilization's bonus + shield, user ruling 2026-11-18 "map the tile-token
 // permanent to an appropriate building"): a stone guardian statue for Earth (petrified), a Healing Orb for Vitality,
 // standing on the hex while the token(s) do. Druid stones keep their own sprites; world features keep theirs.
+// Effect tile tokens (Fossilization, Ice Blast, Artifice on a tile …) — one building per element (user 2026-11-23: no
+// numbered dice on the map; the values are in the hex card, main.js tokenLines). None shared with WORLD_ITEM_BUILDING.
 const TOKEN_BUILDING = {
   elem_earth: 'assets/Sprites/Buildings/Shared/Stone Golem (guardian statue)/Stone Golem (guardian statue) - base [BWGS].png',
   elem_vitality: 'assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png',
+  elem_souls: 'assets/Sprites/Buildings/Dark Elves/Tomb/Tomb - base [BPTO].png',
+  elem_time: 'assets/Sprites/Buildings/High Elves/Dragonstone/Dragonstone - base [BPDI].png',
+  elem_space: 'assets/Sprites/Buildings/Daemons/Portal/Portal - base [BPPO].png',
+  elem_air: 'assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - base [BPLO].png',
+  elem_water: 'assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - base [BPCP].png',
+  elem_fire: 'assets/Sprites/Buildings/Neutral/Infernal Temple/Infernal Temple - base [BTIN].png',
+  elem_concentration: 'assets/Sprites/Buildings/Ssrathi/Scrying Pool/Scrying Pool - base [BPYP].png',
+  elem_harmony: 'assets/Sprites/Buildings/Fey/Magic Pool/Magic Pool - base [BPMP].png',
+};
+// World bonus items (map.js featureAt: Grove, Graveyard, Ruins, Crystals, Wells …) as a small building of their element
+// instead of a numbered die (user 2026-11-23: "a number over the tile … is ugly"). One sprite per element, none shared
+// with the effect / Druid tokens above; the item, element and value stay in the hover / object card.
+const WORLD_ITEM_BUILDING = {
+  elem_vitality: 'assets/Sprites/Buildings/Wood Elves/White Tree/White Tree - base [BPWT].png',
+  elem_souls: 'assets/Sprites/Buildings/Undead/Gravestone/Gravestone - base [BAGR].png',
+  elem_time: 'assets/Sprites/Buildings/Minotaurs/Henge/Henge - base [BPHG].png',
+  elem_space: 'assets/Sprites/Buildings/Neutral/Black Portal/Black Portal - base [BMBP].png',
+  elem_air: 'assets/Sprites/Buildings/Orcs/Totem/Totem - base [BWTP].png',
+  elem_water: 'assets/Sprites/Buildings/Wood Elves/Magic Well/Magic Well - base [BPMW].png',
+  elem_earth: 'assets/Sprites/Buildings/Neutral/Stone Quarry (size 1)/Stone Quarry (size 1) - base [BRS0].png',
+  elem_fire: 'assets/Sprites/Buildings/Plaguelords/Fire Cave/Fire Cave - base [BPFC].png',
+  elem_concentration: 'assets/Sprites/Buildings/Neutral/Shrine/Shrine - base [BMSH].png',
+  elem_harmony: 'assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - base [BPFR].png',
 };
 // Skill isolation (2026-11-22): per-skill UI facts { tag, glyph, color, card_glyph?, card_color?, rest_hint?, trance, … }
 // keyed by skill id = skills.mjs SKILL_UI, sent by the peer as hello.skill_ui; main.js calls setSkillUi() with it.
 let _skillUi = {};
+// The sprite a tile token is drawn as (main.js shows it in the hex card): world item, Druid stone or effect token.
+export function tokenSpritePath(t) {
+  if (!t) return null;
+  if (t.world) return WORLD_ITEM_BUILDING[t.elem] || null;
+  if (t.druid) return t.elem === 'elem_vitality' ? DRUID_ORB : DRUID_OBELISK;
+  return TOKEN_BUILDING[t.elem] || null;
+}
 export function setSkillUi(map) { _skillUi = map instanceof Map ? Object.fromEntries(map) : (map && typeof map === 'object' ? { ...map } : {}); }
 // Threat area: an enemy goes for whoever steps within this many hexes of it.
 const THREAT_RADIUS = 2;
@@ -603,25 +663,67 @@ export function createRenderer(canvas, state) {
     }
     // Effect tile tokens as a building (left side of the hex; Vitality wins the hex when both stand — the orb heals).
     const tokenHexes = new Map();
+    const tokenDrawn = new Set();   // tokens shown as a building / Druid stone + pip: no die for them below
+    const pipsAt = new Map();       // "q,r" -> [{ elem, shield }] — one small pip per token at the building's foot
+    const addPip = (t) => { const k = `${t.q},${t.r}`; if (!pipsAt.has(k)) pipsAt.set(k, []); pipsAt.get(k).push({ elem: t.elem, shield: t.kind === 'shield' }); };
     for (const t of (state.tileTokens || [])) {
-      if (t.druid || t.world || t.item || !TOKEN_BUILDING[t.elem]) continue;
+      if (t.world || t.item) continue;
       const k = `${t.q},${t.r}`;
-      if (druidHexes.has(k)) continue;
+      if (t.druid || druidHexes.has(k)) { if (featureImage(druidHexes.get(k) ? DRUID_ORB : DRUID_OBELISK)?.ready) { tokenDrawn.add(t); addPip(t); } continue; }
+      if (!TOKEN_BUILDING[t.elem]) continue;
       if (!tokenHexes.has(k) || t.elem === 'elem_vitality') tokenHexes.set(k, t.elem);
     }
     for (const [k, elem] of tokenHexes) {
       const [q, r] = k.split(',').map(Number);
       const { x, y } = tilePx(q, r);
-      if (!inView(x, y)) continue;
       const tex = featureImage(TOKEN_BUILDING[elem]);
       if (!tex?.ready) continue;
+      for (const t of (state.tileTokens || [])) if (!t.world && !t.item && !t.druid && t.q === q && t.r === r && TOKEN_BUILDING[t.elem]) { tokenDrawn.add(t); addPip(t); }
+      if (!inView(x, y)) continue;
       const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
-      const scale = Math.min(1.0, Math.max(0.2, (hexH * 0.7) / sy));
+      const scale = Math.min(0.8, Math.max(0.15, (hexH * 0.55) / sy));
       const dw = sx * scale, dh = sy * scale;
-      ctx.drawImage(tex.img, x - dw / 2 - HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(tex.img, x - dw / 2 - HEX_SIZE * 0.45, y - dh + hexH * 0.3, dw, dh);
+      ctx.globalAlpha = 1;
+    }
+    for (const [k, pips] of pipsAt) {
+      const [q, r] = k.split(',').map(Number);
+      const { x, y } = tilePx(q, r);
+      if (!inView(x, y)) continue;
+      const px0 = x - HEX_SIZE * 0.45 - (pips.length - 1) * 3.5, py = y + hexH * 0.3 + 2;
+      pips.slice(0, 4).forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(px0 + i * 7, py, 2.6, 0, Math.PI * 2);
+        if (p.shield) { ctx.lineWidth = 1.4; ctx.strokeStyle = ELEM_COLOR[p.elem] || '#ccc'; ctx.stroke(); }
+        else { ctx.fillStyle = ELEM_COLOR[p.elem] || '#ccc'; ctx.fill(); }
+      });
+    }
+    // World bonus items: a small building of the element (WORLD_ITEM_BUILDING), back-right of the hex, with a tiny
+    // element-coloured pip at its foot. Falls back to the die below while the sprite loads / if it is missing.
+    const worldDrawn = new Set();
+    for (const t of (state.tileTokens || [])) {
+      if (!t.world || !WORLD_ITEM_BUILDING[t.elem]) continue;
+      const { x, y } = tilePx(t.q, t.r);
+      if (!inView(x, y)) continue;
+      const tex = featureImage(WORLD_ITEM_BUILDING[t.elem]);
+      if (!tex?.ready) continue;
+      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const scale = Math.min(0.8, Math.max(0.15, (hexH * 0.55) / sy));
+      const dw = sx * scale, dh = sy * scale;
+      const bx = x + HEX_SIZE * 0.42, by = y + hexH * 0.3;
+      ctx.globalAlpha = 0.92;
+      ctx.drawImage(tex.img, bx - dw / 2, by - dh, dw, dh);
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(bx, by + 2, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = ELEM_COLOR[t.elem] || '#ccc';
+      ctx.fill();
+      worldDrawn.add(t);
     }
     // Tile tokens (dice left on hexes by effects), bottom-right of the hex.
     for (const t of (state.tileTokens || [])) {
+      if (worldDrawn.has(t) || tokenDrawn.has(t)) continue;   // the die only while its building sprite is not loaded
       const { x, y } = tilePx(t.q, t.r);
       const i = (state.tileTokens || []).filter(o => o.q === t.q && o.r === t.r).indexOf(t);
       // 2026-11-17 (Fossilization request): a bigger die with the element's letter on top so an Earth / Vitality
@@ -714,6 +816,7 @@ export function createRenderer(canvas, state) {
       ? (Array.isArray(state.ui.pathPlan) && state.ui.pathPlan.length ? state.ui.pathPlan : [state.ui.destinationTile]) : [];
     const threats = threatenedBy(state.entities, selfEnt, mySide, journey);
     if (typeof window !== "undefined") window.__chaosThreats = { journey, threats: [...threats] };   // test hook
+    const balloons = [];   // speech balloons, drawn after every unit (drawSpeechBalloons)
     for (const e of drawOrder) {
       const dead = e.life <= 0;
       // Fog of war: enemies the team can't currently see simply don't paint.
@@ -883,10 +986,13 @@ export function createRenderer(canvas, state) {
       // out over its last fifth.
       const sp = e.speech;
       const st = sp ? (now - sp.startAt) / sp.duration : 1;
-      if (sp && st >= 0 && st < 1 && !dead) drawSpeech(ctx, sp.text, x, Math.min(top - 26, y - 54), st < 0.8 ? 1 : 1 - (st - 0.8) / 0.2, sideOf(e.alliance) !== mySide);
+      if (sp && st >= 0 && st < 1 && !dead) balloons.push({ text: sp.text, name: String(e.name || '').replace(/^(Builder|Rival|Ally) — /, ''), startAt: sp.startAt,
+        x, yTip: Math.min(top - 26, y - 54), alpha: st < 0.85 ? 1 : 1 - (st - 0.85) / 0.15, foe: sideOf(e.alliance) !== mySide });
 
       ctx.restore();
     }
+
+    if (balloons.length) drawSpeechBalloons(ctx, balloons);
 
     // Threat areas my journey walks into: a ring of tiny red arrows on the hexes
     // THREAT_RADIUS away from each such enemy, pointing out — "step inside and

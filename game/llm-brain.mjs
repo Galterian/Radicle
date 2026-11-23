@@ -163,7 +163,8 @@ export function echoesOption(say, label) {
 // 4.5 s deadline, never part of a plan or the state hash). Asked by the hero's peer for its own UI (peer.mjs
 // banterFor); the UI plays the lines one after another as speech balloons.
 export const BANTER_MAX_UNITS = 6;
-export const BANTER_LINES = 8;
+export const BANTER_SAY_MAX = 90;   // a banter balloon holds 3 lines of ~30 characters (a reveal shout: SAY_MAX)
+export const BANTER_LINES = 6;   // short scene: ~200 tokens, it shares the server with the bots' picks
 const ROLE_WORDS = { hero: 'the human hero', team: "the hero's ally", builder: "the hero's builder (raises barricades, grumbles a lot)",
   rival: 'a rival team hero (boastful)', monster: 'a wild monster (growls, hungry)', unit: 'a wanderer' };
 export function banterSystemPrompt() {
@@ -187,7 +188,7 @@ export function banterSchema(n) {
   return {
     type: 'object',
     properties: { lines: { type: 'array', minItems: 3, maxItems: BANTER_LINES, items: {
-      type: 'object', properties: { who: { type: 'integer', enum: Array.from({ length: n }, (_, i) => i + 1) }, line: { type: 'string', minLength: 8, maxLength: SAY_MAX + 20 } },
+      type: 'object', properties: { who: { type: 'integer', enum: Array.from({ length: n }, (_, i) => i + 1) }, line: { type: 'string', minLength: 8, maxLength: BANTER_SAY_MAX + 20 } },
       required: ['who', 'line'], additionalProperties: false } } },
     required: ['lines'],
     additionalProperties: false,
@@ -195,10 +196,23 @@ export function banterSchema(n) {
 }
 // A long line is cut at a word (never mid-word) to fit a balloon: SAY_MAX characters with its "…".
 function shortLine(s) {
-  const t = cleanSay(String(s ?? '').replace(/[*_]/g, ''));
-  if (t.length < SAY_MAX) return t;
-  const cut = t.slice(0, SAY_MAX - 1).replace(/[\s,;:—-]+\S*$/, '');
-  return `${cut || t.slice(0, SAY_MAX - 1)}…`;
+  const t = String(s ?? '').replace(/[*_]/g, '').replace(/[ -<>`]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (t.length <= BANTER_SAY_MAX) return t;
+  const cut = t.slice(0, BANTER_SAY_MAX - 1).replace(/[\s,;:—-]+\S*$/, '');
+  return `${cut || t.slice(0, BANTER_SAY_MAX - 1)}…`;
+}
+// The 1.7B often makes a unit call ITSELF by name ("Rhox, your alchemy…" said by Rhox): the line is meant for the unit
+// that spoke before, so that one's name goes in front instead (no previous line: the vocative is dropped).
+export function fixSelfAddress(lines, names) {
+  const first = (n) => String(n || '').split(/[\s,—-]+/).filter(Boolean)[0]?.toLowerCase() || '';
+  return lines.map((l, i) => {
+    const own = first(names[l.who]);
+    const m = own && l.line.match(/^([^,!?]{1,40})[,!]\s*(.+)$/);
+    if (!m || first(m[1]) !== own) return l;
+    const prev = i > 0 ? names[lines[i - 1].who] : '';
+    const rest = m[2].charAt(0).toUpperCase() + m[2].slice(1);
+    return { ...l, line: prev ? `${String(prev).split(/\s+/).slice(0, 2).join(' ')}, ${m[2]}` : rest };
+  });
 }
 // → [{ who (0-based index), line }] — cleaned, empty / repeated lines and a speaker answering itself dropped.
 export function parseBanter(text, n) {
@@ -221,7 +235,7 @@ export function parseBanter(text, n) {
   return out.length ? out : null;
 }
 // One bulk request → { lines, ms } | { error, ms } | null (model off). Never throws.
-export async function askBanter(cfg, { units, place = '', mood = '', timeoutMs = 25000, fetchImpl = globalThis.fetch }) {
+export async function askBanter(cfg, { units, place = '', mood = '', timeoutMs = 60000, fetchImpl = globalThis.fetch }) {   // off the planning path: a busy server may take long
   const us = (units || []).slice(0, BANTER_MAX_UNITS);
   if (!cfg.url || us.length < 2 || typeof fetchImpl !== 'function') return null;
   const t0 = Date.now();
@@ -229,7 +243,7 @@ export async function askBanter(cfg, { units, place = '', mood = '', timeoutMs =
     model: cfg.model,
     messages: [{ role: 'system', content: banterSystemPrompt() }, { role: 'user', content: banterUserPrompt({ units: us, place, mood }) }],
     temperature: Math.max(cfg.temperature, 0.9),
-    max_tokens: 420,
+    max_tokens: 320,
     frequency_penalty: 0.6, presence_penalty: 0.4, repeat_penalty: 1.15,
     cache_prompt: true,
     chat_template_kwargs: { enable_thinking: false },

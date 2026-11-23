@@ -118,6 +118,15 @@ if (( DO_BUILD )); then
   done
   "$NODE_BIN" game/tools/effects-check.mjs | tail -1
   "$NODE_BIN" game/tools/stage-mobile-bundle.mjs || { echo "[deploy] staging the phone bundle failed — not building" >&2; exit 1; }
+  # The APK takes the bundle from the plugin's AAR (plugins/nodejs_mobile/nodejs_mobile.aar), NOT from src/main/assets:
+  # without rebuilding it every APK from 11-16 to 0.94 shipped the 11-16 game code (found 2026-11-23). Rebuild + verify.
+  ( cd godot/android/plugins/nodejs_mobile && ./gradlew --no-daemon assembleRelease -q ) \
+    || { echo "[deploy] building the nodejs_mobile AAR failed — not building" >&2; exit 1; }
+  cp godot/android/plugins/nodejs_mobile/build/outputs/aar/nodejs_mobile-release.aar godot/android/plugins/nodejs_mobile/nodejs_mobile.aar
+  if ! unzip -p godot/android/plugins/nodejs_mobile/nodejs_mobile.aar assets/nodejs-project/peer.mjs | cmp -s - game/peer.mjs; then
+    echo "[deploy] the AAR's peer.mjs differs from game/peer.mjs — not building a stale APK" >&2; exit 1
+  fi
+  echo "[deploy] nodejs_mobile AAR rebuilt with the staged bundle"
 fi
 
 # -- 2. Build -----------------------------------------------------------------

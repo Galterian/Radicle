@@ -74,7 +74,8 @@ import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
 import { effectResultsOf, plannedLossResults, naturalResults } from './effect-results.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
-import { llmConfig, aiRoleFor, systemPrompt, userPrompt, echoesOption, askThisAction, askBanter, BANTER_MAX_UNITS } from './llm-brain.mjs';
+import { llmConfig, aiRoleFor, systemPrompt, userPrompt, echoesOption, askThisAction, askBanter, fixSelfAddress, BANTER_MAX_UNITS } from './llm-brain.mjs';
+import { ringHexes, homeIndex, nextWallHex, ringStep } from './builder-ring.mjs';   // NPC builders' ring wall (planning only)
 import { LLM_PROTO, loadTeamAuth, remoteConfig, attachLlmRpc, createLlmRouter } from './llm-route.mjs';   // local → own team → OCI
 import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, onlyHolderAffliction, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats, naturalKind, naturalOfKind, isContactNatural } from './natural-perms.mjs';
 import { trapsInRange, clericRoute, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './world-prims.mjs';   // phase 6: generic primitives (were class-world / class-traps)
@@ -1290,7 +1291,7 @@ function recoverFromDiscard(pred, what) {
 // every unit's world_ledger_json, and this peer keeps (entity.worldLedger, published + autosaved) what it has seen.
 // NPC builders (AI skirmish 2026-11-22): the world-edit payload of a Barricade — an impassable wall (features.js
 // overlay: blocks moves like a labyrinth wall; Awake may move it). A builder keeps BUILDER_MAX_STANDING standing.
-const BUILDER_MAX_STANDING = 3;
+const BUILDER_MAX_STANDING = Number(process.env.BUILDER_MAX_STANDING) > 0 ? Number(process.env.BUILDER_MAX_STANDING) : 150;   // the ring wall (6R = 120 hexes at R 20)
 function barricadeMade() {
   return { label: 'Barricade', path: LAB_WALL_PATHS[0], desc: 'A barricade raised by an NPC builder: nobody passes.', biome: '', kind: 'wall', blocking: true, made_by: 'npc_builder' };
 }
@@ -5544,7 +5545,7 @@ async function doResolution() {
       console.log(`[${PEER_LABEL}] my class ${entity.className} is back on the board (every colour recast)`);
     }
     if (pr.event === 'untap') console.log(`[${PEER_LABEL}] my class ${entity.className} is untapped — the ability is ready again`);
-    if (pr.event === 'step') console.log(`[${PEER_LABEL}] class ${co.kind}: ${Number.isInteger(entity.classProgress.n) ? `${entity.classProgress.n}/${data.classes[entity.classId]?.data?.untap_emissions} emissions` : `${entity.classProgress.done.length}/${cols.length} colours`} (${co.stat} done)`);   // CP2: healer_untap_log — Healer untap_emissions (answer 2026-11-19 #4)
+    if (pr.event === 'step') console.log(`[${PEER_LABEL}] class ${co.kind}: ${Number.isInteger(entity.classProgress.n) ? `${entity.classProgress.n}/${classDataOf(entity.classId).untap_emissions} emissions` : `${entity.classProgress.done.length}/${cols.length} colours`} (${co.stat} done)`);   // CP2: healer_untap_log — Healer untap_emissions (answer 2026-11-19 #4)
   }
   // Class abilities that fired this turn (user rulings 2026-10-30, R1–R3) — each peer applies what is theirs.
   for (const u of classAbilityOut.used) {
@@ -6731,8 +6732,12 @@ function llmOptions() {
       opts.push({ label: `Cast ${c.name || c.effect_id}${at ? ` at ${_nameOf(at)}` : ''} (${c.element_cost.length} action${c.element_cost.length === 1 ? '' : 's'})`, plan: { cast: ch.index, cardId: c.card_id, aim: ch.target || null } });
     }
   }
-  // Builder: one Barricade a turn, never with an enemy in contact; the hex nearest the nearest enemy first.
-  if (AI_ROLE === 'builder' && builderBuiltTurn !== hg.turn && !(near && dist(near) <= 1)) {
+  // Builder: the ring wall (builderRingPlan) first; once it stands (or can't be reached), one Barricade a turn next to
+  // me, never with an enemy in contact — the hex nearest the nearest enemy first.
+  const ringOpt = AI_ROLE === 'builder' && !(near && dist(near) <= 1) ? builderRingPlan() : null;
+  if (ringOpt) opts.unshift(ringOpt);
+  // No Barricades around myself while ring work is left (user 2026-11-23: "they are building a wall around themselves").
+  else if (AI_ROLE === 'builder' && ringFinished() && builderBuiltTurn !== hg.turn && !(near && dist(near) <= 1)) {
     const code = has('P') ? 'P' : 'EP';
     const spots = near ? [...freeNear].sort((a, b) => hexDistance({ tile_q: a.q, tile_r: a.r }, near) - hexDistance({ tile_q: b.q, tile_r: b.r }, near) || a.q - b.q || a.r - b.r) : freeNear;
     spots.slice(0, 3).forEach((t, i) => opts.push({ label: `Build a barricade ${i === 0 && near ? `between you and ${_nameOf(near)}` : `on free hex ${i + 1} next to you`}`, plan: { code, build: { q: t.q, r: t.r } } }));
@@ -6765,7 +6770,8 @@ async function banterFor(ids) {
     if ((!ans || ans.error) && remote?.url) ans = await askBanter({ ...LLM, url: String(remote.url).replace(/\/+$/, ''), key: remote.key || '' }, { units, place });
     if (!ans || ans.error) { console.log(`[${PEER_LABEL}] banter: no answer (${ans?.error || 'model off'}, ${ans?.ms ?? '?'} ms)`); return; }
     console.log(`[${PEER_LABEL}] banter: ${ans.lines.length} lines for ${units.length} units in ${ans.ms} ms`);
-    broadcastUI({ kind: 'banter', ms: ans.ms, lines: ans.lines.map(l => ({ peer_id: picked[l.who].peer_id, text: l.line })) });
+    const fixed = fixSelfAddress(ans.lines, units.map(u => u.name));
+    broadcastUI({ kind: 'banter', ms: ans.ms, lines: fixed.map(l => ({ peer_id: picked[l.who].peer_id, text: l.line })) });
   } finally { banterBusy = false; banterAt = Date.now(); }
 }
 let _llmSystem = null;
@@ -6829,6 +6835,7 @@ function llmApply() {
     target = p.target ?? null;
     if (!(p.code === 'P' || p.code === 'EP' || clEmits(p.code))) queuedDestroy = null;
     queuedBuild = p.build || null;
+    opt.onApply?.();   // builder ring wall: remember the site I am building
   }
   llmStats.used++;
   const say = ans.say && hg.action - llmLastSay >= LLM.sayEvery && !echoesOption(ans.say, opt.label) ? ans.say : '';
@@ -6836,22 +6843,85 @@ function llmApply() {
   console.log(`[${PEER_LABEL}] llm (${AI_ROLE}): option ${ans.choice}/${t.options.length} "${opt.label}" in ${ans.ms} ms${ans.via && ans.via !== 'local' ? ` via ${ans.via}` : ''}${say ? ` — says "${say}"` : ''}`);
   return true;
 }
-// Builder without (or before) an answer: no enemy in contact → Posture / Empty Posture, and a Barricade on a free hex
-// next to me once a turn (the resolver picks the hex from the reveal salt). In contact the rules' pick stands.
+// Builder ring wall (builder-ring.mjs, user 2026-11-23): walk out to the BUILDER_RING_RADIUS ring around (0,0) and
+// raise it one Barricade a turn on my own arc. Planning only — the resolver checks each Barricade as before.
+const BUILDER_RING = AI_ROLE === 'builder' ? ringHexes({ q: 0, r: 0 }, Number(process.env.BUILDER_RING_RADIUS ?? 20)) : [];
+const BUILDER_HOME = homeIndex(PEER_LABEL, BUILDER_RING.length);
+const ringSkip = new Set();   // sites I could not reach (walled off): the next one along
+let ringWalk = { site: '', at: '', still: 0, action: -1 };
+// Built = a Barricade on the map, or one of mine raised this turn (my world edit is there before the overlay syncs) or
+// planned in the last 3 actions (the resolver would put a second one on a random hex next to me).
+const ringPlanned = new Map();   // "q,r" -> hg.action I planned to build it
+const isBarricadeAt = (q, r) => buildingFeatureAt(MAP_SEED, q, r)?.made_by === 'npc_builder' || (entity.worldEdits || []).some(e => !e.gone && e.id === `made:${q},${r}`)
+  || hg.action - (ringPlanned.get(`${q},${r}`) ?? -99) <= 3;
+function builderRingPlan() {
+  if (!BUILDER_RING.length || entity.life <= 0) return null;
+  const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+  const obs = new Set(livePeers().flatMap(p => { try { return JSON.parse(p?.obstacles_json || '[]').map(o => `${o.q},${o.r}`); } catch { return []; } }));
+  const obstacleAtTile = (q, r) => obs.has(`${q},${r}`);
+  const blocksStep = (q, r) => { const f = buildingFeatureAt(MAP_SEED, q, r); return !hexWalkableAt(MAP_SEED, q, r) || isLabyrinthWallAt(MAP_SEED, q, r) || !!(f && (f.kind === 'wall' || f.blocking)); };
+  // Two builders never race for one site: a hex clearly nearer another live builder (by 2+) is its job, not mine.
+  const meT = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const mates = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.ai_role === 'builder' && (p.life ?? 0) > 0 && !p.out && Number.isInteger(p.tile_q));
+  const theirs = (q, r) => { const t = { tile_q: q, tile_r: r }, mine = hexDistance(meT, t); return mates.some(b => hexDistance(b, t) + 2 <= mine); };
+  const site = nextWallHex({ ring: BUILDER_RING, home: BUILDER_HOME, skip: ringSkip, built: isBarricadeAt,
+    blocked: (q, r) => (!isBarricadeAt(q, r) && !!buildingFeatureAt(MAP_SEED, q, r)) || blocksStep(q, r) || obstacleAtTile(q, r) || occ.has(`${q},${r}`) || theirs(q, r) });
+  // Done = the whole ring stands (or every site left is out of reach) — not merely "the rest is another builder's".
+  if (!site) { builderRingPlan.done = !nextWallHex({ ring: BUILDER_RING, home: BUILDER_HOME, skip: ringSkip, built: isBarricadeAt,
+    blocked: (q, r) => (!isBarricadeAt(q, r) && !!buildingFeatureAt(MAP_SEED, q, r)) || blocksStep(q, r) || obstacleAtTile(q, r) }); return null; }
+  builderRingPlan.done = false;
+  const me = { q: entity.tile.q, r: entity.tile.r }, key = `${site.q},${site.r}`, at = `${me.q},${me.r}`;
+  if (builderRingPlan.site !== key) { builderRingPlan.site = key; console.log(`[${PEER_LABEL}] npc builder: next ring wall site (${key}) — I am at (${at}), ${Math.round(hexDistance({ tile_q: me.q, tile_r: me.r }, { tile_q: site.q, tile_r: site.r }))} hexes away`); }
+  const step = ringStep({ me, site, free: (q, r) => !blocksStep(q, r) && !occ.has(`${q},${r}`) && !obstacleAtTile(q, r) });
+  const has = (code) => hand.some(c => c.kind === 'action' && c.code === code);
+  if (!step?.build) {
+    // Walking but not getting anywhere for 6 actions (water, a wall line, a crowd): give this site up, take the next.
+    if (!(ringWalk.site === key && ringWalk.at === at)) ringWalk = { site: key, at, still: 0, action: hg.action };
+    else if (ringWalk.action !== hg.action) ringWalk = { ...ringWalk, still: ringWalk.still + 1, action: hg.action };   // once per action (asked at kick + deadline)
+    if (ringWalk.still >= 6) { ringSkip.add(key); console.log(`[${PEER_LABEL}] npc builder: cannot reach the ring wall at (${key}) — the next site along`); return null; }
+  }
+  if (step?.build) {
+    if (occ.has(key)) return null;   // somebody stands on the site: wait (the rules play)
+    const code = has('P') ? 'P' : 'EP';
+    return builderBuiltTurn === hg.turn ? { label: 'Rest by the ring wall', plan: { code } }
+      : { label: `Raise the ring wall at (${key})`, plan: { code, build: { q: site.q, r: site.r } }, onApply: () => ringPlanned.set(key, hg.action) };
+  }
+  if (step?.stepTo) return { label: 'Walk to the ring wall site', plan: { code: has('M') ? 'M' : 'EM', target: step.stepTo } };
+  return null;
+}
+
+// Builder without (or before) an answer — or with no enemy within 2 (the ring wall comes first): the ring plan; when the
+// ring stands or can't be reached, Posture / Empty Posture and a Barricade on a free hex next to me once a turn (the
+// resolver picks the hex from the reveal salt). In contact the rules' pick stands.
 function builderFallback() {
   const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   if (npcEnemies().some(p => hexDistance(here, p) <= 1)) return;
+  queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; npcCastAim = null; target = null;
+  const ring = builderRingPlan();
+  if (ring) {
+    const p = ring.plan, empty = p.code === 'EP' || p.code === 'EM';
+    const slot = empty ? -1 : hand.findIndex(c => c.kind === 'action' && c.code === p.code);
+    queued = slot >= 0 ? [slot] : [p.code];
+    const rides = slot >= 0 ? p.code : p.code === 'EM' ? 'M' : 'P';
+    queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && c.requires === rides ? i : -1).filter(i => i >= 0);
+    target = p.target ?? null;
+    queuedBuild = p.build || null;
+    ring.onApply?.();
+    return;
+  }
   const pi = hand.findIndex(c => c.kind === 'action' && c.code === 'P');
   queued = pi >= 0 ? [pi] : ['EP'];
   queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && c.requires === 'P' ? i : -1).filter(i => i >= 0);
-  queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; npcCastAim = null; target = null;
-  if (builderBuiltTurn !== hg.turn) queuedBuild = { q: null, r: null };
+  if (builderBuiltTurn !== hg.turn && ringFinished()) queuedBuild = { q: null, r: null };   // a random hex next to me only once the ring is done
 }
+function ringFinished() { return !BUILDER_RING.length || builderRingPlan.done === true; }
 async function npcPlan() {
   npcFree = false; queuedBuild = null;
   await npcPlanRules();
   const used = AI_ROLE ? llmApply() : false;
-  if (AI_ROLE === 'builder' && !used && npcFree) builderFallback();
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const calm = !npcEnemies().some(p => hexDistance(here, p) <= 2);
+  if (AI_ROLE === 'builder' && npcFree && (!used || calm)) builderFallback();   // the model's line (say) stays either way
 }
 async function npcPlanRules() {
   queuedDestroy = null;

@@ -160,3 +160,5 @@ tmp/
 /warlords3_screenshots/
 
 data/dimensions/dim-gentest-*
+data/dimensions/dim-ringtest-*
+game/.msys0000*

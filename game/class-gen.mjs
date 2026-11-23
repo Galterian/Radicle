@@ -4,6 +4,8 @@
 // editor's own publish check (editor-api.mjs validateDefinition: id / schema / foreign rules, class-engine
 // validateClassDef, tools/classes-rebalancing-check.mjs checkClass — the C3 validator every peer runs on a foreign class).
 // Same loop as effects and skills (effect-gen.mjs generateDef); a local draft only.
+// Since 2026-11-23 the model answers a TEMPLATE form ({id, name, template, data: colours / text / knobs, power}) — see
+// CLASS_TEMPLATES; assemble() still takes a whole class (hooks) too (systemPrompt(): the old free-form prompt).
 // A foreign class may not do what the game code resolves itself (power keys marked peer / hand: build, plant,
 // disable_traps, relocate, discard, reveal — user ruling 2026-11-17), so the prompt offers only the data-run keys.
 import fs from 'node:fs';
@@ -27,12 +29,80 @@ const HAND_KEYS = ['hand_reveal', 'hand_discard'];
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
 const isObj = (x) => x && typeof x === 'object' && !Array.isArray(x);
 
+// TEMPLATES (user 2026-11-23, after the first real 8B run looped on hand-written hook logic): the model no longer writes
+// hook programs — it picks ONE ready-made rule (a built-in class that passes the publish check as a player copy,
+// tools/out/_class_probe2.mjs) and gives the class its own name, colours, card text and knob values; assemble() copies
+// the template's flags / hooks / library in. The published def is a full chaosd6.class/2 (no validator / repo change).
+export const CLASS_TEMPLATES = Object.freeze(['class_alchemist', 'class_assassin', 'class_avenger', 'class_barbarian', 'class_bard', 'class_druid',
+  'class_elementalist', 'class_enchanter', 'class_guardian', 'class_healer', 'class_kensei', 'class_manipulator', 'class_monk', 'class_necromancer',
+  'class_noble', 'class_overlord', 'class_paladin', 'class_ranger', 'class_reaver', 'class_restaurateur', 'class_rogue', 'class_shaman',
+  'class_summoner', 'class_transmuter', 'class_weapon_master']);
+export const CLASS_ELEMENTS = Object.freeze(['elem_vitality', 'elem_souls', 'elem_time', 'elem_space', 'elem_air', 'elem_water', 'elem_earth', 'elem_fire', 'elem_concentration', 'elem_harmony']);
+const OWN = ['ability_kind', 'colors', 'text'];
+const knobsOf = (data) => Object.fromEntries(Object.entries(data || {}).filter(([k]) => !OWN.includes(k)));
+const sameType = (a, b) => (Array.isArray(a) ? Array.isArray(b) : a === null ? b === null : typeof a === typeof b && !Array.isArray(b));
+/** A template as the model may change it: the built-in class stripped (power from BUILTIN_POWER). */
+export function templateDef(id, { dataDir = DATA } = {}) {
+  if (!CLASS_TEMPLATES.includes(id)) return null;
+  return stripClass(readJson(path.join(dataDir, 'classes', `${id}.json`)));
+}
+
 // What the model writes (the generator adds schema, version, source).
 export function stripClass(d) {
   const o = { id: d.id, name: d.name, data: d.data, flags: d.flags, power: d.power || BUILTIN_POWER[d.id] || BUILTIN_POWER[d.extends] || {} };
   if (d.ui) o.ui = d.ui;
   Object.assign(o, { uses: d.uses, hooks: d.hooks });
   return o;
+}
+
+/** A def → what the model sees of it on a retry: the template form when it came from one, else the whole class. */
+export function stripForModel(d) {
+  const t = d?.source?.template;
+  if (!t || !CLASS_TEMPLATES.includes(t)) return stripClass(d);
+  return { id: d.id, name: d.name, template: t, data: { colors: d.data?.colors, text: d.data?.text, ...knobsOf(d.data) }, power: d.power };
+}
+
+/** The template prompt (≈ 3k tokens instead of ≈ 7k: no dialect, no hook docs, no whole examples). */
+export function templatePrompt({ dataDir = DATA } = {}) {
+  const lines = CLASS_TEMPLATES.map(id => {
+    const t = templateDef(id, { dataDir });
+    const k = knobsOf(t.data);
+    return `${id} — ${t.data.ability_kind}${t.flags?.needs ? `, targets ${t.flags.needs}` : ''} — "${String(t.data.text || '').replace(/\s+/g, ' ').slice(0, 260)}"`
+      + `${Object.keys(k).length ? ` — knobs ${JSON.stringify(k)}` : ''} — power ${JSON.stringify(t.power)}`;
+  });
+  return [
+    'You design new character classes for chaosD6, a hex card game. A class is a card in front of a hero: an ability it taps',
+    '(tap: once, then untapped again by emitting its colours; once_per_round: once per turn) or a rule that always holds',
+    '(static, passive).',
+    'You do NOT write rule programs. Pick the ONE ready-made rule (template) below that does what the player asks — the',
+    'closest one if none fits exactly — and give the class its own name, colours, card text and knob values.',
+    'Answer with ONE JSON object:',
+    '{"id": "class_<lowercase words joined by _>", "name": "<name>", "template": "<a template id>", "data": {"colors": [<2-5',
+    'DISTINCT elements>], "text": "<the card text, 1-3 sentences, true to the template\'s rule and your knob values>", <knob>:',
+    '<value>, …}, "power": {…}}',
+    `Elements: ${CLASS_ELEMENTS.join(' ')}. The colours are what untaps the class (for a static class: its colours).`,
+    'Knobs: only the chosen template\'s own knobs, each with the same type; leave a knob out to keep the template\'s value.',
+    'power: the template\'s power keys with your numbers (it prices the class; the validator refuses a class that does more',
+    'than its power says); leave power out to keep the template\'s.',
+    'Keep it fair: one clear benefit, priced like its template. The name and text are yours — never the template\'s name.',
+    '',
+    'Templates (id — kind — what it does — knobs — power):',
+    ...lines,
+    '',
+    'Example answer:',
+    '{"id":"class_battle_nurse","name":"Battle Nurse","template":"class_healer","data":{"colors":["elem_vitality","elem_harmony"],"text":"Tap: if you did not move this turn, you or an adjacent ally regains 1 life."}}',
+  ].join('\n');
+}
+export function templateAnswerSchema() {
+  return {
+    type: 'object',
+    properties: {
+      id: { type: 'string', pattern: '^class_[a-z0-9_]+$' }, name: { type: 'string' }, template: { type: 'string', enum: [...CLASS_TEMPLATES] },
+      data: { type: 'object', properties: { colors: { type: 'array', items: { type: 'string', enum: [...CLASS_ELEMENTS] }, minItems: 2, maxItems: 5 }, text: { type: 'string' } }, required: ['colors', 'text'] },
+      power: { type: 'object' },
+    },
+    required: ['id', 'name', 'template', 'data'],
+  };
 }
 
 const section = (doc, from, to) => { const a = doc.indexOf(from); if (a < 0) return ''; const b = to ? doc.indexOf(to, a + from.length) : -1; return doc.slice(a, b < 0 ? undefined : b).trim(); };
@@ -102,6 +172,8 @@ export function assemble(raw, { model = '', idea = '', taken = new Set() } = {})
   let id = typeof r.id === 'string' && /^class_[a-z0-9_]+$/.test(r.id) ? r.id : `class_gen_${Date.now().toString(36)}`;
   if (taken.has(id)) id = `${id}_gen`;   // never a built-in's id
   const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 80) : id;
+  const tpl = typeof r.template === 'string' ? templateDef(r.template) : null;
+  if (tpl) return fromTemplate(r, tpl, { id, name, model, idea });
   const def = {
     schema: 'chaosd6.class/2', id, name, version: '0.1.0',
     source: { collection: 'generated', custom: true, model, idea: String(idea).slice(0, 500), at: new Date().toISOString() },
@@ -112,6 +184,33 @@ export function assemble(raw, { model = '', idea = '', taken = new Set() } = {})
   if (isObj(r.ui) && Object.keys(r.ui).length) def.ui = r.ui;
   def.uses = Array.isArray(r.uses) && r.uses.length ? r.uses.filter(u => typeof u === 'string') : ['classes_std'];
   def.hooks = isObj(r.hooks) ? r.hooks : {};
+  return def;
+}
+
+// The template's rule with the model's name / colours / text / knobs / power numbers. Its kind, flags, hooks and library
+// are the template's (never the model's); the hooks' log text "class <template>:" names the new class.
+function fromTemplate(r, tpl, { id, name, model, idea }) {
+  const data = structuredClone(tpl.data);
+  const ignored = [];
+  for (const [k, v] of Object.entries(isObj(r.data) ? r.data : {})) {
+    if (k === 'colors') { if (Array.isArray(v)) data.colors = v.filter(e => typeof e === 'string'); }
+    else if (k === 'text') { if (typeof v === 'string' && v.trim()) data.text = v.trim().slice(0, 600); }
+    else if (k !== 'ability_kind' && Object.prototype.hasOwnProperty.call(data, k) && sameType(data[k], v)) data[k] = structuredClone(v);
+    else ignored.push(k);
+  }
+  const power = structuredClone(tpl.power || {});
+  if (isObj(r.power)) for (const [k, v] of Object.entries(r.power)) { if (Object.prototype.hasOwnProperty.call(power, k)) power[k] = structuredClone(v); else ignored.push(`power.${k}`); }
+  const short = tpl.id.replace(/^class_/, '').replace(/_/g, ' ');
+  const own = name.toLowerCase().replace(/[^a-z0-9 ]+/g, '').trim() || id.replace(/^class_/, '').replace(/_/g, ' ');
+  const hooks = JSON.parse(JSON.stringify(tpl.hooks || {}).split(`class ${short}:`).join(`class ${own}:`));
+  const def = {
+    schema: 'chaosd6.class/2', id, name, version: '0.1.0',
+    source: { collection: 'generated', custom: true, model, idea: String(idea).slice(0, 500), at: new Date().toISOString(), template: tpl.id, ...(ignored.length ? { ignored } : {}) },
+    data, flags: structuredClone(tpl.flags || {}), power,
+  };
+  if (isObj(tpl.ui) && Object.keys(tpl.ui).length) def.ui = structuredClone(tpl.ui);
+  def.uses = [...(tpl.uses || ['classes_std'])];
+  def.hooks = hooks;
   return def;
 }
 
@@ -157,8 +256,9 @@ export async function checkClassDraft(def, { validateDefinition = null } = {}) {
 
 export function classSpec({ validateDefinition = null } = {}) {
   return {
-    kind: 'class', expect: 650,
-    systemPrompt: () => systemPrompt(), answerSchema, strip: stripClass, assemble, autoFix,
+    // templates (2026-11-23): the model picks a ready-made rule — a short answer (≈ 150 tokens) and a short prompt
+    kind: 'class', expect: 160,
+    systemPrompt: () => templatePrompt(), answerSchema: templateAnswerSchema, strip: stripForModel, assemble, autoFix,
     taken: () => new Set(fs.readdirSync(path.join(DATA, 'classes')).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5))),
     check: (def) => checkClassDraft(def, { validateDefinition }),
   };

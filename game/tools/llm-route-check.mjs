@@ -41,6 +41,14 @@ fs.writeFileSync(path.join(tmp, 'phone', 'llm.json'), JSON.stringify({ remote_ur
 const rc = remoteConfig({}, phone.file);
 ok(rc.url === 'https://oci.example/llm' && rc.key === 'k1', 'remote from <profile dir>/llm.json');
 ok(remoteConfig({ LLM_REMOTE_URL: '0' }, phone.file).url === '', 'LLM_REMOTE_URL=0 turns the remote off');
+{   // only the OCI 8B's url + key (the phone's Drafts key form / a desktop without remote_*): the 1.7B on the same host
+  const f = path.join(tmp, 'big-only.json');
+  fs.writeFileSync(f, JSON.stringify({ big_url: 'https://oci.example/llm-big', big_key: 'kb' }));
+  const r = remoteConfig({ LLM_REMOTE_FILE: f });
+  ok(r.url === 'https://oci.example/llm' && r.key === 'kb', 'big_url/big_key only → remote …/llm with the same key (LLM_REMOTE_FILE, no profile)');
+  fs.writeFileSync(f, JSON.stringify({ big_url: 'https://oci.example/llm-big', big_key: 'kb', remote_url: 'https://other.example/llm' }));
+  ok(remoteConfig({ LLM_REMOTE_FILE: f }).key === '', 'the big key never goes to another host');
+}
 
 // Fake model: answers choice 2 after `delay` ms, or the error string.
 const fakeAsk = (tag, { delay = 5, error = null, choice = 2 } = {}) => async (cfg, q) => {

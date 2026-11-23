@@ -393,6 +393,8 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
       AI_ROLE:          ai && p.aiRole ? p.aiRole : '',
       // llm-route.mjs: my team's bots may also ask my teammates' nodes (signed with this device's key) — team role only.
       ...(ai && p.aiRole === 'team' ? { LLM_PROFILE_FILE: file } : {}),
+      // every AI bot may fall back to the OCI 1.7B (llm.json; rivals / builders have no profile of their own)
+      ...(ai && p.aiRole ? { LLM_REMOTE_FILE: path.join(path.dirname(file), 'llm.json') } : {}),
     });
     if (!(await waitForPort(p.http))) throw new Error(`peer-${p.label} did not come up on :${p.http}`);
     try {

@@ -184,6 +184,9 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         Object.assign(process.env, { DIM_NAME: plan.dimName, DIM_ID: plan.dimId });
         if (plan.character) Object.assign(process.env, profileEnv(file, plan.character));
         console.log(`[mobile] new dimension ${plan.dimName} (${plan.dimId}) as ${plan.character?.name || 'a random character'}`);
+        // AI skirmish (as the desktop's Create Dimension, ui-server.mjs; user 2026-11-23): a rival team (npc_c) and NPC
+        // builders (npc_a) as workers. No llama on the phone: they ask the OCI 1.7B (llm.json), else the rules play them.
+        if (process.env.AI_SKIRMISH !== '0') teamAllies = { allies: [], tier: 'strong', file, profileEnv, bots: await skirmishBots() };
       }
       // Load old Dimension: peer.mjs hydrates map / obstacles / tokens / traps from the TMJ (RESTORE_FROM_TMJ).
       if (plan.mode === 'restore') {
@@ -236,7 +239,18 @@ await menuToEnv();
 // allySide: the team's bot side (npc_a; npc_c when I am the third team). monsters: a quiet join's regenerated
 // Door-known monsters [{ label, name, creature_id, tile, life }] — npc_b bots on their last tiles, under their old
 // peer ids (so the Doors' records of them are superseded, not doubled), started after the allies.
-async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false, allySide = 'npc_a', monsters = [] }) {
+// The AI skirmish of a Create Dimension (ui-server.mjs startDimension: AI_RIVALS 2 rivals 7–9 hexes out, npc_c;
+// AI_BUILDERS 2 builders 2–3 hexes from me, npc_a), each a random character.
+async function skirmishBots() {
+  const chars = await characterList();
+  const any = () => chars[Math.floor(Math.random() * chars.length)] || { id: 'char_oran_rief', name: 'Oran Rief' };
+  const n = (v, d) => Math.max(0, Number(v ?? d) || 0);
+  return [
+    ...Array.from({ length: n(process.env.AI_RIVALS, 2) }, (_, i) => { const c = any(); return { tag: `rival${i + 1}`, character: c.id, name: `Rival — ${c.name}`, alliance: 'npc_c', aiRole: 'rival', ring: [7, 9] }; }),
+    ...Array.from({ length: n(process.env.AI_BUILDERS, 2) }, (_, i) => { const c = any(); return { tag: `builder${i + 1}`, character: c.id, name: `Builder — ${c.name}`, alliance: 'npc_a', aiRole: 'builder', ring: [2, 3] }; }),
+  ];
+}
+async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false, allySide = 'npc_a', monsters = [], bots = [] }) {
   const { Worker } = await import('node:worker_threads');
   const { Transform } = await import('node:stream');
   const net = await import('node:net');
@@ -265,11 +279,15 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
   const home = JSON.parse(process.env.START_TILE || '{"q":1,"r":2}');
   const [dMin, dMax] = tier === 'strong' ? [2, 6] : [9, 10];
   const taken = new Set([`${home.q},${home.r}`, ...monsters.map(m => `${m.tile.q},${m.tile.r}`)]);
-  const ring = [];
-  for (let dq = -dMax; dq <= dMax; dq++) for (let dr = -dMax; dr <= dMax; dr++) {
-    const t = { q: home.q + dq, r: home.r + dr }, d = hexDistance(home, t);
-    if (d >= dMin && d <= dMax && (walkable ? walkable(seed, t.q, t.r) : !isLabyrinthWallAt(seed, t.q, t.r))) ring.push(t);
-  }
+  const ringOf = (lo, hi) => {
+    const out = [];
+    for (let dq = -hi; dq <= hi; dq++) for (let dr = -hi; dr <= hi; dr++) {
+      const t = { q: home.q + dq, r: home.r + dr }, d = hexDistance(home, t);
+      if (d >= lo && d <= hi && (walkable ? walkable(seed, t.q, t.r) : !isLabyrinthWallAt(seed, t.q, t.r))) out.push(t);
+    }
+    return out;
+  };
+  const ring = ringOf(dMin, dMax);
   const split = (v) => String(v || '').split(',').filter(Boolean);
   const bootstrap = [...new Set([...me.multiaddrs, ...split(process.env.BOOTSTRAP)])];
   // NOGUN=1 (M6 step 1): the workers inherit it via process.env and get no Gun relays to mesh with.
@@ -321,6 +339,32 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
     await startWorker(m.label, m.name, { PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', CHARACTER_ID: '', CREATURE_ID: m.creature_id, ENTITY_NAME: m.name,
       ALLIANCE: 'npc_b', START_TILE: JSON.stringify(m.tile), START_LIFE: m.life ? String(m.life) : '', FORCE_CLASS: '' });
   }
+  // AI skirmish bots (skirmishBots): no profile, no llama here (LLM_URL '') → llm-route asks the OCI 1.7B through
+  // LLM_REMOTE_FILE (my llm.json), never my teammates' nodes (they are not my team's bots); none reachable → the rules.
+  const llmFile = `${String(file).replace(/[\\/][^\\/]*$/, '')}/llm.json`;
+  for (const b of bots) {
+    const free = ringOf(b.ring[0], b.ring[1]).filter(t => !taken.has(`${t.q},${t.r}`));
+    const tile = free[Math.floor(Math.random() * free.length)];
+    if (!tile) { console.error(`[skirmish] no free tile ${b.ring[0]}–${b.ring[1]} hexes from (${home.q},${home.r}) for ${b.name}`); continue; }
+    taken.add(`${tile.q},${tile.r}`);
+    const tag = `${label}-${b.tag}`;
+    console.log(`[skirmish] ${b.name} (${b.character}) enters as ${tag} (${b.alliance}, ${b.aiRole}) at (${tile.q},${tile.r}), ${hexDistance(home, tile)} hexes from me`);
+    await startWorker(tag, b.name, { PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', CHARACTER_ID: b.character, CREATURE_ID: '', ENTITY_NAME: b.name,
+      ALLIANCE: b.alliance, START_TILE: JSON.stringify(tile), FORCE_CLASS: '', AI_ROLE: b.aiRole, LLM_URL: '', LLM_PROFILE_FILE: '', LLM_REMOTE_FILE: llmFile,
+      LLM_SERVE: '0', FORCE_FOREIGN_CLASS: '', FOREIGN_CLASS_REF_JSON: '', FORCE_FOREIGN_SKILL: '', FORCE_FOREIGN_EFFECT: '', FOREIGN_CARD_REFS_JSON: '', TEST_PRIORITY: '' });
+  }
+}
+// Playable characters of data/characters.json: [{ id, name }] (the active versions; ../data next to the bundle, else ./data).
+async function characterList() {
+  const fs = await import('node:fs');
+  for (const rel of ['../data/characters.json', './data/characters.json']) {
+    try {
+      const doc = JSON.parse(fs.readFileSync(new URL(rel, import.meta.url), 'utf8'));
+      const out = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status))).map(e => ({ id: e.id, name: e.name || e.id }));
+      if (out.length) return out;
+    } catch { /* try the next location */ }
+  }
+  return [];
 }
 // The phone starts as a random character each launch (user ruling 2026-11-12) unless one is pinned.
 // Same data/ lookup as peer.mjs (../data next to the bundle), falling back to the bundled ./data.

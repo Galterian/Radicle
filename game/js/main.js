@@ -2,9 +2,9 @@
 // the state the peer gossips. All simulation (libp2p mesh, Gun graph,
 // hashgraph envelopes, resolver, radicle lottery) runs in the peer processes.
 
-import { createRenderer, setSkillUi as setRendererSkillUi } from './renderer.js';
+import { createRenderer, setSkillUi as setRendererSkillUi, tokenSpritePath } from './renderer.js';
 import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
-import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS } from './map.js';
+import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS, featureAt as worldItemAt } from './map.js';   // worldItemAt: the seed's bonus items (Shrine, Crystal …), NOT features.js featureAt (buildings / walls)
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
 import { ledgerUnits } from './world-ledger.js';
@@ -547,10 +547,10 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 // AI skirmish speech balloons: how long a line stays up, and the receiver-side clean-up (same rule as
 // llm-brain.mjs cleanSay — one printable line, at most 60 characters; never trust a peer's string).
 const SPEECH_MS = 4500;
-function cleanSayUI(s) {
+function cleanSayUI(s, max = 60) {   // banter lines: 90 (llm-brain.mjs BANTER_SAY_MAX)
   if (typeof s !== 'string') return '';
   const t = s.replace(/[\u0000-\u001f\u007f<>`]/g, ' ').replace(/\s+/g, ' ').trim();
-  return t.length > 60 ? `${t.slice(0, 59)}…` : t;
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
 }
 function logUI(text, kind = 'evt', opts = null) {
   const li = document.createElement('li');
@@ -1343,7 +1343,8 @@ function worldFeatures() {
   if (key === worldCache.key) return worldCache.list;
   const list = [];
   for (const t of state.map.tiles()) {
-    const f = featureAt(state.map.seed, t.q, t.r);
+    // map.js item (2026-11-23: features.js featureAt here listed buildings and Barricades as tokens → "undefined" dice)
+    const f = worldItemAt(state.map.seed, t.q, t.r);
     if (!f) continue;
     const ed = edits.get(f.id);
     if (ed?.gone) continue;
@@ -2108,7 +2109,28 @@ function renderHoverCard(clientX, clientY) {
 // placer is a pure function of (dim seed, q, r); the catalogs load lazily, so
 // a hex can briefly report "nothing" right after connect. Returns
 // {label, kind, path, id, biome, desc, q, r} or null.
+// The hex card also lists the tile tokens standing there (2026-11-23: the map shows them as small buildings, not
+// numbered dice): a world item "Grove — Vitality +3 while you stand here", an effect token "Earth bonus +4 (by Ana)".
+function tokenLines(q, r) {
+  const out = [];
+  const nm = (el) => elementById.get(el)?.name || String(el || '').replace(/^elem_/, '');
+  for (const p of state.entities) { try { for (const t of JSON.parse(p.tile_tokens_json || '[]')) if (t.q === q && t.r === r) out.push({ t, by: p }); } catch {} }
+  try { for (const t of worldFeatures()) if (t.q === q && t.r === r) out.push({ t, by: null }); } catch {}
+  return out.map(({ t, by }) => ({ t, text: t.world ? `${t.item || 'World item'} — ${nm(t.elem)} +${t.value} while you stand here`
+    : `${nm(t.elem)} ${t.kind === 'shield' ? 'shield' : 'bonus'} ${t.kind === 'shield' ? '' : '+'}${t.value}${t.druid ? ' (Druid stone)' : ''}${by?.name ? ` — by ${by.name}` : ''}` }));
+}
 function objectAt(q, r) {
+  const o = objectAtBase(q, r);
+  if (!Number.isInteger(q) || !Number.isInteger(r) || !state.map.has(q, r)) return o;
+  const toks = tokenLines(q, r);
+  if (!toks.length) return o;
+  const list = `Tokens here:\n${toks.map(x => `• ${x.text}`).join('\n')}`;
+  if (o) return { ...o, desc: `${o.desc}\n\n${list}` };
+  const t0 = toks[0].t;
+  return { id: `tokens:${q},${r}`, label: t0.world ? (t0.item || 'World item') : `${elementById.get(t0.elem)?.name || 'Element'} token`, kind: t0.world ? 'world item' : 'tile token',
+    path: tokenSpritePath(t0), q, r, desc: list };
+}
+function objectAtBase(q, r) {
   if (!Number.isInteger(q) || !Number.isInteger(r) || !state.map.has(q, r)) return null;
   // Player-created obstacles (Creation walls) take priority over map scenery:
   // if a wall is standing on this hex, that's what you're asking about. Return
@@ -3196,10 +3218,12 @@ if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === 'skil
 // dimension (some unit carries an ai_role) my peer asks the llama-server for ONE bulk scene between me and the units
 // in my sight (peer.mjs banterFor → llm-brain.mjs askBanter) and this plays it, a line every BANTER_GAP_MS, as
 // speech balloons + 💬 log lines. A unit new to my sight asks again (≥ 20 s apart); a quiet scene every 75 s.
-const BANTER_GAP_MS = 2800;
+// A line stays up long enough to read (≈ 2.4 s + 55 ms a character, 3.5–7 s) and the answer appears while it is
+// still up, so two balloons read as an exchange. The 💬 strip over the map keeps the last lines (✕ mutes banter).
+const banterMs = (text) => Math.max(3500, Math.min(7000, 2400 + 55 * text.length));
 function maybeBanter(sight) {
   const b = (state.ui.banter ||= { heard: new Set(), askedAt: 0, playingUntil: 0 });
-  if (!state.myPeerId || !state.entities?.some(e => e.ai_role)) return;
+  if (!state.myPeerId || !state.entities?.some(e => e.ai_role) || localStorage.getItem('chaosd6.banter') === 'off') return;
   const me = state.entities.find(p => p.peer_id === state.myPeerId);
   if (!me || !(me.life > 0)) return;
   const now = Date.now();
@@ -3216,16 +3240,50 @@ function maybeBanter(sight) {
 function playBanter(lines) {
   const b = (state.ui.banter ||= { heard: new Set(), askedAt: 0, playingUntil: 0 });
   const ok = (Array.isArray(lines) ? lines : []).filter(l => typeof l?.peer_id === 'string')
-    .map(l => ({ id: l.peer_id, text: cleanSayUI(l.text) })).filter(l => l.text).slice(0, 8);
+    .map(l => ({ id: l.peer_id, text: cleanSayUI(l.text, 90) })).filter(l => l.text).slice(0, 8);
   if (!ok.length) return;
-  b.playingUntil = Date.now() + ok.length * BANTER_GAP_MS + SPEECH_MS;
-  ok.forEach((l, i) => setTimeout(() => {
-    const e = state.entities.find(p => p.peer_id === l.id);
-    if (!e || !(e.life > 0) || isGone(e)) return;   // fell or left meanwhile: its line is skipped
-    (state.ui.speech ||= {})[l.id] = { text: l.text, startAt: performance.now(), duration: SPEECH_MS };
-    logUI(`💬 ${peerShort(l.id)}: “${l.text}”`, 'evt', { peerId: l.id });
-    rendererRef?.render?.();
-  }, i * BANTER_GAP_MS));
+  let at = 0;
+  for (const l of ok) {
+    const dur = banterMs(l.text);
+    setTimeout(() => {
+      const e = state.entities.find(p => p.peer_id === l.id);
+      if (!e || !(e.life > 0) || isGone(e)) return;   // fell or left meanwhile: its line is skipped
+      (state.ui.speech ||= {})[l.id] = { text: l.text, startAt: performance.now(), duration: dur };
+      logUI(`💬 ${peerShort(l.id)}: “${l.text}”`, 'evt', { peerId: l.id });
+      banterStrip(e, l.text);
+      rendererRef?.render?.();
+    }, at);
+    at += Math.round(dur * 0.7);
+  }
+  b.playingUntil = Date.now() + at + 3000;
+}
+// The 💬 strip: the scene's last three lines, small and translucent over the map's bottom-left corner, click-through
+// except its ✕ (mutes banter); it fades 8 s after the last line. textContent only (lines and names are untrusted).
+function banterStrip(e, text) {
+  let box = document.getElementById('banter-strip');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'banter-strip';
+    const x = document.createElement('button');
+    x.type = 'button'; x.className = 'banter-x'; x.textContent = '✕'; x.title = 'mute the units’ banter (AI skirmish)';
+    x.onclick = () => { localStorage.setItem('chaosd6.banter', 'off'); box.remove(); logUI('💬 banter muted (localStorage chaosd6.banter = off)', 'phase'); };
+    box.append(x, document.createElement('ol'));
+    document.body.appendChild(box);
+  }
+  // Pinned to the map's bottom-left corner (fixed: the map sits in a grid / fills the phone screen).
+  const r = document.getElementById('stage')?.getBoundingClientRect();
+  if (r) { box.style.left = `${Math.round(r.left + 8)}px`; box.style.bottom = `${Math.round(window.innerHeight - r.bottom + (IS_MOBILE_UI ? 150 : 8))}px`; }
+  const li = document.createElement('li');
+  const who = document.createElement('b');
+  who.textContent = `${String(e.name || peerShort(e.peer_id)).replace(/^(Builder|Rival|Ally) — /, '')}: `;
+  who.className = e.peer_id === state.myPeerId || sameSide(e) ? 'friend' : 'foe';
+  li.append(who, document.createTextNode(text));
+  const ol = box.querySelector('ol');
+  ol.appendChild(li);
+  while (ol.children.length > 3) ol.firstChild.remove();
+  box.classList.remove('idle');
+  clearTimeout(banterStrip.t);
+  banterStrip.t = setTimeout(() => box.classList.add('idle'), 8000);
 }
 
 // Encounter defeated (user ruling 2026-11-13): once every enemy the team has seen is down and none
