@@ -6,6 +6,8 @@
 #   LLM_HOME      install dir            (default ~/.local/share/chaosd6-llm; the OCI setup uses /opt/chaosd6-llm)
 #   LLAMA_TAG     llama.cpp release tag  (default b12626, 2026-11-22)
 #   MODEL_URL / MODEL_SHA256             (default unsloth/Qwen3-1.7B-GGUF Q4_K_M, sha256 pinned below)
+#   LLM_TIER      bot (default: Qwen3-1.7B → models/current.gguf, the live bot brain) | big (Qwen3-8B Q4_K_M, 5.0 GB →
+#                 models/big.gguf: effect generation, game/effect-gen.mjs — not on the planning clock)
 #
 # Binary: the release tarball llama-<tag>-bin-ubuntu-<x64|arm64>.tar.gz (sha256 checked against the release's
 # digest), else — no asset, or it does not run on this glibc — a CPU build from source (cmake via pip --user if
@@ -13,8 +15,16 @@
 set -euo pipefail
 LLM_HOME="${LLM_HOME:-$HOME/.local/share/chaosd6-llm}"
 LLAMA_TAG="${LLAMA_TAG:-b12626}"
-MODEL_URL="${MODEL_URL:-https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf}"
-MODEL_SHA256="${MODEL_SHA256:-b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897}"
+LLM_TIER="${LLM_TIER:-bot}"
+if [ "$LLM_TIER" = big ]; then
+  MODEL_URL="${MODEL_URL:-https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf}"
+  MODEL_SHA256="${MODEL_SHA256:-120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4}"   # HF lfs oid, 5,027,784,512 B
+  MODEL_LINK=big.gguf
+else
+  MODEL_URL="${MODEL_URL:-https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf}"
+  MODEL_SHA256="${MODEL_SHA256:-b139949c5bd74937ad8ed8c8cf3d9ffb1e99c866c823204dc42c0d91fa181897}"
+  MODEL_LINK=current.gguf
+fi
 MODEL_FILE="$LLM_HOME/models/$(basename "${MODEL_URL%%\?*}")"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -77,7 +87,7 @@ fi
 echo "   $(LD_LIBRARY_PATH="$LLM_HOME/bin" "$LLM_HOME/bin/llama-server" --version 2>&1 | grep -m1 -i version || echo '?')"
 install -m 755 "$HERE/llama-run.sh" "$LLM_HOME/bin/llama-run.sh"
 
-# The model (1.1 GB): resumable download, sha256 pinned.
+# The model (1.1 GB bot / 5.0 GB big): resumable download, sha256 pinned.
 if [ -f "$MODEL_FILE" ] && [ "$(sha256sum "$MODEL_FILE" | cut -d' ' -f1)" = "$MODEL_SHA256" ]; then
   echo "-- model $(basename "$MODEL_FILE") already in place (sha256 ok)"
 else
@@ -88,5 +98,5 @@ else
   mv "$MODEL_FILE.part" "$MODEL_FILE"
   echo "   sha256 ok"
 fi
-ln -sf "$(basename "$MODEL_FILE")" "$LLM_HOME/models/current.gguf"
-echo "== done: $LLM_HOME/bin/llama-run.sh serves $(basename "$MODEL_FILE") on 127.0.0.1:\${LLM_PORT:-8095}"
+ln -sf "$(basename "$MODEL_FILE")" "$LLM_HOME/models/$MODEL_LINK"
+echo "== done: $LLM_HOME/bin/llama-run.sh serves $(basename "$MODEL_FILE") as models/$MODEL_LINK (LLM_TIER=$LLM_TIER)"
