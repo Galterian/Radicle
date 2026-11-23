@@ -6,11 +6,13 @@
 //           OCI: https://<host>/llm-big with --key = the OCI API key)
 //   --out   default <profile dir>/effect-drafts (desktop ~/.local/share/chaosd6/effect-drafts)
 //   --prompt  print the system prompt's size and exit (no model call)
+//   --save-key [--url URL]  store the OCI key (asked, not echoed) in <profile dir>/llm.json (mode 600); later runs need no --key/--url
 //   --ssh user@host  read the model server's CPU / memory over your SSH (OCI: --ssh ubuntu@92.5.138.121; key $SSH_KEY or
 //                    ~/.ssh/id_rsa). Without it: this machine's when --url is local, else none.
 //   --every N        status line every N seconds (default 5); --quiet: none
 // Exit 0 = a draft the validator rates ok; 1 = best draft kept but refused / out of band; 2 = no draft.
-import { genConfig, generateEffect, saveDraft, systemPrompt } from '../effect-gen.mjs';
+import { genConfig, generateEffect, saveDraft, systemPrompt, readLlmFile, formatStatus } from '../effect-gen.mjs';
+import fs from 'node:fs';
 import { profileDir } from '../profile.mjs';
 import { startStats } from './machine-stats.mjs';
 import os from 'node:os';
@@ -23,7 +25,37 @@ for (let i = 0; i < args.length; i++) {
   else words.push(args[i]);
 }
 if (opt.prompt) { const p = systemPrompt(); console.log(`system prompt: ${p.length} chars (~${Math.round(p.length / 3.6)} tokens)`); process.exit(0); }
-const cfg = genConfig({ ...process.env, ...(opt.url ? { LLM_BIG_URL: opt.url } : {}), ...(opt.key ? { LLM_BIG_KEY: opt.key } : {}), ...(opt.attempts ? { GEN_ATTEMPTS: opt.attempts } : {}) });
+const LLM_FILE = path.join(profileDir(), 'llm.json');
+// --save-key [--url URL]: ask for the key without echoing it, store it (and the url) in <profile dir>/llm.json, mode 600.
+if (opt['save-key']) {
+  const key = await new Promise((resolve) => {
+    process.stdout.write('OCI LLM key (not shown): ');
+    let s = '';
+    const tty = process.stdin.isTTY;
+    if (tty) process.stdin.setRawMode(true);
+    process.stdin.resume(); process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (d) => {
+      for (const ch of d) {
+        if (ch === '\r' || ch === '\n') { if (tty) process.stdin.setRawMode(false); process.stdin.pause(); process.stdout.write('\n'); resolve(s.trim()); return; }
+        if (ch === '\u0003') { process.stdout.write('\n'); process.exit(130); }
+        if (ch === '\u007f' || ch === '\b') s = s.slice(0, -1); else s += ch;
+      }
+    });
+  });
+  if (!key) { console.error('no key entered — nothing saved'); process.exit(2); }
+  const f = readLlmFile(LLM_FILE);
+  if (!f.remote_key || f.remote_key === f.big_key) f.remote_key = key;   // a rotated OCI key replaces the old one for /llm too
+  f.big_key = key;
+  f.big_url = (opt.url || f.big_url || 'https://92-5-138-121.sslip.io/llm-big').replace(/\/+$/, '');
+  // (the same OCI key serves /llm — team bots' fallback, llm-route.mjs — set above)
+  f.remote_url ||= f.big_url.replace(/\/llm-big$/, '/llm');
+  fs.mkdirSync(path.dirname(LLM_FILE), { recursive: true });
+  fs.writeFileSync(LLM_FILE, JSON.stringify(f, null, 2) + '\n', { mode: 0o600 });
+  fs.chmodSync(LLM_FILE, 0o600);
+  console.log(`saved to ${LLM_FILE} (only you can read it): big_url ${f.big_url}, remote_url ${f.remote_url}`);
+  process.exit(0);
+}
+const cfg = genConfig({ ...process.env, ...(opt.url ? { LLM_BIG_URL: opt.url } : {}), ...(opt.key ? { LLM_BIG_KEY: opt.key } : {}), ...(opt.attempts ? { GEN_ATTEMPTS: opt.attempts } : {}) }, { file: LLM_FILE });
 const idea = words.join(' ');
 const t0 = Date.now();
 // Status line: the attempt's phase and % (prompt read → answer written → validator), the server's CPU / memory.
@@ -33,26 +65,8 @@ const sshKey = process.env.SSH_KEY || path.join(os.homedir(), '.ssh', 'id_rsa');
 const stats = opt.quiet ? null : opt.ssh ? startStats({ ssh: opt.ssh, sshKey, everyMs }) : local ? startStats({ everyMs }) : null;
 const where = opt.ssh ? opt.ssh.replace(/^.*@/, '') : 'local';
 let state = { attempt: 1, of: cfg.attempts, phase: 'wait' };
-const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
 function statusLine() {
-  if (!state) return;
-  const pct = (a, b) => (b > 0 ? Math.min(99, Math.round(100 * a / b)) : 0);
-  let what;
-  if (state.phase === 'prompt') what = `reading prompt ${state.done}/${state.total} tok (${pct(state.done, state.total)}%${state.cached ? `, ${state.cached} cached` : ''})`;
-  else if (state.phase === 'answer') what = `writing answer ${state.done}/~${state.expect} tok (${pct(state.done, state.expect)}%)`;
-  else if (state.phase === 'check') what = 'validating (99%)';
-  else what = 'waiting for the server';
-  // the attempt's own %: prompt = 0–20 %, answer = 20–99 % (the answer is most of the time once the prompt is cached)
-  const job = state.phase === 'prompt' ? Math.round(20 * pct(state.done, state.total) / 100) : state.phase === 'answer' ? 20 + Math.round(79 * pct(state.done, state.expect) / 100) : state.phase === 'check' ? 99 : 0;
-  let m = '';
-  if (stats) {
-    const x = stats.latest();
-    if (x) {
-      const big = x.servers.find(sv => sv.port === '8096');
-      m = ` · ${where} CPU ${x.cpu}% · mem ${x.mem}% (${x.memUsedGb}/${x.memTotalGb} GB)${big ? ` · 8B ${big.cpu ?? '?'}% CPU, ${big.rssGb} GB` : ''}`;
-    } else if (stats.error()) m = ` · stats: ${stats.error()}`;
-  }
-  console.log(`[gen] ${mmss(Date.now() - t0)} attempt ${state.attempt}/${state.of} ${job}% · ${what}${m}`);
+  if (state) console.log(formatStatus(state, { elapsedMs: Date.now() - t0, sample: stats?.latest() || null, statsError: stats?.error() || '', where }));
 }
 const ticker = opt.quiet ? null : setInterval(statusLine, everyMs);
 if (!stats && !opt.quiet && !local) console.log(`[gen] (server CPU / memory: add --ssh ubuntu@<host>)`);

@@ -616,7 +616,7 @@ export async function createFxPeer({ selfId, label = selfId, dimId, ui = () => {
         is_instant: false, scope: f.scope || (f.teleportSelf ? 'tile' : 'self'),
         tile_target: !!f.tileTarget, takes_attach: !!(f.trapAttach || f.blessAttach), takes_link: !!f.spiritLink, takes_elem: !!f.altTileToken,
         text: d.text || '', tags: ['foreign'], summon: null,
-        fx: ref, source: { ...ref },
+        fx: ref, source: { ...ref, ...(d.source?.custom === true ? { custom: true } : {}) },   // custom: the generated-card badge
       };
     },
     /** FXG: a {kind:'effect', id, ref} gift / profile card → foreignCardFromRef result (refused / missing → log + UI notice). */

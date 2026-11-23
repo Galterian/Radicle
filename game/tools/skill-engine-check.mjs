@@ -323,6 +323,25 @@ rejects('bad schema / id / action', base({}, { schema: 'x', id: 'Skill X', actio
 rejects('permanent without point_buy_stat', base({}, { is_permanent: true }), /point_buy_stat/);
 rejects('unknown lib', base({}, { uses: ['nope'] }), /unknown lib/);
 ok('a valid foreign definition passes', J(SK.validateSkillDef(base({ attack_out: { '+': [{ var: 'dmg' }, 1] } }))) === '[]');
+// resources on /1 (user ruling 2026-11-23: the editor's resource picker) — the shape of an effect's card.resources, unpriced
+{
+  const RES = { sprites: { effect: { path: 'assets/Sprites/Effects/Effects1/Fireball explosion (growing orange blast)/Fireball explosion (growing orange blast) - idle [EX02].png', usage: 'x' } },
+    sounds: { fx: [{ path: 'assets/Sounds/SoundFX/fireball.wav', usage: 'y' }] } };
+  const plain = base({ attack_out: { '+': [{ var: 'dmg' }, 1] } });
+  ok('resources on a /1 skill are accepted', J(SK.validateSkillDef({ ...plain, resources: RES })) === '[]');
+  rejects('resources: an unknown key inside', { ...plain, resources: { ...RES, music: {} } }, /resources\.music: unknown key/);
+  rejects('resources: an unknown entry key', { ...plain, resources: { sprites: { effect: { path: RES.sprites.effect.path, alpha: 1 } } } }, /unknown key \(path, usage\)/);
+  rejects('resources: a sprite that is not .png', { ...plain, resources: { sprites: { effect: { path: 'assets/Sprites/Effects/x.bmp' } } } }, /assets\/Sprites/);
+  rejects('resources: a sound under Sprites (no crossing)', { ...plain, resources: { sounds: { fx: [{ path: 'assets/Sprites/Effects/x.wav' }] } } }, /assets\/Sounds/);
+  rejects('resources: ".." in a path', { ...plain, resources: { sounds: { fx: [{ path: 'assets/Sounds/../../etc/passwd.wav' }] } } }, /no "\.\."/);
+  rejects('resources: an absolute path', { ...plain, resources: { sounds: { fx: [{ path: '/assets/Sounds/SoundFX/fireball.wav' }] } } }, /assets\/Sounds/);
+  rejects('resources: a backslash', { ...plain, resources: { sounds: { fx: [{ path: 'assets\\Sounds\\SoundFX\\fireball.wav' }] } } }, /assets\/Sounds/);
+  rejects('resources: more than 8 sounds', { ...plain, resources: { sounds: { fx: Array(9).fill(RES.sounds.fx[0]) } } }, /1\.\.8/);
+  rejects('resources: top level on a /2 skill', { ...plain, schema: 'chaosd6.skill/2', resources: RES }, /keeps them in card\.resources/);
+  const { checkSkill } = await import('./skills-rebalancing-check.mjs');
+  const a = checkSkill(plain), b = checkSkill({ ...plain, resources: RES });
+  ok('resources are not priced: the same verdict and score with and without them', a.verdict === b.verdict && J(a.power) === J(b.power) && a.judged_ratio === b.judged_ratio, `${a.verdict}/${b.verdict}`);
+}
 ok('resolveSkillProgram throws on an invalid definition', (() => { try { resolveSkillProgram(base({ attack_out: { eval: 1 } }), 'attack_out', null, { dmg: 1 }); return false; } catch { return true; } })());
 const e0 = SK.skillShadowStats.errors;
 const wide = base({ attack_out: { len: { map: [{ range: [0, 250] }, { map: [{ range: [0, 250] }, { '+': [{ var: 'i' }, 1] }] }] } } });   // 62 500 bodies

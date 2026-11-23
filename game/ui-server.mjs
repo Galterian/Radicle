@@ -302,6 +302,14 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
     { label: 'foe-1',    alliance: 'npc_b',  character: '',                              creature: 'mon_ruinous_minotaur',  name: 'Ruinous Minotaur',     tile: { q: 3, r: 1 }, aiRole: 'monster' },
     { label: 'foe-2',    alliance: 'npc_b',  character: '',                              creature: 'mon_ridge_runnet_3a',   name: 'Ridge Runnet 3A',      tile: { q: 3, r: 3 }, aiRole: 'monster' },
   ];
+  // TEST_FOES=mon_a[,mon_b] (test modes only; tools/effect-gen-test.mjs): other creatures for foe-1 / foe-2 — a draft
+  // test needs player-1 alive for a few rounds, the Minotaur kills a life-4 hero in one or two.
+  if (test && process.env.TEST_FOES) {
+    process.env.TEST_FOES.split(',').map(s => s.trim()).filter(s => /^mon_[a-z0-9_]+$/.test(s)).slice(0, 2).forEach((c, i) => {
+      const f = roster.find(p => p.label === `foe-${i + 1}`);
+      if (f) Object.assign(f, { creature: c, name: c.replace(/^mon_/, '').replace(/_/g, ' ').replace(/\b\w/g, x => x.toUpperCase()) });
+    });
+  }
   if (override?.allies?.length) {
     // "Test my team": the next characters of the team order replace the Pride
     // Guardian, each on a walkable hex at the tier's distance from player-1.
@@ -340,11 +348,14 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
   // so probe them in parallel. libp2p (7410) sits inside http's search region,
   // so it has to wait for httpBase and start past it — this is the fix for the
   // old bug where both pools independently picked :7422 (EADDRINUSE).
+  // LAUNCH_PORT_BASE (background test launchers, tools/effect-gen-test.mjs): http from it, gun from it + 100, so a
+  // test game never takes 7401 (the user's launcher / the phone's 10.0.2.2:7401).
+  const PB = Number(process.env.LAUNCH_PORT_BASE) || 7401;
   const [httpBase, gunBase] = await Promise.all([
-    freePortRun(7401, roster.length),
-    freePortRun(7501, roster.length),
+    freePortRun(PB, roster.length),
+    freePortRun(PB + 100, roster.length),
   ]);
-  const libp2pBase = await freePortRun(Math.max(7410, httpBase + roster.length), roster.length);
+  const libp2pBase = await freePortRun(Math.max(PB + 9, httpBase + roster.length), roster.length);
   const peers = roster.map((p, i) => ({ ...p, http: httpBase + i, libp2p: libp2pBase + i, gun: gunBase + i }));
   startedDimension = { peerPort: peers[0].http, dimensionName: DIM_NAME, ...(test ? { private: true, dimensionId: DIM_ID } : {}) };
   console.log(`[launcher] starting dimension ${DIM_NAME}  (dim_id=${DIM_ID}; direct links via ${ip}; ports http ${httpBase}+, libp2p ${libp2pBase}+, gun ${gunBase}+; ${test ? `PRIVATE test game (${mode}): no Door, no bus, loopback` : `bus relays ${DEFAULT_RELAYS.join(', ')}`})`);

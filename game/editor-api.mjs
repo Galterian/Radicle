@@ -339,6 +339,12 @@ export async function handleEditorRequest(req, res, url, { repoRoot = path.resol
     if (p === '/rules') { res.writeHead(302, { Location: '/rules/', 'Cache-Control': 'no-cache' }); res.end(); return true; }
     const rel = p.slice('/rules/'.length);
     if (rel.startsWith('api/')) {
+      // /rules/api/gen/* (gen-api.mjs, b9 2026-11-23): generate → preview → test → publish; same guard, POST = token + login.
+      if (rel.startsWith('api/gen/')) {
+        guard(req, ctx.port);
+        await (await import('./gen-api.mjs')).handleGenApi(req, res, u, rel.slice('api/gen/'.length), ctx, { readJsonBody, requireLogin, validateDefinition, fail, sendJson });
+        return true;
+      }
       if (!rel.startsWith('api/editor/')) fail(404, 'not found');
       await handleApi(req, res, u, rel.slice('api/editor/'.length), ctx);
       return true;

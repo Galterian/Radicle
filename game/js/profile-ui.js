@@ -497,6 +497,11 @@ function renderPanel() {
       : 'No characters yet — create one to play as yourself.' }));
     // Cards won from kills, until the player opens them in the editor.
     const fresh = chars.filter(c => newCards(c));
+    // The team's own published custom card (rules editor → Generate, gen-api.mjs): one glowing line per new type.
+    const customNew = [...new Map(chars.flatMap(c => (c.cards || []).filter(x => x.new && x.custom)).map(x => [`${x.kind}:${x.id}`, x])).values()];
+    for (const x of customNew) root.append(h('div', { class: 'pp-new pp-custom-new' },
+      `✨ New ${x.kind} type is added: ${x.ref?.name || prettyId(x.id)} `, h('span', { class: 'pe-card-custom', text: 'custom' }),
+      ` — in the archive of every ${team || 'team'} character (tap it in a character's cards to put it in the deck)`));
     if (fresh.length) root.append(h('div', { class: 'pp-new' },
       `✨ new cards in the archive: ${fresh.map(c => `${c.name} ${newCards(c)}`).join(' · ')} — `,
       ...fresh.map(c => h('button', { type: 'button', class: 'pp-new-open', text: `open ${c.name}`, onclick: () => openCharacterEditor('edit', c.id) }))));
@@ -1090,14 +1095,15 @@ async function openCharacterEditor(mode, charId) {
         },
       },
       h('span', { class: 'pe-card-head' },
-        x.new ? h('span', { class: 'pe-card-new', text: '✨ new' }) : null,
+        x.new ? h('span', { class: 'pe-card-new', text: x.custom ? `✨ New ${x.kind} type is added` : '✨ new' }) : null,
+        x.custom ? h('span', { class: 'pe-card-custom', text: 'custom', title: 'Made by your team (generated in the rules editor)' }) : null,
         h('span', { class: 'pe-card-kind', text: x.kind === 'skill' ? 'skill' : 'effect' }),
         h('b', { class: 'pe-card-name', text: info?.name || x.ref?.name || prettyId(x.id) }),
         elems ? h('span', { class: 'pe-card-elems', text: elems }) : null),
       flags.length ? h('span', { class: 'pe-card-flags' }, ...flags.map(t => h('span', { class: `pe-flag${t === 'perm' ? ' perm' : ''}`, text: t }))) : null,
       h('span', { class: 'pe-card-text', text: shortText(info?.text, 120) }),
       src ? makeSourceBadge(src) : null,
-      x.from ? h('span', { class: 'pe-card-from', text: `🏆 from ${x.from}` }) : null,
+      x.from ? h('span', { class: 'pe-card-from', text: x.custom ? `✦ made by ${x.from}` : `🏆 from ${x.from}` }) : null,
       h('span', { class: 'pe-where', text: inDeck ? '▣ Deck' : '▢ Archive' })));
     }
   }

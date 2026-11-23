@@ -288,14 +288,17 @@ export function dropRandomDeckCard(file, charId, rnd = Math.random) {
   }, file);
 }
 // A card taken from a unit I killed lands in my archive.
-export function addArchivedCard(file, charId, card, from = '') {
+// kill: false = not a kill reward; custom: true = the team's own published custom card (gen-api.mjs) — the profile
+// editor shows it as "New effect type is added" with a custom badge.
+export function addArchivedCard(file, charId, card, from = '', { kill = true, custom = false } = {}) {
   return updateProfile(p => {
     const c = characterOf(p, charId);
     if (!c || !['skill', 'effect'].includes(card?.kind) || !card.id) return null;
-    c.kills = (c.kills | 0) + 1;
+    if (kill) c.kills = (c.kills | 0) + 1;
     const x = { uid: uid(), kind: card.kind, id: card.id, where: 'archive', from: String(from).slice(0, 60), new: true, taken_at: new Date().toISOString() };
+    if (custom) x.custom = true;
     const ref = foreignRefOf(card);   // FXG: a foreign card keeps its ref (rebuilt next session from the cache / a fetch)
-    if (ref) { x.ref = ref; x.source = { ...ref, kind: card.kind }; }
+    if (ref) { x.ref = ref; x.source = { ...ref, kind: card.kind, ...(custom ? { custom: true } : {}) }; }
     c.cards.push(x);
     return x;
   }, file);

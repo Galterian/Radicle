@@ -1,0 +1,3024 @@
+{
+ "format": 1,
+ "source": "chaosD6-Resources manifest.json",
+ "generated_at": "2026-11-23T10:14:05.335Z",
+ "sprites": [
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir0/AcidBreath dir0 - idle.png",
+   "name": "AcidBreath dir0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir1/AcidBreath dir1 - idle.png",
+   "name": "AcidBreath dir1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir2/AcidBreath dir2 - idle.png",
+   "name": "AcidBreath dir2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir3/AcidBreath dir3 - idle.png",
+   "name": "AcidBreath dir3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir4/AcidBreath dir4 - idle.png",
+   "name": "AcidBreath dir4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir5/AcidBreath dir5 - idle.png",
+   "name": "AcidBreath dir5",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir6/AcidBreath dir6 - idle.png",
+   "name": "AcidBreath dir6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AcidBreath dir7/AcidBreath dir7 - idle.png",
+   "name": "AcidBreath dir7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/AreaOverlay1/AreaOverlay1 - idle.png",
+   "name": "AreaOverlay1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Arrow projectile (directions)/Arrow projectile (directions) - idle [EMA0].png",
+   "name": "Arrow projectile (directions)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Arrow projectile variant/Arrow projectile variant - idle [EMA5].png",
+   "name": "Arrow projectile variant",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Arrowbolt projectile variant/Arrowbolt projectile variant - idle [EMA1].png",
+   "name": "Arrowbolt projectile variant",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Blood splatter (red) and green ichor splatter/Blood splatter (red) and green ichor splatter - idle [EDBL].png",
+   "name": "Blood splatter (red) and green ichor splatter",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Blue crystaldiamond icons/Blue crystaldiamond icons - idle [EZ36].png",
+   "name": "Blue crystaldiamond icons",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Blue ring markers/Blue ring markers - idle [EZ73].png",
+   "name": "Blue ring markers",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Bluewhite arcs/Bluewhite arcs - idle [EZ75].png",
+   "name": "Bluewhite arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Bluewhite ring burst/Bluewhite ring burst - idle [EZ64].png",
+   "name": "Bluewhite ring burst",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Bonebody debris pieces/Bonebody debris pieces - idle [EDTH].png",
+   "name": "Bonebody debris pieces",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Building debris rubble chunks (sheet 2)/Building debris rubble chunks (sheet 2) - idle [EDB1].png",
+   "name": "Building debris rubble chunks (sheet 2)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Building debris rubble chunks (sheet 3)/Building debris rubble chunks (sheet 3) - idle [EDB2].png",
+   "name": "Building debris rubble chunks (sheet 3)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Building debris rubble chunks (sheet)/Building debris rubble chunks (sheet) - idle [EDB0].png",
+   "name": "Building debris rubble chunks (sheet)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir0/CelestBreath dir0 - idle.png",
+   "name": "CelestBreath dir0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir1/CelestBreath dir1 - idle.png",
+   "name": "CelestBreath dir1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir2/CelestBreath dir2 - idle.png",
+   "name": "CelestBreath dir2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir3/CelestBreath dir3 - idle.png",
+   "name": "CelestBreath dir3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir4/CelestBreath dir4 - idle.png",
+   "name": "CelestBreath dir4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir5/CelestBreath dir5 - idle.png",
+   "name": "CelestBreath dir5",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir6/CelestBreath dir6 - idle.png",
+   "name": "CelestBreath dir6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/CelestBreath dir7/CelestBreath dir7 - idle.png",
+   "name": "CelestBreath dir7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Crossed burning swords icon (battle marker)/Crossed burning swords icon (battle marker) - idle [EEBX].png",
+   "name": "Crossed burning swords icon (battle marker)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cursormarker icons (small)/Cursormarker icons (small) - idle [ECM0].png",
+   "name": "Cursormarker icons (small)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cyan arc markers/Cyan arc markers - idle [EZ71].png",
+   "name": "Cyan arc markers",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cyan beams/Cyan beams - idle [EZ63].png",
+   "name": "Cyan beams",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png",
+   "name": "Cyan dome shield arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cyan horizontal beams/Cyan horizontal beams - idle [EZ51].png",
+   "name": "Cyan horizontal beams",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cyan ice shards/Cyan ice shards - idle [EZ56].png",
+   "name": "Cyan ice shards",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Cyan star sparkles/Cyan star sparkles - idle [EZ53].png",
+   "name": "Cyan star sparkles",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Debris trail 1/Debris trail 1 - idle [EDT1].png",
+   "name": "Debris trail 1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Debris trail 2/Debris trail 2 - idle [EDT2].png",
+   "name": "Debris trail 2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Decorative scrollbanner glyph/Decorative scrollbanner glyph - idle [Ezdw].png",
+   "name": "Decorative scrollbanner glyph [Ezdw]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Dialoginventory icon sheet (many small item icons)/Dialoginventory icon sheet (many small item icons) - idle [IDLG].png",
+   "name": "Dialoginventory icon sheet (many small item icons)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Digit glyphs 0-9 (floating numbers)/Digit glyphs 0-9 (floating numbers) - idle [ERNX].png",
+   "name": "Digit glyphs 0-9 (floating numbers)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 10 (320x240)/Elliptical area overlay size 10 (320x240) - idle [EEE9].png",
+   "name": "Elliptical area overlay size 10 (320x240)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 2/Elliptical area overlay size 2 - idle [EEE1].png",
+   "name": "Elliptical area overlay size 2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 3/Elliptical area overlay size 3 - idle [EEE2].png",
+   "name": "Elliptical area overlay size 3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 4/Elliptical area overlay size 4 - idle [EEE3].png",
+   "name": "Elliptical area overlay size 4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 5/Elliptical area overlay size 5 - idle [EEE4].png",
+   "name": "Elliptical area overlay size 5",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 6/Elliptical area overlay size 6 - idle [EEE5].png",
+   "name": "Elliptical area overlay size 6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 7/Elliptical area overlay size 7 - idle [EEE6].png",
+   "name": "Elliptical area overlay size 7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 8/Elliptical area overlay size 8 - idle [EEE7].png",
+   "name": "Elliptical area overlay size 8",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Elliptical area overlay size 9/Elliptical area overlay size 9 - idle [EEE8].png",
+   "name": "Elliptical area overlay size 9",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire arrow projectile/Fire arrow projectile - idle [EMA2].png",
+   "name": "Fire arrow projectile",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 0/Fire dragon breath (orange flames) - direction 0 - idle [Efb0].png",
+   "name": "Fire dragon breath (orange flames) - direction 0 [Efb0]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 1/Fire dragon breath (orange flames) - direction 1 - idle [Efb1].png",
+   "name": "Fire dragon breath (orange flames) - direction 1 [Efb1]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 2/Fire dragon breath (orange flames) - direction 2 - idle [Efb2].png",
+   "name": "Fire dragon breath (orange flames) - direction 2 [Efb2]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 3/Fire dragon breath (orange flames) - direction 3 - idle [Efb3].png",
+   "name": "Fire dragon breath (orange flames) - direction 3 [Efb3]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 4/Fire dragon breath (orange flames) - direction 4 - idle [Efb4].png",
+   "name": "Fire dragon breath (orange flames) - direction 4 [Efb4]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 5/Fire dragon breath (orange flames) - direction 5 - idle [Efb5].png",
+   "name": "Fire dragon breath (orange flames) - direction 5 [Efb5]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 6/Fire dragon breath (orange flames) - direction 6 - idle [Efb6].png",
+   "name": "Fire dragon breath (orange flames) - direction 6 [Efb6]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire dragon breath (orange flames) - direction 7/Fire dragon breath (orange flames) - direction 7 - idle [Efb7].png",
+   "name": "Fire dragon breath (orange flames) - direction 7 [Efb7]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+   "name": "Fire flames (torchburning)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fireball explosion (growing orange blast)/Fireball explosion (growing orange blast) - idle [EX02].png",
+   "name": "Fireball explosion (growing orange blast)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fireexplosion burst animation (large)/Fireexplosion burst animation (large) - idle [EF01].png",
+   "name": "Fireexplosion burst animation (large)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fireexplosion burst animation (small)/Fireexplosion burst animation (small) - idle [EF04].png",
+   "name": "Fireexplosion burst animation (small)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fireexplosion burst animation 2/Fireexplosion burst animation 2 - idle [EF02].png",
+   "name": "Fireexplosion burst animation 2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Fireexplosion burst animation 3/Fireexplosion burst animation 3 - idle [EF03].png",
+   "name": "Fireexplosion burst animation 3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Footprints small ground marks/Footprints small ground marks - idle [EDFS].png",
+   "name": "Footprints small ground marks",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Glow orb row (small)/Glow orb row (small) - idle [EPF1].png",
+   "name": "Glow orb row (small)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Green dome arcs/Green dome arcs - idle [EZ43].png",
+   "name": "Green dome arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Green dotted rings/Green dotted rings - idle [EZ76].png",
+   "name": "Green dotted rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Green ring markers/Green ring markers - idle [EZ72].png",
+   "name": "Green ring markers",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Green sparkle clusters/Green sparkle clusters - idle [EZ77].png",
+   "name": "Green sparkle clusters",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png",
+   "name": "Grey arc sweeps",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey arcs/Grey arcs - idle [EZ70].png",
+   "name": "Grey arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png",
+   "name": "Grey crescent arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey glowing orb projectile growing (sizes)/Grey glowing orb projectile growing (sizes) - idle [EPF0].png",
+   "name": "Grey glowing orb projectile growing (sizes)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey ring arcs/Grey ring arcs - idle [EZ54].png",
+   "name": "Grey ring arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey rings/Grey rings - idle [EZ60].png",
+   "name": "Grey rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Grey smoke wisps/Grey smoke wisps - idle [EZ38].png",
+   "name": "Grey smoke wisps",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png",
+   "name": "Greybrown dust puffs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Greywhite large sparkle burst/Greywhite large sparkle burst - idle [EZ78].png",
+   "name": "Greywhite large sparkle burst",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Heart icons (healingcharm)/Heart icons (healingcharm) - idle [EZ23].png",
+   "name": "Heart icons (healingcharm)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Hero death banner picture (fallen warrior)/Hero death banner picture (fallen warrior) - idle [Ezdd].png",
+   "name": "Hero death banner picture (fallen warrior) [Ezdd]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/HeroVictory [Ezdv]/HeroVictory - idle [Ezdv].png",
+   "name": "HeroVictory [Ezdv]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir0 [EIB0]/IceBreath dir0 - idle [EIB0].png",
+   "name": "IceBreath dir0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir1 [EIB1]/IceBreath dir1 - idle [EIB1].png",
+   "name": "IceBreath dir1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir2 [EIB2]/IceBreath dir2 - idle [EIB2].png",
+   "name": "IceBreath dir2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir3 [EIB3]/IceBreath dir3 - idle [EIB3].png",
+   "name": "IceBreath dir3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir4 [EIB4]/IceBreath dir4 - idle [EIB4].png",
+   "name": "IceBreath dir4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir5 [EIB5]/IceBreath dir5 - idle [EIB5].png",
+   "name": "IceBreath dir5",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir6 [EIB6]/IceBreath dir6 - idle [EIB6].png",
+   "name": "IceBreath dir6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/IceBreath dir7 [EIB7]/IceBreath dir7 - idle [EIB7].png",
+   "name": "IceBreath dir7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Large smokedust explosion animation/Large smokedust explosion animation - idle [EMX1].png",
+   "name": "Large smokedust explosion animation",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LichBreath/LichBreath - idle.png",
+   "name": "LichBreath",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir0/LightningBreath dir0 - idle.png",
+   "name": "LightningBreath dir0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir1/LightningBreath dir1 - idle.png",
+   "name": "LightningBreath dir1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir2/LightningBreath dir2 - idle.png",
+   "name": "LightningBreath dir2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir3/LightningBreath dir3 - idle.png",
+   "name": "LightningBreath dir3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir4/LightningBreath dir4 - idle.png",
+   "name": "LightningBreath dir4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir5/LightningBreath dir5 - idle.png",
+   "name": "LightningBreath dir5",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir6/LightningBreath dir6 - idle.png",
+   "name": "LightningBreath dir6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/LightningBreath dir7/LightningBreath dir7 - idle.png",
+   "name": "LightningBreath dir7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/MineIcons/MineIcons - idle.png",
+   "name": "MineIcons",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Missile projectile (small bolts)/Missile projectile (small bolts) - idle [EMM0].png",
+   "name": "Missile projectile (small bolts)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Missile projectile (thin)/Missile projectile (thin) - idle [EMM3].png",
+   "name": "Missile projectile (thin)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Missile projectile variant/Missile projectile variant - idle [EMM5].png",
+   "name": "Missile projectile variant",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - black/Objectivetarget ring marker - black - idle [EOSK].png",
+   "name": "Objectivetarget ring marker - black",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - blue/Objectivetarget ring marker - blue - idle [EOSB].png",
+   "name": "Objectivetarget ring marker - blue",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - green/Objectivetarget ring marker - green - idle [EOSG].png",
+   "name": "Objectivetarget ring marker - green",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - purple/Objectivetarget ring marker - purple - idle [EOSP].png",
+   "name": "Objectivetarget ring marker - purple",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - red/Objectivetarget ring marker - red - idle [EOSR].png",
+   "name": "Objectivetarget ring marker - red",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - yellow/Objectivetarget ring marker - yellow - idle [EOSY].png",
+   "name": "Objectivetarget ring marker - yellow",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orange ember sparks/Orange ember sparks - idle [EZ27].png",
+   "name": "Orange ember sparks",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orange fireball orbs/Orange fireball orbs - idle [EZ40].png",
+   "name": "Orange fireball orbs",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orange glowing rings/Orange glowing rings - idle [EZ28].png",
+   "name": "Orange glowing rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orange ring markers/Orange ring markers - idle [EZ33].png",
+   "name": "Orange ring markers",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orange ring markers/Orange ring markers - idle [EZ69].png",
+   "name": "Orange ring markers",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orange rings/Orange rings - idle [EZ31].png",
+   "name": "Orange rings",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Orangeyellow flame drip columns/Orangeyellow flame drip columns - idle [EZ29].png",
+   "name": "Orangeyellow flame drip columns",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Particle set cyan sparks/Particle set cyan sparks - idle [EPA4].png",
+   "name": "Particle set cyan sparks",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Particle set green sparks/Particle set green sparks - idle [EPA2].png",
+   "name": "Particle set green sparks",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Particle set orange sparks/Particle set orange sparks - idle [EPA6].png",
+   "name": "Particle set orange sparks",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Particle set red sparks/Particle set red sparks - idle [EPA1].png",
+   "name": "Particle set red sparks",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Particle set white sparksrings/Particle set white sparksrings - idle [EPA0].png",
+   "name": "Particle set white sparksrings",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Pinkred sparkles/Pinkred sparkles - idle [EZ50].png",
+   "name": "Pinkred sparkles",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Purple dome arcs/Purple dome arcs - idle [EZ44].png",
+   "name": "Purple dome arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Purple domeshield arcs/Purple domeshield arcs - idle [EZ37].png",
+   "name": "Purple domeshield arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Red beamline effect/Red beamline effect - idle [Emf0].png",
+   "name": "Red beamline effect [Emf0]",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Red crescent arcs/Red crescent arcs - idle [EZ55].png",
+   "name": "Red crescent arcs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Red horizontal beams/Red horizontal beams - idle [EZ52].png",
+   "name": "Red horizontal beams",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Red ring markers/Red ring markers - idle [EZ74].png",
+   "name": "Red ring markers",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Red X cancel marker (sizes)/Red X cancel marker (sizes) - idle [EMC0].png",
+   "name": "Red X cancel marker (sizes)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Red X cancel marker variant/Red X cancel marker variant - idle [EMC1].png",
+   "name": "Red X cancel marker variant",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Shieldgem icons in 8 player colours/Shieldgem icons in 8 player colours - idle [ESHD].png",
+   "name": "Shieldgem icons in 8 player colours",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small coloured dotsparticles column/Small coloured dotsparticles column - idle [ERIX].png",
+   "name": "Small coloured dotsparticles column",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small debris fragments A/Small debris fragments A - idle [EDBA].png",
+   "name": "Small debris fragments A",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small debris fragments D/Small debris fragments D - idle [EDBD].png",
+   "name": "Small debris fragments D",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small debris fragments I/Small debris fragments I - idle [EDBI].png",
+   "name": "Small debris fragments I",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small dust puffs/Small dust puffs - idle [EZ24].png",
+   "name": "Small dust puffs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small orange sparks/Small orange sparks - idle [EZ26].png",
+   "name": "Small orange sparks",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small orange sparks/Small orange sparks - idle [EZ80].png",
+   "name": "Small orange sparks",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small projectile bolt/Small projectile bolt - idle [EMS1].png",
+   "name": "Small projectile bolt",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small projectile dart/Small projectile dart - idle [EMS0].png",
+   "name": "Small projectile dart",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small white rings/Small white rings - idle [EZ57].png",
+   "name": "Small white rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Small white starbursts/Small white starbursts - idle [EZ34].png",
+   "name": "Small white starbursts",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Smoke puff shot smoke (40x40)/Smoke puff shot smoke (40x40) - idle [EMRL].png",
+   "name": "Smoke puff shot smoke (40x40)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Smokedust cloud explosion/Smokedust cloud explosion - idle [EX01].png",
+   "name": "Smokedust cloud explosion",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png",
+   "name": "Smokedust puff animation",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spearjavelin projectile/Spearjavelin projectile - idle [EMA6].png",
+   "name": "Spearjavelin projectile",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect cyan energy shards/Spell effect cyan energy shards - idle [EZ03].png",
+   "name": "Spell effect cyan energy shards",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect cyan sparkle burst/Spell effect cyan sparkle burst - idle [EZ00].png",
+   "name": "Spell effect cyan sparkle burst",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect faint rings/Spell effect faint rings - idle [EZ14].png",
+   "name": "Spell effect faint rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect faint white rings/Spell effect faint white rings - idle [EZ08].png",
+   "name": "Spell effect faint white rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect green hooded figure sprites (phantom)/Spell effect green hooded figure sprites (phantom) - idle [EZ22].png",
+   "name": "Spell effect green hooded figure sprites (phantom)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect orange glowing ring eye/Spell effect orange glowing ring eye - idle [EZ06].png",
+   "name": "Spell effect orange glowing ring eye",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect pale starburst/Spell effect pale starburst - idle [EZ20].png",
+   "name": "Spell effect pale starburst",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect purplewhite glowing orbs/Spell effect purplewhite glowing orbs - idle [EZ05].png",
+   "name": "Spell effect purplewhite glowing orbs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect red oval blobs/Spell effect red oval blobs - idle [EZ17].png",
+   "name": "Spell effect red oval blobs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+   "name": "Spell effect small purple ringspiral",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect small sparks/Spell effect small sparks - idle [EZ16].png",
+   "name": "Spell effect small sparks",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect starburst (large)/Spell effect starburst (large) - idle [EZ19].png",
+   "name": "Spell effect starburst (large)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect starburst sparkles/Spell effect starburst sparkles - idle [EZ15].png",
+   "name": "Spell effect starburst sparkles",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect tiny sparkles/Spell effect tiny sparkles - idle [EZ21].png",
+   "name": "Spell effect tiny sparkles",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect vertical lightning boltspillars/Spell effect vertical lightning boltspillars - idle [EZ11].png",
+   "name": "Spell effect vertical lightning boltspillars",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect white glowing orb growing/Spell effect white glowing orb growing - idle [EZ07].png",
+   "name": "Spell effect white glowing orb growing",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png",
+   "name": "Spell effect white rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect white smoke cloud ring (large)/Spell effect white smoke cloud ring (large) - idle [EZ13].png",
+   "name": "Spell effect white smoke cloud ring (large)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect white smoke puffs/Spell effect white smoke puffs - idle [EZ18].png",
+   "name": "Spell effect white smoke puffs",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect white smoke rings/Spell effect white smoke rings - idle [EZ10].png",
+   "name": "Spell effect white smoke rings",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect yellow ring markers/Spell effect yellow ring markers - idle [EZ12].png",
+   "name": "Spell effect yellow ring markers",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Spell effect yellow sparkle cloud (very wide sheet)/Spell effect yellow sparkle cloud (very wide sheet) - idle [EZ01].png",
+   "name": "Spell effect yellow sparkle cloud (very wide sheet)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/SummonPillar [EZ09]/SummonPillar - idle [EZ09].png",
+   "name": "SummonPillar",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Thin horizontal line effect 0/Thin horizontal line effect 0 - idle [ETX0].png",
+   "name": "Thin horizontal line effect 0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Thin horizontal line effect 1/Thin horizontal line effect 1 - idle [ETX1].png",
+   "name": "Thin horizontal line effect 1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Thin horizontal line effect 2/Thin horizontal line effect 2 - idle [ETX2].png",
+   "name": "Thin horizontal line effect 2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Thin horizontal line effect 3/Thin horizontal line effect 3 - idle [ETX3].png",
+   "name": "Thin horizontal line effect 3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Thrown axeweapon projectile/Thrown axeweapon projectile - idle [EMA4].png",
+   "name": "Thrown axeweapon projectile",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Thrown stonerock projectile/Thrown stonerock projectile - idle [EMA3].png",
+   "name": "Thrown stonerock projectile",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Tiny yellow dots/Tiny yellow dots - idle [EZ35].png",
+   "name": "Tiny yellow dots",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI campaign scene pictures (ruined city)/UI campaign scene pictures (ruined city) - idle [EMDA].png",
+   "name": "UI campaign scene pictures (ruined city)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI dark horizontal bar/UI dark horizontal bar - idle [EMDI].png",
+   "name": "UI dark horizontal bar",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI hero inventoryequipment panel frame/UI hero inventoryequipment panel frame - idle [EMD4].png",
+   "name": "UI hero inventoryequipment panel frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI inventory panel with potion slots/UI inventory panel with potion slots - idle [EMDK].png",
+   "name": "UI inventory panel with potion slots",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI list panel frame/UI list panel frame - idle [EMDH].png",
+   "name": "UI list panel frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI open book (journalspellbook)/UI open book (journalspellbook) - idle [Emdo].png",
+   "name": "UI open book (journalspellbook) [Emdo]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI open parchment book/UI open parchment book - idle [EMDS].png",
+   "name": "UI open parchment book",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI panel frame/UI panel frame - idle [EMD1].png",
+   "name": "UI panel frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI panel frame (large)/UI panel frame (large) - idle [EMD2].png",
+   "name": "UI panel frame (large)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI panel frame with inset/UI panel frame with inset - idle [Emdl].png",
+   "name": "UI panel frame with inset [Emdl]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI parchment scroll banner/UI parchment scroll banner - idle [EMDQ].png",
+   "name": "UI parchment scroll banner",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI parchment scroll banner (large)/UI parchment scroll banner (large) - idle [Emdg].png",
+   "name": "UI parchment scroll banner (large) [Emdg]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI parchment scroll banner (wide)/UI parchment scroll banner (wide) - idle [EMDV].png",
+   "name": "UI parchment scroll banner (wide)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI skill grid frame (small variant)/UI skill grid frame (small variant) - z [EMDPz].png",
+   "name": "UI skill grid frame (small variant) - z [EMDPz]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI skillability grid frame with weapons border/UI skillability grid frame with weapons border - idle [EMDP].png",
+   "name": "UI skillability grid frame with weapons border",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI small panel frame/UI small panel frame - idle [EMDF].png",
+   "name": "UI small panel frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI stats panel frame/UI stats panel frame - idle [EMDR].png",
+   "name": "UI stats panel frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI stats panel frame variant/UI stats panel frame variant - idle [EMDX].png",
+   "name": "UI stats panel frame variant",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI thin dialog frame/UI thin dialog frame - idle [EMDB].png",
+   "name": "UI thin dialog frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI vertical bar frame/UI vertical bar frame - idle [EMDC].png",
+   "name": "UI vertical bar frame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UI wide panel frame/UI wide panel frame - idle [Emdm].png",
+   "name": "UI wide panel frame [Emdm]",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UIBars/UIBars - idle.png",
+   "name": "UIBars",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/UISlots [EMDD]/UISlots - idle [EMDD].png",
+   "name": "UISlots",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (armour)/Unknown-item placeholder card (armour) - idle [ENC2].png",
+   "name": "Unknown-item placeholder card (armour)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (bootsgloves)/Unknown-item placeholder card (bootsgloves) - idle [ENC5].png",
+   "name": "Unknown-item placeholder card (bootsgloves)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (coins)/Unknown-item placeholder card (coins) - idle [ENC4].png",
+   "name": "Unknown-item placeholder card (coins)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (helmet)/Unknown-item placeholder card (helmet) - idle [ENC1].png",
+   "name": "Unknown-item placeholder card (helmet)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (orb)/Unknown-item placeholder card (orb) - idle [ENC6].png",
+   "name": "Unknown-item placeholder card (orb)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (potion)/Unknown-item placeholder card (potion) - idle [ENC3].png",
+   "name": "Unknown-item placeholder card (potion)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Misc/Effects1/Unknown-item placeholder card (statue icon with )/Unknown-item placeholder card (statue icon with ) - idle [ENC0].png",
+   "name": "Unknown-item placeholder card (statue icon with )",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Weatherlandscape preview thumbnails (4 skies)/Weatherlandscape preview thumbnails (4 skies) - idle [EWTH].png",
+   "name": "Weatherlandscape preview thumbnails (4 skies)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/White sparkle orbs (large)/White sparkle orbs (large) - idle [EZ32].png",
+   "name": "White sparkle orbs (large)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Yellow crescent arcs/Yellow crescent arcs - idle [EZ62].png",
+   "name": "Yellow crescent arcs",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Yellow light orb glow growing (sizes)/Yellow light orb glow growing (sizes) - idle [ELIT].png",
+   "name": "Yellow light orb glow growing (sizes)",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Yellow lightning bolt flame/Yellow lightning bolt flame - idle [EZ30].png",
+   "name": "Yellow lightning bolt flame",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Yellow smileysun face icons/Yellow smileysun face icons - idle [EZ25].png",
+   "name": "Yellow smileysun face icons",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sprites/Effects/Effects1/Yellow sparks/Yellow sparks - idle [EZ65].png",
+   "name": "Yellow sparks",
+   "in_pack": true
+  }
+ ],
+ "sounds": [
+  {
+   "path": "assets/Sounds/SoundFX/ambush.wav",
+   "name": "ambush",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Assassination.wav",
+   "name": "Assassination",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack00.wav",
+   "name": "Attack00",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack01.wav",
+   "name": "Attack01",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack02.wav",
+   "name": "Attack02",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack03.wav",
+   "name": "Attack03",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack04.wav",
+   "name": "Attack04",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack05.wav",
+   "name": "Attack05",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack10.wav",
+   "name": "Attack10",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack100.wav",
+   "name": "Attack100",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack11.wav",
+   "name": "Attack11",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack12.wav",
+   "name": "Attack12",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack13.wav",
+   "name": "Attack13",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack14.wav",
+   "name": "Attack14",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack141.wav",
+   "name": "Attack141",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack15.wav",
+   "name": "Attack15",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack20.wav",
+   "name": "Attack20",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack21.wav",
+   "name": "Attack21",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack22.wav",
+   "name": "Attack22",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack23.wav",
+   "name": "Attack23",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack24.wav",
+   "name": "Attack24",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack25.wav",
+   "name": "Attack25",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack30.wav",
+   "name": "Attack30",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack40.wav",
+   "name": "Attack40",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack50.wav",
+   "name": "Attack50",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack60.wav",
+   "name": "Attack60",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack70.wav",
+   "name": "Attack70",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack80.wav",
+   "name": "Attack80",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Attack90.wav",
+   "name": "Attack90",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAAG.wav",
+   "name": "BAAG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAAR.wav",
+   "name": "BAAR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BABA.wav",
+   "name": "BABA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BABC.wav",
+   "name": "BABC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BABN.wav",
+   "name": "BABN",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BABP.wav",
+   "name": "BABP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BABY.wav",
+   "name": "BABY",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BACA.wav",
+   "name": "BACA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BACP.wav",
+   "name": "BACP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAEX.wav",
+   "name": "BAEX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAEX (2).wav",
+   "name": "BAEX (2)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAGA.wav",
+   "name": "BAGA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAGT.wav",
+   "name": "BAGT",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAGU.wav",
+   "name": "BAGU",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAGY.wav",
+   "name": "BAGY",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAHG.wav",
+   "name": "BAHG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAHX.wav",
+   "name": "BAHX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAKS.wav",
+   "name": "BAKS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BANX.wav",
+   "name": "BANX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAPI.wav",
+   "name": "BAPI",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAPN.wav",
+   "name": "BAPN",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAPR.wav",
+   "name": "BAPR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BARS.wav",
+   "name": "BARS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BASH.wav",
+   "name": "BASH",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BASM.wav",
+   "name": "BASM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BASR.wav",
+   "name": "BASR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BASW.wav",
+   "name": "BASW",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BASX.WAV",
+   "name": "BASX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BATE.wav",
+   "name": "BATE",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BATG.wav",
+   "name": "BATG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BATL.wav",
+   "name": "BATL",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BATP.wav",
+   "name": "BATP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/battle.wav",
+   "name": "battle",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAUG.wav",
+   "name": "BAUG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAVX.wav",
+   "name": "BAVX",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BAWS.wav",
+   "name": "BAWS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Bing.WAV",
+   "name": "Bing",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKAX.wav",
+   "name": "BKAX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKBX.wav",
+   "name": "BKBX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKDX.wav",
+   "name": "BKDX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKEX.wav",
+   "name": "BKEX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKFX.wav",
+   "name": "BKFX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKGX.wav",
+   "name": "BKGX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKHX.wav",
+   "name": "BKHX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKKX.wav",
+   "name": "BKKX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKLX.wav",
+   "name": "BKLX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKOX.wav",
+   "name": "BKOX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKPX.wav",
+   "name": "BKPX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKRX.wav",
+   "name": "BKRX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKTX.wav",
+   "name": "BKTX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKUX.wav",
+   "name": "BKUX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKVX.WAV",
+   "name": "BKVX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BKWX.wav",
+   "name": "BKWX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BLBM.wav",
+   "name": "BLBM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BLGH.wav",
+   "name": "BLGH",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BLGL.wav",
+   "name": "BLGL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BLHN.wav",
+   "name": "BLHN",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BMBP.wav",
+   "name": "BMBP",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BMCP.wav",
+   "name": "BMCP",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BMEG.wav",
+   "name": "BMEG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BMSH.wav",
+   "name": "BMSH",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Boom.wav",
+   "name": "Boom",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPAC.wav",
+   "name": "BPAC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPAH.wav",
+   "name": "BPAH",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPAR.wav",
+   "name": "BPAR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPAS.wav",
+   "name": "BPAS",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPAT.wav",
+   "name": "BPAT",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPBA.wav",
+   "name": "BPBA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPBL.wav",
+   "name": "BPBL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPBR.wav",
+   "name": "BPBR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPBS.wav",
+   "name": "BPBS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCA.wav",
+   "name": "BPCA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCG.wav",
+   "name": "BPCG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCL.wav",
+   "name": "BPCL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCO.wav",
+   "name": "BPCO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCP.wav",
+   "name": "BPCP",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCS.WAV",
+   "name": "BPCS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPCV.wav",
+   "name": "BPCV",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPDA.wav",
+   "name": "BPDA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPDI.wav",
+   "name": "BPDI",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPDM.wav",
+   "name": "BPDM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPDS.wav",
+   "name": "BPDS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPDU.wav",
+   "name": "BPDU",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPEC.wav",
+   "name": "BPEC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPFC.wav",
+   "name": "BPFC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPFL.wav",
+   "name": "BPFL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPFO.wav",
+   "name": "BPFO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPFR.wav",
+   "name": "BPFR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPFT.wav",
+   "name": "BPFT",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPGA.wav",
+   "name": "BPGA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPGL.wav",
+   "name": "BPGL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPGR.wav",
+   "name": "BPGR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHA.wav",
+   "name": "BPHA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHC.wav",
+   "name": "BPHC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHE.wav",
+   "name": "BPHE",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHG.wav",
+   "name": "BPHG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHO.wav",
+   "name": "BPHO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHS.wav",
+   "name": "BPHS",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPHU.wav",
+   "name": "BPHU",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPIC.wav",
+   "name": "BPIC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPIN.wav",
+   "name": "BPIN",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPIW.wav",
+   "name": "BPIW",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPLB.wav",
+   "name": "BPLB",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPLI.wav",
+   "name": "BPLI",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPLO.wav",
+   "name": "BPLO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPLP.wav",
+   "name": "BPLP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPMA.wav",
+   "name": "BPMA",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPME.wav",
+   "name": "BPME",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPMI.wav",
+   "name": "BPMI",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPMP.wav",
+   "name": "BPMP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPMT.wav",
+   "name": "BPMT",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPMW.wav",
+   "name": "BPMW",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPOH.wav",
+   "name": "BPOH",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPOW.wav",
+   "name": "BPOW",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPPO.WAV",
+   "name": "BPPO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPPP.wav",
+   "name": "BPPP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPPS.wav",
+   "name": "BPPS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPQM.wav",
+   "name": "BPQM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPRB.wav",
+   "name": "BPRB",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPRG.wav",
+   "name": "BPRG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSB.wav",
+   "name": "BPSB",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSD.wav",
+   "name": "BPSD",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSK.wav",
+   "name": "BPSK",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSM.wav",
+   "name": "BPSM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSP.wav",
+   "name": "BPSP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSQ.wav",
+   "name": "BPSQ",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPSS.wav",
+   "name": "BPSS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPST.wav",
+   "name": "BPST",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPTM.wav",
+   "name": "BPTM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPTO.wav",
+   "name": "BPTO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPTP.wav",
+   "name": "BPTP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPTR.wav",
+   "name": "BPTR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPVO.wav",
+   "name": "BPVO",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPWA.wav",
+   "name": "BPWA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPWS.wav",
+   "name": "BPWS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPWT.wav",
+   "name": "BPWT",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BPYP.wav",
+   "name": "BPYP",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BRCX.wav",
+   "name": "BRCX",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BRGX.wav",
+   "name": "BRGX",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BRMX.wav",
+   "name": "BRMX",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BRSX.wav",
+   "name": "BRSX",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BSAL.wav",
+   "name": "BSAL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BSBS.wav",
+   "name": "BSBS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BSFG.wav",
+   "name": "BSFG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BTCE.wav",
+   "name": "BTCE",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BTDR.wav",
+   "name": "BTDR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BTEL.wav",
+   "name": "BTEL",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BTIN.wav",
+   "name": "BTIN",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Build.wav",
+   "name": "Build",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWGC.wav",
+   "name": "BWGC",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWGI.wav",
+   "name": "BWGI",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWGS.wav",
+   "name": "BWGS",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWLX.WAV",
+   "name": "BWLX",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWMO.wav",
+   "name": "BWMO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWT0.wav",
+   "name": "BWT0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTA.wav",
+   "name": "BWTA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTB.wav",
+   "name": "BWTB",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTC.wav",
+   "name": "BWTC",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTD.wav",
+   "name": "BWTD",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTE.wav",
+   "name": "BWTE",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTF.wav",
+   "name": "BWTF",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTG.wav",
+   "name": "BWTG",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTH.wav",
+   "name": "BWTH",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTK.wav",
+   "name": "BWTK",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTL.wav",
+   "name": "BWTL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTM.wav",
+   "name": "BWTM",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTO.wav",
+   "name": "BWTO",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Bwtp.wav",
+   "name": "Bwtp",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTR.wav",
+   "name": "BWTR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTU.wav",
+   "name": "BWTU",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTV.wav",
+   "name": "BWTV",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BWTW.wav",
+   "name": "BWTW",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BZMA.wav",
+   "name": "BZMA",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/BZPY.wav",
+   "name": "BZPY",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Clank.wav",
+   "name": "Clank",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/ClickSft.wav",
+   "name": "ClickSft",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/CrushCrit.wav",
+   "name": "CrushCrit",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Crystallize.wav",
+   "name": "Crystallize",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death1.wav",
+   "name": "Death1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death10.WAV",
+   "name": "Death10",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death11.WAV",
+   "name": "Death11",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death12.WAV",
+   "name": "Death12",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death13.WAV",
+   "name": "Death13",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death2.wav",
+   "name": "Death2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death3.wav",
+   "name": "Death3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death4.wav",
+   "name": "Death4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death5.wav",
+   "name": "Death5",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death6.wav",
+   "name": "Death6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death7.wav",
+   "name": "Death7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death8.wav",
+   "name": "Death8",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Death9.WAV",
+   "name": "Death9",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Defeat.wav",
+   "name": "Defeat",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Disease.wav",
+   "name": "Disease",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Disembark.wav",
+   "name": "Disembark",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+   "name": "DoubleClang",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/DragonBreath0.wav",
+   "name": "DragonBreath0",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/DragonBreath1.wav",
+   "name": "DragonBreath1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/drum.wav",
+   "name": "drum",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/drum2.wav",
+   "name": "drum2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/drum3.wav",
+   "name": "drum3",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/DwarvenBrew.wav",
+   "name": "DwarvenBrew",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Eating.wav",
+   "name": "Eating",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/EggDestroy.wav",
+   "name": "EggDestroy",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/electric.wav",
+   "name": "electric",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/ElectricCrit.wav",
+   "name": "ElectricCrit",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Embark.wav",
+   "name": "Embark",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Error.wav",
+   "name": "Error",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/evilselect.wav",
+   "name": "evilselect",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Fade.wav",
+   "name": "Fade",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Falling0.wav",
+   "name": "Falling0",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Falling1.wav",
+   "name": "Falling1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FastWalk.wav",
+   "name": "FastWalk",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FI00Ambient.wav",
+   "name": "FI00Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FI01Ambient.wav",
+   "name": "FI01Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FI02Ambient.wav",
+   "name": "FI02Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FI03Ambient.wav",
+   "name": "FI03Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FI04Ambient.wav",
+   "name": "FI04Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FI05Ambient.wav",
+   "name": "FI05Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Fire.wav",
+   "name": "Fire",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Fire (2).wav",
+   "name": "Fire (2)",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/fireball.wav",
+   "name": "fireball",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Flap.wav",
+   "name": "Flap",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/FML0Ambient.wav",
+   "name": "FML0Ambient",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/fthsoft.wav",
+   "name": "fthsoft",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/GainedLevel.wav",
+   "name": "GainedLevel",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Garrison.wav",
+   "name": "Garrison",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/GettingCow.wav",
+   "name": "GettingCow",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/GettingSheep.wav",
+   "name": "GettingSheep",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/goodselect.wav",
+   "name": "goodselect",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HeartBeatFast.wav",
+   "name": "HeartBeatFast",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HeartBeatSlow.wav",
+   "name": "HeartBeatSlow",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HeavyDrum.wav",
+   "name": "HeavyDrum",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HeroLevelUp.wav",
+   "name": "HeroLevelUp",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Highlight.wav",
+   "name": "Highlight",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HighlightL.wav",
+   "name": "HighlightL",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HighlightR.wav",
+   "name": "HighlightR",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/HorseTrot.wav",
+   "name": "HorseTrot",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/IceCrit.wav",
+   "name": "IceCrit",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/KeepConversion.wav",
+   "name": "KeepConversion",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Land.wav",
+   "name": "Land",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LightningH1.wav",
+   "name": "LightningH1",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LightningH2.wav",
+   "name": "LightningH2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LightningL1.wav",
+   "name": "LightningL1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LightningL2.wav",
+   "name": "LightningL2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LightningM1.wav",
+   "name": "LightningM1",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LightningM2.wav",
+   "name": "LightningM2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/LongWhoosh.wav",
+   "name": "LongWhoosh",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Mace.wav",
+   "name": "Mace",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Magic.wav",
+   "name": "Magic",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/MarshMove.wav",
+   "name": "MarshMove",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/mechanical.wav",
+   "name": "mechanical",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/merchant.wav",
+   "name": "merchant",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/message.wav",
+   "name": "message",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile0.wav",
+   "name": "Missile0",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile15.wav",
+   "name": "Missile15",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile16.wav",
+   "name": "Missile16",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile18.wav",
+   "name": "Missile18",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile22.wav",
+   "name": "Missile22",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile24.wav",
+   "name": "Missile24",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile25.wav",
+   "name": "Missile25",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile33.wav",
+   "name": "Missile33",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile34.wav",
+   "name": "Missile34",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile35.WAV",
+   "name": "Missile35",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile36.WAV",
+   "name": "Missile36",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile4.wav",
+   "name": "Missile4",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile6.wav",
+   "name": "Missile6",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Missile7.wav",
+   "name": "Missile7",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Morph.WAV",
+   "name": "Morph",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/NeutralSelect.wav",
+   "name": "NeutralSelect",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Newclick.wav",
+   "name": "Newclick",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Night.wav",
+   "name": "Night",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Pad.wav",
+   "name": "Pad",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/PageTurn.wav",
+   "name": "PageTurn",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/PageTurn2.wav",
+   "name": "PageTurn2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Petrify.wav",
+   "name": "Petrify",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/PiercingCrit.wav",
+   "name": "PiercingCrit",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Poison.wav",
+   "name": "Poison",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/RaceSel.wav",
+   "name": "RaceSel",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Rain.wav",
+   "name": "Rain",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/RainH.wav",
+   "name": "RainH",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/retinue.wav",
+   "name": "retinue",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Sail.wav",
+   "name": "Sail",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Scream.WAV",
+   "name": "Scream",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Select1.wav",
+   "name": "Select1",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Select2.wav",
+   "name": "Select2",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/ShortWhoosh.wav",
+   "name": "ShortWhoosh",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Skeleton.wav",
+   "name": "Skeleton",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/SlashCrit.wav",
+   "name": "SlashCrit",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/SlideOpt.wav",
+   "name": "SlideOpt",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Soar.wav",
+   "name": "Soar",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Sparkles.wav",
+   "name": "Sparkles",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/spear.wav",
+   "name": "spear",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Splash.wav",
+   "name": "Splash",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/SplashMove.wav",
+   "name": "SplashMove",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Statpop.wav",
+   "name": "Statpop",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ01.wav",
+   "name": "STEZ01",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ02.wav",
+   "name": "STEZ02",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ03.wav",
+   "name": "STEZ03",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ04.wav",
+   "name": "STEZ04",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ05.wav",
+   "name": "STEZ05",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ06.wav",
+   "name": "STEZ06",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ07.wav",
+   "name": "STEZ07",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ08.wav",
+   "name": "STEZ08",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ09.wav",
+   "name": "STEZ09",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ10.wav",
+   "name": "STEZ10",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ11.wav",
+   "name": "STEZ11",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ12.wav",
+   "name": "STEZ12",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ13.wav",
+   "name": "STEZ13",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ14.wav",
+   "name": "STEZ14",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ15.wav",
+   "name": "STEZ15",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ16.wav",
+   "name": "STEZ16",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ17.wav",
+   "name": "STEZ17",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ18.wav",
+   "name": "STEZ18",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ19.wav",
+   "name": "STEZ19",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ20.wav",
+   "name": "STEZ20",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ21.wav",
+   "name": "STEZ21",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ22.wav",
+   "name": "STEZ22",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ23.wav",
+   "name": "STEZ23",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ24.wav",
+   "name": "STEZ24",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ25.wav",
+   "name": "STEZ25",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ26.wav",
+   "name": "STEZ26",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ27.wav",
+   "name": "STEZ27",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ28.wav",
+   "name": "STEZ28",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ29.wav",
+   "name": "STEZ29",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ30.wav",
+   "name": "STEZ30",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ31.wav",
+   "name": "STEZ31",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ32.wav",
+   "name": "STEZ32",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ33.wav",
+   "name": "STEZ33",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ34.wav",
+   "name": "STEZ34",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ35.wav",
+   "name": "STEZ35",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ36.wav",
+   "name": "STEZ36",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ37.wav",
+   "name": "STEZ37",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ38.wav",
+   "name": "STEZ38",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ39.wav",
+   "name": "STEZ39",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ40.wav",
+   "name": "STEZ40",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ41.wav",
+   "name": "STEZ41",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ42.wav",
+   "name": "STEZ42",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ43.wav",
+   "name": "STEZ43",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ44.wav",
+   "name": "STEZ44",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ45.wav",
+   "name": "STEZ45",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ46.wav",
+   "name": "STEZ46",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/STEZ47.wav",
+   "name": "STEZ47",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Stomp.wav",
+   "name": "Stomp",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/swoosh.wav",
+   "name": "swoosh",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/swoosh2.wav",
+   "name": "swoosh2",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/swooshlr.wav",
+   "name": "swooshlr",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/swooshrl.wav",
+   "name": "swooshrl",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Sword.wav",
+   "name": "Sword",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/tavern.wav",
+   "name": "tavern",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Thump.wav",
+   "name": "Thump",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Trot.wav",
+   "name": "Trot",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/UnGarrison.wav",
+   "name": "UnGarrison",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Victory.wav",
+   "name": "Victory",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Wagon.wav",
+   "name": "Wagon",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Walk.wav",
+   "name": "Walk",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Whack.wav",
+   "name": "Whack",
+   "in_pack": true
+  },
+  {
+   "path": "assets/Sounds/SoundFX/Whip.wav",
+   "name": "Whip",
+   "in_pack": false
+  },
+  {
+   "path": "assets/Sounds/SoundFX/xp.wav",
+   "name": "xp",
+   "in_pack": true
+  }
+ ]
+}

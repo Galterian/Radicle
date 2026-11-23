@@ -1536,9 +1536,25 @@ function makeEffectCard(id) {
 // Shuffle.
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
 // FORCE_FOREIGN_EFFECT=<def.json> (dev/test only): a player-branch effect on top of my deck (E4 handshake).
-if (process.env.FORCE_FOREIGN_EFFECT) { const fc = fxPeer.forcedCard(process.env.FORCE_FOREIGN_EFFECT); if (fc) deck.unshift(fc); }
+// FORCE_FOREIGN_COPIES=n (1–4, tools/effect-gen-test.mjs): n copies, the first on top, the others every 4th card after it.
+if (process.env.FORCE_FOREIGN_EFFECT) {
+  const fc = fxPeer.forcedCard(process.env.FORCE_FOREIGN_EFFECT);
+  if (fc) {
+    deck.unshift(fc);
+    const n = Math.max(1, Math.min(4, Number(process.env.FORCE_FOREIGN_COPIES) || 1));
+    for (let i = 1; i < n; i++) deck.splice(Math.min(deck.length, 4 * i), 0, { ...fc, card_id: `${fc.card_id}${i}` });
+  }
+}
 // FORCE_FOREIGN_SKILL=<def.json> (dev/test only): a player-branch skill on top of my deck (S4 handshake).
-if (process.env.FORCE_FOREIGN_SKILL) { const sc = skPeer.forcedCard(process.env.FORCE_FOREIGN_SKILL); if (sc) deck.unshift(sc); }
+// FORCE_FOREIGN_SKILL_COPIES=n (1–4, tools/effect-gen-test.mjs): n copies, placed like FORCE_FOREIGN_COPIES.
+if (process.env.FORCE_FOREIGN_SKILL) {
+  const sc = skPeer.forcedCard(process.env.FORCE_FOREIGN_SKILL);
+  if (sc) {
+    deck.unshift(sc);
+    const n = Math.max(1, Math.min(4, Number(process.env.FORCE_FOREIGN_SKILL_COPIES) || 1));
+    for (let i = 1; i < n; i++) deck.splice(Math.min(deck.length, 4 * i), 0, { ...sc, card_id: `${sc.card_id}${i}` });
+  }
+}
 // FORCE_OPENING=skill_sanctuary,B,A (dev/test only): move one card per entry
 // to the top of the deck so the opening hand is predictable. Only characters —
 // monsters keep their shuffle so a pinned hero test is not mirrored by the foe.

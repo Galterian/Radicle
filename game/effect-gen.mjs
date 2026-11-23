@@ -13,6 +13,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
 import { ALL_ELEMS, loadEffectDefs, resolveEffectData } from './effect-engine.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -23,11 +25,18 @@ export const GEN_LIBS = Object.freeze(['std', 'e2a']);
 export const GEN_KINDS = Object.freeze(['damage', 'lock', 'stat_token', 'permanent', 'counter', 'trap', 'relocation', 'meta']);
 export const GEN_DURATIONS = Object.freeze(['instant', 'permanent', 'channel', 'trap']);
 
-export function genConfig(env = {}) {
-  const url = String(env.LLM_BIG_URL ?? 'http://127.0.0.1:8096').replace(/\/+$/, '');
+// file: <profile dir>/llm.json { big_url, big_key, remote_url, remote_key } — mode 600, written by `effect-gen.mjs --save-key`,
+// never in the repo. The environment wins over the file.
+export function readLlmFile(file) {
+  try { return file ? JSON.parse(fs.readFileSync(file, 'utf8')) || {} : {}; } catch { return {}; }
+}
+export function genConfig(env = {}, { file = '' } = {}) {
+  const f = readLlmFile(file);
+  // the phone has no local big model: no default there (the Drafts page asks for the OCI URL + key)
+  const url = String(env.LLM_BIG_URL ?? f.big_url ?? (env.CHAOSD6_MOBILE === '1' ? '' : 'http://127.0.0.1:8096')).replace(/\/+$/, '');
   return {
     url: url === '0' ? '' : url,
-    key: String(env.LLM_BIG_KEY ?? env.LLM_KEY ?? ''),
+    key: String(env.LLM_BIG_KEY ?? f.big_key ?? env.LLM_KEY ?? f.remote_key ?? ''),
     model: env.LLM_BIG_MODEL || 'qwen3-8b',
     timeoutMs: Math.max(30_000, Number(env.LLM_BIG_TIMEOUT_MS) || 20 * 60_000),
     attempts: Math.max(1, Math.min(6, Number(env.GEN_ATTEMPTS) || 3)),
@@ -111,7 +120,8 @@ export function assemble(raw, { model = '', idea = '', taken = new Set() } = {})
   const text = typeof r.text === 'string' ? r.text.trim() : '';
   const def = {
     schema: 'chaosd6.effect/2', id, name, version: '0.1.0',
-    source: { collection: 'generated', model, idea: String(idea).slice(0, 500), at: new Date().toISOString() },
+    // custom: true = a player-made definition (user ruling 2026-11-23) — the editor, the card and the vote popup show a "custom" badge.
+    source: { collection: 'generated', custom: true, model, idea: String(idea).slice(0, 500), at: new Date().toISOString() },
     elements, cost: elements.length, kind: r.kind, duration: r.duration,
     every: r.every && typeof r.every === 'object' ? r.every : { behaviour: 'none' },
     text, flags: r.flags && typeof r.flags === 'object' ? r.flags : {},
@@ -258,7 +268,24 @@ export function probeErrors(def) {
 // One completion. → { text, ms, usage, timings } | { error, ms }
 // With onProgress it streams (llama-server SSE + return_progress): onProgress({ phase: 'prompt', done, total, cached })
 // while the prompt is read, then ({ phase: 'answer', done }) per answer token. Same result either way.
-export async function complete(cfg, messages, { fetchImpl = globalThis.fetch, timeoutMs = cfg.timeoutMs, temperature = 0.4, onProgress = null } = {}) {
+// A POST with node:http(s) shaped like fetch's answer ({ ok, status, body: async iterable, json(), text() }). Node's fetch
+// (undici) gives up when the reply headers take > 300 s (UND_ERR_HEADERS_TIMEOUT, seen on OCI 2026-11-23: a slow 8B sends
+// nothing until its first prompt batch is read); this has no such limit — only the caller's AbortSignal.
+export function longFetch(url, { method = 'POST', headers = {}, body = '', signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const mod = u.protocol === 'https:' ? https : http;
+    const req = mod.request(u, { method, headers: { ...headers, 'Content-Length': Buffer.byteLength(body) }, signal }, (res) => {
+      const read = async () => { let s = ''; for await (const c of res) s += c; return s; };
+      resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, body: res, text: read, json: async () => JSON.parse(await read()) });
+    });
+    req.on('error', (e) => reject(e.name === 'AbortError' ? Object.assign(new Error('timeout'), { name: 'TimeoutError' }) : e));
+    req.end(body);
+  });
+}
+
+// schema: the JSON schema the answer is held to (default: an effect definition; null = free text, e.g. a test review).
+export async function complete(cfg, messages, { fetchImpl = longFetch, timeoutMs = cfg.timeoutMs, temperature = 0.4, onProgress = null, schema = answerSchema(), maxTokens = cfg.maxTokens } = {}) {
   const t0 = Date.now();
   const stream = typeof onProgress === 'function';
   try {
@@ -266,9 +293,9 @@ export async function complete(cfg, messages, { fetchImpl = globalThis.fetch, ti
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
       body: JSON.stringify({
-        model: cfg.model, messages, temperature, max_tokens: cfg.maxTokens, cache_prompt: true,
+        model: cfg.model, messages, temperature, max_tokens: maxTokens, cache_prompt: true,
         chat_template_kwargs: { enable_thinking: false },
-        response_format: { type: 'json_schema', json_schema: { name: 'effect', strict: false, schema: answerSchema() } },
+        ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'answer', strict: false, schema } } } : {}),
         ...(stream ? { stream: true, return_progress: true } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs),
@@ -303,6 +330,49 @@ export async function complete(cfg, messages, { fetchImpl = globalThis.fetch, ti
   }
 }
 
+// The status line of a generation (CLI every 5 s, the editor's label every 10 s):
+// "[gen] m:ss attempt i/n X% · reading prompt …/… tok (..%) | writing answer n/~N tok (..%) | validating · <host> CPU …".
+// state = generateEffect's onProgress object; sample = machine-stats latest() (or null); statsError = its error().
+export const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+export function formatStatus(state, { elapsedMs = 0, sample = null, statsError = '', where = 'local' } = {}) {
+  if (!state) return '';
+  const pct = (a, b) => (b > 0 ? Math.min(99, Math.round(100 * a / b)) : 0);
+  let what;
+  if (state.phase === 'prompt') what = `reading prompt ${state.done}/${state.total} tok (${pct(state.done, state.total)}%${state.cached ? `, ${state.cached} cached` : ''})`;
+  else if (state.phase === 'answer') what = `writing answer ${state.done}/~${state.expect} tok (${pct(state.done, state.expect)}%)`;
+  else if (state.phase === 'check') what = 'validating (99%)';
+  else what = 'waiting for the server';
+  // the attempt's own %: prompt = 0–20 %, answer = 20–99 % (the answer is most of the time once the prompt is cached)
+  const job = state.phase === 'prompt' ? Math.round(20 * pct(state.done, state.total) / 100) : state.phase === 'answer' ? 20 + Math.round(79 * pct(state.done, state.expect) / 100) : state.phase === 'check' ? 99 : 0;
+  let m = '';
+  if (sample) {
+    const big = (sample.servers || []).find(sv => sv.port === '8096');
+    m = ` · ${where} CPU ${sample.cpu}% · mem ${sample.mem}% (${sample.memUsedGb}/${sample.memTotalGb} GB)${big ? ` · 8B ${big.cpu ?? '?'}% CPU, ${big.rssGb} GB` : ''}`;
+  } else if (statsError) m = ` · stats: ${statsError}`;
+  return `[gen] ${mmss(elapsedMs)} attempt ${state.attempt}/${state.of} ${job}% · ${what}${m}`;
+}
+
+// The rebalance validator's own report as the CLI prints it (tools/rebalancing-check.mjs / skills-rebalancing-check.mjs
+// `check <file>`), from the raw check result → lines for the draft's log (the player sees why it is rated so).
+export function validatorReport(res) {
+  if (!res || typeof res !== 'object') return [];
+  const id = res.effect_id || res.skill_id || res.class_id || '?';
+  const out = [`${id}: VERDICT ${String(res.verdict || '?').toUpperCase()}  (validator ${res.validator?.version || '?'}${res.validator?.pin_id ? `, pin ${res.validator.pin_id.slice(0, 12)}` : ''})`];
+  if (res.valid === false) { for (const e of res.errors || []) out.push(`  ✗ ${e}`); return out; }
+  const p = res.power;
+  if (p && typeof p === 'object') {
+    const cost = p.cost && typeof p.cost === 'object' ? ` cost ${p.cost.actions} ${res.skill_id || res.class_id ? 'card-' : ''}actions${p.cost.emissions != null ? ` (emissions ${p.cost.emissions}${p.cost.instant ? ' instant' : ''}, retries ${p.cost.retries})` : ''}` : '';
+    out.push(`  value ${p.value}${p.uses != null ? ` (uses ${p.uses} × ${p.per_use})` : ''} ${cost}  curve ${p.expected}  ratio ${p.ratio}`);
+    if (p.components) out.push(`  components: ${Object.entries(p.components).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  }
+  if (res.baseline) out.push(`  baseline ${res.baseline.id}: ratio ${res.baseline.ratio} → judged ${res.judged_ratio}`);
+  if (res.band) out.push(`  band [${res.band.low}, ${res.band.high}]`);
+  if (res.audit) out.push(`  audit: ${res.audit.ran ? `${res.audit.engine}, ${res.audit.N} ${res.skill_id ? 'duels' : 'scenarios'}, ${res.audit.identical ? 'identical to the flags' : 'within the flags'}` : res.audit.why || 'not run'}`);
+  for (const r of res.reasons || []) out.push(`  · ${r}`);
+  for (const s of res.suggestions || []) out.push(`  → ${s.change}${s.ratio != null ? ` (ratio ${s.ratio}${s.in_band ? ', in band' : ''})` : ''}`);
+  return out.slice(0, 40);
+}
+
 export function parseJson(text) {
   if (typeof text !== 'string') return null;
   const t = text.replace(/<think>[\s\S]*?<\/think>/g, '');
@@ -313,18 +383,43 @@ export function parseJson(text) {
 
 // generateEffect({ idea }) → { ok, def, verdict, problems, tries: [{ms, verdict, problems, usage}] }
 // onProgress({ attempt, of, phase: 'prompt'|'answer'|'check', done, total, cached, expect }) — CLI status line.
-export async function generateEffect({ idea, cfg = genConfig(process.env), fetchImpl = globalThis.fetch, log = () => {}, taken = null, checkEffect = null, onProgress = null }) {
+// prior + changes (the editor's "retry"): the previous draft goes back as the model's own answer, followed by the
+// player's extra description and the test review's suggestions — the model edits it instead of starting over.
+export async function generateEffect({ checkEffect = null, ...o }) {
+  return generateDef(effectSpec({ checkEffect }), o);
+}
+// What generateDef needs to know about one kind of definition (effects here; skill-gen.mjs, class-gen.mjs the others).
+export function effectSpec({ checkEffect = null } = {}) {
+  return {
+    kind: 'effect', expect: 350,   // answer tokens expected (an effect definition ~300–350)
+    systemPrompt: () => systemPrompt(), answerSchema, strip: stripExample, assemble, autoFix,
+    taken: () => new Set(fs.readdirSync(path.join(DATA, 'effects')).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5))),
+    check: (def) => checkDraft(def, { checkEffect }),
+    tune: (def, res) => autoTune(def, res, { checkEffect }),
+  };
+}
+
+// The model loop for any kind: ask → parse → assemble → auto-fix → the validator → (tune) → the problems back to the model.
+// tagCheck(def) → problems (gen-tags.mjs tagProblems for the tags the player picked; a hard requirement: a draft that
+// misses one is not ok, the problems go back to the model like a validator's reasons).
+export async function generateDef(spec, { idea, cfg = genConfig(process.env), fetchImpl = longFetch, log = () => {}, taken = null, onProgress = null, prior = null, changes = '', tagCheck = null }) {
   if (!cfg.url) return { ok: false, error: 'no big model configured (LLM_BIG_URL)', tries: [] };
-  if (!idea || !String(idea).trim()) return { ok: false, error: 'describe the effect', tries: [] };
-  taken ||= new Set(fs.readdirSync(path.join(DATA, 'effects')).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)));
-  const messages = [{ role: 'system', content: systemPrompt() }, { role: 'user', content: `New effect: ${String(idea).trim().slice(0, 1000)}\n/no_think` }];
+  if (!idea || !String(idea).trim()) return { ok: false, error: `describe the ${spec.kind}`, tries: [] };
+  taken ||= spec.taken();
+  const messages = [{ role: 'system', content: spec.systemPrompt() }, { role: 'user', content: `New ${spec.kind}: ${String(idea).trim().slice(0, 1000)}\n/no_think` }];
+  if (prior && typeof prior === 'object') {
+    messages.push({ role: 'assistant', content: JSON.stringify(spec.strip(prior)).slice(0, 12_000) });
+    messages.push({ role: 'user', content: `Change it: ${String(changes || 'make it work as described').trim().slice(0, 2000)}\nKeep the id "${prior.id}". Answer with the whole corrected JSON object.\n/no_think` });
+  }
   const tries = [];
-  let best = null, expect = 350;   // answer tokens expected (an effect definition ~300–350; then the last attempt's length)
+  // the conversation for the draft's log (the system prompt left out): the player's words, each answer, the validator's report
+  const talk = messages.slice(1).filter(m => m.role === 'user').map(m => ({ role: 'player', text: m.content.replace(/\n\/no_think$/, '').slice(0, 2000) }));
+  let best = null, expect = spec.expect || 350;   // then the last attempt's length
   for (let i = 1; i <= cfg.attempts; i++) {
     log(`attempt ${i}/${cfg.attempts}: asking ${cfg.model} at ${cfg.url}…`);
     const prog = onProgress ? (x) => onProgress({ attempt: i, of: cfg.attempts, expect, ...x }) : null;
     prog?.({ phase: 'wait' });
-    const ans = await complete(cfg, messages, { fetchImpl, temperature: Math.min(0.9, 0.4 + 0.2 * (i - 1)), onProgress: prog });   // retries vary more: the 8B re-sends its answer otherwise
+    const ans = await complete(cfg, messages, { fetchImpl, temperature: Math.min(0.9, 0.4 + 0.2 * (i - 1)), onProgress: prog, schema: spec.answerSchema() });   // retries vary more: the 8B re-sends its answer otherwise
     if (ans.usage?.completion_tokens) expect = ans.usage.completion_tokens;
     prog?.({ phase: 'check' });
     if (ans.error) { tries.push({ ms: ans.ms, error: ans.error }); log(`attempt ${i}: ${ans.error} after ${ans.ms} ms`); if (/^(timeout|http 40[13])/.test(ans.error)) break; continue; }
@@ -332,23 +427,30 @@ export async function generateEffect({ idea, cfg = genConfig(process.env), fetch
     let def = null, res;
     if (!raw) res = { ok: false, verdict: 'reject', problems: ['the answer is not one JSON object'] };
     else {
-      def = assemble(raw, { model: cfg.model, idea, taken });
-      const fixed = autoFix(def);
+      def = spec.assemble(raw, { model: cfg.model, idea, taken });
+      if (prior?.id && raw.id === prior.id) def.id = prior.id;   // a retry keeps its draft's id (taken only holds the built-ins)
+      const fixed = spec.autoFix ? spec.autoFix(def) : [];
       if (fixed.length) { def.source.auto_fixed = fixed; log(`attempt ${i}: auto-fixed — ${fixed.join('; ')}`); }
-      res = await checkDraft(def, { checkEffect });
-      if (res.verdict === 'nerf' || res.verdict === 'boost') {
-        const t = await autoTune(def, res, { checkEffect });
+      res = await spec.check(def);
+      if ((res.verdict === 'nerf' || res.verdict === 'boost') && spec.tune) {
+        const t = await spec.tune(def, res);
         if (t) { def = t.def; (def.source.auto_fixed ||= []).push(`validator suggestion: ${t.change}`); log(`attempt ${i}: ${res.verdict} → applied the validator's suggestion "${t.change}"`); res = t.res; }
       }
+      const tp = tagCheck ? tagCheck(def) : [];
+      if (tp.length) res = { ...res, ok: false, tagProblems: tp, problems: [...tp, ...res.problems] };
     }
     tries.push({ ms: ans.ms, verdict: res.verdict, problems: res.problems, usage: ans.usage, timings: ans.timings });
     log(`attempt ${i}: ${res.verdict} in ${Math.round(ans.ms / 1000)} s${res.problems.length ? ` — ${res.problems.slice(0, 3).join('; ')}` : ''}`);
-    if (def && (!best || rank(res.verdict) > rank(best.verdict))) best = { def, verdict: res.verdict, problems: res.problems, check: res.check };
+    talk.push({ role: 'model', attempt: i, text: def ? JSON.stringify(spec.strip(def)).slice(0, 1500) : String(ans.text).slice(0, 600) },
+      { role: 'validator', attempt: i, verdict: res.verdict, text: [...validatorReport(res.check), ...(res.check ? [] : res.problems.map(p => `  · ${p}`))].join('\n').slice(0, 3000) });
+    const score = rank(res.verdict) - (res.tagProblems?.length ? 0.5 : 0);   // a draft that meets the tags wins a tie
+    if (def && (!best || score > best.score)) best = { def, verdict: res.verdict, problems: res.problems, check: res.check, tagProblems: res.tagProblems || [], score };
     if (res.ok) break;
     messages.push({ role: 'assistant', content: ans.text.slice(0, 12_000) });
     messages.push({ role: 'user', content: `The validator refused it (${res.verdict}):\n- ${res.problems.join('\n- ')}\nFix these and answer with the whole corrected JSON object.\n/no_think` });
   }
-  return { ok: best?.verdict === 'ok', def: best?.def || null, verdict: best?.verdict || 'none', problems: best?.problems || [], check: best?.check || null, tries };
+  return { ok: best?.verdict === 'ok' && !best.tagProblems.length, def: best?.def || null, verdict: best?.verdict || 'none', problems: best?.problems || [], check: best?.check || null,
+    tag_problems: best?.tagProblems || [], tries, talk };
 }
 const rank = (v) => ({ ok: 3, nerf: 2, boost: 2, reject: 1 })[v] || 0;
 

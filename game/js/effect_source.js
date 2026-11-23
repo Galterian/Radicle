@@ -97,7 +97,8 @@ export function normalizeSource(s, kind = null) {
     name: s.name ? String(s.name) : null,
     kind: k,
     ...(/^z6Mk[1-9A-HJ-NP-Za-km-z]{40,50}$/.test(String(s.ns || '')) ? { ns: String(s.ns) } : {}),   // PV: publisher namespace (author check)
-    ...(s.review === true ? { review: true } : {}),                                              // PV: players' votes flag it for review
+    ...(s.review === true ? { review: true } : {}),
+    ...(s.custom === true ? { custom: true } : {}),   // a player-made (generated) card — the "custom" badge (2026-11-23)                                              // PV: players' votes flag it for review
   };
 }
 
@@ -182,6 +183,7 @@ export function sourceBadgeHtml(src, { compact = false } = {}) {
   const v = src.verdict ? VERDICTS[src.verdict] : null;
   return `<span class="fx-src${v ? ' ' + v.cls : ''}${compact ? ' compact' : ''}${src.review ? ' fx-src-low' : ''}" title="${_esc(sourceTitle(src))}">`   // fx-src-low: the card around it turns grey (style.css)
     + `<span class="fx-src-br">${_esc(sourceLabel(src, compact))}</span>`
+    + (src.custom ? '<span class="fx-src-cu" title="made by a player (custom)">custom</span>' : '')
     + (!compact && src.author ? `<span class="fx-src-au">${_esc(src.author)}</span>` : '')
     + (v ? `<span class="fx-src-v" aria-label="${_esc(v.label)}">${v.glyph}</span>` : '')
     + (src.review ? '<span class="fx-src-rv" aria-label="players flagged it for review" style="color:#ff9b5b;margin-left:2px">⚑</span>' : '')   // PV: votes n ≥ 10, mean ≤ −3
@@ -195,6 +197,8 @@ export const effectSourceBadge = (x, opts) => sourceBadgeHtml(effectSource(x), o
 export const cardSourceBadge = effectSourceBadge;
 // Plain-text mark for text-only surfaces (the `[EM + A + ✦BT + ✦Po⎇]` chip, canvas labels): '⎇' or ''.
 export const sourceMark = x => (effectSource(x) ? '⎇' : '');
+// User 2026-11-23: a player-made (custom) card gets ✪ before its kind symbol on the map: `✪✦Qu⎇`, `✪✧🔥💧`.
+export const customMark = x => (effectSource(x)?.custom ? '✪' : '');
 
 // DOM version for DOM-built cards (skill_card.js, profile-ui.js). Browser only.
 export function makeSourceBadge(src, opts) {

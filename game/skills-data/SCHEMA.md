@@ -208,6 +208,11 @@ wins. From then on the skill takes part in every data hook it has a program for 
 code-unit order — in every `SKILL_ENGINE` mode; its per-skill hooks (`perm_stats`, `disposition`, …) run its own program
 or the std default on its metadata. A pass program of a foreign skill runs after the built-ins' pass (MV).
 
+`resources` (/1 only, 2026-11-23 — the editor's resource picker): `{sprites: {effect: {path, usage}}, sounds: {fx: [{path,
+usage}…≤ 8]}}`, the shape of an effect's `card.resources`, paths from chaosD6-Resources (`assets/Sprites/….png`,
+`assets/Sounds/….wav`, no `..`; `skill-engine.mjs validateResources`). For the UI only — the validator does not price it.
+A /2 built-in keeps its media in `card.resources`; a top-level `resources` there is an error.
+
 ## Example (Dodge)
 
 ```json

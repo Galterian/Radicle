@@ -735,6 +735,7 @@ function routeNew(rest) {
     h('p', { class: 'au-hint', text: 'Start from the minimal valid template of a kind, or open a built-in skill / effect / class and use "Fork as new …".' }),
     h('div', { class: 'au-kinds' }, kinds.map((k) => h('button', { class: 'au-btn', type: 'button', text: `New ${k}`,
       onclick: () => C.navigate(`#/new/${k}`) }))),
+    h('div', { class: 'au-bar' }, h('button', { class: 'au-btn', type: 'button', text: 'Generate from a description…', onclick: () => C.navigate('#/gen/effect') })),
   ]);
 }
 

@@ -9,7 +9,7 @@
 #     reachable from outside the VM.
 #   - with --big: a SECOND server, Qwen3-8B Q4_K_M (5.0 GB, sha256-pinned), unit chaosd6-llm-big.service on
 #     127.0.0.1:8096, 1 slot × 16384 ctx, LLM_BIG_THREADS (2) — effect generation (game/effect-gen.mjs), never the
-#     bots' planning clock: Nice 15 + CPUWeight 20 so the 1.7B bot server (CPUWeight 100) wins the cores. Needs the
+#     bots' planning clock: Nice 15 + CPUWeight 20 so the 1.7B bot server (CPUWeight 100) wins the cores; MemoryMax 14G (9G thrashed: the mmap-ed 4.7 GB model + 16k KV + buffers sat at the cap → 1 tok/s, 2026-11-23). Needs the
 #     4 OCPU / 24 GB shape (refuses below 20 GB). With --public too: route /llm-big/* (same API key).
 #
 # Usage (from WSL, repo root):  infra/oci/llm-setup.sh [--public] [--big]
@@ -110,7 +110,7 @@ Restart=on-failure
 RestartSec=5
 Nice=15
 CPUWeight=20
-MemoryMax=9G
+MemoryMax=14G
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/opt/chaosd6-llm

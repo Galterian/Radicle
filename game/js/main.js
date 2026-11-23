@@ -20,7 +20,7 @@ onFeaturesChanged(clearBuildingBonusMemo); onBigFeaturesChanged(clearBuildingBon
 import { scatterAt } from './scatter.js';
 import { ACTION_HELP, KIND_DESC, abbreviate } from './rules_text.js';
 import { makeSkillIcon, fillSkillCardStack, permStats, elemGlyphsOf, skillInfo, setSkillUi as setCardSkillUi } from './skill_card.js';
-import { effectSourceBadge, sourceEpoch, setEffectSource, refText, refId, sourceMark, DEV_FIXTURE, votedLow } from './effect_source.js';
+import { effectSourceBadge, sourceEpoch, setEffectSource, refText, refId, sourceMark, customMark, DEV_FIXTURE, votedLow } from './effect_source.js';
 import { pvInit, pvSeen, pvOnMessage } from './proposal_vote_ui.js';   // PV: proposal votes on foreign (player-branch) cards
 
 // Large multi-hex landmarks live in bigfeature.js, which another workstream is
@@ -868,16 +868,17 @@ function composeLabel({ action, declared, trance, played, skills, effects }) {
   if (Array.isArray(trance) && trance.length) trance.forEach((c, i) => parts.push(!Array.isArray(played) || played.includes(i) ? c : `(${c})`));
   // A class stance (Reaver / Barbarian / Monk) judges an Empty Posture as
   // A / B / M — show both so the reader knows the EP was the play.
-  else if (action && declared && declared !== action) parts.push(`${declared}⚜${action}`);
+  // Prefixes (user 2026-11-23): ✦ skill · ✧ effect · ◈ class · ✪ custom (player-made, before the kind symbol).
+  else if (action && declared && declared !== action) parts.push(`${declared}◈${action}`);
   else if (action) parts.push(action);
   const ids = (skills || []).map(String);
   const rest = ids.filter(id => !skUi(id).trance);
   // A player-branch skill (chaosD6-Skills) carries ⎇ after its tag: `✦Po⎇`. The trance skill's tag (ui.tag), else
   // the BT action code.
   const tid = tranceSkillId();
-  if (Array.isArray(trance) && trance.length) parts.push(`✦${tid ? skillTag(tid) : 'BT'}${tid ? sourceMark(tid) : ''}`);
-  for (const id of rest) parts.push(`✦${skillTag(id)}${sourceMark(id)}`);
-  for (const e of effects || []) parts.push(`✺${elemGlyphs(e.elements || e.element_cost)}`);
+  if (Array.isArray(trance) && trance.length) parts.push(`${tid ? customMark(tid) : ''}✦${tid ? skillTag(tid) : 'BT'}${tid ? sourceMark(tid) : ''}`);
+  for (const id of rest) parts.push(`${customMark(id)}✦${skillTag(id)}${sourceMark(id)}`);
+  for (const e of effects || []) parts.push(`${customMark(e)}✧${elemGlyphs(e.elements || e.element_cost)}`);
   return parts.join(' + ');
 }
 // The chip over my own head while planning: what the commit will carry.

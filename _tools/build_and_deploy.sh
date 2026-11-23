@@ -143,7 +143,9 @@ if [[ "$MODE" == "release" ]]; then
   OCI_KEY="infra/oci/keys/oci_seeder"
   OCI_HOST="ubuntu@92.5.138.121"
   OCI_PATH="/var/www/downloads/chaosd6-release.apk"
-  if [[ -f "$OCI_KEY" ]]; then
+  if [[ "${NO_OCI_UPLOAD:-0}" == "1" ]]; then
+    echo "[deploy] skip OCI upload (NO_OCI_UPLOAD=1)"
+  elif [[ -f "$OCI_KEY" ]]; then
     echo "[deploy] uploading APK to $OCI_HOST:$OCI_PATH ..."
     if scp -i "$OCI_KEY" -o StrictHostKeyChecking=accept-new "$APK_PATH" "$OCI_HOST:/tmp/chaosd6-release.apk"; then
       ssh -i "$OCI_KEY" "$OCI_HOST" "sudo mv /tmp/chaosd6-release.apk $OCI_PATH && sudo chown ubuntu:ubuntu $OCI_PATH"

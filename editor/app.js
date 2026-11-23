@@ -174,6 +174,8 @@ function confirmDialog(title, body) {
 /* ------------------------------------------------------------------ extension points for author.js */
 function registerHeaderAction(a) {
   S.headerActions = S.headerActions.filter(x => x.id !== a.id).concat(a);
+  // a.before = <id>: shown in front of that action (gen.js "Drafts" before author.js "New skill / effect / class")
+  if (a.before) { const i = S.headerActions.findIndex(x => x.id === a.before); if (i >= 0) S.headerActions.splice(i, 0, S.headerActions.pop()); }
   renderHeaderActions();
 }
 function renderHeaderActions() {
@@ -611,6 +613,7 @@ async function boot() {
       console.error('editor: author.js', e);
       toast('Editing tools failed to load — read-only (' + (e?.message || e) + ')', 'error');
     }
+    try { (await import('./gen.js')).initGeneration(ctx); } catch (e) { console.error('editor: gen.js', e); }   // b9: #/gen/ (generate from a description)
     renderHeaderActions();
   }
   await route();

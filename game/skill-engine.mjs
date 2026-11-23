@@ -259,6 +259,40 @@ export function validateUi(ui) {
   for (const k of ['card_glyph', 'card_color', 'rest_hint']) if (ui[k] !== undefined && (typeof ui[k] !== 'string' || !ui[k] || ui[k].length > 400)) errs.push(`ui.${k} must be a string`);
   return errs;
 }
+// A foreign (/1) skill's own picture and sound (user ruling 2026-11-23; the editor's resource picker, chaosD6-Resources
+// paths): {sprites: {effect: {path, usage}}, sounds: {fx: [{path, usage}…≤ 8]}} — the shape of an effect's
+// card.resources. Documentation for the UI only: the validator does not price it (normalizeDef never reads it).
+// Paths are relative asset paths: sprites .png under assets/Sprites/, sounds .wav under assets/Sounds/; no "..", "//",
+// backslash or absolute path.
+export const RESOURCE_PATH_RE = { sprite: /^assets\/Sprites\/[A-Za-z0-9_ ()[\].,'+-]+(\/[A-Za-z0-9_ ()[\].,'+-]+)*\.png$/, sound: /^assets\/Sounds\/[A-Za-z0-9_ ()[\].,'+-]+(\/[A-Za-z0-9_ ()[\].,'+-]+)*\.wav$/i };
+const resPathOk = (p, kind) => typeof p === 'string' && p.length <= 300 && !p.includes('..') && !p.includes('//') && !p.includes('\\') && RESOURCE_PATH_RE[kind].test(p);
+const resEntryErrors = (x, kind, where) => {
+  if (!isObj(x)) return [`${where} must be {path, usage}`];
+  const e = [];
+  for (const k of Object.keys(x)) if (!['path', 'usage'].includes(k)) e.push(`${where}.${k}: unknown key (path, usage)`);
+  if (!resPathOk(x.path, kind)) e.push(`${where}.path must be ${kind === 'sprite' ? 'assets/Sprites/….png' : 'assets/Sounds/….wav'} (no "..")`);
+  if (x.usage !== undefined && (typeof x.usage !== 'string' || x.usage.length > 300)) e.push(`${where}.usage must be a string (≤ 300)`);
+  return e;
+};
+export function validateResources(r) {
+  if (!isObj(r)) return ['resources must be {sprites, sounds}'];
+  const errs = [];
+  for (const k of Object.keys(r)) if (!['sprites', 'sounds'].includes(k)) errs.push(`resources.${k}: unknown key (sprites, sounds)`);
+  if (r.sprites !== undefined) {
+    if (!isObj(r.sprites)) errs.push('resources.sprites must be {effect: {path, usage}}');
+    else for (const [k, v] of Object.entries(r.sprites)) errs.push(...(k === 'effect' ? resEntryErrors(v, 'sprite', 'resources.sprites.effect') : [`resources.sprites.${k}: unknown key (effect)`]));
+  }
+  if (r.sounds !== undefined) {
+    if (!isObj(r.sounds)) errs.push('resources.sounds must be {fx: [{path, usage}]}');
+    else for (const [k, v] of Object.entries(r.sounds)) {
+      if (k !== 'fx') { errs.push(`resources.sounds.${k}: unknown key (fx)`); continue; }
+      if (!Array.isArray(v) || v.length < 1 || v.length > 8) { errs.push('resources.sounds.fx must be a list of 1..8 {path, usage}'); continue; }
+      v.forEach((x, i) => errs.push(...resEntryErrors(x, 'sound', `resources.sounds.fx[${i}]`)));
+    }
+  }
+  return errs;
+}
+
 // validateSkillDef(def, {libs | libMap, builtin}) → [errors]. `builtin` (a bundled chaosD6 skill) may mark hooks
 // {engine: 'js'}; a foreign definition must give a program for every hook it declares. A /2 built-in needs deal_order,
 // card and ui, and a flags.passOrder entry for every pass hook it has a program for.
@@ -273,6 +307,7 @@ export function validateSkillDef(def, opts = {}) {
   }
   if (def.deal_order !== undefined && !(Number.isInteger(def.deal_order) && def.deal_order >= 1)) errors.push('deal_order must be an integer ≥ 1');
   errors.push(...validateCard(def.card, def), ...validateUi(def.ui));
+  if (def.resources !== undefined) errors.push(...(v2 ? [`resources: a ${SKILL_SCHEMA_ID_2} built-in keeps them in card.resources`] : validateResources(def.resources)));
   if (def.fixed_power !== undefined && !(Number.isInteger(def.fixed_power) && def.fixed_power >= 1 && def.fixed_power <= 6 && def.is_permanent === true)) errors.push('fixed_power: an integer 1..6 of a permanent');
   if (def.element !== undefined && typeof def.element !== 'string') errors.push('element must be a string');
   if (typeof def.id !== 'string' || !/^skill_[a-z0-9_]+$/.test(def.id)) errors.push('id must match skill_[a-z0-9_]+');

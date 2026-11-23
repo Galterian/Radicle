@@ -379,7 +379,10 @@ function startAgent(peerId, port, attempt = 0) {
     // or the Empty Posture) half the time — this is what exercises the
     // Rule 21 effect-damage path in the resolver. A Summoning needs no enemy
     // in reach — start it whenever one is in sight.
-    const effIdx = a.hand.findIndex(isEffect);
+    // SWARM_PREFER_EFFECT=<id> (tools/effect-gen-test.mjs): the effect under test goes first and is cast 90 % of the time.
+    const PREFER = process.env.SWARM_PREFER_EFFECT || '';
+    const prefIdx = PREFER ? a.hand.findIndex(c => isEffect(c) && c.effect_id === PREFER) : -1;
+    const effIdx = prefIdx >= 0 ? prefIdx : a.hand.findIndex(isEffect);
     // Stat buys (Summoning, Golems, Elementals): start whenever an enemy is in sight.
     // Resurrect only with a fallen unit or an ally next to me (else it has nothing to aim at).
     const nextToMe = [...a.peers.values()].filter(p => p.peer_id !== peerId && Number.isInteger(p.tile_q) && dist(p) <= 1);
@@ -409,7 +412,22 @@ function startAgent(peerId, port, attempt = 0) {
       if ((a.hand[idx].effect_types || []).includes('channeling')) a.holdFor = 2;
       send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
     };
-    if (near && dist(near) <= 1 && effIdx >= 0 && Math.random() < 0.5) { castEffect(effIdx); return; }
+    if (near && dist(near) <= 1 && effIdx >= 0 && Math.random() < (prefIdx >= 0 ? 0.9 : 0.5)) { castEffect(effIdx); return; }
+    // SWARM_PREFER_SKILL=<id> (tools/effect-gen-test.mjs): adjacent with the skill under test, play it on its own action
+    // 85 % of the time, staying in contact (A / B at the enemy; M / P on the Posture or Empty Posture) — a reactive skill
+    // (Dodge-like) only pays off when the enemy is in reach.
+    const PREFER_SK = process.env.SWARM_PREFER_SKILL || '';
+    const psIdx = PREFER_SK ? a.hand.findIndex(c => isSkill(c) && (c.skill_id || c.id) === PREFER_SK) : -1;
+    if (near && dist(near) <= 1 && psIdx >= 0 && Math.random() < 0.85) {
+      const code = a.hand[psIdx].requires;
+      const s = code === 'A' || code === 'B' ? slotOf(code) : slotOf('P');
+      if (s >= 0 || code === 'M' || code === 'P') {
+        queue(s >= 0 ? s : 'EMPTY', skillsFor(...(code === 'M' || code === 'P' ? ['M', 'P'] : [code])));
+        send({ kind: 'target', target: near.peer_id }); send({ kind: 'lock' });
+        if (code === 'A') a.attacks++;
+        return;
+      }
+    }
     // Set-up effects (traps, permanents, relocations — anything not aimed at a target) go out
     // while the enemy is still a few hexes off.
     const setupIdx = a.hand.findIndex(c => isEffect(c) && c.scope !== 'target' && !(c.effect_types || []).includes('stat_buy'));
@@ -467,7 +485,10 @@ function startAgent(peerId, port, attempt = 0) {
 
 // ---- 1. host ----
 // AI skirmish (llm-brain.mjs) only with SWARM_AI=1: rival team + NPC builders + AI_ROLE bots; else the classic roster.
-const host = await api('/api/launch', { mode: 'host', dimensionName: DIM, ai: process.env.SWARM_AI === '1' });
+// SWARM_MODE=test-random (tools/effect-gen-test.mjs, 2026-11-23): a PRIVATE test game instead — loopback, no Door,
+// no bus — with only the launcher's roster (player-1, ally-1, foe-1, foe-2); nobody joins, player-1's agent drives.
+const PRIVATE_RUN = process.env.SWARM_MODE === 'test-random';
+const host = await api('/api/launch', { mode: PRIVATE_RUN ? 'test-random' : 'host', dimensionName: DIM, ai: process.env.SWARM_AI === '1' });
 if (!host.ok) { console.error('host failed', host); process.exit(1); }
 log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
 // PS: partial foreign swarms — FOREIGN_HOLDERS / FOREIGN_REFUSERS reach every peer through the launcher's env (foreign-select.mjs).
@@ -486,7 +507,7 @@ await sleep(3000);
 startAgent('peer:player-1', host.peerPort);
 
 // ---- 2. wait until the Doors are on Radicle, then join the rest ----
-for (let i = 0; i < 40; i++) {
+for (let i = 0; !PRIVATE_RUN && i < 40; i++) {
   const d = await api('/api/dimensions');
   const mine = (d.items || []).find(x => x.dimension_name === DIM);
   if (mine && mine.doors?.length >= 1) { log(`Doors published (${mine.doors.length})`); break; }
@@ -513,7 +534,7 @@ const joins = [
 if (process.env.TEAM_C === '1') joins.push({ label: 'C-Agent6', side: 'player_c', characterId: 'char_akki_coalfinger' });
 // TEAM_D=1: one human-driven bot on the fourth team (player_d, hostile to A, B and C — user ruling 2026-11-15).
 if (process.env.TEAM_D === '1') joins.push({ label: 'D-Agent7', side: 'player_d', characterId: 'char_oran_rief' });
-for (const j of joins) {
+for (const j of PRIVATE_RUN ? [] : joins) {
   let base = launcher;
   if (launcherC && j.label === 'P-Agent5') {
     // The other identity only sees the dimension once the seeds have replicated our Doors.

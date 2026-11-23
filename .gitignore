@@ -159,3 +159,4 @@ tmp/
 !/assets/**/*.json
 /warlords3_screenshots/
 
+data/dimensions/dim-gentest-*

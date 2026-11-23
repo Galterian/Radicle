@@ -374,7 +374,7 @@ export async function createSkPeer({ selfId, label = selfId, dimId, ui = () => {
       const s = prep.shape;
       return {
         card_id: `${prep.def.id}#${randomBytes(3).toString('hex')}`, kind: 'skill', skill_id: prep.def.id, name: s.name, requires: s.action_type, is_trance: false,
-        text: s.text, tags: ['foreign'], is_permanent: s.is_permanent, sk: ref, source: { ...ref, kind: 'skill' },
+        text: s.text, tags: ['foreign'], is_permanent: s.is_permanent, sk: ref, source: { ...ref, kind: 'skill', ...(prep.def.source?.custom === true ? { custom: true } : {}) },
       };
     },
     /** FXG: a {kind:'skill', id, ref} gift / profile card → foreignCardFromRef result (refused / missing → log + UI notice). */

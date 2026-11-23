@@ -1410,6 +1410,10 @@ html.mobile .join-team-btn { min-height: 34px; font-size: 13px; padding: 4px 12p
 .pe-card.is-new { opacity: 1; border-color: #e8c272; border-left-color: #ffd34d; animation: pe-new-glow 1.6s ease-in-out infinite; }
 .pe-card-new { font-size: 10px; font-weight: 700; color: #1a1406; background: #ffd34d; border-radius: 3px; padding: 0 5px; }
 @keyframes pe-new-glow { 0%, 100% { box-shadow: 0 0 4px 1px rgba(255, 211, 77, .35); } 50% { box-shadow: 0 0 14px 4px rgba(255, 211, 77, .85); } }
+/* A player-made (custom) card: rules editor → Generate → publish (2026-11-23). */
+.pe-card-custom { font-size: 10px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #b36bff, #3d7be0); border-radius: 999px; padding: 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+.profile-panel .pp-custom-new { padding: 4px 8px; border-radius: 6px; border: 1px solid #b36bff; animation: pe-custom-glow 1.6s ease-in-out infinite; }
+@keyframes pe-custom-glow { 0%, 100% { box-shadow: 0 0 4px 1px rgba(179, 107, 255, .35); } 50% { box-shadow: 0 0 14px 4px rgba(179, 107, 255, .85); } }
 .profile-panel .pp-new { font-size: 12px; color: #ffd34d; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .profile-panel .pp-new-open { font: inherit; font-size: 11px; color: #1a1406; background: #ffd34d; border: 0; border-radius: 4px; padding: 2px 8px; cursor: pointer; animation: pe-new-glow 1.6s ease-in-out infinite; }
 .pe-card-text { color: #a9b8cd; line-height: 1.3; }
@@ -1472,6 +1476,7 @@ html.mobile #pf-banners { top: 30px; left: calc((100vw - var(--m-panel-w, 0px)) 
 .fx-src { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; margin-top: 2px; padding: 0 4px; border-radius: 3px;
   background: #4fb3ff14; border: 1px solid #4fb3ff44; color: #9fd2ff; font: 500 8.5px/1.6 ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; overflow: hidden; vertical-align: middle; cursor: help; }
 .fx-src-br { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fx-src-cu { flex: none; color: #fff; background: linear-gradient(90deg, #b36bff, #3d7be0); border-radius: 999px; padding: 0 4px; font-weight: 700; text-transform: uppercase; }   /* custom (generated) card */
 .fx-src-au { flex: none; color: #c8d4e3; opacity: .85; }
 .fx-src-au::before { content: '· '; opacity: .6; }
 .fx-src-v { flex: none; font-weight: 700; padding: 0 3px; border-radius: 2px; }
