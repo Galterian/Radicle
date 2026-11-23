@@ -11,6 +11,10 @@
 // A skill draft (id skill_…): FORCE_FOREIGN_SKILL + FORCE_FOREIGN_SKILL_COPIES=3; the bot plays skill cards on every
 // matching action. "cast" = player-1 played it (the tape's reveals), "landed" = an instant that did not come back to
 // the hand without benefit (Rule 8), a permanent that went up, or a "skill fx:" line of it.
+// A class draft (id class_…): player-1 boots with it (FORCE_FOREIGN_CLASS, FOREIGN_HOLDERS=player-1) and the bot clicks
+// it when ready. "cast" = a use (a fired ability / local ability, or an event of its static rule), "landed" = a use that
+// did something; pass also needs the boot line. A class whose hooks write no log line (attack_out, lifesteal, emits …)
+// passes on boot + 0 errors + 0 divergences, and the result says it was not observed.
 // --review: the big model (genConfig: LLM_BIG_URL / <profile dir>/llm.json) reads the draft + the cast lines and
 // returns suggestions only — it never decides pass / fail.
 // Status: "[test] m:ss <phase> … · casts n, lands n · errors n · divergences n" every --every seconds (10);
@@ -37,12 +41,19 @@ const draftFile = path.resolve(words[0] || '');
 let def;
 try { def = JSON.parse(fs.readFileSync(draftFile, 'utf8')); } catch (e) { console.log(`[test] cannot read the draft ${draftFile}: ${e.message}`); process.exit(2); }
 const ID = String(def.id || '');
-const KIND = /^skill_[a-z0-9_]+$/.test(ID) ? 'skill' : /^effect_[a-z0-9_]+$/.test(ID) ? 'effect' : '';
-if (!KIND) { console.log(`[test] the draft has no effect or skill id`); process.exit(2); }
-const verb = KIND === 'skill' ? 'played' : 'cast';
+const KIND = /^skill_[a-z0-9_]+$/.test(ID) ? 'skill' : /^effect_[a-z0-9_]+$/.test(ID) ? 'effect' : /^class_[a-z0-9_]+$/.test(ID) ? 'class' : '';
+if (!KIND) { console.log(`[test] the draft has no effect, skill or class id`); process.exit(2); }
+const verb = KIND === 'skill' ? 'played' : KIND === 'class' ? 'used' : 'cast';
 const minutes = Math.max(1, Math.min(15, Number(opt.minutes) || 3));
 const maxGames = Math.max(1, Math.min(4, Number(opt.games) || 2));
-const minCasts = Math.max(1, Number(opt['min-casts']) || 2);
+// A class: hooks that write no log line of their own (attack_out, lifesteal, emits, …) cannot be counted — such a
+// class passes on boot + 0 errors + 0 divergences and the result says it was not observed (CL_SILENT).
+const CL_CLICK = KIND === 'class' && ['tap', 'once_per_round'].includes(def.data?.ability_kind);
+const CL_LOUD = ['ability', 'local', 'end_turn', 'step', 'dungeon_step', 'stance', 'stance_target', 'combat_in', 'pick_target', 'contact', 'plan_emits',
+  // log lines added 2026-11-23 (user: a rule that writes no line cannot be tested) — peer.mjs [class-event] attack_out, lifesteal, emit, reroll, …
+  'attack_out', 'lifesteal', 'lifesteal_apply', 'emits', 'pre_cast', 'share_skills', 'transmute', 'destroy_result', 'chase_step'];
+const CL_SILENT = KIND === 'class' && !CL_CLICK && !Object.keys(def.hooks || {}).some(h => CL_LOUD.includes(h));
+const minCasts = KIND === 'class' ? (CL_SILENT ? 0 : Math.max(1, Number(opt['min-casts']) || 1)) : Math.max(1, Number(opt['min-casts']) || 2);
 const everyMs = Math.max(2, Number(opt.every) || 10) * 1000;
 const t0 = Date.now();
 const say = (t) => console.log(`[test] ${mmss(Date.now() - t0)} ${t}`);
@@ -55,7 +66,8 @@ function freePort() {
 
 // ---- log scan: the draft's lines in the peers' logs ----
 // + a skill program's error / limit (skills.mjs: neutral value + stderr) and a forced draft the peer refused
-const ERR_RE = /Uncaught|UNCAUGHT|UNHANDLED|TypeError|ReferenceError|SyntaxError|RangeError|\[skills\] data hook|FORCE_FOREIGN_\w+ \S+: refused/;
+// + a class program's error, an unreadable forced class, a class version gate / missing ref (classes-handshake.mjs)
+const ERR_RE = /Uncaught|UNCAUGHT|UNHANDLED|TypeError|ReferenceError|SyntaxError|RangeError|\[skills\] data hook|\[classes\] data hook|\[classes\] invalid class definitions|SHADOW MISMATCH|CLASS VERSION GATE|has no usable ref|foreign class ref unreadable|FORCE_FOREIGN_\w+ \S+: refused|FORCE_FOREIGN_CLASS \S+\.json: /;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // player-1's own lines ("[player-1] …"; the wild lurkers it spawns write into the same file under their own label):
 //   "effect <id> by …: a token(s), b stat token(s), c lock(s), d zone hexes" = one resolved cast (peer.mjs, every done cast)
@@ -65,6 +77,7 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const EMPTY = () => ({ casts: 0, resolved: 0, failed: 0, lands: 0, errors: 0, divergences: 0, died: false, errorLines: [], lines: [] });
 function scan(logs) {
   if (KIND === 'skill') return scanSkill(logs);
+  if (KIND === 'class') return scanClass(logs);
   const out = EMPTY();
   let files = [];
   try { files = fs.readdirSync(logs).filter(f => f.endsWith('.log') && !f.endsWith('.ui.log')); } catch { return out; }
@@ -120,6 +133,46 @@ function scanSkill(logs) {
   }
   return out;
 }
+// A class: player-1's lines (peer.mjs; the class is player-1's own — FORCE_FOREIGN_CLASS + FOREIGN_HOLDERS=player-1):
+//   "cl: my class is foreign: <id> …" = it booted;  "cl: FORCE_FOREIGN_CLASS: not a holder" on player-1 = it did not
+//   "[class-event] {"class":"<id>","kind":"ability"}" = a fired ability (a use that did something = a land)
+//   "class <Name>: <note>" = a local ability (draw / recover / grant) that fired; "…: nothing to do" = a try only
+//   "class <short>: … the ability stays ready" = a try that did nothing
+//   static rules: any other [class-event] of the id (trap_charge, threat_charge, swap, contact), the end-of-turn line
+//   ("guardian: stayed on my tile …", hard-coded in peer.mjs for every end_turn class), "<id> EM fights as …" (stance)
+//   "my class <id> is dormant …" = a revealer could not run it that action (counted, reported)
+function scanClass(logs) {
+  const out = { ...EMPTY(), booted: false, tries: 0, uses: 0, statics: 0, dormant: 0 };
+  let files = [];
+  try { files = fs.readdirSync(logs).filter(f => f.endsWith('.log') && !f.endsWith('.ui.log')); } catch { return out; }
+  const short = ID.replace(/^class_/, ''), name = String(def.name || short);
+  const evRe = new RegExp(`\\[class-event\\] \\{"class":"${esc(ID)}","kind":"(\\w+)"`);
+  const localRe = new RegExp(`\\] class ${esc(name)}: (.*)$`);
+  for (const f of files) {
+    let txt = '';
+    try { txt = fs.readFileSync(path.join(logs, f), 'utf8'); } catch { continue; }
+    for (const line of txt.split('\n')) {
+      if (ERR_RE.test(line)) { out.errors++; if (out.errorLines.length < 8) out.errorLines.push(`${f}: ${line.slice(0, 240)}`); }
+      if (line.includes('STATE DIVERGENCE')) out.divergences++;
+      if (line.includes('[player-1] DIED at')) out.died = true;
+      const mine = line.includes('[player-1] ');
+      if (mine && line.includes('FORCE_FOREIGN_CLASS: not a holder')) { out.errors++; out.errorLines.push(`${f}: ${line.slice(0, 240)}`); }
+      const about = line.includes(ID) || line.includes(`class ${short}:`) || line.includes(`class ${name}`) || (mine && /\] guardian: stayed on my tile/.test(line));
+      if (!about) continue;
+      if (out.lines.length < 60) out.lines.push(line.slice(line.indexOf('['), line.indexOf('[') + 220));
+      if (!mine) continue;
+      if (line.includes(`my class is foreign: ${ID}`)) out.booted = true;
+      if (line.includes(`my class ${ID} is dormant`)) out.dormant++;
+      const ev = evRe.exec(line);
+      if (ev) { if (ev[1] === 'ability') { out.uses++; out.tries++; } else out.statics++; continue; }
+      if (/ the ability stays ready/.test(line) && line.includes(`class ${short}:`)) { out.tries++; continue; }
+      if (/\] guardian: stayed on my tile/.test(line) || line.includes(`${ID} EM fights as`)) { out.statics++; continue; }
+      const lm = localRe.exec(line);
+      if (lm && def.hooks?.local && !/^(ability not ready|click the card|is tapped|is untapped|is destroyed|is back|lost its)/.test(lm[1])) { out.tries++; if (lm[1] !== 'nothing to do') out.uses++; }
+    }
+  }
+  return out;
+}
 // The skill in the reveals on the game's tape (sessions/<dim>/hashgraph.jsonl, + the rotated .1) = its plays.
 function playsOf(dim) {
   const tape = path.join(GAME, 'sessions', dim, 'hashgraph.jsonl');
@@ -134,15 +187,17 @@ function playsOf(dim) {
 }
 // A skill game's counts: casts = plays; lands = permanents that went up / fx lines, or instants that paid off.
 const settle = (s, dim) => {
+  // a class: casts = uses (+ the static rule's events), lands = the uses that did something
+  if (KIND === 'class') return { ...s, casts: s.uses + s.statics, resolved: s.uses + s.statics, failed: s.tries - s.uses, lands: s.uses + s.statics };
   if (KIND !== 'skill') return s;
   const plays = playsOf(dim);
   const lands = def.is_permanent ? Math.max(s.perms, s.fx) : Math.min(plays, Math.max(s.fx, plays - s.returned));
   return { ...s, casts: plays, resolved: plays, lands };
 };
 const add = (a, b) => ({ casts: a.casts + b.casts, resolved: a.resolved + b.resolved, failed: a.failed + b.failed, lands: a.lands + b.lands,
-  errors: a.errors + b.errors, divergences: a.divergences + b.divergences, died: b.died,
+  errors: a.errors + b.errors, divergences: a.divergences + b.divergences, died: b.died, booted: !!(a.booted || b.booted), dormant: (a.dormant || 0) + (b.dormant || 0),
   errorLines: [...a.errorLines, ...b.errorLines].slice(0, 8), lines: [...a.lines, ...b.lines].slice(0, 60) });
-const brief = (s) => `${KIND === 'skill' ? 'plays' : 'casts'} ${s.casts}, lands ${s.lands} · errors ${s.errors} · divergences ${s.divergences}`;
+const brief = (s) => `${KIND === 'skill' ? 'plays' : KIND === 'class' ? 'uses' : 'casts'} ${s.casts}, lands ${s.lands} · errors ${s.errors} · divergences ${s.divergences}`;
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'chaosd6-gentest-'));
 const draftCopy = path.join(tmp, `${ID}.json`);
@@ -168,7 +223,7 @@ process.on('SIGTERM', () => { stopGame(); process.exit(143); });
 // One game: its own launcher (one dimension per launcher process), the swarm bot on player-1, the scan.
 async function runGame(n, before) {
   const stamp = new Date().toISOString().slice(11, 19).replace(/:/g, '');
-  const dim = `GenTest-${ID.replace(/^(effect|skill)_/, '').replace(/_/g, '-').slice(0, 30)}-${stamp}`;
+  const dim = `GenTest-${ID.replace(/^(effect|skill|class)_/, '').replace(/_/g, '-').slice(0, 30)}-${stamp}`;
   const logs = path.join(GAME, 'logs', slug(dim));
   const port = await freePort();
   const env = {
@@ -177,11 +232,14 @@ async function runGame(n, before) {
     // A skill needs many actions of player-1 AND a foe that strikes (a reactive skill pays off only then): the Minotaur
     // kills a life-4 hero in a round or two, the Nacatl only postures (2026-11-23 trials) → Rhox Brute (ui-server TEST_FOES).
     ...(KIND === 'skill' ? { FORCE_FOREIGN_SKILL: draftCopy, FORCE_FOREIGN_SKILL_COPIES: '3', SWARM_PREFER_SKILL: ID, TEST_FOES: process.env.GEN_TEST_FOES || 'mon_rhox_brute' }
+      // a class: player-1 boots with it (classes-handshake boot); the bot clicks a ready class itself (botClassPolicy)
+      : KIND === 'class' ? { FORCE_FOREIGN_CLASS: draftCopy, TEST_FOES: process.env.GEN_TEST_FOES || 'mon_rhox_brute' }
       : { FORCE_FOREIGN_EFFECT: draftCopy, FORCE_FOREIGN_COPIES: '3', SWARM_PREFER_EFFECT: ID }),
     AI_SKIRMISH: '0', NOSTR_ENABLED: '0',
     LAUNCH_PORT_BASE: process.env.GEN_TEST_PORT_BASE || '7801',
   };
-  for (const k of ['FORCE_EFFECTS', 'FORCE_SKILLS', 'FORCE_FOREIGN_CLASS', 'FOREIGN_REFUSERS', 'LLM_URL', KIND === 'skill' ? 'FORCE_FOREIGN_EFFECT' : 'FORCE_FOREIGN_SKILL']) delete env[k];
+  const other = { effect: ['FORCE_FOREIGN_SKILL', 'FORCE_FOREIGN_CLASS'], skill: ['FORCE_FOREIGN_EFFECT', 'FORCE_FOREIGN_CLASS'], class: ['FORCE_FOREIGN_EFFECT', 'FORCE_FOREIGN_SKILL'] }[KIND];
+  for (const k of ['FORCE_EFFECTS', 'FORCE_SKILLS', 'FORCE_CLASS', 'FOREIGN_REFUSERS', 'LLM_URL', ...other]) delete env[k];
   fs.mkdirSync(env.CHAOSD6_PROFILE_DIR, { recursive: true });
   const launcherLog = fs.openSync(path.join(tmp, `launcher-${n}.log`), 'a');
   const launcher = spawn(process.execPath, ['ui-server.mjs'], { cwd: GAME, env, detached: true, stdio: ['ignore', launcherLog, launcherLog] });
@@ -217,7 +275,7 @@ async function runGame(n, before) {
   const code = await new Promise((resolve) => swarm.on('exit', (c) => resolve(c)));
   clearInterval(ticker);
   const agentLine = swarmOut.find(l => /agents stopped/.test(l)) || '';
-  const botCasts = Number((new RegExp(`player-1 [^,]*?${KIND === 'skill' ? 'skills' : 'effects'} (\\d+)`).exec(agentLine) || [])[1] || 0);
+  const botCasts = Number((new RegExp(`player-1 [^,]*?${KIND === 'skill' ? 'skills' : KIND === 'class' ? 'class-uses' : 'effects'} (\\d+)`).exec(agentLine) || [])[1] || 0);
   stopGame();
   return { code, s: settle(scan(logs), dim), dim, logs, botCasts, phase };
 }
@@ -233,11 +291,16 @@ for (let n = 1; n <= maxGames; n++) {
   if (n < maxGames) say(`player-1 died after ${g.s.casts} cast(s) — another game`);
 }
 const s = total;
-const pass = lastCode === 0 && s.casts >= minCasts && s.lands >= 1 && s.errors === 0 && s.divergences === 0;
+// a class must have booted on player-1; a class of silent hooks only cannot show a land (it passes unobserved)
+const needLand = !(KIND === 'class' && CL_SILENT);
+const pass = lastCode === 0 && s.casts >= minCasts && (!needLand || s.lands >= 1) && s.errors === 0 && s.divergences === 0 && (KIND !== 'class' || s.booted);
 const why = [];
+if (KIND === 'class' && !s.booted) why.push('player-1 did not boot with the class (see the cl: lines)');
+if (KIND === 'class' && CL_SILENT) why.push(`not observed: its hooks (${Object.keys(def.hooks || {}).join(', ')}) write no log line — booted, 0 errors and 0 divergences are all this test can show`);
+if (KIND === 'class' && s.dormant) why.push(`dormant in ${s.dormant} action(s) (a revealer could not run it)`);
 if (lastCode !== 0) why.push(`the test game ended with code ${lastCode}${lastPhase === 'host failed' || lastPhase === 'launcher did not start' ? ` (${lastPhase === 'host failed' ? 'the game did not start' : lastPhase})` : ''}`);
-if (s.casts < minCasts) why.push(`${verb} ${s.casts} time(s) in ${games.length} game(s), needs ${minCasts}${botCasts > s.casts ? ` (the bot queued ${KIND === 'skill' ? 'skills' : 'it'} ${botCasts} times)` : ''}${s.died ? ' — player-1 died' : ''}`);
-if (s.lands < 1) why.push(KIND === 'skill' && s.casts ? (def.is_permanent ? 'it never went up as a permanent' : 'it never paid off — every play came back to the hand without benefit') : 'it never landed');
+if (s.casts < minCasts) why.push(`${verb} ${s.casts} time(s) in ${games.length} game(s), needs ${minCasts}${botCasts > s.casts ? ` (the bot ${KIND === 'class' ? 'clicked it' : `queued ${KIND === 'skill' ? 'skills' : 'it'}`} ${botCasts} times)` : ''}${s.died ? ' — player-1 died' : ''}`);
+if (needLand && s.lands < 1) why.push(KIND === 'class' ? (s.casts ? 'it was tried but never did anything' : 'it never fired') : KIND === 'skill' && s.casts ? (def.is_permanent ? 'it never went up as a permanent' : 'it never paid off — every play came back to the hand without benefit') : 'it never landed');
 if (s.errors) why.push(`${s.errors} engine error line(s)`);
 if (s.divergences) why.push(`${s.divergences} state divergence(s)`);
 say(`${pass ? 'PASS' : 'FAIL'} · ${brief(s)}${why.length ? ` — ${why.join('; ')}` : ''}`);
@@ -251,10 +314,12 @@ if (opt.review) {
     say('asking the big model for a review of the test log');
     const schema = { type: 'object', properties: { summary: { type: 'string' }, suggestions: { type: 'array', items: { type: 'string' }, maxItems: 5 } }, required: ['summary', 'suggestions'] };
     const ask = [
-      { role: 'system', content: KIND === 'skill'
+      { role: 'system', content: KIND === 'class'
+        ? 'You review a test game of a new chaosD6 character class (a card in front of the hero: an ability it taps — untapped again by emitting its colours — or a rule that always holds). Read the definition and the log lines, say in one or two sentences what happened, and give at most 5 short, concrete suggestions (each one change to the class: ability kind, colours, what its ability or rule does, its condition, text) that would make it work as its text says or make it more fun. "nothing to do" / "stays ready" means a use did nothing. Answer JSON {"summary": "...", "suggestions": ["..."]}. /no_think'
+        : KIND === 'skill'
         ? 'You review a test game of a new chaosD6 skill card (it rides on an Attack, Move, Block or Posture and changes how that action resolves). Read the definition and the log lines, say in one or two sentences what happened, and give at most 5 short, concrete suggestions (each one change to the skill: action type, permanent or instant, its bonus, its condition, text) that would make it work as its text says or make it more fun. "return to hand without benefit" means the skill did nothing that action. Answer JSON {"summary": "...", "suggestions": ["..."]}. /no_think'
         : 'You review a test game of a new chaosD6 card effect. Read the definition and the log lines, say in one or two sentences what happened, and give at most 5 short, concrete suggestions (each one change to the effect: cost, elements, scope, range, lock, damage, text) that would make it work as its text says or make it more fun. Answer JSON {"summary": "...", "suggestions": ["..."]}. /no_think' },
-      { role: 'user', content: `Definition:\n${JSON.stringify(KIND === 'skill' ? { id: def.id, name: def.name, action_type: def.action_type, is_permanent: def.is_permanent, text: def.text, flags: def.flags }
+      { role: 'user', content: `Definition:\n${JSON.stringify(KIND === 'class' ? { id: def.id, name: def.name, data: def.data, power: def.power, flags: def.flags, hooks: Object.keys(def.hooks || {}) } : KIND === 'skill' ? { id: def.id, name: def.name, action_type: def.action_type, is_permanent: def.is_permanent, text: def.text, flags: def.flags }
         : { id: def.id, name: def.name, elements: def.elements, kind: def.kind, duration: def.duration, text: def.text, flags: def.flags })}\n\nResult: ${pass ? 'passed' : `failed — ${why.join('; ')}`}; ${brief(s)}.\n\nLog lines:\n${s.lines.slice(0, 40).join('\n') || `(none — it was never ${verb})`}\n${s.errorLines.length ? `\nErrors:\n${s.errorLines.join('\n')}` : ''}\n/no_think` },
     ];
     const r = await complete(cfg, ask, { schema, maxTokens: 500, temperature: 0.3 });

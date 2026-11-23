@@ -14,16 +14,23 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { genConfig, generateEffect, saveDraft, formatStatus, checkDraft, validatorReport } from './effect-gen.mjs';
 import { generateSkill } from './skill-gen.mjs';
+import { generateClass } from './class-gen.mjs';
 import { tagsPrompt, tagProblems, cleanTags } from './gen-tags.mjs';
 import { profileDir } from './profile.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const GEN_KINDS = ['effect', 'skill'];   // classes follow (user order: effects → phone → skills → classes)
-const generateOf = (o) => (o.kind === 'skill' ? generateSkill(o) : generateEffect(o));
+export const GEN_KINDS = ['effect', 'skill', 'class'];   // user order: effects → phone → skills → classes
+const generateOf = (o) => (o.kind === 'skill' ? generateSkill(o) : o.kind === 'class' ? generateClass(o) : generateEffect(o));
 
 // The resource picks { sprite, sound } (paths of game/gen-resources.json, checked by gen-api) → the def: an effect's
 // card.resources, a skill's resources (/1, skill-engine validateResources). Same shape as the built-ins' card.resources.
+// A class takes a unit's whole voice set (user 2026-11-23): pick { unit: {race, unit, sounds: [{path, kind, line}]} }
+// (gen-api resolves it from the catalogue) → def.resources { unit: {race, unit}, sounds: { voice: [...] } }.
 export function applyResources(kind, def, pick) {
+  if (kind === 'class') {
+    if (def && pick?.unit) def.resources = { unit: { race: pick.unit.race, unit: pick.unit.unit }, sounds: { voice: pick.unit.sounds.map(s => ({ path: s.path, kind: s.kind, ...(s.line ? { line: s.line } : {}) })) } };
+    return def;
+  }
   if (!def || !pick || (!pick.sprite && !pick.sound)) return def;
   const r = { ...(pick.sprite ? { sprites: { effect: { path: pick.sprite, usage: 'effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex' } } } : {}),
     ...(pick.sound ? { sounds: { fx: [{ path: pick.sound, usage: 'play when it resolves' }] } } : {}) };
@@ -34,16 +41,17 @@ export function applyResources(kind, def, pick) {
 export const DRAFT_ID_RE = /^gen_[a-z0-9]{6,20}$/;
 export const STATUS_EVERY_MS = 10_000;
 export const isFailed = (s) => /^testing failed \d+$/.test(String(s || ''));
+const RUNNING_STATES = ['generating', 'testing', 'publishing'];
 const nowIso = () => new Date().toISOString();
 
 // generate({ kind, idea, cfg, prior, changes, onProgress, log }) → generateDef's result (tests pass a fake one).
 // The def files: effects in <profile dir>/effect-drafts (shared with the CLI), skills in <profile dir>/skill-drafts.
 export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), draftsDir = path.join(profileDir(), 'effect-drafts'),
-  skillDraftsDir = path.join(path.dirname(draftsDir), 'skill-drafts'),
+  skillDraftsDir = path.join(path.dirname(draftsDir), 'skill-drafts'), classDraftsDir = path.join(path.dirname(draftsDir), 'class-drafts'),
   llmFile = path.join(profileDir(), 'llm.json'), env = process.env, generate = generateOf, spawnImpl = spawn, statsImpl = null, fetchImpl = (...a) => globalThis.fetch(...a),
   everyMs = STATUS_EVERY_MS, testMinutes = Number(env.GEN_TEST_MINUTES) || 3, log = () => {} } = {}) {
   let current = null;   // { draft_id, what: 'generate' | 'test', child? }
-  const defsDir = (kind) => (kind === 'skill' ? skillDraftsDir : draftsDir);
+  const defsDir = (kind) => (kind === 'skill' ? skillDraftsDir : kind === 'class' ? classDraftsDir : draftsDir);
   const file = (id) => path.join(dir, `${id}.json`);
   const read = (id) => { try { return JSON.parse(fs.readFileSync(file(id), 'utf8')); } catch { return null; } };
   const write = (d) => { fs.mkdirSync(dir, { recursive: true }); d.updated_at = nowIso(); const t = `${file(d.draft_id)}.tmp`; fs.writeFileSync(t, JSON.stringify(d, null, 2) + '\n'); fs.renameSync(t, file(d.draft_id)); return d; };
@@ -51,7 +59,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   // the test game + the big model's review of it, into the conversation (the next retry answers it)
   const talkTest = (x) => {
     const t = x.test || {};
-    const head = `${t.pass ? 'PASS' : 'FAIL'} · ${x.kind === 'skill' ? 'plays' : 'casts'} ${t.casts ?? 0}, lands ${t.lands ?? 0} · errors ${t.errors ?? 0} · divergences ${t.divergences ?? 0}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}`;
+    const head = `${t.pass ? 'PASS' : 'FAIL'} · ${x.kind === 'skill' ? 'plays' : x.kind === 'class' ? 'uses' : 'casts'} ${t.casts ?? 0}, lands ${t.lands ?? 0} · errors ${t.errors ?? 0} · divergences ${t.divergences ?? 0}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}`;
     const rv = t.review ? (t.review.error ? `review: ${t.review.error}` : [`review: ${t.review.summary || ''}`, ...(t.review.suggestions || []).map(s => `  → ${s}`)].join('\n')) : '';
     x.talk = [...(x.talk || []), { role: 'test', at: nowIso(), text: [head, rv].filter(Boolean).join('\n').slice(0, 3000) }].slice(-120);
   };
@@ -312,6 +320,20 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       setState(d, 'testing', rt ? 'on OCI' : ''); d.status = `[test] 0:00 starting${rt ? ' · on OCI' : ''}`; d.status_at = nowIso(); write(d);
       start(d, 'test', () => (rt ? runTestRemote(d, rt) : runTest(d)));
       return d;
+    },
+    /** The picture / sound only (no model, no new test: the media are not priced and change nothing in a game). */
+    setResources(id, pick) {
+      const d = read(id);
+      if (!d) throw Object.assign(new Error('no such draft'), { status: 404 });
+      if (RUNNING_STATES.includes(d.state) || d.state === 'published') throw Object.assign(new Error(`cannot change the media while ${d.state}`), { status: 409 });
+      d.resources = pick || null;
+      if (d.def) {
+        if (d.kind === 'skill' || d.kind === 'class') delete d.def.resources; else if (d.def.card) delete d.def.card.resources;
+        applyResources(d.kind, d.def, d.resources);
+        saveDraft(d.def, defsDir(d.kind));
+      }
+      note(d, `media: ${pick?.unit ? `unit ${pick.unit.race}/${pick.unit.unit} (${pick.unit.sounds.length} sounds)` : pick ? [pick.sprite, pick.sound].filter(Boolean).map(p => path.basename(p)).join(' + ') : 'none'}`);
+      return write(d);
     },
     /** publish step bookkeeping (gen-api.mjs does the validate + publishDefinition). */
     beginPublish(id) {

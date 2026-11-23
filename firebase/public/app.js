@@ -9,6 +9,24 @@
 //   dimensions/<name>                     { name, creatorNid, lastPushAt, lastCommit, peerCount, rid }
 //   dimensions/<name>/doors/<nid>         { nid, peer_id, alliance, tile, life, life_max, pushed_at, name, commit }
 //   dimensions/<name>/commits/<sha>       { sha, branch, subject, when, pushedBy (nid), author }
+//
+// The peer page's dimension list is the union of three isolated queries:
+// dimensions where creatorNid == nid (auto-indexed), collectionGroup("doors")
+// where nid == nid and collectionGroup("commits") where pushedBy == nid. The
+// two collection-group queries need the fieldOverrides in
+// firestore.indexes.json (`firebase deploy --only firestore:indexes`); until
+// they are deployed those queries fail quietly and only the creator list shows.
+// The peer page also lists the node's `players/<team>/<slug>` branches in the
+// Skills / Effects / Classes repos via the seed's radicle-httpd
+// (GET /api/v1/repos/<rid>/remotes/<nid> → { heads: { <branch>: <oid> } }).
+//
+// Test fixture hook: if globalThis.__CHAOSD6_FIXTURE is set BEFORE this module
+// loads (only a local test page does that), Firebase is never initialised and
+// the data functions read from it instead of Firestore / httpd:
+//   { peers: [doc…], dimensions: [doc…],            // docs carry `id`
+//     doors: { <dim>: [door…] }, commits: { <dim>: [commit…] },
+//     http:  { <absolute url>: <json> | { __error: "msg", __status?: 404 } } }
+// Unknown URLs in fixture mode throw "fixture: no response" (never hit the net).
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
@@ -55,7 +73,7 @@ const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = s => { const t = String(s || ""); return t.length > 14 ? t.slice(0, 6) + "…" + t.slice(-5) : t; };
-const toMs = v => v?.toMillis ? v.toMillis() : (typeof v === "number" ? v : Date.parse(v || 0));
+const toMs = v => v?.toMillis ? v.toMillis() : (typeof v === "number" ? v : (v ? Date.parse(v) || 0 : 0));
 const ago = ms => {
   if (!ms) return "—";
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
@@ -73,51 +91,123 @@ const cloneCmd = (rid, addr, nid) => {
 
 // --- bootstrap -------------------------------------------------------------
 const isConfigured = () => FIREBASE_CONFIG.apiKey !== "REPLACE_ME" && FIREBASE_CONFIG.projectId !== "YOUR-PROJECT";
+const FX = globalThis.__CHAOSD6_FIXTURE || null;   // see header: test-only
 let db = null;
-if (isConfigured()) {
+if (isConfigured() && !FX) {
   const app = initializeApp(FIREBASE_CONFIG);
   db = getFirestore(app);
 }
 
 // --- data access -----------------------------------------------------------
+const byDesc = key => (a, b) => toMs(b[key]) - toMs(a[key]);
+const fxList = (name, sub) => (sub ? FX[name]?.[sub] : FX[name]) || [];
+
+// Cross-origin JSON GET (radicle-httpd). Errors carry `.status` so callers can
+// tell "this peer has no remote in that repo" (404) from a real failure.
+async function getJson(url) {
+  if (FX) {
+    if (!(url in (FX.http || {}))) throw new Error("fixture: no response");
+    const v = FX.http[url];
+    if (v && v.__error) { const e = new Error(v.__error); e.status = v.__status; throw e; }
+    return v;
+  }
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) { const e = new Error(`http ${r.status}`); e.status = r.status; throw e; }
+  return r.json();
+}
+
 async function fetchPeers() {
+  if (FX) return [...fxList("peers")].sort(byDesc("lastSeen")).slice(0, 100);
   const snap = await getDocs(query(collection(db, "peers"), orderBy("lastSeen", "desc"), limit(100)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 async function fetchPeer(nid) {
+  if (FX) return fxList("peers").find(p => p.id === nid) || null;
   const s = await getDoc(doc(db, "peers", nid));
   return s.exists() ? { id: s.id, ...s.data() } : null;
 }
+// Dimensions this peer took part in, as Map<name, { doc?, roles:Set }>. Three
+// independent sources — each isolated so one failing query (e.g. a collection-
+// group index not deployed yet) never blanks the others.
 async function fetchPeerDimensions(nid) {
-  // Dimensions where this peer has a door — pulled from the doors subcollection
-  // via a collection-group query. A missing composite index just returns [].
-  try {
-    const snap = await getDocs(query(collectionGroup(db, "doors"), where("nid", "==", nid), limit(200)));
-    const names = new Set();
-    for (const d of snap.docs) {
-      const dim = d.ref.parent.parent?.id;
-      if (dim) names.add(dim);
-    }
-    return [...names];
-  } catch (e) { console.warn("peer dimensions query failed", e.message); return []; }
+  const out = new Map();
+  const add = (name, role, docData) => {
+    if (!name) return;
+    const e = out.get(name) || { roles: new Set() };
+    e.roles.add(role);
+    if (docData) e.doc = docData;
+    out.set(name, e);
+  };
+  const sources = FX ? [
+    async () => fxList("dimensions").filter(d => d.creatorNid === nid).forEach(d => add(d.id, "creator", d)),
+    async () => Object.entries(FX.doors || {}).forEach(([dim, ds]) => ds.some(d => d.nid === nid) && add(dim, "door")),
+    async () => Object.entries(FX.commits || {}).forEach(([dim, cs]) => cs.some(c => c.pushedBy === nid) && add(dim, "commits")),
+  ] : [
+    async () => {
+      const snap = await getDocs(query(collection(db, "dimensions"), where("creatorNid", "==", nid), limit(200)));
+      snap.docs.forEach(d => add(d.id, "creator", { id: d.id, ...d.data() }));
+    },
+    async () => {
+      const snap = await getDocs(query(collectionGroup(db, "doors"), where("nid", "==", nid), limit(200)));
+      snap.docs.forEach(d => add(d.ref.parent.parent?.id, "door"));
+    },
+    async () => {
+      const snap = await getDocs(query(collectionGroup(db, "commits"), where("pushedBy", "==", nid), limit(300)));
+      snap.docs.forEach(d => add(d.ref.parent.parent?.id, "commits"));
+    },
+  ];
+  const labels = ["creator", "doors", "commits"];
+  await Promise.all(sources.map((fn, i) => fn().catch(e => console.warn(`peer dimensions (${labels[i]}) query failed:`, e.message))));
+  return out;
 }
 async function fetchDimensions() {
+  if (FX) return [...fxList("dimensions")].sort(byDesc("lastPushAt")).slice(0, 100);
   const snap = await getDocs(query(collection(db, "dimensions"), orderBy("lastPushAt", "desc"), limit(100)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 async function fetchDimension(name) {
+  if (FX) return fxList("dimensions").find(d => d.id === name) || null;
   const s = await getDoc(doc(db, "dimensions", name));
   return s.exists() ? { id: s.id, ...s.data() } : null;
 }
 async function fetchDoors(name) {
+  if (FX) return [...fxList("doors", name)].sort(byDesc("pushed_at")).slice(0, 50);
   const snap = await getDocs(query(collection(db, "dimensions", name, "doors"), orderBy("pushed_at", "desc"), limit(50)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 async function fetchCommits(name) {
+  if (FX) return [...fxList("commits", name)].sort(byDesc("when")).slice(0, 30);
   try {
     const snap = await getDocs(query(collection(db, "dimensions", name, "commits"), orderBy("when", "desc"), limit(30)));
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch { return []; }
+}
+
+// Definition repos a node authors into from the rules editor. Each authored
+// skill/effect/class lands on branch players/<team>/<slug> in the author's
+// namespace of the matching repo (fetched by the seed).
+const DEF_REPOS = [
+  { kind: "skill",  name: "chaosD6-Skills",  rid: "rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5" },
+  { kind: "effect", name: "chaosD6-Effects", rid: "rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ" },
+  { kind: "class",  name: "chaosD6-Classes", rid: "rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi" },
+];
+// → { repo, branches: [{ branch, team, slug, oid }] } or { repo, error }.
+// A 404 means the seed holds no refs for this node in that repo: not an error.
+async function fetchPeerBranches(seed, repo, nid) {
+  try {
+    const r = await getJson(`${seed.apiBase}/api/v1/repos/${repo.rid}/remotes/${encodeURIComponent(nid)}`);
+    const branches = Object.entries(r?.heads || {})
+      .filter(([b]) => b.startsWith("players/"))
+      .map(([branch, oid]) => {
+        const [, team = "", ...rest] = branch.split("/");
+        return { branch, team, slug: rest.join("/") || team, oid: String(oid || "") };
+      })
+      .sort((a, b) => (a.team + "/" + a.slug).localeCompare(b.team + "/" + b.slug));
+    return { repo, branches };
+  } catch (e) {
+    if (e.status === 404) return { repo, branches: [] };
+    return { repo, error: String(e && e.message || e) };
+  }
 }
 
 // --- rendering -------------------------------------------------------------
@@ -160,19 +250,62 @@ function renderPeerListItem(p) {
   return li;
 }
 
-function renderDimListItem(d) {
+// `roles` (peer page only): which sources linked the peer to this dimension.
+function renderDimListItem(d, roles) {
   const t = toMs(d.lastPushAt);
   const live = isLive(t);
   const li = document.createElement("li");
+  const roleChips = roles && roles.size
+    ? `<span class="roles">${[...roles].map(r => `<span class="chip role-${esc(r)}">${esc(r)}</span>`).join("")}</span>`
+    : "";
   li.innerHTML = `
     <a class="ri-name" href="/dimensions/${encodeURIComponent(d.id)}">${esc(d.id)}</a>
     <span class="ri-meta">
+      ${roleChips}
       <span class="badge ${live ? "live" : "stale"}">${live ? "LIVE" : "quiet"}</span>
       <span>${esc(ago(t))}</span>
     </span>
     <div class="ri-sub">
-      ActiveDimensions/${esc(d.id)} · ${d.peerCount ?? "?"} peers
+      ActiveDimensions/${esc(d.id)} · ${esc(d.peerCount ?? "?")} peers
       ${d.creatorNid ? ` · creator <span class="mono">${esc(short(d.creatorNid))}</span>` : ""}
+    </div>`;
+  return li;
+}
+
+// Render `items` into `ul` a page at a time: `first` rows up front, then a
+// "Show more" button below the list that reveals `step` more per click.
+function renderPaged(ul, items, renderItem, { first = 3, step = 10 } = {}) {
+  let shown = 0;
+  const more = document.createElement("div");
+  more.className = "more-row";
+  more.innerHTML = `<button class="btn more" type="button"></button>`;
+  const btn = more.firstElementChild;
+  const reveal = n => {
+    items.slice(shown, shown + n).forEach(it => ul.appendChild(renderItem(it)));
+    shown = Math.min(items.length, shown + n);
+    const left = items.length - shown;
+    more.hidden = left <= 0;
+    btn.textContent = left > step ? `Show ${step} more (${left} remaining)` : `Show ${left} more`;
+  };
+  btn.addEventListener("click", () => reveal(step));
+  ul.after(more);
+  reveal(first);
+}
+
+function renderBranchItem(seed, nid, repo, b) {
+  const host = seed.hostname;
+  const seg = s => s.split("/").map(encodeURIComponent).join("/");
+  const treeHref = `/nodes/${host}/${repo.rid}/remotes/${encodeURIComponent(nid)}/tree/${seg(b.branch)}`;
+  const commitHref = `/nodes/${host}/${repo.rid}/commits/${encodeURIComponent(b.oid)}`;
+  const li = document.createElement("li");
+  li.innerHTML = `
+    <a class="ri-name" href="${esc(treeHref)}">${esc(b.slug)}</a>
+    <span class="ri-meta">
+      <span class="chip kind-${esc(repo.kind)}">${esc(repo.kind)}</span>
+      ${b.oid ? `<a class="mono" href="${esc(commitHref)}" title="${esc(b.oid)}">${esc(b.oid.slice(0, 7))}</a>` : ""}
+    </span>
+    <div class="ri-sub">
+      team <b>${esc(b.team || "—")}</b> · <code>${esc(b.branch)}</code> · ${esc(repo.name)}
     </div>`;
   return li;
 }
@@ -191,9 +324,7 @@ const KNOWN_SEEDS = [
 
 async function probeKnownSeed(s) {
   try {
-    const r = await fetch(`${s.apiBase}/api/v1/node`, { cache: "no-store" });
-    if (!r.ok) throw new Error(`http ${r.status}`);
-    const info = await r.json();
+    const info = await getJson(`${s.apiBase}/api/v1/node`);
     return { ...s, info, ok: true };
   } catch (e) {
     return { ...s, ok: false, error: String(e && e.message || e) };
@@ -231,9 +362,9 @@ async function viewExplore() {
   if (!known.length) kl.innerHTML = `<li class="empty">No known seeders configured.</li>`;
   else known.forEach(s => kl.appendChild(renderKnownSeedItem(s)));
   if (!peers.length) pl.innerHTML = `<li class="empty">No peers have published yet. Run <code>game/local-seeds.mjs</code> on a peer to register one.</li>`;
-  else peers.forEach(p => pl.appendChild(renderPeerListItem(p)));
+  else renderPaged(pl, peers, renderPeerListItem);
   if (!dims.length) dl.innerHTML = `<li class="empty">No dimensions pushed yet.</li>`;
-  else dims.forEach(d => dl.appendChild(renderDimListItem(d)));
+  else renderPaged(dl, dims, d => renderDimListItem(d));
 }
 
 async function viewPeer(nid) {
@@ -253,13 +384,36 @@ async function viewPeer(nid) {
   $(".clone-box").textContent = cloneCmd(peer.rid || DEFAULT_RID, peer.radicleAddr, nid);
   wireCopy($("#view"));
 
-  const names = await fetchPeerDimensions(nid);
+  await Promise.all([renderPeerDims(nid), renderPeerBranches(nid)]);
+}
+
+async function renderPeerDims(nid) {
+  const found = await fetchPeerDimensions(nid);
   const list = $(".dim-list");
-  if (!names.length) list.innerHTML = `<li class="empty">This peer has not pushed any dimension doors yet.</li>`;
-  else {
-    const dims = await Promise.all(names.map(n => fetchDimension(n).then(d => d || { id: n })));
-    dims.sort((a, b) => toMs(b.lastPushAt) - toMs(a.lastPushAt));
-    dims.forEach(d => list.appendChild(renderDimListItem(d)));
+  list.innerHTML = "";
+  if (!found.size) { list.innerHTML = `<li class="empty">This peer has not created, joined or pushed to any dimension yet.</li>`; return; }
+  const rows = await Promise.all([...found].map(async ([name, e]) =>
+    ({ d: e.doc || await fetchDimension(name).catch(() => null) || { id: name }, roles: e.roles })));
+  rows.sort((a, b) => toMs(b.d.lastPushAt) - toMs(a.d.lastPushAt));
+  rows.forEach(r => list.appendChild(renderDimListItem(r.d, r.roles)));
+}
+
+async function renderPeerBranches(nid) {
+  const seed = KNOWN_SEEDS[0];
+  const results = await Promise.all(DEF_REPOS.map(repo => fetchPeerBranches(seed, repo, nid)));
+  const list = $(".branch-list");
+  list.innerHTML = "";
+  for (const r of results) {
+    if (r.error) continue;
+    r.branches.forEach(b => list.appendChild(renderBranchItem(seed, nid, r.repo, b)));
+  }
+  if (!list.children.length && results.some(r => !r.error)) list.innerHTML = `<li class="empty">No skills, effects or classes published from this node yet — author them in the rules editor on your node.</li>`;
+  for (const r of results) {
+    if (!r.error) continue;
+    const li = document.createElement("li");
+    li.className = "quiet-error";
+    li.innerHTML = `<span class="muted">${esc(r.repo.name)}: could not read from the seed (${esc(r.error)})</span>`;
+    list.appendChild(li);
   }
 }
 

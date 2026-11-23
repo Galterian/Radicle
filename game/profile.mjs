@@ -110,11 +110,13 @@ export function loadCatalog(dataDir) {
   const characters = read('characters'), creatures = read('creatures'), classes = read('classes'), skills = Object.fromEntries(builtinSkillCatalog().entries.map(e => [e.id, pickActive(e)])), effects = Object.fromEntries(builtinEffectCatalog().entries.map(e => [e.id, pickActive(e)]));   // F9 / skill isolation: effect + skill cards = definitions
   const portraitOf = (r) => r?.portrait?.path || r?.sprites?.info?.path || null;
   const soundOf = (r) => r?.sounds?.select?.[0]?.path || r?.sounds?.ready?.[0]?.path || r?.sounds?.order?.[0]?.path || null;
+  // every voice line of the unit (user 2026-11-23: ▶ plays them one after another, click again and again)
+  const soundsOf = (r) => ['select', 'ready', 'order'].flatMap(k => (Array.isArray(r?.sounds?.[k]) ? r.sounds[k] : []).filter(s => s?.path).map(s => ({ path: s.path, kind: k, ...(s.quote ? { line: String(s.quote) } : {}) })));
   const units = [
     ...Object.values(characters).map(e => ({ kind: 'character', ...e })),
     ...Object.values(creatures).map(e => ({ kind: 'creature', ...e })),
   ].filter(e => e.resources?.sprites && Object.keys(e.resources.sprites).length)
-    .map(e => ({ kind: e.kind, id: e.id, name: e.name, unit: e.resources.wbc3_name || e.name, race: e.resources.wbc3_race || '', portrait: portraitOf(e.resources), sound: soundOf(e.resources), idle: e.resources.sprites.idle?.path || null }));
+    .map(e => ({ kind: e.kind, id: e.id, name: e.name, unit: e.resources.wbc3_name || e.name, race: e.resources.wbc3_race || '', portrait: portraitOf(e.resources), sound: soundOf(e.resources), sounds: soundsOf(e.resources), idle: e.resources.sprites.idle?.path || null }));
   const cat = {
     characters, creatures, classes, skills, effects, units,
     skillIds: PROFILE_SKILLS.filter(id => skills[id]),
@@ -123,11 +125,13 @@ export function loadCatalog(dataDir) {
   _catalogs.set(dataDir, cat);
   return cat;
 }
-// The catalogue as the UI needs it (small).
-export function catalogForUI(cat) {
+// The catalogue as the UI needs it (small). `p` (the profile): its team's published custom classes join the class list
+// (user 2026-11-23: a new character may take one; custom: true + the ref the peer boots it from + its unit voice).
+export function catalogForUI(cat, p = null) {
   return {
     limits: LIMITS,
-    classes: Object.values(cat.classes).map(c => ({ id: c.id, name: c.name, text: c.data.text || '', kind: c.data.ability_kind || '', colors: c.data.colors || [] })),
+    classes: [...Object.values(cat.classes).map(c => ({ id: c.id, name: c.name, text: c.data.text || '', kind: c.data.ability_kind || '', colors: c.data.colors || [] })),
+      ...customClassesOf(p).filter(x => !cat.classes[x.id]).map(x => ({ id: x.id, name: x.name, text: x.text, kind: x.kind, colors: x.colors, custom: true, ref: x.ref, voice: x.voice || [] }))],
     units: cat.units,
     // The flags the in-game hand shows (peer.mjs makeSkillCard / makeEffectCard + main.js card chips).
     skills: cat.skillIds.map(id => {
@@ -215,6 +219,12 @@ export function createCharacter(p, draft, cat) {
   c.created_at ||= new Date().toISOString();
   c.deaths ??= 0; c.kills ??= 0;
   for (const x of c.cards || []) x.uid ||= uid();
+  // a custom class: only one the team published (profile.custom_classes), with ITS ref (not the client's)
+  if (!cat.classes[c.class_id]) {
+    const cc = customClassesOf(p).find(x => x.id === c.class_id);
+    if (!cc) fail(`unknown class ${c.class_id} (a custom class must be one your team published)`);
+    c.class_ref = structuredClone(cc.ref);
+  } else delete c.class_ref;
   const err = validateCharacter(c, cat);
   if (err.length) fail(err.join('; '));
   // The template from newDraft fixes the 4 skills + 10 effects + combo; the editor may only touch
@@ -304,6 +314,23 @@ export function addArchivedCard(file, charId, card, from = '', { kill = true, cu
   }, file);
 }
 
+// The team's published custom classes (gen-api.mjs publish of a class, user 2026-11-23: a class is not a card — a NEW
+// character may take one). profile.custom_classes = [{ id, name, text, kind, colors, ref, voice, at }]; a valid ref only.
+export function customClassesOf(p) {
+  return (Array.isArray(p?.custom_classes) ? p.custom_classes : []).filter(x => x && /^class_[a-z0-9_]+$/.test(String(x.id)) && foreignRefOf({ id: x.id, ref: x.ref }));
+}
+export function addCustomClass(file, def, ref) {
+  return updateProfile(p => {
+    const r = foreignRefOf({ id: def?.id, ref });
+    if (!r) return null;
+    const voice = Array.isArray(def.resources?.sounds?.voice) ? def.resources.sounds.voice.slice(0, 16).map(s => ({ path: String(s.path), kind: String(s.kind || ''), ...(s.line ? { line: String(s.line) } : {}) })) : [];
+    const x = { id: def.id, name: String(def.name || def.id).slice(0, 80), text: String(def.data?.text || '').slice(0, 600), kind: def.data?.ability_kind || '', colors: [...(def.data?.colors || [])],
+      ref: r, voice, ...(def.resources?.unit ? { unit: { race: String(def.resources.unit.race), unit: String(def.resources.unit.unit) } } : {}), at: new Date().toISOString() };
+    p.custom_classes = [...customClassesOf(p).filter(y => y.id !== x.id), x];
+    return x;
+  }, file);
+}
+
 // ---------------------------------------------------------------------------------------------
 // What a peer process needs to play a profile character (spread into its env).
 export function profileEnv(file, c) {
@@ -338,7 +365,7 @@ export async function handleProfileApi(req, res, urlPath, { file = profilePath()
     const cat = loadCatalog(dataDir);
     const m = req.method;
     if (m === 'GET' && urlPath === '/api/profile') return send(200, { profile: loadProfile(file), limits: LIMITS, file }), true;
-    if (m === 'GET' && urlPath === '/api/profile/catalog') return send(200, catalogForUI(cat)), true;
+    if (m === 'GET' && urlPath === '/api/profile/catalog') return send(200, catalogForUI(cat, loadProfile(file))), true;
     if (m === 'POST' && urlPath === '/api/profile/draft') return send(200, { character: newDraft(cat, loadProfile(file)) }), true;
     if (m === 'POST' && urlPath === '/api/profile/characters') { const b = await readBody(req); return send(200, { profile: updateProfile(p => createCharacter(p, b.character, cat), file) }), true; }
     const cm = /^\/api\/profile\/characters\/([\w-]+)$/.exec(urlPath);

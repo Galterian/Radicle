@@ -63,7 +63,8 @@ pre.pre { background: var(--bg-elev); border: 1px solid var(--border); border-ra
 .profile-name { font-size: 18px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
 .profile-name .nid { color: var(--muted); font-size: 12px; }
 .profile-sub { color: var(--muted); margin: 4px 0 8px; }
-.profile-sync { display: flex; align-items: center; gap: 4px; }
+.profile-meta { min-width: 0; }
+.profile-sync { display: flex; align-items: center; gap: 4px; min-width: 0; }
 
 /* --- clone box --- */
 .clone-box { display: inline-block; background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; color: var(--text); user-select: all; white-space: pre; overflow-x: auto; max-width: 100%; line-height: 1.4; }
@@ -121,3 +122,47 @@ pre.pre { background: var(--bg-elev); border: 1px solid var(--border); border-ra
 .btn-app .btn-sub { color: var(--muted); font-size: 11px; }
 .btn-app.play .btn-sub { color: #d59a3f; }
 .footer-fine { max-width: 1100px; margin: 16px auto 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+/* --- "Show more" paging under explore lists --- */
+.muted { color: var(--muted); }
+.more-row { display: flex; justify-content: center; margin: 10px 0 0; }
+.more-row[hidden] { display: none; }
+.btn.more { padding: 6px 14px; font-size: 13px; color: var(--link); }
+
+/* --- small chips: dimension role on the peer page, definition kind --- */
+.chip { display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; font-size: 11px; font-weight: 600; line-height: 18px; text-transform: lowercase; color: var(--muted); background: #21262d; }
+.roles { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chip.role-creator { color: #e3b341; border-color: #e3b34166; background: #e3b3411a; }
+.chip.role-door    { color: #3fb950; border-color: #3fb95066; background: #3fb9501a; }
+.chip.role-commits { color: #58a6ff; border-color: #58a6ff66; background: #58a6ff1a; }
+.chip.kind-skill   { color: #58a6ff; border-color: #58a6ff66; background: #58a6ff1a; }
+.chip.kind-effect  { color: #db61a2; border-color: #db61a266; background: #db61a21a; }
+.chip.kind-class   { color: #e3b341; border-color: #e3b34166; background: #e3b3411a; }
+.repo-list li.quiet-error { display: block; padding: 8px 16px; font-size: 12px; }
+.repo-list li.empty { display: block; padding: 24px 16px; }
+
+/* --- architecture teaser cards on /explore --- */
+.arch-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .arch-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .arch-cards { grid-template-columns: 1fr; } }
+.arch-card { --c: var(--link); display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--border); border-top: 3px solid var(--c); border-radius: 8px; background: linear-gradient(180deg, color-mix(in srgb, var(--c) 14%, var(--bg-elev)), var(--bg-elev) 70%); color: var(--text); transition: border-color .12s, transform .12s; }
+.arch-card:hover { text-decoration: none; border-color: var(--c); transform: translateY(-1px); }
+.arch-card .ac-kicker { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--c); }
+.arch-card .ac-title { font-size: 15px; font-weight: 600; }
+.arch-card .ac-text { font-size: 12px; color: var(--muted); }
+.arch-card.c-overview  { --c: #58a6ff; }
+.arch-card.c-repos     { --c: #3fb950; }
+.arch-card.c-workflows { --c: #db61a2; }
+.arch-card.c-round     { --c: #e3b341; }
+
+/* --- narrow screens: header wraps instead of overflowing --- */
+@media (max-width: 640px) {
+  .site { flex-wrap: wrap; gap: 8px 14px; padding: 10px 14px; }
+  .search { margin-left: 0; width: 100%; }
+  .search input { width: 100%; max-width: none; }
+  .repo-list li { grid-template-columns: 1fr; }
+  .profile { grid-template-columns: 48px 1fr; }
+  .profile-avatar { width: 48px; height: 48px; font-size: 20px; }
+}
+/* NIDs / addrs are 48+ char tokens: let them wrap instead of widening the page. */
+.profile-name .nid, .profile-sub, .repo-list .ri-sub { overflow-wrap: anywhere; }

@@ -3,11 +3,12 @@
 // Every state change is POST + readJsonBody (JSON only, size cap) + requireLogin (team owner); GET only reads.
 //   GET  drafts                → { busy, model, drafts: [summary] }
 //   GET  drafts/<draft_id>     → { draft }   (def, state, status line, test result, suggestions, log)
-//   GET  vocab?kind=effect|skill → { groups: [{ id, label, values }] }   the tag chips (gen-tags.mjs)
-//   GET  resources             → { sprites: [{path, name, in_pack}], sounds }   game/gen-resources.json (chaosD6-Resources)
-//   POST create   { kind, idea, tags[], resources: {sprite, sound} }   → { draft }   starts the generation (the big model)
+//   GET  vocab?kind=effect|skill|class → { groups: [{ id, label, values }] }   the tag chips (gen-tags.mjs)
+//   GET  resources             → { sprites: [{path, name, in_pack, grid}], sounds, units: [{race, unit, sounds}] }   game/gen-resources.json
+//   POST create   { kind, idea, tags[], resources: {sprite, sound} | {unit: "<race>/<unit>"} (a class) }  → { draft }   starts the generation
 //   POST retry    { draft_id, extra, suggestions[], tags?, resources? } → { draft }   regenerates from the preview + the changes
-//   POST test     { draft_id }                         → { draft }   starts the private background test game
+//   POST media    { draft_id, resources }                → { draft }   the picture / sound only (not priced, no regeneration)
+//   POST test     { draft_id }                       → { draft }   starts the private background test game
 //   POST publish  { draft_id, message }                → { draft, ref, publish, granted }  only in "testing success"
 //   POST delete   { draft_id }
 //   POST key      { url: https://<host>/llm-big, key }  → the phone's OCI model + test service (llm.json, mode 600)
@@ -40,6 +41,7 @@ export function jobsFor(ctx) {
 async function refOf(kind, def, ref, verdict) {
   const o = { repo: ref.repo || '', branch: ref.branch || '', commit: ref.commit || '', verdict };
   if (kind === 'skill') { const hs = await import('./skills-handshake.mjs'); return hs.makeSkRef(def, hs.bundledSkillSet().libs, o); }
+  if (kind === 'class') { const hs = await import('./classes-handshake.mjs'); return hs.makeClRef(def, hs.bundledClassSet().libs, o); }
   const hs = await import('./effects-handshake.mjs');
   return hs.makeFxRef(def, hs.bundledEffectSet().libs, o);
 }
@@ -47,17 +49,24 @@ async function refOf(kind, def, ref, verdict) {
 let catalogue = null;
 function resourceCatalogue() {
   if (catalogue) return catalogue;
-  try { const c = JSON.parse(fs.readFileSync(path.join(HERE, 'gen-resources.json'), 'utf8')); catalogue = { source: c.source, generated_at: c.generated_at, sprites: c.sprites || [], sounds: c.sounds || [] }; }
-  catch { catalogue = { source: null, sprites: [], sounds: [] }; }
+  try { const c = JSON.parse(fs.readFileSync(path.join(HERE, 'gen-resources.json'), 'utf8')); catalogue = { source: c.source, generated_at: c.generated_at, sprites: c.sprites || [], sounds: c.sounds || [], units: c.units || [] }; }
+  catch { catalogue = { source: null, sprites: [], sounds: [], units: [] }; }
   return catalogue;
 }
 
 export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requireLogin, validateDefinition, fail, sendJson }) {
   const jobs = jobsFor(ctx);
-  // { sprite, sound } → only paths of the catalogue (null = none picked)
-  const pickOf = (r) => {
+  // { sprite, sound } → only paths of the catalogue (null = none picked); a class: { unit: "<race>/<unit>" } → that
+  // unit's whole voice set from the catalogue (user 2026-11-23)
+  const pickOf = (r, kind = 'effect') => {
     if (!r || typeof r !== 'object') return null;
     const c = resourceCatalogue();
+    if (kind === 'class') {
+      if (!r.unit) return null;
+      const u = c.units.find(x => `${x.race}/${x.unit}` === String(r.unit));
+      if (!u) fail(400, 'that unit is not in the chaosD6-Resources catalogue');
+      return { unit: { race: u.race, unit: u.unit, sounds: u.sounds.slice(0, 16).map(s => ({ path: s.path, kind: s.kind, line: s.line, in_pack: s.in_pack })) } };
+    }
     const sprite = r.sprite ? String(r.sprite) : null, sound = r.sound ? String(r.sound) : null;
     if (sprite && !c.sprites.some(s => s.path === sprite)) fail(400, 'that picture is not in the chaosD6-Resources catalogue');
     if (sound && !c.sounds.some(s => s.path === sound)) fail(400, 'that sound is not in the chaosD6-Resources catalogue');
@@ -112,14 +121,20 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       requireLogin(ctx);
       const b = await readJsonBody(req);
       const kind = String(b.kind || 'effect');
-      return sendJson(res, 200, { ok: true, draft: call(() => jobs.create({ kind, idea: typeof b.idea === 'string' ? b.idea : '', tags: Array.isArray(b.tags) ? b.tags : [], resources: pickOf(b.resources) })) });
+      return sendJson(res, 200, { ok: true, draft: call(() => jobs.create({ kind, idea: typeof b.idea === 'string' ? b.idea : '', tags: Array.isArray(b.tags) ? b.tags : [], resources: pickOf(b.resources, kind) })) });
     }
     case 'POST retry': {
       requireLogin(ctx);
       const b = await readJsonBody(req);
       draftOf(b);
       return sendJson(res, 200, { ok: true, draft: call(() => jobs.retry(b.draft_id, { extra: typeof b.extra === 'string' ? b.extra : '', suggestions: Array.isArray(b.suggestions) ? b.suggestions : [],
-        tags: Array.isArray(b.tags) ? b.tags : undefined, resources: b.resources === undefined ? undefined : pickOf(b.resources) })) });
+        tags: Array.isArray(b.tags) ? b.tags : undefined, resources: b.resources === undefined ? undefined : pickOf(b.resources, jobs.get(b.draft_id).kind) })) });
+    }
+    case 'POST media': {   // { draft_id, resources: {sprite, sound} | null } — the picture / sound only, no regeneration
+      requireLogin(ctx);
+      const b = await readJsonBody(req);
+      draftOf(b);
+      return sendJson(res, 200, { ok: true, draft: call(() => jobs.setResources(b.draft_id, pickOf(b.resources, jobs.get(b.draft_id).kind))) });
     }
     case 'POST test': {
       requireLogin(ctx);
@@ -147,14 +162,17 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       } catch (e) { jobs.endPublish(d.draft_id, { ok: false, error: e.message }); throw e; }
       // Every character of the team gets the card in its archive (not a kill: kill false).
       const granted = [];
+      let clRef = null;   // a class: the handshake ref a character needs to hold it (profile class_ref)
       try {
         const ref = await refOf(kind, d.def, r.ref || {}, v.verdict);
-        for (const c of loadProfile(ctx.profileFile).characters || []) {
+        if (kind === 'class') clRef = ref;
+        // a class is not a card (profile cards are skills + effects): no archive grant — the ref is on the draft
+        if (kind !== 'class') for (const c of loadProfile(ctx.profileFile).characters || []) {
           const x = addArchivedCard(ctx.profileFile, c.id, { kind, id: d.def.id, ref }, s.team.name, { kill: false, custom: true });
           if (x) granted.push({ character: c.id, name: c.name, uid: x.uid });
         }
       } catch (e) { console.warn(`[gen] archive grant failed: ${e.message}`); }
-      const done = jobs.endPublish(d.draft_id, { ok: true, info: { ...(r.ref || {}), state: r.publish?.state || null, error: r.publish?.error || null, granted: granted.length } });
+      const done = jobs.endPublish(d.draft_id, { ok: true, info: { ...(r.ref || {}), state: r.publish?.state || null, error: r.publish?.error || null, granted: granted.length, ...(clRef ? { class_ref: clRef } : {}) } });
       return sendJson(res, 200, { ok: true, draft: done, ref: r.ref, publish: r.publish, verdict: v.verdict, granted });
     }
     default: fail(404, `no gen API ${route}`);

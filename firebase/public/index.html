@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>chaosD6 — Radicle seeds</title>
+  <title>chaosD6 — explore seeds, peers &amp; dimensions</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -14,6 +14,7 @@
     </a>
     <nav class="site-nav">
       <a href="https://92-5-138-121.sslip.io/rules/" target="_blank" rel="noopener">Rules</a>
+      <a href="/architecture">Architecture</a>
       <a href="/nodes/localhost/rad:zqZmP6itceBMqYwi1K1n8phQqCaj">Radicle Explorer</a>
     </nav>
     <div class="search">
@@ -56,8 +57,10 @@
 
   <!-- Views are templates we clone + fill in app.js; no bundler, no framework. -->
   <template id="tpl-explore">
-    <h1 class="page-title">Explore seeds</h1>
-    <p class="page-sub">Peers that have published to the shared Radicle project. Each row is a reachable seed address a new peer can dial with <code>rad sync</code> or add to its libp2p bootstrap list.</p>
+    <h1 class="page-title">Explore the chaosD6 mesh</h1>
+    <p class="page-sub">A live view of the peer-to-peer network behind chaosD6: the always-on Radicle seeds, every peer that has registered here, and the dimensions currently being played.
+      Open a dimension to see its commits and live doors, then join it from the app as an ally or as a third team.
+      The architecture overview below explains how the repos, workflows and a game round fit together.</p>
     <h2 class="page-title lvl2">Known seeds</h2>
     <p class="page-sub">Always-on Radicle seeders you can add to <code>preferredSeeds</code>. Status is probed live from each node's <code>/api/v1/node</code>.</p>
     <ul id="known-list" class="repo-list"></ul>
@@ -65,6 +68,30 @@
     <ul id="peer-list" class="repo-list"></ul>
     <h2 class="page-title lvl2">Active dimensions</h2>
     <ul id="dim-list" class="repo-list"></ul>
+    <h2 class="page-title lvl2">Architecture</h2>
+    <p class="page-sub">How the game, its Radicle repos and the Firebase registry fit together. <a href="/architecture">Read the full overview →</a></p>
+    <div class="arch-cards">
+      <a class="arch-card c-overview" href="/architecture#overview">
+        <span class="ac-kicker">Overview</span>
+        <span class="ac-title">One game, many peers</span>
+        <span class="ac-text">Every phone runs its own Radicle node; seeds relay, Firestore only answers “who is online”.</span>
+      </a>
+      <a class="arch-card c-repos" href="/architecture#repos">
+        <span class="ac-kicker">Repos</span>
+        <span class="ac-title">Code, dimensions, definitions</span>
+        <span class="ac-text">The game source, ActiveDimensions branches and the Skills / Effects / Classes repos.</span>
+      </a>
+      <a class="arch-card c-workflows" href="/architecture#workflows">
+        <span class="ac-kicker">Workflows</span>
+        <span class="ac-title">Author, push, promote</span>
+        <span class="ac-text">From the rules editor on your node to a branch on the seed everyone can fetch.</span>
+      </a>
+      <a class="arch-card c-round" href="/architecture#round">
+        <span class="ac-kicker">A round</span>
+        <span class="ac-title">Turns, doors, resolution</span>
+        <span class="ac-text">How peers exchange actions and agree on the same state every round.</span>
+      </a>
+    </div>
   </template>
 
   <template id="tpl-peer">
@@ -80,8 +107,11 @@
         </div>
       </div>
     </header>
-    <h2 class="section">Dimensions this peer has pushed</h2>
-    <ul class="repo-list dim-list"></ul>
+    <h2 class="section">Dimensions this peer created, joined or pushed to</h2>
+    <ul class="repo-list dim-list"><li class="empty">loading…</li></ul>
+    <h2 class="section">Skills, effects &amp; classes this peer published</h2>
+    <p class="page-sub">Branches <code>players/&lt;team&gt;/&lt;slug&gt;</code> under this node's namespace in the definition repos, read live from the seed.</p>
+    <ul class="repo-list branch-list"><li class="empty">loading…</li></ul>
   </template>
 
   <template id="tpl-dim">

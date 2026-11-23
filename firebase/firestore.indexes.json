@@ -4,18 +4,75 @@
       "collectionGroup": "peers",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "rid",      "order": "ASCENDING" },
-        { "fieldPath": "lastSeen", "order": "DESCENDING" }
+        {
+          "fieldPath": "rid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastSeen",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "commits",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "branch", "order": "ASCENDING" },
-        { "fieldPath": "when",   "order": "DESCENDING" }
+        {
+          "fieldPath": "branch",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "when",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "doors",
+      "fieldPath": "nid",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "commits",
+      "fieldPath": "pushedBy",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    }
+  ]
 }

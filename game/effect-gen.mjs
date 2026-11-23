@@ -362,8 +362,8 @@ export function validatorReport(res) {
   const p = res.power;
   if (p && typeof p === 'object') {
     const cost = p.cost && typeof p.cost === 'object' ? ` cost ${p.cost.actions} ${res.skill_id || res.class_id ? 'card-' : ''}actions${p.cost.emissions != null ? ` (emissions ${p.cost.emissions}${p.cost.instant ? ' instant' : ''}, retries ${p.cost.retries})` : ''}` : '';
-    out.push(`  value ${p.value}${p.uses != null ? ` (uses ${p.uses} × ${p.per_use})` : ''} ${cost}  curve ${p.expected}  ratio ${p.ratio}`);
-    if (p.components) out.push(`  components: ${Object.entries(p.components).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+    out.push(`  value ${p.value}${p.uses != null ? ` (uses ${p.uses}${p.per_use != null ? ` × ${p.per_use}` : ''})` : ''}${p.kind ? ` ${p.kind}` : ''}${p.k != null ? `, ${p.k} colours` : ''} ${cost}  curve ${p.expected}  ratio ${p.ratio}`);
+    if (p.components) out.push(`  components: ${Object.entries(p.components).map(([k, v]) => (v && typeof v === 'object' ? `${k} ${v.value} (${v.trigger || ''}${v.per != null ? ` ${v.per} × ${v.times}` : ''})` : `${k} ${v}`)).join(', ')}`);
   }
   if (res.baseline) out.push(`  baseline ${res.baseline.id}: ratio ${res.baseline.ratio} → judged ${res.judged_ratio}`);
   if (res.band) out.push(`  band [${res.band.low}, ${res.band.high}]`);

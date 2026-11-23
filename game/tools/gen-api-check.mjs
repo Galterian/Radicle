@@ -27,7 +27,10 @@ const { useGenJobs } = await import('../gen-api.mjs');
 const { createGenJobs } = await import('../gen-jobs.mjs');
 const { assemble, stripExample } = await import('../effect-gen.mjs');
 const { stripSkill, assemble: assembleSkill, autoFix: skillFix } = await import('../skill-gen.mjs');
+const { stripClass, assemble: assembleClass, autoFix: classFix } = await import('../class-gen.mjs');
 const { ridOfKind, defSha } = await import('../editor-publish.mjs');
+const { cleanTags, tagProblems, tagsPrompt } = await import('../gen-tags.mjs');
+const { assetFile } = await import('../asset-root.mjs');
 const { generateIdentity } = await import('../profile-auth.mjs');
 const { loadProfile } = await import('../profile.mjs');
 
@@ -64,18 +67,29 @@ fs.writeFileSync(path.join(ws, 'index.json'), JSON.stringify({ format: 1, hash: 
 git(['init', '-q', '-b', 'main', ws]); git(['add', '-A'], { cwd: ws }); git(['-c', 'user.name=seed', '-c', 'user.email=seed@x', 'commit', '-q', '-m', 'main'], { cwd: ws });
 const remoteSkill = path.join(T, 'remote-skill.git');
 git(['clone', '-q', '--bare', ws, remoteSkill]);
-const publishHooks = { profileFile, remoteUrlFor: (rid) => (rid === ridOfKind('effect') ? remote : rid === ridOfKind('skill') ? remoteSkill : path.join(T, 'none.git')), radSync: false, env: GIT_ENV, via: 'git' };
+// a fake chaosD6-Classes: classes/ + lib/ + index.json on main
+const wc = path.join(T, 'work-class');
+fs.mkdirSync(path.join(wc, 'classes'), { recursive: true }); fs.mkdirSync(path.join(wc, 'lib'), { recursive: true });
+for (const f of fs.readdirSync(path.join(GAME, 'classes-data/lib'))) fs.copyFileSync(path.join(GAME, 'classes-data/lib', f), path.join(wc, 'lib', f));
+fs.writeFileSync(path.join(wc, 'index.json'), JSON.stringify({ format: 1, hash: 'sha256(canonical-json)', classes: {} }, null, 2) + '\n');
+git(['init', '-q', '-b', 'main', wc]); git(['add', '-A'], { cwd: wc }); git(['-c', 'user.name=seed', '-c', 'user.email=seed@x', 'commit', '-q', '-m', 'main'], { cwd: wc });
+const remoteClass = path.join(T, 'remote-class.git');
+git(['clone', '-q', '--bare', wc, remoteClass]);
+const publishHooks = { profileFile, remoteUrlFor: (rid) => (rid === ridOfKind('effect') ? remote : rid === ridOfKind('skill') ? remoteSkill : rid === ridOfKind('class') ? remoteClass : path.join(T, 'none.git')), radSync: false, env: GIT_ENV, via: 'git' };
 
 // ---- fake model + fake test runner ----
 const light = stripExample(JSON.parse(fs.readFileSync(path.join(GAME, 'effects-data/effects/effect_lightning.json'), 'utf8')));
 let genCalls = [];
 const dodge = stripSkill(JSON.parse(fs.readFileSync(path.join(GAME, 'skills-data/skills/skill_dodge.json'), 'utf8')));
+const overlord = stripClass(JSON.parse(fs.readFileSync(path.join(GAME, 'classes-data/classes/class_overlord.json'), 'utf8')));
 const fakeGenerate = async ({ kind, idea, prior, changes, onProgress, log, tagCheck }) => {
   genCalls.push({ kind, idea, prior: prior?.id || null, changes });
   onProgress?.({ attempt: 1, of: 3, phase: 'answer', done: 100, expect: 300 });
   log('attempt 1/3: asking fake');
   await sleep(150);
-  const def = kind === 'skill'
+  const def = kind === 'class'
+    ? (() => { const c = assembleClass({ ...overlord, id: 'class_field_medic', name: 'Field Medic' }, { model: 'fake', idea, taken: new Set(['class_overlord']) }); classFix(c); return c; })()
+    : kind === 'skill'
     ? (() => { const s = assembleSkill({ ...dodge, id: 'skill_quick_step', name: 'Quick Step' }, { model: 'fake', idea, taken: new Set(['skill_dodge']) }); skillFix(s); return s; })()
     : assemble({ ...light, id: 'effect_static_bolt', name: prior ? 'Static Bolt II' : 'Static Bolt' }, { model: 'fake', idea, taken: new Set(['effect_lightning']) });
   const check = { effect_id: def.id, verdict: 'ok', judged_ratio: 1, band: { low: 0.8, high: 1.25 }, power: { value: 3, cost: { actions: 3 }, expected: 3, ratio: 1 }, reasons: ['fake reason'], suggestions: [] };
@@ -106,6 +120,14 @@ useGenJobs(profileFile, jobs);
 
 // ---- server ----
 const server = http.createServer(async (req, res) => {
+  // /assets/* as ui-server serves it (the picker's previews and sounds)
+  const u = new URL(req.url, 'http://x');
+  if (u.pathname.startsWith('/assets/')) {
+    const abs = assetFile(decodeURIComponent(u.pathname).slice('/assets/'.length).replace(/\.\./g, ''));
+    if (!abs || !fs.existsSync(abs)) { res.writeHead(404); return res.end('not found'); }
+    res.writeHead(200, { 'content-type': /\.png$/i.test(abs) ? 'image/png' : /\.wav$/i.test(abs) ? 'audio/wav' : 'application/octet-stream' });
+    return fs.createReadStream(abs).pipe(res);
+  }
   const handled = await handleEditorRequest(req, res, new URL(req.url, 'http://x'), { repoRoot: REPO, gameDir: GAME, profileFile, port: server.address().port, publish: publishHooks });
   if (!handled) { res.writeHead(418); res.end(); }
 });
@@ -156,7 +178,7 @@ try {
   ok(r.status === 200 && r.json.draft.state === 'generating' && /^gen_/.test(r.json.draft.draft_id), 'create → generating');
   const id = r.json.draft.draft_id;
   ok((await post('create', { idea: 'another one at the same time' })).status === 409, 'one job at a time → 409');
-  ok((await post('create', { kind: 'class', idea: 'a class please now' })).status === 400, 'classes are not built yet → 400');
+  ok((await post('create', { kind: 'monster', idea: 'a monster please now' })).status === 400, 'an unknown kind → 400');
   await sleep(80);
   ok(/^\[gen\] 0:0\d attempt 1\/3 \d+% · writing answer/.test((await get(`drafts/${id}`)).json.draft.status), 'status line in the [gen] format while generating');
   let d = await waitState(id, /^preview$/);
@@ -230,7 +252,34 @@ try {
   d = await waitState(tid, /^preview$/);
   ok(!d.tag_problems.length && d.talk.filter(t => t.role === 'round').length === 2, 'a retry that drops the tags: nothing to meet; a second round in the conversation');
   { const v = await validateDefinition('effect', d.def); ok(v.ok, `an effect with picked resources still validates for publish (${v.errors?.slice(0, 2).join('; ')})`); }
+  // the picture / sound alone (POST media): no regeneration, the def's card.resources follow, the verdict stands
+  { const spr2 = cat.sprites.find(s => s.path !== spr.path && s.grid), verdict = d.verdict;
+    r = await post('media', { draft_id: tid, resources: { sprite: spr2.path, sound: null } });
+    const m = r.json?.draft;
+    ok(r.status === 200 && m.state === 'preview' && m.verdict === verdict && m.def.card.resources.sprites.effect.path === spr2.path && !m.def.card.resources.sounds && m.resources.sprite === spr2.path,
+      `POST media: the card's picture changes, the sound goes, no regeneration (${r.status} ${r.json?.error || ''})`);
+    ok(JSON.parse(fs.readFileSync(path.join(PROFILE_DIR, 'effect-drafts', `${m.def.id}.json`), 'utf8')).card.resources.sprites.effect.path === spr2.path, 'POST media: the draft def file is rewritten');
+    ok((await post('media', { draft_id: tid, resources: { sprite: 'assets/Sprites/nope.png' } })).status === 400, 'POST media: a path outside the catalogue → 400');
+    r = await post('media', { draft_id: tid, resources: null });
+    ok(r.status === 200 && !r.json.draft.def.card.resources && r.json.draft.resources === null, 'POST media null: the picture and sound are dropped');
+    ok(spr2.grid.cols >= 1 && spr2.grid.w > 0 && spr2.grid.fps > 0, `the catalogue gives the strip grid for the animated preview (${JSON.stringify(spr2.grid)})`);
+  }
+  await post('retry', { draft_id: tid, extra: 'again' });
+  ok((await post('media', { draft_id: tid, resources: null })).status === 409, 'POST media while generating → 409');
+  await waitState(tid, /^preview$/);
   await post('delete', { draft_id: tid });
+  // repeated elements (user 2026-11-23: water, fire, water = two water in the cost)
+  { const t = cleanTags('effect', ['element:elem_water', 'element:elem_fire', 'element:elem_water', 'kind:damage', 'kind:lock', 'type:point_buy', 'type:point_buy', 'element:elem_air', 'element:elem_air']);
+    ok(JSON.stringify(t) === JSON.stringify(['element:elem_water', 'element:elem_fire', 'element:elem_water', 'kind:lock', 'type:point_buy', 'element:elem_air']), `cleanTags: elements repeat (≤ 4), 'one' replaces, 'set' once (${t.join(', ')})`);
+    const need = ['element:elem_water', 'element:elem_fire', 'element:elem_water'];
+    ok(/elem_water ×2 \(that many times/.test(tagsPrompt('effect', need)), 'the prompt asks for water ×2');
+    const p1 = tagProblems('effect', { elements: ['elem_water', 'elem_fire'] }, need);
+    ok(p1.length === 1 && p1[0].startsWith('tag element:elem_water ×2 is not met'), `one water where two are picked → missed (${p1.join(' | ')})`);
+    ok(!tagProblems('effect', { elements: ['elem_fire', 'elem_water', 'elem_water'] }, need).length, 'water, fire, water in any order → met'); }
+  // /assets/* (the picker's previews) on the fake node, as ui-server serves them
+  { const a = cat.sprites.find(s => s.in_pack && /[ ()[\]]/.test(s.path)) || cat.sprites.find(s => s.in_pack);
+    const st = a ? (await rq('GET', '/' + a.path.split('/').map(encodeURIComponent).join('/'))).status : 0;
+    ok(st === 200 || (st === 404 && !fs.existsSync(assetFile(a.path.slice('assets/'.length)) || '')), `GET /assets/<encoded path> of a packed sprite → ${st}`); }
 
   // ---- a skill end to end: create → preview (/1, resources) → test → publish to chaosD6-Skills → archive cards ----
   testPass = true;
@@ -248,6 +297,43 @@ try {
     `skill publish → ${r.json?.ref?.branch || r.json?.error} on the (fake) chaosD6-Skills`);
   const ps = loadProfile(profileFile).characters.map(c => (c.cards || []).find(x => x.id === 'skill_quick_step'));
   ok(ps.every(x => x && x.kind === 'skill' && x.where === 'archive' && x.custom === true && x.ref?.branch === 'players/Gold-Team/quick-step'), 'every team character gets the skill card in its archive (custom)');
+
+  // ---- a class end to end: create (tags, a unit's whole voice) → preview (/2) → voice change → test → publish to
+  // chaosD6-Classes (no archive card: a class is not a card) ----
+  { const voc = (await get('vocab?kind=class')).json;
+    ok(['ability', 'color', 'power', 'needs'].every(g => voc?.groups?.some(x => x.id === g)) && voc.groups.find(g => g.id === 'power').values.includes('armor') && !voc.groups.find(g => g.id === 'power').values.includes('build'),
+      'GET vocab?kind=class: ability kind, colours, power (no peer / hand keys), targets');
+    const unit = cat.units?.find(u => u.sounds.length >= 5), unit2 = cat.units?.find(u => u !== unit && u.sounds.some(s => /[!?']/.test(s.path)));
+    ok(cat.units?.length > 100 && unit && unit2, `GET resources: ${cat.units?.length} units with their voice sets`);
+    ok((await post('create', { kind: 'class', idea: 'a medic', resources: { unit: 'Nobody/Nothing' } })).status === 400, 'class: a unit outside the catalogue → 400');
+    r = await post('create', { kind: 'class', idea: 'a field medic who shields an ally', tags: ['ability:tap', 'power:armor', 'color:elem_space', 'color:elem_fire'], resources: { unit: `${unit.race}/${unit.unit}` } });
+    const cid = r.json.draft.draft_id;
+    d = await waitState(cid, /^preview$/);
+    ok(d.kind === 'class' && d.def.schema === 'chaosd6.class/2' && d.def.source.custom === true && path.basename(path.dirname(d.file)) === 'class-drafts', 'class: a /2 draft in <profile>/class-drafts, marked custom');
+    ok(d.def.resources?.unit?.unit === unit.unit && d.def.resources.sounds.voice.length === Math.min(16, unit.sounds.length) && d.def.resources.sounds.voice.every(s => s.path.startsWith(`assets/Sounds/Units/${unit.race}/${unit.unit}/`)),
+      `class: the unit's whole voice set (${d.def.resources?.sounds?.voice?.length} sounds) in def.resources`);
+    ok(d.tag_problems.length === 1 && d.tag_problems[0].startsWith('tag color:elem_fire is not met'), `class tags checked (${d.tag_problems.join(' | ')})`);
+    r = await post('media', { draft_id: cid, resources: { unit: `${unit2.race}/${unit2.unit}` } });
+    ok(r.status === 200 && r.json.draft.def.resources.unit.unit === unit2.unit, `class: POST media changes the voice (${unit2.unit}: paths with ! ? ')`);
+    { const v = await validateDefinition('class', r.json.draft.def); ok(v.ok, `a class with a unit voice validates for publish (${v.errors?.slice(0, 2).join('; ')})`); }
+    { const bad = structuredClone(r.json.draft.def); bad.resources.sounds.voice[0].path = 'assets/Sounds/Units/../../etc/x.wav';
+      const v = await validateDefinition('class', bad); ok(!v.ok && v.errors.some(e => /voice\[0\]\.path/.test(e)), 'a voice path with ".." is refused');
+      bad.resources.sounds.voice[0].path = `assets/Sounds/Units/${unit.race}/${unit.unit}/x.wav`;
+      const v2 = await validateDefinition('class', bad); ok(!v2.ok && v2.errors.some(e => /not in the folder/.test(e)), 'a voice path of another unit is refused'); }
+    await post('retry', { draft_id: cid, extra: 'no fire', tags: ['ability:tap', 'power:armor'] });
+    d = await waitState(cid, /^preview$/);
+    ok(!d.tag_problems.length && d.def.resources.unit.unit === unit2.unit, 'class retry: new tags met, the voice kept');
+    await post('test', { draft_id: cid });
+    d = await waitState(cid, /^testing (failed|success)/);
+    ok(d.state === 'testing success' && spawned.at(-1)[1] === d.file, 'class: the test runner gets the class draft file');
+    ok(d.talk.some(t => t.role === 'test' && /^PASS · uses 3/.test(t.text)), 'class: the test line says uses');
+    const before = JSON.stringify(loadProfile(profileFile).characters.map(c => c.cards));
+    r = await post('publish', { draft_id: cid });
+    ok(r.status === 200 && r.json.ref?.branch === 'players/Gold-Team/field-medic' && git(['--git-dir', remoteClass, 'branch', '--list', 'players/*']).includes('players/Gold-Team/field-medic'),
+      `class publish → ${r.json?.ref?.branch || r.json?.error} on the (fake) chaosD6-Classes`);
+    ok(r.json.granted?.length === 0 && JSON.stringify(loadProfile(profileFile).characters.map(c => c.cards)) === before && r.json.draft.published?.class_ref?.id === 'class_field_medic' && r.json.draft.published.class_ref.sha256,
+      'class publish: no archive card; the class ref (sha256) is on the draft');
+  }
 
   // ---- the phone: model key form + the test on OCI's gen-test service ----
   ok((await post('key', { url: 'http://evil.example/llm-big', key: 'k'.repeat(30) })).status === 400, 'key: a non-https / non-/llm-big url → 400');

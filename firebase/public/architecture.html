@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>chaosD6 — Architecture</title>
+<meta name="description" content="chaosD6 architecture: Radicle repos, desktop node, phone app, OCI seed, Firebase explorer, and the workflows that connect them.">
+<style>
+/* architecture.html — self-contained; mirrors the explorer's GitHub-dark look (style.css) + a light theme. */
+:root {
+  color-scheme: dark;
+  --bg: #0d1117; --elev: #161b22; --raised: #1c2129; --border: #30363d; --head: #010409;
+  --text: #e6edf3; --muted: #8b949e; --link: #58a6ff;
+  /* layer colours = dataviz categorical slots 1-5 (dark steps, validated vs #161b22) */
+  --rad: #3987e5; --desk: #d95926; --phone: #199e70; --seed: #c98500; --fb: #d55181; --mesh: #8b949e;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #ffffff; --elev: #f6f8fa; --raised: #eef1f4; --border: #d0d7de; --head: #f6f8fa;
+    --text: #1f2328; --muted: #59636e; --link: #0969da;
+    --rad: #2a78d6; --desk: #eb6834; --phone: #1baf7a; --seed: #eda100; --fb: #e87ba4; --mesh: #8c959f;
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  }
+}
+.L-rad { --c: var(--rad); } .L-desk { --c: var(--desk); } .L-phone { --c: var(--phone); }
+.L-seed { --c: var(--seed); } .L-fb { --c: var(--fb); } .L-mesh { --c: var(--mesh); }
+.c1 { --c: var(--s1); } .c2 { --c: var(--s2); } .c3 { --c: var(--s3); }
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.55 var(--sans); }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 12px; background: var(--raised); border: 1px solid var(--border); border-radius: 5px; padding: 0 4px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+.skip { position: absolute; left: -999px; top: 0; }
+.skip:focus { left: 8px; z-index: 30; background: var(--elev); padding: 6px 10px; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+
+/* header (mirrors index.html .site) */
+.site { display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: var(--head); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; flex-wrap: wrap; }
+.brand { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.brand .logo { font-size: 22px; color: var(--link); }
+.brand .name { font-size: 15px; }
+.site-nav { display: inline-flex; gap: 14px; margin-left: 8px; flex-wrap: wrap; }
+.site-nav a { color: var(--text); font-size: 13px; }
+.site-nav a[aria-current] { color: var(--link); font-weight: 600; }
+
+/* layout */
+.layout { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 28px; padding: 0 20px; }
+.toc { position: sticky; top: 64px; align-self: start; max-height: calc(100vh - 80px); overflow: auto; padding: 24px 0; }
+.toc-h { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 8px; }
+.toc ul { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--border); }
+.toc a { display: block; padding: 3px 12px; color: var(--muted); font-size: 13px; border-left: 2px solid transparent; margin-left: -1px; }
+.toc a:hover { color: var(--text); text-decoration: none; }
+.toc a.on { color: var(--text); border-left-color: var(--link); font-weight: 600; }
+.doc { padding: 24px 0 40px; min-width: 0; }
+section { margin: 0 0 44px; }
+h1 { font-size: 34px; line-height: 1.15; margin: 4px 0 12px; }
+h1 em { color: var(--link); font-style: normal; }
+h2 { font-size: 21px; margin: 0 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+h3 { font-size: 15px; margin: 22px 0 10px; }
+.sub { color: var(--muted); margin: 0 0 14px; max-width: 860px; }
+.note { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; max-width: 900px; }
+.hint { display: none; color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+
+/* hero */
+.hero { padding: 18px 0 8px; }
+.eyebrow { text-transform: uppercase; letter-spacing: .1em; font-size: 11px; color: var(--muted); margin: 0; }
+.lead { font-size: 16px; max-width: 880px; margin: 0 0 16px; }
+.cta { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 16px; }
+.btn-cta { display: inline-flex; align-items: center; min-height: 40px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--elev); color: var(--text); font-weight: 600; font-size: 13px; }
+.btn-cta:hover { background: var(--raised); text-decoration: none; }
+.btn-cta.primary { border-color: var(--good); }
+.rule-callout { border: 1px solid var(--border); border-left: 4px solid var(--link); background: var(--elev); padding: 10px 14px; border-radius: 8px; max-width: 900px; margin: 0; }
+
+/* legend */
+.legend { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; margin: 0 0 10px; font-size: 13px; }
+.legend li { display: inline-flex; align-items: center; gap: 7px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--c); flex: none; vertical-align: -1px; margin-right: 6px; }
+.legend .sw { margin-right: 0; }
+.L-mesh .sw { background: transparent; border: 2px dashed var(--mesh); }
+
+/* figures */
+figure { margin: 0; }
+.scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--elev); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.scroller svg { display: block; width: 100%; height: auto; min-width: 860px; }
+.scroller.wide svg { min-width: 900px; }
+
+/* svg */
+svg text { font-family: var(--sans); }
+.sys .zone, .swim .lanebg { fill: color-mix(in srgb, var(--c) 7%, var(--bg)); stroke: color-mix(in srgb, var(--c) 70%, var(--bg)); stroke-width: 1.5; }
+.swim .lanebg { stroke-width: 1; }
+.zone.mesh { fill: var(--bg); stroke: var(--mesh); stroke-dasharray: 6 5; }
+.box { fill: color-mix(in srgb, var(--c) 15%, var(--elev)); stroke: var(--c); stroke-width: 1.2; }
+.stripe, .dot { fill: var(--c); }
+.nd { cursor: default; outline: none; }
+a .nd { cursor: pointer; }
+.nd:hover .box, .nd:focus .box, a:focus .nd .box { stroke-width: 2.5; fill: color-mix(in srgb, var(--c) 26%, var(--elev)); }
+.t1 { font-size: 13px; font-weight: 600; fill: var(--text); }
+.t2 { font-size: 11px; font-family: var(--mono); fill: var(--muted); }
+.t1.s { font-size: 12.5px; }
+.t2.s { font-size: 11px; font-family: var(--sans); fill: var(--text); opacity: .85; }
+.zt { font-size: 15px; font-weight: 700; fill: var(--text); }
+.zs { font-size: 11px; font-family: var(--mono); fill: var(--muted); }
+.ar { stroke: var(--muted); stroke-width: 2; fill: none; }
+.ar.thin { stroke-width: 1.5; opacity: .7; }
+.ar.deep { stroke-dasharray: 5 4; }
+.ahp { fill: var(--muted); }
+.bdg circle { fill: var(--bg); stroke: var(--text); stroke-width: 1.5; }
+.bdg text { font-size: 11px; font-weight: 700; fill: var(--text); }
+
+/* tables */
+.tbl { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin: 0 0 12px; background: var(--elev); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--raised); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: color-mix(in srgb, var(--link) 6%, transparent); }
+tfoot td { font-weight: 600; border-top: 1px solid var(--border); border-bottom: 0; background: var(--raised); }
+td.r { text-align: right; font-variant-numeric: tabular-nums; }
+td.n { font-weight: 700; text-align: center; width: 36px; }
+code.rid { white-space: nowrap; }
+td:first-child { white-space: nowrap; }
+
+/* stat tiles */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.tile { background: var(--elev); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .v { font-size: 30px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tile .k { color: var(--text); font-size: 13px; margin-top: 4px; }
+.tile .k span { display: block; color: var(--muted); font-size: 11.5px; }
+
+/* charts */
+.charts { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; }
+.card { background: var(--elev); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+figcaption { margin: 0 0 10px; }
+figcaption b { display: block; font-size: 14px; }
+figcaption span { color: var(--muted); font-size: 12px; }
+figcaption.sm { margin-top: 18px; }
+.bars svg { display: block; max-width: 100%; height: auto; }
+.bars .bar { fill: var(--s1); }
+.bars .hit { fill: transparent; }
+.bars g:hover .bar, .bars g:focus .bar { fill: color-mix(in srgb, var(--s1) 75%, var(--text)); }
+.bars g { outline: none; }
+.bars .lbl { font-size: 11.5px; fill: var(--text); font-family: var(--mono); }
+.bars .val { font-size: 11.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.bars .base { stroke: var(--border); stroke-width: 1; }
+.stack { display: flex; gap: 2px; height: 28px; margin: 6px 0 10px; }
+.seg { display: block; height: 100%; outline: none; }
+.seg:first-child { border-radius: 4px 0 0 4px; } .seg:last-child { border-radius: 0 4px 4px 0; }
+.seg.s1 { background: var(--s1); } .seg.s2 { background: var(--s2); } .seg.s3 { background: var(--s3); }
+.seg:hover, .seg:focus { filter: brightness(1.15); }
+.stack-legend li b { margin-left: 4px; }
+
+/* flows */
+.flow { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.flow .step:nth-child(3n+1)::before, .flow .step:nth-child(3n+1)::after { display: none; }
+.step { position: relative; background: var(--elev); border: 1px solid var(--border); border-top: 4px solid var(--c); border-radius: 10px; padding: 12px 12px 10px; }
+.step + .step::before { content: ""; position: absolute; left: -19px; top: 26px; width: 16px; height: 2px; background: var(--muted); }
+.step + .step::after { content: ""; position: absolute; left: -7px; top: 22px; border: 5px solid transparent; border-left: 6px solid var(--muted); }
+.step .num { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--text); font-weight: 700; font-size: 12px; margin-bottom: 6px; }
+.step h4 { margin: 0 0 4px; font-size: 14px; }
+.step p { margin: 0 0 8px; font-size: 12.5px; }
+.step .where { font-size: 11.5px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 6px; }
+
+/* status chips (icon + label, never colour alone) */
+.st { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--k); border-radius: 999px; padding: 0 7px 0 3px; font-size: 11.5px; font-weight: 600; color: var(--text); white-space: nowrap; background: color-mix(in srgb, var(--k) 12%, transparent); }
+.st .ic { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--k); color: #0b0b0b; font-size: 10px; }
+.st-good { --k: var(--good); } .st-warning { --k: var(--warning); } .st-serious { --k: var(--serious); } .st-critical { --k: var(--critical); }
+.st-critical .ic, .st-good .ic { color: #fff; }
+.verdicts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+/* gate decision */
+.decide { border: 1px solid var(--border); background: var(--elev); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; max-width: 900px; }
+.dq { font-weight: 600; }
+.dr { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+
+/* links */
+.linkgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.linkgrid h4 { margin: 0 0 6px; }
+.linkgrid ul { margin: 0; padding-left: 18px; }
+.linkgrid li { margin: 3px 0; }
+
+/* tooltip */
+.tip { position: fixed; z-index: 40; max-width: 320px; background: var(--raised); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.45; box-shadow: 0 6px 24px rgba(0,0,0,.35); pointer-events: none; }
+
+/* footer (mirrors index.html .site-footer) */
+.site-footer { border-top: 1px solid var(--border); padding: 24px 16px 40px; background: var(--elev); }
+.footer-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.get-the-app strong { display: block; font-size: 15px; }
+.get-sub { color: var(--muted); font-size: 13px; }
+.app-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-app { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); min-height: 44px; }
+.btn-app:hover { text-decoration: none; border-color: var(--link); }
+.btn-ico { font-size: 18px; }
+.btn-txt { display: flex; flex-direction: column; line-height: 1.2; }
+.btn-lead { font-weight: 600; font-size: 13px; }
+.btn-sub { color: var(--muted); font-size: 11px; }
+.footer-fine { max-width: 1100px; margin: 16px auto 0; color: var(--muted); font-size: 11px; }
+
+/* responsive */
+@media (max-width: 1100px) {
+  .charts { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; gap: 0; padding: 0 14px; }
+  .toc { position: sticky; top: var(--hdr, 50px); z-index: 15; max-height: none; padding: 8px 0; margin: 0 -14px; background: var(--bg); border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .toc::-webkit-scrollbar { display: none; }
+  .toc-h { display: none; }
+  .toc ul { display: flex; gap: 4px; border: 0; padding: 0 10px; width: max-content; }
+  .toc a { border: 1px solid var(--border); border-radius: 999px; padding: 5px 11px; margin: 0; white-space: nowrap; min-height: 32px; }
+  .toc a.on { border-color: var(--link); }
+  html { scroll-padding-top: 140px; }
+  .hint { display: block; }
+}
+@media (max-width: 640px) {
+  h1 { font-size: 26px; }
+  .lead { font-size: 15px; }
+  .site { gap: 8px 14px; padding: 8px 14px; }
+  .site-nav { margin-left: 0; gap: 12px; }
+  .flow { grid-template-columns: 1fr; gap: 18px; }
+  .flow .step + .step::before, .flow .step:nth-child(3n+1)::before { display: block; left: 24px; top: -17px; width: 2px; height: 14px; }
+  .flow .step + .step::after, .flow .step:nth-child(3n+1)::after { display: block; left: 20px; top: -9px; border: 5px solid transparent; border-top: 6px solid var(--muted); }
+  .tile .v { font-size: 26px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  th, td { padding: 7px 9px; }
+}
+@media (forced-colors: active) {
+  .box, .zone, .lanebg { stroke: CanvasText; }
+  .bar, .seg, .sw, .stripe { forced-color-adjust: none; }
+}
+@media print {
+  .toc, .site, .site-footer, .tip { display: none; }
+  .layout { display: block; }
+  .scroller svg { min-width: 0; }
+}
+.linkgrid code.rid { white-space: normal; }
+
+</style>
+</head>
+<body>
+<a class="skip" href="#overview">Skip to content</a>
+<header class="site">
+  <a class="brand" href="/explore"><span class="logo">⌬</span><span class="name">chaosD6 / seeds</span></a>
+  <nav class="site-nav">
+    <a href="/explore">Explore</a>
+    <a href="/architecture" aria-current="page">Architecture</a>
+    <a href="https://92-5-138-121.sslip.io/rules/" target="_blank" rel="noopener">Rules</a>
+    <a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj">Radicle Explorer</a>
+  </nav>
+</header>
+
+<div class="layout">
+<nav class="toc" id="toc" aria-label="On this page">
+  <div class="toc-h">On this page</div>
+  <ul><li><a href="#overview">Overview</a></li><li><a href="#system-map">System map</a></li><li><a href="#connections">Connections</a></li><li><a href="#numbers">Numbers</a></li><li><a href="#repos">Radicle repos</a></li><li><a href="#services">Ports & services</a></li><li><a href="#collections">Collections</a></li><li><a href="#definitions">Definitions</a></li><li><a href="#gates">Version gates</a></li><li><a href="#workflows">Workflows</a></li><li><a href="#round">· a game action</a></li><li><a href="#wf-join">· join</a></li><li><a href="#wf-publish">· publish</a></li><li><a href="#wf-propose">· propose</a></li><li><a href="#wf-profiles">· profiles</a></li><li><a href="#wf-seed">· seeds</a></li><li><a href="#links">Links</a></li></ul>
+</nav>
+
+<main class="doc">
+
+<section id="overview" class="hero">
+  <p class="eyebrow">Architecture · as of 2026-11-23</p>
+  <h1>chaosD6 — <em>Dimensions</em></h1>
+  <p class="lead">chaosD6 is a fully peer-to-peer tactical card RPG on an endless hex map: every player runs the same deterministic engine and publishes a state hash, so there is no game server, no lobby and no host.
+  The rulebook is versioned data that players propose and vote on, and Radicle (peer-to-peer git) is the shared memory for Dimensions, definitions, votes and team profiles.</p>
+  <div class="cta">
+    <a class="btn-cta primary" href="/explore">Explore live Dimensions</a>
+    <a class="btn-cta" href="https://92-5-138-121.sslip.io/rules/" target="_blank" rel="noopener">Rules (read-only)</a>
+    <a class="btn-cta" href="https://92-5-138-121.sslip.io/downloads/chaosd6-release.apk" download>Android APK</a>
+    <a class="btn-cta" href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj">Code on Radicle</a>
+  </div>
+  <p class="rule-callout"><b>The rule of the design:</b> every peer resolves every action itself and publishes a state hash. Peers that disagree log a <code>STATE DIVERGENCE</code>; a peer that cannot run the exact same definitions publishes no hash (it abstains) instead of guessing.</p>
+</section>
+
+<section id="system-map">
+  <h2>System map</h2>
+  <p class="sub">Colour marks the layer; every box is also labelled, grouped and listed in the tables below. Hover or tap a box for details; repo boxes open the Radicle explorer.</p>
+  <ul class="legend" aria-label="Layers">
+    <li class="L-rad"><span class="sw"></span>Radicle repos</li>
+    <li class="L-desk"><span class="sw"></span>Desktop node</li>
+    <li class="L-seed"><span class="sw"></span>OCI seed</li>
+    <li class="L-phone"><span class="sw"></span>Phone app</li>
+    <li class="L-fb"><span class="sw"></span>Firebase</li>
+    <li class="L-mesh"><span class="sw"></span>Mesh (transport)</li>
+  </ul>
+  <figure class="scroller wide"><svg class="sys" viewBox="0 0 1200 840" role="img" aria-labelledby="sysT sysD"><title id="sysT">chaosD6 system map</title><desc id="sysD">Seven Radicle repos on top; desktop node, OCI seed and phone in the middle; the mesh and Firebase below. Numbered links are listed in the connections table.</desc><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M0,0 L10,5 L0,10 z"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M10,0 L0,5 L10,10 z"/></marker></defs><g class="zn L-rad"><rect class="zone" x="20" y="20" width="1160" height="170" rx="14"/><circle class="dot" cx="40" cy="42" r="6"/><text class="zt" x="54" y="47">Radicle — peer-to-peer git · 7 repos</text><text class="zs" x="1166" y="47" text-anchor="end">main = built-in rules · players/&lt;team&gt;/&lt;slug&gt; = proposals</text></g><a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6 (rad:zqZmP6itceBMqYwi1K1n8phQqCaj) — engine, data/, tools, godot/, infra/. Writes: maintainers. Click: Radicle explorer."><rect class="box" x="32" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="32" y="68" width="4" height="100" rx="2"/><text class="t1" x="46" y="81">chaosD6</text><text class="t2" x="46" y="97">rad:zqZmP6itceBM…</text><text class="t2" x="46" y="111">engine · data ·</text><text class="t2" x="46" y="125">tools</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6-Dimensions (rad:z2xbfJfwT3kukR73m8LXmmuvchEwr) — ActiveDimensions/&lt;name&gt; branches, one Door per peer. Writes: every peer, in its own namespace. Click: Radicle explorer."><rect class="box" x="196" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="196" y="68" width="4" height="100" rx="2"/><text class="t1" x="210" y="81">Dimensions</text><text class="t2" x="210" y="97">rad:z2xbfJfwT3ku…</text><text class="t2" x="210" y="111">Doors per Dimension</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6-Effects (rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ) — effect definitions + hooks + libs. Writes: main = built-in · players/&lt;team&gt;/&lt;slug&gt; = proposals. Click: Radicle explorer."><rect class="box" x="360" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="360" y="68" width="4" height="100" rx="2"/><text class="t1" x="374" y="81">Effects</text><text class="t2" x="374" y="97">rad:z9X3fYPnz8QZ…</text><text class="t2" x="374" y="111">66 effects · 4 libs</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6-Skills (rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5) — skill definitions + libs. Writes: main = built-in · players/&lt;team&gt;/&lt;slug&gt;. Click: Radicle explorer."><rect class="box" x="524" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="524" y="68" width="4" height="100" rx="2"/><text class="t1" x="538" y="81">Skills</text><text class="t2" x="538" y="97">rad:z2L7U9KeYdiy…</text><text class="t2" x="538" y="111">14 skills · 2 libs</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6-Classes (rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi) — class definitions, data/classes.json content + weights. Writes: main = built-in · players/&lt;team&gt;/&lt;slug&gt;. Click: Radicle explorer."><rect class="box" x="688" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="688" y="68" width="4" height="100" rx="2"/><text class="t1" x="702" y="81">Classes</text><text class="t2" x="702" y="97">rad:zBCekM1pp1DM…</text><text class="t2" x="702" y="111">33 classes · 1 lib</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6-Profiles (rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH) — teams/&lt;Team&gt; + profiles/&lt;z6Mk…&gt; branches (profile.json). Writes: the seed only (signed pushes via /profiles-push). Click: Radicle explorer."><rect class="box" x="852" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="852" y="68" width="4" height="100" rx="2"/><text class="t1" x="866" y="81">Profiles</text><text class="t2" x="866" y="97">rad:z4Y11mZyhHRb…</text><text class="t2" x="866" y="111">team + device</text><text class="t2" x="866" y="125">profiles</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14"><g class="nd L-rad" tabindex="-1" data-tip="chaosD6-Resources (rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14) — sprites, sounds (third-party assets). Writes: maintainers; served to phones as /pack/. Click: Radicle explorer."><rect class="box" x="1016" y="62" width="152" height="112" rx="8"/><rect class="stripe" x="1016" y="68" width="4" height="100" rx="2"/><text class="t1" x="1030" y="81">Resources</text><text class="t2" x="1030" y="97">rad:zZA4j9cK1QF5…</text><text class="t2" x="1030" y="111">sprites · sounds</text></g></a><g class="zn L-desk"><rect class="zone" x="20" y="250" width="360" height="330" rx="14"/><circle class="dot" cx="40" cy="272" r="6"/><text class="zt" x="54" y="277">Desktop node</text><text class="zs" x="366" y="277" text-anchor="end">tools/setup-desktop.sh</text></g><g class="nd L-desk" tabindex="0" data-tip="The local radicle-node holds your identity; setup-desktop.sh pins the seed as the only peer (seedingPolicy block)."><rect class="box" x="36" y="290" width="328" height="48" rx="8"/><rect class="stripe" x="36" y="296" width="4" height="36" rx="2"/><text class="t1" x="50" y="309">rad node · your identity</text><text class="t2" x="50" y="325">z6Mk… key · seed = only peer</text></g><g class="nd L-desk" tabindex="0" data-tip="game/ui-server.mjs on 127.0.0.1:7357: launcher API, the browser UI and the startup menu."><rect class="box" x="36" y="346" width="328" height="48" rx="8"/><rect class="stripe" x="36" y="352" width="4" height="36" rx="2"/><text class="t1" x="50" y="365">ui-server.mjs · launcher :7357</text><text class="t2" x="50" y="381">start-all.mjs · browser UI (hex map)</text></g><g class="nd L-desk" tabindex="0" data-tip="One deterministic resolver per unit. Ports from PEER_PORT_LIBP2P / _HTTP / _GUN, the launcher takes free runs from 7401 / 7501."><rect class="box" x="36" y="402" width="328" height="48" rx="8"/><rect class="stripe" x="36" y="408" width="4" height="36" rx="2"/><text class="t1" x="50" y="421">peer.mjs × N  (you + bots)</text><text class="t2" x="50" y="437">libp2p 7400 · ws 7401 · gun 7501 (+i)</text></g><g class="nd L-desk" tabindex="0" data-tip="The same editor as the public site, editable on 127.0.0.1:7357/rules/ when signed in with your team."><rect class="box" x="36" y="458" width="328" height="48" rx="8"/><rect class="stripe" x="36" y="464" width="4" height="36" rx="2"/><text class="t1" x="50" y="477">rules editor  /rules/</text><text class="t2" x="50" y="493">editor-api.mjs · editor-publish.mjs</text></g><g class="nd L-desk" tabindex="0" data-tip="Qwen3-1.7B picks one of the legal plans for team / rival / monster / builder bots; never part of the resolver."><rect class="box" x="36" y="514" width="328" height="48" rx="8"/><rect class="stripe" x="36" y="520" width="4" height="36" rx="2"/><text class="t1" x="50" y="533">llama-server :8095 (opt.)</text><text class="t2" x="50" y="549">llm-brain.mjs · llm-route.mjs</text></g><g class="zn L-seed"><rect class="zone" x="420" y="250" width="360" height="330" rx="14"/><circle class="dot" cx="440" cy="272" r="6"/><text class="zt" x="454" y="277">OCI seed · 92-5-138-121.sslip.io</text><text class="zs" x="766" y="277" text-anchor="end">infra/oci/</text></g><g class="nd L-seed" tabindex="0" data-tip="Always-on gossip node z6MknLjCKCXp… on 0.0.0.0:8776; seedingPolicy block, the 6 game repos seeded with --scope all."><rect class="box" x="436" y="290" width="328" height="48" rx="8"/><rect class="stripe" x="436" y="296" width="4" height="36" rx="2"/><text class="t1" x="450" y="309">radicle-node :8776</text><text class="t2" x="450" y="325">seeds the 6 repos · --scope all</text></g><a href="https://92-5-138-121.sslip.io/rules/" target="_blank" rel="noopener"><g class="nd L-seed" tabindex="-1" data-tip="infra/oci/seed.caddy: static /rules/ /pack/ /downloads/ from /var/www, /profiles-push → :8090, everything else → radicle-httpd."><rect class="box" x="436" y="346" width="328" height="48" rx="8"/><rect class="stripe" x="436" y="352" width="4" height="36" rx="2"/><text class="t1" x="450" y="365">caddy :443  (TLS, sslip.io)</text><text class="t2" x="450" y="381">/rules/ /pack/ /downloads/ /profiles-push</text></g></a><a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj"><g class="nd L-seed" tabindex="-1" data-tip="Read-only HTTP API: the Radicle explorer on this site, phone fetches of Doors and definitions."><rect class="box" x="436" y="402" width="328" height="48" rx="8"/><rect class="stripe" x="436" y="408" width="4" height="36" rx="2"/><text class="t1" x="450" y="421">radicle-httpd 127.0.0.1:8080</text><text class="t2" x="450" y="437">/api/v1 · git smart-HTTP (read)</text></g></a><g class="nd L-seed" tabindex="0" data-tip="The only writer of chaosD6-Profiles: X-Profile-Auth signed fast-forwards, then git push rad; the promoter moves P2P commits."><rect class="box" x="436" y="458" width="328" height="48" rx="8"/><rect class="stripe" x="436" y="464" width="4" height="36" rx="2"/><text class="t1" x="450" y="477">profiles-push.mjs 127.0.0.1:8090</text><text class="t2" x="450" y="493">signed pushes · promoter → git push rad</text></g><g class="nd L-seed" tabindex="0" data-tip="infra/oci/llm-setup.sh: loopback only by default; --public adds the /llm route with an API key."><rect class="box" x="436" y="514" width="328" height="48" rx="8"/><rect class="stripe" x="436" y="520" width="4" height="36" rx="2"/><text class="t1" x="450" y="533">llama-server 127.0.0.1:8095 (opt.)</text><text class="t2" x="450" y="549">/llm/ behind an API key (--llm-public)</text></g><g class="zn L-phone"><rect class="zone" x="820" y="250" width="360" height="330" rx="14"/><circle class="dot" cx="840" cy="272" r="6"/><text class="zt" x="854" y="277">Phone · Android app</text><text class="zs" x="1166" y="277" text-anchor="end">net.dimensions.radicle</text></g><a href="https://92-5-138-121.sslip.io/downloads/chaosd6-release.apk" target="_blank" rel="noopener"><g class="nd L-phone" tabindex="-1" data-tip="godot/ — the Android client; DimensionLauncher parses chaosd6://join deep links."><rect class="box" x="836" y="290" width="328" height="48" rx="8"/><rect class="stripe" x="836" y="296" width="4" height="36" rx="2"/><text class="t1" x="850" y="309">Godot 4.5 app</text><text class="t2" x="850" y="325">DimensionLauncher.gd · chaosd6://join</text></g></a><g class="nd L-phone" tabindex="0" data-tip="EmbeddedPeer.gd starts game/mobile-entry.mjs → peer.mjs; every build stages the current game/ code."><rect class="box" x="836" y="346" width="328" height="48" rx="8"/><rect class="stripe" x="836" y="352" width="4" height="36" rx="2"/><text class="t1" x="850" y="365">nodejs-mobile → peer.mjs</text><text class="t2" x="850" y="381">same resolver · game/ staged per build</text></g><g class="nd L-phone" tabindex="0" data-tip="godot plugin radicle_node: signs profiles, definitions and votes into the device namespace (CHAOSD6_RADICLE_BRIDGE)."><rect class="box" x="836" y="402" width="328" height="48" rx="8"/><rect class="stripe" x="836" y="408" width="4" height="36" rx="2"/><text class="t1" x="850" y="421">in-app radicle-node</text><text class="t2" x="850" y="437">bridge.json → POST /publish</text></g><g class="nd L-phone" tabindex="0" data-tip="godot plugin webview_hud renders the HUD; the mobile-menu server serves the editable rules editor."><rect class="box" x="836" y="458" width="328" height="48" rx="8"/><rect class="stripe" x="836" y="464" width="4" height="36" rx="2"/><text class="t1" x="850" y="477">WebView HUD</text><text class="t2" x="850" y="493">hand · perms · phone rules editor</text></g><a href="https://92-5-138-121.sslip.io/pack/" target="_blank" rel="noopener"><g class="nd L-phone" tabindex="-1" data-tip="Sprites and sounds come from the seed /pack/ (chaosD6-Resources)."><rect class="box" x="836" y="514" width="328" height="48" rx="8"/><rect class="stripe" x="836" y="520" width="4" height="36" rx="2"/><text class="t1" x="850" y="533">/pack/ art on first launch</text><text class="t2" x="850" y="549">godot/assets_manifest.json</text></g></a><g class="zn L-mesh" tabindex="0" data-tip="Commit / reveal / state envelopes per action. libp2p gossipsub and GunDB are the fast lanes; Nostr relays cross any NAT (nostr-bus.mjs)."><rect class="zone mesh" x="20" y="620" width="1160" height="56" rx="14"/><text class="zt" x="350" y="644">Mesh — commit · reveal · state hash</text><text class="t2" x="350" y="662">libp2p gossipsub · GunDB · Nostr relays — no host</text></g><g class="zn L-fb"><rect class="zone" x="20" y="716" width="1160" height="104" rx="14"/><circle class="dot" cx="40" cy="738" r="6"/><text class="zt" x="54" y="743">Firebase · dimensions-4e9ae</text><text class="zs" x="1166" y="743" text-anchor="end">firebase/</text></g><a href="/explore"><g class="nd L-fb" tabindex="-1" data-tip="Every pushDimension() upserts peers/&lt;nid&gt;, dimensions/&lt;name&gt;, its doors/&lt;nid&gt; and commits/&lt;sha&gt; — only &quot;who is online and where&quot;."><rect class="box" x="36" y="752" width="548" height="56" rx="8"/><rect class="stripe" x="36" y="758" width="4" height="44" rx="2"/><text class="t1" x="50" y="771">Firestore registry (written by game/local-seeds.mjs)</text><text class="t2" x="50" y="787">peers/&lt;nid&gt; · dimensions/&lt;name&gt;/{doors,commits}/…</text></g></a><a href="/explore"><g class="nd L-fb" tabindex="-1" data-tip="This web app: Firestore views (/explore, /peers/&lt;nid&gt;, /dimensions/&lt;name&gt;) and the Radicle explorer (/nodes/&lt;seed&gt;/&lt;rid&gt;)."><rect class="box" x="600" y="752" width="564" height="56" rx="8"/><rect class="stripe" x="600" y="758" width="4" height="44" rx="2"/><text class="t1" x="614" y="771">Hosting: this explorer</text><text class="t2" x="614" y="787">/explore · /peers · /dimensions · /nodes/… · /architecture</text></g></a><line class="ar " x1="200" y1="192" x2="200" y2="248" marker-end="url(#ah)" marker-start="url(#ahs)"/><g class="bdg"><circle cx="200" cy="220" r="11"/><text x="200" y="224" text-anchor="middle">1</text></g><line class="ar " x1="600" y1="192" x2="600" y2="248" marker-end="url(#ah)" marker-start="url(#ahs)"/><g class="bdg"><circle cx="600" cy="220" r="11"/><text x="600" y="224" text-anchor="middle">2</text></g><line class="ar " x1="1000" y1="192" x2="1000" y2="248" marker-end="url(#ah)" marker-start="url(#ahs)"/><g class="bdg"><circle cx="1000" cy="220" r="11"/><text x="1000" y="224" text-anchor="middle">3</text></g><line class="ar " x1="382" y1="318" x2="418" y2="318" marker-end="url(#ah)" marker-start="url(#ahs)"/><g class="bdg"><circle cx="400" cy="300" r="11"/><text x="400" y="304" text-anchor="middle">4</text></g><line class="ar " x1="818" y1="430" x2="782" y2="430" marker-end="url(#ah)" marker-start="url(#ahs)"/><g class="bdg"><circle cx="800" cy="412" r="11"/><text x="800" y="416" text-anchor="middle">5</text></g><line class="ar " x1="200" y1="582" x2="200" y2="618" marker-end="url(#ah)" marker-start="url(#ahs)"/><line class="ar " x1="1000" y1="582" x2="1000" y2="618" marker-end="url(#ah)" marker-start="url(#ahs)"/><g class="bdg"><circle cx="200" cy="600" r="11"/><text x="200" y="604" text-anchor="middle">6</text></g><g class="bdg"><circle cx="1000" cy="600" r="11"/><text x="1000" y="604" text-anchor="middle">6</text></g><path class="ar " d="M 330 582 L 330 750" marker-end="url(#ah)"/><g class="bdg"><circle cx="330" cy="600" r="11"/><text x="330" y="604" text-anchor="middle">7</text></g><path class="ar " d="M 765 750 L 765 582" marker-end="url(#ah)"/><g class="bdg"><circle cx="765" cy="600" r="11"/><text x="765" y="604" text-anchor="middle">8</text></g><path class="ar deep" d="M 1080 750 L 1080 582" marker-end="url(#ah)"/><g class="bdg"><circle cx="1080" cy="600" r="11"/><text x="1080" y="604" text-anchor="middle">9</text></g></svg></figure>
+  <p class="hint">On a phone, swipe the diagram sideways.</p>
+</section>
+
+<section id="connections">
+  <h2>Connections</h2>
+  <p class="sub">The numbered arrows of the system map.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>#</th><th>From → to</th><th>What travels</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td class="n">1</td><td>Desktop ⇄ Radicle</td><td>Doors (every ~60 s), team definitions, votes</td><td><code>git push rad</code> · <code>rad sync --seed &lt;OCI NID&gt;</code></td></tr>
+      <tr><td class="n">2</td><td>Seed ⇄ Radicle</td><td>the 6 game repos, all namespaces</td><td><code>rad seed --scope all</code>, <code>seedingPolicy: block</code></td></tr>
+      <tr><td class="n">3</td><td>Phone ⇄ Radicle</td><td>profiles, definitions, votes signed in the device namespace</td><td>in-app radicle-node · <code>bridge.json</code> <code>POST /publish</code></td></tr>
+      <tr><td class="n">4</td><td>Desktop ⇄ Seed</td><td>Radicle gossip</td><td>TCP <b>8776</b> · the seed is the only peer</td></tr>
+      <tr><td class="n">5</td><td>Phone ⇄ Seed</td><td>Doors + definitions (read), <code>/pack/</code> art, profile writes, <code>/llm/</code></td><td>HTTPS 443 via caddy</td></tr>
+      <tr><td class="n">6</td><td>Peers ⇄ Mesh</td><td>commit · reveal · state hash, definition fetches</td><td>libp2p gossipsub · GunDB · Nostr relays</td></tr>
+      <tr><td class="n">7</td><td>Desktop → Firestore</td><td><code>peers/&lt;nid&gt;</code>, <code>dimensions/&lt;name&gt;/{doors,commits}</code></td><td><code>game/local-seeds.mjs</code> on every <code>pushDimension()</code></td></tr>
+      <tr><td class="n">8</td><td>Explorer → Seed</td><td>repo trees, commits, READMEs</td><td>radicle-httpd <code>/api/v1</code> (CORS)</td></tr>
+      <tr><td class="n">9</td><td>Explorer → Phone</td><td>join a Dimension next to a unit</td><td><code>chaosd6://join?dim=…</code> deep link</td></tr>
+    </tbody></table></div>
+</section>
+
+<section id="numbers">
+  <h2>Numbers</h2>
+  <p class="sub">Counted from the repository on 2026-11-23 (<code>data/index.json</code>, the data files and the definition directories).</p>
+  <div class="tiles">
+    <div class="tile"><div class="v">7</div><div class="k">Radicle repos</div></div>
+    <div class="tile"><div class="v">18</div><div class="k">data collections <span>+ logic_rules</span></div></div>
+    <div class="tile"><div class="v">294</div><div class="k">entries <span>in the 18 collections</span></div></div>
+    <div class="tile"><div class="v">311</div><div class="k">versions <span>in data/*.json</span></div></div>
+    <div class="tile"><div class="v">160</div><div class="k">named logic rules <span>logic_rules.json</span></div></div>
+    <div class="tile"><div class="v">113</div><div class="k">definitions <span>66 effects · 33 classes · 14 skills</span></div></div>
+    <div class="tile"><div class="v">7</div><div class="k">definition libs <span>4 effect · 2 skill · 1 class</span></div></div>
+    <div class="tile"><div class="v">31</div><div class="k">rules <span>in data/rules.json</span></div></div>
+  </div>
+
+  <div class="charts">
+    <figure class="card" id="chart-entries">
+      <figcaption><b>Entries per collection</b><span>18 collections · effects and skills come from their definitions · <a href="#collections">table view</a></span></figcaption>
+      <div class="bars" data-bars='[[&quot;concept&quot;,1],[&quot;stats&quot;,4],[&quot;elements&quot;,10],[&quot;rules&quot;,31],[&quot;battle_system&quot;,1],[&quot;actions&quot;,10],[&quot;effects&quot;,66],[&quot;skills&quot;,14],[&quot;classes&quot;,33],[&quot;characters&quot;,12],[&quot;creatures&quot;,29],[&quot;terrain_items&quot;,41],[&quot;game_modes&quot;,9],[&quot;contradictions&quot;,6],[&quot;sync_protocol&quot;,6],[&quot;hashgraph_events&quot;,13],[&quot;dimension_session&quot;,3],[&quot;governance&quot;,5]]'></div>
+    </figure>
+    <figure class="card" id="chart-defs">
+      <figcaption><b>Definitions per kind</b><span>113 files in game/*-data · mirrored to three repos</span></figcaption>
+      <div class="stack" role="img" aria-label="Definitions: effects 66, classes 33, skills 14">
+        <span class="seg s1" style="flex:66" tabindex="0" data-tip="Effects: 66 definitions (chaosd6.effect/2) in game/effects-data/effects"></span>
+        <span class="seg s2" style="flex:33" tabindex="0" data-tip="Classes: 33 definitions (29 chaosd6.class/1, 4 chaosd6.class/2) in game/classes-data/classes"></span>
+        <span class="seg s3" style="flex:14" tabindex="0" data-tip="Skills: 14 definitions (chaosd6.skill/2) in game/skills-data/skills"></span>
+      </div>
+      <ul class="legend stack-legend">
+        <li class="c1"><span class="sw"></span>Effects <b>66</b></li>
+        <li class="c2"><span class="sw"></span>Classes <b>33</b></li>
+        <li class="c3"><span class="sw"></span>Skills <b>14</b></li>
+      </ul>
+      <figcaption class="sm"><b>Versions per data collection</b><span>311 versions · every change is a new version, never in place</span></figcaption>
+      <div class="bars" data-bars='[[&quot;concept&quot;,3],[&quot;stats&quot;,4],[&quot;elements&quot;,10],[&quot;rules&quot;,33],[&quot;battle_system&quot;,1],[&quot;actions&quot;,10],[&quot;classes&quot;,90],[&quot;characters&quot;,13],[&quot;creatures&quot;,63],[&quot;terrain_items&quot;,41],[&quot;game_modes&quot;,9],[&quot;contradictions&quot;,7],[&quot;sync_protocol&quot;,6],[&quot;hashgraph_events&quot;,13],[&quot;dimension_session&quot;,3],[&quot;governance&quot;,5]]' data-unit="version"></div>
+    </figure>
+  </div>
+</section>
+
+<section id="repos">
+  <h2>The seven Radicle repos</h2>
+  <p class="sub">Links open the Radicle explorer of this web app against the OCI seed. Clone the code with <code>rad clone rad:zqZmP6itceBMqYwi1K1n8phQqCaj --scope all</code>.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Repo</th><th>RID</th><th>Holds</th><th>Who writes</th></tr></thead>
+    <tbody><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj"><b>chaosD6</b></a></td><td><code class="rid">rad:zqZmP6itceBMqYwi1K1n8phQqCaj</code></td><td>engine, data/, tools, godot/, infra/</td><td>maintainers</td></tr><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:z2xbfJfwT3kukR73m8LXmmuvchEwr"><b>chaosD6-Dimensions</b></a></td><td><code class="rid">rad:z2xbfJfwT3kukR73m8LXmmuvchEwr</code></td><td>ActiveDimensions/&lt;name&gt; branches, one Door per peer</td><td>every peer, in its own namespace</td></tr><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ"><b>chaosD6-Effects</b></a></td><td><code class="rid">rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ</code></td><td>effect definitions + hooks + libs</td><td>main = built-in · players/&lt;team&gt;/&lt;slug&gt; = proposals</td></tr><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5"><b>chaosD6-Skills</b></a></td><td><code class="rid">rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5</code></td><td>skill definitions + libs</td><td>main = built-in · players/&lt;team&gt;/&lt;slug&gt;</td></tr><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi"><b>chaosD6-Classes</b></a></td><td><code class="rid">rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi</code></td><td>class definitions, data/classes.json content + weights</td><td>main = built-in · players/&lt;team&gt;/&lt;slug&gt;</td></tr><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH"><b>chaosD6-Profiles</b></a></td><td><code class="rid">rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH</code></td><td>teams/&lt;Team&gt; + profiles/&lt;z6Mk…&gt; branches (profile.json)</td><td>the seed only (signed pushes via /profiles-push)</td></tr><tr><td class="L-rad"><span class="sw"></span><a href="/nodes/92-5-138-121.sslip.io/rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14"><b>chaosD6-Resources</b></a></td><td><code class="rid">rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14</code></td><td>sprites, sounds (third-party assets)</td><td>maintainers; served to phones as /pack/</td></tr></tbody>
+  </table></div>
+  <p class="note">The seed seeds the first six; chaosD6-Resources is the asset repo behind <code>/pack/</code>. Seed NID <code>z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT</code> at <code>92-5-138-121.sslip.io:8776</code>.</p>
+</section>
+
+<section id="services">
+  <h2>Ports &amp; services</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Where</th><th>Process</th><th>Listens</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="L-desk"><span class="sw"></span>Desktop</td><td><code>game/ui-server.mjs</code> (via <code>start-all.mjs</code>)</td><td><b>127.0.0.1:7357</b> (<code>UI_PORT</code>)</td><td>launcher API, browser UI, rules editor at <code>/rules/</code></td></tr>
+      <tr><td class="L-desk"><span class="sw"></span>Desktop</td><td><code>game/peer.mjs</code> × N</td><td>libp2p <b>7400</b> · ws/API <b>7401</b> · gun <b>7501</b> (+i)</td><td><code>PEER_PORT_LIBP2P / _HTTP / _GUN</code>; the launcher takes free runs</td></tr>
+      <tr><td class="L-desk"><span class="sw"></span>Desktop</td><td><code>game/discovery.mjs</code> (opt.)</td><td>7350</td><td>LAN mirror, <code>WITH_DISCOVERY</code></td></tr>
+      <tr><td class="L-desk"><span class="sw"></span>Desktop</td><td>llama-server (opt.)</td><td>127.0.0.1:8095</td><td><code>tools/llm/</code>, <code>LLM_URL</code>; setup <code>--with-llm</code></td></tr>
+      <tr><td class="L-seed"><span class="sw"></span>Seed</td><td>radicle-node</td><td>0.0.0.0:<b>8776</b></td><td>gossip, <code>Restart=always</code></td></tr>
+      <tr><td class="L-seed"><span class="sw"></span>Seed</td><td>caddy</td><td>:80 / :<b>443</b></td><td>TLS for <code>92-5-138-121.sslip.io</code>; <code>/rules/ /pack/ /downloads/</code> static, <code>/profiles-push</code> → 8090, rest → 8080</td></tr>
+      <tr><td class="L-seed"><span class="sw"></span>Seed</td><td>radicle-httpd</td><td>127.0.0.1:8080</td><td><code>/api/v1</code>, git smart-HTTP read; all repos pinned</td></tr>
+      <tr><td class="L-seed"><span class="sw"></span>Seed</td><td><code>infra/oci/profiles-push.mjs</code></td><td>127.0.0.1:8090</td><td>chaosD6-Profiles writes + promoter (<code>PROMOTE_EVERY_MS</code> 3000)</td></tr>
+      <tr><td class="L-seed"><span class="sw"></span>Seed</td><td>chaosd6-llm (opt.)</td><td>127.0.0.1:8095</td><td><code>/llm/*</code> with API key when <code>--llm-public</code></td></tr>
+      <tr><td class="L-phone"><span class="sw"></span>Phone</td><td>nodejs-mobile → <code>mobile-entry.mjs</code></td><td>loopback ws (node_ready port)</td><td><code>EmbeddedPeer.gd</code> connects the Godot client</td></tr>
+      <tr><td class="L-phone"><span class="sw"></span>Phone</td><td>in-app radicle-node</td><td>loopback (<code>bridge.json</code>: port, token, nid)</td><td><code>POST /publish</code> — profiles, definitions, votes</td></tr>
+      <tr><td class="L-fb"><span class="sw"></span>Firebase</td><td>Hosting + Firestore</td><td><a href="https://dimensions-4e9ae.web.app/explore" target="_blank" rel="noopener">dimensions-4e9ae.web.app</a></td><td>this explorer; registry written by <code>game/local-seeds.mjs</code></td></tr>
+    </tbody></table></div>
+  <p class="note">Timing defaults: <code>ROUND_SEC</code> 6 · <code>ROUNDS_PER_TURN</code> 3 · <code>COMMIT_WAIT_MS</code> 800 · <code>REVEAL_WAIT_MS</code> 1500 · <code>RADICLE_PUSH_SEC</code> 60 · <code>DOOR_LIVE_MS</code> 180 000 (the LIVE badge in /explore).</p>
+</section>
+
+<section id="collections">
+  <h2>Collections — the living rulebook</h2>
+  <p class="sub"><code>data/*.json</code>: every entry has <code>versions[]</code> with <code>status</code>, <code>weight</code>, <code>data</code> and a JsonLogic <code>logic</code> block. Links open the read-only rules site.</p>
+  <div class="tbl"><table class="num">
+    <thead><tr><th>Collection</th><th>Entries</th><th>Versions</th><th>Writes</th><th>Browse</th></tr></thead>
+    <tbody><tr><td><code>concept</code></td><td class="r">1</td><td class="r">3</td><td>rebalance-only</td><td><a href="https://92-5-138-121.sslip.io/rules/#/concept" target="_blank" rel="noopener">#/concept</a></td></tr><tr><td><code>stats</code></td><td class="r">4</td><td class="r">4</td><td>paper-only</td><td><a href="https://92-5-138-121.sslip.io/rules/#/stats" target="_blank" rel="noopener">#/stats</a></td></tr><tr><td><code>elements</code></td><td class="r">10</td><td class="r">10</td><td>paper-only</td><td><a href="https://92-5-138-121.sslip.io/rules/#/elements" target="_blank" rel="noopener">#/elements</a></td></tr><tr><td><code>rules</code></td><td class="r">31</td><td class="r">33</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/rules" target="_blank" rel="noopener">#/rules</a></td></tr><tr><td><code>battle_system</code></td><td class="r">1</td><td class="r">1</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/battle_system" target="_blank" rel="noopener">#/battle_system</a></td></tr><tr><td><code>actions</code></td><td class="r">10</td><td class="r">10</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/actions" target="_blank" rel="noopener">#/actions</a></td></tr><tr><td><code>effects</code></td><td class="r">66</td><td class="r"><span class="muted">definitions</span></td><td>chaosD6-Effects</td><td><a href="https://92-5-138-121.sslip.io/rules/#/effects" target="_blank" rel="noopener">#/effects</a></td></tr><tr><td><code>skills</code></td><td class="r">14</td><td class="r"><span class="muted">definitions</span></td><td>chaosD6-Skills</td><td><a href="https://92-5-138-121.sslip.io/rules/#/skills" target="_blank" rel="noopener">#/skills</a></td></tr><tr><td><code>classes</code></td><td class="r">33</td><td class="r">90</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/classes" target="_blank" rel="noopener">#/classes</a></td></tr><tr><td><code>characters</code></td><td class="r">12</td><td class="r">13</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/characters" target="_blank" rel="noopener">#/characters</a></td></tr><tr><td><code>creatures</code></td><td class="r">29</td><td class="r">63</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/creatures" target="_blank" rel="noopener">#/creatures</a></td></tr><tr><td><code>terrain_items</code></td><td class="r">41</td><td class="r">41</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/terrain_items" target="_blank" rel="noopener">#/terrain_items</a></td></tr><tr><td><code>game_modes</code></td><td class="r">9</td><td class="r">9</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/game_modes" target="_blank" rel="noopener">#/game_modes</a></td></tr><tr><td><code>contradictions</code></td><td class="r">6</td><td class="r">7</td><td>resolution-vote</td><td><a href="https://92-5-138-121.sslip.io/rules/#/contradictions" target="_blank" rel="noopener">#/contradictions</a></td></tr><tr><td><code>sync_protocol</code></td><td class="r">6</td><td class="r">6</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/sync_protocol" target="_blank" rel="noopener">#/sync_protocol</a></td></tr><tr><td><code>hashgraph_events</code></td><td class="r">13</td><td class="r">13</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/hashgraph_events" target="_blank" rel="noopener">#/hashgraph_events</a></td></tr><tr><td><code>dimension_session</code></td><td class="r">3</td><td class="r">3</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/dimension_session" target="_blank" rel="noopener">#/dimension_session</a></td></tr><tr><td><code>governance</code></td><td class="r">5</td><td class="r">5</td><td>vote-driven</td><td><a href="https://92-5-138-121.sslip.io/rules/#/governance" target="_blank" rel="noopener">#/governance</a></td></tr>
+      <tr><td><code>logic_rules</code></td><td class="r">160</td><td class="r">—</td><td>vote-driven</td><td><span class="muted">named JsonLogic rules + power_score</span></td></tr>
+    </tbody>
+    <tfoot><tr><td>18 collections</td><td class="r">294</td><td class="r">311</td><td colspan="2">+ 160 logic rules</td></tr></tfoot>
+  </table></div>
+  <p class="note">Since effect isolation F9 and skill isolation (2026-11-22) the effects and skills collections are built from the definitions' <code>card</code> blocks (<code>defs-collection.mjs</code>); <code>data/skills.json</code> is a frozen record. Classes keep <code>data/classes.json</code> (owned by chaosD6-Classes, ruling 5).</p>
+</section>
+
+<section id="definitions">
+  <h2>Definitions — one JSON file per effect, skill, class</h2>
+  <p class="sub">Built-ins live in <code>game/*-data/</code> and are mirrored to their repos; players author new ones on <code>players/&lt;team&gt;/&lt;slug&gt;</code> branches. Docs: <code>SCHEMA.md</code>, <code>HOOKS.md</code>, <code>HANDSHAKE.md</code> in each directory.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Kind</th><th>Built-ins</th><th>Schema</th><th>Libs</th><th>Fetch protocol · bus</th><th>Validator</th><th>Examples</th></tr></thead>
+    <tbody>
+      <tr><td class="c1"><span class="sw"></span><b>Effect</b><br><a href="/nodes/92-5-138-121.sslip.io/rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ">chaosD6-Effects</a></td><td class="r">66</td><td><code>chaosd6.effect/2</code></td><td>std, e2a, e2b, e2c<br><span class="muted">+ 4 hook packs</span></td><td><code>/chaos/&lt;DIM&gt;/effects/1</code> · <code>fx</code></td><td><code>tools/rebalancing-check.mjs</code></td><td><a href="https://92-5-138-121.sslip.io/rules/#/effects/effect_fireball" target="_blank" rel="noopener">Fireball</a> · <a href="https://92-5-138-121.sslip.io/rules/#/effects/effect_shield" target="_blank" rel="noopener">Shield</a> · <a href="https://92-5-138-121.sslip.io/rules/#/effects/effect_haste" target="_blank" rel="noopener">Haste</a></td></tr>
+      <tr><td class="c3"><span class="sw"></span><b>Skill</b><br><a href="/nodes/92-5-138-121.sslip.io/rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5">chaosD6-Skills</a></td><td class="r">14</td><td><code>chaosd6.skill/2</code> <span class="muted">(/1 loads)</span></td><td>skills_std, skills_pass</td><td><code>/chaos/&lt;DIM&gt;/skills/1</code> · <code>sk</code></td><td><code>tools/skills-rebalancing-check.mjs</code></td><td><a href="https://92-5-138-121.sslip.io/rules/#/skills/skill_grapple" target="_blank" rel="noopener">Grapple</a> · <a href="https://92-5-138-121.sslip.io/rules/#/skills/skill_dodge" target="_blank" rel="noopener">Dodge</a> · <a href="https://92-5-138-121.sslip.io/rules/#/skills/skill_bluff" target="_blank" rel="noopener">Bluff</a></td></tr>
+      <tr><td class="c2"><span class="sw"></span><b>Class</b><br><a href="/nodes/92-5-138-121.sslip.io/rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi">chaosD6-Classes</a></td><td class="r">33</td><td><code>chaosd6.class/1</code> (29) · <code>/2</code> (4)</td><td>classes_std</td><td><code>/chaos/&lt;DIM&gt;/classes/1</code> · <code>cl</code></td><td><code>classes-rebalancing-check</code></td><td><a href="https://92-5-138-121.sslip.io/rules/#/classes/class_bard" target="_blank" rel="noopener">Bard</a> · <a href="https://92-5-138-121.sslip.io/rules/#/classes/class_rogue" target="_blank" rel="noopener">Rogue</a> · <a href="https://92-5-138-121.sslip.io/rules/#/classes/class_necromancer" target="_blank" rel="noopener">Necromancer</a></td></tr>
+    </tbody></table></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Identity</th><th>Definition</th></tr></thead>
+    <tbody>
+      <tr><td><code>ref</code></td><td><code>{ id, sha256, libs: { &lt;lib&gt;: &lt;sha256&gt; }, repo?, branch?, commit?, name?, verdict? }</code> — provenance never changes the key</td></tr>
+      <tr><td><code>fxKey / skKey / clKey</code></td><td><code>sha256(canonical { &lt;kind&gt;: ref.sha256, libs: ref.libs })</code> — one runnable definition, libs included</td></tr>
+      <tr><td>set id</td><td><code>sha256(canonical { libs, &lt;kinds&gt;: {id: sha} })</code> over the bundled set; its 16-hex prefix is the pin (<code>fx_set</code>, <code>sk_set</code>)</td></tr>
+      <tr><td>Foreign card</td><td>resolves <b>only</b> from its owner's reveal ref; a peer that cannot run it lists it in <code>fx_missing / sk_missing</code>; the union is postponed (effects, <code>FX_POSTPONE_MAX</code> 3) or stripped (skills) on every peer</td></tr>
+    </tbody></table></div>
+</section>
+
+<section id="gates">
+  <h2>Version gates — definitions by reference</h2>
+  <p class="sub">Built-ins travel by name, so two peers agree only if they run the same bundled definitions. Every snapshot carries a pin; once per action each peer compares the pins of the units in its view with its own.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Kind</th><th>Pin on the snapshot</th><th>Gate</th><th>Log line</th><th>UI event</th></tr></thead>
+    <tbody>
+      <tr><td class="c1"><span class="sw"></span>Effects (F9)</td><td><code>fx_set</code> = 16-hex set id</td><td><code>gateEffectSet(units, mine)</code></td><td><code>EFFECT VERSION GATE …</code></td><td><code>effect_source</code> <code>version</code></td></tr>
+      <tr><td class="c3"><span class="sw"></span>Skills</td><td><code>sk_set</code> = 16-hex set id (slim + full)</td><td><code>gateSkillSet</code> / <code>skPeer.gateBuiltins</code></td><td><code>SKILL VERSION GATE T&lt;t&gt;.R&lt;r&gt;: …</code></td><td><code>skill_source</code> <code>version</code></td></tr>
+      <tr><td class="c2"><span class="sw"></span>Classes</td><td><code>cl_key</code> = clKey(definition + libs)</td><td><code>classes-handshake.mjs gateBuiltins</code></td><td><code>CLASS VERSION GATE …</code></td><td><code>class_source</code> <code>version</code></td></tr>
+    </tbody></table></div>
+  <div class="decide" aria-label="Gate decision per unit">
+    <div class="dq">Pin of a unit in my view…</div>
+    <div class="dr"><span class="st st-good"><span class="ic" aria-hidden="true">✓</span>same as mine</span><span>→ resolve and publish my state hash</span></div>
+    <div class="dr"><span class="st st-warning"><span class="ic" aria-hidden="true">!</span>no pin, slim record only</span><span>→ <b>unknown</b>: skipped until its full snapshot arrives</span></div>
+    <div class="dr"><span class="st st-critical"><span class="ic" aria-hidden="true">✕</span>other pin / full snapshot without one</span><span>→ <b>abstain</b>: <code>state_hash: ''</code>, log once per unit|pin, UI notice</span></div>
+  </div>
+  <p class="note">Built-in-only play hashes exactly as before: with no foreign id and no ref on the tape the foreign gate does not run at all (<code>needsGate</code>). Source: <code>game/skills-data/HANDSHAKE.md</code>, <code>game/effects-data/HANDSHAKE.md</code>, <code>game/classes-data/HOOKS.md</code>.</p>
+</section>
+
+<div id="workflows" class="workflows">
+<section class="wf-intro">
+  <h2>Workflows</h2>
+  <p class="sub">Six flows that tie the pieces together: <a href="#round">a game action</a> · <a href="#wf-join">joining from this web app</a> · <a href="#wf-publish">publishing a definition</a> · <a href="#wf-propose">proposing a data change</a> · <a href="#wf-profiles">team profiles</a> · <a href="#wf-seed">seeds and desktop nodes</a>.</p>
+</section>
+<section id="round">
+  <h2>Workflow · one game action</h2>
+  <p class="sub">A paper round is 3 actions; every action all players play one card simultaneously. Every peer runs every step itself. Rules: <a href="https://92-5-138-121.sslip.io/rules/#/battle_system" target="_blank" rel="noopener">battle system</a> · <a href="https://92-5-138-121.sslip.io/rules/#/actions" target="_blank" rel="noopener">actions</a> · <a href="https://92-5-138-121.sslip.io/rules/#/sync_protocol" target="_blank" rel="noopener">sync protocol</a>.</p>
+  <figure class="scroller"><svg class="swim" id="round-svg" viewBox="0 0 1200 416" role="img" aria-label="One game action: plan, commit, reveal, resolve, state hash, divergence check, Door publish"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M0,0 L10,5 L0,10 z"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M10,0 L0,5 L10,10 z"/></marker></defs><g class="lane L-desk"><rect class="lanebg" x="0" y="40" width="1200" height="86" rx="10"/><rect class="stripe" x="0" y="48" width="5" height="70" rx="2"/><text class="t1" x="14" y="66">Player A</text><text class="t2" x="14" y="84">peer.mjs (you or a</text><text class="t2" x="14" y="98">bot)</text></g><g class="lane L-mesh"><rect class="lanebg" x="0" y="132" width="1200" height="86" rx="10"/><rect class="stripe" x="0" y="140" width="5" height="70" rx="2"/><text class="t1" x="14" y="158">Mesh</text><text class="t2" x="14" y="176">libp2p · GunDB · Nostr</text></g><g class="lane L-phone"><rect class="lanebg" x="0" y="224" width="1200" height="86" rx="10"/><rect class="stripe" x="0" y="232" width="5" height="70" rx="2"/><text class="t1" x="14" y="250">Player B</text><text class="t2" x="14" y="268">peer.mjs on a phone or</text><text class="t2" x="14" y="282">another desktop</text></g><g class="lane L-rad"><rect class="lanebg" x="0" y="316" width="1200" height="86" rx="10"/><rect class="stripe" x="0" y="324" width="5" height="70" rx="2"/><text class="t1" x="14" y="342">Radicle</text><text class="t2" x="14" y="360">chaosD6-Dimensions</text></g><g class="colhead"><g class="bdg"><circle cx="168" cy="20" r="11"/><text x="168" y="24" text-anchor="middle">1</text></g><text class="t1" x="186" y="25">Plan</text></g><g class="nd L-desk" tabindex="0" data-tip="Each player picks a card and a target within the planning window (ROUND_SEC 6). Bots plan with npcPlan(); an LLM may pick one of the legal plans."><rect class="box" x="156" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="164" y="65">pick card + target</text><text class="t2 s" x="164" y="80">≤ 6 s (ROUND_SEC)</text><text class="t2 s" x="164" y="93">bots: npcPlan()</text><text class="t2 s" x="164" y="106">+ LLM hint (opt.)</text></g><g class="nd L-phone" tabindex="0" data-tip="Each player picks a card and a target within the planning window (ROUND_SEC 6). Bots plan with npcPlan(); an LLM may pick one of the legal plans."><rect class="box" x="156" y="232" width="138" height="70" rx="8"/><text class="t1 s" x="164" y="249">pick card + target</text><text class="t2 s" x="164" y="264">in parallel, private</text></g><line class="ar thin" x1="294" y1="83" x2="306" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="318" cy="20" r="11"/><text x="318" y="24" text-anchor="middle">2</text></g><text class="t1" x="336" y="25">Commit</text></g><g class="nd L-desk" tabindex="0" data-tip="The commitment hash is broadcast first so nobody can change their mind after seeing the others. Foreign definitions ride as refs so peers start fetching now."><rect class="box" x="306" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="314" y="65">sha256(card ::</text><text class="t2 s" x="314" y="80">target :: salt)</text><text class="t2 s" x="314" y="93">+ fx_ref / sk_ref /</text><text class="t2 s" x="314" y="106">cl_ref if foreign</text></g><g class="nd L-mesh" tabindex="0" data-tip="The commitment hash is broadcast first so nobody can change their mind after seeing the others. Foreign definitions ride as refs so peers start fetching now."><rect class="box" x="306" y="140" width="138" height="70" rx="8"/><text class="t1 s" x="314" y="157">commit envelopes</text><text class="t2 s" x="314" y="172">COMMIT_WAIT_MS 800</text></g><g class="nd L-phone" tabindex="0" data-tip="The commitment hash is broadcast first so nobody can change their mind after seeing the others. Foreign definitions ride as refs so peers start fetching now."><rect class="box" x="306" y="232" width="138" height="70" rx="8"/><text class="t1 s" x="314" y="249">commits too</text><text class="t2 s" x="314" y="264">nobody can change</text><text class="t2 s" x="314" y="277">their mind</text></g><line class="ar " x1="375" y1="118" x2="375" y2="138" marker-end="url(#ah)"/><line class="ar " x1="375" y1="232" x2="375" y2="210" marker-end="url(#ah)"/><line class="ar thin" x1="444" y1="83" x2="456" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="468" cy="20" r="11"/><text x="468" y="24" text-anchor="middle">3</text></g><text class="t1" x="486" y="25">Reveal</text></g><g class="nd L-desk" tabindex="0" data-tip="Reveal carries card, effects, skills, target and salt (+ refs and *_missing lists). A silent peer counts as Empty Posture."><rect class="box" x="456" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="464" y="65">card, effects,</text><text class="t2 s" x="464" y="80">skills, target, salt</text><text class="t2 s" x="464" y="93">+ fx_missing /</text><text class="t2 s" x="464" y="106">sk_missing</text></g><g class="nd L-mesh" tabindex="0" data-tip="Reveal carries card, effects, skills, target and salt (+ refs and *_missing lists). A silent peer counts as Empty Posture."><rect class="box" x="456" y="140" width="138" height="70" rx="8"/><text class="t1 s" x="464" y="157">reveal envelopes</text><text class="t2 s" x="464" y="172">REVEAL_WAIT_MS 1500</text><text class="t2 s" x="464" y="185">silent = Empty Posture</text></g><g class="nd L-phone" tabindex="0" data-tip="Reveal carries card, effects, skills, target and salt (+ refs and *_missing lists). A silent peer counts as Empty Posture."><rect class="box" x="456" y="232" width="138" height="70" rx="8"/><text class="t1 s" x="464" y="249">reveals the same</text><text class="t2 s" x="464" y="264">fields</text></g><line class="ar " x1="525" y1="118" x2="525" y2="138" marker-end="url(#ah)"/><line class="ar " x1="525" y1="232" x2="525" y2="210" marker-end="url(#ah)"/><line class="ar thin" x1="594" y1="83" x2="606" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="618" cy="20" r="11"/><text x="618" y="24" text-anchor="middle">4</text></g><text class="t1" x="636" y="25">Resolve</text></g><g class="nd L-desk" tabindex="0" data-tip="Every peer runs the same deterministic resolver on the same reveal set; point-buy dice come from the revealed salts, so every peer rolls the same."><rect class="box" x="606" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="614" y="65">same pure resolver</text><text class="t2 s" x="614" y="80">movement, damage</text><text class="t2 s" x="614" y="93">matrix, emissions</text></g><g class="nd L-phone" tabindex="0" data-tip="Every peer runs the same deterministic resolver on the same reveal set; point-buy dice come from the revealed salts, so every peer rolls the same."><rect class="box" x="606" y="232" width="138" height="70" rx="8"/><text class="t1 s" x="614" y="249">same reveals →</text><text class="t2 s" x="614" y="264">same result</text><text class="t2 s" x="614" y="277">dice from salts</text></g><line class="ar thin" x1="744" y1="83" x2="756" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="768" cy="20" r="11"/><text x="768" y="24" text-anchor="middle">5</text></g><text class="t1" x="786" y="25">Gate + hash</text></g><g class="nd L-desk" tabindex="0" data-tip="Version gates: a unit running other built-in definitions (pin mismatch) or a missing foreign definition makes this peer publish state_hash '' — it never resolves with another version silently."><rect class="box" x="756" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="764" y="65">fx_set · sk_set</text><text class="t2 s" x="764" y="80">· cl_key pins match?</text><text class="t2 s" x="764" y="93">yes → state_hash</text><text class="t2 s" x="764" y="106">no → '' (abstain)</text></g><g class="nd L-mesh" tabindex="0" data-tip="Version gates: a unit running other built-in definitions (pin mismatch) or a missing foreign definition makes this peer publish state_hash '' — it never resolves with another version silently."><rect class="box" x="756" y="140" width="138" height="70" rx="8"/><text class="t1 s" x="764" y="157">state hashes</text><text class="t2 s" x="764" y="172">published per action</text></g><g class="nd L-phone" tabindex="0" data-tip="Version gates: a unit running other built-in definitions (pin mismatch) or a missing foreign definition makes this peer publish state_hash '' — it never resolves with another version silently."><rect class="box" x="756" y="232" width="138" height="70" rx="8"/><text class="t1 s" x="764" y="249">same gates,</text><text class="t2 s" x="764" y="264">own hash or abstain</text></g><line class="ar " x1="825" y1="118" x2="825" y2="138" marker-end="url(#ah)"/><line class="ar " x1="825" y1="232" x2="825" y2="210" marker-end="url(#ah)"/><line class="ar thin" x1="894" y1="83" x2="906" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="918" cy="20" r="11"/><text x="918" y="24" text-anchor="middle">6</text></g><text class="t1" x="936" y="25">Agree</text></g><g class="nd L-desk" tabindex="0" data-tip="A mismatching hash is logged as STATE DIVERGENCE and triaged with the swarm tools. Nobody is the host."><rect class="box" x="906" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="914" y="65">checkStateHash()</text><text class="t2 s" x="914" y="80">mismatch →</text><text class="t2 s" x="914" y="93">STATE DIVERGENCE</text></g><g class="nd L-phone" tabindex="0" data-tip="A mismatching hash is logged as STATE DIVERGENCE and triaged with the swarm tools. Nobody is the host."><rect class="box" x="906" y="232" width="138" height="70" rx="8"/><text class="t1 s" x="914" y="249">same check</text><text class="t2 s" x="914" y="264">abstainers skipped</text></g><line class="ar thin" x1="1044" y1="83" x2="1056" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="1068" cy="20" r="11"/><text x="1068" y="24" text-anchor="middle">7</text></g><text class="t1" x="1086" y="25">Publish Door</text></g><g class="nd L-desk" tabindex="0" data-tip="Every ~60 s (RADICLE_PUSH_SEC) each peer pushes its Door — position, clock, known map, addresses — to the Dimensions repo."><rect class="box" x="1056" y="48" width="138" height="70" rx="8"/><text class="t1 s" x="1064" y="65">every ~60 s</text><text class="t2 s" x="1064" y="80">RADICLE_PUSH_SEC</text></g><g class="nd L-rad" tabindex="0" data-tip="Every ~60 s (RADICLE_PUSH_SEC) each peer pushes its Door — position, clock, known map, addresses — to the Dimensions repo."><rect class="box" x="1056" y="324" width="138" height="70" rx="8"/><text class="t1 s" x="1064" y="341">ActiveDimensions/</text><text class="t2 s" x="1064" y="356">&lt;name&gt; branch</text><text class="t2 s" x="1064" y="369">one Door per peer</text></g><line class="ar " x1="1125" y1="118" x2="1125" y2="322" marker-end="url(#ah)"/></svg></figure>
+</section>
+
+<section id="wf-join">
+  <h2>Workflow · join a Dimension from this web app</h2>
+  <p class="sub">A Dimension is one live session; its Doors (one per peer) are on the <code>ActiveDimensions/&lt;name&gt;</code> branch of <a href="/nodes/92-5-138-121.sslip.io/rad:z2xbfJfwT3kukR73m8LXmmuvchEwr">chaosD6-Dimensions</a>.</p>
+  <ol class="flow L-phone" style="--n:6" aria-label="join steps"><li class="step"><span class="num">1</span><h4>Open /explore</h4><p><a href="/explore">Active dimensions</a> lists <code>dimensions/&lt;name&gt;</code> from Firestore; <span class="st st-good"><span class="ic" aria-hidden="true">✓</span>LIVE</span> = a Door seen in the last 3 min.</p><div class="where"><code>firebase/public/app.js</code></div></li><li class="step"><span class="num">2</span><h4>Pick a Dimension</h4><p><code>/dimensions/&lt;name&gt;</code> shows its commits and the live Doors, plus a <code>git clone --branch ActiveDimensions/&lt;name&gt;</code> line for desktops.</p><div class="where"><code>dimensions/&lt;name&gt;/doors/&lt;nid&gt;</code></div></li><li class="step"><span class="num">3</span><h4>Tap “join”</h4><p>Next to a Door or commit: <code>chaosd6://join?dim=&lt;name&gt;&amp;rid=&lt;RID&gt;&amp;peer=&lt;id&gt;&amp;nid=&lt;publisher&gt;&amp;commit=&lt;sha&gt;</code>; <code>&amp;team=c</code> joins as a third team.</p><div class="where">deep link</div></li><li class="step"><span class="num">4</span><h4>The app opens</h4><p>The Android intent filter starts the app; the URI reaches <code>EmbeddedPeer.gd</code> (<code>JOIN_URI</code>) and <code>DimensionLauncher.gd</code>; a <code>rid</code> overrides the baked one.</p><div class="where"><code>godot/scripts/</code></div></li><li class="step"><span class="num">5</span><h4>Read the Doors</h4><p>The app fetches the Dimension's Doors through radicle-httpd and spawns next to the chosen unit, as its ally.</p><div class="where"><code>game/mobile-entry.mjs</code></div></li><li class="step"><span class="num">6</span><h4>Play + publish</h4><p>The phone's <code>peer.mjs</code> joins the mesh and pushes its own Door every ~60 s.</p><div class="where">→ #round</div></li></ol>
+  <p class="note">No phone? Get the <a href="https://92-5-138-121.sslip.io/downloads/chaosd6-release.apk" target="_blank" rel="noopener">APK</a>, or on a desktop run <code>node game/join.mjs --dimension &lt;name&gt; --placement nearby</code> or <code>chaosd6-play --list</code>.</p>
+</section>
+
+<section id="wf-publish">
+  <h2>Workflow · publish a new skill, effect or class</h2>
+  <p class="sub">From the rules editor your node serves (<code>http://127.0.0.1:7357/rules/</code>, startup menu → <b>Rules editor</b>). The public <a href="https://92-5-138-121.sslip.io/rules/" target="_blank" rel="noopener">rules site</a> is always read-only; editing needs your team identity. Spec: <code>EDITOR_SPEC.md</code> rulings 1–3.</p>
+  <figure class="scroller"><svg class="swim" id="publish-svg" viewBox="0 0 1270 508" role="img" aria-label="Publishing a new skill, effect or class from the rules editor"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M0,0 L10,5 L0,10 z"/></marker><marker id="ahs" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahp" d="M10,0 L0,5 L10,10 z"/></marker></defs><g class="lane L-desk"><rect class="lanebg" x="0" y="40" width="1270" height="86" rx="10"/><rect class="stripe" x="0" y="48" width="5" height="70" rx="2"/><text class="t1" x="14" y="66">Rules editor</text><text class="t2" x="14" y="84">127.0.0.1:7357/rules/</text><text class="t2" x="14" y="98">(editor/author.js)</text></g><g class="lane L-desk"><rect class="lanebg" x="0" y="132" width="1270" height="86" rx="10"/><rect class="stripe" x="0" y="140" width="5" height="70" rx="2"/><text class="t1" x="14" y="158">Node API</text><text class="t2" x="14" y="176">editor-api.mjs ·</text><text class="t2" x="14" y="190">editor-publish.mjs</text></g><g class="lane L-rad"><rect class="lanebg" x="0" y="224" width="1270" height="86" rx="10"/><rect class="stripe" x="0" y="232" width="5" height="70" rx="2"/><text class="t1" x="14" y="250">Local Radicle</text><text class="t2" x="14" y="268">your namespace</text><text class="t2" x="14" y="282">(desktop git or phone</text><text class="t2" x="14" y="296">bridge)</text></g><g class="lane L-seed"><rect class="lanebg" x="0" y="316" width="1270" height="86" rx="10"/><rect class="stripe" x="0" y="324" width="5" height="70" rx="2"/><text class="t1" x="14" y="342">OCI seed</text><text class="t2" x="14" y="360">radicle-node :8776</text></g><g class="lane L-phone"><rect class="lanebg" x="0" y="408" width="1270" height="86" rx="10"/><rect class="stripe" x="0" y="416" width="5" height="70" rx="2"/><text class="t1" x="14" y="434">Other peers</text><text class="t2" x="14" y="452">fetch by reference in</text><text class="t2" x="14" y="466">play</text></g><g class="colhead"><g class="bdg"><circle cx="168" cy="20" r="11"/><text x="168" y="24" text-anchor="middle">1</text></g><text class="t1" x="186" y="25">Author</text></g><g class="nd L-desk" tabindex="0" data-tip="Header &quot;New skill / effect / class&quot; (from GET templates) or &quot;Fork as new &lt;kind&gt;&quot; on a built-in. Signed in = team name set AND device key in the team profile owners."><rect class="box" x="156" y="48" width="128" height="70" rx="8"/><text class="t1 s" x="164" y="65">New / Fork as new</text><text class="t2 s" x="164" y="80">skill · effect · class</text><text class="t2 s" x="164" y="93">GET templates</text><text class="t2 s" x="164" y="106">(foreign schema)</text></g><line class="ar thin" x1="284" y1="83" x2="296" y2="83" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="308" cy="20" r="11"/><text x="308" y="24" text-anchor="middle">2</text></g><text class="t1" x="326" y="25">Validate</text></g><g class="nd L-desk" tabindex="0" data-tip="POST validate: validateSkillDef / validateEffectDef / validateClassDef with foreign rules (id not built-in, no deal_order), then checkSkill / checkEffect / the class check."><rect class="box" x="296" y="48" width="128" height="70" rx="8"/><text class="t1 s" x="304" y="65">verdict shown</text><text class="t2 s" x="304" y="80">ok · nerf · boost</text><text class="t2 s" x="304" y="93">reject = refused</text></g><g class="nd L-desk" tabindex="0" data-tip="POST validate: validateSkillDef / validateEffectDef / validateClassDef with foreign rules (id not built-in, no deal_order), then checkSkill / checkEffect / the class check."><rect class="box" x="296" y="140" width="128" height="70" rx="8"/><text class="t1 s" x="304" y="157">POST validate</text><text class="t2 s" x="304" y="172">schema + engine</text><text class="t2 s" x="304" y="185">+ rebalancing check</text></g><line class="ar " x1="360" y1="118" x2="360" y2="138" marker-end="url(#ah)"/><line class="ar thin" x1="424" y1="175" x2="436" y2="175" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="448" cy="20" r="11"/><text x="448" y="24" text-anchor="middle">3</text></g><text class="t1" x="466" y="25">Commit</text></g><g class="nd L-desk" tabindex="0" data-tip="POST definitions: one commit = main + &lt;subdir&gt;/&lt;id&gt;.json + index.json manifest, author &quot;&lt;team&gt; &lt;id&gt;@chaosd6&quot;, trailers Chaosd6-Author and Chaosd6-Signature (ed25519 over sha256(canonicalJson(def)))."><rect class="box" x="436" y="140" width="128" height="70" rx="8"/><text class="t1 s" x="444" y="157">players/&lt;team&gt;/</text><text class="t2 s" x="444" y="172">&lt;slug&gt; (never main)</text><text class="t2 s" x="444" y="185">Chaosd6-Signature:</text><text class="t2 s" x="444" y="198">ed25519 trailer</text></g><line class="ar thin" x1="564" y1="175" x2="576" y2="175" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="588" cy="20" r="11"/><text x="588" y="24" text-anchor="middle">4</text></g><text class="t1" x="606" y="25">Push</text></g><g class="nd L-rad" tabindex="0" data-tip="Desktop: bare repo in &lt;profile dir&gt;/editor-defs-git/&lt;rid&gt;.git, remote rad://&lt;rid&gt;/&lt;nid&gt;. Phone: in-app node definition_commit through bridge.json."><rect class="box" x="576" y="232" width="128" height="70" rx="8"/><text class="t1 s" x="584" y="249">git push rad</text><text class="t2 s" x="584" y="264">refs/heads/&lt;branch&gt;</text><text class="t2 s" x="584" y="277">phone: bridge</text><text class="t2 s" x="584" y="290">POST /publish</text></g><line class="ar " x1="640" y1="210" x2="640" y2="230" marker-end="url(#ah)"/><line class="ar thin" x1="704" y1="267" x2="716" y2="267" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="728" cy="20" r="11"/><text x="728" y="24" text-anchor="middle">5</text></g><text class="t1" x="746" y="25">Announce</text></g><g class="nd L-rad" tabindex="0" data-tip="rad sync --seed &lt;OCI seed NID&gt; --announce — the OCI seed only, never public seeds. A failed publish keeps the commit as &quot;pending&quot; (POST definitions/retry)."><rect class="box" x="716" y="232" width="128" height="70" rx="8"/><text class="t1 s" x="724" y="249">rad sync &lt;rid&gt;</text><text class="t2 s" x="724" y="264">--seed &lt;OCI NID&gt;</text><text class="t2 s" x="724" y="277">--announce</text></g><g class="nd L-seed" tabindex="0" data-tip="rad sync --seed &lt;OCI seed NID&gt; --announce — the OCI seed only, never public seeds. A failed publish keeps the commit as &quot;pending&quot; (POST definitions/retry)."><rect class="box" x="716" y="324" width="128" height="70" rx="8"/><text class="t1 s" x="724" y="341">replicates the</text><text class="t2 s" x="724" y="356">player branch</text><text class="t2 s" x="724" y="369">(OCI seed only)</text></g><line class="ar " x1="780" y1="302" x2="780" y2="322" marker-end="url(#ah)"/><line class="ar thin" x1="844" y1="359" x2="856" y2="359" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="868" cy="20" r="11"/><text x="868" y="24" text-anchor="middle">6</text></g><text class="t1" x="886" y="25">Play it</text></g><g class="nd L-phone" tabindex="0" data-tip="A foreign card resolves only from its owner's reveal ref: {id, sha256, libs, repo, branch, commit}."><rect class="box" x="856" y="416" width="128" height="70" rx="8"/><text class="t1 s" x="864" y="433">ref rides the</text><text class="t2 s" x="864" y="448">commit + reveal</text><text class="t2 s" x="864" y="461">fx_ref · sk_ref ·</text><text class="t2 s" x="864" y="474">cl_ref</text></g><line class="ar " x1="920" y1="394" x2="920" y2="414" marker-end="url(#ah)"/><line class="ar thin" x1="984" y1="451" x2="996" y2="451" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="1008" cy="20" r="11"/><text x="1008" y="24" text-anchor="middle">7</text></g><text class="t1" x="1026" y="25">Fetch + gate</text></g><g class="nd L-phone" tabindex="0" data-tip="Fetch order: announced holders (*_have) → owner → local clone → radicle-httpd. Verified by sha256 + id, validator gate; refused or missing → *_missing → postponed (effects) / stripped (skills) on every peer."><rect class="box" x="996" y="416" width="128" height="70" rx="8"/><text class="t1 s" x="1004" y="433">holders → owner →</text><text class="t2 s" x="1004" y="448">clone → httpd</text><text class="t2 s" x="1004" y="461">sha256 + validator</text><text class="t2 s" x="1004" y="474">refused → strip</text></g><line class="ar thin" x1="1124" y1="451" x2="1136" y2="451" marker-end="url(#ah)"/><g class="colhead"><g class="bdg"><circle cx="1148" cy="20" r="11"/><text x="1148" y="24" text-anchor="middle">8</text></g><text class="t1" x="1166" y="25">Vote</text></g><g class="nd L-phone" tabindex="0" data-tip="Testers vote −6..+6 on player-made definitions (proposal-votes.mjs), published to votes/&lt;voter&gt; branches on the OCI seed; no vote from the author."><rect class="box" x="1136" y="416" width="128" height="70" rx="8"/><text class="t1 s" x="1144" y="433">−6 … +6 vote</text><text class="t2 s" x="1144" y="448">minus needs comment</text><text class="t2 s" x="1144" y="461">n ≥ 10, mean ≤ −3</text><text class="t2 s" x="1144" y="474">→ review flag</text></g></svg></figure>
+  <div class="verdicts">Rebalancing verdicts: <span class="st st-good"><span class="ic" aria-hidden="true">✓</span>ok</span> <span class="st st-warning"><span class="ic" aria-hidden="true">!</span>nerf</span> <span class="st st-warning"><span class="ic" aria-hidden="true">!</span>boost</span> <span class="st st-critical"><span class="ic" aria-hidden="true">✕</span>reject (refused)</span></div>
+</section>
+
+<section id="wf-propose">
+  <h2>Workflow · propose a change to a data entry</h2>
+  <p class="sub">Rules, creatures, terrain, classes data … never change in place: a proposal is a new version. Governance lives in <a href="https://92-5-138-121.sslip.io/rules/#/governance" target="_blank" rel="noopener">data/governance.json</a>.</p>
+  <ol class="flow L-rad" style="--n:6" aria-label="propose steps"><li class="step"><span class="num">1</span><h4>Propose</h4><p>Signed in on your node, an entry → <b>Propose a change</b> → <code>POST proposals</code> with <code>data</code> (+ <code>logic</code>) and notes.</p><div class="where"><code>editor/author.js</code></div></li><li class="step"><span class="num">2</span><h4>New version</h4><p><code>version</code> = active minor + 1, <code>status: &quot;proposal&quot;</code>, <code>weight: 0</code>, <code>origin: &quot;player_vote&quot;</code>, <code>parent_version</code> = active.</p><div class="where"><code>writeDataFile + flock</code></div></li><li class="step"><span class="num">3</span><h4>Rebalance verdict</h4><p>JsonLogic validation, then power score Δ: <span class="st st-good"><span class="ic" aria-hidden="true">✓</span>accept</span> if |Δ| ≤ 15 %, else counters → <span class="st st-warning"><span class="ic" aria-hidden="true">!</span>accept_with_counters</span> / <span class="st st-serious"><span class="ic" aria-hidden="true">▲</span>needs_rework</span>; invalid → <span class="st st-critical"><span class="ic" aria-hidden="true">✕</span>blocked</span>.</p><div class="where"><code>tools/rebalance.mjs</code></div></li><li class="step"><span class="num">4</span><h4>Counter-proposals</h4><p>Walks <code>rebalance_links</code> (depth ≤ 2) and drafts one version per linked entry (<code>origin: rebalance_script</code>), so the collection mean drifts ≤ 5 %.</p><div class="where"><code>rebalance-&lt;ts&gt;.json</code></div></li><li class="step"><span class="num">5</span><h4>Votes</h4><p>Signed votes; <code>w = 0.01·(1+log2(1+uses))·(1+0.1·dims)</code>, ≤ 0.10 per peer; weight = clamp(Σ+ − Σ−, 0, 1). Tally every hour.</p><div class="where"><code>governance_voting</code></div></li><li class="step"><span class="num">6</span><h4>Canonical</h4><p>weight ≥ 0.6, ≥ 7 voters, age ≥ 1 day, within tolerance → <span class="st st-good"><span class="ic" aria-hidden="true">✓</span>canonical</span>; the old one is superseded. ≤ −0.3 or > 30 days → rejected.</p><div class="where">next session loads it</div></li></ol>
+  <div class="tbl"><table>
+    <thead><tr><th>Player-made definitions get proposal votes too</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Vote</td><td>−6 … +6 per voter per def version; a minus vote needs a comment (≤ 500 chars); signed ed25519 by the device key</td></tr>
+      <tr><td>Author</td><td>no vote on your own definition (namespace, key or names match the branch's <code>&lt;who&gt;</code>)</td></tr>
+      <tr><td>Publish</td><td>automatic, debounced, OCI seed only, on <code>votes/&lt;voter&gt;</code> branches; failed → pending and retried</td></tr>
+      <tr><td>Effect</td><td>below n = 10 none; n ≥ 10 and mean ≤ −3 → <span class="st st-serious"><span class="ic" aria-hidden="true">▲</span>review</span> flag; a new def version starts empty</td></tr>
+    </tbody></table></div>
+  <p class="note">Source: <code>game/effects-data/PROPOSAL_VOTES.md</code>, <code>game/proposal-votes.mjs</code>, <code>game/proposal-votes-publish.mjs</code>.</p>
+</section>
+
+<section id="wf-profiles">
+  <h2>Workflow · team profile sync</h2>
+  <p class="sub">A team profile is one <code>profile.json</code> on <code>refs/heads/teams/&lt;Team&gt;</code> of <a href="/nodes/92-5-138-121.sslip.io/rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH">chaosD6-Profiles</a>; the seed is its only delegate. A player is an ed25519 device key with a <code>z6Mk…</code> id.</p>
+  <ol class="flow L-seed" style="--n:6" aria-label="profiles steps"><li class="step"><span class="num">1</span><h4>Set a team</h4><p>Startup menu → team name. The device key lives in <code>&lt;profile dir&gt;/radicle/identity.pem</code>; it never leaves the device.</p><div class="where"><code>game/profile-auth.mjs</code></div></li><li class="step"><span class="num">2</span><h4>First claim wins</h4><p>The creating push lists the signer in <code>owners</code>; afterwards only an owner moves the branch, and owners never become empty.</p><div class="where"><code>teams/&lt;Team&gt;</code></div></li><li class="step"><span class="num">3</span><h4>Join request</h4><p>Another device pushes on its own <code>profiles/&lt;z6Mk…&gt;</code> branch; an owner accepts → the key is added to <code>owners</code>.</p><div class="where"><code>profile-radicle.mjs</code></div></li><li class="step"><span class="num">4</span><h4>Write (P2P first)</h4><p>The in-app radicle-node signs the commit into the device namespace; the seed's promoter moves the canonical branch.</p><div class="where"><code>CHAOSD6_RADICLE_BRIDGE</code></div></li><li class="step"><span class="num">5</span><h4>Write (fallback)</h4><p>git smart-HTTP to <code>/profiles-push</code> with <code>X-Profile-Auth</code> (ed25519 over ref, old, new oid + time, ±10 min); fast-forward only, ≤ 256 KB; then <code>git push rad</code>.</p><div class="where"><code>infra/oci/profiles-push.mjs</code></div></li><li class="step"><span class="num">6</span><h4>Read + merge</h4><p>radicle-httpd, depth 1, one ref; per-character merge, owners union; unsent saves wait in <code>pending.json</code>.</p><div class="where"><code>game/profile-sync.mjs</code></div></li></ol>
+  <p class="note">The same team identity signs you into the rules editor (owner = logged in), signs proposal votes, and decides which nodes may serve your bots' LLM prompts (<code>llm-route.mjs</code>: only keys in your team's owners, direct libp2p only). Mirrors serve profiles read-only; writes always go to the delegate (<code>OCI_NID</code>).</p>
+</section>
+
+<section id="wf-seed">
+  <h2>Workflow · seeds and desktop nodes</h2>
+  <h3>A new seed — <code>infra/oci/new-seed.sh</code></h3>
+  <ol class="flow L-seed" style="--n:6" aria-label="new seed steps"><li class="step"><span class="num">1</span><h4>Prepare</h4><p>Ubuntu 22.04/24.04 VM (OCI Ampere A1 works), TCP 22, 80, 443, 8776 open, an ssh key. <code>--dry-run</code> shows the plan.</p><div class="where"><code>--host ubuntu@IP</code></div></li><li class="step"><span class="num">2</span><h4>Provision</h4><p><code>seed-provision.sh</code> over ssh: radicle-node, radicle-httpd, caddy (Let's Encrypt on <code>&lt;ip&gt;.sslip.io</code>), iptables.</p><div class="where"><code>infra/oci/seed-provision.sh</code></div></li><li class="step"><span class="num">3</span><h4>Policy</h4><p><code>peers: dynamic</code> · <code>seedingPolicy: block</code> · <code>rad seed --scope all</code> for the 6 repos; upstream in <code>node.connect</code>.</p><div class="where">private seed</div></li><li class="step"><span class="num">4</span><h4>Content</h4><p><code>/var/www/{rules,pack,downloads}</code>: rules site (<code>rules-site-build.mjs</code>), asset pack, APK.</p><div class="where"><code>--content all</code></div></li><li class="step"><span class="num">5</span><h4>Options</h4><p><code>--with-llm</code> / <code>--llm-public</code> (<code>llm-setup.sh</code>); <code>--own-profiles</code> only for a separate network.</p><div class="where">optional</div></li><li class="step"><span class="num">6</span><h4>Wire players</h4><p>Prints <code>NEW SEED: z6Mk…@&lt;host&gt;:8776</code> and <code>seeder-&lt;host&gt;.json</code>; it keeps in sync with the upstream over gossip.</p><div class="where"><code>oci-seed-sync.sh</code></div></li></ol>
+  <h3>A desktop node — <code>tools/setup-desktop.sh</code></h3>
+  <ol class="flow L-desk" style="--n:6" aria-label="desktop steps"><li class="step"><span class="num">1</span><h4>Tools</h4><p>apt packages, Node 22 (nvm), Radicle in ~/.radicle/bin.</p><div class="where">Linux · WSL2</div></li><li class="step"><span class="num">2</span><h4>Identity</h4><p><code>rad auth</code> only without a key; with a passphrase run it once per session.</p><div class="where"><code>--alias NAME</code></div></li><li class="step"><span class="num">3</span><h4>Node config</h4><p>The seed is the only peer and the preferred seed; seedingPolicy block; node restarted.</p><div class="where"><code>--seed NID@HOST:8776</code></div></li><li class="step"><span class="num">4</span><h4>Repos</h4><p>Clone the code, fetch Dimensions / Effects / Skills / Classes / Profiles from the seed only.</p><div class="where"><code>--dir ~/chaosD6</code></div></li><li class="step"><span class="num">5</span><h4>npm</h4><p>npm install from the public registry (ignores a private ~/.npmrc token).</p><div class="where"><code>game/</code></div></li><li class="step"><span class="num">6</span><h4>Play</h4><p><code>chaosd6-play</code> → <code>http://127.0.0.1:7357</code>; set your team name in the startup menu.</p><div class="where"><code>chaosd6-play --list</code></div></li></ol>
+</section>
+</div>
+
+<section id="links">
+  <h2>Links</h2>
+  <div class="linkgrid">
+    <div class="card"><h4>This web app</h4><ul>
+      <li><a href="/explore">Explore — peers, seeds, active Dimensions</a></li>
+      <li><a href="/architecture">Architecture (this page)</a></li>
+      <li><a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj">Radicle explorer — chaosD6 code</a></li>
+      <li><a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj/tree/README.md">README on Radicle</a></li>
+      <li><a href="/nodes/92-5-138-121.sslip.io/rad:z2xbfJfwT3kukR73m8LXmmuvchEwr">Radicle explorer — Dimensions</a></li>
+    </ul></div>
+    <div class="card"><h4>Rules (read-only)</h4><ul>
+      <li><a href="https://92-5-138-121.sslip.io/rules/" target="_blank" rel="noopener">Rulebook home</a></li>
+      <li><a href="https://92-5-138-121.sslip.io/rules/#/rules" target="_blank" rel="noopener">Rules</a> · <a href="https://92-5-138-121.sslip.io/rules/#/effects" target="_blank" rel="noopener">Effects</a> · <a href="https://92-5-138-121.sslip.io/rules/#/skills" target="_blank" rel="noopener">Skills</a> · <a href="https://92-5-138-121.sslip.io/rules/#/classes" target="_blank" rel="noopener">Classes</a></li>
+      <li><a href="https://92-5-138-121.sslip.io/rules/#/creatures" target="_blank" rel="noopener">Creatures</a> · <a href="https://92-5-138-121.sslip.io/rules/#/terrain_items" target="_blank" rel="noopener">Terrain</a> · <a href="https://92-5-138-121.sslip.io/rules/#/game_modes" target="_blank" rel="noopener">Game modes</a></li>
+      <li><a href="https://92-5-138-121.sslip.io/rules/#/skills/skill_grapple" target="_blank" rel="noopener">Grapple</a> · <a href="https://92-5-138-121.sslip.io/rules/#/effects/effect_fireball" target="_blank" rel="noopener">Fireball</a> · <a href="https://92-5-138-121.sslip.io/rules/#/classes/class_bard" target="_blank" rel="noopener">Bard</a></li>
+      <li><a href="https://92-5-138-121.sslip.io/rules/#/governance" target="_blank" rel="noopener">Governance</a> · <a href="https://92-5-138-121.sslip.io/rules/#/contradictions" target="_blank" rel="noopener">Contradictions</a></li>
+    </ul></div>
+    <div class="card"><h4>Seed downloads</h4><ul>
+      <li><a href="https://92-5-138-121.sslip.io/downloads/chaosd6-release.apk" target="_blank" rel="noopener">chaosd6-release.apk</a></li>
+      <li><a href="https://92-5-138-121.sslip.io/downloads/" target="_blank" rel="noopener">/downloads/</a></li>
+      <li>Seed: <code class="rid">z6MknLjCKCXpzUoA…@92-5-138-121.sslip.io:8776</code></li>
+    </ul></div>
+    <div class="card"><h4>Radicle repos</h4><ul>
+      <li><a href="/nodes/92-5-138-121.sslip.io/rad:zqZmP6itceBMqYwi1K1n8phQqCaj">chaosD6</a></li><li><a href="/nodes/92-5-138-121.sslip.io/rad:z2xbfJfwT3kukR73m8LXmmuvchEwr">chaosD6-Dimensions</a></li><li><a href="/nodes/92-5-138-121.sslip.io/rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ">chaosD6-Effects</a></li><li><a href="/nodes/92-5-138-121.sslip.io/rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5">chaosD6-Skills</a></li><li><a href="/nodes/92-5-138-121.sslip.io/rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi">chaosD6-Classes</a></li><li><a href="/nodes/92-5-138-121.sslip.io/rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH">chaosD6-Profiles</a></li><li><a href="/nodes/92-5-138-121.sslip.io/rad:zZA4j9cK1QF5ThY3KjEoLV4HTd14">chaosD6-Resources</a></li>
+    </ul></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="get-the-app"><strong>Get the app</strong><span class="get-sub">Run the game as a peer on your phone.</span></div>
+    <div class="app-buttons">
+      <a class="btn-app" href="https://92-5-138-121.sslip.io/downloads/chaosd6-release.apk" download><span class="btn-ico">⬇</span><span class="btn-txt"><span class="btn-lead">Download APK</span><span class="btn-sub">Direct install (sideload)</span></span></a>
+      <a class="btn-app" href="/explore"><span class="btn-ico">⌬</span><span class="btn-txt"><span class="btn-lead">Explore</span><span class="btn-sub">Live Dimensions</span></span></a>
+    </div>
+  </div>
+  <div class="footer-fine">Numbers counted from the repository on 2026-11-23. Sources: README.md, game/*-data/{SCHEMA,HOOKS,HANDSHAKE}.md, infra/oci/, firebase/README.md.</div>
+</footer>
+
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script>
+(function () {
+  'use strict';
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // --- bar chart: entries per collection (single series, sorted, value labels, hover tooltip) ---
+  function drawBars() { Array.prototype.forEach.call(document.querySelectorAll('.bars[data-bars]'), function (host) {
+    host.textContent = '';
+    var unit = host.getAttribute('data-unit') || 'entry';
+    var rows = JSON.parse(host.getAttribute('data-bars')).sort(function (a, b) { return b[1] - a[1] || (a[0] < b[0] ? -1 : 1); });
+    var max = rows[0][1], W = Math.max(280, Math.round(host.clientWidth || 560)), LW = W < 420 ? 118 : 136, VW = 34, RH = 20, H = rows.length * RH + 6;
+    var svg = el('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, role: 'img', 'aria-label': 'Entries per collection, bar chart' });
+    var span = W - LW - VW;
+    rows.forEach(function (r, i) {
+      var y = 3 + i * RH, w = Math.max(2, (r[1] / max) * span), h = 12, y0 = y + 3;
+      var g = el('g', { tabindex: '0', 'data-tip': r[0] + ': ' + r[1] + ' ' + (r[1] === 1 ? unit : unit === 'entry' ? 'entries' : unit + 's') + (unit === 'entry' && (r[0] === 'effects' || r[0] === 'skills') ? ' (from definitions)' : '') });
+      g.appendChild(el('rect', { class: 'hit', x: 0, y: y, width: W, height: RH }));
+      g.appendChild(el('text', { class: 'lbl', x: LW - 8, y: y0 + 10, 'text-anchor': 'end' }, r[0]));
+      // rounded data end only (4px), square at the baseline
+      var rr = Math.min(4, w / 2), x0 = LW, x1 = LW + w;
+      g.appendChild(el('path', { class: 'bar', d: 'M' + x0 + ',' + y0 + 'H' + (x1 - rr) + 'Q' + x1 + ',' + y0 + ' ' + x1 + ',' + (y0 + rr) + 'V' + (y0 + h - rr) + 'Q' + x1 + ',' + (y0 + h) + ' ' + (x1 - rr) + ',' + (y0 + h) + 'H' + x0 + 'Z' }));
+      g.appendChild(el('text', { class: 'val', x: x1 + 6, y: y0 + 10 }, String(r[1])));
+      svg.appendChild(g);
+    });
+    svg.appendChild(el('line', { class: 'base', x1: LW, y1: 0, x2: LW, y2: H }));
+    host.appendChild(svg);
+  }); }
+  drawBars();
+  var bw = window.innerWidth, bt = null;
+  window.addEventListener('resize', function () { if (window.innerWidth === bw) return; bw = window.innerWidth; clearTimeout(bt); bt = setTimeout(drawBars, 150); });
+
+  // --- tooltip for anything with data-tip (hover, focus, tap) ---
+  var tip = document.getElementById('tip');
+  var cur = null;
+  function show(t, x, y) {
+    tip.textContent = t; tip.hidden = false;
+    var r = tip.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight;
+    var left = Math.min(vw - r.width - 8, Math.max(8, x + 14)), top = y + 16;
+    if (top + r.height > vh - 8) top = Math.max(8, y - r.height - 12);
+    tip.style.left = left + 'px'; tip.style.top = top + 'px';
+  }
+  function hide() { tip.hidden = true; cur = null; }
+  function target(e) { return e.target && e.target.closest ? e.target.closest('[data-tip]') : null; }
+  document.addEventListener('pointermove', function (e) {
+    var t = target(e);
+    if (!t) { if (cur && e.pointerType === 'mouse') hide(); return; }
+    cur = t; show(t.getAttribute('data-tip'), e.clientX, e.clientY);
+  });
+  document.addEventListener('pointerdown', function (e) {
+    var t = target(e);
+    if (t && e.pointerType !== 'mouse') { cur = t; show(t.getAttribute('data-tip'), e.clientX, e.clientY); }
+    else if (!t) hide();
+  });
+  document.addEventListener('focusin', function (e) {
+    var t = target(e) || (e.target.querySelector && e.target.querySelector('[data-tip]'));
+    if (!t) return;
+    var r = t.getBoundingClientRect();
+    cur = t; show(t.getAttribute('data-tip'), r.left + Math.min(r.width, 40), r.bottom - 10);
+  });
+  document.addEventListener('focusout', hide);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
+  window.addEventListener('scroll', function () { if (cur) hide(); }, { passive: true });
+
+  // --- sticky header height (phone TOC sits below it) ---
+  var hdr = document.querySelector('.site');
+  function setHdr() { document.documentElement.style.setProperty('--hdr', hdr.offsetHeight + 'px'); }
+  setHdr(); window.addEventListener('resize', setHdr);
+
+  // --- TOC: highlight the section in view ---
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var byId = {};
+  links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+  var secs = links.map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); }).filter(Boolean);
+  function onScroll() {
+    var y = window.scrollY + window.innerHeight * 0.3, on = secs[0];
+    secs.forEach(function (s) { if (s.getBoundingClientRect().top + window.scrollY <= y) on = s; });
+    links.forEach(function (a) { a.classList.remove('on'); });
+    var a = on && byId[on.id];
+    if (a) {
+      a.classList.add('on');
+      var toc = document.getElementById('toc');
+      if (window.innerWidth <= 900 && toc) {
+        var lr = a.getBoundingClientRect(), tr = toc.getBoundingClientRect();
+        if (lr.left < tr.left || lr.right > tr.right) toc.scrollLeft += lr.left - tr.left - 20;
+      }
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+})();
+
+</script>
+</body>
+</html>

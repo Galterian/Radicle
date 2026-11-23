@@ -217,6 +217,35 @@ export function validateClassLib(lib) {
   }
   return errors;
 }
+// A class's voice (gen classes, user 2026-11-23: a class takes the WHOLE sound set of one chaosD6-Resources unit):
+// resources = { unit: {race, unit}, sounds: { voice: [{path, kind, line?}] } } (1..16 lines, all of that unit's folder).
+// Data only — nothing in a game reads it; the paths are relative, under assets/Sounds/Units/<race>/<unit>/, no "..".
+const UNIT_SEG = "[A-Za-z0-9_ ()[\\].,'!?&+…-]+";
+export const UNIT_SOUND_RE = new RegExp(`^assets/Sounds/Units/(${UNIT_SEG})/(${UNIT_SEG})/${UNIT_SEG}\\.wav$`, 'i');
+const UNIT_NAME_RE = new RegExp(`^${UNIT_SEG}$`);
+export function validateClassResources(r) {
+  if (!isObj(r)) return ['resources must be {unit, sounds}'];
+  const errs = [];
+  for (const k of Object.keys(r)) if (!['unit', 'sounds'].includes(k)) errs.push(`resources.${k}: unknown key (unit, sounds)`);
+  const u = r.unit;
+  const okName = (s) => typeof s === 'string' && s.length <= 80 && UNIT_NAME_RE.test(s) && !s.includes('..');
+  if (!isObj(u) || !okName(u.race) || !okName(u.unit) || Object.keys(u).some(k => !['race', 'unit'].includes(k))) errs.push('resources.unit must be {race, unit} (a chaosD6-Resources unit folder)');
+  const v = r.sounds?.voice;
+  if (!isObj(r.sounds) || Object.keys(r.sounds).some(k => k !== 'voice')) errs.push('resources.sounds must be {voice: [{path, kind, line?}]}');
+  else if (!Array.isArray(v) || v.length < 1 || v.length > 16) errs.push('resources.sounds.voice must be a list of 1..16 {path, kind, line?}');
+  else v.forEach((x, i) => {
+    const w = `resources.sounds.voice[${i}]`;
+    if (!isObj(x)) { errs.push(`${w} must be {path, kind, line?}`); return; }
+    for (const k of Object.keys(x)) if (!['path', 'kind', 'line'].includes(k)) errs.push(`${w}.${k}: unknown key (path, kind, line)`);
+    const m = typeof x.path === 'string' && x.path.length <= 300 && !x.path.includes('..') && !x.path.includes('//') && !x.path.includes('\\') ? UNIT_SOUND_RE.exec(x.path) : null;
+    if (!m) errs.push(`${w}.path must be assets/Sounds/Units/<race>/<unit>/….wav (no "..")`);
+    else if (isObj(u) && (m[1] !== u.race || m[2] !== u.unit)) errs.push(`${w}.path is not in the folder of resources.unit (${u.race}/${u.unit})`);
+    if (typeof x.kind !== 'string' || x.kind.length > 60) errs.push(`${w}.kind must be a string (≤ 60)`);
+    if (x.line !== undefined && (typeof x.line !== 'string' || x.line.length > 200)) errs.push(`${w}.line must be a string (≤ 200)`);
+  });
+  return errs;
+}
+
 const KINDS = ['tap', 'once_per_round', 'static', 'passive'];
 // validateClassDef(def, {libs | libMap, builtin}) → [errors]. `builtin` (a bundled chaosD6 class) may mark hooks
 // {engine: 'js'}; a foreign definition must give a program for every hook it declares.
@@ -232,6 +261,7 @@ export function validateClassDef(def, opts = {}) {
       else if (typeof v !== 'string' || !v || v.length > (k === 'icon' ? 4 : 400)) errors.push(`ui.${k} must be a non-empty string (${k === 'icon' ? '≤ 4' : '≤ 400'} chars)`);
     }
   }
+  if (def.resources !== undefined) errors.push(...validateClassResources(def.resources));
   if (typeof def.id !== 'string' || !/^class_[a-z0-9_]+$/.test(def.id)) errors.push('id must match class_[a-z0-9_]+');
   if (typeof def.name !== 'string' || !def.name) errors.push('name required');
   if (typeof def.version !== 'string' || !/^\d+\.\d+\.\d+/.test(def.version)) errors.push('version must be semver');

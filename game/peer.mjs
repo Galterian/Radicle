@@ -1221,7 +1221,9 @@ let queuedClassAbility = false;   // the class card was clicked for this action 
 // C1: CLASS_RULES needs — tile (Animator, Priest, Alchemist, Warrior), ally_or_self (Healer, Overlord),
 // enemy_near (Witch: the right-clicked enemy within range, else the nearest), monster_near (Avenger: nothing to
 // pick), attach_effect (Ranger, Seeker). Manipulator and Prophet are passive.
-const CLASS_NEEDS = CL_NEEDS;
+// A foreign class's flags join CLASS_RULES at registration (classes.mjs CL_NEEDS is built from the built-ins at import):
+// read needs from CLASS_RULES so a player-branch class asks for its target too (gen classes, 2026-11-23).
+const classNeeds = (id) => CLASS_RULES[id]?.needs || CL_NEEDS[id] || null;
 // Abilities settled on this peer alone (hand / deck / discard are private). Return a note when it fired.
 // C1: the `local` hook gives the descriptor ({op: recover|draw|grant}); applying it stays here (private hand).
 const CLASS_LOCAL = Object.fromEntries(Object.keys(CLASS_RULES).filter(id => CLASS_RULES[id].phase === 'local').map(id => [id, () => {
@@ -1712,7 +1714,7 @@ const classBlocked = () => {
   const archive_creature = archive.some(c => c.kind === 'creature' && data.creatures[c.creature_id]);
   return classHook('blocked', cls, CL_BASE, { fallen_near, archive_creature });
 };
-const classStateForUI = () => ({ blocked: classBlocked(), class_id: entity.classId || null, name: entity.className || null, kind: classKindOf(entity.classId), colours: classColours(entity.classId), down: [...(entity.classDown || [])], archived: !!entity.classArchived, tapped: !!entity.classTapped, progress: entity.classProgress || null, used_turn: entity.classUsedTurn ?? -1, needs: CLASS_NEEDS[entity.classId] || null, local: !!CLASS_LOCAL[entity.classId], text: data.classes[entity.classId]?.data?.text || clPeer.info(entity.classId)?.text || '', ...(clPeer.mine?.ref.id === entity.classId ? { source: { ...clPeer.mine.ref, kind: 'class' } } : {}), charges: rogueChargesForUI(),   /* CH: a foreign class's text + source */ emits: ['A', 'B', 'M', 'EM'].filter(c => clEmits(c)) /* C1 ruling 2026-11-16 */ });
+const classStateForUI = () => ({ blocked: classBlocked(), class_id: entity.classId || null, name: entity.className || null, kind: classKindOf(entity.classId), colours: classColours(entity.classId), down: [...(entity.classDown || [])], archived: !!entity.classArchived, tapped: !!entity.classTapped, progress: entity.classProgress || null, used_turn: entity.classUsedTurn ?? -1, needs: classNeeds(entity.classId), local: !!CLASS_LOCAL[entity.classId], text: data.classes[entity.classId]?.data?.text || clPeer.info(entity.classId)?.text || '', ...(clPeer.mine?.ref.id === entity.classId ? { source: { ...clPeer.mine.ref, kind: 'class' } } : {}), charges: rogueChargesForUI(),   /* CH: a foreign class's text + source */ emits: ['A', 'B', 'M', 'EM'].filter(c => clEmits(c)) /* C1 ruling 2026-11-16 */ });
 let locked = false;
 const willDiscard = new Set();   // card_ids the player marked to drop at turn end (rule 7: characters MAY discard leftovers)
 
@@ -3173,7 +3175,13 @@ async function doPlanningEnd() {
   const enchanterNow = clHeld('plan_emits').some(c => classHook('plan_emits', c, CL_BASE, { held: true, archived: entity.classArchived, usedTurn: entity.classUsedTurn, turn: hg.turn, options: !!options, code, queued: typeof queuedEffect === 'number' || !!casting }));
   const emitsLong = wants('P') || wants('EP') || (!options && code === 'EP') || clHeld('emits').some(c => ['A', 'B', 'M', 'EM'].some(x => wants(x) && classHook('emits', c, CL_BASE, { code: x, site: 'plan' }))) || enchanterNow;
   const emits = (c, every) => castInstant(c, every) || emitsLong;
-  if (enchanterNow) { entity.classUsedTurn = hg.turn; console.log(`[${PEER_LABEL}] enchanter: this ${code} emits an element too (once per turn)`); }
+  if (enchanterNow) { entity.classUsedTurn = hg.turn; console.log(`[${PEER_LABEL}] enchanter: this ${code} emits an element too (once per turn)`); console.log(classEventLine(clHeld('plan_emits')[0], 'plan_emit')); }
+  // Log only (user 2026-11-23: a class rule that writes no line cannot be tested): a class that makes A / B / M / EM emit
+  // while a cast is going on — the holder's line + [class-event] emit. Planning is local; nothing here is hashed.
+  if (!enchanterNow && (typeof queuedEffect === 'number' || !!casting) && !(wants('P') || wants('EP') || (!options && code === 'EP'))) {
+    const ce = clHeld('emits').find(c => ['A', 'B', 'M', 'EM'].some(x => wants(x) && classHook('emits', c, CL_BASE, { code: x, site: 'plan' })));
+    if (ce) { console.log(`[${PEER_LABEL}] class ${ce.replace(/^class_/, '')}: this ${code} emits an element (the class rule)`); console.log(classEventLine(ce, 'emit')); }
+  }
   const auraEvery = !!everyWidener();
   // The plan being emitted this action: the cast in progress, else what is queued.
   let plan = null, chainStep = 1;
@@ -3282,7 +3290,7 @@ async function doPlanningEnd() {
     if (!ready) console.log(`[${PEER_LABEL}] class ${entity.className}: ability not ready (${kind === 'tap' ? 'tapped — emit every colour to untap' : 'already used this turn'})`);
     else if (local) { const note = local(); if (note) { spend(); console.log(`[${PEER_LABEL}] class ${entity.className}: ${note}`); } else console.log(`[${PEER_LABEL}] class ${entity.className}: nothing to do`); }
     else {
-      const need = CLASS_NEEDS[cid] || null;
+      const need = classNeeds(cid);
       const attachCardC = (need === 'attach_effect' || need === 'attach_nonaction') && typeof queuedAttach === 'number' ? hand[queuedAttach] : null;
       const attachOk = need === 'attach_effect' ? attachCardC?.kind === 'effect' : need === 'attach_nonaction' ? !!attachCardC && attachCardC.kind !== 'action' : true;
       if (!attachOk) console.log(`[${PEER_LABEL}] class ${entity.className}: click the card in hand it works on first`);
@@ -4339,7 +4347,10 @@ async function doResolution() {
     if ((CLASS_RULES[ec]?.hooks || []).includes('pre_cast') && classReady(r.actor, ec) && lifeOf(r.actor) > 0 && castsDamage(r)) {
       const pb = classHook('pre_cast', ec, clCtx, { actor: r.actor, elements: r.effect.elements, salt: r.salt });   // C1 pre_cast: point-buy of my best stat among the cast's elements
       const best = pb.stat;
-      if (!pb.fail) { castBoost.set(r.actor, pb.value); elementalistPending.push({ actor: r.actor, cls: ec, value: pb.value, stat: best, dice: pb.dice }); }
+      if (!pb.fail) {
+        castBoost.set(r.actor, pb.value); elementalistPending.push({ actor: r.actor, cls: ec, value: pb.value, stat: best, dice: pb.dice });
+        if (r.actor === PEER_ID_STRING) { log(`[${PEER_LABEL}] class ${clShort(ec)}: the extra ${best} die [${pb.dice.join(',')}] adds ${pb.value} to my cast`); log(classEventLine(ec, 'reroll')); }   // log only (user 2026-11-23)
+      }
       else if (r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] class ${clShort(ec)}: the extra ${best} die failed [${pb.dice.join(',')}] — nothing added, it stays ready this turn`);
     }
     // Illusionist (user ruling 2026-11-12): me and every ally within ILLUSION_RANGE get one illusion life
@@ -4355,6 +4366,7 @@ async function doResolution() {
     const sh = classHook('share_skills', sharer, clCtx, { actor: r.actor, skills: r.skills, adj });   // C1 share_skills (S1 rides inside)
     for (const a of sh.adds) { const rev = byActorPre.get(a.on); rev.skills = [...rev.skills, a.skill]; }
     for (const s of sh.log) log(s);
+    if (sh.adds.length && r.actor === PEER_ID_STRING) log(classEventLine(sharer, 'share_skills'));   // log only (user 2026-11-23)
   }
   const casts = revealsThisTurn.filter(r => r.effect && Array.isArray(r.effect.elements) && r.effect.elements.length && view.get(r.actor));
   // Blessing / Curse ∀ (user ruling 2026-10-30): a holder of TWO Blessings loses the second one the moment
@@ -4730,7 +4742,12 @@ async function doResolution() {
       // Assassin: +1 if the attacker has already connected this round. The flag
       // is set when a previous addDmg(..., attacker, >0) landed — so same-round
       // "first hit then rider" scales up for them. Resolver-local; no state leak.
-      for (const c of CL_ATTACK_OUT) dmg = classHook('attack_out', c, clCtx, { attacker: r.actor, dmg, scored: [...assassinScored], defender: defId });   // C1 attack_out (Assassin +1) // CR: assassin — vs a hurt enemy only (2026-11-17)
+      for (const c of CL_ATTACK_OUT) {
+        const was = dmg;
+        dmg = classHook('attack_out', c, clCtx, { attacker: r.actor, dmg, scored: [...assassinScored], defender: defId });   // C1 attack_out (Assassin +1) // CR: assassin — vs a hurt enemy only (2026-11-17)
+        // log only (user 2026-11-23): the holder's line when its class changed the blow
+        if (dmg !== was && r.actor === PEER_ID_STRING) { log(`[${PEER_LABEL}] class ${c.replace(/^class_/, '')}: my attack ${was} → ${dmg} damage (the class rule)`); log(classEventLine(c, 'attack_out')); }
+      }
       // Taunt: a nearby taunter is the only legal Attack target. Only revealers
       // count — their snapshots ride in the reveal, so every peer sees the same set.
       if (skillHook('attack_target', null, skCtx, { attacker: r.actor, defender: defId })) dmg = 0;   // S1 attack_target
@@ -4994,12 +5011,14 @@ async function doResolution() {
     const tr = classHook('transmute', tc, clCtx, { id, outcomes: effectOutcomes.map(({ actor, oc }) => ({ actor, status: oc.status, statTokens: oc.statTokens, heals: oc.heals })) });
     for (const e of tr.edits) { const { oc } = effectOutcomes[e.i]; oc.statTokens.push(...e.statTokens); oc.heals.push(...e.heals); }
     for (const s of tr.log) log(s);
+    if (tr.edits.length && id === PEER_ID_STRING) log(classEventLine(tc, 'transmute'));   // log only (user 2026-11-23)
   }
   // Restaurateur (static): a token destroyed by a Restaurateur is taken instead (same tile / into their holding).
   for (const d of destroyOutcomes) {
     const res = classHook('destroy_result', classOf(d.actor), clCtx, { d });   // C1 destroy_result (Restaurateur: destroyed → taken)
     if (res === d.result) continue;
     d.result = res; if (d.actor === PEER_ID_STRING || d.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] restaurateur ${d.actor.slice(0, 8)} takes the ${d.kind} token instead of destroying it`);
+    if (d.actor === PEER_ID_STRING) log(classEventLine(classOf(d.actor), 'take_tokens'));   // log only (user 2026-11-23)
   }
   // Prophet (user rework #2 2026-11-14) is a look, not an outcome: requestHand() at its first contact of the turn,
   // on the Prophet's peer after the resolution (doResolution), outside the state hash. Avenger: the lure case above.
@@ -5493,6 +5512,7 @@ async function doResolution() {
     ])];
     const st = classHook('chase_step', cc, CL_BASE, { state: { chasers: [...csGet(cc, 'chasers', [])], bonus: csGet(cc, 'bonus', 0) }, chasing });   // C1 chase_step
     if (st.fresh.length) console.log(`[${PEER_LABEL}] ${clShort(cc)}: ${st.fresh.length} new monster(s) chasing me (${st.fresh.map(o => o.slice(0, 14)).join(', ')}) — ${st.chasers.length} in all`);
+    if (st.fresh.length || st.grant > 0) console.log(classEventLine(cc, 'chase'));   // log only (user 2026-11-23)
     if (st.grant > 0) { const heal = Number.isInteger(st.heal) ? st.heal : st.grant; csSet(cc, 'bonus', st.bonus); entity.lifeMax += st.grant; entity.life += heal; console.log(`[${PEER_LABEL}] ${clShort(cc)}: +${st.grant} temporary life max${heal ? '' : ' (max only)'} (chase bonus ${st.bonus}) — life ${entity.life}/${entity.lifeMax}`); broadcastUI(handMsg({ notice: `${clName(cc)}: a new monster chases you — +1 temporary life ${heal ? '' : 'max '}(${entity.life}/${entity.lifeMax})` })); }   // CP: avenger_grant — life += st.heal (0 when max only)
     if (st.fade) { if (cbMaxOnly(cc)) cpCbFreed += csGet(cc, 'bonus', 0) || 0; csSet(cc, 'bonus', 0); console.log(`[${PEER_LABEL}] ${clShort(cc)}: no monster chases me any more — the chase bonus fades`); }   // CP: avenger_fade
     csSet(cc, 'chasers', [...st.chasers]);
@@ -6048,7 +6068,12 @@ async function doResolution() {
   // Noble lifesteal: the per-attacker amount I dealt this resolve, now applied
   // as healing after my own damage lands (so a lethal attack that finishes an
   // enemy also carries the heal). Cap at my life maximum.
-  for (const c of clWith('lifesteal_apply')) entity.life = classHook('lifesteal_apply', c, CL_BASE, { amount: lifestealForMe.amount, life: entity.life, lifeMax: entity.lifeMax, held: entity.permanents.has(c) });   // C1 lifesteal_apply
+  for (const c of clWith('lifesteal_apply')) {
+    const was = entity.life;
+    entity.life = classHook('lifesteal_apply', c, CL_BASE, { amount: lifestealForMe.amount, life: entity.life, lifeMax: entity.lifeMax, held: entity.permanents.has(c) });   // C1 lifesteal_apply
+    // log only (user 2026-11-23): the holder's line when the class healed it
+    if (entity.life > was) { console.log(`[${PEER_LABEL}] class ${c.replace(/^class_/, '')}: I steal ${entity.life - was} life (${entity.life}/${entity.lifeMax}, the class rule)`); console.log(classEventLine(c, 'lifesteal')); }
+  }
   // Effect heals (Drain, Turn Life) land the same way: after my damage, capped, never on a corpse.
   // Resting on a healing building (user ruling 2026-11-12): an Empty Posture with
   // no skill, effect or bonus round, unhurt this action, heals once per turn.

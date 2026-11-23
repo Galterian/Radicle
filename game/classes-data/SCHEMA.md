@@ -47,6 +47,7 @@ The chaosD6-Classes program (user request 2026-11-16) splits the classes out the
   - `notice`: what a click on a class that fires by itself says (the Prophet's "automatic — …").
   - The peer sends every class's block as `class_ui` (hello / `class_catalog`, `classes.mjs#classUiOf`), plus `reanim` = `data.destroy_reanimated` {elements, die} for a class that raises units (the reanimated pill).
   - `/1` definitions (published player branches) still load: `/1` is `/2` without `ui`; a `/1` file with a `ui` block is refused. Bots have no per-class block (user ruling 2026-11-20 #2): `tools/swarm-test.mjs` infers from `needs`, the data knobs, the hooks and `class-engine.mjs#abilityRecordsOf`.
+- **resources** (optional, data only; generated classes 2026-11-23): the class's voice is the whole sound set of one chaosD6-Resources unit, `{"unit": {"race", "unit"}, "sounds": {"voice": [{"path", "kind", "line"?}]}}`. There are 1..16 lines, each `assets/Sounds/Units/<race>/<unit>/….wav` inside that unit's folder, with no `..` (`class-engine.mjs validateClassResources`). Nothing in a game reads it yet.
 - **uses**: the libraries whose subs `call` may reach, searched in order.
 - **hooks**: hook name → program. A hook that is absent falls back to the lib default for std hooks, or to the neutral value for the others.
   - A built-in class may instead give a marker, `{"engine": "js", "impl": "peer.mjs#animatorCopy", "note": "…"}`. This is used only for the 5 abilities that need map geometry, occupancy or the move register: Animator, Priest, Cleric, Seeker and Warrior.

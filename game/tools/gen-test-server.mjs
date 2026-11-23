@@ -18,6 +18,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { checkDraft } from '../effect-gen.mjs';
 import { checkSkillDraft } from '../skill-gen.mjs';
+import { checkClassDraft } from '../class-gen.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
@@ -102,8 +103,8 @@ const server = http.createServer(async (req, res) => {
       if (running) return send(res, 409, { ok: false, error: 'busy: a test game is running (one at a time) — try again in a few minutes' });
       const b = await body(req);
       const def = b.def;
-      if (!def || typeof def !== 'object' || !/^(effect|skill)_[a-z0-9_]{1,58}$/.test(String(def.id || ''))) return send(res, 400, { ok: false, error: 'def with an effect or skill id required' });
-      const v = String(def.id).startsWith('skill_') ? await checkSkillDraft(def) : await checkDraft(def);
+      if (!def || typeof def !== 'object' || !/^(effect|skill|class)_[a-z0-9_]{1,58}$/.test(String(def.id || ''))) return send(res, 400, { ok: false, error: 'def with an effect, skill or class id required' });
+      const v = String(def.id).startsWith('skill_') ? await checkSkillDraft(def) : String(def.id).startsWith('class_') ? await checkClassDraft(def) : await checkDraft(def);
       if (!v.ok) return send(res, 400, { ok: false, error: `the validator refuses it (${v.verdict})`, problems: v.problems });
       if (running) return send(res, 409, { ok: false, error: 'busy' });
       const t = start(def);

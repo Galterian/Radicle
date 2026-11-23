@@ -4,8 +4,9 @@ A Firebase project that does two jobs for the chaosD6 Radicle mesh:
 
 1. **Seed registry** — peers publish `{nid, rid, radicleAddr, lastSeen}` to Firestore on every push. A new peer calls `fetchSeeds()` at boot and uses the returned addresses as `rad sync --seed <addr> --from <nid>` targets and libp2p bootstrap hints. **The actual sync still goes peer-to-peer over libp2p/TCP** — Firestore just answers "who's online and where?"
 2. **GitHub-equivalent UI** — Firebase Hosting serves a single-page explorer with:
-   - `/explore` — list of registered peers (seeds) and active dimensions (branches)
-   - `/peers/<nid>` — per-peer profile: `rad clone … --seed … --from <nid>` command and the dimensions this peer pushed
+   - `/explore` — known seeds (live `/api/v1/node` probe), registered peers and active dimensions (first 3 of each list, then "Show more" +10 per click), plus an architecture teaser linking into `/architecture#overview|repos|workflows|round`
+   - `/peers/<nid>` — per-peer profile: `rad clone … --seed … --from <nid>` command; the dimensions this peer created / has a door in / pushed commits to (role chips); and its `players/<team>/<slug>` branches in chaosD6-Skills / -Effects / -Classes, read live from the OCI seed's radicle-httpd (`/api/v1/repos/<rid>/remotes/<nid>`), linked into the bundled Radicle explorer (`/nodes/<seed>/<rid>/remotes/<nid>/tree/<branch>`, `/nodes/<seed>/<rid>/commits/<oid>`)
+   - `/architecture` — static overview page (`public/architecture.html`)
    - `/dimensions/<name>` — per-dimension "repo" page: commit list, live doors sidebar, `rad clone` + `git checkout ActiveDimensions/<name>` instructions
 
 ## Setup (one-time)
@@ -20,6 +21,17 @@ cp .firebaserc.example .firebaserc       # then edit: set your project ID
 # At Firebase console → Build → Firestore → Rules, publish firestore.rules.
 firebase deploy --only hosting,firestore
 ```
+
+The peer page's door/commit lookups are collection-group queries
+(`collectionGroup("doors") where nid ==`, `collectionGroup("commits") where pushedBy ==`).
+They need the `fieldOverrides` in `firestore.indexes.json`; deploy them with
+`firebase deploy --only firestore:indexes` (index build takes a few minutes).
+Until then those two queries fail quietly and the page falls back to
+`dimensions where creatorNid ==` only.
+
+Local, network-free check: set `globalThis.__CHAOSD6_FIXTURE` before importing
+`/app.js` (shape in the `app.js` header). Firebase is then never initialised and
+all Firestore/httpd reads come from the fixture.
 
 ## Peer side — enabling publish/discovery
 
@@ -64,7 +76,7 @@ FIREBASE_PROJECT_ID=... FIREBASE_API_KEY=... node game/local-seeds.mjs peer   <n
 firebase.json              — hosting (SPA rewrites) + firestore config
 .firebaserc.example        — copy to .firebaserc and fill in project ID
 firestore.rules            — public read, write-with-shape-check
-firestore.indexes.json     — lastSeen + commits ordering
+firestore.indexes.json     — lastSeen + commits ordering; collection-group overrides doors.nid / commits.pushedBy
 public/index.html          — SPA shell + templates
 public/app.js              — Firebase SDK client, routing, rendering
 public/style.css           — GitHub-dark-ish palette
