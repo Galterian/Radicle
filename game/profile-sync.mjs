@@ -124,7 +124,8 @@ const httpReason = (e) => e?.data?.statusMessage || e?.data?.reason || e?.messag
  * team profile; each branch gets its own shallow gitdir + pending file under `dir` (`name` keys them).
  */
 export async function openProfileStore({ dir, readUrl = DEFAULTS.readUrl, pushUrl = DEFAULTS.pushUrl, namespace, ref: wantRef = null, name = null, log = () => {},
-  bridgeFile = process.env.CHAOSD6_RADICLE_BRIDGE || '', rid = PROFILES_RID, seedNid = OCI_NID } = {}) {
+  bridgeFile = process.env.CHAOSD6_RADICLE_BRIDGE || '', rid = PROFILES_RID,
+  seedNid = process.env.CHAOSD6_OCI_SEED_NID || process.env.OCI_SEED_NID || OCI_NID } = {}) {   // the seed this node syncs with (OCI_NID stays the delegate)
   namespace ??= readUrl === DEFAULTS.readUrl ? DEFAULTS.namespace : '';   // the delegate namespace belongs to the seed URL
   if (!dir) throw new Error('openProfileStore: dir required');
   if (!readUrl) throw new Error('openProfileStore: no read URL (set RADICLE_PROFILES_RID or PROFILES_READ_URL)');

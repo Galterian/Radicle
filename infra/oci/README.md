@@ -17,6 +17,16 @@ Always-Free-eligible OCI Ampere A1 VM. No rosa, no iris — your own.
 - caddy terminates TLS on `<ip-dashed>.sslip.io` and reverse-proxies to
   radicle-httpd on 127.0.0.1:8080.
 
+## A new seed in one command (2026-11-23)
+
+`infra/oci/new-seed.sh --host ubuntu@<public-ip>` (from a chaosD6 checkout, WSL/Linux) copies
+`seed-provision.sh` to the VM and sets it up like the live seed: radicle-node + radicle-httpd + caddy,
+private-seed policy (peers dynamic, seedingPolicy block, `rad seed --scope all` for the 6 repos), all
+repos pinned and fetched from the upstream seed, /rules /pack /downloads content, optional
+`--with-llm` / `--llm-public` and `--own-profiles`. `--terraform` creates the VM first (needs
+terraform.tfvars). `--help` lists the prerequisites. Players then run
+`tools/setup-desktop.sh --seed <nid>@<host>:8776` (fresh desktop: tools, identity, repos, npm, launcher).
+
 ## One-time setup
 
 ```sh
