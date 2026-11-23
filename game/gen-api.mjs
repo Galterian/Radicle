@@ -22,7 +22,7 @@ import path from 'node:path';
 import { createGenJobs, GEN_KINDS } from './gen-jobs.mjs';
 import { genConfig } from './effect-gen.mjs';
 import { publishDefinition } from './editor-publish.mjs';
-import { loadProfile, addArchivedCard } from './profile.mjs';
+import { loadProfile, addArchivedCard, addCustomClass } from './profile.mjs';
 import { vocab } from './gen-tags.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -83,11 +83,13 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       const cfg = genConfig(process.env, { file: path.join(path.dirname(ctx.profileFile), 'llm.json') });
       let host = '';
       try { host = cfg.url ? new URL(cfg.url).host : ''; } catch {}
+      let fallback = '';   // the desktop: its own 8B first, this OCI host when that is not reachable
+      try { fallback = cfg.fallback?.url ? new URL(cfg.fallback.url).host : ''; } catch {}
       const rt = jobs.remoteTest?.() || null;
       let testHost = '';
       try { testHost = rt?.url ? new URL(rt.url).host : ''; } catch {}
       return sendJson(res, 200, { ok: true, kinds: GEN_KINDS, busy: jobs.busy(),
-        model: { configured: !!cfg.url, host, name: cfg.model, key_set: !!cfg.key, mobile: process.env.CHAOSD6_MOBILE === '1' },
+        model: { configured: !!cfg.url, host, ...(fallback ? { fallback } : {}), name: cfg.model, key_set: !!(cfg.key || cfg.fallback?.key), mobile: process.env.CHAOSD6_MOBILE === '1' },
         test: rt ? { where: 'oci', host: testHost } : { where: 'local' }, drafts: jobs.list() });
     }
     case 'POST key': {
@@ -165,8 +167,8 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       let clRef = null;   // a class: the handshake ref a character needs to hold it (profile class_ref)
       try {
         const ref = await refOf(kind, d.def, r.ref || {}, v.verdict);
-        if (kind === 'class') clRef = ref;
-        // a class is not a card (profile cards are skills + effects): no archive grant — the ref is on the draft
+        if (kind === 'class') { clRef = ref; addCustomClass(ctx.profileFile, d.def, ref); }   // a NEW character of the team may take it (user 2026-11-23)
+        // a class is not a card (profile cards are skills + effects): no archive grant — profile.custom_classes instead
         if (kind !== 'class') for (const c of loadProfile(ctx.profileFile).characters || []) {
           const x = addArchivedCard(ctx.profileFile, c.id, { kind, id: d.def.id, ref }, s.team.name, { kill: false, custom: true });
           if (x) granted.push({ character: c.id, name: c.name, uid: x.uid });

@@ -1390,6 +1390,7 @@ function recomputeSightSet() {
   }
   state.ui.sightSet = set;
   checkEncounter(set);
+  maybeBanter(set);
 }
 
 function hexDistanceTo(e) {
@@ -1458,6 +1459,7 @@ function followLeaderName(e) {
 }
 function unattendedTagsHtml(e) {
   const out = [];
+  if (e?.ai_role === 'builder') out.push('<span class="ros-builder" title="NPC builder (AI skirmish): raises Barricades next to itself, avoids fights">🔨 builder</span>');
   if (Number(e?.leader) > 0) out.push(`<span class="ros-leader" title="leads ${e.leader} unattended character${e.leader === 1 ? '' : 's'}">⚑ leader ${e.leader}</span>`);
   if (e?.shadow_of) out.push(e.led_by ? `<span class="ros-follow" title="unattended — its player closed the game; it follows its master">follow ${escHtml(followLeaderName(e))}</span>`
     : '<span class="ros-follow" title="unattended — its player closed the game; the computer holds its ground">unattended</span>');
@@ -3064,10 +3066,12 @@ function connect() {
       }
       // Dimension Out (rule_dimension_out): started / interrupted — and done: back to the menu.
       if (m.kind === 'dim_out') {
-        logUI(m.active ? `⇱ Dimension Out — you leave at turn ${m.until_turn}; moving, attacking or casting interrupts it` : `⇱ Dimension Out interrupted${m.why ? ` (${m.why})` : ''}`, 'phase');
+        if (m.refused) { logUI(`⇱ can't leave at once: ${m.why || 'the encounter is not over'}`, 'phase'); profileBanner(`⇱ Can't leave at once — ${m.why || 'the encounter is not over'}`, 'loss'); }
+        else logUI(m.active ? `⇱ Dimension Out — you leave at turn ${m.until_turn}; moving, attacking or casting interrupts it` : `⇱ Dimension Out interrupted${m.why ? ` (${m.why})` : ''}`, 'phase');
         updateDimOutButton();
       }
       if (m.kind === 'dim_out_done') dimOutDone(m);
+      if (m.kind === 'banter') playBanter(m.lines);   // AI skirmish banter scene (maybeBanter)
       if (m.kind === 'standoff') {
         logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
       }
@@ -3092,7 +3096,8 @@ function connect() {
 // Desktop + phone: banners for the moments a player must not miss (user ruling 2026-11-13) —
 // a card won or lost to the profile, a teammate's gate, the encounter defeated. Sticky ones
 // stay until closed; a card won / lost fades after 25 s, the rest after 12 s. At most three, newest on top.
-function profileBanner(text, kind = '', { sticky = false, badge = '' } = {}) {
+// `action: { label, title, run }` adds a button; the banner text is clickable too (run(banner) → true removes it).
+function profileBanner(text, kind = '', { sticky = false, badge = '', action = null } = {}) {
   let box = document.getElementById('pf-banners');
   if (!box) { box = document.createElement('div'); box.id = 'pf-banners'; document.body.appendChild(box); }
   const b = document.createElement('div');
@@ -3102,8 +3107,15 @@ function profileBanner(text, kind = '', { sticky = false, badge = '' } = {}) {
   if (badge) span.insertAdjacentHTML('beforeend', ` ${badge}`);   // source badge (effect_source.js HTML, escaped there)
   const x = document.createElement('button');
   x.type = 'button'; x.className = 'pf-banner-x'; x.textContent = '✕'; x.title = 'dismiss';
-  x.onclick = () => b.remove();
-  b.append(span, x);
+  x.onclick = (e) => { e.stopPropagation(); b.remove(); };
+  if (action) {
+    const go = document.createElement('button');
+    go.type = 'button'; go.className = 'pf-banner-go'; go.textContent = action.label; go.title = action.title || '';
+    const run = (e) => { e.stopPropagation(); if (action.run(b)) b.remove(); };
+    go.onclick = run;
+    span.classList.add('pf-banner-click'); span.title = action.title || ''; span.onclick = run;
+    b.append(span, go, x);
+  } else b.append(span, x);
   box.prepend(b);
   while (box.children.length > 3) box.lastChild.remove();
   const ms = kind === 'gain' || kind === 'loss' ? 25000 : 12000;
@@ -3180,6 +3192,42 @@ if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === 'skil
   }, 3000);
 }
 
+// Banter (user 2026-11-23): "funny fantasy lines … conversation balloons between the units". In an AI skirmish
+// dimension (some unit carries an ai_role) my peer asks the llama-server for ONE bulk scene between me and the units
+// in my sight (peer.mjs banterFor → llm-brain.mjs askBanter) and this plays it, a line every BANTER_GAP_MS, as
+// speech balloons + 💬 log lines. A unit new to my sight asks again (≥ 20 s apart); a quiet scene every 75 s.
+const BANTER_GAP_MS = 2800;
+function maybeBanter(sight) {
+  const b = (state.ui.banter ||= { heard: new Set(), askedAt: 0, playingUntil: 0 });
+  if (!state.myPeerId || !state.entities?.some(e => e.ai_role)) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me || !(me.life > 0)) return;
+  const now = Date.now();
+  if (now < b.playingUntil || now - b.askedAt < 20000) return;
+  const seen = state.entities.filter(e => e.peer_id !== state.myPeerId && e.life > 0 && !isGone(e) && !hiddenFromMe(e)
+    && Number.isInteger(e.tile_q) && sight.has(`${e.tile_q},${e.tile_r}`));
+  if (!seen.length) return;
+  if (!seen.some(e => !b.heard.has(e.peer_id)) && now - b.askedAt < 75000) return;
+  b.askedAt = now;
+  for (const e of seen) b.heard.add(e.peer_id);
+  const d = (e) => (Math.abs(e.tile_q - me.tile_q) + Math.abs(e.tile_r - me.tile_r) + Math.abs(e.tile_q + e.tile_r - me.tile_q - me.tile_r)) / 2;
+  send({ kind: 'banter', ids: seen.sort((a, b2) => d(a) - d(b2)).slice(0, 5).map(e => e.peer_id) });
+}
+function playBanter(lines) {
+  const b = (state.ui.banter ||= { heard: new Set(), askedAt: 0, playingUntil: 0 });
+  const ok = (Array.isArray(lines) ? lines : []).filter(l => typeof l?.peer_id === 'string')
+    .map(l => ({ id: l.peer_id, text: cleanSayUI(l.text) })).filter(l => l.text).slice(0, 8);
+  if (!ok.length) return;
+  b.playingUntil = Date.now() + ok.length * BANTER_GAP_MS + SPEECH_MS;
+  ok.forEach((l, i) => setTimeout(() => {
+    const e = state.entities.find(p => p.peer_id === l.id);
+    if (!e || !(e.life > 0) || isGone(e)) return;   // fell or left meanwhile: its line is skipped
+    (state.ui.speech ||= {})[l.id] = { text: l.text, startAt: performance.now(), duration: SPEECH_MS };
+    logUI(`💬 ${peerShort(l.id)}: “${l.text}”`, 'evt', { peerId: l.id });
+    rendererRef?.render?.();
+  }, i * BANTER_GAP_MS));
+}
+
 // Encounter defeated (user ruling 2026-11-13): once every enemy the team has seen is down and none
 // is in sight, tell the player the encounter is won and they may quit safely (profile writes are
 // immediate). A fresh enemy coming into sight starts a new encounter.
@@ -3203,7 +3251,11 @@ function checkEncounter(sight) {
   encounter.done = true;
   const text = `🏁 Encounter defeated — every enemy you saw (${ids.length}) is down. You may quit safely: your profile is already saved.`;
   logUI(text, 'phase');
-  profileBanner(text, 'win', { sticky: true });
+  // User 2026-11-23: clicking the banner (or its button) leaves the dimension at once — no 10-round channel.
+  // The peer refuses if an enemy has come into sight since (dimOutNow in peer.mjs) and the HUD logs why.
+  profileBanner(text, 'win', { sticky: true, action: {
+    label: '⇱ Leave now', title: 'Leave this dimension now (the encounter is cleared — no Dimension Out channel needed)',
+    run: () => { send({ kind: 'dim_out', now: true }); return true; } } });
 }
 
 // Phone: short-lived notices over the map (HP changes, deaths) — the event log
@@ -3757,6 +3809,7 @@ function wireInput() {
           invisible: hasInvis(p),
           shadow: !!p.shadow_of,   // unattended (rule_unattended_character): drawn dimmed, "follow <leader>" / "unattended" tag
           leader: Number(p.leader) || 0,   // ⚑ flag: a master of unattended characters
+          aiRole: p.ai_role || '',   // AI skirmish: a builder gets a 🔨 before its name
           followName: p.shadow_of ? followLeaderName(p) : '',
           // Dimension Out countdown (rule_dimension_out): rounds left before it leaves, null = not channelling.
           dimOutLeft: Number(p.dim_out_until_turn) >= 0 && typeof state.turn === 'number' ? Math.max(0, Number(p.dim_out_until_turn) - state.turn) : null,

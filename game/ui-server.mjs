@@ -44,6 +44,7 @@ import { randomBytes } from 'node:crypto';
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API), launcher only
 import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
+import { testPriorityEnv } from './test-priority.mjs';   // Test Random character: my drafts, then my team's published defs first (user 2026-11-23)
 
 const pexec = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -291,6 +292,10 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
   const pc = override?.hero || null;
   const hero = pc ? { id: pc.base_character, name: pc.name } : randomCharacter();
   const file = profilePath();
+  // Test Random character (user 2026-11-23): the random hero plays my draft class / skills / effects first, then my
+  // team's published ones, then built-ins (test-priority.mjs; player-1 only — a harness's FORCE_FOREIGN_* wins).
+  const prio = mode === 'test-random' && !pc ? testPriorityEnv(file, { loadProfile }) : { env: {}, summary: '' };
+  if (prio.summary) console.log(`[launcher] Test Random character: ${prio.summary}`);
   // AI skirmish (2026-11-22, game/llm-brain.mjs): Create Dimension (any non-test launch; body.ai false / AI_SKIRMISH=0
   // turns it off, body.ai true turns it on for a test) adds a rival team (npc_c, hostile to everyone) and NPC builders
   // (npc_a, raise Barricades) and gives every bot an AI_ROLE for the local llama-server (LLM_URL, default
@@ -384,7 +389,8 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
       ...commonPeerEnv(),
       ...netEnv,
       ...(p.profile ? profileEnv(file, p.profile) : {}),
-      AI_ROLE:           ai && p.aiRole ? p.aiRole : '',
+      ...(p === peers[0] ? prio.env : {}),
+      AI_ROLE:          ai && p.aiRole ? p.aiRole : '',
       // llm-route.mjs: my team's bots may also ask my teammates' nodes (signed with this device's key) — team role only.
       ...(ai && p.aiRole === 'team' ? { LLM_PROFILE_FILE: file } : {}),
     });

@@ -157,3 +157,96 @@ export function echoesOption(say, label) {
   const lab = new Set(words(label));
   return w.filter(x => lab.has(x)).length / w.length >= 0.75;
 }
+
+// ---- Banter (user 2026-11-23): "funny fantasy world lines for the units I see … conversation balloons between the
+// units", generated in BULK — one request writes a short scene for every unit in sight, off the planning path (no
+// 4.5 s deadline, never part of a plan or the state hash). Asked by the hero's peer for its own UI (peer.mjs
+// banterFor); the UI plays the lines one after another as speech balloons.
+export const BANTER_MAX_UNITS = 6;
+export const BANTER_LINES = 8;
+const ROLE_WORDS = { hero: 'the human hero', team: "the hero's ally", builder: "the hero's builder (raises barricades, grumbles a lot)",
+  rival: 'a rival team hero (boastful)', monster: 'a wild monster (growls, hungry)', unit: 'a wanderer' };
+export function banterSystemPrompt() {
+  return [
+    'You write funny banter for a fantasy hex battle game, like a comic fantasy novel.',
+    'Rules: every line is SHORT (4 to 9 words) and different; speakers tease, threaten, joke and answer each other;',
+    'call the OTHER units by name, never yourself; monsters growl or speak broken words; builders grumble about walls and stones.',
+    'Never mention cards, dice, numbers, turns or the game. Reply JSON {"lines": [{"who": n, "line": "..."}]}.',
+    'Example (other names): Grok: "Me smash tiny wall!" / Mira: "That wall cost me three fingernails, Grok." / Sir Hob: "Stand back, Mira, I shall bravely watch." / Grok: "Knight smell like soup."',
+  ].join('\n');
+}
+// units: [{ name, what (creature / class name or ''), role (hero|team|builder|rival|monster), friend (bool, from the hero's side) }]
+export function banterUserPrompt({ units, place = '', mood = '' }) {
+  return [
+    `Scene${place ? ` in ${place}` : ''}${mood ? `: ${mood}` : ''}. Speakers:`,
+    ...units.map((u, i) => `${i + 1}. ${u.name}${u.what ? ` (${u.what})` : ''} — ${ROLE_WORDS[u.role] || ROLE_WORDS.unit}, ${u.friend ? "on the hero's side" : 'an enemy of the hero'}`),
+    `Write ${BANTER_LINES} lines of conversation between them; each line answers the one before; no speaker twice in a row; everyone speaks at least once.`,
+  ].join('\n');
+}
+export function banterSchema(n) {
+  return {
+    type: 'object',
+    properties: { lines: { type: 'array', minItems: 3, maxItems: BANTER_LINES, items: {
+      type: 'object', properties: { who: { type: 'integer', enum: Array.from({ length: n }, (_, i) => i + 1) }, line: { type: 'string', minLength: 8, maxLength: SAY_MAX + 20 } },
+      required: ['who', 'line'], additionalProperties: false } } },
+    required: ['lines'],
+    additionalProperties: false,
+  };
+}
+// A long line is cut at a word (never mid-word) to fit a balloon: SAY_MAX characters with its "…".
+function shortLine(s) {
+  const t = cleanSay(String(s ?? '').replace(/[*_]/g, ''));
+  if (t.length < SAY_MAX) return t;
+  const cut = t.slice(0, SAY_MAX - 1).replace(/[\s,;:—-]+\S*$/, '');
+  return `${cut || t.slice(0, SAY_MAX - 1)}…`;
+}
+// → [{ who (0-based index), line }] — cleaned, empty / repeated lines and a speaker answering itself dropped.
+export function parseBanter(text, n) {
+  if (typeof text !== 'string') return null;
+  const m = text.replace(/<think>[\s\S]*?<\/think>/g, '').match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let o;
+  try { o = JSON.parse(m[0]); } catch { return null; }
+  if (!Array.isArray(o?.lines)) return null;
+  const out = [], seen = new Set();
+  for (const l of o.lines.slice(0, BANTER_LINES)) {
+    const who = Number(l?.who);
+    const line = shortLine(l?.line);
+    const key = line.toLowerCase().replace(/[^a-z]+/g, '');
+    if (!Number.isInteger(who) || who < 1 || who > n || !line || seen.has(key)) continue;
+    if (out.length && out[out.length - 1].who === who - 1) continue;
+    seen.add(key);
+    out.push({ who: who - 1, line });
+  }
+  return out.length ? out : null;
+}
+// One bulk request → { lines, ms } | { error, ms } | null (model off). Never throws.
+export async function askBanter(cfg, { units, place = '', mood = '', timeoutMs = 25000, fetchImpl = globalThis.fetch }) {
+  const us = (units || []).slice(0, BANTER_MAX_UNITS);
+  if (!cfg.url || us.length < 2 || typeof fetchImpl !== 'function') return null;
+  const t0 = Date.now();
+  const body = {
+    model: cfg.model,
+    messages: [{ role: 'system', content: banterSystemPrompt() }, { role: 'user', content: banterUserPrompt({ units: us, place, mood }) }],
+    temperature: Math.max(cfg.temperature, 0.9),
+    max_tokens: 420,
+    frequency_penalty: 0.6, presence_penalty: 0.4, repeat_penalty: 1.15,
+    cache_prompt: true,
+    chat_template_kwargs: { enable_thinking: false },
+    response_format: { type: 'json_schema', json_schema: { name: 'banter', strict: true, schema: banterSchema(us.length) } },
+  };
+  try {
+    const r = await fetchImpl(`${cfg.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(Math.max(1000, timeoutMs)),
+    });
+    if (!r.ok) return { error: `http ${r.status}`, ms: Date.now() - t0 };
+    const j = await r.json();
+    const lines = parseBanter(j?.choices?.[0]?.message?.content, us.length);
+    return lines ? { lines, ms: Date.now() - t0 } : { error: 'malformed answer', ms: Date.now() - t0 };
+  } catch (e) {
+    return { error: e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 'timeout' : (e?.cause?.code || e?.message || 'error'), ms: Date.now() - t0 };
+  }
+}

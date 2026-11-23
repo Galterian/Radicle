@@ -208,7 +208,15 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         if (allies.length || plan.monsters?.length) teamAllies = { allies, tier: plan.tier || 'strong', file, profileEnv, keepMap: true, allySide: plan.allySide || 'npc_a', monsters: plan.monsters || [] };
         console.log(`[join] ${plan.join.summary}${plan.character ? ` as ${plan.character.name}` : plan.creatureId ? ` as ${plan.creatureId}` : ''}${allies.length ? ` + ${allies.length} allies (${plan.tier}, ${plan.allySide})` : ''}`);
       }
-      // test-random: CHARACTER_ID stays 'random' → the block below picks one, as before.
+      // test-random: CHARACTER_ID stays 'random' → the block below picks one, as before. The hero plays my draft
+      // class / skills / effects first, then my team's published ones (test-priority.mjs, user 2026-11-23; reset
+      // with the rest of the env after a Dimension Out).
+      if (plan.mode === 'test-random') {
+        const { testPriorityEnv } = await import('./test-priority.mjs');
+        const prio = testPriorityEnv(file, { loadProfile });
+        Object.assign(process.env, prio.env);
+        console.log(`[mobile] Test Random character: ${prio.summary}`);
+      }
     }
   } catch (e) {
     console.error(`[mobile] profile / menu failed (${e.message}); starting as a random character`);

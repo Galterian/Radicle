@@ -1001,22 +1001,37 @@ async function openCharacterEditor(mode, charId) {
 
   // Class
   const classText = h('div', { class: 'pe-class-text' });
-  const showClass = () => { const k = classes.get(c.class_id); classText.textContent = k ? (k.text || '—') : `unknown class ${c.class_id}`; };
+  // custom: a class the team published (profile.custom_classes, user 2026-11-23) — ✪, the server sets its ref
+  const showClass = () => { const k = classes.get(c.class_id); classText.textContent = k ? `${k.custom ? '✪ custom class — ' : ''}${k.text || '—'}` : `unknown class ${c.class_id}`; };
   const classCtl = create
-    ? sel([...classes.values()].map(k => ({ value: k.id, text: k.name })), c.class_id, { class: 'pe-select', onchange: (ev) => { c.class_id = ev.target.value; showClass(); refresh(); } })
-    : h('div', { class: 'pe-fixed', text: classes.get(c.class_id)?.name || prettyId(c.class_id) });
+    ? sel([...classes.values()].map(k => ({ value: k.id, text: `${k.custom ? '✪ ' : ''}${k.name}` })), c.class_id, { class: 'pe-select', onchange: (ev) => { c.class_id = ev.target.value; showClass(); voiceAt = 0; showUnit(); refresh(); } })
+    : h('div', { class: 'pe-fixed', text: `${classes.get(c.class_id)?.custom ? '✪ ' : ''}${classes.get(c.class_id)?.name || prettyId(c.class_id)}` });
   showClass();
   left.append(section(['Class ', !create && lockTag()], classCtl, classText));
 
   // Unit resources (Warlords III Battlecry unit: portrait, sprites, sounds)
   const portrait = h('img', { class: 'pe-portrait', alt: '' });
   const unitName = h('div', { class: 'pe-unit-name' });
-  let audio = null;
+  let audio = null, voiceAt = 0;
   const curUnit = () => units.find(u => u.kind === c.resources?.kind && u.id === c.resources?.id) || null;
-  const playBtn = h('button', { type: 'button', class: 'pe-play', text: '▶', title: "play the unit's voice", onclick: () => {
+  // The voice (user 2026-11-23): EVERY line of the unit, one per click — mixed with the class's voice (a custom class
+  // speaks with a unit of its own): unit, class, unit, class, … then the rest of the longer list.
+  const voiceLines = () => {
     const u = curUnit();
-    if (!u?.sound) return;
-    try { audio?.pause(); audio = new Audio(assetUrl(u.sound)); audio.play().catch(() => {}); } catch { /* no audio */ }
+    const mine = (u?.sounds?.length ? u.sounds : u?.sound ? [{ path: u.sound }] : []).map(s => ({ ...s, who: 'unit' }));
+    const cls = (classes.get(c.class_id)?.voice || []).map(s => ({ ...s, who: 'class' }));
+    const out = [];
+    for (let i = 0; i < Math.max(mine.length, cls.length); i++) { if (mine[i]) out.push(mine[i]); if (cls[i]) out.push(cls[i]); }
+    return out;
+  };
+  const voiceLabel = h('span', { class: 'pe-voice-line' });
+  const playBtn = h('button', { type: 'button', class: 'pe-play', text: '▶', title: 'play the voice — click again for the next line', onclick: () => {
+    const list = voiceLines();
+    if (!list.length) return;
+    const s = list[voiceAt % list.length];
+    voiceAt = (voiceAt + 1) % list.length;
+    voiceLabel.textContent = `${(voiceAt || list.length)}/${list.length}${s.who === 'class' ? ' · class' : ''}${s.line ? ` · “${s.line}”` : ''}`;
+    try { audio?.pause(); audio = new Audio(assetUrl(s.path)); audio.play().catch(() => {}); } catch { /* no audio */ }
   } });
   function showUnit() {
     const u = curUnit();
@@ -1024,21 +1039,23 @@ async function openCharacterEditor(mode, charId) {
     portrait.hidden = !src;
     if (src) portrait.src = src;
     unitName.textContent = u ? `${u.unit}${u.race ? ` (${u.race})` : ''}` : 'unknown unit';
-    playBtn.disabled = !u?.sound;
+    const n = voiceLines().length;
+    playBtn.disabled = !n;
+    voiceLabel.textContent = n ? `${n} line${n === 1 ? '' : 's'}` : '';
   }
   const unitCtl = create
     ? sel(units.map(u => ({ value: unitKey(u), text: `${u.name} — ${u.unit}${u.race ? ` (${u.race})` : ''}` })), c.resources ? `${c.resources.kind}:${c.resources.id}` : null, {
       class: 'pe-select', onchange: (ev) => {
         const u = units.find(x => unitKey(x) === ev.target.value);
         if (!u) return;
-        c.resources = { kind: u.kind, id: u.id };
+        c.resources = { kind: u.kind, id: u.id }; voiceAt = 0;
         // Same rule as profile.mjs newDraft: a character unit is also the base character the peer reads.
         if (u.kind === 'character' && (cat.base_characters || []).some(b => b.id === u.id)) c.base_character = u.id;
         showUnit(); refresh();
       } })
     : null;
   showUnit();
-  left.append(section(['Unit ', !create && lockTag()], unitCtl, h('div', { class: 'pe-unit' }, portrait, h('div', { class: 'pe-unit-meta' }, unitName, playBtn))));
+  left.append(section(['Unit ', !create && lockTag()], unitCtl, h('div', { class: 'pe-unit' }, portrait, h('div', { class: 'pe-unit-meta' }, unitName, h('div', { class: 'pe-voice' }, playBtn, voiceLabel)))));
 
   // Combo (random, never editable)
   left.append(section(['Combo ', h('span', { class: 'pe-lock', text: '🎲 random, fixed' })],

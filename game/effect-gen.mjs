@@ -30,13 +30,20 @@ export const GEN_DURATIONS = Object.freeze(['instant', 'permanent', 'channel', '
 export function readLlmFile(file) {
   try { return file ? JSON.parse(fs.readFileSync(file, 'utf8')) || {} : {}; } catch { return {}; }
 }
+// The desktop (user 2026-11-23): its OWN 8B first (llm.json local_big_url, default http://127.0.0.1:8096); when that
+// cannot be reached, the OCI 8B of llm.json big_url / big_key (cfg.fallback; complete() switches once, for good).
+// The phone has no local big model: big_url only (the Drafts page asks for the OCI URL + key). LLM_BIG_URL = that url only.
 export function genConfig(env = {}, { file = '' } = {}) {
   const f = readLlmFile(file);
-  // the phone has no local big model: no default there (the Drafts page asks for the OCI URL + key)
-  const url = String(env.LLM_BIG_URL ?? f.big_url ?? (env.CHAOSD6_MOBILE === '1' ? '' : 'http://127.0.0.1:8096')).replace(/\/+$/, '');
+  const clean = (u) => { const s = String(u ?? '').replace(/\/+$/, ''); return s === '0' ? '' : s; };
+  const desktop = env.LLM_BIG_URL === undefined && env.CHAOSD6_MOBILE !== '1';
+  const url = clean(env.LLM_BIG_URL ?? (desktop ? f.local_big_url ?? 'http://127.0.0.1:8096' : f.big_url));
+  const ociKey = String(env.LLM_BIG_KEY ?? f.big_key ?? env.LLM_KEY ?? f.remote_key ?? '');
+  const oci = clean(f.big_url);
   return {
-    url: url === '0' ? '' : url,
-    key: String(env.LLM_BIG_KEY ?? f.big_key ?? env.LLM_KEY ?? f.remote_key ?? ''),
+    url,
+    key: desktop ? String(env.LLM_BIG_KEY ?? f.local_big_key ?? '') : ociKey,
+    fallback: desktop && oci && oci !== url ? { url: oci, key: ociKey } : null,
     model: env.LLM_BIG_MODEL || 'qwen3-8b',
     timeoutMs: Math.max(30_000, Number(env.LLM_BIG_TIMEOUT_MS) || 20 * 60_000),
     attempts: Math.max(1, Math.min(6, Number(env.GEN_ATTEMPTS) || 3)),
@@ -285,7 +292,19 @@ export function longFetch(url, { method = 'POST', headers = {}, body = '', signa
 }
 
 // schema: the JSON schema the answer is held to (default: an effect definition; null = free text, e.g. a test review).
-export async function complete(cfg, messages, { fetchImpl = longFetch, timeoutMs = cfg.timeoutMs, temperature = 0.4, onProgress = null, schema = answerSchema(), maxTokens = cfg.maxTokens } = {}) {
+// The desktop's own 8B unreachable (nothing listens / no route) and cfg.fallback set → cfg becomes the OCI one (mutated:
+// the next attempts of this generation go straight there; cfg.fell_back_from = the local url) and the call is repeated.
+const UNREACHABLE = /^(ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN|ECONNRESET|EADDRNOTAVAIL)$/;
+export async function complete(cfg, messages, opts = {}) {
+  const r = await completeOnce(cfg, messages, opts);
+  if (!r.error || !cfg.fallback || !UNREACHABLE.test(r.error)) return r;
+  const from = cfg.url;
+  Object.assign(cfg, { url: cfg.fallback.url, key: cfg.fallback.key, fallback: null, fell_back_from: from });
+  opts.onFallback?.({ from, to: cfg.url, error: r.error });
+  const again = await completeOnce(cfg, messages, opts);
+  return { ...again, ms: again.ms + r.ms, fell_back: { from, error: r.error } };
+}
+async function completeOnce(cfg, messages, { fetchImpl = longFetch, timeoutMs = cfg.timeoutMs, temperature = 0.4, onProgress = null, schema = answerSchema(), maxTokens = cfg.maxTokens } = {}) {
   const t0 = Date.now();
   const stream = typeof onProgress === 'function';
   try {
@@ -326,7 +345,7 @@ export async function complete(cfg, messages, { fetchImpl = longFetch, timeoutMs
     if (!usage && timings) usage = { prompt_tokens: (timings.prompt_n ?? 0) + (timings.cache_n ?? 0), completion_tokens: timings.predicted_n ?? n };
     return { text, ms: Date.now() - t0, usage, timings };
   } catch (e) {
-    return { error: e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 'timeout' : (e?.cause?.code || e?.message || 'error'), ms: Date.now() - t0 };
+    return { error: e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 'timeout' : (e?.cause?.code || e?.code || e?.message || 'error'), ms: Date.now() - t0 };
   }
 }
 
@@ -419,7 +438,8 @@ export async function generateDef(spec, { idea, cfg = genConfig(process.env), fe
     log(`attempt ${i}/${cfg.attempts}: asking ${cfg.model} at ${cfg.url}…`);
     const prog = onProgress ? (x) => onProgress({ attempt: i, of: cfg.attempts, expect, ...x }) : null;
     prog?.({ phase: 'wait' });
-    const ans = await complete(cfg, messages, { fetchImpl, temperature: Math.min(0.9, 0.4 + 0.2 * (i - 1)), onProgress: prog, schema: spec.answerSchema() });   // retries vary more: the 8B re-sends its answer otherwise
+    const ans = await complete(cfg, messages, { fetchImpl, temperature: Math.min(0.9, 0.4 + 0.2 * (i - 1)), onProgress: prog, schema: spec.answerSchema(),   // retries vary more: the 8B re-sends its answer otherwise
+      onFallback: ({ from, to, error }) => log(`attempt ${i}: the own 8B at ${from} is not reachable (${error}) → OCI ${to}`) });
     if (ans.usage?.completion_tokens) expect = ans.usage.completion_tokens;
     prog?.({ phase: 'check' });
     if (ans.error) { tries.push({ ms: ans.ms, error: ans.error }); log(`attempt ${i}: ${ans.error} after ${ans.ms} ms`); if (/^(timeout|http 40[13])/.test(ans.error)) break; continue; }

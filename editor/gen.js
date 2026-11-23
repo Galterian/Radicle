@@ -411,7 +411,7 @@ async function routeList(rest) {
   const keyBtn = h('button', { class: 'au-btn', type: 'button', onclick: () => openKeySheet(info) }, info.model?.key_set ? 'Change model key…' : 'Model key…');
   const where = info.test?.where === 'oci' ? `test games run on ${info.test.host || 'OCI'}` : 'test games run on this node';
   const model = info.model?.configured
-    ? h('div', { class: 'au-bar' }, h('span', { class: 'au-hint' }, `Model: ${info.model.name} at ${info.model.host}${info.model.key_set ? '' : ' (no key)'} · ${where}`), info.model.mobile || !info.model.key_set ? keyBtn : null)
+    ? h('div', { class: 'au-bar' }, h('span', { class: 'au-hint' }, `Model: ${info.model.name} at ${info.model.host}${info.model.fallback ? `, else OCI ${info.model.fallback}` : ""}${info.model.key_set ? '' : ' (no key)'} · ${where}`), info.model.mobile || !info.model.key_set ? keyBtn : null)
     : h('div', { class: 'au-bar' }, h('span', { class: 'au-hint' }, info.model?.mobile ? 'Enter the OCI model key to generate from this phone.' : 'No big model on this node: run "node tools/effect-gen.mjs --save-key" (OCI) or install the desktop 8B — or enter the OCI key here.'), keyBtn);
   const list = h('div', { class: 'gen-list' });
   for (const d of info.drafts || []) {
@@ -438,7 +438,7 @@ async function routeList(rest) {
 
 // The OCI model URL + key (the phone has no local model); stored by the node in <profile dir>/llm.json, never shown again.
 function openKeySheet(info) {
-  const url = h('input', { type: 'url', id: 'gen-key-url', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: `https://${info.model?.host && !/^127\.|^localhost/.test(info.model.host) ? info.model.host : '92-5-138-121.sslip.io'}/llm-big` });
+  const url = h('input', { type: 'url', id: 'gen-key-url', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: `https://${info.model?.fallback || (info.model?.host && !/^127\.|^localhost/.test(info.model.host) ? info.model.host : '92-5-138-121.sslip.io')}/llm-big` });
   const key = h('input', { type: 'password', id: 'gen-key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'the OCI LLM key' });
   const save = h('button', { class: 'au-btn au-primary', type: 'button' }, 'Save');
   let sh = null;

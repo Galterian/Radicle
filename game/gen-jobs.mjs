@@ -99,7 +99,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     const st = await statsFor(cfg);
     const tick = () => {
       const x = read(d.draft_id) || d;
-      x.status = prog ? formatStatus(prog, { elapsedMs: Date.now() - t0, sample: st?.s.latest() || null, statsError: st?.s.error() || '', where: st?.where || 'server' })
+      x.status = prog ? formatStatus(prog, { elapsedMs: Date.now() - t0, sample: st?.s.latest() || null, statsError: st?.s.error() || '', where: cfg.fell_back_from ? 'oci' : st?.where || 'server', ...(cfg.fell_back_from ? { sample: null } : {}) })
         : `[gen] ${Math.floor((Date.now() - t0) / 60000)}:${String(Math.floor((Date.now() - t0) / 1000) % 60).padStart(2, '0')} waiting for the server`;
       x.status_at = nowIso(); write(x);
     };

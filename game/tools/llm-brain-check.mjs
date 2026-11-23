@@ -1,6 +1,6 @@
 // Offline oracles for game/llm-brain.mjs (no llama-server needed): node tools/llm-brain-check.mjs → "all llm checks passed".
 import assert from 'node:assert/strict';
-import { llmConfig, aiRoleFor, cleanSay, parseAnswer, answerSchema, askLlm, userPrompt, systemPrompt, echoesOption, askThisAction, SAY_MAX } from '../llm-brain.mjs';
+import { llmConfig, aiRoleFor, cleanSay, parseAnswer, answerSchema, askLlm, userPrompt, systemPrompt, echoesOption, askThisAction, SAY_MAX, parseBanter, askBanter, banterSchema, banterUserPrompt } from '../llm-brain.mjs';
 
 // config
 assert.equal(llmConfig({}).url, 'http://127.0.0.1:8095');
@@ -58,4 +58,24 @@ const keepAlive = setTimeout(() => {}, 2000);   // AbortSignal.timeout's timer i
 const slow = await askLlm(llmConfig({}), { system: 's', user: 'u', n: 2, timeoutMs: 200, fetchImpl: (url, init) => new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(init.signal.reason))) });
 assert.equal(slow.error, 'timeout'); clearTimeout(keepAlive);
 assert.equal(await askLlm(llmConfig({ LLM_URL: '0' }), { system: 's', user: 'u', n: 2 }), null);
+
+// banter (bulk scene): speaker enum, cleaning, no back-to-back speaker, no repeats, word-boundary cut, failure paths
+assert.deepEqual(banterSchema(3).properties.lines.items.properties.who.enum, [1, 2, 3]);
+assert.match(banterUserPrompt({ units: [{ name: 'Grok', what: 'Orc', role: 'monster', friend: false }, { name: 'Mira', role: 'builder', friend: true }], place: 'Ashen Wastes' }), /1\. Grok \(Orc\) — a wild monster.*enemy.*\n2\. Mira — the hero's builder/);
+const bl = parseBanter(JSON.stringify({ lines: [{ who: 1, line: 'Me smash *tiny* wall!' }, { who: 1, line: 'again me' }, { who: 2, line: 'Not my <b>wall</b>, Grok.' },
+  { who: 3, line: 'nobody' }, { who: 1, line: 'Me smash tiny wall!' }, { who: 1, line: 'One two three four five six seven eight nine ten eleven twelve thirteen' }] }), 2);
+assert.deepEqual(bl.map(l => l.who), [0, 1, 0]);
+assert.equal(bl[0].line, 'Me smash tiny wall!');
+assert.equal(bl[1].line, 'Not my  b wall /b , Grok.'.replace(/\s+/g, ' '));
+assert.ok(bl[2].line.length <= SAY_MAX && bl[2].line.endsWith('…') && !/\s…$/.test(bl[2].line) && /twelve…$|eleven…$|ten…$/.test(bl[2].line));
+assert.equal(parseBanter('{"lines": "x"}', 2), null);
+let bseen = null;
+const bok = await askBanter(llmConfig({}), { units: [{ name: 'A', role: 'hero', friend: true }, { name: 'B', role: 'monster', friend: false }], fetchImpl: async (url, init) => {
+  bseen = JSON.parse(init.body);
+  return { ok: true, json: async () => ({ choices: [{ message: { content: '{"lines":[{"who":2,"line":"Grr, tasty hero."},{"who":1,"line":"Not today, B."}]}' } }] }) };
+} });
+assert.deepEqual(bok.lines, [{ who: 1, line: 'Grr, tasty hero.' }, { who: 0, line: 'Not today, B.' }]);
+assert.equal(bseen.response_format.json_schema.name, 'banter');
+assert.equal(await askBanter(llmConfig({}), { units: [{ name: 'A' }] }), null);   // one unit: no scene
+assert.equal(await askBanter(llmConfig({ LLM_URL: '0' }), { units: [{ name: 'A' }, { name: 'B' }] }), null);
 console.log('all llm checks passed');

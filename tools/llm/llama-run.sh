@@ -29,6 +29,12 @@ has '--jinja' && ARGS+=(--jinja)
 has '--reasoning-budget' && ARGS+=(--reasoning-budget 0)
 has '--no-webui' && ARGS+=(--no-webui)
 has '--cont-batching' && ARGS+=(--cont-batching)
+# Host-RAM prompt cache: llama.cpp defaults to 8192 MiB, which grew the desktop server to 7.6 GB RSS and pushed a 16 GB
+# box into swap (2026-11-23: disk 100 %, the game hung). The per-slot KV cache already keeps each bot's system prompt.
+# Bot tier only: the big tier (effect/class generation) keeps llama.cpp's default so its ~6–7k-token system prompt
+# survives between retries; LLM_CACHE_RAM overrides either tier.
+if [ "$LLM_TIER" = big ]; then CACHE_RAM="${LLM_CACHE_RAM:-}"; else CACHE_RAM="${LLM_CACHE_RAM:-512}"; fi
+[ -n "$CACHE_RAM" ] && has '--cache-ram' && ARGS+=(--cache-ram "$CACHE_RAM")
 if [ -n "${LLM_API_KEY_FILE:-}" ]; then ARGS+=(--api-key-file "$LLM_API_KEY_FILE"); fi
 echo "[llm] $BIN ${ARGS[*]}"
 exec "$BIN" "${ARGS[@]}"

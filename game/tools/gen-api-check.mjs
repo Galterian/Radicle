@@ -333,6 +333,24 @@ try {
       `class publish → ${r.json?.ref?.branch || r.json?.error} on the (fake) chaosD6-Classes`);
     ok(r.json.granted?.length === 0 && JSON.stringify(loadProfile(profileFile).characters.map(c => c.cards)) === before && r.json.draft.published?.class_ref?.id === 'class_field_medic' && r.json.draft.published.class_ref.sha256,
       'class publish: no archive card; the class ref (sha256) is on the draft');
+    // a NEW character of the team may take the published class (user 2026-11-23): profile.custom_classes → catalog → create
+    const P = await import('../profile.mjs');
+    const pc = loadProfile(profileFile);
+    const cc = P.customClassesOf(pc).find(x => x.id === 'class_field_medic');
+    ok(cc?.ref?.sha256 === r.json.draft.published.class_ref.sha256 && cc.voice.length === d.def.resources.sounds.voice.length && cc.name === 'Field Medic',
+      'class publish → profile.custom_classes (ref, name, the voice)');
+    const pcat = P.loadCatalog(path.join(REPO, 'data'));
+    const ui = P.catalogForUI(pcat, pc).classes.find(x => x.id === 'class_field_medic');
+    ok(ui?.custom === true && ui.voice.length === cc.voice.length && !P.catalogForUI(pcat).classes.some(x => x.custom), 'the catalog offers the custom class (with its voice) to the editor');
+    const draft = { ...P.newDraft(pcat, pc), name: 'Medic One', class_id: 'class_field_medic', class_ref: { id: 'class_field_medic', sha256: 'f'.repeat(64), libs: {} } };
+    const p2 = P.createCharacter(structuredClone(pc), draft, pcat);
+    const made = p2.characters.at(-1);
+    ok(made.class_id === 'class_field_medic' && made.class_ref.sha256 === cc.ref.sha256, 'a new character takes the custom class with the TEAM\'s ref (not the client\'s)');
+    let refused = '';
+    try { P.createCharacter(structuredClone(pc), { ...P.newDraft(pcat, pc), name: 'X', class_id: 'class_not_published' }, pcat); } catch (e) { refused = e.message; }
+    ok(/custom class must be one your team published/.test(refused), 'an unpublished custom class is refused');
+    const merged = (await import('../profile-radicle.mjs')).mergeProfiles({ ...pc, custom_classes: [] }, pc);
+    ok(merged.custom_classes?.some(x => x.id === 'class_field_medic'), 'the team-branch merge keeps custom_classes');
   }
 
   // ---- the phone: model key form + the test on OCI's gen-test service ----
@@ -345,7 +363,25 @@ try {
     && lj.big_url === 'https://h.example/llm-big' && lj.test_url === 'https://h.example/gen-test' && lj.remote_url === 'https://h.example/llm', 'key saved (600, test_url derived), never sent back');
   delete process.env.LLM_BIG_URL;   // the env wins over llm.json (set at the top for the fake model)
   const dl = (await get('drafts')).json;
-  ok(dl.model.key_set === true && dl.model.host === 'h.example' && !JSON.stringify(dl).includes('secret-key'), 'GET drafts: key_set, host — no key');
+  ok(dl.model.key_set === true && dl.model.host === '127.0.0.1:8096' && dl.model.fallback === 'h.example' && !JSON.stringify(dl).includes('secret-key'), 'GET drafts (desktop): the own 8B, else OCI h.example, key_set — no key');
+  {   // the desktop: its own 8B first, OCI when it is not reachable (user 2026-11-23)
+    const { genConfig: gc, complete } = await import('../effect-gen.mjs');
+    const cfg = gc({}, { file: lf });
+    ok(cfg.url === 'http://127.0.0.1:8096' && cfg.key === '' && cfg.fallback?.url === 'https://h.example/llm-big' && cfg.fallback.key === 'secret-key-0123456789abcdef', 'desktop config: local first, the OCI url + key as the fallback (no OCI key sent to localhost)');
+    ok(gc({ CHAOSD6_MOBILE: '1' }, { file: lf }).url === 'https://h.example/llm-big' && !gc({ CHAOSD6_MOBILE: '1' }, { file: lf }).fallback && !gc({ LLM_BIG_URL: 'http://x:1' }, { file: lf }).fallback, 'phone / LLM_BIG_URL: that url only, no fallback');
+    const hits = [];
+    const fake = async (url, o) => { hits.push([url, o.headers.Authorization || '']); if (url.startsWith('http://127.0.0.1')) throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8096'), { code: 'ECONNREFUSED' });
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: '{"a":1}' } }] }) }; };
+    let fb = null;
+    const a1 = await complete(cfg, [{ role: 'user', content: 'x' }], { fetchImpl: fake, onFallback: (x) => { fb = x; } });
+    const a2 = await complete(cfg, [{ role: 'user', content: 'y' }], { fetchImpl: fake });
+    ok(a1.text === '{"a":1}' && a1.fell_back?.error === 'ECONNREFUSED' && fb?.to === 'https://h.example/llm-big' && hits[1][1] === 'Bearer secret-key-0123456789abcdef' && hits[0][1] === '',
+      'own 8B refused → the same call goes to OCI with the OCI key');
+    ok(a2.text && hits.length === 3 && hits[2][0].startsWith('https://h.example') && cfg.fell_back_from === 'http://127.0.0.1:8096', 'the next attempt goes straight to OCI');
+    const c2 = gc({}, { file: lf }), hits2 = [];
+    const httpErr = async (url) => { hits2.push(url); return { ok: false, status: 500, text: async () => 'boom' }; };
+    ok((await complete(c2, [{ role: 'user', content: 'x' }], { fetchImpl: httpErr })).error.startsWith('http 500') && hits2.length === 1, 'a local http error is NOT a fallback (the 8B is there)');
+  }
   const calls = [];
   const fakeOci = async (url, o = {}) => {
     calls.push({ url, auth: o.headers?.Authorization, method: o.method || 'GET' });

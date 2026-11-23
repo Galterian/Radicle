@@ -816,7 +816,7 @@ export function createRenderer(canvas, state) {
       // Label (outlined so it reads over textured tiles).
       // Unattended characters (rule_unattended_character): "follow <leader>" / "unattended"; a master gets a ⚑ flag.
       const label = isMobileUI && dead ? `☠ ${e.name}` : e.gone ? `⌛ ${e.name}` : e.shadow ? `${e.name} · ${e.followName ? `follow ${e.followName}` : 'unattended'}`
-        : e.leader > 0 && !dead ? `⚑ ${e.name}` : e.name;
+        : e.leader > 0 && !dead ? `⚑ ${e.name}` : e.aiRole === 'builder' && !dead ? `🔨 ${e.name}` : e.name;
       ctx.font = '11px ui-sans-serif, system-ui';
       ctx.textAlign = 'center';
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineJoin = 'round';

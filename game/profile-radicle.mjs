@@ -49,6 +49,10 @@ export function mergeProfiles(local, remote) {
   for (const o of [...(R.owners || []), ...(L.owners || [])].map(ownerObj)) if (o?.id && !owners.some(x => x.id === o.id)) owners.push(o);
   const out = { ...R, ...L, version: Math.max(L.version | 0, R.version | 0) || 1, team_name: L.team_name ?? R.team_name ?? '',
     team_order: order, characters: order.map(id => structuredClone(by.get(id))), deleted, owners };
+  // the team's published custom classes (profile.mjs addCustomClass): a union by id, the later `at` wins
+  const cls = new Map();
+  for (const x of [...(R.custom_classes || []), ...(L.custom_classes || [])]) if (x?.id && (!cls.has(x.id) || String(x.at || '') >= String(cls.get(x.id).at || ''))) cls.set(x.id, structuredClone(x));
+  if (cls.size) out.custom_classes = [...cls.values()].sort((a, b) => a.id.localeCompare(b.id));
   const orderAt = first.order_at || second.order_at;
   if (orderAt) out.order_at = orderAt;
   for (const c of out.characters) c.team = out.team_name;

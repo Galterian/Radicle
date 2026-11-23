@@ -74,7 +74,7 @@ import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
 import { effectResultsOf, plannedLossResults, naturalResults } from './effect-results.mjs';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcStuckCard } from './monster-deck.mjs';
-import { llmConfig, aiRoleFor, systemPrompt, userPrompt, echoesOption, askThisAction } from './llm-brain.mjs';
+import { llmConfig, aiRoleFor, systemPrompt, userPrompt, echoesOption, askThisAction, askBanter, BANTER_MAX_UNITS } from './llm-brain.mjs';
 import { LLM_PROTO, loadTeamAuth, remoteConfig, attachLlmRpc, createLlmRouter } from './llm-route.mjs';   // local → own team → OCI
 import { naturalConfig, naturalPermFor, parseCopies, dropOneCopy, naturalDamageBlock, onlyHolderAffliction, contactAfflictions, liftAtTower, creationBars, lostToHolders, nearestAlliedCreature, naturalLinkStats, naturalKind, naturalOfKind, isContactNatural } from './natural-perms.mjs';
 import { trapsInRange, clericRoute, nearestBuilding, buildSite, copyMade, shrineMade, hexDist, discAround } from './world-prims.mjs';   // phase 6: generic primitives (were class-world / class-traps)
@@ -950,6 +950,7 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv, at = n
     SHADOW_OF: '', SHADOW_STATS_JSON: '', SHADOW_DEATH_CARD: '', SHADOW_PROFILE_CHAR_ID: '', ALLY_OF: '', DIM_OUT_ON_START: '',
     RAISED_BY: String(permId || '').startsWith('class_') ? permId : '',   // C1 ruling 2026-11-16: a class-raised companion (Necromancer)
     FORCE_FOREIGN_CLASS: '', FOREIGN_CLASS_REF_JSON: '',   // CH: a companion does not inherit my foreign class (the phantom passes it below)
+    ...(process.env.TEST_PRIORITY === '1' ? { FORCE_FOREIGN_SKILL: '', FORCE_FOREIGN_EFFECT: '', FOREIGN_CARD_REFS_JSON: '', TEST_PRIORITY: '' } : {}),   // nor my Test Random drafts (test-priority.mjs)
     POSSESSED_BY: '',   // Possess 2026-11-17: only the creature my Possess brings in gets it (extraEnv)
     ...extraEnv,
   };
@@ -1535,27 +1536,56 @@ function makeEffectCard(id) {
     });
   }
 }
+// FOREIGN_CARD_REFS_JSON=[{kind, id, ref}] (Test Random character, test-priority.mjs): my team's published custom
+// skills / effects in my deck — from the content cache, else fetched once connected (profileForeignPending).
+if (process.env.FOREIGN_CARD_REFS_JSON && !profileChar) {
+  let refs = [];
+  try { refs = JSON.parse(process.env.FOREIGN_CARD_REFS_JSON); } catch (e) { console.warn(`[${PEER_LABEL}] FOREIGN_CARD_REFS_JSON: ${e.message}`); }
+  for (const x of (Array.isArray(refs) ? refs : []).filter(x => ['skill', 'effect'].includes(x?.kind) && x.ref).slice(0, 7)) {
+    const fr = await foreignCardFromRef(x, { timeoutMs: 2000, why: 'test priority', quiet: true });
+    if (fr.status === 'ready') { deck.push(fr.card); console.log(`[${PEER_LABEL}] test priority: my team's ${x.kind} ${x.id} in my deck (${fr.src})`); }
+    else if (fr.status === 'missing') { profileForeignPending.push(x); console.log(`[${PEER_LABEL}] test priority: my team's ${x.kind} ${x.id} not cached — fetching once connected`); }
+    else console.warn(`[${PEER_LABEL}] test priority: my team's ${x.kind} ${x.id} ${fr.status} (${fr.reason || ''}) skipped`);
+  }
+}
 // Shuffle.
 for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
-// FORCE_FOREIGN_EFFECT=<def.json> (dev/test only): a player-branch effect on top of my deck (E4 handshake).
+// FORCE_FOREIGN_EFFECT=<def.json>[,<def.json>…] (dev/test; Test Random: my drafts): player-branch effects on top of my deck (E4 handshake).
 // FORCE_FOREIGN_COPIES=n (1–4, tools/effect-gen-test.mjs): n copies, the first on top, the others every 4th card after it.
-if (process.env.FORCE_FOREIGN_EFFECT) {
-  const fc = fxPeer.forcedCard(process.env.FORCE_FOREIGN_EFFECT);
+const forcedFiles = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4);
+for (const file of forcedFiles(process.env.FORCE_FOREIGN_EFFECT).reverse()) {
+  const fc = fxPeer.forcedCard(file);
   if (fc) {
     deck.unshift(fc);
     const n = Math.max(1, Math.min(4, Number(process.env.FORCE_FOREIGN_COPIES) || 1));
     for (let i = 1; i < n; i++) deck.splice(Math.min(deck.length, 4 * i), 0, { ...fc, card_id: `${fc.card_id}${i}` });
   }
 }
-// FORCE_FOREIGN_SKILL=<def.json> (dev/test only): a player-branch skill on top of my deck (S4 handshake).
+// FORCE_FOREIGN_SKILL=<def.json>[,…] (dev/test; Test Random: my drafts): player-branch skills on top of my deck (S4 handshake).
 // FORCE_FOREIGN_SKILL_COPIES=n (1–4, tools/effect-gen-test.mjs): n copies, placed like FORCE_FOREIGN_COPIES.
-if (process.env.FORCE_FOREIGN_SKILL) {
-  const sc = skPeer.forcedCard(process.env.FORCE_FOREIGN_SKILL);
+for (const file of forcedFiles(process.env.FORCE_FOREIGN_SKILL).reverse()) {
+  const sc = skPeer.forcedCard(file);
   if (sc) {
     deck.unshift(sc);
     const n = Math.max(1, Math.min(4, Number(process.env.FORCE_FOREIGN_SKILL_COPIES) || 1));
     for (let i = 1; i < n; i++) deck.splice(Math.min(deck.length, 4 * i), 0, { ...sc, card_id: `${sc.card_id}${i}` });
   }
+}
+// TEST_PRIORITY=1 (Test Random character, user 2026-11-23): my drafts, then my team's published cards TAKE the dealt
+// slots (4 skills, 3 effects) — the built-ins only fill what is left; the foreign cards are spread every 3rd card from
+// the top (the opening hand holds some, with action cards to play them). Private deck state: never hashed.
+if (process.env.TEST_PRIORITY === '1' && !profileChar && entity.kind === 'character') {
+  const isForeign = (c) => !!(c.fx || c.sk);
+  for (const [kind, slots] of [['skill', 4], ['effect', 3]]) {
+    let over = deck.filter(c => c.kind === kind).length - slots;
+    for (let i = deck.length - 1; i >= 0 && over > 0; i--) if (deck[i].kind === kind && !isForeign(deck[i])) { deck.splice(i, 1); over--; }
+  }
+  const mine = deck.filter(isForeign);
+  for (const c of mine) deck.splice(deck.indexOf(c), 1);
+  mine.forEach((c, i) => deck.splice(Math.min(deck.length, 3 * i), 0, c));
+  const short = 15 - deck.length;   // DECK_MIN
+  for (let i = 0; i < short; i++) pushAction('P');
+  console.log(`[${PEER_LABEL}] test priority: ${mine.length ? mine.map(c => `${c.kind} ${c.effect_id || c.skill_id}`).join(', ') : 'none of mine'} first; then built-ins — ${deck.filter(c => c.kind === 'skill').length} skills, ${deck.filter(c => c.kind === 'effect').length} effects, ${deck.length} cards`);
 }
 // FORCE_OPENING=skill_sanctuary,B,A (dev/test only): move one card per entry
 // to the top of the deck so the opening hand is predictable. Only characters —
@@ -2421,10 +2451,26 @@ function discoverTrapMonsters(cq, cr) {
 // a fresh one of the same creature, same life, on the same tile — by the live hero with the smallest peer
 // id, so only one of us does it. Summoned creatures are never replaced (follow-up ruling, same day).
 const GHOST_MS = 120_000;
+// Was it ME who went quiet? (2026-11-23, New-Silent-Wilds: the box swapped, both builders froze for ~2 min, woke up to
+// find every snapshot 127 s old and EACH spawned stand-ins for the hero — who had left cleanly — and fresh monsters.)
+// A 1 s tick that comes > 5 s late means my own event loop stalled; then nobody is judged silent until a full silence
+// window has passed with me awake, so the snapshots that were only stale on my side get refreshed first.
+const SELF_STALL_MS = 5_000;
+let selfTickAt = Date.now(), selfStallUntil = 0;
+setInterval(() => {
+  const now = Date.now();
+  if (now - selfTickAt > SELF_STALL_MS) {
+    if (now >= selfStallUntil) console.log(`[${PEER_LABEL}] stall: my event loop was frozen ${Math.round((now - selfTickAt) / 1000)}s — nobody is judged silent for ${Math.round(Math.max(GHOST_MS, SHADOW_MS) / 1000)}s`);
+    selfStallUntil = now + Math.max(GHOST_MS, SHADOW_MS);
+  }
+  selfTickAt = now;
+}, 1_000).unref?.();
+const selfStalled = (now = Date.now()) => now < selfStallUntil || now - selfTickAt > SELF_STALL_MS;
 const replacedGhosts = new Set();
 setInterval(() => {
   if (IS_COMPANION || SHADOW_OF || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
   const now = Date.now();
+  if (selfStalled(now)) return;
   const heroes = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && !p.shadow_of && (p.life ?? 0) > 0 && (p.peer_id === PEER_ID_STRING || isFresh(p))).map(p => p.peer_id).sort();
   const summonedByAnyone = new Set(livePeers().flatMap(p => String(p?.summoned_csv || '').split(',').filter(Boolean)));
   for (const p of livePeers()) {
@@ -2458,6 +2504,7 @@ const shadowedHeroes = new Set();
 setInterval(() => {
   if (DIM_PRIVATE || IS_COMPANION || SHADOW_OF || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
   const now = Date.now();
+  if (selfStalled(now)) return;   // I was the frozen one (see SELF_STALL_MS)
   const heard = p => p.peer_id === PEER_ID_STRING || now - Date.parse(p.last_seen || 0) < Math.min(PEER_STALE_MS, SHADOW_MS);
   const spawners = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && !p.shadow_of && (p.life ?? 0) > 0 && heard(p)).map(p => p.peer_id).sort();
   if (spawners[0] !== PEER_ID_STRING) return;
@@ -2565,6 +2612,23 @@ function dimOutCancel(why) {
   dimOut = null;
   broadcastUI({ kind: 'dim_out', active: false, why });
   publishPublicState().catch(() => {});
+}
+// Encounter cleared (user 2026-11-23): "once the Encounter is cleared you may leave the Dimension immediately" — the
+// UI's banner decides the encounter is won (main.js checkEncounter); here I only refuse while a live enemy is still
+// within my sight radius, so the shortcut can't be used to run from a fight. Not part of the resolver / state hash.
+function dimOutNow() {
+  if (outNow || entity.life <= 0 || entity.kind !== 'character' || ownerPeerId) return false;
+  const me = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const now = Date.now();
+  const foe = livePeers().find(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && liveSnap(p, now) && hexDistance(me, p) <= REVEAL_RADIUS);
+  if (foe) {
+    console.log(`[${PEER_LABEL}] dimension out now: refused — ${foe.name || foe.peer_id} is still in sight`);
+    broadcastUI({ kind: 'dim_out', active: false, refused: true, why: `${foe.name || 'an enemy'} is still in sight — use ⇱ Dimension Out` });
+    return false;
+  }
+  dimOut = null;
+  leaveDimension(`encounter cleared — left at once (T${hg.turn})`);
+  return true;
 }
 setInterval(() => {
   if (outNow) return;
@@ -6675,6 +6739,35 @@ function llmOptions() {
   }
   return opts.slice(0, 9);
 }
+// Banter (user 2026-11-23, llm-brain.mjs askBanter): my UI asks for a short funny scene between the units it sees
+// ({kind:'banter', ids}); ONE bulk request writes every line, the answer goes back to my UI only ({kind:'banter',
+// lines:[{peer_id, text}]}) and is shown as speech balloons. Cosmetic: not in any plan, reveal or the state hash.
+// Local llama-server first, then the OCI route (LLM_REMOTE_URL / <profile dir>/llm.json) — e.g. on a phone.
+let banterBusy = false, banterAt = 0;
+async function banterFor(ids) {
+  if (banterBusy || Date.now() - banterAt < 15_000 || !Array.isArray(ids)) return;
+  const bare = (n) => String(n || '').replace(/^(Builder|Rival|Ally) — /, '');
+  const me = peersPublic.get(PEER_ID_STRING) || { peer_id: PEER_ID_STRING, name: ENTITY_NAME, alliance: entity.alliance, human: IS_HUMAN ? 1 : 0, class_id: entity.classId, life: entity.life };
+  const picked = [...new Set([PEER_ID_STRING, ...ids.map(String)])].map(id => id === PEER_ID_STRING ? me : peersPublic.get(id))
+    .filter(p => p && (p.life ?? 0) > 0 && !p.out).slice(0, BANTER_MAX_UNITS);
+  if (picked.length < 2) return;
+  const units = picked.map(p => ({
+    name: bare(p.name) || String(p.peer_id).slice(0, 12),
+    what: data.classes[p.class_id]?.name || data.creatures[p.creature_id]?.name || '',
+    role: p.ai_role || (p.peer_id === PEER_ID_STRING ? 'hero' : p.human ? (sideOf(p.alliance) === MY_SIDE ? 'team' : 'rival') : p.creature_id && sideOf(p.alliance) !== MY_SIDE ? 'monster' : 'team'),
+    friend: sideOf(p.alliance) === MY_SIDE,
+  }));
+  banterBusy = true; banterAt = Date.now();
+  try {
+    const place = DIM_NAME.replace(/^(Real|GenTest)-/, '').replace(/-/g, ' ');
+    let ans = await askBanter(LLM, { units, place });
+    const remote = remoteConfig(process.env, process.env.LLM_PROFILE_FILE || PROFILE_FILE);
+    if ((!ans || ans.error) && remote?.url) ans = await askBanter({ ...LLM, url: String(remote.url).replace(/\/+$/, ''), key: remote.key || '' }, { units, place });
+    if (!ans || ans.error) { console.log(`[${PEER_LABEL}] banter: no answer (${ans?.error || 'model off'}, ${ans?.ms ?? '?'} ms)`); return; }
+    console.log(`[${PEER_LABEL}] banter: ${ans.lines.length} lines for ${units.length} units in ${ans.ms} ms`);
+    broadcastUI({ kind: 'banter', ms: ans.ms, lines: ans.lines.map(l => ({ peer_id: picked[l.who].peer_id, text: l.line })) });
+  } finally { banterBusy = false; banterAt = Date.now(); }
+}
 let _llmSystem = null;
 function llmKick() {
   llmTurn = null;
@@ -7928,7 +8021,10 @@ wss.on('connection', (ws) => {
         }
       }
       // Dimension Out (rule_dimension_out): the HUD button starts the 10-turn channel, a second click cancels it.
-      if (m.kind === 'dim_out') {
+      // `now: true` = the "Encounter defeated" banner (user 2026-11-23): leave at once, no channel (dimOutNow checks).
+      if (m.kind === 'banter') banterFor(m.ids).catch(e => console.log(`[${PEER_LABEL}] banter: ${e.message}`));
+      if (m.kind === 'dim_out' && m.now === true) dimOutNow();
+      else if (m.kind === 'dim_out') {
         if (m.active === false || dimOut) dimOutCancel('cancelled by its player');
         else dimOutStart('the Dimension Out button');
       }

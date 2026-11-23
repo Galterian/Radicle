@@ -494,7 +494,7 @@ log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
 // PS: partial foreign swarms — FOREIGN_HOLDERS / FOREIGN_REFUSERS reach every peer through the launcher's env (foreign-select.mjs).
 {
   const fsel = await import('../foreign-select.mjs');
-  const fk = ['FORCE_FOREIGN_EFFECT', 'FORCE_FOREIGN_SKILL', 'FORCE_FOREIGN_CLASS'].filter(k => process.env[k]).map(k => `${k.slice(14).toLowerCase()} ${path.basename(process.env[k])}`);
+  const fk = ['FORCE_FOREIGN_EFFECT', 'FORCE_FOREIGN_SKILL', 'FORCE_FOREIGN_CLASS'].filter(k => process.env[k]).map(k => `${k.slice(14).toLowerCase()} ${process.env[k].split(',').map(f => path.basename(f)).join('+')}`);   // a comma list (Test Random drafts) too
   if (fk.length) log(`foreign: ${fk.join(', ')} — holders ${(fsel.foreignHolders() || ['every peer']).join(',')}; refusers ${fsel.foreignRefusers().join(',') || 'none'}; cache ${process.env.CHAOSD6_DEFS_CACHE_ROOT ? `per peer under ${process.env.CHAOSD6_DEFS_CACHE_ROOT}` : 'shared (~/.local/share/chaosd6)'}`);
 }
 // NOGUN=1 reaches every peer through the launcher's env (tools/swarm-run.sh exports it before start-all.mjs).
