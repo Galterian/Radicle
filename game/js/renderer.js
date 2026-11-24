@@ -226,6 +226,22 @@ function buildVillageWalls(seed, features) {
   }
   return pieces.sort((a, b) => a.key - b.key || WALL_RANK[a.kind] - WALL_RANK[b.kind]);
 }
+// Some WBC3 building sprites are a row of animation frames (Black Portal 736×112, Shrine 1184×147: 8 frames each) —
+// drawn whole they read as a row of 8 buildings (2026-11-24, the "purple domes" along the village wall). The frame
+// width: the even split of a wide sheet whose frames come out closest to square.
+const _frameW = new WeakMap();
+function frameW(img) {
+  let f = _frameW.get(img);
+  if (f) return f;
+  const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+  f = w;
+  if (w > 1.8 * h) {
+    let best = Infinity;
+    for (let n = 2; n <= 16; n++) if (w % n === 0 && Math.abs(Math.log(w / n / h)) < best) { best = Math.abs(Math.log(w / n / h)); f = w / n; }
+  }
+  _frameW.set(img, f);
+  return f;
+}
 const _wallBody = new WeakMap();
 function wallBody(img) {   // the opaque body of a wall sprite (the shadow is alpha ≈ 112)
   let b = _wallBody.get(img);
@@ -236,11 +252,20 @@ function wallBody(img) {   // the opaque body of a wall sprite (the shadow is al
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
     const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
     const d = g.getImageData(0, 0, w, h).data;
-    let x0 = w, x1 = -1, y0 = h, y1 = -1;
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 200) {
-      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    // the body = the widest run of mostly-opaque columns (the shadow's edge has stray opaque pixels: BWN1, BWG0 at x 0)
+    const col = new Array(w).fill(0), row = new Array(h).fill(0);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 200) col[x]++;
+    const cMin = Math.max(...col) * 0.25;
+    let x0 = -1, x1 = -2;
+    for (let x = 0, s = -1; x <= w; x++) {
+      if (x < w && col[x] >= cMin) { if (s < 0) s = x; continue; }
+      if (s >= 0 && x - 1 - s > x1 - x0) { x0 = s; x1 = x - 1; }
+      s = -1;
     }
-    if (x1 >= x0) b = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+    for (let y = 0; y < h; y++) for (let x = Math.max(0, x0); x <= x1; x++) if (d[(y * w + x) * 4 + 3] > 200) row[y]++;
+    const rMin = Math.max(...row) * 0.1;
+    const y0 = row.findIndex(n => n >= rMin), y1 = h - 1 - [...row].reverse().findIndex(n => n >= rMin);
+    if (x0 >= 0 && x1 >= x0 && y0 >= 0 && y1 >= y0) b = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
   } catch { /* tainted canvas: draw the whole sprite */ }
   _wallBody.set(img, b);
   return b;
@@ -668,7 +693,7 @@ export function createRenderer(canvas, state) {
       const jx = ((h32 & 0xFFFF) / 65536 - 0.5) * hexH * 0.18;
       const jy = (((h32 >> 16) & 0xFFFF) / 65536 - 0.5) * hexH * 0.12;
       const sy = tex.img.naturalHeight || 1;
-      const sx = tex.img.naturalWidth || 1;
+      const sx = frameW(tex.img);
       const target = hexH * 1.1;
       const scale = Math.min(1.2, Math.max(0.25, target / sy));
       const dw = sx * scale, dh = sy * scale;
@@ -677,7 +702,7 @@ export function createRenderer(canvas, state) {
       if (ruined) ctx.globalAlpha = 0.3;
       // A village's walls and buildings wear its team colour (the WBC3 green ramp, recoloured like a unit's).
       const tint = it.f.village ? villageColour(state.map.seed, it.f.village.id) : null;
-      ctx.drawImage(tint ? teamSource(tex, tint) : tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
+      ctx.drawImage(tint ? teamSource(tex, tint) : tex.img, 0, 0, sx, sy, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
       ctx.globalAlpha = 1;
       // What the building does, as a small glyph on its roof — every building does something.
       const pw = !ruined && it.f.kind !== 'wall' && it.f.kind !== 'bridge' ? buildingBonusAt(state.map.seed, it.q, it.r)?.bonus?.power : null;
@@ -732,11 +757,11 @@ export function createRenderer(canvas, state) {
       if (!inView(x, y)) continue;
       const tex = featureImage(orb ? DRUID_ORB : DRUID_OBELISK);
       if (!tex?.ready) continue;
-      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const sy = tex.img.naturalHeight || 1, sx = frameW(tex.img);
       const scale = Math.min(1.0, Math.max(0.2, (hexH * 0.75) / sy));
       const dw = sx * scale, dh = sy * scale;
       // Beside whoever stands on the hex (right side), so the unit's sprite doesn't hide it.
-      ctx.drawImage(tex.img, x - dw / 2 + HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
+      ctx.drawImage(tex.img, 0, 0, sx, sy, x - dw / 2 + HEX_SIZE * 0.5, y - dh + hexH * 0.25, dw, dh);
     }
     // Effect tile tokens as a building (left side of the hex; Vitality wins the hex when both stand — the orb heals).
     const tokenHexes = new Map();
@@ -757,11 +782,11 @@ export function createRenderer(canvas, state) {
       if (!tex?.ready) continue;
       for (const t of (state.tileTokens || [])) if (!t.world && !t.item && !t.druid && t.q === q && t.r === r && TOKEN_BUILDING[t.elem]) { tokenDrawn.add(t); addPip(t); }
       if (!inView(x, y)) continue;
-      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const sy = tex.img.naturalHeight || 1, sx = frameW(tex.img);
       const scale = Math.min(0.8, Math.max(0.15, (hexH * 0.55) / sy));
       const dw = sx * scale, dh = sy * scale;
       ctx.globalAlpha = 0.92;
-      ctx.drawImage(tex.img, x - dw / 2 - HEX_SIZE * 0.45, y - dh + hexH * 0.3, dw, dh);
+      ctx.drawImage(tex.img, 0, 0, sx, sy, x - dw / 2 - HEX_SIZE * 0.45, y - dh + hexH * 0.3, dw, dh);
       ctx.globalAlpha = 1;
     }
     for (const [k, pips] of pipsAt) {
@@ -785,12 +810,12 @@ export function createRenderer(canvas, state) {
       if (!inView(x, y)) continue;
       const tex = featureImage(WORLD_ITEM_BUILDING[t.elem]);
       if (!tex?.ready) continue;
-      const sy = tex.img.naturalHeight || 1, sx = tex.img.naturalWidth || 1;
+      const sy = tex.img.naturalHeight || 1, sx = frameW(tex.img);
       const scale = Math.min(0.8, Math.max(0.15, (hexH * 0.55) / sy));
       const dw = sx * scale, dh = sy * scale;
       const bx = x + HEX_SIZE * 0.42, by = y + hexH * 0.3;
       ctx.globalAlpha = 0.92;
-      ctx.drawImage(tex.img, bx - dw / 2, by - dh, dw, dh);
+      ctx.drawImage(tex.img, 0, 0, sx, sy, bx - dw / 2, by - dh, dw, dh);
       ctx.globalAlpha = 1;
       ctx.beginPath();
       ctx.arc(bx, by + 2, 2.5, 0, Math.PI * 2);

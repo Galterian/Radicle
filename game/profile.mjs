@@ -314,6 +314,18 @@ export function addArchivedCard(file, charId, card, from = '', { kill = true, cu
   }, file);
 }
 
+// A card I bartered away (GameModels trader, peer.mjs completeQuest consume): the first archived card of that kind + id.
+export function removeArchivedCard(file, charId, card) {
+  return updateProfile(p => {
+    const c = characterOf(p, charId);
+    if (!c || !card?.id) return null;
+    const i = c.cards.findIndex(x => x.where === 'archive' && x.kind === card.kind && x.id === card.id);
+    if (i < 0) return null;
+    const [x] = c.cards.splice(i, 1);
+    return x;
+  }, file);
+}
+
 // The team's published custom classes (gen-api.mjs publish of a class, user 2026-11-23: a class is not a card — a NEW
 // character may take one). profile.custom_classes = [{ id, name, text, kind, colors, ref, voice, at }]; a valid ref only.
 export function customClassesOf(p) {

@@ -9,6 +9,7 @@
 // (dimension seed, q, r) so every peer that materialises a hex gets the same.
 import { hexDistance } from './hex.js';
 import { biomeFor, BIOME_FILL } from './biome.js';
+import { villageAround } from './villages.js';
 
 export const INITIAL_SIZE = 5;
 export const DEFAULT_REVEAL_RADIUS = 10;
@@ -113,6 +114,7 @@ export function regionAt(seed, q, r) {
 // The world feature on a hex, or null. The start disc (within 2 of the origin) stays clear.
 export function featureAt(seed, q, r) {
   if (Math.max(Math.abs(q), Math.abs(r), Math.abs(-q - r)) <= 2) return null;
+  if (villageAround(seed, q, r)) return null;   // a village's disc (and its wall) holds no world item (GameModels 2026-11-24)
   const h = hash32(`${seed}:feature:${q}:${r}`);
   if (h % 14 === 0) {
     const b = WORLD_BUILDINGS[(h >>> 4) % WORLD_BUILDINGS.length];

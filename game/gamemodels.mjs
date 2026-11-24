@@ -36,10 +36,14 @@ export const KINDS = {
   quest: ['quests', 'chaosd6.quest/1', /^quest_[a-z0-9_]+$/],
   lib: ['lib', 'chaosd6.agenda-lib/1', /^agenda_[a-z0-9_]+$/],
 };
-export const ROLES = ['quest_giver', 'storyteller', 'builder', 'healer', 'guard', 'villager', 'wanderer'];
-export const BUILDING_ROLES = ['centre', 'keep', 'producer', 'temple', 'shop', 'lore', 'house'];
+export const ROLES = ['quest_giver', 'storyteller', 'builder', 'healer', 'guard', 'villager', 'wanderer', 'smith', 'wizard', 'mercenary', 'trader'];
+export const BUILDING_ROLES = ['centre', 'keep', 'producer', 'temple', 'shop', 'lore', 'house', 'tower'];
+// What a hired builder's building does (npc.builds[].power → js/building-bonus.js, for a hero standing on it).
+export const BUILD_POWERS = ['stance', 'mend', 'draw', 'explore'];
 export const STATS = ['vitality', 'world', 'matter', 'will'];
 export const REWARDS = ['reputation', 'allies', 'effect', 'skill', 'enter'];
+// talk topic ids the engine gives by role (peer.mjs talkTopics) — an NPC's own `talk` may not reuse them
+export const TALK_RESERVED = ['who', 'news', 'danger', 'villages', 'enter', 'standing', 'magic', 'arms', 'hire', 'wares', 'bye'];
 
 const canon = (v) => Array.isArray(v) ? `[${v.map(canon).join(',')}]` : v && typeof v === 'object'
   ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k =>`${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}` : JSON.stringify(v);
@@ -124,6 +128,33 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
     for (const fx of u.deck_effects || []) if (known?.effects && !known.effects.has(fx)) e(id, `unknown deck effect ${fx}`);
     for (const q of n.quests || []) if (m.quest[q]?.giver !== id) e(id, `quest ${q} missing or given by someone else`);
     if (n.role === 'quest_giver' && !(n.quests || []).length) e(id, 'a quest_giver needs quests');
+    if (n.role === 'trader' && !(n.quests || []).some(q => m.quest[q]?.consume)) e(id, 'a trader needs a barter (a quest with consume: true)');
+    // builds (a hired builder's menu, user 2026-11-24): [{ id, ask, building + power | wall: true }], build_max standing
+    if (n.builds !== undefined) {
+      if (n.role !== 'builder') e(id, 'builds: only a builder builds');
+      if (!Array.isArray(n.builds) || !n.builds.length) e(id, 'builds must be a non-empty list');
+      else for (const b of n.builds) {
+        if (!/^[a-z][a-z0-9_]*$/.test(b?.id || '')) e(id, `builds: id "${b?.id}" (lower-case)`);
+        if (typeof b?.ask !== 'string' || !b.ask || b.ask.length > 60) e(id, `builds ${b?.id}: ask (≤ 60 chars) needed`);
+        if (b?.wall) { if (b.building || b.power) e(id, `builds ${b.id}: a wall has no building / power`); continue; }
+        if (!m.building[b?.building] || m.building[b.building].race !== n.race) e(id, `builds ${b?.id}: building ${b?.building} missing or of another race`);
+        if (!BUILD_POWERS.includes(b?.power?.kind)) e(id, `builds ${b?.id}: power.kind not in ${BUILD_POWERS.join('|')}`);
+        if (b?.power?.kind === 'stance' && !['P', 'B'].includes(b.power.code)) e(id, `builds ${b.id}: stance code P or B`);
+      }
+      if (new Set((n.builds || []).map(b => b?.id)).size !== (n.builds || []).length) e(id, 'builds: two with one id');
+      if (!(Number.isInteger(n.build_max) && n.build_max >= 1 && n.build_max <= 10)) e(id, 'build_max 1..10 needed with builds');
+      if (!(n.quests || []).some(q => m.quest[q]?.consume && (m.quest[q].rewards || []).some(r => r.kind === 'allies' && (r.units || []).includes(id)))) e(id, 'a builder with builds needs its price (a consume quest whose allies reward is itself)');
+    }
+    // talk: the NPC's own questions in its card ({ id, ask, say[] }), next to the ones its role gives (peer.mjs talkTopics)
+    if (n.talk !== undefined) {
+      if (!Array.isArray(n.talk)) e(id, 'talk must be a list of { id, ask, say[] }');
+      else for (const t of n.talk) {
+        if (!/^[a-z][a-z0-9_]*$/.test(t?.id || '') || TALK_RESERVED.includes(t.id)) e(id, `talk: id "${t?.id}" (lower-case, not ${TALK_RESERVED.join('/')})`);
+        if (typeof t?.ask !== 'string' || !t.ask || t.ask.length > 60) e(id, `talk ${t?.id}: ask (≤ 60 chars) needed`);
+        if (!Array.isArray(t?.say) || !t.say.length || t.say.some(s => typeof s !== 'string' || !s)) e(id, `talk ${t?.id}: say[] needed`);
+      }
+      if (new Set((n.talk || []).map(t => t?.id)).size !== (n.talk || []).length) e(id, 'talk: two questions with one id');
+    }
     for (const p of Object.values(n.card?.resources?.sprites || {})) sprite(id, p?.path);
     if (!n.card?.resources?.sprites?.idle?.path) e(id, 'card.resources.sprites.idle.path needed');
   }
@@ -150,6 +181,8 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
     if (!/\{name\}/.test(v.team || '')) e(id, 'team must contain {name} ("{name} Village")');
     if (!(Number.isInteger(v.cap) && v.cap >= 1 && v.cap <= 20)) e(id, 'cap 1..20');
     if (!(Number.isInteger(v.radius) && v.radius >= 3 && v.radius <= 12)) e(id, 'radius 3..12');
+    if (v.size !== undefined && v.size !== 'hamlet') e(id, 'size: "hamlet" or none (a full village)');
+    if (v.size === 'hamlet' && !Object.values(m.village).some(o => o.race === v.race && o.size === undefined)) e(id, 'a hamlet needs a full village of its race');
     const hexes = new Set();
     const dist = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
     for (const l of v.layout || []) {
@@ -173,6 +206,13 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
       if (rs.post === 'gate') {
         if (!w) e(id, `resident ${rs.npc}: post "gate" needs a wall`);
         else if (String(rs.at) !== String(w.gate.map(x => x / w.radius * (w.radius + 1)))) e(id, `resident ${rs.npc}: the gate post stands right outside the gate (${w.gate.map(x => x / w.radius * (w.radius + 1))})`);
+      } else if (rs.post === 'outside') {
+        // waits outside the wall for strangers (a quest giver, a storyteller): in the cleared band, never on a hex
+        // next to the gate (the way in stays open)
+        const nextToGate = w && Math.max(Math.abs(rs.at[0] - w.gate[0]), Math.abs(rs.at[1] - w.gate[1]), Math.abs(rs.at[0] + rs.at[1] - w.gate[0] - w.gate[1])) <= 1;
+        if (!w) e(id, `resident ${rs.npc}: post "outside" needs a wall`);
+        else if (!(dist(rs.at) > w.radius && dist(rs.at) <= cr)) e(id, `resident ${rs.npc}: post "outside" stands between the wall and the cleared edge (${w.radius} < d ≤ ${cr})`);
+        else if (nextToGate) e(id, `resident ${rs.npc}: post "outside" must not stand next to the gate`);
       } else if (dist(rs.at) > v.radius) e(id, `resident ${rs.npc} outside the radius`);
       else if (rs.post !== undefined) e(id, `resident ${rs.npc}: unknown post "${rs.post}"`);
     }
@@ -203,8 +243,8 @@ export function compileCatalog(m) {
     format: 1, hash: sha.digest('hex'),
     races: Object.fromEntries(Object.entries(m.race).map(([id, r]) => [id, pick(r, ['name', 'temper', 'village', 'village_names', 'person_names', 'wbc3_race'])])),
     buildings: Object.fromEntries(Object.entries(m.building).map(([id, b]) => [id, { ...pick(b, ['name', 'race', 'role', 'bank', 'blocks', 'produces', 'text']), sprites: b.card.resources.sprites }])),
-    villages: Object.fromEntries(Object.entries(m.village).map(([id, v]) => [id, pick(v, ['race', 'team', 'radius', 'clear_radius', 'cap', 'layout', 'residents', 'wanderers', 'reputation', 'quests', 'wall'])])),
-    npcs: Object.fromEntries(Object.entries(m.npc).map(([id, n]) => [id, { ...pick(n, ['name', 'race', 'role', 'home', 'persona', 'lines', 'quests', 'unit']), agenda: compileAgenda(n.agenda, lib), resources: n.card.resources }])),
+    villages: Object.fromEntries(Object.entries(m.village).map(([id, v]) => [id, pick(v, ['race', 'size', 'team', 'radius', 'clear_radius', 'cap', 'layout', 'residents', 'wanderers', 'reputation', 'quests', 'wall'])])),
+    npcs: Object.fromEntries(Object.entries(m.npc).map(([id, n]) => [id, { ...pick(n, ['name', 'race', 'role', 'home', 'persona', 'lines', 'quests', 'unit', 'talk', 'builds', 'build_max']), agenda: compileAgenda(n.agenda, lib), resources: n.card.resources }])),
     monsters: Object.fromEntries(Object.entries(m.monster).map(([id, mo]) => [id, { creature: mo.creature, agenda: compileAgenda(mo.agenda, lib) }])),
     quests: Object.fromEntries(Object.entries(m.quest).map(([id, q]) => [id, pick(q, ['name', 'race', 'giver', 'need_text', 'need', 'consume', 'rewards', 'repeatable'])])),
   };

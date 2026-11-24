@@ -300,7 +300,8 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
   const netEnv = test ? { ...PRIVATE_TEST_ENV, TEST_MODE: mode } : { PEER_PUBLIC_IP: ip, BIND_HOST: isLoopback(ip) ? '127.0.0.1' : '0.0.0.0' };
   // (The peers' autosave writes private.json beside the saves — TEST_MODE — so Load old Dimension tags it "test".)
   const pc = override?.hero || null;
-  const hero = pc ? { id: pc.base_character, name: pc.name } : randomCharacter();
+  // TEST_HERO=<char id> (test modes only): a fixed hero instead of a random one (e.g. a village's race: 70 % start)
+  const hero = pc ? { id: pc.base_character, name: pc.name } : test && process.env.TEST_HERO ? { id: process.env.TEST_HERO, name: process.env.TEST_HERO } : randomCharacter();
   const file = profilePath();
   // Test Random character (user 2026-11-23): the random hero plays my draft class / skills / effects first, then my
   // team's published ones, then built-ins (test-priority.mjs; player-1 only — a harness's FORCE_FOREIGN_* wins).
@@ -328,15 +329,17 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
   // TEST_NEAR_VILLAGE=1 (test modes only; GameModels 2026-11-24): the whole roster starts just outside the spawn
   // village (clear_radius + 1 hexes from its centre, its buildings inside the reveal), so a test meets its villagers,
   // quests and centre card at once; the test foes start ~20 hexes further out so they don't kill the hero first.
-  if (test && process.env.TEST_NEAR_VILLAGE === '1') {
+  // TEST_NEAR_VILLAGE=inside: the hero starts at the village centre instead (meets the smith, wizard, mercenary, trader).
+  if (test && /^(1|inside)$/.test(process.env.TEST_NEAR_VILLAGE || '')) {
     const seed = seedForDimension(DIM_ID);
     const v = villageNearSpawn(seed);
     if (v) {
       // walled: one hex beyond the gate guard's post, straight out from the gate
-      const anchor = v.wall ? { q: 2 * v.wall.outer.q - v.wall.gate.q, r: 2 * v.wall.outer.r - v.wall.gate.r } : { q: v.q, r: v.r + (v.clear_radius ?? 9) + 1 }, occupied = new Set();
+      const inside = process.env.TEST_NEAR_VILLAGE === 'inside';
+      const anchor = inside ? { q: v.q + 1, r: v.r + 1 } : v.wall ? { q: 2 * v.wall.outer.q - v.wall.gate.q, r: 2 * v.wall.outer.r - v.wall.gate.r } : { q: v.q, r: v.r + (v.clear_radius ?? 9) + 1 }, occupied = new Set();
       for (const p of roster) {
         const far = p.alliance === 'npc_b' ? 20 : 0;
-        const want = { q: anchor.q + p.tile.q - 1, r: anchor.r + p.tile.r - 2 + far };
+        const want = inside && p.label === roster[0].label ? anchor : { q: anchor.q + p.tile.q - 1, r: anchor.r + p.tile.r - 2 + far };
         p.tile = tileInRing(want, { min: 0, max: 4, seed, salt: p.label, occupied }) || tileInRing(want, { min: 0, max: 14, seed, salt: p.label, occupied }) || want;
         occupied.add(`${p.tile.q},${p.tile.r}`);
       }

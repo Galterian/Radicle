@@ -2241,7 +2241,7 @@ function talkCardOf(t) {
   const v = t.village;
   const lines = [n?.persona || ''];
   if (v) lines.push(`${v.team}: your relationship ${t.rep}% (${t.standing}).`);
-  const qs = (t.quests || []);
+  const qs = (t.quests || []).filter(q => !q.barter);   // a trader's barters are its questions, not quests
   if (qs.length) lines.push(`Quests:\n${qs.map(q => `${q.done ? '✓' : q.ready ? '📜' : '•'} ${q.name} — ${q.done ? 'done' : q.ready ? `you carry ${q.need}: hand it over` : `asks for ${q.need}`}`).join('\n')}`);
   if (t.answer?.text) lines.push(`You: “${t.answer.ask}”\n${t.name || 'They'}: “${t.answer.text}”`);
   return { label: t.name || e?.name || 'Villager', kind: `${n?.role?.replace('_', ' ') || 'villager'}${v ? ` · ${v.team}` : ''}`, path: n?.resources?.sprites?.info?.path || n?.resources?.sprites?.idle?.path || '',
@@ -3291,7 +3291,17 @@ function effectSourceNotice(m) {
   profileBanner(text, ev === 'missing' || ev === 'version' ? 'fx-missing' : ev === 'learned' ? 'fx-learned' : 'fx-shared');
   if (ev === 'learned' || ev === 'missing') { renderDeck(); renderPerms(); renderRoster(); }
 }
-window.chaosHud = Object.assign(window.chaosHud || {}, { effectSourceNotice, setEffectSource, showPeek });
+window.chaosHud = Object.assign(window.chaosHud || {}, { effectSourceNotice, setEffectSource, showPeek,
+  // test hook: open the talk card of the villager whose name contains `name` (puppeteer can't hit a walking sprite)
+  talkWith: (name) => { const all = state.entities.filter(p => p.npc_id && String(p.name || '').includes(name)), e = all.find(p => (p.life ?? 0) > 0) || all[0]; if (e) openTalk(e, NaN, NaN); return e?.name || null; },
+  me: () => { const e = state.entities.find(p => p.peer_id === driverId()); return e ? { q: e.tile_q, r: e.tile_r, life: e.life } : null; },
+  // test hook: right-click the hex (q, r) on screen (a journey there), as a player would
+  walkTo: (q, r) => {
+    const canvas = document.getElementById('stage'), renderer = rendererRef;
+    const p = renderer.tilePx(q, r), a = renderer.toWorld(0, 0), b = renderer.toWorld(1, 1), rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new MouseEvent('contextmenu', { clientX: rect.left + (p.x - a.x) / (b.x - a.x), clientY: rect.top + (p.y - a.y) / (b.y - a.y), bubbles: true, cancelable: true }));
+    return true;
+  } });
 // Dev: ?fxsrc=demo|all&fxnotice=1 — fire one notice of each kind a few seconds after load (screenshots / tests).
 if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === '1') {
   setTimeout(() => {

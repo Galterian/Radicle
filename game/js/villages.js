@@ -13,7 +13,7 @@
 import { hash32 } from './map.js';
 
 export const VILLAGE_CELL = 200, VILLAGE_INSET = 50, MIN_APART = 100;
-export const ORIGIN_MIN = 35, ORIGIN_MAX = 55, VILLAGE_RATE = 0.75;
+export const ORIGIN_MIN = 35, ORIGIN_MAX = 55, VILLAGE_RATE = 0.75, HAMLET_RATE = 0.4;
 
 let cat = null, catHash = '';
 const listeners = new Set();
@@ -49,7 +49,8 @@ const _hexes = new Map();   // `${seed}|vid` → Map("q,r" → { building, def }
 // The candidate centre of a cell before the spawn-cell spacing rule.
 function rawVillage(seed, cx, cy) {
   if (!cat) return null;
-  const templates = Object.keys(cat.villages).sort();
+  // full villages only (the pick stays what it was before hamlets existed); a hamlet replaces one of its race below
+  const templates = Object.keys(cat.villages).filter(t => !cat.villages[t].size).sort();
   if (!templates.length) return null;
   let q, r;
   if (cx === 0 && cy === 0) {
@@ -61,7 +62,14 @@ function rawVillage(seed, cx, cy) {
     q = cx * VILLAGE_CELL + VILLAGE_INSET + Math.floor(roll(seed, `q:${cx},${cy}`) * span);
     r = cy * VILLAGE_CELL + VILLAGE_INSET + Math.floor(roll(seed, `r:${cx},${cy}`) * span);
   }
-  const template = templates[Math.floor(roll(seed, `t:${cx},${cy}`) * templates.length)];
+  let template = templates[Math.floor(roll(seed, `t:${cx},${cy}`) * templates.length)];
+  // Smaller villages (user 2026-11-24): HAMLET_RATE of the cells away from the spawn hold a hamlet of the same race —
+  // no wall, three buildings, a handful of people (a quest giver, a storyteller, a builder for hire, a trader).
+  if ((cx || cy) && roll(seed, `h:${cx},${cy}`) < HAMLET_RATE) {
+    const race0 = cat.villages[template].race;
+    const h = Object.keys(cat.villages).sort().find(t => cat.villages[t].size === 'hamlet' && cat.villages[t].race === race0);
+    if (h) template = h;
+  }
   const v = cat.villages[template], race = cat.races[v.race];
   const np = race?.village_names || { prefix: ['New'], suffix: ['town'] };
   const name = np.prefix[Math.floor(roll(seed, `n1:${cx},${cy}`) * np.prefix.length)] + np.suffix[Math.floor(roll(seed, `n2:${cx},${cy}`) * np.suffix.length)];
@@ -204,7 +212,7 @@ export function villageFeatureAt(seed, q, r) {
 export function villageResidents(seed, v) {
   const t = cat?.villages?.[v.template];
   if (!t) return [];
-  return (t.residents || []).map((rs, i) => ({ npc: rs.npc, q: v.q + rs.at[0], r: v.r + rs.at[1], ...(rs.post ? { post: rs.post } : {}), label: `${v.id.replace(/[^a-z0-9]+/gi, '_')}_r${i}`, name: personName(seed, v, `r${i}`, rs.npc) }));
+  return (t.residents || []).map((rs, i) => ({ npc: rs.npc, q: v.q + rs.at[0], r: v.r + rs.at[1], ...(rs.post ? { post: rs.post } : {}), label: `${v.id.replace(/[^a-z0-9]+/gi, '_')}_r${i}`, name: personName(seed, v, `r${i}`, rs.npc, i) }));
 }
 export function villageWanderers(seed, v) {
   const t = cat?.villages?.[v.template];
@@ -213,18 +221,26 @@ export function villageWanderers(seed, v) {
   return (t.wanderers.npcs || []).map((npc, i) => {
     const d = lo + Math.floor(roll(seed, `wd:${v.id}:${i}`) * (hi - lo + 1));
     const { q, r } = ringPoint(d, roll(seed, `wa:${v.id}:${i}`), roll(seed, `wt:${v.id}:${i}`));
-    return { npc, q: v.q + q, r: v.r + r, label: `${v.id.replace(/[^a-z0-9]+/gi, '_')}_w${i}`, name: personName(seed, v, `w${i}`, npc) };
+    return { npc, q: v.q + q, r: v.r + r, label: `${v.id.replace(/[^a-z0-9]+/gi, '_')}_w${i}`, name: personName(seed, v, `w${i}`, npc, (t.residents || []).length + i) };
   });
 }
 // "Aelindra, Elder of Silverleaf"
-export function personName(seed, v, salt, npc) {
+// With `idx` the names are dealt from a seeded shuffle of the race's list, so no two villagers share one until the
+// list runs out (residents 0.., then the wanderers after them).
+export function personName(seed, v, salt, npc, idx) {
   const names = cat?.races?.[v.race]?.person_names || ['Someone'];
-  const who = names[Math.floor(roll(seed, `pn:${v.id}:${salt}`) * names.length)];
+  let who;
+  if (Number.isInteger(idx)) {
+    const deck = names.map((n, i) => [roll(seed, `pn:${v.id}:deck:${i}`), n]).sort((a, b) => a[0] - b[0]).map(x => x[1]);
+    who = deck[idx % deck.length];
+  } else who = names[Math.floor(roll(seed, `pn:${v.id}:${salt}`) * names.length)];
   return `${who}, ${cat?.npcs?.[npc]?.name || 'Villager'} of ${v.name}`;
 }
 // Compass word for the direction from a to b (flat-top axial → screen), for storytellers.
+// As the map shows it (js/hex.js hexToPixel: x = √3·(q + r/2), y = 1.5·r·H_SQUASH, north = up).
 export function compass(a, b) {
-  const x = 1.5 * (b.q - a.q), y = Math.sqrt(3) * (b.r - a.r + (b.q - a.q) / 2);
+  const dq = b.q - a.q, dr = b.r - a.r;
+  const x = Math.sqrt(3) * (dq + dr / 2), y = 1.5 * 0.72 * dr;
   if (!x && !y) return 'here';
   const deg = (Math.atan2(-y, x) * 180 / Math.PI + 360) % 360;
   return ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'][Math.round(deg / 45) % 8];

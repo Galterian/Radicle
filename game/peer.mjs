@@ -69,10 +69,10 @@ import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, s
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
-import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt } from './js/villages.js';
+import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround } from './js/villages.js';
 import { npcCreatureEntries } from './gamemodels.mjs';
 import { agendaGoal, questMet } from './agenda.mjs';
-import { villageUnits, activeUnits, wanderersOf, npcLine, loreFact, archiveItems, rewardWords } from './village-life.mjs';
+import { villageUnits, activeUnits, wanderersOf, npcLine, loreFact, intelLine, archiveItems, rewardWords, villageNeutral, isWildMonsterSnap } from './village-life.mjs';
 import { setBuildingSkills, configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
 import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
@@ -93,7 +93,7 @@ import { mergeLedger, ledgerUnits, ledgerFor } from './js/world-ledger.js';
 const awakeLast = new Map();   // caster → the Awake plan of its last real (non-quiet) resolution (∀ lend)
 import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, exploreTarget, dungeonAt, dungeonExplored, LEARN_REARM_TURNS } from './js/building-bonus.js';
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
-import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard, profilePath } from './profile.mjs';
+import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard, removeArchivedCard, profilePath } from './profile.mjs';
 import { pvHandle, pvHello } from './proposal-votes.mjs';   // PV: proposal votes on foreign defs (profile side store, never the state hash)
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { phylacteryConfig, possessArchivePick, phylacteryPick, releasedCompanions } from './possess.mjs';   // Possess / Phylactery (user ruling 2026-11-17)
@@ -1313,6 +1313,67 @@ const BUILDER_MAX_STANDING = Number(process.env.BUILDER_MAX_STANDING) > 0 ? Numb
 function barricadeMade() {
   return { label: 'Barricade', path: LAB_WALL_PATHS[0], desc: 'A barricade raised by an NPC builder: nobody passes.', biome: '', kind: 'wall', blocking: true, made_by: 'npc_builder' };
 }
+// A hired builder's building (user 2026-11-24): the race building's look (GameModels npc.builds[].building) and the
+// power its menu names — walkable, so the hero stands on it and uses the power; a wall entry is a Barricade.
+// Pure in (catalog, npc, build id, owner name): every resolver makes the same payload.
+function hiredMade(npcId, buildId, ownerName) {
+  const n = GAMEMODELS?.npcs?.[npcId], b = n?.builds?.find(x => x.id === buildId);
+  if (!b) return null;
+  const forWhom = ownerName ? ` for ${ownerName}` : '';
+  if (b.wall) return { ...barricadeMade(), desc: `A barricade a hired ${n.name} raised${forWhom}: nobody passes.` };
+  const def = GAMEMODELS.buildings?.[b.building];
+  if (!def) return null;
+  return { label: def.name, path: def.sprites?.base || '', desc: `${def.text} Raised by a hired ${n.name}${forWhom}.`, biome: '', theme: 'hired', bonus: { power: { ...b.power } }, made_by: 'npc_builder' };
+}
+// The hero's build orders (entity.buildOrders, published as build_orders_json): one per hired builder at a time,
+// dropped once the building stands on its hex, the builder is gone, or 60 actions passed.
+function pruneBuildOrders() {
+  const list = entity.buildOrders || (entity.buildOrders = []);
+  const keep = list.filter(o => {
+    const f = buildingFeatureAt(MAP_SEED, o.q, o.r);
+    if (f?.placed && f.made_by === 'npc_builder') { console.log(`[${PEER_LABEL}] build order done: ${f.label} at (${o.q},${o.r})`); return false; }
+    return hg.action - o.at <= 60 && livePeers().some(p => p?.peer_id === o.to && (p.life ?? 0) > 0);
+  });
+  if (keep.length !== list.length) entity.buildOrders = keep;
+  return entity.buildOrders;
+}
+// A free hex next to me for a building: walkable, no feature, no wall, nobody on it, outside every village.
+function buildHexNextToMe(builderTile) {
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const occ = new Set(livePeers().filter(p => p && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q)).map(p => `${p.tile_q},${p.tile_r}`));
+  occ.add(`${me.q},${me.r}`);
+  const taken = new Set((entity.buildOrders || []).map(o => `${o.q},${o.r}`));
+  const ok = hexNeighbours(me.q, me.r).filter(t => !occ.has(`${t.q},${t.r}`) && !taken.has(`${t.q},${t.r}`) && hexWalkableAt(MAP_SEED, t.q, t.r) && !isLabyrinthWallAt(MAP_SEED, t.q, t.r) && !buildingFeatureAt(MAP_SEED, t.q, t.r) && !villageAround(MAP_SEED, t.q, t.r));
+  // the one nearest the builder, so it does not have to walk round me
+  return ok.sort((a, b) => (builderTile ? _hd(a, builderTile) - _hd(b, builderTile) : 0) || a.q - b.q || a.r - b.r)[0] || null;
+}
+// Hired builder: my leader's order for me → walk next to its hex, then Posture with build { q, r, b } (once a turn).
+const hiredTried = new Map();   // order id → hg.action I last tried it
+function hiredBuildPlan() {
+  if (!HIRED_BUILDER || entity.life <= 0) return false;
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  if (npcEnemies().some(p => hexDistance(here, p) <= 1)) { if (process.env.DEBUG_HIRED) console.log(`[${PEER_LABEL}] DEBUG_HIRED foe in contact: ${npcEnemies().filter(p => hexDistance(here, p) <= 1).map(p => p.name || p.peer_id).join(', ')}`); return false; }
+  let orders = [];
+  try { orders = JSON.parse(peersPublic.get(ownerPeerId)?.build_orders_json || '[]'); } catch { orders = []; }
+  const o = orders.find(x => x?.to === PEER_ID_STRING && NPC_DEF.builds.some(b => b.id === x.b) && Number.isInteger(x.q) && Number.isInteger(x.r) && !buildingFeatureAt(MAP_SEED, x.q, x.r));
+  if (process.env.DEBUG_HIRED) console.log(`[${PEER_LABEL}] DEBUG_HIRED owner ${ownerPeerId} seen ${peersPublic.has(ownerPeerId)} orders ${peersPublic.get(ownerPeerId)?.build_orders_json} → ${o ? o.id : 'none'}`);
+  if (!o) return false;
+  const me = { q: entity.tile.q, r: entity.tile.r }, key = `${o.q},${o.r}`;
+  const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+  const free = (q, r) => !occ.has(`${q},${r}`) && hexWalkableAt(MAP_SEED, q, r) && !isLabyrinthWallAt(MAP_SEED, q, r) && !buildingFeatureAt(MAP_SEED, q, r);
+  const has = (code) => hand.some(c => c.kind === 'action' && c.code === code);
+  const step = ringStep({ me, site: { q: o.q, r: o.r }, free, maxNodes: 1500 });
+  if (process.env.DEBUG_HIRED) console.log(`[${PEER_LABEL}] DEBUG_HIRED at ${me.q},${me.r} step ${JSON.stringify(step)}`);
+  if (step?.build) {
+    if (occ.has(key) || builderBuiltTurn === hg.turn || hg.action - (hiredTried.get(o.id) ?? -99) < 3) return applyNpcPlan({ code: has('P') ? 'P' : 'EP' });
+    hiredTried.set(o.id, hg.action);
+    const label = NPC_DEF.builds.find(b => b.id === o.b)?.ask || o.b;
+    console.log(`[${PEER_LABEL}] hired builder: building for my leader at (${key}) — "${label}"`);
+    return applyNpcPlan({ code: has('P') ? 'P' : 'EP', build: { q: o.q, r: o.r, b: o.b } });
+  }
+  if (step?.stepTo) return applyNpcPlan({ code: has('M') ? 'M' : 'EM', target: step.stepTo });
+  return false;
+}
 function syncPlacedBuildings(view) {
   const units = [...view.entries()].map(([id, v]) => ({ peer_id: id, world_edits_json: id === PEER_ID_STRING ? JSON.stringify(entity.worldEdits || []) : v?.world_edits_json, world_ledger_json: v?.world_ledger_json }));
   if (!units.some(u => u.peer_id === PEER_ID_STRING)) units.push({ peer_id: PEER_ID_STRING, world_edits_json: JSON.stringify(entity.worldEdits || []) });
@@ -1490,6 +1551,8 @@ const NPC_DEF = NPC_ID ? GAMEMODELS?.npcs?.[NPC_ID] || null : null;
 const VILLAGE_ID = NPC_DEF ? process.env.VILLAGE_ID || '' : '';
 const NPC_HOME = NPC_DEF && /^-?\d+$/.test(process.env.HOME_Q || '') && /^-?\d+$/.test(process.env.HOME_R || '') ? { q: Number(process.env.HOME_Q), r: Number(process.env.HOME_R) } : null;
 const IS_FOLLOWER = !!NPC_DEF && process.env.FOLLOWER === '1';
+// A builder a hero hired (its price: a consume quest, user 2026-11-24) — builds what its leader orders (npc.builds).
+const HIRED_BUILDER = IS_FOLLOWER && NPC_DEF?.role === 'builder' && Array.isArray(NPC_DEF?.builds) && NPC_DEF.builds.length > 0;
 const AGENDA = (NPC_DEF && !IS_FOLLOWER ? NPC_DEF.agenda : null) || (IS_MONSTER && !NPC_DEF ? GAMEMODELS?.monsters?.[CREATURE_ID]?.agenda : null) || null;
 const villageHostile = new Set();    // villager: heroes my village is hostile to (snapshot hostile_to_csv)
 const villageAllyFoes = new Set();   // villager: units fighting a hero my village counts as an ally
@@ -1980,7 +2043,7 @@ function currentStateSnapshot(slim = false) {
     peer_id: PEER_ID_STRING, character_id: CHARACTER_ID || null, creature_id: CREATURE_ID || null,
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: entity.alliance, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
-    owner_peer_id: ownerPeerId || '', summoned_csv: entity.summons.map(x => x.peer_id).join(','), wards_csv: entity.wards.join(','), entry_q: START_TILE.q, entry_r: START_TILE.r,
+    owner_peer_id: ownerPeerId || '', build_orders_json: JSON.stringify(pruneBuildOrders()), summoned_csv: entity.summons.map(x => x.peer_id).join(','), wards_csv: entity.wards.join(','), entry_q: START_TILE.q, entry_r: START_TILE.r,
     turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt, resolved_action: resolvedAction,
     map_blocks: dimMap ? dimMap.blockCount() : 0,
     ...(mapSync ? { map_root: mapSync.myRoot() } : {}),   // map-sync.mjs digest root (~12 B); absent = pre-M3 build / legacy sim
@@ -2755,7 +2818,7 @@ setInterval(() => {
 // The fields only the full snapshot carries (fingerprint + dialing hints): when they changed, the
 // heartbeat sends the full snapshot over the bus at most once a FULL_STATE_BUS_MS even while busy.
 const FULL_STATE_BUS_MS = 60_000;
-let lastFullBusAt = 0, lastFullBusSig = '';
+let lastFullBusAt = 0, lastFullBusSig = '', lastEditsSig = '';
 const fullOnlySig = (s) => `${s.map_tiles}|${s.map_sketch}|${s.multiaddrs_csv}|${s.nostr_relays_csv}|${s.gun_url}`;
 function fullStateDue() { return Date.now() - lastFullBusAt >= FULL_STATE_BUS_MS && fullOnlySig(currentStateSnapshot()) !== lastFullBusSig; }
 // M6 step 1 — the live clock on the wire (Gun's GUN_URGENT job, the Swarm-0226 fix): between a peer's
@@ -2779,6 +2842,14 @@ function publishClock(snap) {
 // it because every envelope already carries the snapshot.
 async function publishPublicState(viaBus = false) {
   const snap = currentStateSnapshot();
+  // World edits / build orders made outside a resolution (a quest handed in, a builder hired, an order given) ride
+  // on no envelope while I stand and talk, and Gun / clock frames carry neither — send the full state now, or the
+  // village never learns its builder was hired (2026-11-24: vrec unseen for minutes).
+  const editsSig = `${snap.world_edits_json}|${snap.build_orders_json}`;
+  if (editsSig !== lastEditsSig) {
+    if (lastEditsSig && entity.kind === 'character') console.log(`[${PEER_LABEL}] world edits changed (${(entity.worldEdits || []).length}) — full state out`);
+    lastEditsSig = editsSig; viaBus = true;
+  }
   putGunMember(snap);
   publishClock(snap);
   peersPublic.set(PEER_ID_STRING, snap);
@@ -3431,7 +3502,7 @@ async function doPlanningEnd() {
   // nothing to hit, so the cast simply fizzles with no target.
   if ((wants('A') || effectNeedsTarget) && !normTarget) {
     const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
-    let enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
+    let enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0 && villageFoe(p));   // autotarget-villagers: a friendly village's people are no target
     if (!wants('A')) enemies = enemies.filter(p => hexDistance(here, p) <= 1);
     let pick = enemies.find(p => p.peer_id === lastAttackTarget) || null;
     if (!pick && enemies.length) {
@@ -3486,7 +3557,7 @@ async function doPlanningEnd() {
       if (effOK && bEff.scope === 'target' && !bTarget && typeof q.target === 'string') bTarget = q.target;
       if ((bCode === 'A' || (effOK && bEff.scope === 'target')) && !bTarget) {
         const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
-        let enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0);
+        let enemies = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0 && villageFoe(p));
         if (bCode !== 'A') enemies = enemies.filter(p => hexDistance(here, p) <= 1);
         if (enemies.length) { const dmin = Math.min(...enemies.map(p => hexDistance(here, p))); bTarget = enemies.filter(p => hexDistance(here, p) === dmin).sort((a, b) => a.life - b.life || a.peer_id.localeCompare(b.peer_id))[0].peer_id; }
       }
@@ -3513,7 +3584,7 @@ async function doPlanningEnd() {
       if (alt.code === 'A' || alt.code === 'M') {
         at = normTarget || target || null;
         if (!at) {
-          const foes = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.life > 0 && sideOf(p.alliance) !== MY_SIDE).sort((a, b) => hexDistance(here, a) - hexDistance(here, b) || a.peer_id.localeCompare(b.peer_id));
+          const foes = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && p.life > 0 && sideOf(p.alliance) !== MY_SIDE && villageFoe(p)).sort((a, b) => hexDistance(here, a) - hexDistance(here, b) || a.peer_id.localeCompare(b.peer_id));
           at = foes[0]?.peer_id || null;
         }
       } else if (alt.code === 'EM') at = stripTargetFor('EM', target);
@@ -3522,8 +3593,8 @@ async function doPlanningEnd() {
   }
   // NPC builders (AI skirmish 2026-11-22): a Barricade intent rides on a plain Posture / Empty Posture (no cast,
   // no trance, not a lost action) — committed in the hash like the rest of the plan.
-  const build = AI_ROLE === 'builder' && queuedBuild && !skipping && !proxy && !phylactery && !effectCard && !trance && (code === 'P' || code === 'EP')
-    ? { q: Number.isInteger(queuedBuild.q) ? queuedBuild.q : null, r: Number.isInteger(queuedBuild.r) ? queuedBuild.r : null } : null;
+  const build = (AI_ROLE === 'builder' || HIRED_BUILDER) && queuedBuild && !skipping && !proxy && !phylactery && !effectCard && !trance && (code === 'P' || code === 'EP')
+    ? { q: Number.isInteger(queuedBuild.q) ? queuedBuild.q : null, r: Number.isInteger(queuedBuild.r) ? queuedBuild.r : null, ...(HIRED_BUILDER && typeof queuedBuild.b === 'string' ? { b: queuedBuild.b } : {}) } : null;
   if (queuedBuild && !build) console.log(`[${PEER_LABEL}] npc builder: no Barricade this action — ${skipping ? 'a lost action' : proxy ? 'a proxy action' : phylactery ? 'phylactery' : effectCard ? `casting ${effectCard.effect_id}` : trance ? 'Battle Trance' : `played ${code}, not a Posture`}`);
   queuedBuild = null;
   const revealCode = trance ? 'BT' : code;
@@ -3819,10 +3890,14 @@ async function doResolution() {
     return by && by !== id && held && (view.get(by)?.life ?? 0) > 0 ? by : null;
   };
   const sideOfId = (id) => { const by = possessorOf(id); const v = view.get(by || id); return v ? sideOf(v.alliance) : null; };
-  const enemyOf = (a, b) => {
+  const sideFoes = (a, b) => {
     const sa = sideOfId(a), sb = sideOfId(b);
     return sa !== null && sb !== null && sa !== sb;
   };
+  // villages are neutral (villageNeutral): a possessed unit is judged as its possessor
+  const enemyOf = (a, b) => sideFoes(a, b) && !villageNeutral(view.get(possessorOf(a) || a), view.get(possessorOf(b) || b));
+  // a strike aimed at the unit (its character target) lands on a neutral villager too — hurting one costs −5 %
+  const aimedAt = (r, id) => r?.target?.kind === 'character' && r.target.ref === id;
   // The possessor's reveal carries `proxy: { for, action, target }` — that is what the possessed unit does
   // this action (its own reveal, if any, is overruled); the possessor's own hero only holds (EP).
   for (const r of revealsThisTurn) {
@@ -4825,7 +4900,7 @@ async function doResolution() {
   // they play against this actor (a trance picks per enemy).
   const strike = (r, code, defId) => {
     const atk = view.get(r.actor), def = view.get(defId);
-    if (!atk || !def || !enemyOf(r.actor, defId)) return;
+    if (!atk || !def || !(enemyOf(r.actor, defId) || (aimedAt(r, defId) && sideFoes(r.actor, defId)))) return;
     // SKR-05 Ranged Weapon "+1 range" (ruling 2026-11-16): the holder's Attack reaches 2 hexes; every other strike needs contact.
     if (hexDistance(postTile(r.actor), postTile(defId)) > skillHook('attack_range', null, skCtx, { attacker: r.actor, code })) return;
     let defCode = codeVs(defId, r.actor);
@@ -5091,8 +5166,18 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     if (!r.build || r.proxied || (r.action !== 'P' && r.action !== 'EP') || r.effect) continue;
     const me = r.actor;
-    if (view.get(me)?.ai_role !== 'builder' || lifeOf(me) <= 0) continue;
+    const vme = view.get(me);
+    // a hired builder (a follower whose npc has builds): only the hex it named, next to it, and only when it is free
+    const hired = !!vme?.follower && GAMEMODELS?.npcs?.[vme.npc_id]?.role === 'builder' && typeof r.build.b === 'string';
+    if ((vme?.ai_role !== 'builder' && !hired) || lifeOf(me) <= 0) continue;
     const picked = Number.isInteger(r.build.q) && Number.isInteger(r.build.r) ? { q: r.build.q, r: r.build.r } : null;
+    if (hired) {
+      const made = hiredMade(vme.npc_id, r.build.b, view.get(vme.owner_peer_id)?.name || '');
+      const ok = made && picked && hexD({ q: vme.tile_q, r: vme.tile_r }, picked) === 1 && buildSiteFree(picked) && !villageAround(MAP_SEED, picked.q, picked.r);
+      const site = ok ? createBuilding(r, me, { made, range: 1, picked, why: 'hired' }) : null;
+      log(`[${PEER_LABEL}] hired builder ${vme.name || me.slice(0, 14)}: ${site ? `a ${made.label} rises at (${picked.q},${picked.r})` : `cannot build ${r.build.b} at (${picked?.q},${picked?.r}) — the hex is not free`}`);
+      continue;
+    }
     const site = createBuilding(r, me, { made: barricadeMade(), range: 1, picked, why: 'builder' });
     if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] npc builder: ${site ? `a Barricade rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex next to me' : ''}` : 'no free hex next to me — nothing built'}`);
   }
@@ -5700,6 +5785,16 @@ async function doResolution() {
         console.log(`[${PEER_LABEL}] class ${b.why}: my older ${old.made?.label || 'Shrine'} at (${old.q},${old.r}) is gone — ${shrineMax === 1 ? `one ${b.made.label}` : `${shrineMax} of them`} at a time`);
       }
     }
+    if (b.why === 'hired') {
+      const max = Number(NPC_DEF?.build_max) || 4;
+      const mine = entity.worldEdits.filter(e => !e.gone && e.made?.made_by === 'npc_builder' && e.id !== id);
+      for (const old of mine.slice(0, Math.max(0, mine.length - (max - 1)))) {
+        entity.worldEdits = entity.worldEdits.filter(e => e !== old);
+        entity.worldEdits.push({ id: old.id, q: old.q, r: old.r, gone: true, at: hg.action });
+        console.log(`[${PEER_LABEL}] hired builder: my oldest ${old.made?.label || 'building'} at (${old.q},${old.r}) comes down — ${max} standing at most`);
+      }
+      builderBuiltTurn = hg.turn;
+    }
     if (b.why === 'builder') {
       const mine = entity.worldEdits.filter(e => !e.gone && e.made?.made_by === 'npc_builder' && e.id !== id);
       for (const old of mine.slice(0, Math.max(0, mine.length - (BUILDER_MAX_STANDING - 1)))) {
@@ -5939,7 +6034,7 @@ async function doResolution() {
     const fxNames = new Map(effectOutcomes.filter(o => o.eff?.name).map(o => [o.eff.effect_id, o.eff.name]));
     const nameOf = (id) => fxNames.get(id) || prettyFx(id);
     const sideIdOf = (id) => { const v = view.get(id); return v ? sideOf(v.alliance) : null; };
-    const foes = (a, b) => { const sa = sideIdOf(a), sb = sideIdOf(b); return sa !== null && sb !== null && sa !== sb; };
+    const foes = (a, b) => { const sa = sideIdOf(a), sb = sideIdOf(b); return sa !== null && sb !== null && sa !== sb && !villageNeutral(view.get(a), view.get(b)); };
     const tileNow = (id) => { const v = view.get(id); return v && Number.isInteger(v.tile_q) ? { q: v.tile_q, r: v.tile_r } : null; };
     const at0 = (id) => { const s = viewBefore.get(id); return s && Number.isInteger(s.tile_q) ? { tile_q: s.tile_q, tile_r: s.tile_r } : null; };
     const near = (a, b, d) => { const pa = at0(a), pb = at0(b); return !!(pa && pb) && hexDistance(pa, pb) <= d; };
@@ -6738,7 +6833,7 @@ function npcEnemies() {   // merge 2026-11-22: HEAD's filter (F3 flag `hides`, c
 // to wild monsters and to whoever its village is hostile to (its hostile_to_csv); a villager's foes are wild monsters,
 // the heroes (and their units) its village is hostile to, and whoever fights a hero the village counts as an ally.
 // Villages leave each other alone. A follower fights like any companion.
-const isWildMonsterSnap = (p) => !!p?.creature_id && !p.owner_peer_id && !p.npc_id && p.alliance === 'npc_b';
+// isWildMonsterSnap / villageNeutral: village-life.mjs (pure; the resolver judges villages neutral with it)
 function villageFoe(p) {
   if (NPC_DEF && !IS_FOLLOWER) {
     if (p.npc_id && !p.follower) return false;
@@ -7166,11 +7261,7 @@ function agendaSay(kind, ctx) {
   pendingSay = { action: hg.action, text: text.charAt(0).toUpperCase() + text.slice(1) };
   console.log(`[${PEER_LABEL}] ${NPC_DEF.name} says (${kind}): "${pendingSay.text}"`);
 }
-function compassOf(a, b) {
-  const x = 1.5 * (b.q - a.q), y = Math.sqrt(3) * (b.r - a.r + (b.q - a.q) / 2);
-  if (!x && !y) return 'here';
-  return ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'][Math.round(((Math.atan2(-y, x) * 180 / Math.PI + 360) % 360) / 45) % 8];
-}
+const compassOf = compass;   // js/villages.js: the direction as the map shows it
 // The agenda's plan for this action (after the rules and the model): true when it replaced the plan.
 function agendaPlan() {
   if (!AGENDA || IS_COMPANION || casting || entity.life <= 0 || entity.monsterState === 'sleeping' || SHADOW_OF) return false;
@@ -7194,7 +7285,7 @@ function agendaPlan() {
 // 20), each where its home hex is on my map. A villager seen dead is gone for good (`vgone:<label>`); one that walked
 // back in (no hero near) comes out again later. Wanderers walk out when a hero comes within WANDERER_NEAR of their spot.
 const VILLAGE_NEAR = Number(process.env.VILLAGE_NEAR ?? 30);
-const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 3 : 6));
+const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 4 : 11));   // gate guard + the 3 outside the wall + trader, builder, smith, wizard, mercenary + 2 guards (2026-11-24)
 const WANDERER_NEAR = Number(process.env.WANDERER_NEAR ?? 25);
 const VILLAGER_LEAVE = Number(process.env.VILLAGER_LEAVE ?? 40);
 const villageSpawning = new Set(), villageLogged = new Map();
@@ -7239,19 +7330,22 @@ function villageTick() {
     const broken = new Set(edits.filter(e => e.gone && /^bld:/.test(e.id)).map(e => e.id.slice(4)));
     const units = villageUnits(MAP_SEED, v, { turn: hg.turn, founded: fe.turn ?? 0, gone, broken });
     const out = units.filter(u => livePeer(u.label));
-    for (const u of activeUnits(units, VILLAGE_ACTIVE)) if (!livePeer(u.label) && known(u.q, u.r)) spawnVillager(v, u);
+    // the slots go to the units whose home hex I know (an unseen inside must not keep the gate people waiting)
+    for (const u of activeUnits(units.filter(u => livePeer(u.label) || known(u.q, u.r)), VILLAGE_ACTIVE)) if (!livePeer(u.label)) spawnVillager(v, u);
     const sum = `${units.length}/${v.cap} units, ${out.length} out`;
     if (villageLogged.get(v.id) !== sum) { villageLogged.set(v.id, sum); console.log(`[${PEER_LABEL}] village: ${v.team} — ${sum}`); }
   }
 }
 setInterval(() => { try { villageTick(); questTick(); trespassTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
 // A villager (not a follower): walks back in when no hero has been near for 90 s, or leaves to follow a hero.
-let villagerHeroAt = Date.now();
+let villagerHeroAt = Date.now(), villagerRecsSeen = '';
 if (NPC_DEF && !IS_FOLLOWER) setInterval(() => {
   if (vanishing || entity.life <= 0) return;
   const me = { q: entity.tile.q, r: entity.tile.r };
   if (livePeers().some(p => heroSnap(p) && _hd(me, _tq(p)) <= VILLAGER_LEAVE)) villagerHeroAt = Date.now();
-  const recruited = ledgerEdits(villageLedger()).some(e => e.id === `vrec:${PEER_LABEL}`);
+  const recs = ledgerEdits(villageLedger()).filter(e => typeof e.id === 'string' && e.id.startsWith('vrec:')).map(e => e.id).sort().join(',');
+  if (recs !== villagerRecsSeen) { villagerRecsSeen = recs; console.log(`[${PEER_LABEL}] village recruits seen: ${recs || 'none'}`); }
+  const recruited = recs.split(',').includes(`vrec:${PEER_LABEL}`);
   if (recruited || Date.now() - villagerHeroAt > 90_000) { villageLeaving = true; vanish(recruited ? 'I leave the village to follow a hero' : 'no hero near — I walk back into the village'); }
 }, 5_000).unref?.();
 
@@ -7316,7 +7410,8 @@ function questTick() {
     if (!v || villageRep(MAP_SEED, v, PEER_ID_STRING, ledger, MY_RACE) < v.reputation.hostile) continue;
     for (const qid of GAMEMODELS.npcs[g.npc_id].quests) {
       const q = GAMEMODELS.quests[qid];
-      if (!q || done.has(qid) || questBusy.has(qid) || !questMet(q, { archive: items })) continue;
+      // a barter (consume: it takes one of my cards) only by asking the trader (talkTo), never by walking past
+      if (!q || q.consume || done.has(qid) || questBusy.has(qid) || !questMet(q, { archive: items })) continue;
       questBusy.add(qid);
       completeQuest(q, qid, g, v);
     }
@@ -7332,24 +7427,89 @@ const talkN = new Map();   // npc peer id → lines said (rotates its lines)
 function talkCtx(npcPeerId) {
   const p = livePeers().find(x => x?.peer_id === npcPeerId);
   const def = p?.npc_id && GAMEMODELS?.npcs?.[p.npc_id];
-  if (!def) return null;
+  if (!def || (p.life ?? 0) <= 0 || p.village_leaving) return null;   // the dead and the leaving answer nothing
   const v = p.village_id ? villageById(MAP_SEED, p.village_id) : null;
   const me = { q: entity.tile.q, r: entity.tile.r };
   const dist = Number.isInteger(p.tile_q) ? _hd(me, _tq(p)) : Infinity;
   const rep = v ? villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedger(), MY_RACE) : null;
   const done = new Set((entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith('vq:')).map(e => e.id.slice(3)));
   const items = archiveItems(archive, (id) => data.creatures[id]?.tags || []);
-  const quests = (def.quests || []).map(id => GAMEMODELS.quests[id] && { id, q: GAMEMODELS.quests[id], done: done.has(id) || questBusy.has(id), ready: !done.has(id) && !questBusy.has(id) && questMet(GAMEMODELS.quests[id], { archive: items }) }).filter(Boolean);
-  return { p, def, v, me, dist, rep, quests, follower: !!p.follower };
+  const quests = (def.quests || []).map(id => {
+    const q = GAMEMODELS.quests[id];
+    if (!q) return null;
+    const busy = questBusy.has(id), was = done.has(id) && !q.repeatable;
+    return { id, q, barter: !!q.consume, done: was || busy, ready: !was && !busy && questMet(q, { archive: items }) };
+  }).filter(Boolean);
+  const hired = (entity.worldEdits || []).some(e => e.id === `vrec:${String(p.peer_id).replace(/^peer:/, '')}`);
+  return { p, def, v, me, dist, rep, quests, follower: !!p.follower, hired, mine: !!p.follower && p.owner_peer_id === PEER_ID_STRING };
 }
+// The questions a villager answers (user 2026-11-24: "different dialogue options of different roles"): who it is, what
+// its role knows (a storyteller the Dimension's news and dangers, a guard the roads and the gate, a wizard magic, a
+// smith arms, a mercenary its sword, a trader its wares), its quests or barters, its own `talk` questions (GameModels
+// npc.talk), my standing, farewell.
+const ROLE_TOPICS = {
+  storyteller: [['news', 'What\'s new in this Dimension?'], ['danger', 'What should I beware of?'], ['villages', 'Where do other folk live?']],
+  wanderer: [['news', 'What did you see on the road?'], ['danger', 'Any danger near by?']],
+  guard: [['enter', 'May I enter {village}?'], ['danger', 'Is the road safe?']],
+  quest_giver: [['enter', 'May I enter {village}?']],
+  wizard: [['magic', 'Teach me about my magic.']],
+  smith: [['arms', 'Can you make me stronger?']],
+  mercenary: [['hire', 'Will you fight at my side?']],
+  trader: [['wares', 'What do you trade?']],
+  healer: [['danger', 'Who comes to you wounded?']],
+};
 function talkTopics(c) {
+  const fill = (s) => s.replace(/\{village\}/g, c.v?.name || 'the village');
   const t = [{ id: 'who', ask: 'Who are you?' }];
-  for (const x of c.quests.filter(x => !x.done)) t.push({ id: `quest:${x.id}`, ask: x.ready ? `I bring ${x.q.need_text}.` : c.quests.filter(y => !y.done).length > 1 ? `What do you need? (${x.q.name})` : 'What do you need?', ready: x.ready });
-  if (c.def.lines?.lore?.length || c.def.role === 'storyteller') t.push({ id: 'lore', ask: 'What news of this Dimension?' });
-  if (c.v?.wall && !c.follower) t.push({ id: 'enter', ask: `May I enter ${c.v.name}?` });
+  for (const [id, ask] of ROLE_TOPICS[c.def.role] || []) {
+    if ((id === 'enter' && (!c.v?.wall || c.follower)) || (id === 'hire' && (c.follower || c.hired))) continue;
+    t.push({ id, ask: fill(ask) });
+  }
+  const open = c.follower ? [] : c.quests.filter(x => !x.done && !x.barter);
+  for (const x of open) t.push({ id: `quest:${x.id}`, ask: x.ready ? `I bring ${x.q.need_text}.` : open.length > 1 ? `What do you need? (${x.q.name})` : 'What do you need?', ready: x.ready });
+  for (const x of c.follower ? [] : c.quests.filter(x => x.barter && !x.done)) {
+    const hire = x.q.rewards.some(r => r.kind === 'allies');   // a builder's price: the reward is the builder himself
+    t.push({ id: `quest:${x.id}`, ask: hire ? `Hire me — pay ${x.q.need_text.replace(/ from your archive$/, '')}` : `Trade ${x.q.need_text.replace(/ from your archive$/, '')} → ${x.q.rewards.map(r => r.kind === 'effect' || r.kind === 'skill' ? talkCardName(r.id) : '').filter(Boolean).join(', ')}`, ready: x.ready });
+  }
+  if (c.mine && c.def.role === 'builder') {
+    const busy = (entity.buildOrders || []).find(o => o.to === c.p.peer_id);
+    for (const b of c.def.builds || []) t.push({ id: `build:${b.id}`, ask: busy?.b === b.id ? `${b.ask} (building…)` : b.ask, ready: busy?.b === b.id });
+  }
+  for (const x of c.def.talk || []) t.push({ id: `t:${x.id}`, ask: fill(x.ask) });
   if (c.v) t.push({ id: 'standing', ask: `How does ${c.v.name} see me?` });
   t.push({ id: 'bye', ask: 'Farewell.' });
   return t;
+}
+const talkCardName = (id) => data.effects?.[id]?.name || data.skills?.[id]?.name || String(id || '').replace(/^(effect|skill)_/, '').replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+// What a storyteller knows around `me` (pure reads: the live snapshots, the seeded map, the villages) as intelLine
+// facts, nearest first per kind: monsters (a pack when several of one kind roam together), heroes, wanderers, other
+// villages, dungeons, schools, world items on hexes I know.
+function intelFacts(me, ownVillage) {
+  const out = [];
+  const dirOf = (t) => compassOf(me, t);
+  const wild = livePeers().filter(p => isWildMonsterSnap(p) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && _hd(me, _tq(p)) <= 90);
+  const byName = new Map();
+  for (const p of wild) { const name = p.name || data.creatures[p.creature_id]?.name || 'monster'; (byName.get(name) || byName.set(name, []).get(name)).push(_tq(p)); }
+  for (const [name, at] of byName) {
+    at.sort((a, b) => _hd(me, a) - _hd(me, b));
+    const near = at.filter(t => _hd(t, at[0]) <= 5).length;
+    out.push(near > 1 ? { kind: 'pack', name, count: near, dir: dirOf(at[0]), hexes: _hd(me, at[0]) } : { kind: 'monster', name, dir: dirOf(at[0]), hexes: _hd(me, at[0]) });
+  }
+  for (const p of livePeers().filter(p => heroSnap(p) && p.peer_id !== PEER_ID_STRING && _hd(me, _tq(p)) <= 150)) out.push({ kind: 'hero', name: p.name || 'a stranger', dir: dirOf(_tq(p)), hexes: _hd(me, _tq(p)) });
+  for (const p of livePeers().filter(p => p?.npc_id && GAMEMODELS?.npcs?.[p.npc_id]?.role === 'wanderer' && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && _hd(me, _tq(p)) <= 120)) out.push({ kind: 'wanderer', name: p.name || 'a wanderer', dir: dirOf(_tq(p)), hexes: _hd(me, _tq(p)) });
+  for (const o of villagesNear(MAP_SEED, me.q, me.r, 450).filter(o => o.id !== ownVillage?.id).slice(0, 3)) out.push({ kind: 'village', name: o.team, race: o.race_name, dir: dirOf(o), hexes: _hd(me, o) });
+  const R = 30, seen = new Set();
+  for (let dq = -R; dq <= R; dq++) for (let dr = Math.max(-R, -dq - R); dr <= Math.min(R, -dq + R); dr++) {
+    const q = me.q + dq, r = me.r + dr;
+    if (!dimMap?.has(q, r)) continue;
+    const dg = dungeonAt(MAP_SEED, q, r);
+    if (dg && !seen.has('dungeon')) { seen.add('dungeon'); out.push({ kind: 'dungeon', name: dg.source || 'dungeon', dir: dirOf({ q, r }), hexes: _hd(me, { q, r }) }); continue; }
+    const b = buildingBonusAt(MAP_SEED, q, r);
+    if (b?.bonus?.power?.kind === 'learn' && !seen.has('school')) { seen.add('school'); out.push({ kind: 'school', name: b.source || 'school', dir: dirOf({ q, r }), hexes: _hd(me, { q, r }) }); continue; }
+    const w = featureAt(MAP_SEED, q, r);
+    if (w?.world && w.value >= 4 && !seen.has(w.item)) { seen.add(w.item); out.push({ kind: 'item', name: w.item, elem: data.elements?.[w.elem]?.name || w.elem.replace(/^elem_/, ''), dir: dirOf({ q, r }), hexes: _hd(me, { q, r }) }); }
+  }
+  return out.sort((a, b) => a.hexes - b.hexes);
 }
 const standingWords = (rep, rp) => rep < rp.hostile ? 'hostile' : rep >= rp.ally_all ? 'an ally' : rep >= rp.enter ? 'welcome' : 'a stranger';
 function talkAnswer(c, topic) {
@@ -7357,7 +7517,8 @@ function talkAnswer(c, topic) {
   talkN.set(c.p.peer_id, n + 1);
   const nameOf = (id) => data.effects?.[id]?.name || String(id || '').replace(/^(effect|skill)_/, '').replace(/_/g, ' ');
   const vars = (q) => ({ need: q?.need_text || '', reward: q ? q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ') : '', village: c.v?.name || '' });
-  const line = (kind, q) => npcLine(c.def, kind, n, vars(q));
+  // a sentence starts upper-case even when a placeholder opens it ("Pleasure doing business! Take this Haste")
+  const line = (kind, q) => npcLine(c.def, kind, n, vars(q)).replace(/(^|[.!?]\s+)([a-z])/g, (_, a, b) => a + b.toUpperCase());
   const rp = c.v?.reputation || {};
   if (c.v && c.rep < rp.hostile && topic !== 'standing') return { text: line('warn') || 'Begone.' };
   if (topic === 'who') return { text: `${c.p.name || c.def.name}. ${c.def.persona || ''} ${line('greet')}`.trim() };
@@ -7365,17 +7526,84 @@ function talkAnswer(c, topic) {
     const x = c.quests.find(y => `quest:${y.id}` === topic);
     if (!x) return { text: line('greet') || 'We have nothing more to ask of you.' };
     if (x.done) return { text: line('thanks', x.q) || 'You did it already. Thank you.' };
-    if (!x.ready) return { text: `${line('quest', x.q) || `Bring me ${x.q.need_text}.`} (${x.q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ')})` };
+    // a hire (the reward is the giver himself): once — he works for you, or he is on his way to
+    const hire = x.q.rewards.some(r => r.kind === 'allies' && (r.units || []).includes(c.p.npc_id));
+    if (hire && (c.hired || c.follower)) return { text: 'I already work for you.' };
+    if (!x.ready) {
+      if (x.barter) return { text: `${line('quest', x.q) || `Give me ${x.q.need_text}, and you shall have ${vars(x.q).reward}.`} You have nothing of the kind on you yet.` };
+      return { text: `${line('quest', x.q) || `Bring me ${x.q.need_text}.`} (${x.q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ')})` };
+    }
     if (c.dist > 2) return { text: `You carry it! Come closer — within 2 hexes — and hand it over.` };
     questBusy.add(x.id);
-    completeQuest(x.q, x.id, c.p, c.v);
-    return { text: line('thanks', x.q) || 'Thank you, friend.', done: x.id };
+    const gave = completeQuest(x.q, x.id, c.p, c.v);
+    if (x.q.repeatable) questBusy.delete(x.id);
+    return { text: `${line('thanks', x.q) || 'Thank you, friend.'}${gave ? ` (You hand over ${gave}.)` : ''}`, done: x.id };
   }
-  if (topic === 'lore') {
-    const monsters = livePeers().filter(p => isWildMonsterSnap(p) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && _hd(c.me, _tq(p)) <= 60).map(p => ({ q: p.tile_q, r: p.tile_r, name: p.name || data.creatures[p.creature_id]?.name || 'monster' }));
-    const lore = loreFact(MAP_SEED, c.v, c.me, n, { monsters, heroes: livePeers().filter(heroSnap).length, dimension: DIM_NAME.replace(/^(Real|GenTest)-/, '').replace(/-/g, ' ') });
-    const t = npcLine(c.def, 'lore', n, { ...vars(), lore, lore_dir: monsters[0] ? compassOf(c.me, monsters[0]) : 'far off' });
-    return { text: t || (lore ? lore.charAt(0).toUpperCase() + lore.slice(1) + '.' : 'I know nothing you do not.') };
+  if (topic.startsWith('t:')) {   // the NPC's own question (GameModels npc.talk)
+    const x = (c.def.talk || []).find(y => `t:${y.id}` === topic);
+    const say = x?.say?.length ? x.say[((n % x.say.length) + x.say.length) % x.say.length] : '';
+    return { text: say.replace(/\{village\}/g, c.v?.name || 'the village').replace(/\{name\}/g, c.p.name || c.def.name) || line('greet') };
+  }
+  if (topic === 'news' || topic === 'lore' || topic === 'danger' || topic === 'villages') {
+    const facts = intelFacts(c.me, c.v);
+    const pickOf = (list) => list.length ? list[n % Math.min(list.length, 4)] : null;
+    // news: the living first (monsters, packs, heroes, wanderers), then dungeons and schools, then places of power
+    const RANK = { pack: 0, monster: 0, hero: 1, wanderer: 2, dungeon: 3, school: 4, item: 5, village: 6 };
+    const f = topic === 'danger' ? pickOf(facts.filter(x => x.kind === 'monster' || x.kind === 'pack' || x.kind === 'hero'))
+      : topic === 'villages' ? pickOf(facts.filter(x => x.kind === 'village'))
+      : pickOf([...facts].sort((a, b) => RANK[a.kind] - RANK[b.kind] || a.hexes - b.hexes).filter((x, i, all) => all.findIndex(y => y.kind === x.kind) === i));
+    let said = f ? intelLine(f, n, ROUND_SEC) : intelLine({ kind: 'quiet' }, n);
+    const lead = npcLine(c.def, 'lore', n, { ...vars(), lore: '§', lore_dir: f?.dir || 'far off' }).replace(/§.*$/, '').trim();
+    if (/[—–-]$/.test(lead)) said = said.charAt(0).toLowerCase() + said.slice(1);   // "… traveller — a pack of …"
+    return { text: `${lead ? `${lead} ` : ''}${said}` };
+  }
+  if (topic === 'magic') {   // a wizard reads one card of my archive / hand back to me
+    const cards = [...archive, ...hand].filter(x => x && (x.kind === 'effect' || x.kind === 'skill'));
+    const card = cards.length ? cards[n % cards.length] : null;
+    const id = card?.effect_id || card?.skill_id;
+    const d = id ? (data.effects?.[id] || data.skills?.[id]) : null;
+    const text = String(d?.data?.text || d?.data?.description || '').replace(/\s+/g, ' ').trim();
+    const elems = (d?.data?.element_cost || []).map(el => data.elements?.[el]?.name || String(el).replace(/^elem_/, '')).filter(Boolean);
+    return { text: card
+      ? `Your ${talkCardName(id)}: ${text ? `${text.slice(0, 220)}${text.length > 220 ? '…' : ''}` : 'a strange one — even I have not read it.'}${elems.length ? ` Its chain runs ${elems.join(' → ')}.` : ''}`
+      : 'You carry no magic at all! Kill a caster, explore a dungeon or rest at a school — then come back.' };
+  }
+  if (topic === 'arms') {   // a smith points at the village's forge-like buildings: stat-buy them for a bonus token
+    const b = (GAMEMODELS.villages?.[c.v?.template]?.layout || []).map(l => ({ ...GAMEMODELS.buildings[l.building], at: l.at })).find(x => x?.bank && /smith|range|forge/i.test(x.name || '')) || null;
+    return { text: b
+      ? `Stand by our ${b.name} and pour your ${b.bank.stat} into it, one emission each action. At ${b.bank.value} it breaks — and you walk away with a ${b.bank.stat} token on your character. The village will not love you for it, mind.`
+      : 'Strength? Fight, survive, and take the cards of what you kill. That is how heroes are forged.' };
+  }
+  if (topic === 'hire') {
+    if (c.hired) return { text: 'I already ride with you.' };
+    if (c.rep < rp.enter) return { text: `${line('warn') || 'Not yet.'} Earn the village's trust first — ${rp.enter}%; you stand at ${c.rep}%.` };
+    if (c.dist > 2) return { text: 'Come closer, and we shake on it.' };
+    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_hire: c.def.id, at: hg.action });
+    spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
+      env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '' } })
+      .then(tag => { const x = companions.find(y => y.label === tag); if (x) x.follower = true; })
+      .catch(e => console.warn(`[${PEER_LABEL}] hire failed: ${e.message}`));
+    broadcastUI(handMsg({ notice: `⚔ ${c.p.name || c.def.name} follows you` }));
+    _autosave?.markDirty?.();
+    publishPublicState().catch(() => {});
+    return { text: `${line('greet') || 'Done.'} Lead on — my blade is yours.`, done: 'hire' };
+  }
+  if (topic.startsWith('build:')) {
+    const b = (c.def.builds || []).find(x => `build:${x.id}` === topic);
+    if (!b || !c.mine) return { text: line('greet') || 'I build for the one who hired me.' };
+    const site = buildHexNextToMe(_tq(c.p));
+    if (!site) return { text: 'There is no free ground next to you — step into the open (and out of any village) and ask again.' };
+    entity.buildOrders = (entity.buildOrders || []).filter(o => o.to !== c.p.peer_id);
+    entity.buildOrders.push({ id: `bo:${hg.turn}:${hg.action}:${c.p.peer_id.slice(-6)}`, to: c.p.peer_id, b: b.id, q: site.q, r: site.r, at: hg.action });
+    const what = b.wall ? 'A Barricade' : `A ${GAMEMODELS.buildings?.[b.building]?.name || b.id}`;
+    console.log(`[${PEER_LABEL}] build order: ${b.id} at (${site.q},${site.r}) for ${c.p.name || c.p.peer_id}`);
+    publishPublicState().catch(() => {});
+    return { text: `${what} it is — on the hex to your ${compassOf(c.me, site)}. Give me a moment${b.power ? `; stand on it when it is done: ${b.power.kind === 'stance' ? `an Empty Posture there fights as ${b.power.code === 'B' ? 'Block' : 'Posture'}` : b.power.kind === 'mend' ? '+1 life at the end of a turn' : b.power.kind === 'draw' ? 'a card drawn at the end of a turn' : 'a far place explored'}` : ''}.` };
+  }
+  if (topic === 'wares') {
+    const bs = c.quests.filter(x => x.barter);
+    return { text: bs.length ? `${bs.map(x => `${x.q.need_text.replace(/^one /, 'any ')} for ${x.q.rewards.map(r => r.kind === 'effect' || r.kind === 'skill' ? `a ${nameOf(r.id)} card` : rewardWords(r, nameOf)).filter(Boolean).join(' and ')}`).join('; ').replace(/^./, ch => ch.toUpperCase())}. ${bs.some(x => x.ready) ? 'And you carry something I want!' : 'Bring me something worth my while.'}` : 'Nothing today.' };
   }
   if (topic === 'enter') return c.rep >= rp.enter
     ? { text: `${line('greet') || 'Be welcome.'} The gate is open to you.` }
@@ -7392,7 +7620,7 @@ function talkMenuMsg(npcPeerId, extra = {}) {
   const rp = c.v?.reputation || {};
   const why = c.dist > TALK_RANGE ? `come within ${TALK_RANGE} hexes to talk` : c.v && c.rep < rp.hostile ? `${c.v.team} is hostile to you (${c.rep}%)` : '';
   return { kind: 'talk', npc: npcPeerId, name: c.p.name || c.def.name, role: c.def.role, dist: c.dist, range: TALK_RANGE, rep: c.rep, standing: c.v ? standingWords(c.rep, rp) : null,
-    village: c.v ? { id: c.v.id, team: c.v.team, ...rp } : null, quests: c.quests.map(x => ({ id: x.id, name: x.q.name, need: x.q.need_text, done: x.done, ready: x.ready })),
+    village: c.v ? { id: c.v.id, team: c.v.team, ...rp } : null, quests: c.quests.map(x => ({ id: x.id, name: x.q.name, need: x.q.need_text, done: x.done, ready: x.ready, barter: x.barter })),
     topics: talkTopics(c).map(t => ({ ...t, disabled: why && t.id !== 'bye' ? why : '' })), ...extra };
 }
 function talkTo(npcPeerId, topic) {
@@ -7407,10 +7635,23 @@ function talkTo(npcPeerId, topic) {
   broadcastUI({ kind: 'banter', lines: [{ peer_id: PEER_ID_STRING, text: tp.ask }, { peer_id: npcPeerId, text }] });
   return talkMenuMsg(npcPeerId, { answer: { topic, ask: tp.ask, text, done: a.done || null } });
 }
+// → the name of the card handed over (a barter, `consume`), '' otherwise.
 function completeQuest(q, qid, giver, v) {
   const d = q.rewards.filter(r => r.kind === 'reputation').reduce((a, r) => a + (Number(r.value) || 0), 0);
-  entity.worldEdits.push({ id: `vq:${qid}`, v: v.id, d, giver: giver.npc_id, turn: hg.turn, at: hg.action });
-  const got = [];
+  // a repeatable quest (a barter) gets one edit per time: vq:<id>#<n> (questsDone / villageRep read the prefix)
+  const n = q.repeatable ? (entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith(`vq:${qid}#`)).length + 1 : 0;
+  entity.worldEdits.push({ id: q.repeatable ? `vq:${qid}#${n}` : `vq:${qid}`, v: v.id, d, giver: giver.npc_id, turn: hg.turn, at: hg.action });
+  let gave = '';
+  if (q.consume) {   // the first archive card that meets the need on its own leaves my archive (and my profile)
+    const i = archive.findIndex(card => { const it = archiveItems([card], (id) => data.creatures[id]?.tags || []); return it.length && questMet(q, { archive: it }); });
+    if (i >= 0) {
+      const [card] = archive.splice(i, 1);
+      gave = card.name || card.effect_id || card.skill_id || card.creature_id || 'a card';
+      const ref = card.kind === 'effect' ? { kind: 'effect', id: card.effect_id } : card.kind === 'skill' ? { kind: 'skill', id: card.skill_id } : card.kind === 'creature' ? { kind: 'creature', id: card.creature_id } : null;
+      if (profileChar && ref) { try { removeArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, ref); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive remove failed: ${e.message}`); } }
+    }
+  }
+  const got = gave ? [`gave ${gave}`] : [];
   for (const r of q.rewards) {
     if (r.kind === 'effect' || r.kind === 'skill') {
       const c = cardFromRef({ kind: r.kind, id: r.id });
@@ -7418,23 +7659,27 @@ function completeQuest(q, qid, giver, v) {
       c.from = String(giver.name || '').slice(0, 60);
       archive.push(c); got.push(`${c.name || r.id} (archive)`);
       if (profileChar) { try { addArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, { kind: r.kind, id: r.id }, `quest: ${q.name}`); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive write failed: ${e.message}`); } }
-    } else if (r.kind === 'allies') got.push(...recruitFollowers(v, r, qid));
+    } else if (r.kind === 'allies') got.push(...recruitFollowers(v, r, qid, giver));
   }
   if (d) got.unshift(`+${d}% relationship with ${v.team}`);
   console.log(`[${PEER_LABEL}] quest done: ${q.name} for ${giver.name} (${v.team}) — ${got.join(', ')}`);
-  broadcastUI(handMsg({ notice: `📜 Quest done — ${q.name} for ${giver.name || 'the village'}: ${got.join(', ')}` }));
+  broadcastUI(handMsg({ notice: `${q.consume ? '🤝 Traded' : '📜 Quest done'} — ${q.name} for ${giver.name || 'the village'}: ${got.join(', ')}` }));
   _autosave?.markDirty?.();
   publishPublicState().catch(() => {});
+  return gave;
 }
-function recruitFollowers(v, r, qid) {
+function recruitFollowers(v, r, qid, giver = null) {
   const out = [];
   const me = { q: entity.tile.q, r: entity.tile.r };
   const taken = new Set();
+  const hireOfGiver = !!giver?.npc_id && (r.units || []).includes(giver.npc_id);   // a hire: the giver himself, or nobody
   for (let i = 0; i < (r.count | 0); i++) {
     const npc = r.units?.[i % Math.max(1, r.units.length)];
     if (!GAMEMODELS.npcs[npc]) continue;
-    const vill = livePeers().filter(p => p?.village_id === v.id && p.npc_id === npc && !p.follower && (p.life ?? 0) > 0 && !taken.has(p.peer_id) && Number.isInteger(p.tile_q))
-      .sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)))[0];
+    const vill = hireOfGiver ? (npc === giver.npc_id && (giver.life ?? 0) > 0 && !giver.follower && !giver.village_leaving && !taken.has(giver.peer_id) ? giver : null)
+      : livePeers().filter(p => p?.village_id === v.id && p.npc_id === npc && !p.follower && (p.life ?? 0) > 0 && !taken.has(p.peer_id) && Number.isInteger(p.tile_q))
+        .sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)))[0];
+    if (hireOfGiver && !vill) continue;
     const label = vill ? String(vill.peer_id).replace(/^peer:/, '') : `${v.id.replace(/[^a-z0-9]+/gi, '_')}_q_${qid}_${i}`;
     if (vill) { taken.add(vill.peer_id); entity.worldEdits.push({ id: `vrec:${label}`, v: v.id, by_quest: qid, at: hg.action }); }
     const name = `${vill?.name || `${GAMEMODELS.npcs[npc].name} of ${v.name}`}`;
@@ -7449,6 +7694,7 @@ function recruitFollowers(v, r, qid) {
 async function npcPlan() {
   npcFree = false; queuedBuild = null;
   await npcPlanRules();
+  if (HIRED_BUILDER && hiredBuildPlan()) return;   // an order from my leader comes before following it
   const used = AI_ROLE ? llmApply() : false;
   const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   const calm = !npcEnemies().some(p => hexDistance(here, p) <= 2);

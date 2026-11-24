@@ -99,6 +99,8 @@ for (let s = 0; s < 40; s++) {
   assert.equal(f.theme, 'fortress'); assert.ok(f.bank.value > 0); assert.ok(f.label.startsWith(o.name));
   assert.equal(villageHexAt(seed, o.q + o.clear_radius + 1, o.r), null);
   assert.ok(villageHexAt(seed, o.q + 1, o.r + 1).clear || villageHexAt(seed, o.q + 1, o.r + 1).def);
+  { const first = villageResidents(seed, o).map(rs => rs.name.split(',')[0]).slice(0, cat.races[o.race].person_names.length);
+    assert.equal(new Set(first).size, first.length, `${seed}: two villagers share a name (${first})`); }
   for (const rs of villageResidents(seed, o)) assert.ok(!villageHexAt(seed, rs.q, rs.r)?.def && !villageHexAt(seed, rs.q, rs.r)?.wall, 'a resident never starts on a building or the wall');
   for (const w of villageWanderers(seed, o)) { const d = dist(w, o); assert.ok(d >= 50 && d <= 100, `wanderer ${d} out`); }
   assert.equal(nearestVillage(seed, 0, 0).id, o.id);
@@ -112,6 +114,7 @@ assert.deepEqual([...races].sort(), ['race_empire', 'race_high_elves']);
   const { setFeatureCatalog, featureAt, labyrinthWallAt } = await import('../js/features.js');
   const { fortressAt, buildingBonusAt } = await import('../js/building-bonus.js');
   const { biomeFor } = await import('../js/biome.js');
+  const { featureAt: worldItemAt } = await import('../js/map.js');
   const rel = (p) => new URL(`../../assets/${p}`, import.meta.url);
   setFeatureCatalog(JSON.parse(fs.readFileSync(rel('features/feature_table.json'), 'utf8')));
   for (const seed of ['seed1', 'seed7', 'a1b2c3']) {
@@ -136,7 +139,8 @@ assert.deepEqual([...races].sort(), ['race_empire', 'race_high_elves']);
       if (lw) { walls++; assert.ok(lw.blocking && lw.kind === 'wall' && lw.id.startsWith('village_wall/') && lw.path); assert.ok(isVillageWallAt(seed, q, r)); }
       const f = featureAt(seed, q, r);
       assert.ok(!f || f.village, `${seed}: only village buildings inside the disc (${q},${r}: ${f?.label})`);
-      assert.ok(biomeFor(seed).isWalkable(q, r), `${seed}: (${q},${r}) inside the village is ${biomeFor(seed).biomeAt(q, r)} — a village clears its land`);
+      assert.equal(worldItemAt(seed, q, r), null, `${seed}: a world item inside the village at (${q},${r})`);
+      assert.ok(biomeFor(seed).isWalkable(q, r),`${seed}: (${q},${r}) inside the village is ${biomeFor(seed).biomeAt(q, r)} — a village clears its land`);
     }
     assert.equal(walls, 6 * o.wall.radius - 1, 'the whole ring but the gate');
     for (const h of [o.wall.gate, o.wall.inner, o.wall.outer]) assert.equal(labyrinthWallAt(seed, h.q, h.r), null, 'gate, its inner hex and the guard post are open');
@@ -169,5 +173,80 @@ assert.deepEqual([...races].sort(), ['race_empire', 'race_high_elves']);
   console.log('relationship: percent rules, race start, clamp, standings; village colours never green / red');
 }
 assert.equal(compass({ q: 0, r: 0 }, { q: 5, r: 0 }).includes('east'), true);
+// directions as the map shows them (north = up the screen)
+assert.equal(compass({ q: 0, r: 0 }, { q: 5, r: -5 }), 'north-east'); assert.equal(compass({ q: 0, r: 0 }, { q: 0, r: -5 }), 'north-west'); assert.equal(compass({ q: 0, r: 0 }, { q: 3, r: -6 }), 'north');
+assert.equal(compass({ q: 0, r: 0 }, { q: -3, r: 6 }), 'south'); assert.equal(compass({ q: 0, r: 0 }, { q: -5, r: 0 }), 'west');
+// dialogues (user 2026-11-24): role people, their own questions, the quest givers + storyteller outside the wall
+{
+  const { walkWords, intelLine } = await import('../village-life.mjs');
+  assert.equal(walkWords(30), 'about 3 minutes\' walk away'); assert.equal(walkWords(2), 'a stone\'s throw away');
+  assert.match(intelLine({ kind: 'monster', name: 'Orc', dir: 'north-east', hexes: 30 }, 0), /Orc.*north-east.*3 minutes/);
+  assert.ok(!/\d+ hexes/.test(intelLine({ kind: 'village', name: 'Ashford Village', race: 'Empire', dir: 'south', hexes: 240 }, 1)), 'no hex counts in the lore');
+  planted(c => { c.village.vil_empire.residents.find(r => r.post === 'outside').at = [-1, 9]; }, /must not stand next to the gate/);
+  planted(c => { c.village.vil_empire.residents.find(r => r.post === 'outside').at = [-1, 3]; }, /between the wall and the cleared edge/);
+  planted(c => { c.npc.npc_empire_trader.talk[0].id = 'news'; }, /talk: id "news"/);
+  planted(c => { c.npc.npc_empire_trader.quests = []; }, /a trader needs a barter/);
+  for (const vid of ['vil_empire', 'vil_high_elves']) {
+    const t = cat.villages[vid];
+    const roles = new Set(t.residents.map(r => cat.npcs[r.npc].role));
+    for (const r of ['smith', 'wizard', 'mercenary', 'trader', 'quest_giver', 'storyteller']) assert.ok(roles.has(r), `${vid} has a ${r}`);
+    for (const r of t.residents.filter(r => /^(quest_giver|storyteller)$/.test(cat.npcs[r.npc].role))) assert.equal(r.post, 'outside', `${vid}: ${r.npc} waits outside the wall`);
+  }
+  assert.equal(goal(npc('npc_empire_trader'), { stranger: { dist: 2, rep: 50 } }), 'greet');
+  assert.equal(goal(npc('npc_high_elves_trader'), { stranger: { dist: 6, rep: 50 } }), 'hawk', 'a trader walks up to a customer');
+  assert.equal(goal(npc('npc_empire_trader'), { stranger: { dist: 6, rep: 30 } }), 'idle', 'but not to a hostile one');
+  assert.equal(goal(npc('npc_high_elves_mercenary'), { stranger: { dist: 3, dist_village: 4, rep: 50 } }), 'warn');
+  assert.equal(goal(npc('npc_empire_mercenary'), { stranger: { dist: 5, dist_village: 4, rep: 70 } }), 'offer', 'a sellsword walks up to a welcome hero');
+  assert.equal(questMet(Qs.quest_empire_trade_creature, { archive: [{ kind: 'creature', id: 'mon_rhox_brute' }] }), true);
+  assert.equal(Qs.quest_empire_trade_creature.consume && Qs.quest_empire_trade_creature.repeatable, true);
+  console.log('dialogues: walking-time lore, role people in both villages, quest givers + storyteller outside the wall');
+}
+// hired builders + hamlets (user 2026-11-24): a builder's price is a barter whose reward is the builder; its menu
+// names race buildings and a power; some villages are hamlets (no wall, few people), never the spawn one
+{
+  planted(c => { c.npc.npc_empire_trader.builds = c.npc.npc_empire_builder.builds; c.npc.npc_empire_trader.build_max = 2; }, /builds: only a builder builds/);
+  planted(c => { c.npc.npc_empire_builder.builds[0].power = { kind: 'fly' }; }, /power.kind not in/);
+  planted(c => { c.npc.npc_empire_builder.builds[0].building = 'bld_high_elves_healer'; }, /missing or of another race/);
+  planted(c => { c.npc.npc_empire_builder.quests = []; c.quest.quest_empire_hire_builder.giver = 'npc_empire_reeve'; c.npc.npc_empire_reeve.quests.push('quest_empire_hire_builder'); }, /needs its price/);
+  planted(c => { c.village.vil_empire_hamlet.size = 'tiny'; }, /size: "hamlet" or none/);
+  for (const id of ['npc_empire_builder', 'npc_high_elves_builder']) {
+    const n = cat.npcs[id], price = cat.quests[n.quests[0]];
+    assert.ok(price.consume && price.repeatable && price.rewards.some(r => r.kind === 'allies' && r.units.includes(id)), `${id}: hire price`);
+    assert.ok(n.builds.some(b => b.id === 'tower') && n.builds.some(b => b.wall), `${id}: a tower and a barricade on the menu`);
+  }
+  assert.equal(goal(npc('npc_empire_builder'), { stranger: { dist: 5, rep: 50 } }), 'offer', 'a builder for hire walks up to a stranger');
+  assert.equal(goal(npc('npc_empire_builder'), { stranger: { dist: 5, rep: 30 } }), 'build', 'but not to a hostile one');
+  assert.equal(questMet(Qs.quest_empire_hire_builder, { archive: [{ kind: 'effect', id: 'effect_haste' }] }), true);
+  assert.equal(questMet(Qs.quest_high_elves_hire_builder, { archive: [{ kind: 'effect', id: 'effect_haste' }] }), false);
+  let hamlets = 0, full = 0;
+  for (let s = 0; s < 40; s++) for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) {
+    const v = villageOfCell(`seed${s}`, cx, cy);
+    if (!v) continue;
+    const t = cat.villages[v.template];
+    if (t.size === 'hamlet') {
+      hamlets++;
+      assert.ok(cx || cy, 'the spawn village is never a hamlet');
+      assert.equal(v.wall, null, 'a hamlet has no wall'); assert.ok(v.team.endsWith('Hamlet'));
+      const roles = new Set(villageResidents(`seed${s}`, v).map(rs => cat.npcs[rs.npc].role));
+      for (const r of ['quest_giver', 'storyteller', 'builder', 'trader']) assert.ok(roles.has(r), `${v.team} has a ${r}`);
+    } else full++;
+  }
+  assert.ok(hamlets > 0.25 * (hamlets + full) && hamlets < 0.5 * (hamlets + full), `hamlets ${hamlets} of ${hamlets + full}`);
+  console.log(`builders for hire (price + menu) and hamlets: ${hamlets} hamlets, ${full} villages`);
+  // villages are neutral in the resolver (contact / area / autotarget): only wild monsters and heroes on the list
+  const { villageNeutral } = await import('../village-life.mjs');
+  const vil = { peer_id: 'peer:v1', npc_id: 'npc_empire_healer', village_id: 'vil:0,0', alliance: 'village_x', hostile_to_csv: '' };
+  const hero = { peer_id: 'peer:h', character_id: 'char_x', alliance: 'player' };
+  const wild = { peer_id: 'peer:m', creature_id: 'mon_rhox_brute', alliance: 'npc_b' };
+  assert.equal(villageNeutral(vil, hero), true, 'a friendly village and a hero');
+  assert.equal(villageNeutral(hero, vil), true);
+  assert.equal(villageNeutral(vil, wild), false, 'villagers fight wild monsters');
+  assert.equal(villageNeutral({ ...vil, hostile_to_csv: 'peer:h' }, hero), false, 'a hostile village fights the hero');
+  assert.equal(villageNeutral({ ...vil, hostile_to_csv: 'peer:h' }, { peer_id: 'peer:s', creature_id: 'mon_x', owner_peer_id: 'peer:h', alliance: 'npc_a' }), false, '…and its summons');
+  assert.equal(villageNeutral(vil, { ...vil, peer_id: 'peer:v2', village_id: 'vil:1,0' }), true, 'villages leave each other alone');
+  assert.equal(villageNeutral({ ...vil, follower: 1 }, wild), false, 'a follower is no villager');
+  assert.equal(villageNeutral(hero, wild), false, 'no village, no say');
+  console.log('villages neutral in the resolver: friendly heroes, other villages; hostile heroes + wild monsters fight');
+}
 console.log(`villages: ${villages} placed over 40 seeds × 49 cells, all ≥ ${MIN_APART} apart, both races used`);
 console.log('all gamemodels checks passed');
