@@ -1,0 +1,227 @@
+// chaosD6-GameModels (2026-11-24): races, buildings by race, NPCs, monsters, village templates, quests and the agenda
+// library as one-file-per-definition JSON (<kind>/<id>.json). The definitions live ONLY in the chaosD6-GameModels repo
+// (user 2026-11-24), never in this Code repo. This module loads, checks and compiles them into the one catalog the map
+// and the peers read (assets/gamemodels/catalog.json, tools/gamemodels-build.mjs) — that compiled catalog stays here,
+// like the Resources catalogues (asset-root.mjs): every peer and the phone must read the same copy.
+// GameModels repo, first match wins: env CHAOSD6_GAMEMODELS_DIR | env CHAOSD6_GAMEMODELS_REPO | the first existing of
+// GAMEMODELS_REPO_CANDIDATES (null when none: the build tool says so; the game only needs the compiled catalog).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { compileAgenda, varsOf, CONTEXT_ROOTS, GOALS, questMet } from './agenda.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+// Default checkout locations relative to the Code repo root: a true sibling, or /home/galt/repo_radicle_clone2/chaosD6
+// + /home/galt/chaosd6-gamemodels-repo.
+export const GAMEMODELS_REPO_CANDIDATES = [
+  path.resolve(HERE, '..', '..', 'chaosd6-gamemodels-repo'),
+  path.resolve(HERE, '..', '..', '..', 'chaosd6-gamemodels-repo'),
+];
+const isModelsDir = (d) => { try { return fs.statSync(path.join(d, 'lib')).isDirectory(); } catch { return false; } };
+export function resolveGameModelsDir(env = process.env) {
+  if (env.CHAOSD6_GAMEMODELS_DIR) return path.resolve(env.CHAOSD6_GAMEMODELS_DIR);
+  if (env.CHAOSD6_GAMEMODELS_REPO) return path.resolve(env.CHAOSD6_GAMEMODELS_REPO);
+  return GAMEMODELS_REPO_CANDIDATES.find(isModelsDir) || null;
+}
+export const GAMEMODELS_DIR = resolveGameModelsDir();
+export const CATALOG_REL = 'gamemodels/catalog.json';
+// kind → [subdir, schema, id pattern]
+export const KINDS = {
+  race: ['races', 'chaosd6.race/1', /^race_[a-z0-9_]+$/],
+  building: ['buildings', 'chaosd6.building/1', /^bld_[a-z0-9_]+$/],
+  npc: ['npcs', 'chaosd6.npc/1', /^npc_[a-z0-9_]+$/],
+  monster: ['monsters', 'chaosd6.monster/1', /^mon_[a-z0-9_]+$/],
+  village: ['villages', 'chaosd6.village/1', /^vil_[a-z0-9_]+$/],
+  quest: ['quests', 'chaosd6.quest/1', /^quest_[a-z0-9_]+$/],
+  lib: ['lib', 'chaosd6.agenda-lib/1', /^agenda_[a-z0-9_]+$/],
+};
+export const ROLES = ['quest_giver', 'storyteller', 'builder', 'healer', 'guard', 'villager', 'wanderer'];
+export const BUILDING_ROLES = ['centre', 'keep', 'producer', 'temple', 'shop', 'lore', 'house'];
+export const STATS = ['vitality', 'world', 'matter', 'will'];
+export const REWARDS = ['reputation', 'allies', 'effect', 'skill', 'enter'];
+
+const canon = (v) => Array.isArray(v) ? `[${v.map(canon).join(',')}]` : v && typeof v === 'object'
+  ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k =>`${JSON.stringify(k)}:${canon(v[k])}`).join(',')}}` : JSON.stringify(v);
+export const defHash = (def) => createHash('sha256').update(canon(def)).digest('hex');
+
+// dir → { race: {id: def}, building: {...}, ..., files: n, errors: [] } (parse errors only; checkGameModels does the rest)
+export function loadGameModels(dir = GAMEMODELS_DIR) {
+  if (!dir) throw new Error('no chaosD6-GameModels checkout found (clone it next to chaosD6 or set CHAOSD6_GAMEMODELS_REPO)');
+  const out = { errors: [], files: 0 };
+  for (const [kind, [sub]] of Object.entries(KINDS)) {
+    out[kind] = {};
+    const d = path.join(dir, sub);
+    if (!fs.existsSync(d)) continue;
+    for (const f of fs.readdirSync(d).filter(f => f.endsWith('.json')).sort()) {
+      out.files++;
+      try { const def = JSON.parse(fs.readFileSync(path.join(d, f), 'utf8')); out[kind][def.id] = def; if (`${def.id}.json` !== f) out.errors.push(`${sub}/${f}: id "${def.id}" does not match the file name`); }
+      catch (e) { out.errors.push(`${sub}/${f}: ${e.message}`); }
+    }
+  }
+  return out;
+}
+
+// The effect / skill / creature ids this game tree knows (for checkGameModels `known`).
+export function knownIds(game = HERE) {
+  const ids = (d) => new Set(fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.json')).map(f => f.replace(/\.json$/, '')) : []);
+  const cre = JSON.parse(fs.readFileSync(path.resolve(game, '..', 'data', 'creatures.json'), 'utf8'));
+  return { effects: ids(path.join(game, 'effects-data', 'effects')), skills: ids(path.join(game, 'skills-data', 'skills')), creatures: new Set(cre.entries.map(e => e.id)) };
+}
+
+// Every problem as one line. `known` = { effects: Set, skills: Set, creatures: Set } (ids the game has) and
+// `assetFile(rel) → path|null` (sprites must exist) — both optional (the repo's offline check passes neither).
+export function checkGameModels(m, { known = null, assetFile = null } = {}) {
+  const err = [...(m.errors || [])];
+  const e = (id, msg) => err.push(`${id}: ${msg}`);
+  const lib = Object.values(m.lib)[0];
+  if (Object.keys(m.lib).length !== 1) err.push(`lib: exactly one agenda library expected, found ${Object.keys(m.lib).length}`);
+  for (const [kind, [, schema, re]] of Object.entries(KINDS)) for (const [id, d] of Object.entries(m[kind])) {
+    if (d.schema !== schema) e(id, `schema "${d.schema}" ≠ ${schema}`);
+    if (!re.test(id)) e(id, `id must match ${re}`);
+    if (kind !== 'lib' && kind !== 'village' && typeof d.name !== 'string') e(id, 'missing name');
+  }
+  const sprite = (id, p) => { if (assetFile && p && !assetFile(String(p).replace(/^assets\//, ''))) e(id, `missing sprite ${p}`); };
+  const agendaCheck = (id, agenda) => {
+    try {
+      const c = compileAgenda(agenda, lib);
+      for (const r of c.rules) {
+        if (!GOALS.includes(r.goal?.do)) e(id, `rule ${r.id}: unknown goal "${r.goal?.do}"`);
+        for (const v of varsOf(r.when)) if (!CONTEXT_ROOTS.includes(v.split('.')[0])) e(id, `rule ${r.id}: reads "${v}" — not in the agenda context (${CONTEXT_ROOTS.join(', ')})`);
+      }
+      if (c.rules[c.rules.length - 1].when !== true) e(id, 'the last agenda rule must be `when: true` (a fallback goal)');
+    } catch (x) { e(id, `agenda: ${x.message}`); }
+  };
+  if (lib) for (const [name, a] of Object.entries(lib.agendas || {})) agendaCheck(`${lib.id}.${name}`, { uses: name });
+  for (const [id, r] of Object.entries(m.race)) {
+    if (!m.village[r.village]) e(id, `unknown village ${r.village}`);
+    for (const b of r.buildings || []) if (m.building[b]?.race !== id) e(id, `building ${b} missing or of another race`);
+    for (const n of r.npcs || []) if (m.npc[n]?.race !== id) e(id, `npc ${n} missing or of another race`);
+    if (!(r.village_names?.prefix?.length && r.village_names?.suffix?.length)) e(id, 'village_names.prefix/suffix needed');
+    if (r.wbc3_race !== undefined && typeof r.wbc3_race !== 'string') e(id, 'wbc3_race: the WBC3 race name a hero character art must carry to start at start_same_race');
+    if (!r.person_names?.length) e(id, 'person_names needed');
+  }
+  for (const [id, b] of Object.entries(m.building)) {
+    if (!m.race[b.race]) e(id, `unknown race ${b.race}`);
+    if (!BUILDING_ROLES.includes(b.role)) e(id, `role "${b.role}" not in ${BUILDING_ROLES.join('|')}`);
+    if (!STATS.includes(b.bank?.stat) || !Number.isInteger(b.bank?.value) || b.bank.value < 1) e(id, 'bank { stat, value ≥ 1 } needed (stat-buy threshold, like the Citadel)');
+    if (b.produces) {
+      if (!m.npc[b.produces.npc]) e(id, `produces unknown npc ${b.produces.npc}`);
+      if (!Number.isInteger(b.produces.every_turns) || b.produces.every_turns < 5) e(id, 'produces.every_turns must be an integer ≥ 5');
+    }
+    const s = b.card?.resources?.sprites;
+    if (!s?.base) e(id, 'card.resources.sprites.base needed'); else for (const p of Object.values(s)) sprite(id, p);
+  }
+  for (const [id, n] of Object.entries(m.npc)) {
+    if (!m.race[n.race]) e(id, `unknown race ${n.race}`);
+    if (!ROLES.includes(n.role)) e(id, `role "${n.role}" not in ${ROLES.join('|')}`);
+    if (n.home && !m.building[n.home]) e(id, `unknown home ${n.home}`);
+    agendaCheck(id, n.agenda);
+    const u = n.unit || {};
+    if (!STATS.every(k => Number.isInteger(u.stats?.[k]) && u.stats[k] >= 0)) e(id, 'unit.stats needs integer vitality/world/matter/will');
+    else if (u.life !== Math.round(STATS.reduce((a, k) => a + u.stats[k], 0) / 10)) e(id, `unit.life ${u.life} ≠ round(Σstats/10) (ruling 2026-10-28)`);
+    if (!Number.isInteger(u.actions_per_round) || u.actions_per_round < 1 || u.actions_per_round > 4) e(id, 'unit.actions_per_round 1..4');
+    for (const fx of u.deck_effects || []) if (known?.effects && !known.effects.has(fx)) e(id, `unknown deck effect ${fx}`);
+    for (const q of n.quests || []) if (m.quest[q]?.giver !== id) e(id, `quest ${q} missing or given by someone else`);
+    if (n.role === 'quest_giver' && !(n.quests || []).length) e(id, 'a quest_giver needs quests');
+    for (const p of Object.values(n.card?.resources?.sprites || {})) sprite(id, p?.path);
+    if (!n.card?.resources?.sprites?.idle?.path) e(id, 'card.resources.sprites.idle.path needed');
+  }
+  for (const [id, mo] of Object.entries(m.monster)) {
+    if (known?.creatures && !known.creatures.has(mo.creature)) e(id, `unknown creature ${mo.creature}`);
+    agendaCheck(id, mo.agenda);
+  }
+  for (const [id, q] of Object.entries(m.quest)) {
+    if (!m.npc[q.giver]) e(id, `unknown giver ${q.giver}`);
+    if (!m.race[q.race]) e(id, `unknown race ${q.race}`);
+    if (typeof q.need_text !== 'string' || !q.need_text) e(id, 'need_text needed');
+    if (questMet(q, { archive: [] })) e(id, 'need already holds with an empty archive');
+    for (const v of varsOf(q.need)) if (!['player.archive', 'kind', 'id', 'tags', ''].includes(v)) e(id, `need reads "${v}" — use player.archive items { kind, id, tags }`);
+    for (const r of q.rewards || []) {
+      if (!REWARDS.includes(r.kind)) e(id, `reward kind "${r.kind}" not in ${REWARDS.join('|')}`);
+      if (r.kind === 'allies') for (const u of r.units || []) if (!m.npc[u]) e(id, `allies: unknown npc ${u}`);
+      if (r.kind === 'effect' && known?.effects && !known.effects.has(r.id)) e(id, `reward: unknown effect ${r.id}`);
+      if (r.kind === 'skill' && known?.skills && !known.skills.has(r.id)) e(id, `reward: unknown skill ${r.id}`);
+    }
+    if (!(q.rewards || []).length) e(id, 'rewards needed');
+  }
+  for (const [id, v] of Object.entries(m.village)) {
+    if (!m.race[v.race]) e(id, `unknown race ${v.race}`);
+    if (!/\{name\}/.test(v.team || '')) e(id, 'team must contain {name} ("{name} Village")');
+    if (!(Number.isInteger(v.cap) && v.cap >= 1 && v.cap <= 20)) e(id, 'cap 1..20');
+    if (!(Number.isInteger(v.radius) && v.radius >= 3 && v.radius <= 12)) e(id, 'radius 3..12');
+    const hexes = new Set();
+    const dist = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+    for (const l of v.layout || []) {
+      if (!m.building[l.building] || m.building[l.building].race !== v.race) e(id, `layout: ${l.building} missing or of another race`);
+      if (dist(l.at) > v.radius) e(id, `layout: ${l.building} at ${l.at} outside radius ${v.radius}`);
+      if (hexes.has(String(l.at))) e(id, `layout: two buildings on ${l.at}`); hexes.add(String(l.at));
+    }
+    if ((v.layout || []).filter(l => m.building[l.building]?.role === 'centre').length !== 1) e(id, 'exactly one centre building (the relationship building)');
+    if (!(v.layout || []).some(l => String(l.at) === '0,0' && m.building[l.building]?.role === 'centre')) e(id, 'the centre building stands at [0,0]');
+    // the wall ring: between the buildings and the cleared edge, its gate a corner hex (on an axis), sprites on disk
+    const w = v.wall, cr = v.clear_radius ?? v.radius + 3;
+    if (w) {
+      if (!(Number.isInteger(w.radius) && w.radius > v.radius && w.radius < cr)) e(id, `wall.radius must lie in (${v.radius}, ${cr})`);
+      const [gq, gr] = Array.isArray(w.gate) ? w.gate : [NaN, NaN];
+      if (!(dist([gq, gr]) === w.radius && (gq === 0 || gr === 0 || gq + gr === 0))) e(id, 'wall.gate must be a corner hex of the ring ([0, R], [R, 0], [R, -R], … )');
+      for (const k of ['joint', 'horizontal', 'vertical']) { if (!w.sprites?.[k]) e(id, `wall.sprites.${k} needed`); else sprite(id, w.sprites[k]); }
+    }
+    for (const rs of v.residents || []) {
+      if (!m.npc[rs.npc] || m.npc[rs.npc].race !== v.race) e(id, `resident ${rs.npc} missing or of another race`);
+      if (hexes.has(String(rs.at))) e(id, `resident ${rs.npc} stands on a building hex ${rs.at}`);
+      if (rs.post === 'gate') {
+        if (!w) e(id, `resident ${rs.npc}: post "gate" needs a wall`);
+        else if (String(rs.at) !== String(w.gate.map(x => x / w.radius * (w.radius + 1)))) e(id, `resident ${rs.npc}: the gate post stands right outside the gate (${w.gate.map(x => x / w.radius * (w.radius + 1))})`);
+      } else if (dist(rs.at) > v.radius) e(id, `resident ${rs.npc} outside the radius`);
+      else if (rs.post !== undefined) e(id, `resident ${rs.npc}: unknown post "${rs.post}"`);
+    }
+    if (w && (v.residents || []).filter(rs => rs.post === 'gate').length !== 1) e(id, 'a walled village has exactly one gate guard (post "gate")');
+    if ((v.residents || []).length > v.cap) e(id, 'more residents than the cap');
+    const [a, b] = v.wanderers?.ring || [];
+    if (!(a >= 50 && b <= 100 && a < b)) e(id, 'wanderers.ring within [50, 100]');
+    for (const w of v.wanderers?.npcs || []) if (m.npc[w]?.role !== 'wanderer') e(id, `wanderer ${w} missing or not a wanderer`);
+    const rp = v.reputation || {};
+    // relationship in percent (user 2026-11-24): 0 ≤ hostile < start ≤ start_same_race ≤ 100, start < enter ≤ ally_all ≤ 100
+    const pct = (x) => Number.isFinite(x) && x >= 0 && x <= 100;
+    if (!(pct(rp.hostile) && pct(rp.start) && pct(rp.enter) && pct(rp.ally_all) && rp.hostile < rp.start && rp.start < rp.enter && rp.enter <= rp.ally_all)) e(id, 'reputation (percent): 0 ≤ hostile < start < enter ≤ ally_all ≤ 100');
+    if (rp.start_same_race !== undefined && !(pct(rp.start_same_race) && rp.start_same_race >= rp.start)) e(id, 'reputation.start_same_race: start..100');
+    for (const k of ['building_broken', 'villager_attacked', 'trespass']) if (!(Number.isFinite(rp[k]) && rp[k] <= 0)) e(id, `reputation.${k}: a drop (≤ 0)`);
+    if (!(Number.isFinite(rp.threat_radius) && rp.threat_radius > 0)) e(id, 'reputation.threat_radius: hexes around the centre where a hostile village attacks');
+    for (const q of v.quests || []) if (m.quest[q]?.race !== v.race) e(id, `quest ${q} missing or of another race`);
+  }
+  return err;
+}
+
+// The compact catalog the map (js/villages.js), the renderer and the peers read. Agendas are compiled.
+export function compileCatalog(m) {
+  const lib = Object.values(m.lib)[0];
+  const sha = createHash('sha256');
+  for (const kind of Object.keys(KINDS)) for (const id of Object.keys(m[kind]).sort()) sha.update(`${id}:${defHash(m[kind][id])}\n`);
+  const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+  return {
+    format: 1, hash: sha.digest('hex'),
+    races: Object.fromEntries(Object.entries(m.race).map(([id, r]) => [id, pick(r, ['name', 'temper', 'village', 'village_names', 'person_names', 'wbc3_race'])])),
+    buildings: Object.fromEntries(Object.entries(m.building).map(([id, b]) => [id, { ...pick(b, ['name', 'race', 'role', 'bank', 'blocks', 'produces', 'text']), sprites: b.card.resources.sprites }])),
+    villages: Object.fromEntries(Object.entries(m.village).map(([id, v]) => [id, pick(v, ['race', 'team', 'radius', 'clear_radius', 'cap', 'layout', 'residents', 'wanderers', 'reputation', 'quests', 'wall'])])),
+    npcs: Object.fromEntries(Object.entries(m.npc).map(([id, n]) => [id, { ...pick(n, ['name', 'race', 'role', 'home', 'persona', 'lines', 'quests', 'unit']), agenda: compileAgenda(n.agenda, lib), resources: n.card.resources }])),
+    monsters: Object.fromEntries(Object.entries(m.monster).map(([id, mo]) => [id, { creature: mo.creature, agenda: compileAgenda(mo.agenda, lib) }])),
+    quests: Object.fromEntries(Object.entries(m.quest).map(([id, q]) => [id, pick(q, ['name', 'race', 'giver', 'need_text', 'need', 'consume', 'rewards', 'repeatable'])])),
+  };
+}
+
+// The id → sha256 index the repo carries (like the effects/skills/classes repos).
+export function buildIndex(m) {
+  const out = { format: 1, hash: 'sha256(canonical-json)' };
+  for (const [kind, [sub]] of Object.entries(KINDS)) out[sub] = Object.fromEntries(Object.keys(m[kind]).sort().map(id => [id, defHash(m[kind][id])]));
+  return out;
+}
+
+// NPC units as creature entries (peer.mjs data.creatures: { id, name, tags, data }) — a villager is played like a
+// monster/companion with its own stats, deck and life.
+export function npcCreatureEntries(catalog) {
+  return Object.fromEntries(Object.entries(catalog?.npcs || {}).map(([id, n]) => [id, {
+    id, name: n.name, tags: ['npc', n.role],
+    data: { stats: n.unit.stats, life: n.unit.life, actions_per_round: n.unit.actions_per_round, dice_pattern: null, innate_effect: n.unit.innate_effect || null, on_action_rider: null, deck_effects: n.unit.deck_effects || [] },
+  }]));
+}

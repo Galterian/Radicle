@@ -41,6 +41,15 @@ import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tile
   dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
 import { hexDistance } from './js/hex.js';
+import { setVillageCatalog, villageCatalogReady, villageOfCell } from './js/villages.js';
+// The spawn cell's village (GameModels catalog loaded once, lazily) — TEST_NEAR_VILLAGE starts the roster next to it.
+function villageNearSpawn(seed) {
+  if (!villageCatalogReady()) {
+    const f = [path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'gamemodels', 'catalog.json')].find(x => fsSync.existsSync(x));
+    if (f) { try { setVillageCatalog(JSON.parse(fsSync.readFileSync(f, 'utf8'))); } catch {} }
+  }
+  return villageCatalogReady() ? villageOfCell(seed, 0, 0) : null;
+}
 import { randomBytes } from 'node:crypto';
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API), launcher only
@@ -315,6 +324,24 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
       const f = roster.find(p => p.label === `foe-${i + 1}`);
       if (f) Object.assign(f, { creature: c, name: c.replace(/^mon_/, '').replace(/_/g, ' ').replace(/\b\w/g, x => x.toUpperCase()) });
     });
+  }
+  // TEST_NEAR_VILLAGE=1 (test modes only; GameModels 2026-11-24): the whole roster starts just outside the spawn
+  // village (clear_radius + 1 hexes from its centre, its buildings inside the reveal), so a test meets its villagers,
+  // quests and centre card at once; the test foes start ~20 hexes further out so they don't kill the hero first.
+  if (test && process.env.TEST_NEAR_VILLAGE === '1') {
+    const seed = seedForDimension(DIM_ID);
+    const v = villageNearSpawn(seed);
+    if (v) {
+      // walled: one hex beyond the gate guard's post, straight out from the gate
+      const anchor = v.wall ? { q: 2 * v.wall.outer.q - v.wall.gate.q, r: 2 * v.wall.outer.r - v.wall.gate.r } : { q: v.q, r: v.r + (v.clear_radius ?? 9) + 1 }, occupied = new Set();
+      for (const p of roster) {
+        const far = p.alliance === 'npc_b' ? 20 : 0;
+        const want = { q: anchor.q + p.tile.q - 1, r: anchor.r + p.tile.r - 2 + far };
+        p.tile = tileInRing(want, { min: 0, max: 4, seed, salt: p.label, occupied }) || tileInRing(want, { min: 0, max: 14, seed, salt: p.label, occupied }) || want;
+        occupied.add(`${p.tile.q},${p.tile.r}`);
+      }
+      console.log(`[launcher] TEST_NEAR_VILLAGE: the roster starts by ${v.team} (${v.race_name}) at (${v.q},${v.r}) — player-1 at (${roster[0].tile.q},${roster[0].tile.r})`);
+    } else console.warn('[launcher] TEST_NEAR_VILLAGE: no village catalog (assets/gamemodels/catalog.json) — normal start');
   }
   if (override?.allies?.length) {
     // "Test my team": the next characters of the team order replace the Pride

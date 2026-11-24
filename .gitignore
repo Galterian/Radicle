@@ -162,3 +162,4 @@ tmp/
 data/dimensions/dim-gentest-*
 data/dimensions/dim-ringtest-*
 game/.msys0000*
+data/dimensions/dim-villagetest-*

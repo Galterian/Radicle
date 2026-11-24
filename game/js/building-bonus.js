@@ -143,6 +143,8 @@ function buildingBonus(seed, q, r, f) {
   // A building created during play (features.js overlay, 2026-11-14): a fixed bonus (Priest's Shrine), or an
   // exact copy of the one it was copied from (Animator) — rolled on the source hex.
   if (f.placed && f.bonus) return JSON.parse(JSON.stringify(f.bonus));
+  // A village building (js/villages.js): its GameModels bank is a fortress threshold — stat-buy it like the Citadel.
+  if (f.village && f.bank) return { power: { kind: 'fortress', stat: f.bank.stat, value: f.bank.value } };
   if (f.placed && f.copy_of && Number.isInteger(f.copy_of.q) && Number.isInteger(f.copy_of.r)) { q = f.copy_of.q; r = f.copy_of.r; }
   const text = `${f.label || ''} ${f.desc || ''}`;
   // A themed building (features.js) does what it looks like: its theme is its power.

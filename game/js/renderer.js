@@ -1,6 +1,7 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
 import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward, hexDistance } from './hex.js';
-import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame } from './sprites.js';
+import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame, teamSource } from './sprites.js';
+import { villageColour, ALLY_GREEN, villageAround, villageWallRing } from './villages.js';
 import { hash32 } from './map.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 
@@ -191,6 +192,73 @@ const ease = t => t < 0 ? 0 : t > 1 ? 1 : (t * t * (3 - 2 * t));
 const CAM_FOLLOW = 0.12;
 const ZOOM_MIN = 0.35, ZOOM_MAX = 1.6;
 
+// A village wall built the WBC3 way (user 2026-11-24: no holes): horizontal pieces along the two flat rows, vertical
+// pieces stacked down the slanted sides as a screen staircase (the WBC3 tiles only run left-right or up-down), a joint
+// tower at the six corners and either side of the gate. Each piece is cropped to its opaque body (the baked shadow
+// left out) and stretched centre to centre, so neighbouring pieces always overlap. Geometry only here
+// ({ kind, x | x0..x1, y | y0..y1, key }); images resolve at draw time.
+const WALL_S = 0.64;   // sprite px → map px: a horizontal piece's body (≈62 px) spans about half a hex step
+const WALL_RANK = { vertical: 0, horizontal: 1, joint: 2 };
+function buildVillageWalls(seed, features) {
+  const shown = new Set(), firstOf = new Map(), pieces = [];
+  for (const it of features) if (it.f.village?.wall) { shown.add(`${it.q},${it.r}`); if (!firstOf.has(it.f.village.id)) firstOf.set(it.f.village.id, it); }
+  for (const [vid, it] of firstOf) {
+    const v = villageAround(seed, it.q, it.r), ring = villageWallRing(v);
+    if (!ring) continue;
+    const H = ring.hexes, n = H.length, cy = hexToPixel(v.q, v.r).y;
+    const add = (p, key) => pieces.push({ ...p, key, vid, cy, sprites: ring.sprites });
+    const seen = (h) => shown.has(`${h.q},${h.r}`);
+    for (let i = 0; i < n; i++) {
+      const a = H[i], b = H[(i + 1) % n];
+      if (a.gate || b.gate || !(seen(a) || seen(b))) continue;
+      const A = hexToPixel(a.q, a.r), B = hexToPixel(b.q, b.r);
+      if (Math.abs(A.y - B.y) < 1) { add({ kind: 'horizontal', x0: Math.min(A.x, B.x), x1: Math.max(A.x, B.x), y: A.y }, A.y); continue; }
+      const [U, L] = A.y < B.y ? [A, B] : [B, A];   // down the upper hex's column, then across the lower hex's row
+      add({ kind: 'vertical', x: U.x, y0: U.y, y1: L.y }, L.y);
+      add({ kind: 'horizontal', x0: Math.min(U.x, L.x), x1: Math.max(U.x, L.x), y: L.y }, L.y);
+    }
+    for (let i = 0; i < n; i++) {
+      const h = H[i];
+      if (h.gate || !seen(h) || !(h.corner || H[(i + 1) % n].gate || H[(i + n - 1) % n].gate)) continue;
+      const P = hexToPixel(h.q, h.r);
+      add({ kind: 'joint', x: P.x, y: P.y }, P.y);
+    }
+  }
+  return pieces.sort((a, b) => a.key - b.key || WALL_RANK[a.kind] - WALL_RANK[b.kind]);
+}
+const _wallBody = new WeakMap();
+function wallBody(img) {   // the opaque body of a wall sprite (the shadow is alpha ≈ 112)
+  let b = _wallBody.get(img);
+  if (b) return b;
+  const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+  b = { x: 0, y: 0, w, h };
+  try {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, w, h).data;
+    let x0 = w, x1 = -1, y0 = h, y1 = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 200) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    if (x1 >= x0) b = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  } catch { /* tainted canvas: draw the whole sprite */ }
+  _wallBody.set(img, b);
+  return b;
+}
+function drawWallPiece(ctx, p, seed, hexH) {
+  const tex = featureImage(p.sprites[p.kind] || p.sprites.joint);
+  if (!tex) return;
+  const src = teamSource(tex, villageColour(seed, p.vid)), b = wallBody(tex.img);
+  const base = hexH * 0.18, dw = b.w * WALL_S, dh = b.h * WALL_S;   // the wall's foot sits just below the hex centre
+  if (p.kind === 'horizontal') {
+    const len = p.x1 - p.x0, k = Math.max(1, Math.round(len / dw)), step = len / k;
+    for (let i = 0; i < k; i++) ctx.drawImage(src, b.x, b.y, b.w, b.h, p.x0 + i * step - 1, p.y + base - dh, step + 2, dh);
+  } else if (p.kind === 'vertical') {
+    const len = p.y1 - p.y0, k = Math.max(1, Math.ceil(len / (32 * WALL_S * 0.75)));
+    for (let i = 0; i <= k; i++) ctx.drawImage(src, b.x, b.y, b.w, b.h, p.x - dw / 2, p.y0 + i * len / k + base - dh, dw, dh);
+  } else ctx.drawImage(src, b.x, b.y, b.w, b.h, p.x - dw / 2, p.y + base + 2 - dh, dw, dh);
+}
+
 export function createRenderer(canvas, state) {
   const ctx = canvas.getContext('2d');
 
@@ -265,6 +333,7 @@ export function createRenderer(canvas, state) {
         const f = featureAt(map.seed, t.q, t.r);
         if (f) tileCache.features.push({ q: t.q, r: t.r, x: t.x, y: t.y, f });
       }
+      tileCache.walls = buildVillageWalls(map.seed, tileCache.features);
       // Already y-sorted courtesy of iterating `tileCache.tiles` in draw order.
     }
     return tileCache;
@@ -583,11 +652,16 @@ export function createRenderer(canvas, state) {
       ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.35 + jy, dw, dh);
     }
 
+    // Village walls: the far half (above the village centre) behind the buildings, the near half in front.
+    const wallPieces = tileCache.walls || [];
+    const wallVisible = (p) => inView(p.x ?? (p.x0 + p.x1) / 2, p.y ?? p.y1, HEX_SIZE * 2.5);
+    for (const p of wallPieces) if (p.key < p.cy && wallVisible(p)) drawWallPiece(ctx, p, state.map.seed, hexH);
     // Features (buildings / permanents) — z-order 5 in Godot. Larger target
     // size (≈1.1 hex) with a tiny jitter so adjacent features in a long biome
     // strip don't line up into visible rows.
     for (const it of featureItems) {
       if (!inView(it.x, it.y)) continue;
+      if (it.f.village?.wall) continue;   // drawn as one run (buildVillageWalls)
       const tex = featureImage(it.f.path);
       if (!tex) continue;
       const h32 = hash32(`${state.map.seed}:j:${it.q}:${it.r}`);
@@ -601,7 +675,9 @@ export function createRenderer(canvas, state) {
       // A broken fortress stays as a faded ruin (user ruling 2026-11-12).
       const ruined = state.brokenBuildings?.has(`bld:${it.q},${it.r}`);
       if (ruined) ctx.globalAlpha = 0.3;
-      ctx.drawImage(tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
+      // A village's walls and buildings wear its team colour (the WBC3 green ramp, recoloured like a unit's).
+      const tint = it.f.village ? villageColour(state.map.seed, it.f.village.id) : null;
+      ctx.drawImage(tint ? teamSource(tex, tint) : tex.img, it.x - dw / 2 + jx, it.y - dh + hexH * 0.12 + jy, dw, dh);
       ctx.globalAlpha = 1;
       // What the building does, as a small glyph on its roof — every building does something.
       const pw = !ruined && it.f.kind !== 'wall' && it.f.kind !== 'bridge' ? buildingBonusAt(state.map.seed, it.q, it.r)?.bonus?.power : null;
@@ -617,6 +693,7 @@ export function createRenderer(canvas, state) {
         ctx.fillStyle = '#ffe66e'; ctx.fillText(glyph, gx, gy + 1);
       }
     }
+    for (const p of wallPieces) if (p.key >= p.cy && wallVisible(p)) drawWallPiece(ctx, p, state.map.seed, hexH);
 
     // Target highlight.
     if (state.ui.hoverTile) {
@@ -830,7 +907,8 @@ export function createRenderer(canvas, state) {
           && !inSight(e.tile_q, e.tile_r)) continue;
       const { x, y } = positions.get(e.peerId);
       if (e.isSelf) selfDrawnPx = { x, y };
-      const color = ALLIANCE_COLOR[e.alliance] || '#ccc';
+      // A village's people: its own colour — the ally green once it counts me an ally (≥ ally_all) or follows me.
+      const color = e.villageId ? ((e.follower && e.ownedByMe) || state.ui?.villageAllies?.has(e.villageId) ? ALLY_GREEN : villageColour(state.map.seed, e.villageId) || '#ccc') : ALLIANCE_COLOR[e.alliance] || '#ccc';
 
       // Sprite book-keeping: create the animator once resources resolve,
       // derive facing from the drawn-position delta, flag walking while the

@@ -10,6 +10,7 @@ import { createKnownMap, initialBlock, seedForDimension, hash32 } from './js/map
 import { biomeFor } from './js/biome.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featuresReady } from './js/features.js';
 import { setBigFeatureCatalog, bigFeaturesReady } from './js/bigfeature.js';
+import { setVillageCatalog, villageCatalogReady } from './js/villages.js';
 import { fortressAt } from './js/building-bonus.js';
 import { fancyLabel } from './js/names.js';
 import { DEFAULT_RELAYS } from './nostr-bus.mjs';
@@ -83,6 +84,10 @@ function ensureBuildingCatalogs() {
     const tries = [path.resolve(__dirname, 'js', 'catalog', path.basename(rel)), path.resolve(__dirname, '..', 'assets', rel), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, rel)] : [])];
     const hit = tries.find(f => fsSync.existsSync(f));
     if (hit) { try { set(JSON.parse(fsSync.readFileSync(hit, 'utf8'))); } catch {} }
+  }
+  if (!villageCatalogReady()) {   // villages (chaosD6-GameModels) put buildings + a cleared disc on the map too
+    const f = [path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])].find(x => fsSync.existsSync(x));
+    if (f) { try { setVillageCatalog(JSON.parse(fsSync.readFileSync(f, 'utf8'))); } catch {} }
   }
 }
 

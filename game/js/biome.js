@@ -2,6 +2,7 @@
 // (dim_seed, q, r) must yield the same biome in both runtimes so a dimension
 // renders identically whether a Node peer, the browser, or Godot drew it.
 import { hash32 } from './map.js';
+import { villageAround } from './villages.js';
 
 export const WATER_LEVEL = 0.26;
 export const COAST_BAND = 0.05;
@@ -80,6 +81,7 @@ export const BIOME_FILL = {
 
 const UNWALKABLE = new Set(['water', 'lava', 'mountains', 'rock_cliffs', 'desert_cliffs']);
 export const isWalkable = (biome) => !UNWALKABLE.has(biome);
+const CLEARED = { water: 'grass', lava: 'dirt', mountains: 'rock', rock_cliffs: 'rock', desert_cliffs: 'desert' };
 
 const rand01 = (seed, ix, iy, salt) => hash32(`${seed}:${salt}:${ix}:${iy}`) / 4294967296;
 
@@ -135,9 +137,16 @@ export function createBiome(seedHex) {
     return { ridge, lake };
   }
 
+  // A named village clears its land (chaosD6-GameModels 2026-11-24): inside its disc an unwalkable biome turns into
+  // the nearest walkable ground, so its gate, streets and buildings are never water, lava or cliffs. (Biome.gd does
+  // not mirror the villages yet.)
+  function biomeAt(q, r) {
+    const b = natureAt(q, r);
+    return !isWalkable(b) && villageAround(seedHex, q, r) ? (CLEARED[b] || 'grass') : b;
+  }
   // Final biome = base Whittaker pick, then the ridge / lake overlays. Order and
   // thresholds must stay identical to Biome.gd.biome_at.
-  function biomeAt(q, r) {
+  function natureAt(q, r) {
     const s = sample(q, r);
     const base = baseBiome(s.elev, s.moist, s.temp);
     const { ridge, lake } = sampleSub(q, r);

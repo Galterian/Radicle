@@ -7,6 +7,7 @@ import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS, featureAt as worldItemAt } from './map.js';   // worldItemAt: the seed's bonus items (Shrine, Crystal …), NOT features.js featureAt (buildings / walls)
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
+import { loadVillageCatalog, villageCatalog, villageOfCell, villageRep, questsDone, sameRace } from './villages.js';
 import { ledgerUnits } from './world-ledger.js';
 // Buildings created during play (Animator copy / Priest Shrine, 2026-11-14): everyone's world_edits_json
 // `made:q,r` → the features.js overlay (renderer + object cards repaint through onFeaturesChanged).
@@ -33,6 +34,7 @@ import('./bigfeature.js').then(m => { if (typeof m?.bigFeatureAt === 'function')
 // assets/features/feature_table.json). featureAt() does not pass it through,
 // so read the table once more here and key it by entry id; until the catalog
 // carries descriptions KIND_DESC supplies a generic line per kind.
+loadVillageCatalog();   // named villages (chaosD6-GameModels): js/villages.js — features.js repaints when it lands
 const featureDescById = new Map();
 for (const url of ['/assets/features/feature_table.json', '/assets/terrain_bigfeatures/bigfeature_table.json', '/assets/terrain_scatter/scatter_table.json']) {
   fetch(url).then(r => r.ok ? r.json() : null).then(j => {
@@ -1461,6 +1463,12 @@ function followLeaderName(e) {
 function unattendedTagsHtml(e) {
   const out = [];
   if (e?.ai_role === 'builder') out.push('<span class="ros-builder" title="NPC builder (AI skirmish): raises Barricades next to itself, avoids fights">🔨 builder</span>');
+  // GameModels villagers (2026-11-24): their village team and role; neutral unless their village is hostile to you.
+  if (e?.npc_id) {
+    const n = villageCatalog()?.npcs?.[e.npc_id];
+    const hostile = String(e.hostile_to_csv || '').split(',').includes(state.myPeerId);
+    out.push(`<span class="ros-village${hostile ? ' hostile' : ''}" title="${escHtml(`${e.team_name || 'village'} — ${n?.role?.replace('_', ' ') || 'villager'}${e.follower ? ', follows its hero' : hostile ? ', hostile to you' : ', neutral'}`)}">🏘 ${escHtml(e.follower ? 'follower' : n?.role === 'quest_giver' ? 'quests' : n?.role?.replace('_', ' ') || 'villager')}</span>`);
+  }
   if (Number(e?.leader) > 0) out.push(`<span class="ros-leader" title="leads ${e.leader} unattended character${e.leader === 1 ? '' : 's'}">⚑ leader ${e.leader}</span>`);
   if (e?.shadow_of) out.push(e.led_by ? `<span class="ros-follow" title="unattended — its player closed the game; it follows its master">follow ${escHtml(followLeaderName(e))}</span>`
     : '<span class="ros-follow" title="unattended — its player closed the game; the computer holds its ground">unattended</span>');
@@ -2181,10 +2189,75 @@ function objectAtBase(q, r) {
     : broken ? `${desc0}\n\nRuins — someone broke this fortress; the way is open.`
     : fz ? `${desc0}\n\nFortress: ${bonusText(bb.bonus)}.`
     : bb ? `${desc0}\n\nWhile you stand here${bb.source !== o.label ? ` (${bb.source})` : ''}: ${bonusText(bb.bonus)}.${scNote}` : desc0;
-  return { ...o, kind, desc, q, r, fortress: fz && !broken ? fz : null };
+  return { ...o, kind, desc: o.village ? `${desc}${villageCardText(o, broken)}` : desc, q, r, fortress: fz && !broken ? fz : null };
 }
+// A village building's card (chaosD6-GameModels): whose village it is, what it makes, and — on the centre (the
+// relationship building) — my standing, the thresholds and the open quests with who gives them.
+function villageCardText(o, broken) {
+  const v = o.village, cat = villageCatalog();
+  if (!v || !cat) return '';
+  const full = villageOfCell(state.map.seed, ...v.id.slice(4).split(',').map(Number));
+  const lines = [`\n\n${v.team} — ${v.race_name}.`];
+  if (broken) lines.push('Broken — the village will not forget who did it.');
+  const p = v.produces && cat.npcs[v.produces.npc];
+  if (p && !broken) lines.push(`Makes a ${p.name} every ${v.produces.every_turns} turns while the village has fewer than ${full?.cap ?? 20} units.`);
+  if (v.role === 'centre') {
+    const rp = full?.reputation || {};
+    const rep = villageRepOf(full, state.myPeerId);
+    const standing = rep < rp.hostile ? 'hostile — its people attack you near the village' : rep >= rp.ally_all ? 'ally — every villager fights at your side' : rep >= rp.enter ? 'welcome — the gate is open to you' : 'stranger — the gate stays shut';
+    const kin = sameRace(full, myHeroRace()) ? ` You are of the ${v.race_name}: you started at ${rp.start_same_race}%.` : ` You started at ${rp.start}% (${v.race_name} heroes start at ${rp.start_same_race}%).`;
+    lines.push(`Your relationship with ${v.team}: ${rep}% (${standing}).${kin}\nUnder ${rp.hostile}% hostile · ${rp.enter}% opens the gate · ${rp.ally_all}% the whole village joins you.\nQuest +5% · attacking a villager ${rp.villager_attacked}% (once per villager) · breaking a building ${rp.building_broken}% · walking in below ${rp.enter}% ${rp.trespass}% (each time).`);
+    const qs = (cat.villages[full?.template]?.quests || []).map(id => cat.quests[id] && { ...cat.quests[id], id }).filter(Boolean);
+    const done = questsDone(ledgerUnits(state.entities || []), state.myPeerId);
+    if (qs.length) lines.push(`Quests:\n${qs.map(q => done.has(q.id) ? `✓ ${q.name} — done` : `• ${q.name} — ${cat.npcs[q.giver]?.name || 'someone'} asks for ${q.need_text} (${q.rewards.map(rewardText).join(', ')})`).join('\n')}`);
+  }
+  return lines.join('\n');
+}
+const rewardText = (r) => r.kind === 'reputation' ? `+${r.value}% relationship` : r.kind === 'allies' ? `${r.count} villager${r.count === 1 ? '' : 's'} join${r.count === 1 ? 's' : ''} you`
+  : r.kind === 'effect' ? `the ${elementlessName(r.id)} effect` : r.kind === 'skill' ? `the ${elementlessName(r.id)} skill` : r.kind === 'enter' ? 'the gates open' : r.kind;
+const elementlessName = (id) => String(id || '').replace(/^(effect|skill)_/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+// My relationship with a village in percent (js/villages.js villageRep over the world-edit ledger: quests, hurt
+// villagers, broken buildings, uninvited entries; 70 % from the start when my character art is of its race).
+const myHeroRace = () => { const me = (state.entities || []).find(e => e.peer_id === state.myPeerId); return resourcesFor(me?.character_id || me?.source_id)?.wbc3_race || ''; };
+const villageRepOf = (v, peerId) => v ? villageRep(state.map.seed, v, peerId, ledgerUnits(state.entities || []), peerId === state.myPeerId ? myHeroRace() : '') : 0;
+// Villages that count me an ally (≥ ally_all): the renderer draws their people in the ally green. Refreshed every 2 s.
+setInterval(() => {
+  const s = new Set();
+  for (const e of state.entities || []) if (e.village_id && !s.has(e.village_id)) { const m = /^vil:(-?\d+),(-?\d+)$/.exec(e.village_id); const v = m && villageOfCell(state.map.seed, Number(m[1]), Number(m[2])); if (v && villageRepOf(v, state.myPeerId) >= (v.reputation?.ally_all ?? 90)) s.add(v.id); }
+  state.ui.villageAllies = s;
+}, 2000);
 
-function showObjectCard(obj, clientX, clientY) {
+// Talking with a villager (peer.mjs talkTo): clicking a unit of a village opens its card; my peer sends its questions
+// ({ kind: 'talk', npc, topics, rep, … }) and, after a click, the answer. Refreshed every 2 s while open (live).
+function openTalk(e, clientX, clientY) {
+  const prev = state.ui.talk?.npc === e.peer_id ? state.ui.talk : null;
+  state.ui.talk = prev || { npc: e.peer_id, name: e.name, topics: [], dist: null, rep: null };
+  send({ kind: 'talk', npc: e.peer_id });
+  showObjectCard(talkCardOf(state.ui.talk), clientX, clientY);
+}
+function talkCardOf(t) {
+  const e = state.entities.find(p => p.peer_id === t.npc);
+  const n = villageCatalog()?.npcs?.[e?.npc_id];
+  const v = t.village;
+  const lines = [n?.persona || ''];
+  if (v) lines.push(`${v.team}: your relationship ${t.rep}% (${t.standing}).`);
+  const qs = (t.quests || []);
+  if (qs.length) lines.push(`Quests:\n${qs.map(q => `${q.done ? '✓' : q.ready ? '📜' : '•'} ${q.name} — ${q.done ? 'done' : q.ready ? `you carry ${q.need}: hand it over` : `asks for ${q.need}`}`).join('\n')}`);
+  if (t.answer?.text) lines.push(`You: “${t.answer.ask}”\n${t.name || 'They'}: “${t.answer.text}”`);
+  return { label: t.name || e?.name || 'Villager', kind: `${n?.role?.replace('_', ' ') || 'villager'}${v ? ` · ${v.team}` : ''}`, path: n?.resources?.sprites?.info?.path || n?.resources?.sprites?.idle?.path || '',
+    q: e?.tile_q, r: e?.tile_r, id: e?.npc_id || '', desc: lines.filter(Boolean).join('\n\n'), talk: t };
+}
+// Live cards (user 2026-11-24: "my Ivoryglade Tree of Gold relationship should be tracked once I click on the
+// building. Live data."): an open card re-reads its object (relationship, quests, bank) or its villager every 2 s.
+setInterval(() => {
+  const oc = state.ui.objectCard, card = document.getElementById('object-card');
+  if (!oc || !card || card.hidden) return;
+  if (oc.talk) { send({ kind: 'talk', npc: oc.talk }); return; }
+  const obj = Number.isInteger(oc.q) ? objectAt(oc.q, oc.r) : null;
+  if (obj && (obj.desc !== card.querySelector('.oc-desc')?.textContent || obj.fortress)) showObjectCard(obj, NaN, NaN, true);
+}, 2000);
+
+function showObjectCard(obj, clientX, clientY, keepPos = false) {
   const card = document.getElementById('object-card');
   if (!card || !obj) return;
   const img = card.querySelector('img');
@@ -2195,6 +2268,7 @@ function showObjectCard(obj, clientX, clientY) {
     : (assetUrl(obj.path) || '');
   if (img.getAttribute('src') !== src) img.src = src;
   img.hidden = !src;
+  img.classList.toggle('info', !!obj.talk);
   img.alt = obj.label || obj.kind;
   card.querySelector('.oc-name').textContent = obj.label || obj.kind;
   card.querySelector('.oc-kind').textContent = obj.obstacle
@@ -2234,6 +2308,22 @@ function showObjectCard(obj, clientX, clientY) {
         logUI(off ? `break ${obj.label}: cancelled` : `staged: emit ${fz.stat} against the ${obj.label} at (${fz.q},${fz.r}) — Posture / Empty Posture`, 'phase');
         showObjectCard(obj, NaN, NaN);
       });
+    } else if (obj.talk) {
+      // A villager's questions (peer.mjs talkTopics): click one and it lights up green like an aimed stat-buy, the
+      // villager answers (two speech balloons) and the answer stays under the questions.
+      const t = obj.talk, asked = t.answer?.topic;
+      statsEl.hidden = false;
+      statsEl.innerHTML = `${t.rep != null ? `<span class="oc-pill thresh" title="your relationship with ${escHtml(t.village?.team || '')}: under ${t.village?.hostile}% hostile · ${t.village?.enter}% opens the gate · ${t.village?.ally_all}% the whole village joins you">${t.rep}% · ${escHtml(t.standing || '')}</span>` : ''}
+        <span class="oc-pill hp" title="talking range">${Number.isFinite(t.dist) ? `${t.dist} hex${t.dist === 1 ? '' : 'es'} away` : 'out of sight'}</span>
+        <div class="oc-talk-list">${(t.topics || []).map(q => `<button type="button" class="oc-break oc-talk${asked === q.id ? ' armed' : ''}${q.ready ? ' ready' : ''}" data-topic="${escHtml(q.id)}" ${q.disabled ? `disabled title="${escHtml(q.disabled)}"` : ''}>${asked === q.id ? '✓ ' : q.ready ? '📜 ' : '💬 '}${escHtml(q.ask)}</button>`).join('')}</div>`;
+      for (const b of statsEl.querySelectorAll('.oc-talk')) b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const topic = b.dataset.topic;
+        if (topic === 'bye') { state.ui.talk = { ...t, answer: { topic } }; send({ kind: 'talk', npc: t.npc, topic }); setTimeout(hideObjectCard, 1200); return; }
+        state.ui.talk = { ...t, answer: { topic, ask: b.textContent.replace(/^\S+\s/, ''), text: '…' } };   // optimistic; the peer's answer is the truth
+        send({ kind: 'talk', npc: t.npc, topic });
+        showObjectCard(talkCardOf(state.ui.talk), NaN, NaN, true);
+      });
     } else {
       statsEl.hidden = true;
       statsEl.innerHTML = '';
@@ -2241,8 +2331,10 @@ function showObjectCard(obj, clientX, clientY) {
   }
   card.querySelector('.oc-desc').textContent = obj.desc;
   card.querySelector('.oc-coords').textContent = `hex (${obj.q}, ${obj.r})${obj.id && obj.id !== obj.label ? ` · ${obj.id}` : ''}`;
+  const wasOpen = !card.hidden;
   card.hidden = false;
-  state.ui.objectCard = { q: obj.q, r: obj.r };
+  state.ui.objectCard = { q: obj.q, r: obj.r, talk: obj.talk?.npc || null };
+  if (keepPos && wasOpen) return;   // a live refresh: the card stays where it is
   // Place beside the click, clamped to the viewport.
   const w = card.offsetWidth || 300, h = card.offsetHeight || 140;
   const x = Number.isFinite(clientX) ? clientX + 18 : window.innerWidth / 2 - w / 2;
@@ -2849,7 +2941,7 @@ function connect() {
         // AI skirmish (game/llm-brain.mjs): a unit's line rides on its reveal → a speech balloon over it (renderer.js
         // drawSpeech) and a log line. Once per (turn, action, unit): my own reveal and the mesh echo carry the same line.
         if (env.type === 'evt_action_reveal' && typeof env.payload?.say === 'string') {
-          const text = cleanSayUI(env.payload.say);
+          const text = cleanSayUI(env.payload.say, 90);
           const key = `${env.turn}:${env.round}:${env.actor_peer_id}`;
           state._saidKeys ||= new Set();
           if (text && !state._saidKeys.has(key)) {
@@ -3094,6 +3186,11 @@ function connect() {
       }
       if (m.kind === 'dim_out_done') dimOutDone(m);
       if (m.kind === 'banter') playBanter(m.lines);   // AI skirmish banter scene (maybeBanter)
+      if (m.kind === 'talk' && state.ui.talk?.npc === m.npc) {   // a villager's questions / its answer (openTalk)
+        const keep = state.ui.talk.answer;
+        state.ui.talk = { ...m, answer: m.answer || (keep?.text && keep.text !== '…' ? keep : null) };
+        if (state.ui.objectCard?.talk === m.npc) showObjectCard(talkCardOf(state.ui.talk), NaN, NaN, true);
+      }
       if (m.kind === 'standoff') {
         logUI(m.winner ? `standoff — only ${m.winner} remains; rounds continue until a challenger joins` : 'a challenger has arrived — the fight resumes', 'damage');
       }
@@ -3856,6 +3953,7 @@ function wireInput() {
           tile: { q: p.tile_q, r: p.tile_r }, life: p.life, lifeMax: p.life_max,
           isSelf: isMe,
           sourceId: sourceIdOf(p),
+          villageId: p.village_id || null, follower: !!p.follower, ownedByMe: !!p.owner_peer_id && p.owner_peer_id === state.myPeerId,
           queuedCode: isMe ? queuedLabel() : null,
           locked: isMe ? state.locked : false,
           revealBadge: state.ui.revealBadges?.[p.peer_id] || null,
@@ -4013,7 +4111,8 @@ function wireInput() {
     // A hex holding a map object and no unit opens the object info card
     // (units keep their hover/hero cards). Any other click closes it.
     const obj = occupant ? null : objectAt(t.q, t.r);
-    if (obj) showObjectCard(obj, ev.clientX, ev.clientY); else hideObjectCard();
+    if (occupant?.npc_id && occupant.peer_id !== state.myPeerId) openTalk(occupant, ev.clientX, ev.clientY);   // a villager: talk
+    else if (obj) showObjectCard(obj, ev.clientX, ev.clientY); else hideObjectCard();
     // Left-click never stages a movement or journey — that's exclusively a
     // right-click gesture now. All left-click does is:
     //   - narrow the event log to the clicked entity (or clear the filter)
@@ -4282,6 +4381,12 @@ function wireInput() {
     const rect = canvas.getBoundingClientRect();
     const occupant = t ? entityAtPixel(ev.clientX - rect.left, ev.clientY - rect.top) : null;
     uilog('tap', { tile: t, detail: occupant ? occupant.peer_id : 'ground' });
+    if (occupant?.npc_id && occupant.peer_id !== state.myPeerId) {   // a villager: talk (phone tap)
+      playUnitSound(occupant);
+      openTalk(occupant, ev.clientX, ev.clientY);
+      setLogFilter(occupant.peer_id);
+      return;
+    }
     if (occupant) {
       hideObjectCard();
       playUnitSound(occupant);

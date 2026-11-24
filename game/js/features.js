@@ -18,6 +18,7 @@
 // listeners are notified when the catalog arrives so the renderer can repaint.
 import { hash32 } from './map.js';
 import { biomeFor } from './biome.js';
+import { villageHexAt, villageFeatureAt, villageWallFeature, onVillagesChanged } from './villages.js';
 
 // ---------------------------------------------------------------------------
 // Labyrinth walls (user ruling 2026-10-30; long connected runs 2026-11-12).
@@ -111,6 +112,8 @@ export function labyrinthWallAt(seed, q, r, biomeAt = null) {
   if (_vacant.has(key)) return null;
   const moved = _placed.get(key);
   if (moved) return moved.kind === 'wall' ? moved : null;
+  const vh = villageHexAt(seed, q, r);   // a village clears its disc, but for its own wall ring (js/villages.js)
+  if (vh) return vh.wall ? villageWallFeature(seed, q, r, vh) : null;
   const bAt = biomeAt || biomeFor(seed).biomeAt;
   // Anchors whose run can reach (q, r) lie within LAB_MAX_LEN + 3 < LAB_CHUNK
   // hexes, so the 3×3 chunks around (q, r)'s own chunk hold all of them.
@@ -144,6 +147,7 @@ let loading = null;
 const listeners = new Set();
 export function onFeaturesChanged(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function notify() { for (const fn of listeners) { try { fn(); } catch { /* ignore */ } } }
+onVillagesChanged(() => notify());   // the village catalog arrived: repaint, drop the building-bonus memo
 
 // Client-local "stepped on, picked up" bookkeeping. featureAt early-returns
 // null for a hex marked consumed so the renderer stops drawing the sprite and
@@ -350,6 +354,9 @@ export function featureAt(seedHex, q, r, biomeAt = null) {
   const made = _placed.get(`${q},${r}`);
   if (made) return made;
   if (_vacant.has(`${q},${r}`)) return null;
+  // Named villages (chaosD6-GameModels, 2026-11-24): their buildings, and nothing else inside the cleared disc.
+  const vf = villageFeatureAt(seedHex, q, r);
+  if (vf) return vf.clear ? null : vf;
   // Buildings stay where they are (user ruling 2026-11-12): stepping on one
   // gives its bonus while you stand there, it is never picked up / consumed.
   const bAt = biomeAt || biomeFor(seedHex).biomeAt;

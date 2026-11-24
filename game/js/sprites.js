@@ -59,9 +59,10 @@ export function loadResources() {
     const one = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
     // Skills and effects carry `resources` too (effect strip + fx sounds), so a
     // revealed skill id resolves through the same resourcesFor() lookup.
-    resourcesLoading = Promise.all([one('/data/characters.json'), one('/data/creatures.json'), one('/data/creatures_builtin.json'), one('/data/skills.json'), one('/data/effects.json')]).then(docs => {
+    // + the GameModels catalog (2026-11-24): villagers / wanderers are creatures whose sprites live in their NPC entry.
+    resourcesLoading = Promise.all([one('/data/characters.json'), one('/data/creatures.json'), one('/data/creatures_builtin.json'), one('/data/skills.json'), one('/data/effects.json'), one('/assets/gamemodels/catalog.json')]).then(docs => {
       for (const doc of docs) {
-        const entries = Array.isArray(doc) ? doc : (doc?.entries || []);
+        const entries = Array.isArray(doc) ? doc : doc?.npcs ? Object.entries(doc.npcs).map(([id, n]) => ({ id, name: n.name, resources: n.resources })) : (doc?.entries || []);
         for (const e of entries) {
           if (!e || !e.id) continue;
           // `resources` is an entry-level key by contract; tolerate a version

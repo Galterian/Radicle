@@ -1087,6 +1087,7 @@ html.mobile #object-card { max-width: 56vw; }
   border-radius: 4px; background: #0b0d12; border: 1px solid #1a1f29; image-rendering: pixelated;
 }
 #object-card img[hidden] { display: none; }
+#object-card img.info { object-fit: cover; object-position: 50% 0; }   /* a villager: the WBC3 info image, portrait on top */
 #object-card .oc-body { flex: 1 1 auto; min-width: 0; }
 #object-card .oc-name { font-weight: 600; font-size: 13px; color: #e8ecf1; padding-right: 18px; }
 #object-card .oc-kind { color: #8aa0bf; margin-top: 2px; text-transform: lowercase; }
@@ -1189,6 +1190,10 @@ html.mobile #deck-row { max-width: 100%; }
 #object-card .oc-break { margin-left: 6px; padding: 2px 8px; border-radius: 4px; border: 1px solid #ff9a5c; background: #2a1a10; color: #ffcf9a; font-size: 11px; cursor: pointer; }
 #object-card .oc-break[disabled] { opacity: 0.45; cursor: default; }
 #object-card .oc-break.armed { border-color: #6ad99f; color: #b8f5d2; background: #10261b; }
+#object-card .oc-talk-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; width: 100%; }
+#object-card .oc-talk { margin-left: 0; text-align: left; border-color: #7aa6d9; background: #121c2a; color: #cfe0f5; }
+#object-card .oc-talk.ready { border-color: #ffd66e; color: #ffe9a8; }
+#object-card .oc-talk.armed { border-color: #6ad99f; color: #b8f5d2; background: #10261b; }
 
 /* 2026-11-12: an instant that did its job — text vanishes, glows green, tilts, turns red, drops to the discard pile. */
 .slot.skill-burn { transform-origin: 50% 90%; animation: skill-burn 1.9s ease-in forwards; }
@@ -1513,6 +1518,8 @@ html.mobile .slot.skill .card .fx-src::before { content: '⎇'; }
 .pf-banner.fx-shared  { border-color: #6ad99f; color: #c9f5dc; font-weight: 500; font-size: 13px; }
 .pf-banner.fx-missing { border-color: #e8c272; color: #ffe1a0; }
 .ros-builder { margin-left: 4px; padding: 0 5px; border-radius: 4px; font-size: 10px; background: #3a2f1a; color: #ffd98a; border: 1px solid #8a6a2a; }
+.ros-village { margin-left: 4px; padding: 0 5px; border-radius: 4px; font-size: 10px; background: #1c2f24; color: #a8e6b8; border: 1px solid #3f7a52; }
+.ros-village.hostile { background: #3a1c1c; color: #ffb0a8; border-color: #8a3a32; }
 /* AI skirmish banter strip (main.js banterStrip): unobtrusive and click-through except its ✕ */
 #banter-strip { position: fixed; left: 8px; bottom: 8px; max-width: min(420px, 70%); padding: 4px 22px 4px 8px; border-radius: 8px; background: rgba(10, 14, 22, 0.55);
   color: #e8ecf1; font-size: 12px; line-height: 1.35; pointer-events: none; transition: opacity 1.2s ease; z-index: 5; }

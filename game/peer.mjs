@@ -69,6 +69,10 @@ import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, s
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
+import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt } from './js/villages.js';
+import { npcCreatureEntries } from './gamemodels.mjs';
+import { agendaGoal, questMet } from './agenda.mjs';
+import { villageUnits, activeUnits, wanderersOf, npcLine, loreFact, archiveItems, rewardWords } from './village-life.mjs';
 import { setBuildingSkills, configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
 import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
@@ -340,6 +344,18 @@ for (const [rel, set] of [['features/feature_table.json', setFeatureCatalog], ['
   set(JSON.parse(txt));
   console.log(`[catalog] ${path.basename(rel)} ${createHash('sha256').update(txt).digest('hex').slice(0, 10)} from ${hit}`);
 }
+// chaosD6-GameModels (2026-11-24): races, village buildings, NPCs, monster agendas, quests — one compiled catalog
+// (tools/gamemodels-build.mjs). Villages change featureAt(): a peer without it diverges from peers that have it.
+const GAMEMODELS = (() => {
+  const tries = [path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])];
+  const hit = tries.find(f => fsSync.existsSync(f));
+  if (!hit) { console.warn(`[catalog] gamemodels/catalog.json NOT FOUND (${tries.join(' | ')}) — no villages on this peer; it will diverge from peers that have them`); return null; }
+  const txt = fsSync.readFileSync(hit, 'utf8');
+  const j = JSON.parse(txt);
+  setVillageCatalog(j);
+  console.log(`[catalog] gamemodels ${String(j.hash || '').slice(0, 10)} from ${hit}`);
+  return j;
+})();
 async function loadJson(name) {
   return JSON.parse(await fs.readFile(path.join(DATA_DIR, name), 'utf8'));
 }
@@ -347,7 +363,7 @@ function pickActive(entry) {
   const live = entry.versions.filter(v => v.status !== 'rejected' && v.status !== 'superseded');
   live.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   const v = live[0] ?? entry.versions[0];
-  return { id: entry.id, name: entry.name, tags: entry.tags || [], data: v.data };
+  return { id: entry.id, name: entry.name, tags: entry.tags || [], data: v.data, race: entry.resources?.wbc3_race || v.data?.resources?.wbc3_race || '' };
 }
 
 const data = {};
@@ -355,6 +371,8 @@ for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'classes
   const f = await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
+// Villagers are played like creatures (their own stats, deck, life): the GameModels NPC units join data.creatures.
+Object.assign(data.creatures, npcCreatureEntries(GAMEMODELS));
 // Class isolation phase 1: the classes are the bundled definitions (game/classes-data), not data/classes.json.
 // A broken definition would silently drop a class on this peer only: refuse to start instead.
 if (classBundleErrors().length) { console.error(`[classes] invalid class definitions:\n  ${classBundleErrors().join('\n  ')}`); process.exit(1); }
@@ -721,7 +739,7 @@ if (Number(process.env.START_LIFE) > 0) entity.life = Math.min(entity.lifeMax, M
 // of the player. Spawns `sleeping` (does nothing) and flips to `awake` once any
 // player sits within 2 hexes of us (user ruling 2026-11-05). Companions and
 // summons never sleep. Characters are never monsters.
-entity.monsterState = (entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN) ? 'sleeping' : null;
+entity.monsterState = (entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN && !process.env.NPC_ID) ? 'sleeping' : null;   // villagers (NPC_ID) are awake
 // Combo tracker (user ruling 2026-11-05): a character can declare an active
 // combo via UI hotkey C; the resolver walks `entity.combo` one slot per
 // revealed action (M-slot: M/EM/EP/P all match). Wrong card resets. Three
@@ -1016,7 +1034,7 @@ function onSummonEnd(permId) {
 }
 // Owner → companion heartbeat: while I hold its permanent, my creature hears it from me directly.
 setInterval(() => {
-  for (const c of companions) if (entity.permanents.has(c.perm)) fetch(`http://127.0.0.1:${c.port}/summon-hold?q=${entity.tile.q}&r=${entity.tile.r}&life=${entity.life}`, { signal: AbortSignal.timeout(1500) }).catch(() => {});
+  for (const c of companions) if (entity.permanents.has(c.perm) || c.follower) fetch(`http://127.0.0.1:${c.port}/summon-hold?q=${entity.tile.q}&r=${entity.tile.r}&life=${entity.life}`, { signal: AbortSignal.timeout(1500) }).catch(() => {});
 }, 2000);
 // Bound to `owner` (∀ Summoning took me, or Resurrect raised me): I fight on
 // their side and follow them until the permanent that holds me falls.
@@ -1465,6 +1483,17 @@ if (entity.kind === 'character' && !profileChar) {
 const IS_MONSTER = entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN;
 // AI skirmish (2026-11-22, llm-brain.mjs): the role this bot plays for the local llama-server — '' = rules only.
 const AI_ROLE = aiRoleFor({ role: process.env.AI_ROLE || '', isHuman: IS_HUMAN });
+// GameModels NPC (2026-11-24): a villager / wanderer peer — villageTick() starts it with NPC_ID, VILLAGE_ID, HOME_Q/R;
+// a hero's quest reward starts one as its companion (FOLLOWER=1). AGENDA: the NPC's, else this monster's (JsonLogic).
+const NPC_ID = process.env.NPC_ID || '';
+const NPC_DEF = NPC_ID ? GAMEMODELS?.npcs?.[NPC_ID] || null : null;
+const VILLAGE_ID = NPC_DEF ? process.env.VILLAGE_ID || '' : '';
+const NPC_HOME = NPC_DEF && /^-?\d+$/.test(process.env.HOME_Q || '') && /^-?\d+$/.test(process.env.HOME_R || '') ? { q: Number(process.env.HOME_Q), r: Number(process.env.HOME_R) } : null;
+const IS_FOLLOWER = !!NPC_DEF && process.env.FOLLOWER === '1';
+const AGENDA = (NPC_DEF && !IS_FOLLOWER ? NPC_DEF.agenda : null) || (IS_MONSTER && !NPC_DEF ? GAMEMODELS?.monsters?.[CREATURE_ID]?.agenda : null) || null;
+const villageHostile = new Set();    // villager: heroes my village is hostile to (snapshot hostile_to_csv)
+const villageAllyFoes = new Set();   // villager: units fighting a hero my village counts as an ally
+let villageLeaving = false;          // villager: I walk back into the village (not a death — snapshot village_leaving)
 const LLM = llmConfig(process.env);
 // Routing (llm-route.mjs): my team's device key + owners (team AI bots: LLM_PROFILE_FILE; my hero: PROFILE_FILE), the
 // OCI route (LLM_REMOTE_URL/KEY or <profile dir>/llm.json). The hero serves my team's bots from its llama-server.
@@ -1608,8 +1637,12 @@ const discard = [];
 // into the deck. The circulating deck — draw pile + discard + hand — may never
 // drop below DECK_MIN cards.
 const archive = [...profileArchived];   // a profile character's archive cards start here (user ruling 2026-11-13)
-// Test hook (live tests, like FORCE_EFFECTS): FORCE_ARCHIVE=<creature id>,… starts those creature cards in my archive.
-for (const cid of String(process.env.FORCE_ARCHIVE || '').split(',').map(s => s.trim()).filter(Boolean)) { const c = creatureCard(cid); if (c) archive.push(c); }
+// Test hook (live tests, like FORCE_EFFECTS): FORCE_ARCHIVE=<creature id>,… starts those creature cards in my archive
+// (and effect_* / skill_* ids those cards — quest tests, GameModels 2026-11-24).
+for (const cid of String(process.env.FORCE_ARCHIVE || '').split(',').map(s => s.trim()).filter(Boolean)) {
+  const c = /^(effect|skill)_/.test(cid) ? cardFromRef({ kind: cid.startsWith('skill_') ? 'skill' : 'effect', id: cid }) : creatureCard(cid);
+  if (c) archive.push(c);
+}
 const willArchive = new Set();   // card_ids marked for the archive this action
 const DECK_MIN = 15;
 const circulating = () => deck.length + discard.length + hand.length + heldCards.length;
@@ -1981,6 +2014,7 @@ function currentStateSnapshot(slim = false) {
     // Dimension Out (rule_dimension_out): the turn I leave at (-1 = none) — every UI counts it down on my unit.
     dim_out_until_turn: dimOut ? dimOut.until_turn : -1, dim_out_start_turn: dimOut ? dimOut.start_turn : -1,
     ai_role: AI_ROLE,   // AI skirmish: 'builder' lets every resolver raise my Barricades (reveal `build`)
+    ...(NPC_DEF ? { npc_id: NPC_ID, village_id: VILLAGE_ID, home_q: NPC_HOME?.q ?? null, home_r: NPC_HOME?.r ?? null, follower: IS_FOLLOWER ? 1 : 0, hostile_to_csv: [...villageHostile].sort().join(','), village_leaving: villageLeaving ? 1 : 0 } : {}),   // GameModels villager
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     world_ledger_json: JSON.stringify(entity.worldLedger || []),
     awake_lend_json: JSON.stringify(entity.awakeLend || null),
@@ -2441,7 +2475,7 @@ function discoverTrapMonsters(cq, cr) {
       .filter(p => { const t = p.peer_id === PEER_ID_STRING ? { tile_q: entity.tile.q, tile_r: entity.tile.r } : p; const d = Number.isInteger(t.tile_q) ? hexDistance(t, at) : Infinity; return d >= 4 && d <= R; })
       .map(p => p.peer_id).sort();
     if (spawners.length && spawners[0] !== PEER_ID_STRING) { lurkersChecked.delete(key); continue; }
-    if (companions.filter(c => c.wild).length >= MAX_WILD_CHILDREN) { lurkersChecked.delete(key); continue; }
+    if (companions.filter(c => c.wild && !c.village).length >= MAX_WILD_CHILDREN) { lurkersChecked.delete(key); continue; }
     const cid = WILD_MONSTERS[parseInt(h.slice(8, 16), 16) % WILD_MONSTERS.length];
     const name = data.creatures[cid].name;
     spawnCompanion(null, { creature_id: cid, name, at: { q, r }, ringOnly: true, wild: true, label, env: { CHARACTER_ID: '', CREATURE_ID: cid, ENTITY_NAME: name } })
@@ -2479,7 +2513,8 @@ setInterval(() => {
     if (now - Date.parse(p.last_seen || 0) < GHOST_MS) continue;
     // Monsters only: a summoned / bound / summon-only creature is left as it is.
     if (p.owner_peer_id || data.creatures[p.creature_id]?.data?.built_in || summonedByAnyone.has(p.peer_id)) continue;
-    if (heroes[0] !== PEER_ID_STRING || companions.filter(c => c.wild).length >= MAX_WILD_CHILDREN) continue;
+    if (p.npc_id) continue;   // a villager: its village (villageTick) brings it back
+    if (heroes[0] !== PEER_ID_STRING || companions.filter(c => c.wild && !c.village).length >= MAX_WILD_CHILDREN) continue;
     replacedGhosts.add(p.peer_id);
     const label = `${String(p.peer_id).replace(/^peer:/, '').replace(/-r\d+$/, '')}-r${++summonSeq}`;
     const name = String(p.name || data.creatures[p.creature_id]?.name || p.creature_id);
@@ -3902,7 +3937,7 @@ async function doResolution() {
       // labyrinth walls (moved as world edits) within 2 of me.
       const walls = [
         ...allObstacles.filter(ob => hexDist(me, ob) <= AWAKE_CONFIG.wallNear).map(ob => ({ q: ob.q, r: ob.r, owner: ob.owner, id: ob.id, label: ob.wall ? 'wall' : 'obstacle' })),
-        ...discAround(me, AWAKE_CONFIG.wallNear).filter(h => isLabyrinthWallAt(MAP_SEED, h.q, h.r) && !obstacleAt(h.q, h.r)).map(h => ({ q: h.q, r: h.r, lab: true, label: 'Impassable Wall' })),
+        ...discAround(me, AWAKE_CONFIG.wallNear).filter(h => isLabyrinthWallAt(MAP_SEED, h.q, h.r) && !isVillageWallAt(MAP_SEED, h.q, h.r) && !obstacleAt(h.q, h.r)).map(h => ({ q: h.q, r: h.r, lab: true, label: 'Impassable Wall' })),
       ];
       awakeMemo.set(key, awakePlan({ me, units, buildings, walls, picked, unitFree: clear, siteFree: (q, r) => clear(q, r) && !buildingFeatureAt(MAP_SEED, q, r), hasBuilding: standing }));
     }
@@ -5379,6 +5414,7 @@ async function doResolution() {
     }
   }
   const real = runRound(revealsThisTurn, false);
+  try { noteVillageHits(real); } catch (e) { console.warn(`[${PEER_LABEL}] village hits: ${e.message}`); }
   const viewReal = viewSnap(), bonusDmgReal = bonusDmgToMe;
   // SKR-07 Disruption Move: my emission was voided (I played an Empty Move) — nothing went out; my cast is interrupted
   // (Rule 19, as when the Manipulator swaps a cast away below).
@@ -6654,6 +6690,10 @@ function npcCast(enemies, nearest) {
   const friends = friendSnaps.map(p => ({ peer_id: p.peer_id, dist: hexDistance(here, p), life: p.life, lifeMax: p.life_max ?? null }));
   const ch = npcCastChoice({ hand, me: { stats: entity.stats, life: entity.life, lifeMax: entity.lifeMax, permanents: entity.permanents }, foes, friends, rules: EFFECT_RULES, cfg: MONSTER_DECK_CFG, ally: !IS_MONSTER });
   if (!ch) return false;
+  // No damage cast with no foe in sight; a villager casts no untargeted area next to a unit it does not count as a foe
+  // (the resolver's areas hit every side — village neutrality is planning only).
+  if (ch.kind === 'damage' && (!foes.length || (NPC_DEF && !IS_FOLLOWER && !ch.target
+    && livePeers().some(p => p && p.peer_id !== PEER_ID_STRING && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && hexDistance(here, p) <= 2 && !enemies.some(e => e.peer_id === p.peer_id))))) return false;
   const c = hand[ch.index];
   plan(ch.index, ch.target);
   const onFriend = ch.target && friends.some(p => p.peer_id === ch.target);
@@ -6691,7 +6731,26 @@ function npcEnemies() {   // merge 2026-11-22: HEAD's filter (F3 flag `hides`, c
   const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   return livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && sideOf(p.alliance) !== MY_SIDE && p.life > 0
     && !(snapInvisible(p) && !hidingPerm(entity.permanents))   // Invisibility: monsters / companions neither see nor chase it
-    && !(CS.anyChargeUsed(csOf(p), 'threat', hg.turn) && hexDistance(here, p) > 1));
+    && !(CS.anyChargeUsed(csOf(p), 'threat', hg.turn) && hexDistance(here, p) > 1)
+    && villageFoe(p));
+}
+// Villages are neutral (GameModels 2026-11-24) — planning only, the resolver's sides are unchanged. A villager is a foe
+// to wild monsters and to whoever its village is hostile to (its hostile_to_csv); a villager's foes are wild monsters,
+// the heroes (and their units) its village is hostile to, and whoever fights a hero the village counts as an ally.
+// Villages leave each other alone. A follower fights like any companion.
+const isWildMonsterSnap = (p) => !!p?.creature_id && !p.owner_peer_id && !p.npc_id && p.alliance === 'npc_b';
+function villageFoe(p) {
+  if (NPC_DEF && !IS_FOLLOWER) {
+    if (p.npc_id && !p.follower) return false;
+    if (isWildMonsterSnap(p)) return true;
+    return villageHostile.has(p.owner_peer_id || p.shadow_of || p.peer_id) || villageAllyFoes.has(p.peer_id);
+  }
+  if (p.npc_id && !p.follower) {
+    if (IS_MONSTER && !NPC_DEF) return true;   // wild monsters raid villages
+    const hostile = String(p.hostile_to_csv || '').split(',').filter(Boolean);
+    return hostile.includes(PEER_ID_STRING) || (!!ownerPeerId && hostile.includes(ownerPeerId)) || (!!SHADOW_OF && hostile.includes(SHADOW_OF));
+  }
+  return true;
 }
 const _nameOf = (p) => p?.name || String(p?.peer_id || '?').slice(0, 12);
 // The numbered options for this action: { label (what the model reads), plan }. null = the rules decide alone.
@@ -6846,7 +6905,8 @@ function llmApply() {
 }
 // Builder ring wall (builder-ring.mjs, user 2026-11-23): walk out to the BUILDER_RING_RADIUS ring around (0,0) and
 // raise it one Barricade a turn on my own arc. Planning only — the resolver checks each Barricade as before.
-const BUILDER_RING = AI_ROLE === 'builder' ? ringHexes({ q: 0, r: 0 }, Number(process.env.BUILDER_RING_RADIUS ?? 20)) : [];
+const BUILDER_CENTRE = (VILLAGE_ID && villageById(MAP_SEED, VILLAGE_ID)) || { q: 0, r: 0 };   // a village builder walls its village
+const BUILDER_RING = AI_ROLE === 'builder' ? ringHexes({ q: BUILDER_CENTRE.q, r: BUILDER_CENTRE.r }, Number(process.env.BUILDER_RING_RADIUS ?? 20)) : [];
 const BUILDER_HOME = homeIndex(PEER_LABEL, BUILDER_RING.length);
 const ringSkip = new Set();   // sites I could not reach (walled off): the next one along
 let ringWalk = { site: '', at: '', still: 0, action: -1 };
@@ -6916,12 +6976,483 @@ function builderFallback() {
   if (builderBuiltTurn !== hg.turn && ringFinished()) queuedBuild = { q: null, r: null };   // a random hex next to me only once the ring is done
 }
 function ringFinished() { return !BUILDER_RING.length || builderRingPlan.done === true; }
+// ================= GameModels: agendas, villages, quests (2026-11-24) =================
+// An NPC's / monster's agenda (agenda.mjs, JsonLogic from chaosD6-GameModels) picks a goal each action from the
+// context below; goalPlan() turns the goal into this action's plan. Planning only: the resolver plays the plan.
+const _hd = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+const _tq = (p) => ({ q: p.tile_q, r: p.tile_r });
+// The WBC3 race of a hero snapshot's character art (data/characters.json resources.wbc3_race) — the same on every peer.
+const heroRaceOf = (p) => data.characters[p?.character_id]?.race || '';
+const MY_RACE = data.characters[CHARACTER_ID]?.race || '';
+const heroSnap = (p) => !!p && !!p.character_id && !p.owner_peer_id && !p.npc_id && !p.shadow_of && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && (!!p.human || isHumanAlliance(p.alliance));
+function myLedgerUnit() { return { peer_id: PEER_ID_STRING, world_edits_json: JSON.stringify(entity.worldEdits || []), world_ledger_json: JSON.stringify(entity.worldLedger || []) }; }
+function villageLedger() { return ledgerUnits([...livePeers().filter(Boolean), myLedgerUnit()]); }
+const ledgerEdits = (ledger) => ledger.flatMap(u => { try { return JSON.parse(u.world_edits_json || '[]').map(e => ({ ...e, by: u.peer_id })); } catch { return []; } });
+let agendaLast = '', agendaSayAt = -99, agendaSayN = 0, agendaCtxCache = null;
+const thankedQuests = new Set();
+function agendaContext() {
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const v = VILLAGE_ID ? villageById(MAP_SEED, VILLAGE_ID) : null;
+  const ledger = villageLedger();
+  const unit = (p) => p ? { id: p.peer_id, dist: _hd(me, _tq(p)), life: p.life ?? 0, life_max: p.life_max ?? p.life ?? 0, q: p.tile_q, r: p.tile_r, name: p.name || '' } : null;
+  const peers = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q));
+  if (NPC_DEF && v) {   // my village's view of the heroes around (relationship in percent, user 2026-11-24)
+    villageHostile.clear(); villageAllyFoes.clear();
+    // Only under `hostile` (40 %) and only in the threat area: the village disc (threat_radius around the centre) —
+    // a wanderer out in the land also within 6 hexes of itself.
+    const threat = v.reputation.threat_radius ?? v.clear_radius ?? 9;
+    const inThreat = (h) => _hd(_tq(h), v) <= threat || (NPC_DEF.role === 'wanderer' && _hd(me, _tq(h)) <= 6);
+    for (const h of peers.filter(heroSnap)) {
+      if (_hd(me, _tq(h)) > 20) continue;
+      const rep = villageRep(MAP_SEED, v, h.peer_id, ledger, heroRaceOf(h));
+      if (rep < v.reputation.hostile) { if (inThreat(h)) villageHostile.add(h.peer_id); }
+      else if (rep >= v.reputation.ally_all) for (const o of peers) if (!o.npc_id && sideOf(o.alliance) !== sideOf(h.alliance) && _hd(_tq(o), _tq(h)) <= 3) villageAllyFoes.add(o.peer_id);
+    }
+  }
+  const foe = unit(npcEnemies().filter(p => Number.isInteger(p.tile_q)).sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)) || (a.peer_id < b.peer_id ? -1 : 1))[0]);
+  const friends = peers.filter(p => sideOf(p.alliance) === MY_SIDE && _hd(me, _tq(p)) <= 6)
+    .sort((a, b) => ((a.life ?? 0) / Math.max(1, a.life_max ?? 1)) - ((b.life ?? 0) / Math.max(1, b.life_max ?? 1)) || _hd(me, _tq(a)) - _hd(me, _tq(b)));
+  const sh = peers.filter(p => heroSnap(p) && sideOf(p.alliance) !== MY_SIDE && _hd(me, _tq(p)) <= 12).sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)) || (a.peer_id < b.peer_id ? -1 : 1))[0];
+  let stranger = null;
+  if (sh) {
+    const done = questsDone(ledger, sh.peer_id);
+    const mine = NPC_DEF?.quests || [];
+    const ready = mine.filter(q => done.has(q) && !thankedQuests.has(`${sh.peer_id}|${q}`) && (done.get(q).turn ?? -99) >= hg.turn - 2);
+    stranger = { ...unit(sh), dist_village: v ? _hd(_tq(sh), v) : null, rep: v ? villageRep(MAP_SEED, v, sh.peer_id, ledger, heroRaceOf(sh)) : 0,
+      quests_open: mine.filter(q => !done.has(q)).length, quests_ready: ready.length, _ready: ready, _open: mine.filter(q => !done.has(q)) };
+  }
+  const leaderSnap = ownerPeerId ? peersPublic.get(ownerPeerId) : null;
+  const ctx = {
+    me: { life: entity.life, life_max: entity.lifeMax, q: me.q, r: me.r, dist_home: NPC_HOME ? _hd(me, NPC_HOME) : 0, role: NPC_DEF?.role || 'monster' },
+    home: NPC_HOME || me, foe, friend: unit(friends[0]), stranger, leader: leaderSnap && Number.isInteger(leaderSnap.tile_q) ? unit(leaderSnap) : null,
+    village: v ? { id: v.id, name: v.name, q: v.q, r: v.r, radius: v.radius, cap: v.cap, units: peers.filter(p => p.village_id === v.id && !p.follower).length + 1,
+      alarm: villageHostile.size > 0 && !!foe && villageHostile.has(foe.id), rep: v.reputation } : null,
+    turn: hg.turn,
+  };
+  agendaCtxCache = { ctx, v, ledger };
+  return ctx;
+}
+// The free hexes next to (q, r) a unit may step on (no unit, wall, building, water).
+function npcFreeNeighbours(q, r) {
+  const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+  return hexNeighbours(q, r).filter(t => !occ.has(`${t.q},${t.r}`) && hexWalkableAt(MAP_SEED, t.q, t.r) && !isLabyrinthWallAt(MAP_SEED, t.q, t.r) && !buildingFeatureAt(MAP_SEED, t.q, t.r));
+}
+// One step toward `t` (BFS through free hexes, builder-ring.mjs ringStep); onto `t` itself when it is next to me and free.
+function npcStepToward(t) {
+  const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+  const free = (q, r) => !occ.has(`${q},${r}`) && hexWalkableAt(MAP_SEED, q, r) && !isLabyrinthWallAt(MAP_SEED, q, r) && !buildingFeatureAt(MAP_SEED, q, r);
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  if (_hd(me, t) === 0) return null;
+  const st = ringStep({ me, site: { q: t.q, r: t.r }, free, maxNodes: 1500 });
+  if (st?.stepTo) return st.stepTo;
+  if (st?.build && free(t.q, t.r)) return { q: t.q, r: t.r };
+  return null;
+}
+function goalPlan(goal, ctx) {
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const has = (c) => hand.some(x => x.kind === 'action' && x.code === c);
+  const still = { code: has('P') ? 'P' : 'EP' };
+  const moveCode = has('M') ? 'M' : 'EM';
+  const who = (t) => ({ foe: ctx.foe, stranger: ctx.stranger, friend: ctx.friend, leader: ctx.leader })[t || 'foe'] || null;
+  const walkTo = (t) => { const st = t ? npcStepToward(t) : null; return st ? { code: moveCode, target: st } : still; };
+  const centre = ctx.village || NPC_HOME || me;
+  // A walled village (js/villages.js wall): a quest giver / storyteller inside meets a stranger outside at the gate's
+  // inner hex — they talk across the gate (questTick reaches 2), the gate guard between them.
+  const wall = agendaCtxCache?.v?.wall || null;
+  const inside = (t) => !!wall && _hd(t, centre) < wall.radius;
+  const welcome = !!ctx.stranger && !!ctx.village?.rep && ctx.stranger.rep >= ctx.village.rep.enter;
+  const viaGate = (t) => t && inside(me) && !inside(t) && !welcome && /^(quest_giver|storyteller)$/.test(NPC_DEF?.role || '') ? { ...wall.inner, dist: _hd(me, wall.inner), gate: true } : t;
+  // A welcome stranger near: whoever stands in the gateway (the gate or its inner hex) and is not barring it steps
+  // aside — the gate guard outward (its post may be taken by the very hero it lets in), the others inward.
+  const same = (a, b) => a && b && a.q === b.q && a.r === b.r;
+  if (wall && welcome && ctx.stranger.dist <= 4 && (same(me, wall.gate) || same(me, wall.inner)) && !(goal?.do === 'post' && goal.at === 'gate')) {
+    const out = same(me, wall.gate) && !inside(NPC_HOME || me);
+    const aside = npcFreeNeighbours(me.q, me.r).filter(t => !same(t, wall.gate) && !same(t, wall.inner) && inside(t) !== out)
+      .sort((a, b) => (same(a, NPC_HOME) ? -1 : 0) - (same(b, NPC_HOME) ? -1 : 0) || a.q - b.q || a.r - b.r)[0];
+    if (aside) return { code: moveCode, target: aside };
+  }
+  switch (goal?.do) {
+    case 'attack': {
+      const f = who(goal.target);
+      if (!f) return still;
+      if (f.dist <= 1) return has('A') ? { code: 'A', target: f.id } : still;
+      return has('M') ? { code: 'M', target: f.id } : walkTo(f);
+    }
+    case 'cast': return 'rules';
+    case 'heal': {
+      if (NPC_CASTS && npcCast([], null)) return 'done';
+      const f = who(goal.target || 'friend');
+      return f && f.dist > 1 ? walkTo(f) : still;
+    }
+    case 'flee': {
+      const f = who(goal.from || 'foe');
+      if (!f) return still;
+      const away = npcFreeNeighbours(me.q, me.r).map(t => ({ t, d: _hd(t, f) })).sort((a, b) => b.d - a.d || a.t.q - b.t.q || a.t.r - b.t.r)[0];
+      return away && away.d > f.dist ? { code: moveCode, target: away.t } : has('B') ? { code: 'B' } : still;
+    }
+    case 'defend': return has('B') ? { code: 'B' } : still;
+    case 'approach': case 'follow': {
+      const t = viaGate(who(goal.target));
+      return t && t.dist > (t.gate ? 0 : goal.stop ?? 1) ? walkTo(t) : still;
+    }
+    case 'post': {   // go to the spot and hold it: the gate itself (barred), its inner hex, or home (the gate guard's post outside)
+      const spot = goal.at === 'gate' ? wall?.gate : goal.at === 'gate_inner' ? wall?.inner : NPC_HOME;
+      return spot && _hd(me, spot) > 0 ? walkTo(spot) : has('B') && ctx.foe && ctx.foe.dist <= 2 ? { code: 'B' } : still;
+    }
+    case 'talk': return still;
+    case 'return': return NPC_HOME ? walkTo(NPC_HOME) : still;
+    case 'patrol': {
+      const ring = ringHexes({ q: centre.q, r: centre.r }, Math.max(1, goal.radius ?? 4));
+      const i = (homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 3)) % ring.length;
+      return walkTo(ring[i]);
+    }
+    case 'wander': {
+      if (Math.random() < 0.55) return still;
+      const base = NPC_HOME || me;
+      const opts = npcFreeNeighbours(me.q, me.r).filter(t => _hd(t, base) <= Math.max(1, goal.radius ?? 2));
+      return opts.length ? { code: moveCode, target: opts[Math.floor(Math.random() * opts.length)] } : still;
+    }
+    case 'roam': {
+      if (!ctx.village) return still;
+      const d = _hd(me, centre), lo = goal.min ?? 50, hi = goal.max ?? 100;
+      if (d > hi) return walkTo(centre);
+      if (d < lo) { const out = npcFreeNeighbours(me.q, me.r).sort((a, b) => _hd(b, centre) - _hd(a, centre))[0]; return out ? { code: moveCode, target: out } : still; }
+      if (Math.random() < 0.35) return still;
+      const ring = ringHexes({ q: centre.q, r: centre.r }, Math.round(d));
+      const at = ring.reduce((best, h, i) => (_hd(h, me) < _hd(ring[best], me) ? i : best), 0);
+      return walkTo(ring[(at + 3) % ring.length]);
+    }
+    case 'build': {   // inside a walled village the wall stands: the builder walks its inner ring and tends it
+      if (wall) { const ring = ringHexes({ q: centre.q, r: centre.r }, wall.radius - 1); return walkTo(ring[(homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]); }
+      return AI_ROLE === 'builder' ? 'build' : still;
+    }
+    case 'idle': default: return still;
+  }
+}
+// Apply a plan { code, target?, build? } like llmApply does. true when applied.
+function applyNpcPlan(p) {
+  if (typeof p.target === 'string' && !livePeers().some(x => x?.peer_id === p.target && (x.life ?? 0) > 0)) return false;
+  const empty = p.code === 'EP' || p.code === 'EM';
+  const slot = empty ? -1 : hand.findIndex(c => c.kind === 'action' && c.code === p.code);
+  if (!empty && slot < 0) return false;
+  queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; npcCastAim = null;
+  queued = slot >= 0 ? [slot] : [p.code];
+  const rides = slot >= 0 ? p.code : p.code === 'EM' ? 'M' : 'P';
+  queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && c.requires === rides ? i : -1).filter(i => i >= 0);
+  queuedExtra = null;
+  target = p.target ?? null;
+  if (!(p.code === 'P' || p.code === 'EP' || clEmits(p.code))) queuedDestroy = null;
+  queuedBuild = p.build || null;
+  return true;
+}
+// A line for the goal's `say` (greet / quest / thanks / lore / warn) — at most one every 3 actions.
+function agendaSay(kind, ctx) {
+  if (!NPC_DEF || hg.action - agendaSayAt < 3) return;
+  const { v } = agendaCtxCache || {};
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const s = ctx.stranger;
+  const qid = kind === 'thanks' ? s?._ready?.[0] : s?._open?.[0];
+  const q = qid ? GAMEMODELS.quests[qid] : null;
+  const nameOf = (id) => data.effects?.[id]?.name || String(id || '').replace(/^(effect|skill)_/, '').replace(/_/g, ' ');
+  const monsters = livePeers().filter(p => isWildMonsterSnap(p) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && _hd(me, _tq(p)) <= 60).map(p => ({ q: p.tile_q, r: p.tile_r, name: p.name || data.creatures[p.creature_id]?.name || 'monster' }));
+  const lore = v ? loreFact(MAP_SEED, v, me, agendaSayN, { monsters, heroes: livePeers().filter(heroSnap).length, dimension: DIM_NAME.replace(/^(Real|GenTest)-/, '').replace(/-/g, ' ') }) : '';
+  const text = npcLine(NPC_DEF, kind, agendaSayN, {
+    need: q?.need_text || '', reward: q ? q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ') : '',
+    village: v?.name || '', village_dir: v ? compassOf(me, v) : '', village_dist: v ? Math.round(_hd(me, v)) : '', lore, lore_dir: monsters[0] ? compassOf(me, monsters[0]) : 'far off',
+  });
+  if (!text) return;
+  agendaSayN++; agendaSayAt = hg.action;
+  if (kind === 'thanks' && qid && s) thankedQuests.add(`${s.id}|${qid}`);
+  pendingSay = { action: hg.action, text: text.charAt(0).toUpperCase() + text.slice(1) };
+  console.log(`[${PEER_LABEL}] ${NPC_DEF.name} says (${kind}): "${pendingSay.text}"`);
+}
+function compassOf(a, b) {
+  const x = 1.5 * (b.q - a.q), y = Math.sqrt(3) * (b.r - a.r + (b.q - a.q) / 2);
+  if (!x && !y) return 'here';
+  return ['east', 'north-east', 'north', 'north-west', 'west', 'south-west', 'south', 'south-east'][Math.round(((Math.atan2(-y, x) * 180 / Math.PI + 360) % 360) / 45) % 8];
+}
+// The agenda's plan for this action (after the rules and the model): true when it replaced the plan.
+function agendaPlan() {
+  if (!AGENDA || IS_COMPANION || casting || entity.life <= 0 || entity.monsterState === 'sleeping' || SHADOW_OF) return false;
+  if (!npcFree && !NPC_DEF) return false;            // a monster's rules took a forced path (cast, lure …)
+  if (NPC_DEF && typeof queuedEffect === 'number') return false;   // a cast just started: let it run
+  const ctx = agendaContext();
+  const g = agendaGoal(AGENDA, ctx);
+  if (!g) return false;
+  if (g.id !== agendaLast) { agendaLast = g.id; console.log(`[${PEER_LABEL}] agenda (${NPC_DEF ? NPC_DEF.role : 'monster'}): ${g.id} → ${g.goal?.do}${ctx.foe ? ` (foe d${ctx.foe.dist})` : ''}${ctx.stranger ? ` (stranger d${ctx.stranger.dist}, rep ${ctx.stranger.rep})` : ''}`); }
+  if (!NPC_DEF && (g.goal?.do === 'attack' || g.goal?.do === 'cast')) return false;   // monsters: the rules fight
+  if (g.goal?.say) agendaSay(g.goal.say, ctx);
+  const plan = goalPlan(g.goal, ctx);
+  if (plan === 'rules' || plan === 'done') return plan === 'done';
+  if (plan === 'build') { builderFallback(); return true; }
+  return plan ? applyNpcPlan(plan) : false;
+}
+
+// ---- the village spawner (a hero's peer): villagers walk out when a hero comes near ----
+// The live human hero with the smallest peer id within VILLAGE_NEAR of a village founds it (`vfound:` edit, once per
+// dimension) and keeps up to VILLAGE_ACTIVE of its units walking (village-life.mjs: residents + produced − gone, cap
+// 20), each where its home hex is on my map. A villager seen dead is gone for good (`vgone:<label>`); one that walked
+// back in (no hero near) comes out again later. Wanderers walk out when a hero comes within WANDERER_NEAR of their spot.
+const VILLAGE_NEAR = Number(process.env.VILLAGE_NEAR ?? 30);
+const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 3 : 6));
+const WANDERER_NEAR = Number(process.env.WANDERER_NEAR ?? 25);
+const VILLAGER_LEAVE = Number(process.env.VILLAGER_LEAVE ?? 40);
+const villageSpawning = new Set(), villageLogged = new Map();
+function villageSpawnerFor(at, radius) {
+  const ids = [...livePeers().filter(p => heroSnap(p) && (p.peer_id === PEER_ID_STRING || isFresh(p)) && _hd(_tq(p), at) <= radius).map(p => p.peer_id)];
+  if (_hd({ q: entity.tile.q, r: entity.tile.r }, at) <= radius && !ids.includes(PEER_ID_STRING)) ids.push(PEER_ID_STRING);
+  return ids.sort()[0] || null;
+}
+function spawnVillager(v, u, extra = {}) {
+  const npc = GAMEMODELS.npcs[u.npc];
+  if (!npc || villageSpawning.has(u.label)) return;
+  villageSpawning.add(u.label);
+  const env = { CHARACTER_ID: '', CREATURE_ID: u.npc, ENTITY_NAME: u.name, ALLIANCE: v.alliance, NPC_ID: u.npc, VILLAGE_ID: v.id, HOME_Q: String(u.q), HOME_R: String(u.r),
+    PROFILE_TEAM: v.team, AI_ROLE: npc.role === 'builder' && !v.wall ? 'builder' : '', BUILDER_RING_RADIUS: String(Math.max(3, (v.clear_radius ?? 9) - 1)), WILD_LURKERS: '0', ...extra };
+  spawnCompanion(null, { creature_id: u.npc, name: u.name, at: { q: u.q, r: u.r }, wild: true, label: u.label, env })
+    .then(tag => { const c = companions.find(x => x.label === tag); if (c) c.village = v.id; if (tag) console.log(`[${PEER_LABEL}] village: ${u.name} walks out of ${v.team} at (${u.q},${u.r})`); })
+    .catch(e => console.warn(`[${PEER_LABEL}] village: ${u.name} could not walk out: ${e.message}`))
+    .finally(() => setTimeout(() => villageSpawning.delete(u.label), 15_000));
+}
+function villageTick() {
+  if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0 || !dimMap || selfStalled() || process.env.VILLAGES === '0') return;
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const peers = livePeers().filter(Boolean);
+  const ledger = villageLedger(), edits = ledgerEdits(ledger);
+  const gone = new Set(edits.filter(e => /^v(gone|rec):/.test(e.id)).map(e => e.id.replace(/^v(gone|rec):/, '')));
+  const known = (q, r) => dimMap.has(q, r);
+  const livePeer = (label) => peersPublic.has(`peer:${label}`) || companions.some(c => c.label === label);
+  // dead villagers of any village I can see: gone for good (the hero who sees it first records it)
+  for (const p of peers) if (p.npc_id && !p.follower && (p.life ?? 1) <= 0 && !p.village_leaving) {
+    const label = String(p.peer_id).replace(/^peer:/, '');
+    if (!gone.has(label) && !(entity.worldEdits || []).some(e => e.id === `vgone:${label}`)) { entity.worldEdits.push({ id: `vgone:${label}`, v: p.village_id, at: hg.action }); gone.add(label); console.log(`[${PEER_LABEL}] village: ${p.name || label} has fallen — ${p.village_id} has one fewer`); }
+  }
+  for (const v of villagesNear(MAP_SEED, me.q, me.r, 100 + WANDERER_NEAR)) {
+    for (const w of wanderersOf(MAP_SEED, v, gone)) {
+      if (_hd(me, w) > WANDERER_NEAR || !known(w.q, w.r) || livePeer(w.label) || villageSpawning.has(w.label)) continue;
+      if (villageSpawnerFor(w, WANDERER_NEAR) !== PEER_ID_STRING) continue;
+      spawnVillager(v, w);
+    }
+    if (v.dist > VILLAGE_NEAR || villageSpawnerFor(v, VILLAGE_NEAR) !== PEER_ID_STRING) continue;
+    let fe = edits.find(e => e.id === `vfound:${v.id}`);
+    if (!fe) { fe = { id: `vfound:${v.id}`, v: v.id, turn: hg.turn, at: hg.action }; entity.worldEdits.push(fe); console.log(`[${PEER_LABEL}] village: ${v.team} of the ${v.race_name} found at (${v.q},${v.r}) on turn ${hg.turn}`); }
+    const broken = new Set(edits.filter(e => e.gone && /^bld:/.test(e.id)).map(e => e.id.slice(4)));
+    const units = villageUnits(MAP_SEED, v, { turn: hg.turn, founded: fe.turn ?? 0, gone, broken });
+    const out = units.filter(u => livePeer(u.label));
+    for (const u of activeUnits(units, VILLAGE_ACTIVE)) if (!livePeer(u.label) && known(u.q, u.r)) spawnVillager(v, u);
+    const sum = `${units.length}/${v.cap} units, ${out.length} out`;
+    if (villageLogged.get(v.id) !== sum) { villageLogged.set(v.id, sum); console.log(`[${PEER_LABEL}] village: ${v.team} — ${sum}`); }
+  }
+}
+setInterval(() => { try { villageTick(); questTick(); trespassTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
+// A villager (not a follower): walks back in when no hero has been near for 90 s, or leaves to follow a hero.
+let villagerHeroAt = Date.now();
+if (NPC_DEF && !IS_FOLLOWER) setInterval(() => {
+  if (vanishing || entity.life <= 0) return;
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  if (livePeers().some(p => heroSnap(p) && _hd(me, _tq(p)) <= VILLAGER_LEAVE)) villagerHeroAt = Date.now();
+  const recruited = ledgerEdits(villageLedger()).some(e => e.id === `vrec:${PEER_LABEL}`);
+  if (recruited || Date.now() - villagerHeroAt > 90_000) { villageLeaving = true; vanish(recruited ? 'I leave the village to follow a hero' : 'no hero near — I walk back into the village'); }
+}, 5_000).unref?.();
+
+// ---- quests (a hero's peer): within 2 of a quest giver (next to it, or across its village gate) with what it asked for in my archive ----
+// My archive is mine (never in a snapshot): my own peer checks the quest's need, records `vq:<quest>` { v, d, giver,
+// turn } (my reputation with that village: js/villages.js villageRep), takes the reward cards into my archive (profile
+// too) and the followers as my companions (the villagers they were leave their village: `vrec:<label>`).
+// A villager I (or a unit of mine) hurt this round: my relationship with its village drops once for that unit (user
+// 2026-11-24: "an unit that is already attacked is count once" — a kill of the same unit adds nothing more).
+function noteVillageHits(res) {
+  if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || !res?.damage) return;
+  const mineIds = new Set([PEER_ID_STRING, ...livePeers().filter(x => x?.owner_peer_id === PEER_ID_STRING).map(x => x.peer_id)]);
+  for (const [victim, list] of res.damage) {
+    if (!(list || []).some(d => d.amount > 0 && mineIds.has(d.attacker))) continue;
+    const snap = peersPublic.get(victim);
+    if (!snap?.npc_id || snap.follower || !snap.village_id) continue;
+    const label = String(victim).replace(/^peer:/, '');
+    if ((entity.worldEdits || []).some(e => e.id === `vhit:${label}`)) continue;
+    entity.worldEdits.push({ id: `vhit:${label}`, v: snap.village_id, at: hg.action });
+    const v = villageById(MAP_SEED, snap.village_id);
+    const now = v ? villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedgerWithMine(), MY_RACE) : null;
+    console.log(`[${PEER_LABEL}] village: I hurt ${snap.name || label} — ${v?.team || snap.village_id} relationship ${v?.reputation?.villager_attacked ?? -5}% → ${now}%`);
+    broadcastUI(handMsg({ notice: `⚔ You attacked ${snap.name || 'a villager'} — ${v?.team || 'the village'}: relationship ${now}%` }));
+  }
+}
+// The ledger with my own latest edits in (my snapshot may lag a tick behind entity.worldEdits).
+function villageLedgerWithMine() {
+  const l = villageLedger().filter(u => u.peer_id !== PEER_ID_STRING);
+  return [...l, { peer_id: PEER_ID_STRING, world_edits_json: JSON.stringify(entity.worldEdits || []) }];
+}
+// Walking inside a village wall below `enter` (70 %): −5 % once per entry (`ventry:<vid>:<n>`) — the hero's own peer.
+const villageInside = new Map();   // vid → was I inside its wall at the last tick
+function trespassTick() {
+  if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0) return;
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  for (const v of villagesNear(MAP_SEED, me.q, me.r, 30)) {
+    if (!v.wall) continue;
+    const inside = _hd(me, v) < v.wall.radius, was = villageInside.get(v.id);
+    villageInside.set(v.id, inside);
+    if (!inside || was !== false) continue;   // only a step from outside to inside counts (not where I started)
+    const rp = v.reputation || {};
+    const rep = villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedgerWithMine(), MY_RACE);
+    if (rep >= (rp.enter ?? 70)) continue;
+    const n = (entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith(`ventry:${v.id}:`)).length + 1;
+    entity.worldEdits.push({ id: `ventry:${v.id}:${n}`, v: v.id, at: hg.action });
+    const now = villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedgerWithMine(), MY_RACE);
+    console.log(`[${PEER_LABEL}] village: I walked into ${v.team} at ${rep}% (the gate opens at ${rp.enter ?? 70}%) — relationship → ${now}%`);
+    broadcastUI(handMsg({ notice: `🚧 You entered ${v.team} uninvited — relationship ${now}% (${rp.enter ?? 70}% opens the gate)` }));
+  }
+}
+const questBusy = new Set();
+function questTick() {
+  if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0) return;
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const givers = livePeers().filter(p => p?.npc_id && !p.follower && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && _hd(me, _tq(p)) <= 2 && GAMEMODELS.npcs[p.npc_id]?.quests?.length);
+  if (!givers.length) return;
+  const done = new Set((entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith('vq:')).map(e => e.id.slice(3)));
+  const items = archiveItems(archive, (id) => data.creatures[id]?.tags || []);
+  const ledger = villageLedger();
+  for (const g of givers) {
+    const v = villageById(MAP_SEED, g.village_id);
+    if (!v || villageRep(MAP_SEED, v, PEER_ID_STRING, ledger, MY_RACE) < v.reputation.hostile) continue;
+    for (const qid of GAMEMODELS.npcs[g.npc_id].quests) {
+      const q = GAMEMODELS.quests[qid];
+      if (!q || done.has(qid) || questBusy.has(qid) || !questMet(q, { archive: items })) continue;
+      questBusy.add(qid);
+      completeQuest(q, qid, g, v);
+    }
+  }
+}
+// Talking with a villager (user 2026-11-24: "participate in discussions with village team units, by clicking at some
+// of the predefined question: answer selections"): clicking a unit of a village opens its card with the questions
+// that NPC can answer — chosen from its role, its quests, its village's gate and my standing — and my peer answers
+// from the NPC's own lines (no model; nothing the resolver reads). The exchange plays as two speech balloons on my
+// screen. "I bring …" hands a quest in at once when I carry its need and stand within 2.
+const TALK_RANGE = 3;
+const talkN = new Map();   // npc peer id → lines said (rotates its lines)
+function talkCtx(npcPeerId) {
+  const p = livePeers().find(x => x?.peer_id === npcPeerId);
+  const def = p?.npc_id && GAMEMODELS?.npcs?.[p.npc_id];
+  if (!def) return null;
+  const v = p.village_id ? villageById(MAP_SEED, p.village_id) : null;
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const dist = Number.isInteger(p.tile_q) ? _hd(me, _tq(p)) : Infinity;
+  const rep = v ? villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedger(), MY_RACE) : null;
+  const done = new Set((entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith('vq:')).map(e => e.id.slice(3)));
+  const items = archiveItems(archive, (id) => data.creatures[id]?.tags || []);
+  const quests = (def.quests || []).map(id => GAMEMODELS.quests[id] && { id, q: GAMEMODELS.quests[id], done: done.has(id) || questBusy.has(id), ready: !done.has(id) && !questBusy.has(id) && questMet(GAMEMODELS.quests[id], { archive: items }) }).filter(Boolean);
+  return { p, def, v, me, dist, rep, quests, follower: !!p.follower };
+}
+function talkTopics(c) {
+  const t = [{ id: 'who', ask: 'Who are you?' }];
+  for (const x of c.quests.filter(x => !x.done)) t.push({ id: `quest:${x.id}`, ask: x.ready ? `I bring ${x.q.need_text}.` : c.quests.filter(y => !y.done).length > 1 ? `What do you need? (${x.q.name})` : 'What do you need?', ready: x.ready });
+  if (c.def.lines?.lore?.length || c.def.role === 'storyteller') t.push({ id: 'lore', ask: 'What news of this Dimension?' });
+  if (c.v?.wall && !c.follower) t.push({ id: 'enter', ask: `May I enter ${c.v.name}?` });
+  if (c.v) t.push({ id: 'standing', ask: `How does ${c.v.name} see me?` });
+  t.push({ id: 'bye', ask: 'Farewell.' });
+  return t;
+}
+const standingWords = (rep, rp) => rep < rp.hostile ? 'hostile' : rep >= rp.ally_all ? 'an ally' : rep >= rp.enter ? 'welcome' : 'a stranger';
+function talkAnswer(c, topic) {
+  const n = talkN.get(c.p.peer_id) || 0;
+  talkN.set(c.p.peer_id, n + 1);
+  const nameOf = (id) => data.effects?.[id]?.name || String(id || '').replace(/^(effect|skill)_/, '').replace(/_/g, ' ');
+  const vars = (q) => ({ need: q?.need_text || '', reward: q ? q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ') : '', village: c.v?.name || '' });
+  const line = (kind, q) => npcLine(c.def, kind, n, vars(q));
+  const rp = c.v?.reputation || {};
+  if (c.v && c.rep < rp.hostile && topic !== 'standing') return { text: line('warn') || 'Begone.' };
+  if (topic === 'who') return { text: `${c.p.name || c.def.name}. ${c.def.persona || ''} ${line('greet')}`.trim() };
+  if (topic.startsWith('quest:')) {
+    const x = c.quests.find(y => `quest:${y.id}` === topic);
+    if (!x) return { text: line('greet') || 'We have nothing more to ask of you.' };
+    if (x.done) return { text: line('thanks', x.q) || 'You did it already. Thank you.' };
+    if (!x.ready) return { text: `${line('quest', x.q) || `Bring me ${x.q.need_text}.`} (${x.q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ')})` };
+    if (c.dist > 2) return { text: `You carry it! Come closer — within 2 hexes — and hand it over.` };
+    questBusy.add(x.id);
+    completeQuest(x.q, x.id, c.p, c.v);
+    return { text: line('thanks', x.q) || 'Thank you, friend.', done: x.id };
+  }
+  if (topic === 'lore') {
+    const monsters = livePeers().filter(p => isWildMonsterSnap(p) && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q) && _hd(c.me, _tq(p)) <= 60).map(p => ({ q: p.tile_q, r: p.tile_r, name: p.name || data.creatures[p.creature_id]?.name || 'monster' }));
+    const lore = loreFact(MAP_SEED, c.v, c.me, n, { monsters, heroes: livePeers().filter(heroSnap).length, dimension: DIM_NAME.replace(/^(Real|GenTest)-/, '').replace(/-/g, ' ') });
+    const t = npcLine(c.def, 'lore', n, { ...vars(), lore, lore_dir: monsters[0] ? compassOf(c.me, monsters[0]) : 'far off' });
+    return { text: t || (lore ? lore.charAt(0).toUpperCase() + lore.slice(1) + '.' : 'I know nothing you do not.') };
+  }
+  if (topic === 'enter') return c.rep >= rp.enter
+    ? { text: `${line('greet') || 'Be welcome.'} The gate is open to you.` }
+    : { text: `${line('warn') || 'Not yet.'} (${c.rep}% — the gate opens at ${rp.enter}%; walking in uninvited costs ${rp.trespass}%.)` };
+  if (topic === 'standing') {
+    const open = c.quests.filter(x => !x.done).length;
+    return { text: `To ${c.v.team} you are ${standingWords(c.rep, rp)}: ${c.rep}%.${c.rep < rp.enter ? ` ${rp.enter}% opens the gate${open ? ' — help us and we will trust you more' : ''}.` : c.rep < rp.ally_all ? ` At ${rp.ally_all}% all of us fight at your side.` : ''}` };
+  }
+  return { text: line('greet') || 'Safe roads.' };
+}
+function talkMenuMsg(npcPeerId, extra = {}) {
+  const c = talkCtx(npcPeerId);
+  if (!c) return { kind: 'talk', npc: npcPeerId, topics: [], ...extra };
+  const rp = c.v?.reputation || {};
+  const why = c.dist > TALK_RANGE ? `come within ${TALK_RANGE} hexes to talk` : c.v && c.rep < rp.hostile ? `${c.v.team} is hostile to you (${c.rep}%)` : '';
+  return { kind: 'talk', npc: npcPeerId, name: c.p.name || c.def.name, role: c.def.role, dist: c.dist, range: TALK_RANGE, rep: c.rep, standing: c.v ? standingWords(c.rep, rp) : null,
+    village: c.v ? { id: c.v.id, team: c.v.team, ...rp } : null, quests: c.quests.map(x => ({ id: x.id, name: x.q.name, need: x.q.need_text, done: x.done, ready: x.ready })),
+    topics: talkTopics(c).map(t => ({ ...t, disabled: why && t.id !== 'bye' ? why : '' })), ...extra };
+}
+function talkTo(npcPeerId, topic) {
+  const c = talkCtx(npcPeerId);
+  if (!c) return talkMenuMsg(npcPeerId);
+  const tp = talkTopics(c).find(t => t.id === topic);
+  if (!tp) return talkMenuMsg(npcPeerId);
+  if (c.dist > TALK_RANGE && topic !== 'bye') return talkMenuMsg(npcPeerId, { answer: { topic, ask: tp.ask, text: `(${c.p.name || c.def.name} is too far to hear you — come within ${TALK_RANGE} hexes.)` } });
+  const a = talkAnswer(c, topic);
+  const text = String(a.text || '').replace(/\s{2,}/g, ' ').trim();
+  console.log(`[${PEER_LABEL}] talk with ${c.p.name || c.def.name}: "${tp.ask}" → "${text}"`);
+  broadcastUI({ kind: 'banter', lines: [{ peer_id: PEER_ID_STRING, text: tp.ask }, { peer_id: npcPeerId, text }] });
+  return talkMenuMsg(npcPeerId, { answer: { topic, ask: tp.ask, text, done: a.done || null } });
+}
+function completeQuest(q, qid, giver, v) {
+  const d = q.rewards.filter(r => r.kind === 'reputation').reduce((a, r) => a + (Number(r.value) || 0), 0);
+  entity.worldEdits.push({ id: `vq:${qid}`, v: v.id, d, giver: giver.npc_id, turn: hg.turn, at: hg.action });
+  const got = [];
+  for (const r of q.rewards) {
+    if (r.kind === 'effect' || r.kind === 'skill') {
+      const c = cardFromRef({ kind: r.kind, id: r.id });
+      if (!c) { console.warn(`[${PEER_LABEL}] quest ${qid}: unknown ${r.kind} ${r.id}`); continue; }
+      c.from = String(giver.name || '').slice(0, 60);
+      archive.push(c); got.push(`${c.name || r.id} (archive)`);
+      if (profileChar) { try { addArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, { kind: r.kind, id: r.id }, `quest: ${q.name}`); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive write failed: ${e.message}`); } }
+    } else if (r.kind === 'allies') got.push(...recruitFollowers(v, r, qid));
+  }
+  if (d) got.unshift(`+${d}% relationship with ${v.team}`);
+  console.log(`[${PEER_LABEL}] quest done: ${q.name} for ${giver.name} (${v.team}) — ${got.join(', ')}`);
+  broadcastUI(handMsg({ notice: `📜 Quest done — ${q.name} for ${giver.name || 'the village'}: ${got.join(', ')}` }));
+  _autosave?.markDirty?.();
+  publishPublicState().catch(() => {});
+}
+function recruitFollowers(v, r, qid) {
+  const out = [];
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const taken = new Set();
+  for (let i = 0; i < (r.count | 0); i++) {
+    const npc = r.units?.[i % Math.max(1, r.units.length)];
+    if (!GAMEMODELS.npcs[npc]) continue;
+    const vill = livePeers().filter(p => p?.village_id === v.id && p.npc_id === npc && !p.follower && (p.life ?? 0) > 0 && !taken.has(p.peer_id) && Number.isInteger(p.tile_q))
+      .sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)))[0];
+    const label = vill ? String(vill.peer_id).replace(/^peer:/, '') : `${v.id.replace(/[^a-z0-9]+/gi, '_')}_q_${qid}_${i}`;
+    if (vill) { taken.add(vill.peer_id); entity.worldEdits.push({ id: `vrec:${label}`, v: v.id, by_quest: qid, at: hg.action }); }
+    const name = `${vill?.name || `${GAMEMODELS.npcs[npc].name} of ${v.name}`}`;
+    spawnCompanion(null, { creature_id: npc, name, at: vill ? { q: vill.tile_q, r: vill.tile_r } : null, wild: false, label: `${label}_f`,
+      env: { CHARACTER_ID: '', CREATURE_ID: npc, ENTITY_NAME: name, NPC_ID: npc, VILLAGE_ID: v.id, FOLLOWER: '1', PROFILE_TEAM: '' } })
+      .then(tag => { const c = companions.find(x => x.label === tag); if (c) c.follower = true; })
+      .catch(e => console.warn(`[${PEER_LABEL}] follower failed: ${e.message}`));
+    out.push(`${name} follows you`);
+  }
+  return out;
+}
 async function npcPlan() {
   npcFree = false; queuedBuild = null;
   await npcPlanRules();
   const used = AI_ROLE ? llmApply() : false;
   const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   const calm = !npcEnemies().some(p => hexDistance(here, p) <= 2);
+  if (AGENDA) { if (!used) agendaPlan(); return; }   // GameModels agenda (villagers, wanderers, monsters)
   if (AI_ROLE === 'builder' && npcFree && (!used || calm)) builderFallback();   // the model's line (say) stays either way
 }
 async function npcPlanRules() {
@@ -8094,6 +8625,8 @@ wss.on('connection', (ws) => {
       // Dimension Out (rule_dimension_out): the HUD button starts the 10-turn channel, a second click cancels it.
       // `now: true` = the "Encounter defeated" banner (user 2026-11-23): leave at once, no channel (dimOutNow checks).
       if (m.kind === 'banter') banterFor(m.ids).catch(e => console.log(`[${PEER_LABEL}] banter: ${e.message}`));
+      // a villager's card: its questions (m.topic absent) or my question to it (talkTo)
+      if (m.kind === 'talk' && typeof m.npc === 'string') { try { ws.send(JSON.stringify(typeof m.topic === 'string' ? talkTo(m.npc, m.topic) : talkMenuMsg(m.npc))); } catch (e) { console.warn(`[${PEER_LABEL}] talk: ${e.message}`); } }
       if (m.kind === 'dim_out' && m.now === true) dimOutNow();
       else if (m.kind === 'dim_out') {
         if (m.active === false || dimOut) dimOutCancel('cancelled by its player');
