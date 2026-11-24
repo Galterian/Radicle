@@ -26,6 +26,7 @@ import crypto from 'node:crypto';
 import { askLlm, SAY_MAX } from './llm-brain.mjs';
 import { encodeFrame, createFrameDecoder } from './map-sync.mjs';
 import { idFromPrivateKeyPem, rawPublicKeyFromId, ownerIds } from './profile-auth.mjs';
+import { deviceSigner, OCI_URLS } from './oci-auth.mjs';
 
 export const LLM_PROTO = (dimId) => `/chaos/${dimId}/llm/1`;
 const DOMAIN = 'chaosd6-llm/1 ';
@@ -83,10 +84,13 @@ export function remoteConfig(env = {}, profileFile = '') {
   try { if (file) f = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
   const big = String(f.big_url || '').replace(/\/+$/, '');
   const derived = /\/llm-big$/.test(big) ? big.replace(/\/llm-big$/, '/llm') : '';
-  const url = String(env.LLM_REMOTE_URL ?? f.remote_url ?? derived).replace(/\/+$/, '');
+  // No key (a player's phone, 2026-11-23): this device signs (oci-auth.mjs → infra/oci/llm-gate.mjs) and the OCI address
+  // is the build's default — the key never has to be typed into a phone.
+  const signer = file ? deviceSigner(path.join(path.dirname(file), 'profile.json')) : null;
+  const url = String(env.LLM_REMOTE_URL ?? f.remote_url ?? (derived || (signer ? OCI_URLS.llm : ''))).replace(/\/+$/, '');
   let sameHost = false;
   try { sameHost = !!big && new URL(url).host === new URL(big).host; } catch {}
-  return { url: url === '0' ? '' : url, key: String(env.LLM_REMOTE_KEY ?? f.remote_key ?? (sameHost ? f.big_key || '' : '')) };
+  return { url: url === '0' ? '' : url, key: String(env.LLM_REMOTE_KEY ?? f.remote_key ?? (sameHost ? f.big_key || '' : '')), signer };
 }
 
 const okAnswer = (a, n) => a && Number.isInteger(a.choice) && a.choice >= 1 && a.choice <= n && typeof a.say === 'string' && a.say.length <= SAY_MAX + 2;
@@ -205,7 +209,7 @@ export function createLlmRouter({ cfg, remote = { url: '', key: '' }, auth = nul
     }
     // 3. remote — the OCI route.
     if (remoteOn && left() >= MIN_TRY_MS) {
-      const r = await askImpl({ ...cfg, url: remote.url, key: remote.key }, { ...q, timeoutMs: left() });
+      const r = await askImpl({ ...cfg, url: remote.url, key: remote.key, signer: remote.signer }, { ...q, timeoutMs: left() });
       if (r && !r.error) { stats.remote++; return { ...r, via: 'remote' }; }
       note('remote', r || { error: 'none' });
     }

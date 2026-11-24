@@ -89,7 +89,7 @@ import { mergeLedger, ledgerUnits, ledgerFor } from './js/world-ledger.js';
 const awakeLast = new Map();   // caster → the Awake plan of its last real (non-quiet) resolution (∀ lend)
 import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, exploreTarget, dungeonAt, dungeonExplored, LEARN_REARM_TURNS } from './js/building-bonus.js';
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
-import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard } from './profile.mjs';
+import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard, profilePath } from './profile.mjs';
 import { pvHandle, pvHello } from './proposal-votes.mjs';   // PV: proposal votes on foreign defs (profile side store, never the state hash)
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { phylacteryConfig, possessArchivePick, phylacteryPick, releasedCompanions } from './possess.mjs';   // Possess / Phylactery (user ruling 2026-11-17)
@@ -6766,8 +6766,9 @@ async function banterFor(ids) {
   try {
     const place = DIM_NAME.replace(/^(Real|GenTest)-/, '').replace(/-/g, ' ');
     let ans = await askBanter(LLM, { units, place });
-    const remote = remoteConfig(process.env, process.env.LLM_PROFILE_FILE || PROFILE_FILE);
-    if ((!ans || ans.error) && remote?.url) ans = await askBanter({ ...LLM, url: String(remote.url).replace(/\/+$/, ''), key: remote.key || '' }, { units, place });
+    // a random hero has no PROFILE_FILE: the device's own llm.json (profile dir) still holds the OCI route (2026-11-23)
+    const remote = remoteConfig(process.env, process.env.LLM_PROFILE_FILE || PROFILE_FILE || profilePath());
+    if ((!ans || ans.error) && remote?.url) ans = await askBanter({ ...LLM, url: String(remote.url).replace(/\/+$/, ''), key: remote.key || '', signer: remote.signer }, { units, place });
     if (!ans || ans.error) { console.log(`[${PEER_LABEL}] banter: no answer (${ans?.error || 'model off'}, ${ans?.ms ?? '?'} ms)`); return; }
     console.log(`[${PEER_LABEL}] banter: ${ans.lines.length} lines for ${units.length} units in ${ans.ms} ms`);
     const fixed = fixSelfAddress(ans.lines, units.map(u => u.name));

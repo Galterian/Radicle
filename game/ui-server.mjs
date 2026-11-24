@@ -40,6 +40,7 @@ import { lastKnownClock, doorClockCands, saveClockCand } from './merge-order.mjs
 import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing, describeDimension, doorMapSummaries, validTile,
   dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
+import { hexDistance } from './js/hex.js';
 import { randomBytes } from 'node:crypto';
 import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API), launcher only
@@ -333,19 +334,26 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
     // The rival team walks in from 7–9 hexes; the builders start 2–3 hexes from the hero.
     const seed = seedForDimension(DIM_ID);
     const occupied = new Set(roster.map(p => `${p.tile.q},${p.tile.r}`));
+    // A seed whose ring is all water / mountain / taken (user 2026-11-23: "no walkable hex 2–3 hexes from player-1
+    // for builder-1" failed the whole launch): widen the ring 3 hexes at a time, then skip that unit — never fail.
     const place = (salt, ring) => {
-      const tile = tileInRing(roster[0].tile, { ...ring, seed, salt, occupied });
-      if (!tile) throw new Error(`AI skirmish: no walkable hex ${ring.min}–${ring.max} hexes from player-1 for ${salt}`);
-      occupied.add(`${tile.q},${tile.r}`);
-      return tile;
+      for (let grow = 0; grow <= 6; grow += 3) {
+        const tile = tileInRing(roster[0].tile, { min: Math.max(1, ring.min - grow), max: ring.max + grow, seed, salt, occupied });
+        if (!tile) continue;
+        if (grow) console.log(`[launcher] AI skirmish: ${salt} placed ${hexDistance(tile, roster[0].tile)} hexes out — no walkable hex ${ring.min}–${ring.max} from player-1`);
+        occupied.add(`${tile.q},${tile.r}`);
+        return tile;
+      }
+      console.warn(`[launcher] AI skirmish: no walkable hex ${Math.max(1, ring.min - 6)}–${ring.max + 6} hexes from player-1 for ${salt} — left out`);
+      return null;
     };
     for (let i = 1; i <= AI_RIVALS; i++) {
-      const c = randomCharacter();
-      roster.push({ label: `rival-${i}`, alliance: 'npc_c', character: c.id, creature: '', name: `Rival — ${c.name}`, tile: place(`rival-${i}`, { min: 7, max: 9 }), aiRole: 'rival' });
+      const c = randomCharacter(), tile = place(`rival-${i}`, { min: 7, max: 9 });
+      if (tile) roster.push({ label: `rival-${i}`, alliance: 'npc_c', character: c.id, creature: '', name: `Rival — ${c.name}`, tile, aiRole: 'rival' });
     }
     for (let i = 1; i <= AI_BUILDERS; i++) {
-      const c = randomCharacter();
-      roster.push({ label: `builder-${i}`, alliance: 'npc_a', character: c.id, creature: '', name: `Builder — ${c.name}`, tile: place(`builder-${i}`, { min: 2, max: 3 }), aiRole: 'builder' });
+      const c = randomCharacter(), tile = place(`builder-${i}`, { min: 2, max: 3 });
+      if (tile) roster.push({ label: `builder-${i}`, alliance: 'npc_a', character: c.id, creature: '', name: `Builder — ${c.name}`, tile, aiRole: 'builder' });
     }
     console.log(`[launcher] AI skirmish: ${roster.filter(p => p.aiRole).map(p => `${p.label}=${p.aiRole}`).join(', ')} — llama-server ${process.env.LLM_URL || 'http://127.0.0.1:8095'}`);
   }

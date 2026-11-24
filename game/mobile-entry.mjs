@@ -350,7 +350,11 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
     const tag = `${label}-${b.tag}`;
     console.log(`[skirmish] ${b.name} (${b.character}) enters as ${tag} (${b.alliance}, ${b.aiRole}) at (${tile.q},${tile.r}), ${hexDistance(home, tile)} hexes from me`);
     await startWorker(tag, b.name, { PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', CHARACTER_ID: b.character, CREATURE_ID: '', ENTITY_NAME: b.name,
-      ALLIANCE: b.alliance, START_TILE: JSON.stringify(tile), FORCE_CLASS: '', AI_ROLE: b.aiRole, LLM_URL: '', LLM_PROFILE_FILE: '', LLM_REMOTE_FILE: llmFile,
+      ALLIANCE: b.alliance, START_TILE: JSON.stringify(tile), FORCE_CLASS: '', AI_ROLE: b.aiRole, LLM_URL: '', LLM_PROFILE_FILE: '',
+      // only the rivals ask the OCI model (user 2026-11-24: it is too slow for four bots); builders build by the rules
+      LLM_REMOTE_FILE: b.aiRole === 'builder' ? '' : llmFile,
+      // the OCI round trip needs more than the 4.5 s default: the whole planning window (llmKick caps it at its end − 400 ms)
+      LLM_TIMEOUT_MS: process.env.LLM_TIMEOUT_MS || '5800',
       LLM_SERVE: '0', FORCE_FOREIGN_CLASS: '', FOREIGN_CLASS_REF_JSON: '', FORCE_FOREIGN_SKILL: '', FORCE_FOREIGN_EFFECT: '', FOREIGN_CARD_REFS_JSON: '', TEST_PRIORITY: '' });
   }
 }

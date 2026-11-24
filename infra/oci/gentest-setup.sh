@@ -113,7 +113,7 @@ SITE=/etc/caddy/sites/seed.caddy
 if ! sudo grep -q '^import /etc/caddy/sites/\*\.caddy' /etc/caddy/Caddyfile; then
   echo "!! /etc/caddy/Caddyfile does not import sites/*.caddy — not touching caddy (run infra/oci/restore-caddy.sh)" >&2; exit 1
 fi
-if ! grep -q 'path /gen-test /gen-test/\*' "$SITE"; then
+if ! grep -q 'path /gen-test /gen-test/\*' "$SITE" && ! grep -q '@chaosgate' "$SITE"; then   # @chaosgate: llm-gate-setup.sh owns it
   sudo cp "$SITE" "$SITE.bak-gentest"
   sudo python3 - "$SITE" <<'PY'
 import sys

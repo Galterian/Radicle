@@ -411,7 +411,7 @@ async function routeList(rest) {
   const keyBtn = h('button', { class: 'au-btn', type: 'button', onclick: () => openKeySheet(info) }, info.model?.key_set ? 'Change model key…' : 'Model key…');
   const where = info.test?.where === 'oci' ? `test games run on ${info.test.host || 'OCI'}` : 'test games run on this node';
   const model = info.model?.configured
-    ? h('div', { class: 'au-bar' }, h('span', { class: 'au-hint' }, `Model: ${info.model.name} at ${info.model.host}${info.model.fallback ? `, else OCI ${info.model.fallback}` : ""}${info.model.key_set ? '' : ' (no key)'} · ${where}`), info.model.mobile || !info.model.key_set ? keyBtn : null)
+    ? h('div', { class: 'au-bar' }, h('span', { class: 'au-hint' }, `Model: ${info.model.name} at ${info.model.host}${info.model.fallback ? `, else OCI ${info.model.fallback}` : ""}${info.model.key_set ? '' : info.model.device ? ' (signed by this device)' : ' (no key)'} · ${where}`), info.model.mobile || (!info.model.key_set && !info.model.device) ? keyBtn : null)
     : h('div', { class: 'au-bar' }, h('span', { class: 'au-hint' }, info.model?.mobile ? 'Enter the OCI model key to generate from this phone.' : 'No big model on this node: run "node tools/effect-gen.mjs --save-key" (OCI) or install the desktop 8B — or enter the OCI key here.'), keyBtn);
   const list = h('div', { class: 'gen-list' });
   for (const d of info.drafts || []) {

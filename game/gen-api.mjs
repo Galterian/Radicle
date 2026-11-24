@@ -89,7 +89,7 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       let testHost = '';
       try { testHost = rt?.url ? new URL(rt.url).host : ''; } catch {}
       return sendJson(res, 200, { ok: true, kinds: GEN_KINDS, busy: jobs.busy(),
-        model: { configured: !!cfg.url, host, ...(fallback ? { fallback } : {}), name: cfg.model, key_set: !!(cfg.key || cfg.fallback?.key), mobile: process.env.CHAOSD6_MOBILE === '1' },
+        model: { configured: !!cfg.url, host, ...(fallback ? { fallback } : {}), name: cfg.model, key_set: !!(cfg.key || cfg.fallback?.key), device: !!cfg.signer && !cfg.key, mobile: process.env.CHAOSD6_MOBILE === '1' },
         test: rt ? { where: 'oci', host: testHost } : { where: 'local' }, drafts: jobs.list() });
     }
     case 'POST key': {

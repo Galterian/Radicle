@@ -17,6 +17,7 @@ import { generateSkill } from './skill-gen.mjs';
 import { generateClass } from './class-gen.mjs';
 import { tagsPrompt, tagProblems, cleanTags } from './gen-tags.mjs';
 import { profileDir } from './profile.mjs';
+import { deviceSigner, authHeaders, OCI_URLS } from './oci-auth.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const GEN_KINDS = ['effect', 'skill', 'class'];   // user order: effects → phone → skills → classes
@@ -219,13 +220,15 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
 
   // ---- test on the OCI gen-test service (the phone: CHAOSD6_MOBILE=1, or GEN_TEST_REMOTE=1 / llm.json test_remote) ----
   // llm.json { test_url (default: big_url with /llm-big → /gen-test), big_key }. The same result shape as a local run.
+  // No key: this device signs (oci-auth.mjs, the OCI gate checks it is a team owner) and the URL defaults to OCI's.
   function remoteTest() {
     const f = (() => { try { return JSON.parse(fs.readFileSync(llmFile, 'utf8')); } catch { return {}; } })();
     const on = env.CHAOSD6_MOBILE === '1' || env.GEN_TEST_REMOTE === '1' || f.test_remote === true;
     if (!on) return null;
     const big = String(env.LLM_BIG_URL || f.big_url || '');
     const url = String(env.GEN_TEST_URL || f.test_url || (/\/llm-big\/?$/.test(big) ? big.replace(/\/llm-big\/?$/, '/gen-test') : '')).replace(/\/+$/, '');
-    return { url, key: String(env.LLM_BIG_KEY || f.big_key || '') };
+    const signer = deviceSigner(path.join(path.dirname(llmFile), 'profile.json'));
+    return { url: url || (signer ? OCI_URLS.test : ''), key: String(env.LLM_BIG_KEY || f.big_key || ''), signer };
   }
   const finishRemote = (d, res) => {
     const x = read(d.draft_id) || d;
@@ -240,11 +243,10 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   };
   const badRemote = (d, why) => { const x = read(d.draft_id) || d; x.status = ''; delete x.remote_test; setState(x, 'preview', `the OCI test did not run: ${why}`); return write(x); };
   async function runTestRemote(d, rt) {
-    const hdr = { 'Content-Type': 'application/json', ...(rt.key ? { Authorization: `Bearer ${rt.key}` } : {}) };
     const finish = (res) => finishRemote(d, res), bad = (why) => badRemote(d, why);
     if (!rt.url) return bad('no test service configured (set the model key first)');
     let r;
-    try { r = await fetchImpl(`${rt.url}/tests`, { method: 'POST', headers: hdr, body: JSON.stringify({ def: d.def }) }); }
+    try { const body = JSON.stringify({ def: d.def }); r = await fetchImpl(`${rt.url}/tests`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders(rt, 'POST', `${rt.url}/tests`, body) }, body }); }
     catch (e) { return bad(e?.cause?.code || e.message); }
     const j = await r.json().catch(() => ({}));
     if (r.status !== 202 || !j.id) return bad(j.error ? `${r.status} ${j.error}${j.problems?.length ? `: ${j.problems.slice(0, 2).join('; ')}` : ''}` : `http ${r.status}`);
@@ -253,11 +255,10 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   }
   // Also after a node restart (the phone's menu process): the OCI game went on, the draft keeps its remote_test id.
   async function pollRemote(d, rt, tid, finish, bad) {
-    const hdr = rt.key ? { Authorization: `Bearer ${rt.key}` } : {};
     for (let misses = 0; ;) {
       await new Promise(res => setTimeout(res, everyMs));
       let s = null;
-      try { const q = await fetchImpl(`${rt.url}/tests/${tid}`, { headers: hdr }); s = q.ok ? await q.json() : null; if (q.status === 404) return bad('the OCI test was lost (its server restarted)'); } catch {}
+      try { const q = await fetchImpl(`${rt.url}/tests/${tid}`, { headers: authHeaders(rt, 'GET', `${rt.url}/tests/${tid}`) }); s = q.ok ? await q.json() : null; if (q.status === 404) return bad('the OCI test was lost (its server restarted)'); } catch {}
       if (!s) { if (++misses > 30) return bad('OCI stopped answering'); continue; }
       misses = 0;
       if (s.state === 'done') return finish(s.result || {});

@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import { ALL_ELEMS, loadEffectDefs, resolveEffectData } from './effect-engine.mjs';
+import { deviceSigner, authHeaders, OCI_URLS } from './oci-auth.mjs';   // no key on a phone: the device signs (llm-gate)
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(HERE, 'effects-data');
@@ -39,10 +40,15 @@ export function genConfig(env = {}, { file = '' } = {}) {
   const desktop = env.LLM_BIG_URL === undefined && env.CHAOSD6_MOBILE !== '1';
   const url = clean(env.LLM_BIG_URL ?? (desktop ? f.local_big_url ?? 'http://127.0.0.1:8096' : f.big_url));
   const ociKey = String(env.LLM_BIG_KEY ?? f.big_key ?? env.LLM_KEY ?? f.remote_key ?? '');
-  const oci = clean(f.big_url);
+  // No key here (a player's phone, user 2026-11-23): the device signs (oci-auth.mjs; infra/oci/llm-gate.mjs lets a team
+  // owner in) and the OCI address is the build's default — nobody types or sees the key.
+  const signer = deviceSigner(file ? path.join(path.dirname(file), 'profile.json') : '');
+  const oci = clean(f.big_url) || (signer ? OCI_URLS.big : '');
+  const phoneUrl = env.LLM_BIG_URL === undefined && !desktop && !url ? oci : url;
   return {
-    url,
+    url: phoneUrl,
     key: desktop ? String(env.LLM_BIG_KEY ?? f.local_big_key ?? '') : ociKey,
+    signer,
     fallback: desktop && oci && oci !== url ? { url: oci, key: ociKey } : null,
     model: env.LLM_BIG_MODEL || 'qwen3-8b',
     timeoutMs: Math.max(30_000, Number(env.LLM_BIG_TIMEOUT_MS) || (/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(url) ? 20 : 60) * 60_000), timeoutSet: !!Number(env.LLM_BIG_TIMEOUT_MS),
@@ -325,15 +331,17 @@ async function completeOnce(cfg, messages, { fetchImpl = longFetch, timeoutMs = 
   const t0 = Date.now();
   const stream = typeof onProgress === 'function';
   try {
-    const r = await fetchImpl(`${cfg.url}/v1/chat/completions`, {
+    const url = `${cfg.url}/v1/chat/completions`;
+    const body = JSON.stringify({
+      model: cfg.model, messages, temperature, max_tokens: maxTokens, cache_prompt: true,
+      chat_template_kwargs: { enable_thinking: false },
+      ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'answer', strict: false, schema } } } : {}),
+      ...(stream ? { stream: true, return_progress: true } : {}),
+    });
+    const r = await fetchImpl(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
-      body: JSON.stringify({
-        model: cfg.model, messages, temperature, max_tokens: maxTokens, cache_prompt: true,
-        chat_template_kwargs: { enable_thinking: false },
-        ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'answer', strict: false, schema } } } : {}),
-        ...(stream ? { stream: true, return_progress: true } : {}),
-      }),
+      headers: { 'Content-Type': 'application/json', ...authHeaders(cfg, 'POST', url, body) },
+      body,
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) return { error: `http ${r.status} ${(await r.text().catch(() => '')).slice(0, 200)}`, ms: Date.now() - t0 };

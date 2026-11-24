@@ -132,7 +132,8 @@ if [ "$PUBLIC" = 1 ]; then
   if ! sudo grep -q '^import /etc/caddy/sites/\*\.caddy' /etc/caddy/Caddyfile; then
     echo "!! /etc/caddy/Caddyfile does not import sites/*.caddy — not touching caddy (run infra/oci/restore-caddy.sh)" >&2; exit 1
   fi
-  if ! grep -q 'handle_path /llm/\*' "$SITE"; then
+  if grep -q '@chaosgate' "$SITE"; then echo "== caddy: /llm and /llm-big go through the gate (llm-gate-setup.sh) — not adding direct routes"; fi
+  if ! grep -q 'handle_path /llm/\*' "$SITE" && ! grep -q '@chaosgate' "$SITE"; then
     sudo cp "$SITE" "$SITE.bak-llm"
     sudo python3 - "$SITE" <<'PY'
 import sys
@@ -155,7 +156,7 @@ PY
     fi
     sudo systemctl reload caddy
   fi
-  if [ "$BIG" = 1 ] && ! grep -q 'handle_path /llm-big/\*' "$SITE"; then
+  if [ "$BIG" = 1 ] && ! grep -q 'handle_path /llm-big/\*' "$SITE" && ! grep -q '@chaosgate' "$SITE"; then
     sudo cp "$SITE" "$SITE.bak-llm-big"
     sudo python3 - "$SITE" <<'PY'
 import sys

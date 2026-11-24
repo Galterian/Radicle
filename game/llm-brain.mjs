@@ -16,6 +16,7 @@
 //   monster — wild creatures (npc_b)
 //   builder — NPC builders on my side: raise Barricades (resolver: peer.mjs "NPC builders"), fight only when cornered
 
+import { authHeaders } from './oci-auth.mjs';   // OCI: the key where set, else this device's signature (infra/oci/llm-gate.mjs)
 export const AI_ROLES = ['team', 'rival', 'monster', 'builder'];
 export const SAY_MAX = 60;
 
@@ -134,7 +135,7 @@ export async function askLlm(cfg, { system, user, n, timeoutMs, fetchImpl = glob
   try {
     const r = await fetchImpl(`${cfg.url}/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...authHeaders(cfg, 'POST', `${cfg.url}/v1/chat/completions`, JSON.stringify(body)) },   // key, else the device signs (oci-auth)
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(Math.max(200, timeoutMs ?? cfg.timeoutMs)),
     });
@@ -252,7 +253,7 @@ export async function askBanter(cfg, { units, place = '', mood = '', timeoutMs =
   try {
     const r = await fetchImpl(`${cfg.url}/v1/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(cfg.key ? { Authorization: `Bearer ${cfg.key}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...authHeaders(cfg, 'POST', `${cfg.url}/v1/chat/completions`, JSON.stringify(body)) },   // key, else the device signs (oci-auth)
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(Math.max(1000, timeoutMs)),
     });
