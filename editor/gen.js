@@ -6,7 +6,8 @@
 // app.js imports this next to author.js and calls initGeneration(ctx); same plug-in style (registerHeaderAction,
 // registerRoute, openSheet, toast, navigate, jsonfmt). Server: /rules/api/gen/* (game/gen-api.mjs) — POST needs
 // the session token and a signed-in team owner; GET drafts/<id> is the status poll (every 10 s while a job runs).
-// Routes: #/gen/ (drafts + the description form), #/gen/<kind> (the form for that kind), #/gen/d/<draft_id> (one draft).
+// Routes: #/gen/ (drafts + the description form), #/gen/<kind> (the form for that kind), #/gen/d/<draft_id> (one draft),
+// #/gen/proposals (other teams' GameModels proposals: try + vote).
 // Nothing here touches `document` at import time.
 
 const KINDS = ['effect', 'skill', 'class', 'npc', 'building', 'monster'];
@@ -91,6 +92,10 @@ export const GEN_CSS = `
 .gen-talk-msg pre{margin:2px 0 0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
 .gen-talk-msg.r-player{border-color:#3d7be0}.gen-talk-msg.r-model{border-color:#b36bff}.gen-talk-msg.r-validator{border-color:#e0a03d}.gen-talk-msg.r-test{border-color:#2ea043}
 .gen-talk-who{font-size:.8em;font-weight:700;opacity:.8}
+.gm-proposal{display:flex;flex-direction:column;gap:8px;padding:10px 0 16px;border-bottom:1px solid var(--border,rgba(127,127,127,.35))}
+.gm-vote{display:flex;flex-direction:column;gap:6px;max-width:520px}
+.gm-vote input[type=range]{flex:1}
+.gm-vote-v{min-width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
 .gm-card{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--border,rgba(127,127,127,.35));
   background:linear-gradient(180deg,rgba(224,160,61,.07),transparent 120px)}
 .gm-head{display:flex;gap:14px;align-items:flex-start}
@@ -503,11 +508,14 @@ function gmCard(d, { compact = false } = {}) {
     h('div', { class: 'gm-rewards' }, ...(q.rewards || []).map(r => h('span', { class: `gm-reward k-${r.kind}` }, REWARD_TEXT(r))))));
   const st = n.unit?.stats || {};
   const stats = h('div', { class: 'gm-stats' }, ...['vitality', 'world', 'matter', 'will'].map(k => h('div', { class: 'gm-stat' }, h('span', null, k), h('i', { style: { width: `${Math.min(100, (st[k] || 0) * 5)}%` } }), h('b', null, String(st[k] ?? '?')))),
-    h('div', { class: 'au-hint' }, `life ${n.unit?.life ?? '?'} · ${n.unit?.actions_per_round ?? '?'} action(s) a round · casts ${(n.unit?.deck_effects || []).map(e => String(e).replace(/^effect_/, '').replace(/_/g, ' ')).join(', ') || '—'}`));
+    h('div', { class: 'au-hint' }, `life ${n.unit?.life ?? '?'} · ${n.unit?.actions_per_round ?? '?'} action(s) a round · casts ${(n.unit?.deck_effects || []).map(e => String(e).replace(/^effect_/, '').replace(/_/g, ' ')).join(', ') || '—'}`),
+    // the village dragon / a siege engine (2026-11-25): Breath Attack, flying, the engine's class
+    n.unit?.breath || (n.unit?.tags || []).includes('flying') ? h('div', { class: 'au-hint' }, [n.unit.breath ? `Breath Attack: each Attack hits every enemy within ${n.unit.breath.range}` : '', (n.unit.tags || []).includes('flying') ? 'flies over walls and scenery' : ''].filter(Boolean).join(' · ')) : null,
+    n.siege ? h('div', { class: 'au-hint' }, `${n.siege.class}: ${n.siege.kind === 'ram' ? `next to a wall for ${n.siege.rounds} actions in a row breaks it` : `shoots ${n.siege.min}–${n.siege.max} hexes once a turn, the ammunition flies ${n.siege.speed} hexes an action${n.siege.kind === 'ballista' ? ' and hurts every foe on its line' : ''}`} · only Empty Posture / Empty Move`) : null);
   const where = b.place?.village ? `${b.place.post === 'wanderer' ? 'Wanders 50–100 hexes around' : b.place.post === 'outside' ? 'Waits outside the wall of' : 'Lives in'} ${b.place.village}${b.place.at ? ` (${b.place.at.join(',')})` : ''}` : 'Not placed in a village';
   return h('div', { class: 'gm-card' },
     h('div', { class: 'gm-head' }, gmPortrait(n.card?.resources?.sprites?.info?.path, { size: 96 }),
-      h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, n.name || n.id), h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, raceName(n.race)), h('span', { class: 'gm-pill r' }, roleName(n.role)), customBadge(), d.base ? h('span', { class: 'gm-pill e' }, `changes ${d.base}`) : null),
+      h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, n.name || n.id), h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, raceName(n.race)), h('span', { class: 'gm-pill r' }, roleName(n.role)), n.unit?.breath ? h('span', { class: 'gm-pill e' }, `🔥 breath ${n.unit.breath.range}`) : null, (n.unit?.tags || []).includes('flying') ? h('span', { class: 'gm-pill' }, 'flying') : null, n.siege ? h('span', { class: 'gm-pill e' }, `⚙ ${n.siege.class}`) : null, customBadge(), d.base ? h('span', { class: 'gm-pill e' }, `changes ${d.base}`) : null),
         h('div', { class: 'gm-persona' }, n.persona || ''), h('div', { class: 'au-hint' }, where))),
     bubbles.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'What it says'), h('div', { class: 'gm-bubbles' }, ...bubbles)) : null,
     talk.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, `Ask ${n.name}`), ...talk) : null,
@@ -536,7 +544,8 @@ const mediaLabelOf = (kind) => (isGm(kind) ? 'Looks like' : kind === 'class' ? '
 // ---------------------------------------------------------------- #/gen/ and #/gen/<kind>
 async function routeList(rest) {
   if (!loggedIn()) return signInPane();
-  const want = String(rest || '').replace(/^\/+|\/+$/g, '');
+  // #/gen/<kind> or #/gen/<kind>/<id> (a GameModels entry's "Change with the big model": start from that one)
+  const [want = '', wantBase = ''] = String(rest || '').replace(/^\/+|\/+$/g, '').split('/').map(x => { try { return decodeURIComponent(x); } catch { return x; } });
   let info = { drafts: [], kinds: ['effect'], model: {} };
   try { info = await genApi('drafts'); } catch (e) { C.toast(errText(e), 'error'); }
   const kinds = info.kinds || ['effect'];
@@ -574,6 +583,10 @@ async function routeList(rest) {
     asks.replaceChildren(...(GM_ASKS[k] || []).map(([label, text]) => h('button', { class: 'gen-chip', type: 'button', title: text, onclick: () => { idea.value = idea.value.trim() ? `${idea.value.trim()}\n${text}` : text; idea.focus(); } }, label)));
   };
   drawGm(kind);
+  if (wantBase && isGm(kind)) {
+    if ([...base.options].some(o => o.value === wantBase)) base.value = wantBase;
+    else C.toast(`${wantBase} cannot be changed here (hand-made: builders, dragons, engineers, siege engines)`, 'error');
+  }
   kindSel.addEventListener('change', async () => {
     const k = kindSel.value;
     idea.placeholder = placeholder[k] || ''; tags.setKind(k);
@@ -603,6 +616,7 @@ async function routeList(rest) {
   // The header's "Drafts" lands here: the drafts first, then the form for a new one (#/gen/<kind> puts the form first).
   const drafts = [
     h('div', { class: 'au-sec' }, 'Your drafts'),
+    h('div', { class: 'au-hint' }, "Other teams' NPCs, buildings and monsters: ", h('a', { href: '#/gen/proposals' }, 'Team proposals — try them and vote')),
     (info.drafts || []).length ? list : h('div', { class: 'au-hint' }, 'No drafts yet — describe one below.'),
   ];
   const form = [
@@ -740,19 +754,23 @@ async function routeDraft(rest) {
       ? h('div', { class: 'gen-talk-round' }, t.text)
       : h('div', { class: `gen-talk-msg r-${t.role}` }, h('span', { class: 'gen-talk-who' }, { player: 'You', model: `Model${t.attempt ? ` · attempt ${t.attempt}` : ''}`, validator: `Validator${t.verdict ? ` · ${t.verdict}` : ''}`, test: 'Test game' }[t.role] || t.role), h('pre', null, t.text))));
     bRetry.disabled = RUNNING.includes(d.state) || d.state === 'published';
-    bPub.disabled = d.state !== 'testing success' || isGm(d.kind);
+    bPub.disabled = d.state !== 'testing success';
     bPub.hidden = d.state === 'published';
-    if (isGm(d.kind)) bPub.title = 'Publishing NPCs and buildings comes with the chaosD6-GameModels team branches (not on Radicle yet)';
     const pub = C.session?.publish || {};
     pubHint.hidden = !(d.state === 'testing success' && pub.ready === false);
     pubHint.textContent = `Publishing is not ready on this node${pub.why ? `: ${pub.why}` : ''} — the commit stays pending until it is (retry it under "My team's definitions").`;
-    if (!isGm(d.kind)) bPub.title = d.state === 'testing success' ? '' : 'Only after "testing success"';
+    bPub.title = d.state === 'testing success' ? '' : 'Only after "testing success"';
     bDel.disabled = RUNNING.includes(d.state);
     const t = d.test;
     testBox.hidden = !t;
     if (t) {
       testBox.replaceChildren(...[
-        h('div', { class: 'au-bar' }, h('b', null, t.pass ? 'Test passed' : 'Test failed'), h('span', { class: 'au-hint' }, `${{ skill: 'played', class: 'used' }[d.kind] || 'cast'} ${t.casts ?? '?'}× · ${{ skill: 'paid off', class: 'did something' }[d.kind] || 'landed'} ${t.lands ?? '?'}× · engine errors ${t.errors ?? '?'} · divergences ${t.divergences ?? '?'}`)),
+        h('div', { class: 'au-bar' }, h('b', null, t.pass ? 'Test passed' : 'Test failed'), h('span', { class: 'au-hint' }, `${d.kind === 'npc' ? `${t.spawned ? 'spawned' : 'never spawned'} · answered ${t.talks ?? 0} question(s) · ${t.agenda ?? 0} agenda step(s) · ${t.quests ?? 0} quest(s) handed in`
+          : d.kind === 'building' ? `village ${t.village ? 'came up' : 'never came up'} · ${t.in_layout ? 'in its layout' : 'not in its layout'}`
+          : d.kind === 'monster' ? `${t.booted ? 'in the game' : 'never in the game'} · chases ${t.chases ?? 0} · casts ${t.casts ?? 0} · hits ${t.hits ?? 0} · kills ${t.kills ?? 0}${t.monster_died ? ' · died' : ''}`
+          : `${{ skill: 'played', class: 'used' }[d.kind] || 'cast'} ${t.casts ?? '?'}× · ${{ skill: 'paid off', class: 'did something' }[d.kind] || 'landed'} ${t.lands ?? '?'}×`} · engine errors ${t.errors ?? '?'} · divergences ${t.divergences ?? '?'}`)),
+        (t.notes || []).length ? h('div', { class: 'au-hint' }, t.notes.join(' · ')) : null,
+        d.kind === 'npc' && (t.talk || []).length ? h('details', null, h('summary', null, `The conversation in the test (${t.talk.length})`), ...t.talk.map(c => h('div', { class: 'gm-bubble k-talk' }, h('b', null, `“${c.ask}” `), c.answer))) : null,
         (t.why || []).length ? h('ul', null, ...t.why.map(w => h('li', null, w))) : null,
         t.review?.summary ? h('div', null, h('b', null, 'Review: '), t.review.summary) : t.review?.error ? h('div', { class: 'au-hint' }, `Review: ${t.review.error}`) : null,
         (t.lines || []).length ? h('details', null, h('summary', null, `Game log lines (${t.lines.length})`), h('pre', { class: 'gen-log' }, t.lines.join('\n'))) : null].filter(Boolean));   // replaceChildren would print "null"
@@ -764,7 +782,7 @@ async function routeDraft(rest) {
     }));
     if ((d.suggestions || []).length) sugg.prepend(h('div', { class: 'au-hint' }, 'Suggestions from the test review — click to include:'));
     if (d.published) testBox.append(h('div', { class: 'au-bar' }, h('b', null, 'Published'), h('span', { class: 'au-mono' }, `${d.published.branch || ''} @${String(d.published.commit || '').slice(0, 8)}`),
-      h('span', { class: 'au-hint' }, d.kind === 'class' ? 'a class: no archive card (its ref is kept on this draft)' : `${d.published.granted ?? 0} team character(s) got the card (archive, new)`)));
+      h('span', { class: 'au-hint' }, isGm(d.kind) ? 'on your team\'s branch of chaosD6-GameModels — it enters the game when the vote merges it' : d.kind === 'class' ? 'a class: no archive card (its ref is kept on this draft)' : `${d.published.granted ?? 0} team character(s) got the card (archive, new)`)));
     logBox.textContent = (d.log || []).join('\n');
   };
   const reload = async () => { try { d = (await genApi(`drafts/${encodeURIComponent(id)}`)).draft; render(); } catch (e) { if (e.status === 404) stop(); } };
@@ -793,9 +811,12 @@ async function routeDraft(rest) {
   }));
   bPub.addEventListener('click', () => act(bPub, async () => {
     const team = C.session?.team?.name || 'your team';
-    if (!(await C.confirm('Publish the preview?', `"${d.def?.name}" goes on ${team}'s branch of chaosD6-${{ skill: 'Skills', class: 'Classes' }[d.kind] || 'Effects'}, marked custom, open to the players' votes${d.kind === 'class' ? ' (a class is not a card: no archive card is given)' : `, and every ${team} character gets the card in its archive`}.`))) return;
+    const gmFiles = isGm(d.kind) ? [d.def?.npc || d.def?.building || d.def?.monster, ...(d.def?.quests || []), d.def?.touches?.village, d.def?.touches?.race].filter(Boolean).map(x => x.id).join(', ') : '';
+    if (!(await C.confirm('Publish the preview?', isGm(d.kind)
+      ? `"${d.def?.name}" goes on ${team}'s branch of chaosD6-GameModels (one commit: ${gmFiles}), open to the players' votes. It enters the game when the vote merges it into main.`
+      : `"${d.def?.name}" goes on ${team}'s branch of chaosD6-${{ skill: 'Skills', class: 'Classes' }[d.kind] || 'Effects'}, marked custom, open to the players' votes${d.kind === 'class' ? ' (a class is not a card: no archive card is given)' : `, and every ${team} character gets the card in its archive`}.`))) return;
     const r = await post('publish', {});
-    if (r) C.toast(`Published on ${r.ref?.branch || 'the team branch'} — ${r.publish?.state || '?'}${d.kind === 'class' ? '' : `; ${r.granted?.length || 0} character(s) got the card`}`, r.publish?.state === 'published' ? 'ok' : 'info');
+    if (r) C.toast(`Published on ${r.ref?.branch || 'the team branch'} — ${r.publish?.state || '?'}${d.kind === 'class' || isGm(d.kind) ? '' : `; ${r.granted?.length || 0} character(s) got the card`}`, r.publish?.state === 'published' ? 'ok' : 'info');
   }));
   bDel.addEventListener('click', () => act(bDel, async () => {
     if (!(await C.confirm('Delete this draft?', 'The draft and its test result are removed from this node.'))) return;
@@ -822,6 +843,68 @@ async function routeDraft(rest) {
   return root;
 }
 
+// ---------------------------------------------------------------- #/gen/proposals — other teams' GameModels proposals
+// (user 2026-11-25: "Team first, then vote" — here AND in Test Random games). Listed from this node's Radicle storage
+// (GET proposals; "Fetch from the seed" = the OCI seed only), each as its card; "Try it" = the private test game on a
+// draft copy; the vote is −6..+6, a comment on a minus vote, never on your own team's.
+async function routeProposals() {
+  if (!loggedIn()) return signInPane();
+  let L = { available: false, proposals: [], limits: { min: -6, max: 6, comment_max: 500 } };
+  const body = h('div');
+  const load = async () => {
+    try { L = await genApi('proposals'); } catch (e) { C.toast(errText(e), 'error'); }
+    await loadGm();
+    draw();
+  };
+  const refresh = h('button', { class: 'au-btn', type: 'button' }, 'Fetch from the seed');
+  refresh.addEventListener('click', () => act(refresh, async () => {
+    const r = await genApi('proposals/refresh', { method: 'POST', body: {} });
+    C.toast(r.ok ? 'Fetched from the OCI seed' : r.error, r.ok ? 'ok' : 'error');
+    await load();
+  }));
+  const voteBox = (p) => {
+    const lim = L.limits || { min: -6, max: 6, comment_max: 500 };
+    const val = h('input', { type: 'range', min: lim.min, max: lim.max, step: 1, value: p.mine?.value ?? 0 });
+    const shown = h('b', { class: 'gm-vote-v' }, String(p.mine?.value ?? 0));
+    const comment = h('textarea', { class: 'au-prose', rows: 2, maxlength: lim.comment_max, placeholder: 'A comment (needed for a minus vote: say what is wrong with it)' }, p.mine?.comment || '');
+    val.addEventListener('input', () => { shown.textContent = `${Number(val.value) > 0 ? '+' : ''}${val.value}`; });
+    const send = h('button', { class: 'au-btn au-primary', type: 'button' }, p.mine ? 'Change my vote' : 'Vote');
+    send.addEventListener('click', () => act(send, async () => {
+      if (Number(val.value) < 0 && !comment.value.trim()) { C.toast('A minus vote needs a comment', 'error'); comment.focus(); return; }
+      const r = await genApi('proposals/vote', { method: 'POST', body: { branch: p.branch, commit: p.commit, value: Number(val.value), comment: comment.value } });
+      C.toast(`Vote saved${r.publish === 'desktop' || r.publish === 'phone' ? ' — publishing to the seed' : ''}`, 'ok');
+      await load();
+    }));
+    return h('div', { class: 'gm-vote' }, h('div', { class: 'au-bar' }, h('span', null, `${lim.min}`), val, h('span', null, `+${lim.max}`), shown), comment, h('div', { class: 'au-bar' }, send));
+  };
+  const draw = () => {
+    if (!L.available) { body.replaceChildren(h('div', { class: 'au-hint' }, L.why || 'No GameModels storage on this node.')); return; }
+    if (!L.proposals.length) { body.replaceChildren(h('div', { class: 'au-hint' }, 'No proposals in this node\'s storage yet — fetch from the seed.')); return; }
+    body.replaceChildren(...L.proposals.map(p => {
+      const tryBtn = h('button', { class: 'au-btn', type: 'button', title: 'A private test game with it (the same test as your own drafts)' }, 'Try it');
+      tryBtn.addEventListener('click', () => act(tryBtn, async () => {
+        const r = await genApi('proposals/try', { method: 'POST', body: { branch: p.branch, commit: p.commit } });
+        C.navigate(`#/gen/d/${r.draft.draft_id}`);
+      }));
+      const v = p.votes || {};
+      return h('div', { class: 'gm-proposal' },
+        h('div', { class: 'au-bar' }, h('b', null, p.name || p.id), h('span', { class: 'gm-pill' }, p.kind), h('span', { class: 'gm-pill r' }, `team ${p.team}`),
+          p.signature_ok ? h('span', { class: 'gm-pill' }, '✓ signed') : h('span', { class: 'gm-pill e', title: 'the signature does not verify' }, '⚠ unsigned'),
+          h('span', { class: 'au-hint' }, `${v.n | 0} vote(s)${v.n ? `, mean ${Number(v.mean).toFixed(1)}` : ''}${v.review ? ' · ⚑ review' : ''} · ${String(p.at || '').slice(0, 10)}`)),
+        h('div', { class: 'au-hint au-mono' }, `${p.branch} @${String(p.commit).slice(0, 8)} · ${p.files.join(', ')}`),
+        gmCard({ def: p.bundle, kind: p.kind }, { compact: true }),
+        h('div', { class: 'au-bar' }, tryBtn),
+        p.own ? h('div', { class: 'au-hint' }, 'Your team\'s own proposal — authors do not vote on it.') : voteBox(p));
+    }));
+  };
+  await load();
+  return pane('Team proposals', [
+    h('p', { class: 'au-hint' }, 'NPCs, buildings and monsters other teams published on their branches of chaosD6-GameModels. Try one in a private test game, then vote: −6 … +6 (a minus vote needs a comment). Votes are signed and sent to the OCI seed.'),
+    h('div', { class: 'au-bar' }, refresh, h('button', { class: 'au-btn', type: 'button', onclick: () => C.navigate('#/gen/') }, 'Your drafts')),
+    body,
+  ]);
+}
+
 // ---------------------------------------------------------------- registration
 export function initGeneration(ctx) {
   C = ctx;
@@ -832,9 +915,15 @@ export function initGeneration(ctx) {
     document.head.appendChild(st);
   }
   C.registerRoute('#/gen/d/', routeDraft);
+  C.registerRoute('#/gen/proposals', routeProposals);
   C.registerRoute('#/gen/', routeList);
   C.registerRoute('#/gen', routeList);
   // Entry points: header "Drafts" (before author.js's "New skill / effect / class", user 2026-11-23) and author.js's
   // "Generate from a description…" button on the New page (8a). Signed-in only, like the other edit actions.
   C.registerHeaderAction({ id: 'gen-drafts', label: 'Drafts', icon: '✦', before: 'au-new', onClick: () => C.navigate('#/gen/') });
+  // A GameModels entry (the GameModels collections of app.js): change it with the big model → the draft form, started
+  // from that entry (#/gen/<kind>/<id>)
+  C.registerEntryAction({ id: 'gen-gm-change', label: '✦ Change with the big model',
+    when: (c, entry) => loggedIn() && !!entry?.id && isGm(C.index?.collections?.find(x => x.id === c)?.kind),
+    onClick: (c, entry) => C.navigate(`#/gen/${C.index.collections.find(x => x.id === c).kind}/${encodeURIComponent(entry.id)}`) });
 }

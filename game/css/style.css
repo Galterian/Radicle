@@ -1250,6 +1250,7 @@ html.in-launcher main, html.in-launcher #hud, html.in-launcher footer#deck-bar {
 .launcher-card .profile-panel input.pp-input { min-width: 0; flex: 1 1 6em; padding: 3px 6px; }
 .profile-panel .pp-btn { background: #1b2a44; color: #e8ecf1; border: 1px solid #2a3c5c; border-radius: 4px; padding: 3px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-align: left; white-space: nowrap; }
 .profile-panel .pp-btn.pp-alt { background: #1a2333; }
+.profile-panel .pp-check { font-size: 12px; margin-left: 8px; opacity: 0.85; white-space: nowrap; }
 .profile-panel .pp-btn:hover:not([disabled]) { border-color: #2a6ddf; background: #20335a; }
 .profile-panel .pp-btn[disabled] { background: #141a24; color: #5a6a82; border-color: #1a2130; cursor: not-allowed; }
 .profile-panel .pp-btn.join-team-main { background: #1e3a26; border-color: #2f5c3a; }

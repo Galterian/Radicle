@@ -369,6 +369,15 @@ export async function handleEditorRequest(req, res, url, { repoRoot = path.resol
       if (!serveFile(res, safeJoin(ctx.dataDir, f))) notFound(res);
       return true;
     }
+    // chaosD6-GameModels (b9 2026-11-25): every kind as a read-only collection (gamemodels-collections.mjs)
+    if (rel.startsWith('gamemodels/')) {
+      const G = await import('./gamemodels-collections.mjs');
+      const f = rel.slice('gamemodels/'.length);
+      if (f === 'index.json') { sendText(res, 200, MIME['.json'], JSON.stringify(G.gameModelsIndex(ctx.dataDir))); return true; }
+      const gm = /^([a-z_]+)\.json$/.exec(f), c = gm && G.gameModelsCollection(ctx.dataDir, gm[1]);
+      if (c) sendText(res, 200, MIME['.json'], JSON.stringify(c)); else notFound(res);
+      return true;
+    }
     if (rel === 'defs/index.json') { sendText(res, 200, MIME['.json'], JSON.stringify(defsIndex(gameDir))); return true; }
     const m = /^defs\/(skill|effect|class)\/([a-z]+_[a-z0-9_]+)\.json$/.exec(rel);
     if (m && m[2].startsWith(`${m[1]}_`)) {

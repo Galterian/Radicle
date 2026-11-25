@@ -13,7 +13,12 @@
 //   POST media    { draft_id, resources }                → { draft }   the picture / sound only (not priced, no regeneration)
 //   POST test     { draft_id }                       → { draft }   starts the private background test game
 //   POST publish  { draft_id, message }                → { draft, ref, publish, granted }  only in "testing success"
+//                  (an npc / building / monster: the bundle on players/<team>/<id> of chaosD6-GameModels, then the vote)
 //   POST delete   { draft_id }
+//   GET  proposals             → { available, proposals: [{ kind, id, name, team, branch, commit, sha256, author, signature_ok, bundle, votes, mine, own }] }
+//   POST proposals/refresh     → rad sync <GameModels rid> --fetch --seed <OCI>   (the OCI seed only)
+//   POST proposals/try   { branch, commit }            → { draft }   another team's proposal as a draft (test it; not publishable)
+//   POST proposals/vote  { branch, commit, value, comment } → { key, mine, publish }   −6..+6, a comment on a minus vote; not the author
 //   POST key      { url: https://<host>/llm-big, key }  → the phone's OCI model + test service (llm.json, mode 600)
 // On the phone (CHAOSD6_MOBILE=1) generation calls the OCI 8B and the test runs on OCI's gen-test service
 // (tools/gen-test-server.mjs); publish goes through the radicle bridge (editor-publish.mjs publishVia 'bridge').
@@ -24,12 +29,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createGenJobs, GEN_KINDS } from './gen-jobs.mjs';
 import { genConfig } from './effect-gen.mjs';
-import { publishDefinition } from './editor-publish.mjs';
+import { publishDefinition, publishGameModels } from './editor-publish.mjs';
 import { loadProfile, addArchivedCard, addCustomClass } from './profile.mjs';
 import { vocab } from './gen-tags.mjs';
-import { GM_KINDS, catalogForEdit, models as gmModels } from './gm-gen.mjs';
-import { GAMEMODELS_DIR } from './gamemodels.mjs';
+import { GM_KINDS, catalogForEdit, checkBundle, bundleDefs, models as gmModels } from './gm-gen.mjs';
+import { GAMEMODELS_DIR, KINDS as GM_DEF_KINDS, defHash } from './gamemodels.mjs';
 import { fileURLToPath } from 'node:url';
+import { listGmProposals, refreshGmProposals } from './gm-proposals.mjs';
+import { whoAmI, recordVote, schedulePublish, VoteError, VALUE_MIN as VOTE_MIN, VALUE_MAX as VOTE_MAX, COMMENT_MAX } from './proposal-votes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -150,6 +157,36 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
         races: Object.values(m.race).map(r => ({ id: r.id, name: r.name, temper: r.temper || '' })),
         villages: Object.entries(m.village).map(([id, v]) => ({ id, race: v.race, size: v.size || 'village', walled: !!v.wall })) });
     }
+    // ---- other teams' GameModels proposals (gm-proposals.mjs): list (local Radicle storage), fetch from the OCI seed,
+    // try one in the private test game (imported as a draft), vote on it (proposal-votes.mjs, signed, published to the seed)
+    case 'GET proposals': {
+      let me = null;
+      try { const s = requireLogin(ctx); me = whoAmI({ profileFile: ctx.profileFile, team: s.team?.name || '' }); } catch { me = whoAmI({ profileFile: ctx.profileFile }); }
+      const l = listGmProposals({ profileFile: ctx.profileFile, me });
+      return sendJson(res, 200, { ok: true, ...l, proposals: l.proposals.map(({ ref, ...p }) => p), limits: { min: VOTE_MIN, max: VOTE_MAX, comment_max: COMMENT_MAX } });
+    }
+    case 'POST proposals/refresh': {
+      requireLogin(ctx);
+      await readJsonBody(req);
+      if (process.env.CHAOSD6_MOBILE === '1') fail(409, 'the phone has no GameModels storage yet — refresh on a desktop');
+      const r = refreshGmProposals();
+      return sendJson(res, r.ok ? 200 : 502, { ok: r.ok, ...(r.ok ? { out: r.out } : { error: `rad sync failed: ${r.error}` }) });
+    }
+    case 'POST proposals/try':
+    case 'POST proposals/vote': {
+      const s = requireLogin(ctx);
+      const b = await readJsonBody(req);
+      const p = listGmProposals({ profileFile: ctx.profileFile }).proposals.find(x => x.branch === String(b.branch || '') && x.commit === String(b.commit || ''));
+      if (!p) fail(404, 'no such proposal in the local storage (refresh first)');
+      if (route === 'POST proposals/try') return sendJson(res, 200, { ok: true, draft: call(() => jobs.importProposal({ kind: p.kind, bundle: p.bundle, proposal: p })) });
+      const value = Number(b.value);
+      if (!Number.isInteger(value) || value < VOTE_MIN || value > VOTE_MAX) fail(400, `a vote is an integer ${VOTE_MIN}..${VOTE_MAX}`);
+      let r;
+      try { r = recordVote({ ref: p.ref, value, comment: typeof b.comment === 'string' ? b.comment : '', profileFile: ctx.profileFile, team: s.team?.name || '' }); }
+      catch (e) { if (e instanceof VoteError) fail(400, e.message); throw e; }
+      const publish = r.vote.sig ? schedulePublish({ profileFile: ctx.profileFile }) : 'local';
+      return sendJson(res, 200, { ok: true, key: r.vote.key, mine: { value: r.vote.value, comment: r.vote.comment }, publish });
+    }
     case 'POST retry': {
       requireLogin(ctx);
       const b = await readJsonBody(req);
@@ -181,6 +218,21 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       draftOf(b);
       const d = call(() => jobs.beginPublish(b.draft_id));
       const kind = d.kind;
+      if (GM_KINDS.includes(kind)) {
+        // a GameModels bundle: checked again against the repo as it is now (main may have moved since the test), then one
+        // commit on players/<team>/<id> of chaosD6-GameModels (editor-publish.mjs publishGameModels); no archive grant —
+        // an NPC / building / monster is not a card; it enters the game when the vote merges it into main
+        let r;
+        try {
+          const c = checkBundle(d.def);
+          if (!c.ok) { jobs.endPublish(d.draft_id, { ok: false, error: c.problems.slice(0, 3).join('; ') }); return sendJson(res, 400, { ok: false, error: 'the draft no longer passes the GameModels check', errors: c.problems }); }
+          const defs = bundleDefs(d.def).map(([k, def]) => [GM_DEF_KINDS[k][0], def, defHash(def)]);
+          r = await publishGameModels({ bundle: { id: d.def.id, name: d.def.name, version: d.def.version, kind }, defs, identity: s.identity, team: s.team,
+            message: (typeof b.message === 'string' && b.message.trim() ? b.message : `${kind}: ${d.def.name}`).slice(0, 200) }, ctx.publish || {});
+        } catch (e) { jobs.endPublish(d.draft_id, { ok: false, error: e.message }); throw e; }
+        const done = jobs.endPublish(d.draft_id, { ok: true, info: { ...(r.ref || {}), state: r.publish?.state || null, error: r.publish?.error || null, granted: 0 } });
+        return sendJson(res, 200, { ok: true, draft: done, ref: r.ref, publish: r.publish, granted: [] });
+      }
       let v, r;
       try {
         v = await validateDefinition(kind, d.def, ctx);

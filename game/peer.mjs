@@ -348,7 +348,7 @@ for (const [rel, set] of [['features/feature_table.json', setFeatureCatalog], ['
 // chaosD6-GameModels (2026-11-24): races, village buildings, NPCs, monster agendas, quests — one compiled catalog
 // (tools/gamemodels-build.mjs). Villages change featureAt(): a peer without it diverges from peers that have it.
 const GAMEMODELS = (() => {
-  const tries = gameModelsCatalogTries([path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])], process.env);
+  const tries = gameModelsCatalogTries([path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), path.resolve(__dirname, 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])], process.env);
   const hit = tries.find(f => fsSync.existsSync(f));
   if (!hit) { console.warn(`[catalog] gamemodels/catalog.json NOT FOUND (${tries.join(' | ')}) — no villages on this peer; it will diverge from peers that have them`); return null; }
   const txt = fsSync.readFileSync(hit, 'utf8');
@@ -369,11 +369,12 @@ function pickActive(entry) {
 
 const data = {};
 // Split A (2026-11-25): the monster creature cards are the GameModels catalog's `creatures` (monster/2), the copy this
-// peer's villages came from — data/creatures.json (a frozen record) only when that catalog has none.
+// peer's villages came from. There is no data/creatures.json any more (2026-11-25, the user: GameModels is the only
+// home of monsters): a catalog without them would drop every monster on this peer only — refuse to start instead.
 const DATA_INDEX = await loadJson('index.json');
 for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'classes', 'elements']) {
   const cs = catalogSourceOf(DATA_INDEX, n), fromCat = cs && GAMEMODELS?.[cs.key]?.entries ? GAMEMODELS[cs.key] : null;
-  if (cs && !fromCat) console.warn(`[catalog] ${n}: the gamemodels catalog has no "${cs.key}" — data/${n}.json (frozen record) instead; peers with a newer catalog will diverge`);
+  if (cs && !fromCat) { console.error(`[catalog] ${n}: the gamemodels catalog (assets/gamemodels/catalog.json) has no "${cs.key}" — rebuild it (node tools/gamemodels-build.mjs)`); process.exit(1); }
   const f = fromCat || await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
@@ -1597,7 +1598,7 @@ if (entity.kind === 'character' && !profileChar) {
   for (const id of [...forcedE, ...poolE].slice(0, 3)) deck.push(makeEffectCard(id));
 }
 // Monster effect cards (user rulings 2026-11-15, rule_monster_deck_effects): a wild creature (not a companion /
-// summon) holds its creature card's deck_effects (thematic, data/creatures.json) + MONSTER_DECK_CFG.random random
+// summon) holds its creature card's deck_effects (thematic, its GameModels monster card) + MONSTER_DECK_CFG.random random
 // playable effects fixed per instance (seed: map seed, peer label, creature id — a restart rebuilds the same deck).
 const IS_MONSTER = entity.kind === 'creature' && !IS_COMPANION && !IS_HUMAN;
 // AI skirmish (2026-11-22, llm-brain.mjs): the role this bot plays for the local llama-server — '' = rules only.
@@ -1614,6 +1615,12 @@ const HIRED_BUILDER = IS_FOLLOWER && NPC_DEF?.role === 'builder' && Array.isArra
 // A siege engine an engineer built for a hero (user 2026-11-25): GameModels npc.siege { kind, class, min, max, speed |
 // rounds } — it follows its hero, plays only EP / EM and uses its class once a turn (siegePlan; resolver "siege").
 const SIEGE = IS_FOLLOWER && NPC_DEF?.role === 'siege' && NPC_DEF.siege ? NPC_DEF.siege : null;
+// Test Random with other teams' GameModels proposals (2026-11-25, ui-server + gm-proposals.mjs): GAMEMODELS_PROPOSALS
+// = the vote refs { kind: 'gamemodels', id, branch, commit, sha256, ns, author } of the proposals in this game's catalog.
+// The hero's snapshot lists them all (gm_proposals_json: the browser asks for a vote on the ones it meets); a unit that
+// IS one (its npc / creature id) carries its own ref (proposal_ref_json).
+const GM_PROPOSALS = (() => { try { const a = JSON.parse(process.env.GAMEMODELS_PROPOSALS || '[]'); return Array.isArray(a) ? a.filter(x => x && typeof x.id === 'string' && typeof x.branch === 'string') : []; } catch { return []; } })();
+const GM_PROPOSAL_SELF = GM_PROPOSALS.find(x => x.id === NPC_ID || x.id === CREATURE_ID) || null;
 entity.siegeShots = [];   // my shots in flight (js/siege.js makeShot records) — snapshot siege_shots_json
 entity.siegeTurn = -1;    // the turn my class was last used (ready again at the start of the next)
 entity.ram = null;        // Battering Ram: { q, r, n, at } — the wall hex I strike, n actions in a row up to action `at`
@@ -2144,6 +2151,8 @@ function currentStateSnapshot(slim = false) {
     ai_role: AI_ROLE,   // AI skirmish: 'builder' lets every resolver raise my Barricades (reveal `build`)
     ...(NPC_DEF ? { npc_id: NPC_ID, village_id: VILLAGE_ID, home_q: NPC_HOME?.q ?? null, home_r: NPC_HOME?.r ?? null, follower: IS_FOLLOWER ? 1 : 0, hostile_to_csv: [...villageHostile].sort().join(','), village_leaving: villageLeaving ? 1 : 0 } : {}),   // GameModels villager
     // siege engine (2026-11-25): its ammunition in flight, the turn its class was used, the ram's wall count — the resolver reads them
+    ...(GM_PROPOSALS.length && IS_HUMAN && !IS_COMPANION ? { gm_proposals_json: JSON.stringify(GM_PROPOSALS) } : {}),
+    ...(GM_PROPOSAL_SELF ? { proposal_ref_json: JSON.stringify(GM_PROPOSAL_SELF) } : {}),
     ...(SIEGE ? { siege_class: SIEGE.class, siege_shots_json: JSON.stringify(entity.siegeShots), siege_turn: entity.siegeTurn, ram_json: JSON.stringify(entity.ram) } : {}),
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     world_ledger_json: JSON.stringify(entity.worldLedger || []),
@@ -7519,7 +7528,17 @@ function testNpcTick() {
   console.log(`[${PEER_LABEL}] test npc: ${npc.name} (${id}) of ${v.team} at (${at.q},${at.r})`);
   spawnVillager(v, { npc: id, q: at.q, r: at.r, label, name: `${npc.name} of ${v.name}` });
 }
-setInterval(() => { try { villageTick(); questTick(); trespassTick(); testNpcTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
+// Test games (GAMEMODELS_TEST_FOLLOWER=<npc id>, private dimensions only): that unit follows me from the start, as
+// if bought (a siege engine of the engineer's) — once per game.
+function testFollowerTick() {
+  const id = process.env.GAMEMODELS_TEST_FOLLOWER;
+  if (!id || testFollowerTick.done || !DIM_PRIVATE || !GAMEMODELS?.npcs?.[id] || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0 || !dimMap) return;
+  const v = villagesNear(MAP_SEED, entity.tile.q, entity.tile.r, 400)[0];
+  if (!v) return;
+  testFollowerTick.done = true;
+  console.log(`[${PEER_LABEL}] test follower: ${recruitFollowers(v, { kind: 'allies', count: 1, units: [id] }, 'test').join(', ')}`);
+}
+setInterval(() => { try { villageTick(); questTick(); trespassTick(); testNpcTick(); testFollowerTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
 // A villager (not a follower): walks back in when no hero has been near for 90 s, or leaves to follow a hero.
 let villagerHeroAt = Date.now(), villagerRecsSeen = '';
 if (NPC_DEF && !IS_FOLLOWER) setInterval(() => {

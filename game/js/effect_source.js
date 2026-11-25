@@ -39,12 +39,13 @@
 // the badge actually changes) or via makeSourceBadge() for DOM-built cards.
 
 const BUILTIN_REPO = 'chaosD6-Effects';
-export const REPOS = { effect: BUILTIN_REPO, skill: 'chaosD6-Skills', class: 'chaosD6-Classes' };
+export const REPOS = { effect: BUILTIN_REPO, skill: 'chaosD6-Skills', class: 'chaosD6-Classes', gamemodels: 'chaosD6-GameModels' };
 const BUILTIN_BRANCHES = new Set(['', 'main', 'master']);
 // 'effect' | 'skill' | 'class' | null from a catalog id.
-export const kindOfId = id => /^effect_/.test(id || '') ? 'effect' : /^skill_/.test(id || '') ? 'skill' : /^class_/.test(id || '') ? 'class' : null;
-const _kindOfRepo = r => r === REPOS.skill ? 'skill' : r === REPOS.class ? 'class' : r === REPOS.effect ? 'effect' : null;
-const KINDS = new Set(['effect', 'skill', 'class']);
+// GameModels proposals (npc_ / bld_ / mon_, 2026-11-25): voted on in Test Random games like a foreign card
+export const kindOfId = id => /^effect_/.test(id || '') ? 'effect' : /^skill_/.test(id || '') ? 'skill' : /^class_/.test(id || '') ? 'class' : /^(npc|bld|mon)_/.test(id || '') ? 'gamemodels' : null;
+const _kindOfRepo = r => r === REPOS.skill ? 'skill' : r === REPOS.class ? 'class' : r === REPOS.effect ? 'effect' : r === REPOS.gamemodels ? 'gamemodels' : null;
+const KINDS = new Set(['effect', 'skill', 'class', 'gamemodels']);
 // The catalog id a ref / source names ('skill_dodge' for { kind: 'skill', id: 'dodge' }).
 export function refId(ref) {
   if (!ref || typeof ref !== 'object') return null;
@@ -155,7 +156,7 @@ export function effectSource(x) {
   const id = String(x);
   if (!kindOfId(id)) return null;
   const hit = _reg.get(id);
-  if (hit || DEV_FIXTURE !== 'all') return hit || null;
+  if (hit || DEV_FIXTURE !== 'all' || kindOfId(id) === 'gamemodels') return hit || null;   // no dev fixtures for monsters / NPCs
   if (!_fixtureCache.has(id)) _fixtureCache.set(id, _fixtureFor(id));
   return _fixtureCache.get(id);
 }

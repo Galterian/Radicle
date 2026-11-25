@@ -61,7 +61,11 @@ const defJsons = (dataIndex.collections || []).filter(c => c.definitions).flatMa
   return fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => `${c.definitions}/${f}`);
 });
 
-const scanTargets = [...dataJsons, ...defJsons, ...ASSET_CONFIG_JSONS];
+// Split A (2026-11-25): a collection whose entry names `catalog` (creatures) has no data file either — it is the compiled
+// chaosD6-GameModels catalog (monsters, NPCs, buildings, villages …): ship it and scan the sprites / sounds of every kind.
+const catalogJsons = [...new Set((dataIndex.collections || []).filter(c => c.catalog).map(c => `assets/${c.catalog}`))];
+
+const scanTargets = [...dataJsons, ...defJsons, ...catalogJsons, ...ASSET_CONFIG_JSONS];
 const alwaysInclude = new Set([...scanTargets, ...BIG_INDEXES]);
 
 const PATH_RE = /"(assets\/[^"\n\r]+?\.(?:png|bmp|wav|json|ogg|mp3))"/g;

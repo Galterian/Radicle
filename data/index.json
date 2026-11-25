@@ -83,7 +83,7 @@
       "catalog_key": "creatures",
       "entries": 29,
       "writes": "chaosD6-GameModels",
-      "purpose": "paper rules; since split A (2026-11-25) the monster cards are chaosD6-GameModels monsters/<id>.json (chaosd6.monster/2 card blocks), compiled into assets/gamemodels/catalog.json `creatures` — creatures.json is a frozen record (its version history), `file` the served name /data/creatures.json"
+      "purpose": "paper rules; since split A (2026-11-25) the monster cards are chaosD6-GameModels monsters/<id>.json (chaosd6.monster/2 card blocks), compiled into assets/gamemodels/catalog.json `creatures` — there is no data file (deleted 2026-11-25; its version history is in git) — `file` is only the served name /data/creatures.json, built from the catalog"
     },
     {
       "id": "terrain_items",

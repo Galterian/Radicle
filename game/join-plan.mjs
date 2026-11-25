@@ -87,7 +87,7 @@ function ensureBuildingCatalogs() {
     if (hit) { try { set(JSON.parse(fsSync.readFileSync(hit, 'utf8'))); } catch {} }
   }
   if (!villageCatalogReady()) {   // villages (chaosD6-GameModels) put buildings + a cleared disc on the map too
-    const f = gameModelsCatalogTries([path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])], process.env).find(x => fsSync.existsSync(x));
+    const f = gameModelsCatalogTries([path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), path.resolve(__dirname, 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])], process.env).find(x => fsSync.existsSync(x));
     if (f) { try { setVillageCatalog(testCatalogOverrides(JSON.parse(fsSync.readFileSync(f, 'utf8')), process.env)); } catch {} }
   }
 }

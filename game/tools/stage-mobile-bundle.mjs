@@ -65,6 +65,9 @@ for (const d of DATA_DIRS) {
 copies.push([path.join(ROOT, 'assets/features/feature_table.json'), path.join(DEST, 'js/catalog/feature_table.json')]);
 copies.push([path.join(ROOT, 'assets/terrain_bigfeatures/bigfeature_table.json'), path.join(DEST, 'js/catalog/bigfeature_table.json')]);
 for (const f of fs.readdirSync(path.join(ROOT, 'data')).filter(f => f.endsWith('.json'))) copies.push([path.join(ROOT, 'data', f), path.join(DEST, 'data', f)]);
+// The compiled GameModels catalog (monsters / NPCs / buildings / villages; data/creatures.json is gone since 2026-11-25):
+// at assets/ beside the bundle's data/, where defs-collection resolveCatalogFile looks first.
+copies.push([path.join(ROOT, 'assets/gamemodels/catalog.json'), path.join(DEST, 'assets/gamemodels/catalog.json')]);
 // Rules editor (2026-11-22): mobile-menu.mjs serves /rules/ from the repo-root editor.html + editor/ — on the phone
 // editor-api.mjs finds them beside the game code, so they land at the bundle root.
 if (fs.existsSync(path.join(ROOT, 'editor.html'))) {

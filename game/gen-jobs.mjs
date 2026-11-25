@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { genConfig, generateEffect, saveDraft, formatStatus, checkDraft, validatorReport } from './effect-gen.mjs';
 import { generateSkill } from './skill-gen.mjs';
 import { generateClass } from './class-gen.mjs';
-import { GM_KINDS, generateGameModel, bundleFromRepo, gmLook } from './gm-gen.mjs';
+import { GM_KINDS, generateGameModel, bundleFromRepo, gmLook, checkBundle } from './gm-gen.mjs';
 import { tagsPrompt, tagProblems, cleanTags } from './gen-tags.mjs';
 import { profileDir } from './profile.mjs';
 import { deviceSigner, authHeaders, OCI_URLS } from './oci-auth.mjs';
@@ -306,6 +306,21 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       start(d, 'generate', () => runGenerate(d, prior ? { prior, changes: text } : {}));
       return d;
     },
+    /** Another team's GameModels proposal (gm-proposals.mjs) as a draft in "preview": the private test game runs on it
+     *  ("Try it"); no generation, never published from here (beginPublish refuses it). proposal = { team, branch, commit, sha256 }. */
+    importProposal({ kind, bundle, proposal }) {
+      if (!isGm(kind) || bundle?.kind !== kind) throw Object.assign(new Error('not a GameModels proposal'), { status: 400 });
+      refuseBusy();
+      const same = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter(f => /^gen_[a-z0-9]+\.json$/.test(f)).map(f => read(f.slice(0, -5))).find(x => x?.proposal?.commit === proposal.commit);
+      if (same) return same;   // tried before: the same draft (and its test result)
+      const c = checkBundle(bundle);
+      const d = { draft_id: `gen_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`, kind, idea: `${proposal.team}'s proposal: ${bundle.name}`.slice(0, 1000), tags: [], resources: null, extras: [],
+        proposal: { team: String(proposal.team).slice(0, 80), branch: String(proposal.branch).slice(0, 200), commit: String(proposal.commit).slice(0, 40), sha256: String(proposal.sha256 || '').slice(0, 64) },
+        state: 'preview', fails: 0, def: bundle, verdict: c.verdict, problems: c.problems, check: c.check || null, report: [], tag_problems: [], suggestions: [], status: '', log: [], created_at: nowIso() };
+      d.file = saveDraft(bundle, defsDir(kind));
+      note(d, `imported ${proposal.branch} @${String(proposal.commit).slice(0, 8)}${c.ok ? '' : ` — the check finds: ${c.problems.slice(0, 3).join('; ')}`}`);
+      return write(d);
+    },
     retry(id, { extra = '', suggestions = [], tags = undefined, resources = undefined } = {}) {
       const d = read(id);
       if (!d) throw Object.assign(new Error('no such draft'), { status: 404 });
@@ -358,6 +373,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       const d = read(id);
       if (!d) throw Object.assign(new Error('no such draft'), { status: 404 });
       if (d.state !== 'testing success') throw Object.assign(new Error(`publish needs "testing success" (now: ${d.state})`), { status: 409 });
+      if (d.proposal) throw Object.assign(new Error(`this is ${d.proposal.team}'s proposal (${d.proposal.branch}) — vote on it; it is not yours to publish`), { status: 409 });
       refuseBusy();
       setState(d, 'publishing'); write(d);
       return d;

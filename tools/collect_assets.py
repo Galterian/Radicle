@@ -1,6 +1,13 @@
 """Copy every asset referenced by a `resources` key in data/*.json from ../extracted into assets/.
 
-    python tools/collect_assets.py [--dry-run] [--src ../extracted] [--data data] [--assets assets]
+    python tools/collect_assets.py [--dry-run | --index-only] [--src ../extracted] [--data data] [--assets assets]
+                                   [--gamemodels <chaosD6-GameModels checkout>]
+
+Sources of `resources` (2026-11-25, generic): the data/*.json collections, the definitions directories data/index.json
+names (`definitions`: effects / skills / classes card blocks) and every kind folder the chaosD6-GameModels repo's
+index.json lists (races, buildings, npcs, monsters, villages, quests, lib) — any `resources` object anywhere in a
+definition. used_by = "<collection or GameModels folder>:<id>:<where>"; GameModels ones are "gamemodels/<folder>:…".
+--index-only rewrites asset_index.json from the media already on disk (no copy, no .png conversion).
 
 Paths inside `resources` are repo-relative (`assets/<rest>`); the source is `<src>/<rest>`.
 Copied .bmp files also get a .png twin next to them. Writes assets/asset_index.json and,
@@ -24,10 +31,73 @@ def iter_paths(node, where=''):
     elif isinstance(node, list):
         for i, v in enumerate(node):
             yield from iter_paths(v, f'{where}[{i}]')
+    elif isinstance(node, str) and node.startswith(PREFIX):   # a bare path (GameModels buildings: sprites.base)
+        yield node, where
 
 
-def collect_refs(data_dir):
+def iter_resources(node, where=''):
+    """Yield (path, context) for every `path` under any `resources` object of a definition (card.resources, ...)."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            w = f'{where}.{k}' if where else k
+            if k == 'resources' and isinstance(v, (dict, list)):
+                yield from iter_paths(v, w)
+            else:
+                yield from iter_resources(v, w)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from iter_resources(v, f'{where}[{i}]')
+
+
+def resolve_gamemodels_dir(root, env=os.environ):
+    """Python twin of game/gamemodels.mjs resolveGameModelsDir: env, then a sibling checkout (one with lib/)."""
+    for k in ('CHAOSD6_GAMEMODELS_DIR', 'CHAOSD6_GAMEMODELS_REPO'):
+        if env.get(k):
+            return os.path.abspath(env[k])
+    for c in (os.path.join(root, '..', 'chaosd6-gamemodels-repo'), os.path.join(root, '..', '..', 'chaosd6-gamemodels-repo')):
+        if os.path.isdir(os.path.join(c, 'lib')):
+            return os.path.normpath(c)
+    return None
+
+
+def load_json(f):
+    return json.load(open(f, encoding='utf-8-sig'))
+
+
+def collect_definition_refs(refs, files, label):
+    for f in files:
+        try:
+            d = load_json(f)
+        except Exception as ex:
+            print(f'  ! cannot parse {f}: {ex}', file=sys.stderr)
+            continue
+        if not isinstance(d, dict) or not d.get('id'):
+            continue
+        for p, where in iter_resources(d):
+            refs.setdefault(p.replace('\\', '/'), []).append(f'{label}:{d["id"]}:{where}')
+
+
+def collect_refs(data_dir, gamemodels_dir=None):
     refs = {}  # path -> list of "collection:entry_id:where"
+    root = os.path.dirname(os.path.abspath(data_dir))
+    try:
+        index = load_json(os.path.join(data_dir, 'index.json'))
+    except Exception:
+        index = {}
+    for c in index.get('collections', []):          # effects / skills / classes: their definitions' card blocks
+        d = c.get('definitions') and os.path.join(root, c['definitions'])
+        if d and os.path.isdir(d):
+            collect_definition_refs(refs, sorted(glob.glob(os.path.join(d, '*.json'))), c['id'])
+    if gamemodels_dir:                              # every kind folder the GameModels repo indexes
+        try:
+            gm_index = load_json(os.path.join(gamemodels_dir, 'index.json'))
+        except Exception as ex:
+            gm_index = {}
+            print(f'  ! no GameModels index.json in {gamemodels_dir}: {ex}', file=sys.stderr)
+        for sub in sorted(k for k, v in gm_index.items() if isinstance(v, dict)):
+            collect_definition_refs(refs, sorted(glob.glob(os.path.join(gamemodels_dir, sub, '*.json'))), f'gamemodels/{sub}')
+    else:
+        print('  ! no chaosD6-GameModels checkout: races / NPCs / buildings / monsters are not indexed', file=sys.stderr)
     for jf in sorted(glob.glob(os.path.join(data_dir, '*.json'))):
         try:
             d = json.load(open(jf, encoding='utf-8'))
@@ -55,10 +125,16 @@ def main():
     ap.add_argument('--data', default=os.path.join(root, 'data'))
     ap.add_argument('--assets', default=os.path.join(root, 'assets'))
     ap.add_argument('--media', default=MEDIA_ROOT, help='where media files are copied (default: tools/asset_root.py)')
+    ap.add_argument('--gamemodels', default=resolve_gamemodels_dir(root), help='chaosD6-GameModels checkout (default: env / sibling)')
     ap.add_argument('--dry-run', action='store_true')
+    ap.add_argument('--index-only', action='store_true', help='rewrite asset_index.json from the media on disk; copy nothing')
     args = ap.parse_args()
+    try:
+        old_files = load_json(os.path.join(args.assets, 'asset_index.json')).get('files', {})
+    except Exception:
+        old_files = {}
 
-    refs = collect_refs(args.data)
+    refs = collect_refs(args.data, args.gamemodels)
     copied = skipped = missing = converted = 0
     total_bytes = 0
     index = {'files': {}, 'missing': [], 'png_twins': {}}
@@ -71,6 +147,20 @@ def main():
         rest = rel[len(PREFIX):]
         src = os.path.join(args.src, rest)
         dst = os.path.join(args.media, rest)
+        if args.index_only:
+            have = dst if os.path.isfile(dst) else src if os.path.isfile(src) else None
+            if not have:
+                print(f'  ! missing: {dst}  ({users[0]})')
+                index['missing'].append(rel)
+                missing += 1
+                continue
+            size = os.path.getsize(have)
+            total_bytes += size
+            index['files'][rel] = {'bytes': size, 'used_by': users, **({'generated': True} if old_files.get(rel, {}).get('generated') else {})}
+            if rel.lower().endswith('.bmp'):
+                index['png_twins'][rel] = rel[:-4] + '.png'
+            skipped += 1
+            continue
         if not os.path.isfile(src):
             if os.path.isfile(dst):      # generated asset (e.g. assets/terrain/*.png)
                 size = os.path.getsize(dst)

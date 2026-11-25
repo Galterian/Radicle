@@ -22,8 +22,10 @@ import { GAMEMODELS_DIR, KINDS, ROLES, BUILDING_ROLES, STATS, REWARDS, TALK_RESE
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const GM_KINDS = Object.freeze(['npc', 'building', 'monster']);
 export const BUNDLE_SCHEMA = 'chaosd6.gm-bundle/1';
-// Roles the generator writes. builder (builds[] + its price quest) and the gate guard post stay hand-made for now.
-export const GEN_ROLES = Object.freeze(ROLES.filter(r => r !== 'builder'));
+// Roles the generator writes. builder (builds[] + its price quest), the gate guard post and c2's dragon (centre post,
+// breath) / engineer (engine quests) / siege (followers only) stay hand-made for now.
+const HAND_MADE_ROLES = ['builder', 'dragon', 'engineer', 'siege'];
+export const GEN_ROLES = Object.freeze(ROLES.filter(r => !HAND_MADE_ROLES.includes(r)));
 export const GEN_BUILDING_ROLES = Object.freeze(BUILDING_ROLES.filter(r => r !== 'centre'));   // one centre per village
 export const LINE_KINDS = Object.freeze(['greet', 'quest', 'thanks', 'lore', 'warn']);
 const EXAMPLE_NPCS = ['npc_empire_reeve', 'npc_empire_chronicler'];
@@ -625,7 +627,7 @@ export function bundleFromRepo(kind, id, { m = models() } = {}) {
 /** What the editor lists to start from: [{ kind, id, name, race, role }] (a monster: role = its tags). */
 export function catalogForEdit({ m = models() } = {}) {
   return [
-    ...Object.values(m.npc).filter(n => n.role !== 'builder').map(n => ({ kind: 'npc', id: n.id, name: n.name, race: n.race, role: n.role })),
+    ...Object.values(m.npc).filter(n => !HAND_MADE_ROLES.includes(n.role)).map(n => ({ kind: 'npc', id: n.id, name: n.name, race: n.race, role: n.role })),
     ...Object.values(m.building).filter(b => b.role !== 'centre').map(b => ({ kind: 'building', id: b.id, name: b.name, race: b.race, role: b.role })),
     ...genMonsters(m).map(mo => ({ kind: 'monster', id: mo.id, name: mo.name, race: mo.race, role: (mo.card.tags || []).join(', ') })),
   ];

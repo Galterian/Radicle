@@ -32,7 +32,8 @@ const KIND_OF = { effects: 'effect', skills: 'skill', classes: 'class' };
 const ID_PREFIX = [[/^elem_/, 'elements'], [/^rule_/, 'rules'], [/^effect_/, 'effects'], [/^skill_/, 'skills'], [/^class_/, 'classes'],
   [/^mon_/, 'creatures'], [/^char_/, 'characters'], [/^action_/, 'actions'], [/^stat_/, 'stats'], [/^contra_/, 'contradictions'],
   [/^mode_/, 'game_modes'], [/^evt_/, 'hashgraph_events'], [/^sync_/, 'sync_protocol'], [/^governance_/, 'governance'],
-  [/^session_/, 'dimension_session'], [/^(item|mine|tower|crystal)_/, 'terrain_items']];
+  [/^session_/, 'dimension_session'], [/^(item|mine|tower|crystal)_/, 'terrain_items'],
+  [/^race_/, 'gm_races'], [/^bld_/, 'gm_buildings'], [/^npc_/, 'gm_npcs'], [/^vil_/, 'gm_villages'], [/^quest_/, 'gm_quests'], [/^agenda_/, 'gm_lib']];
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
 
 /* ------------------------------------------------------------------ loaders */
@@ -41,8 +42,9 @@ const fileOf = (x) => collOf(x)?.file || (String(x).endsWith('.json') ? String(x
 function getCollection(x) {
   const file = fileOf(x);
   if (!S.cache.has(file)) {
-    const p = fetch('data/' + encodeURIComponent(file), { cache: 'no-cache' }).then(async (r) => {
-      if (!r.ok) throw new Error(`data/${file}: HTTP ${r.status}`);
+    const url = collOf(x)?.url || 'data/' + encodeURIComponent(file);   // GameModels kinds: gamemodels/<folder>.json
+    const p = fetch(url, { cache: 'no-cache' }).then(async (r) => {
+      if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
       const text = await r.text();
       const json = JSON.parse(text.replace(/^﻿/, ''));
       S.texts.set(file, text); S.loaded.set(file, json);
@@ -229,7 +231,7 @@ function renderNav() {
       const json = S.loaded.get(c.file);
       const n = json ? (json.entries || []).length : c.entries;
       items.push(el('a', { class: 'nav-item' + (c.id === active ? ' active' : ''), href: '#/' + c.id, title: c.purpose || '' },
-        el('span', { class: 'nav-name' }, prettyId(c.id)),
+        el('span', { class: 'nav-name' }, c.label || prettyId(c.id)),
         c.definitions ? el('span', { class: 'badge-defs', title: 'Cards built from the definitions in ' + c.definitions }, 'defs') : null,
         c.catalog ? el('span', { class: 'badge-defs', title: 'Cards of the chaosD6-GameModels definitions (' + c.catalog + ')' }, 'models') : null,
         el('span', { class: 'nav-count' + (json ? ' loaded' : '') }, n ?? '')));
@@ -297,7 +299,7 @@ async function renderList(coll) {
   };
   filter.addEventListener('input', debounce(paint, 120));
   list.replaceChildren(el('div', { class: 'list-head' },
-    el('div', { class: 'list-title' }, el('h2', null, prettyId(coll.id)), el('span', { class: 'muted' }, `${entries.length} entries`),
+    el('div', { class: 'list-title' }, el('h2', null, coll.label || prettyId(coll.id)), el('span', { class: 'muted' }, `${entries.length} entries`),
       coll.definitions ? el('span', { class: 'badge-defs' }, 'definitions') : null, coll.catalog ? el('span', { class: 'badge-defs' }, 'GameModels') : null),
     filter), body);
   paint();
@@ -605,6 +607,12 @@ async function boot() {
     detectSession(),
   ]).catch(e => { $('#list').replaceChildren(el('div', { class: 'empty err' }, 'Cannot load the rules index: ' + (e.message || e))); return [null, null]; });
   if (!index) return;
+  // chaosD6-GameModels (2026-11-25): every kind of the GameModels repo (races, buildings, NPCs, monsters, villages,
+  // quests, …) as a read-only collection, listed by the node (game/gamemodels-collections.mjs); none on the public site
+  try {
+    const gm = await fetch('gamemodels/index.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null));
+    for (const c of gm?.collections || []) if (!(index.collections || []).some(x => x.id === c.id)) index.collections.push(c);
+  } catch { /* no GameModels on this node */ }
   S.index = ctx.index = index;
   S.session = ctx.session = session;
   renderMode(); renderNav(); renderHeaderActions();

@@ -36,12 +36,15 @@ import { idFromPrivateKeyPem, rawPublicKeyFromId, idFromRawPublicKey, generateId
 export const VALUE_MIN = -6, VALUE_MAX = 6;
 export const COMMENT_MAX = 500;
 export const REVIEW_MIN_VOTES = 10, REVIEW_MEAN_MAX = -3;   // ruling (4): below 10 votes, no effect
-export const KINDS = ['effect', 'skill', 'class'];
-export const REPO_NAMES = { effect: 'chaosD6-Effects', skill: 'chaosD6-Skills', class: 'chaosD6-Classes' };
+// gamemodels (2026-11-25): a GameModels bundle on players/<team>/<id> of chaosD6-GameModels (an NPC + its quests, a
+// building, a monster — editor-publish.mjs publishGameModels); id = the bundle's main definition (npc_ / bld_ / mon_)
+export const KINDS = ['effect', 'skill', 'class', 'gamemodels'];
+export const REPO_NAMES = { effect: 'chaosD6-Effects', skill: 'chaosD6-Skills', class: 'chaosD6-Classes', gamemodels: 'chaosD6-GameModels' };
 export const DEFAULT_RIDS = {
   effect: process.env.CHAOSD6_EFFECTS_RID || 'rad:z9X3fYPnz8QZnBmfnCaoY73zeKRZ',
   skill: process.env.CHAOSD6_SKILLS_RID || 'rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5',
   class: process.env.CHAOSD6_CLASSES_RID || 'rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi',
+  gamemodels: process.env.CHAOSD6_GAMEMODELS_RID || 'rad:z48usa3nUHDWMc67TYwiFzL8DixbC',   // published 2026-11-25
 };
 export const OCI_SEED_NID = process.env.CHAOSD6_OCI_SEED_NID || 'z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT';
 export const VOTES_FILE = 'proposal_votes.json';
@@ -52,7 +55,7 @@ export const NID_RE = /^z6Mk[1-9A-HJ-NP-Za-km-z]{40,50}$/;
 const RID_RE = /^(rad:)?z[1-9A-HJ-NP-Za-km-z]{20,}$/;
 const VOTER_RE = /^(z6Mk[1-9A-HJ-NP-Za-km-z]{40,50}|peer:[A-Za-z0-9._-]{1,120})$/;
 const SIG_DOMAIN = 'chaosd6-proposal-vote\n';
-const KIND_OF_ID = (id) => /^effect_/.test(id) ? 'effect' : /^skill_/.test(id) ? 'skill' : /^class_/.test(id) ? 'class' : null;
+const KIND_OF_ID = (id) => /^effect_/.test(id) ? 'effect' : /^skill_/.test(id) ? 'skill' : /^class_/.test(id) ? 'class' : /^(npc|bld|mon)_/.test(id) ? 'gamemodels' : null;
 const clip = (s, n) => String(s ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, n);
 
 export class VoteError extends Error { constructor(code, message) { super(message); this.name = 'VoteError'; this.code = code; this.status = 400; } }

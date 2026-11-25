@@ -73,7 +73,7 @@ ok(JSON.stringify(stripBundle(prior)).length < 3000 && !JSON.stringify(stripBund
 // ---- a building --------------------------------------------------------------------------------------------------------
 r = await generateDef(gmSpec('building', { dir }), { idea: 'a windmill that trains peasants', cfg, fetchImpl: fake(JSON.stringify({ building: { id: 'bld_empire_windmill', name: 'Windmill', race: 'race_empire', role: 'producer', bank: { stat: 'matter', value: 28 }, blocks: true, produces: { npc: 'npc_empire_peasant', every_turns: 25 }, text: 'Its sails never stop.' }, place: { village: 'vil_empire' } })) });
 ok(r.ok && r.def.building.card.resources.sprites.base && r.def.touches.village.layout.some(l => l.building === 'bld_empire_windmill'), `new building → ok, art, in the village layout (${r.problems.join('; ')})`);
-ok(catalogForEdit({ m }).some(x => x.id === 'npc_empire_chronicler') && !catalogForEdit({ m }).some(x => x.role === 'builder' || x.role === 'centre'), 'catalogForEdit lists NPCs + buildings, not builders / centres');
+ok(catalogForEdit({ m }).some(x => x.id === 'npc_empire_chronicler') && !catalogForEdit({ m }).some(x => ['builder', 'centre', 'dragon', 'engineer', 'siege'].includes(x.role)), 'catalogForEdit lists NPCs + buildings, not builders / centres');
 ok(bundleDefs(r.def).map(([k]) => k).join() === 'building,village,race', 'bundleDefs: the building, the village and race it changes');
 
 // ---- monsters (chaosd6.monster/2: the creature card) -------------------------------------------------------------------

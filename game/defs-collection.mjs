@@ -26,9 +26,9 @@ export function definitionsCollection(id, dir, source = dir) {
 
 // Split A (2026-11-25): a collection whose index entry names `catalog` (creatures: "gamemodels/catalog.json",
 // catalog_key "creatures") is read from the compiled chaosD6-GameModels catalog (tools/gamemodels-build.mjs) — the
-// monster/2 cards; its data file stays as a frozen record. The catalog file is the one the peers read (peer.mjs
-// GAMEMODELS): env GAMEMODELS_CATALOG_FILE (a test game's own) first, then assets/ beside data/, beside game/, the
-// CHAOSD6_ASSETS_DIR (phone). A catalog without that key → null (the caller falls back to the data file).
+// monster/2 cards; there is no data file any more (deleted 2026-11-25, its history is in git). The catalog file is the
+// one the peers read (peer.mjs GAMEMODELS): env GAMEMODELS_CATALOG_FILE (a test game's own) first, then assets/ beside
+// data/, beside game/, the CHAOSD6_ASSETS_DIR (phone). A catalog without that key → null (readCollection throws).
 export const catalogSourceOf = (index, id) => { const c = (index?.collections || []).find(x => x.id === id); return c?.catalog ? { file: c.catalog, key: c.catalog_key || id } : null; };
 // Where a collection is authored when not in its data file (definitions dir | "catalog#key"), else null: logic-apply
 // skips it, rebalance / editor-api proposals refuse it.
@@ -49,6 +49,8 @@ export function readCollection(dataDir, id, index = JSON.parse(fs.readFileSync(p
   const cs = catalogSourceOf(index, id), cf = cs && resolveCatalogFile(dataDir, cs.file);
   const fromCat = cf && catalogCollection(id, cf, cs.key);
   if (fromCat) return fromCat;
+  // 2026-11-25 (user): the GameModels repo is the only copy — no data/creatures.json to fall back to.
+  if (cs) throw new Error(`${id}: no compiled GameModels catalog with "${cs.key}" (${cf || cs.file}) — run tools/gamemodels-build.mjs`);
   const file = (index.collections || []).find(x => x.id === id)?.file || `${id}.json`;
   return JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf8'));
 }

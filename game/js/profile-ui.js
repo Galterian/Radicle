@@ -83,7 +83,7 @@ export const teamCountOptions = (n) => n >= 2 ? Array.from({ length: n - 1 }, (_
 export const peerSearch = (port, mobile = IS_MOBILE) => `?peer=${port}${mobile ? '&mobile=1' : ''}`;
 export const launchBody = {
   testCharacter: (profileCharId) => ({ mode: 'test-character', profileCharId }),
-  testRandom: () => ({ mode: 'test-random' }),
+  testRandom: (proposals = false) => ({ mode: 'test-random', ...(proposals ? { proposals: true } : {}) }),
   testTeam: (count, tier) => ({ mode: 'test-team', count: Number(count), tier: tier === 'strong' ? 'strong' : 'reachable' }),
   // count > 1: the top character opens the gate, the next count−1 arrive beside it on the tier ring.
   joinTeam: (dimensionName, doorId, count = null, tier = null) => ({
@@ -517,10 +517,14 @@ function renderPanel() {
 
   // 1. Test my character <character> | Test Random character
   const testSel = sel(charOpts.length ? charOpts : [{ value: '', text: 'no characters yet' }], top?.id, { class: 'pp-select', disabled: !has, title: 'which character to test' });
+  // Test Random with other teams' GameModels proposals (2026-11-25): remembered on this device
+  const propBox = h('input', { type: 'checkbox', checked: (() => { try { return localStorage.getItem('chaosd6.testProposals') === '1'; } catch { return false; } })(),
+    onchange: (ev) => { try { localStorage.setItem('chaosd6.testProposals', ev.target.checked ? '1' : '0'); } catch {} } });
   const od = S.od = { testSel };   // one dimension at a time: refreshOneDim greys these launch buttons
   row(od.test = btn('Test my character', () => launchProfile(launchBody.testCharacter(testSel.value), `test game as ${chars.find(c => c.id === testSel.value)?.name || 'my character'}`), { disabled: !has }),
     [testSel],
-    btn('Test Random character', () => launchProfile(launchBody.testRandom(), 'test game with a random character'), { class: 'pp-btn pp-alt' }));
+    h('span', null, btn('Test Random character', () => launchProfile(launchBody.testRandom(propBox.checked), `test game with a random character${propBox.checked ? ' and other teams\' proposals' : ''}`), { class: 'pp-btn pp-alt' }),
+      h('label', { class: 'pp-check', title: 'Up to 3 NPCs / buildings / monsters other teams proposed to chaosD6-GameModels join the game; meet them and vote (+6..−6)' }, propBox, ' with other teams\' proposals')));
   // 2. Edit a character profile <character> | Create New character
   const editSel = sel(charOpts.length ? charOpts : [{ value: '', text: 'no characters yet' }], top?.id, { class: 'pp-select', disabled: !has, title: 'which character to edit' });
   row(btn('Edit a character profile', () => openCharacterEditor('edit', editSel.value), { disabled: !has }),

@@ -284,7 +284,7 @@ const AI_BUILDERS = Math.max(0, Number(process.env.AI_BUILDERS ?? 2));
 // `override` (profile launches, user ruling 2026-11-13) replaces the hero and/or
 // the default ally: { hero: profile character | null (random), allies: [profile
 // characters] (bots, alliance npc_a) | null (the Pride Guardian), tier }.
-async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, override = null) {
+async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag, proposals: withProposals }, override = null) {
   if (startedDimension) return { ...startedDimension, status: 'already-running' };
   // Test my character / Test my team / Test Random character are LOCAL and PRIVATE (user 2026-11-16): no Door, no
   // Nostr bus, loopback only, an unguessable DIM_ID, never unattended — and so never "one dimension at a time"
@@ -307,6 +307,25 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag }, ove
   // team's published ones, then built-ins (test-priority.mjs; player-1 only — a harness's FORCE_FOREIGN_* wins).
   const prio = mode === 'test-random' && !pc ? testPriorityEnv(file, { loadProfile }) : { env: {}, summary: '' };
   if (prio.summary) console.log(`[launcher] Test Random character: ${prio.summary}`);
+  // Test Random with other teams' GameModels proposals (user 2026-11-25 "Both": players vote on them in the editor AND
+  // in Test Random games; body.proposals / TEST_WITH_PROPOSALS=1): gm-proposals.mjs compiles up to 3 foreign proposals
+  // over the repo into a temp catalog and names the test hooks. Its env goes into the launcher's own env (one game per
+  // launcher) so the village placement below, the catalog the browser gets and every peer read the same catalog — a
+  // key already set (a gen-test runner's GAMEMODELS_CATALOG_FILE, a harness's TEST_FOES) is never overridden.
+  if (mode === 'test-random' && !pc && (withProposals === true || process.env.TEST_WITH_PROPOSALS === '1')) {
+    try {
+      const { proposalTestCatalog } = await import('./gm-proposals.mjs');
+      const { whoAmI } = await import('./proposal-votes.mjs');
+      const pt = await proposalTestCatalog({ profileFile: file, me: whoAmI({ profileFile: file }), max: 3, outDir: path.join(os.tmpdir(), `chaosd6-gm-proposals-${DIM_ID}`) });
+      if (!pt.file) console.log('[launcher] Test Random: no other team\'s GameModels proposal to try');
+      else {
+        const kept = Object.entries(pt.env).filter(([k]) => process.env[k] === undefined || process.env[k] === '');
+        for (const [k, v] of kept) process.env[k] = v;
+        setVillageCatalog(null);   // villageNearSpawn reloads it from the proposals catalog
+        console.log(`[launcher] Test Random with proposals: ${pt.proposals.map(p => `${p.kind} ${p.name || p.id} (${p.team || '?'})`).join(', ')}${kept.length < Object.keys(pt.env).length ? ` — kept the harness's ${Object.keys(pt.env).filter(k => !kept.some(([x]) => x === k)).join(', ')}` : ''}`);
+      }
+    } catch (e) { console.warn(`[launcher] Test Random: proposals skipped — ${e.message}`); }
+  }
   // AI skirmish (2026-11-22, game/llm-brain.mjs): Create Dimension (any non-test launch; body.ai false / AI_SKIRMISH=0
   // turns it off, body.ai true turns it on for a test) adds a rival team (npc_c, hostile to everyone) and NPC builders
   // (npc_a, raise Barricades) and gives every bot an AI_ROLE for the local llama-server (LLM_URL, default

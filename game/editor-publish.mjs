@@ -137,7 +137,8 @@ async function radNid(env) {
 }
 
 // ------------------------------------------------------------------ desktop: git
-async function commitGit({ kind, def, sha, identity, team, message, branch, rid, gitdir, nid, remoteUrlFor, env, now }) {
+// files [{ path, text }] + manifest [{ key, id, sha256 }] (index.json maps) on main's tree; subject / body = the message.
+async function commitGit({ files, manifest: entries, subject, body, repoName, team, identity, branch, rid, gitdir, nid, remoteUrlFor, env, now }) {
   const ref = `refs/heads/${branch}`;
   const g = (args, o = {}) => run('git', ['--git-dir', gitdir, ...args], { env, ...o });
   let step = 'init';
@@ -154,7 +155,7 @@ async function commitGit({ kind, def, sha, identity, team, message, branch, rid,
     try { await g(['fetch', '-q', remoteUrlFor(rid, null), `+refs/heads/${MAIN_BRANCH}:${mainRef}`], { timeout: 60e3 }); } catch (e) { fetchErr = e; }
     let main;
     try { main = await g(['rev-parse', '--verify', '-q', `${mainRef}^{commit}`]); } catch { main = null; }
-    if (!main) return { ok: false, commit: null, error: `cannot read ${REPO_NAMES[kind]} ${MAIN_BRANCH} (${fetchErr ? errText(fetchErr) : 'no main'}) — is the repo seeded on this node? (rad clone ${rid})` };
+    if (!main) return { ok: false, commit: null, error: `cannot read ${repoName} ${MAIN_BRANCH} (${fetchErr ? errText(fetchErr) : 'no main'}) — is the repo seeded on this node? (rad clone ${rid})` };
     let tip = null;
     try { tip = await g(['rev-parse', '--verify', '-q', `${ref}^{commit}`]); } catch { tip = null; }
     step = 'commit';
@@ -163,15 +164,18 @@ async function commitGit({ kind, def, sha, identity, team, message, branch, rid,
     let tree;
     try {
       await run('git', ['--git-dir', gitdir, 'read-tree', `${main}^{tree}`], { env: ienv });
-      const blob = await g(['hash-object', '-w', '--stdin'], { input: JSON.stringify(def, null, 2) + '\n' });
-      await run('git', ['--git-dir', gitdir, 'update-index', '--add', '--cacheinfo', `100644,${blob},${defPath(kind, def.id)}`], { env: ienv });
+      for (const fl of files) {
+        const blob = await g(['hash-object', '-w', '--stdin'], { input: fl.text });
+        await run('git', ['--git-dir', gitdir, 'update-index', '--add', '--cacheinfo', `100644,${blob},${fl.path}`], { env: ienv });
+      }
       // index.json manifest (tools/manifest.mjs of the repo template): { format, hash, <subdir>: { id: sha256 }, lib… }
       let manifest = null;
       try { manifest = JSON.parse(await g(['cat-file', '-p', `${main}:index.json`])); } catch { manifest = null; }
       if (manifest && typeof manifest === 'object') {
-        const key = SUBDIRS[kind];
-        const map = { ...(manifest[key] || {}), [def.id]: sha };
-        manifest[key] = Object.fromEntries(Object.keys(map).sort().map(k => [k, map[k]]));
+        for (const { key, id, sha256 } of entries) {
+          const map = { ...(manifest[key] || {}), [id]: sha256 };
+          manifest[key] = Object.fromEntries(Object.keys(map).sort().map(k => [k, map[k]]));
+        }
         const mblob = await g(['hash-object', '-w', '--stdin'], { input: JSON.stringify(manifest, null, 2) + '\n' });
         await run('git', ['--git-dir', gitdir, 'update-index', '--add', '--cacheinfo', `100644,${mblob},index.json`], { env: ienv });
       }
@@ -186,8 +190,6 @@ async function commitGit({ kind, def, sha, identity, team, message, branch, rid,
         try { await g(['merge-base', '--is-ancestor', main, tip]); mainIn = true; } catch { mainIn = false; }
         if (!mainIn) parents.push(main);
       } else parents.push(main);
-      const subject = `${def.id} ${def.version}: ${String(message || def.name || 'new ' + kind).replace(/[\r\n]+/g, ' ').slice(0, 160)}`;
-      const body = `${subject}\n\nNew ${kind} by team ${team.name}, authored in the chaosD6 rules editor.\n\nChaosd6-Author: ${identity.id}\nChaosd6-Signature: ${signDefinition(identity.privateKeyPem, def)}\n`;
       const who = { GIT_AUTHOR_NAME: team.name, GIT_AUTHOR_EMAIL: `${identity.id}@chaosd6`, GIT_COMMITTER_NAME: team.name, GIT_COMMITTER_EMAIL: `${identity.id}@chaosd6`,
         GIT_AUTHOR_DATE: now().toISOString(), GIT_COMMITTER_DATE: now().toISOString() };
       commit = await run('git', ['--git-dir', gitdir, 'commit-tree', tree, ...parents.flatMap(p => ['-p', p]), '-F', '-'], { env: { ...env, ...who }, input: body });
@@ -258,7 +260,10 @@ export function publishDefinition({ kind, def, identity, team, message = '' }, h
       const radSync = hooks.radSync !== false;
       const nid = hooks.nid ?? (radSync ? await radNid(env) : null);
       const gitdir = path.join(dirOf(hooks), 'editor-defs-git', `${ridBare(rid)}.git`);
-      res = await commitGit({ kind, def, sha, identity, team, message, branch, rid, gitdir, nid, remoteUrlFor: hooks.remoteUrlFor || defaultRemoteUrl, env, now });
+      const subject = `${def.id} ${def.version}: ${String(message || def.name || 'new ' + kind).replace(/[\r\n]+/g, ' ').slice(0, 160)}`;
+      const body = `${subject}\n\nNew ${kind} by team ${team.name}, authored in the chaosD6 rules editor.\n\nChaosd6-Author: ${identity.id}\nChaosd6-Signature: ${signDefinition(identity.privateKeyPem, def)}\n`;
+      res = await commitGit({ files: [{ path: defPath(kind, def.id), text: JSON.stringify(def, null, 2) + '\n' }], manifest: [{ key: SUBDIRS[kind], id: def.id, sha256: sha }],
+        subject, body, repoName: REPO_NAMES[kind], identity, team, branch, rid, gitdir, nid, remoteUrlFor: hooks.remoteUrlFor || defaultRemoteUrl, env, now });
       if (res.ok) { const p = await pushGit({ branch, rid, gitdir, radSync, env }); if (!p.ok) res = { ...res, ok: false, error: p.error }; }
     }
     const at = now().toISOString();
@@ -271,10 +276,59 @@ export function publishDefinition({ kind, def, identity, team, message = '' }, h
   });
 }
 
+// ------------------------------------------------------------------ chaosD6-GameModels bundles (2026-11-25)
+// A GameModels draft (game/gm-gen.mjs bundle: an NPC + its quests + the village / race it changes, a building, a
+// monster) is ONE commit of several files on players/<team-slug>/<bundle-id-slug> of chaosD6-GameModels, every file a
+// definition of that repo (<subdir>/<id>.json) + its sha256 in index.json (gamemodels.mjs defHash). The signature
+// covers sha256(canonicalJson({ id, files: { <path>: <sha256> } })). Voting on the branch: the same as any player branch.
+// Desktop only for now (the phone has no GameModels checkout to generate from; its bridge publishes one file).
+export const GAMEMODELS_RID = DEFAULT_RIDS.gamemodels;   // proposal-votes.mjs (published 2026-11-25; CHAOSD6_GAMEMODELS_RID overrides)
+export const GAMEMODELS_REPO_NAME = REPO_NAMES.gamemodels;
+export const gmBranchOf = (teamSlug, bundleId) => `${PLAYER_BRANCH_PREFIX}${teamSlug}/${String(bundleId).replace(/_/g, '-')}`;
+/** The signed content of a bundle: { id, files: { path: sha256 } } of its definitions (defs = [[subdir, def, sha256]]). */
+export const gmSignedOf = (id, defs) => ({ id, files: Object.fromEntries(defs.map(([sub, def, sha]) => [`${sub}/${def.id}.json`, sha]).sort(([a], [b]) => a.localeCompare(b))) });
+/** bundle = { id, name, version, kind }, defs = [[subdir, def, sha256]] (the caller: gm-gen bundleDefs + gamemodels KINDS / defHash).
+ *  → { ok, ref: { repo, branch, commit, id, sha256 }, publish: { state, error? } } — sha256 = of the signed content. */
+export function publishGameModels({ bundle, defs, identity, team, message = '' }, hooks = {}) {
+  return serial(async () => {
+    if (!identity?.privateKeyPem) throw new Error('no identity key');
+    if (!defs?.length) throw new Error('an empty bundle');
+    const now = hooks.now || (() => new Date());
+    const via = publishVia(hooks);
+    const rid = hooks.rid || GAMEMODELS_RID, branch = gmBranchOf(team.slug, bundle.id);
+    const signed = gmSignedOf(bundle.id, defs), sha = defSha(signed);
+    const key = `gamemodels:${bundle.id}`;
+    const status = loadStatus(hooks);
+    const prev = status.defs[key] || {};
+    let res;
+    if (via === 'bridge') res = { ok: false, commit: null, error: 'the phone cannot publish GameModels drafts yet — publish from a desktop' };
+    else {
+      const env = toolEnv(hooks.env);
+      const radSync = hooks.radSync !== false;
+      const nid = hooks.nid ?? (radSync ? await radNid(env) : null);
+      const gitdir = path.join(dirOf(hooks), 'editor-defs-git', `${ridBare(rid)}.git`);
+      const subject = `${bundle.id} ${bundle.version}: ${String(message || bundle.name || `new ${bundle.kind}`).replace(/[\r\n]+/g, ' ').slice(0, 160)}`;
+      const list = defs.map(([sub, def]) => `- ${sub}/${def.id}.json (${def.version || ''})`).join('\n');
+      const body = `${subject}\n\nA ${bundle.kind} by team ${team.name}, generated in the chaosD6 editor. Files:\n${list}\n\nChaosd6-Author: ${identity.id}\nChaosd6-Signature: ${signDefinition(identity.privateKeyPem, signed)}\n`;
+      res = await commitGit({ files: defs.map(([sub, def]) => ({ path: `${sub}/${def.id}.json`, text: JSON.stringify(def, null, 2) + '\n' })),
+        manifest: defs.map(([sub, def, s]) => ({ key: sub, id: def.id, sha256: s })), subject, body, repoName: GAMEMODELS_REPO_NAME,
+        identity, team, branch, rid, gitdir, nid, remoteUrlFor: hooks.remoteUrlFor || defaultRemoteUrl, env, now });
+      if (res.ok) { const p = await pushGit({ branch, rid, gitdir, radSync, env }); if (!p.ok) res = { ...res, ok: false, error: p.error }; }
+    }
+    const at = now().toISOString();
+    const publish = res.ok ? { state: 'published', via, tries: 0, at } : { state: 'pending', error: res.error, via, tries: (prev.sha256 === sha ? (prev.publish?.tries | 0) : 0) + 1, at };
+    status.defs[key] = { kind: 'gamemodels', gm_kind: bundle.kind, id: bundle.id, name: bundle.name, team: team.name, slug: team.slug, author: identity.id, repo: rid, branch,
+      commit: res.commit || (prev.sha256 === sha ? prev.commit || null : null), sha256: sha, files: signed.files, defs, version: bundle.version, message: String(message || '').slice(0, 200), at, publish };
+    saveStatus(status, hooks);
+    return { ok: true, ref: { repo: rid, branch, commit: status.defs[key].commit, sha256: sha, id: bundle.id }, publish: res.ok ? { state: 'published' } : { state: 'pending', error: res.error } };
+  });
+}
+
 /** Re-run the publish of a stored definition (POST definitions/retry). */
 export async function retryDefinition({ kind, id, identity, team }, hooks = {}) {
   const rec = loadStatus(hooks).defs[`${kind}:${id}`];
   if (!rec) return { ok: false, error: `no authored ${kind} ${id}` };
   if (rec.slug !== team.slug) return { ok: false, error: `${id} belongs to team ${rec.team}` };
+  if (kind === 'gamemodels') return publishGameModels({ bundle: { id: rec.id, name: rec.name, version: rec.version, kind: rec.gm_kind }, defs: rec.defs, identity, team, message: rec.message }, hooks);
   return publishDefinition({ kind, def: rec.def, identity, team, message: rec.message }, hooks);
 }

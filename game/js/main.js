@@ -7,7 +7,7 @@ import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS, featureAt as worldItemAt } from './map.js';   // worldItemAt: the seed's bonus items (Shrine, Crystal …), NOT features.js featureAt (buildings / walls)
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
-import { loadVillageCatalog, villageCatalog, villageOfCell, villageRep, questsDone, sameRace } from './villages.js';
+import { loadVillageCatalog, villageCatalog, villageOfCell, villageRep, questsDone, sameRace, villagesNear } from './villages.js';
 import { ledgerUnits } from './world-ledger.js';
 // Buildings created during play (Animator copy / Priest Shrine, 2026-11-14): everyone's world_edits_json
 // `made:q,r` → the features.js overlay (renderer + object cards repaint through onFeaturesChanged).
@@ -2236,7 +2236,40 @@ function openTalk(e, clientX, clientY) {
   state.ui.talk = prev || { npc: e.peer_id, name: e.name, topics: [], dist: null, rep: null };
   send({ kind: 'talk', npc: e.peer_id });
   showObjectCard(talkCardOf(state.ui.talk), clientX, clientY);
+  gmProposalMet(e);   // a proposed NPC: talking to it asks for a vote
 }
+// Test Random with other teams' GameModels proposals (2026-11-25): my hero's snapshot lists their vote refs
+// (gm_proposals_json); the first-time vote popup of a foreign card (js/proposal_vote_ui.js, −6…+6, a comment on a
+// minus vote) opens for a proposed NPC once I talk to it, a monster at its first fight (within 2 of me), a building
+// once it is in sight. pvSeen asks once per proposal version.
+function gmProposalRefs() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  try { const a = JSON.parse(me?.gm_proposals_json || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+const gmVoteRef = (r) => ({ ...r, kind: 'gamemodels', repo: r.repo || 'chaosD6-GameModels' });
+function gmProposalMet(e) {
+  let own = null; try { own = e?.proposal_ref_json ? JSON.parse(e.proposal_ref_json) : null; } catch { own = null; }
+  const r = own || gmProposalRefs().find(x => x.id === e?.npc_id);
+  if (r) pvSeen(gmVoteRef(r), e.name);
+}
+function gmProposalTick() {
+  const refs = gmProposalRefs();
+  if (!refs.length) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  if (!me || !Number.isInteger(me.tile_q)) return;
+  const at = { q: me.tile_q, r: me.tile_r };
+  for (const e of state.entities) {
+    const r = !e.npc_id && refs.find(x => x.id === e.creature_id);
+    if (r && (e.life ?? 0) > 0 && Number.isInteger(e.tile_q) && hexDistanceQR(at, { q: e.tile_q, r: e.tile_r }) <= 2) pvSeen(gmVoteRef(r), e.name);
+  }
+  const bld = refs.filter(x => /^bld_/.test(x.id)), cat = villageCatalog();
+  if (!bld.length || !cat || !state.map?.seed) return;
+  for (const v of villagesNear(state.map.seed, at.q, at.r, 40)) for (const l of cat.villages[v.template]?.layout || []) {
+    const r = bld.find(x => x.id === l.building);
+    if (r && hexDistanceQR(at, { q: v.q + l.at[0], r: v.r + l.at[1] }) <= HERO_SIGHT_RADIUS) pvSeen(gmVoteRef(r), `${v.name} ${cat.buildings[l.building]?.name || l.building}`);
+  }
+}
+setInterval(() => { try { gmProposalTick(); } catch { /* not in a game yet */ } }, 2000);
 function talkCardOf(t) {
   const e = state.entities.find(p => p.peer_id === t.npc);
   const n = villageCatalog()?.npcs?.[e?.npc_id];
