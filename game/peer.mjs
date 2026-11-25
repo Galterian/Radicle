@@ -69,11 +69,11 @@ import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, s
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS, placedBuildingAt } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
-import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround, testCatalogOverrides, gameModelsCatalogTries } from './js/villages.js';
+import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround, testCatalogOverrides, gameModelsCatalogTries, brokenHexes, diplomacyLedger, villageRelation, villageRelations, atWar, pairKey, villageHexAt, WAR_BELOW, DIPLOMACY_STEP, heroAlignment, raceAlignment, alignmentWords, ALIGN_STEP, ALIGN_HOSTILE_GAP } from './js/villages.js';
 import { npcCreatureEntries } from './gamemodels.mjs';
 import { makeShot, shotStrikes, shotEnds, flyerHop } from './js/siege.js';   // siege engines + flyers (user 2026-11-25)
 import { agendaGoal, questMet } from './agenda.mjs';
-import { villageUnits, activeUnits, wanderersOf, npcLine, loreFact, intelLine, archiveItems, rewardWords, villageNeutral, isWildMonsterSnap } from './village-life.mjs';
+import { villageUnits, activeUnits, wanderersOf, npcLine, loreFact, intelLine, archiveItems, rewardWords, villageNeutral, isWildMonsterSnap, respawnDelay, homeLabel, walkWords } from './village-life.mjs';
 import { setBuildingSkills, configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
 import { tileInRing, hexWalkableAt } from './join-plan.mjs';
 import { rollDice, placeStatBonusToken, rule24Order, TILE_TOKEN_CHOICE, tokenRetryOwed } from './effects.mjs';
@@ -357,6 +357,7 @@ const GAMEMODELS = (() => {
   console.log(`[catalog] gamemodels ${String(j.hash || '').slice(0, 10)} from ${hit}`);
   return j;
 })();
+let GAMEMODELS_TEXT = null;   // GAMEMODELS as the UI is served it (/assets/gamemodels/catalog.json), built on first ask
 async function loadJson(name) {
   return JSON.parse(await fs.readFile(path.join(DATA_DIR, name), 'utf8'));
 }
@@ -1321,6 +1322,11 @@ function recoverFromDiscard(pred, what) {
 // NPC builders (AI skirmish 2026-11-22): the world-edit payload of a Barricade — an impassable wall (features.js
 // overlay: blocks moves like a labyrinth wall; Awake may move it). A builder keeps BUILDER_MAX_STANDING standing.
 const BUILDER_MAX_STANDING = Number(process.env.BUILDER_MAX_STANDING) > 0 ? Number(process.env.BUILDER_MAX_STANDING) : 150;   // the ring wall (6R = 120 hexes at R 20)
+// A village wall hex put back by the mason (2026-11-25): the ring's own piece, impassable again.
+function villageWallMade(vh, q, r) {
+  const w = GAMEMODELS?.villages?.[vh.village.template]?.wall || {};
+  return { label: `${vh.village.name} ${w.name || 'Wall'}`, path: vh.path || '', desc: `${w.text || 'The village wall.'} Mended by the village mason.`, biome: '', kind: 'wall', blocking: true, made_by: 'village_mason', village_wall: vh.village.id };
+}
 function barricadeMade() {
   return { label: 'Barricade', path: LAB_WALL_PATHS[0], desc: 'A barricade raised by an NPC builder: nobody passes.', biome: '', kind: 'wall', blocking: true, made_by: 'npc_builder' };
 }
@@ -1459,9 +1465,26 @@ function foldWorldLedger(units) {
   const next = ledgerFor(all, PEER_ID_STRING);
   if (JSON.stringify(next) !== JSON.stringify(entity.worldLedger || [])) { entity.worldLedger = next; _autosave?.markDirty(); }
 }
+// Villages at war (user 2026-11-25: under 40 % between two villages their people fight when they meet): judged on the
+// resolution view's world-edit ledger (the diplomats' `vdip:` edits; js/villages.js villageRelation), so every resolver
+// agrees. → (vidA, vidB) => bool, memoised per view.
+const _villageWar = new WeakMap();
+function villageWarOf(view) {
+  let f = _villageWar.get(view);
+  if (f) return f;
+  const dip = diplomacyLedger(ledgerUnits([...view.entries()].map(([id, v]) => ({ peer_id: id, world_edits_json: v?.world_edits_json, world_ledger_json: v?.world_ledger_json }))));
+  const memo = new Map();
+  f = (a, b) => { const k = pairKey(a, b); if (!memo.has(k)) memo.set(k, atWar(villageById(MAP_SEED, a), villageById(MAP_SEED, b), dip)); return memo.get(k); };
+  _villageWar.set(view, f);
+  return f;
+}
 function worldLens(view) {
   const edits = new Map();
-  for (const u of ledgerUnits([...view.entries()].map(([id, v]) => ({ peer_id: id, world_edits_json: v?.world_edits_json, world_ledger_json: v?.world_ledger_json })))) for (const e of parseJsonArr(u.world_edits_json)) { const cur = edits.get(e.id); if (!cur || e.gone || (!cur.gone && (e.at ?? 0) >= (cur.at ?? 0))) edits.set(e.id, e); }
+  // per id: a gone edit beats a standing one, the latest `at` among equals (order-free, so every peer keeps the same)
+  for (const u of ledgerUnits([...view.entries()].map(([id, v]) => ({ peer_id: id, world_edits_json: v?.world_edits_json, world_ledger_json: v?.world_ledger_json })))) for (const e of parseJsonArr(u.world_edits_json)) { const cur = edits.get(e.id); if (!cur || (e.gone && !cur.gone) || (!!e.gone === !!cur.gone && (e.at ?? 0) >= (cur.at ?? 0))) edits.set(e.id, e); }
+  // the village mason's repairs (2026-11-25, js/villages.js brokenHexes): a `vfix:q,r` as late as the break stands the
+  // village building up again (fortressAt reads this map: the building blocks and banks anew)
+  for (const e of [...edits.values()]) { const m = typeof e?.id === 'string' && /^vfix:(-?\d+),(-?\d+)$/.exec(e.id); const b = m && edits.get(`bld:${m[1]},${m[2]}`); if (b?.gone && (b.at ?? 0) <= (e.at ?? 0)) edits.delete(b.id); }
   const movedIn = new Map();
   for (const e of edits.values()) if (!e.gone && Number.isInteger(e.q)) { const m = /^world:(-?\d+),(-?\d+)$/.exec(e.id); const f = m ? featureAt(MAP_SEED, Number(m[1]), Number(m[2])) : null; if (f) movedIn.set(`${e.q},${e.r}`, { ...f, q: e.q, r: e.r }); }
   const tokensAt = (q, r) => {
@@ -1615,6 +1638,24 @@ const HIRED_BUILDER = IS_FOLLOWER && NPC_DEF?.role === 'builder' && Array.isArra
 // A siege engine an engineer built for a hero (user 2026-11-25): GameModels npc.siege { kind, class, min, max, speed |
 // rounds } — it follows its hero, plays only EP / EM and uses its class once a turn (siegePlan; resolver "siege").
 const SIEGE = IS_FOLLOWER && NPC_DEF?.role === 'siege' && NPC_DEF.siege ? NPC_DEF.siege : null;
+// The village mason (2026-11-25): a villager whose npc has `repairs` mends its village's broken buildings and wall.
+const MASON = !IS_FOLLOWER && NPC_DEF?.repairs ? NPC_DEF.repairs : null;
+// A diplomat a hero leads (2026-11-25): the village it travels to; once its hero records `venvoy:<me>` it stays there.
+const DIPLOMAT_TO = IS_FOLLOWER && NPC_DEF?.role === 'diplomat' ? process.env.DIPLOMAT_TO || '' : '';
+const DIPLOMAT_SPY = !!DIPLOMAT_TO && process.env.DIPLOMAT_SPY === '1';   // a spy mission (paid): −5 % between the two villages
+// A wanderer a hero walks home (2026-11-25): its village; once its hero records `vhome:<me>` it is home.
+const HOMEWARD_TO = IS_FOLLOWER && NPC_DEF?.role === 'wanderer' ? process.env.HOMEWARD_TO || '' : '';
+if (HOMEWARD_TO) setInterval(() => {
+  if (vanishing || entity.life <= 0) return;
+  const me = PEER_LABEL.replace(/_f$/, '');
+  if (ledgerEdits(villageLedger()).some(e => e.id === `vhome:${me}`)) vanish(`home again in ${villageById(MAP_SEED, HOMEWARD_TO)?.team || HOMEWARD_TO}`);
+}, 5_000).unref?.();
+if (DIPLOMAT_TO) setInterval(() => {
+  if (vanishing || entity.life <= 0) return;
+  const me = PEER_LABEL.replace(/_f$/, '');
+  if (ledgerEdits(villageLedger()).some(e => e.id === `venvoy:${me}`)) vanish(`I stay in ${villageById(MAP_SEED, DIPLOMAT_TO)?.team || DIPLOMAT_TO} as the envoy of my village`);
+}, 5_000).unref?.();
+entity.repair = null;   // { q, r, n, at } — actions of work in a row on that hex (snapshot repair_json)
 // Test Random with other teams' GameModels proposals (2026-11-25, ui-server + gm-proposals.mjs): GAMEMODELS_PROPOSALS
 // = the vote refs { kind: 'gamemodels', id, branch, commit, sha256, ns, author } of the proposals in this game's catalog.
 // The hero's snapshot lists them all (gm_proposals_json: the browser asks for a vote on the ones it meets); a unit that
@@ -2149,10 +2190,16 @@ function currentStateSnapshot(slim = false) {
     // Dimension Out (rule_dimension_out): the turn I leave at (-1 = none) — every UI counts it down on my unit.
     dim_out_until_turn: dimOut ? dimOut.until_turn : -1, dim_out_start_turn: dimOut ? dimOut.start_turn : -1,
     ai_role: AI_ROLE,   // AI skirmish: 'builder' lets every resolver raise my Barricades (reveal `build`)
+    ...(DIPLOMAT_TO ? { diplomat_to: DIPLOMAT_TO, ...(DIPLOMAT_SPY ? { diplomat_spy: 1 } : {}) } : {}),
+    ...(HOMEWARD_TO ? { homeward_to: HOMEWARD_TO } : {}),
+    // alignment in percent of good (2026-11-25): a hero's own (race + its deeds), an NPC's its village race's; monsters none
+    ...(GAMEMODELS && IS_HUMAN && !IS_COMPANION && !SHADOW_OF ? { alignment_pct: heroAlignment([myLedgerUnit()], PEER_ID_STRING, data.characters[CHARACTER_ID]?.race || '') } : {}),
+    ...(NPC_DEF && GAMEMODELS?.npcs?.[NPC_ID] ? { alignment_pct: raceAlignment(NPC_DEF.race) } : {}),
     ...(NPC_DEF ? { npc_id: NPC_ID, village_id: VILLAGE_ID, home_q: NPC_HOME?.q ?? null, home_r: NPC_HOME?.r ?? null, follower: IS_FOLLOWER ? 1 : 0, hostile_to_csv: [...villageHostile].sort().join(','), village_leaving: villageLeaving ? 1 : 0 } : {}),   // GameModels villager
     // siege engine (2026-11-25): its ammunition in flight, the turn its class was used, the ram's wall count — the resolver reads them
     ...(GM_PROPOSALS.length && IS_HUMAN && !IS_COMPANION ? { gm_proposals_json: JSON.stringify(GM_PROPOSALS) } : {}),
     ...(GM_PROPOSAL_SELF ? { proposal_ref_json: JSON.stringify(GM_PROPOSAL_SELF) } : {}),
+    ...(MASON ? { repair_json: JSON.stringify(entity.repair || null) } : {}),
     ...(SIEGE ? { siege_class: SIEGE.class, siege_shots_json: JSON.stringify(entity.siegeShots), siege_turn: entity.siegeTurn, ram_json: JSON.stringify(entity.ram) } : {}),
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     world_ledger_json: JSON.stringify(entity.worldLedger || []),
@@ -3669,8 +3716,8 @@ async function doPlanningEnd() {
   }
   // NPC builders (AI skirmish 2026-11-22): a Barricade intent rides on a plain Posture / Empty Posture (no cast,
   // no trance, not a lost action) — committed in the hash like the rest of the plan.
-  const build = (AI_ROLE === 'builder' || HIRED_BUILDER) && queuedBuild && !skipping && !proxy && !phylactery && !effectCard && !trance && (code === 'P' || code === 'EP')
-    ? { q: Number.isInteger(queuedBuild.q) ? queuedBuild.q : null, r: Number.isInteger(queuedBuild.r) ? queuedBuild.r : null, ...(HIRED_BUILDER && typeof queuedBuild.b === 'string' ? { b: queuedBuild.b } : {}) } : null;
+  const build = (AI_ROLE === 'builder' || HIRED_BUILDER || (MASON && queuedBuild?.b === 'repair')) && queuedBuild && !skipping && !proxy && !phylactery && !effectCard && !trance && (code === 'P' || code === 'EP')
+    ? { q: Number.isInteger(queuedBuild.q) ? queuedBuild.q : null, r: Number.isInteger(queuedBuild.r) ? queuedBuild.r : null, ...((HIRED_BUILDER || MASON) && typeof queuedBuild.b === 'string' ? { b: queuedBuild.b } : {}) } : null;
   if (queuedBuild && !build) console.log(`[${PEER_LABEL}] npc builder: no Barricade this action — ${skipping ? 'a lost action' : proxy ? 'a proxy action' : phylactery ? 'phylactery' : effectCard ? `casting ${effectCard.effect_id}` : trance ? 'Battle Trance' : `played ${code}, not a Posture`}`);
   queuedBuild = null;
   // Siege engines (2026-11-25): the class use (a shot / a ram blow) rides on an Empty Posture, committed in the hash.
@@ -3978,7 +4025,7 @@ async function doResolution() {
     return sa !== null && sb !== null && sa !== sb;
   };
   // villages are neutral (villageNeutral): a possessed unit is judged as its possessor
-  const enemyOf = (a, b) => sideFoes(a, b) && !villageNeutral(view.get(possessorOf(a) || a), view.get(possessorOf(b) || b));
+  const enemyOf = (a, b) => sideFoes(a, b) && !villageNeutral(view.get(possessorOf(a) || a), view.get(possessorOf(b) || b), villageWarOf(view));
   // a strike aimed at the unit (its character target) lands on a neutral villager too — hurting one costs −5 %
   const aimedAt = (r, id) => r?.target?.kind === 'character' && r.target.ref === id;
   // The possessor's reveal carries `proxy: { for, action, target }` — that is what the possessed unit does
@@ -4578,7 +4625,7 @@ async function doResolution() {
   const isCounter = (r) => { const k = EFFECT_RULES[r.effect?.effect_id] || {}; return !!(k.shieldElem || k.disableElem || k.voidThisAction || k.zone); };
   // ---- class abilities, part 1 (user ruling 2026-10-30): what must be known before casts and damage ----
   // `r.classAbility = { id, target, attach, stat }` is the clicked class card; statics need no click.
-  const classAbilityOut = { used: [], heals: [], discards: [], peeks: [], traps: [], tokens: [], armor: [], illusion: [], revives: [], moves: [], stealth: [], rogueTrap: [], lures: [], builds: [], siegeShots: [], siegeRams: [] };   // siege*: the siege engines' class (2026-11-25)
+  const classAbilityOut = { used: [], heals: [], discards: [], peeks: [], traps: [], tokens: [], armor: [], illusion: [], revives: [], moves: [], stealth: [], rogueTrap: [], lures: [], builds: [], siegeShots: [], siegeRams: [], repairs: [] };   // siege*: the siege engines' class, repairs: the village mason (2026-11-25)
   const elementalistPending = [];       // { actor, value, stat } — counted as used once the damage cast lands
   const abilityOf = (r) => (r.classAbility && typeof r.classAbility.id === 'string' && classReady(r.actor, r.classAbility.id) && lifeOf(r.actor) > 0) ? r.classAbility : null;
   const abilityTile = (ab) => ab?.target?.kind === 'tile' ? ab.target.ref : null;
@@ -5265,8 +5312,31 @@ async function doResolution() {
   // Posture / Empty Posture with a `build` intent raises a Barricade (an impassable wall) on the hex it named next to
   // it — else on a random free hex next to it (reveal salt), nothing if none is free. Same createBuilding pipeline as
   // the Animator / Priest: the builder records `made:q,r`, every peer folds it in from the next resolution on.
+  // The village mason (2026-11-25, GameModels npc.repairs { rounds }): a villager (no follower) that played Posture /
+  // Empty Posture with build { q, r, b: 'repair' } next to a broken hex of ITS village — a building someone broke
+  // (`bld:q,r` gone) or a wall hex a ram broke (vacated) — and did not move: one more action of work in a row
+  // (repair_json); at `rounds` the wall hex stands again (`made:q,r`, the wall piece) / the building is repaired
+  // (`vfix:q,r`, js/villages.js brokenHexes). Judged on its snapshot so every peer agrees.
   for (const r of revealsThisTurn) {
-    if (!r.build || r.proxied || (r.action !== 'P' && r.action !== 'EP') || r.effect) continue;
+    if (r.build?.b !== 'repair' || r.proxied || (r.action !== 'P' && r.action !== 'EP') || r.effect) continue;
+    const me = r.actor, vme = view.get(me), rp = GAMEMODELS?.npcs?.[vme?.npc_id]?.repairs;
+    if (!rp || vme?.follower || !vme?.village_id || lifeOf(me) <= 0 || !Number.isInteger(r.build.q) || !Number.isInteger(r.build.r)) continue;
+    const to = { q: r.build.q, r: r.build.r }, from = { q: vme.tile_q, r: vme.tile_r }, who = vme.name || me.slice(0, 14);
+    const vh = villageHexAt(MAP_SEED, to.q, to.r);
+    const mine = vh?.village?.id === vme.village_id;
+    const wallGap = mine && !!vh.wall && !isLabyrinthWallAt(MAP_SEED, to.q, to.r);
+    const bldGone = mine && !!vh.building && !!worldEditsNow.get(`bld:${to.q},${to.r}`)?.gone;
+    let prev = null; try { prev = JSON.parse(vme.repair_json || 'null'); } catch { prev = null; }
+    const ok = (wallGap || bldGone) && hexD(from, to) === 1 && !nextTiles.has(me) && !occupantAt(to.q, to.r);
+    const n = ok ? (prev && prev.q === to.q && prev.r === to.r && prev.at === hg.action - 1 ? (prev.n | 0) : 0) + 1 : 0;
+    const done = ok && n >= (rp.rounds || 3);
+    classAbilityOut.repairs.push({ by: me, q: to.q, r: to.r, n, done, kind: wallGap ? 'wall' : 'building' });
+    if (done && wallGap) { buildClaimed.add(`${to.q},${to.r}`); classAbilityOut.builds.push({ by: me, q: to.q, r: to.r, made: villageWallMade(vh, to.q, to.r), why: 'repair', random: false }); }
+    const what = wallGap ? `the ${vh.village.name} wall` : `the ${vh?.def?.name || 'building'}`;
+    log(`[${PEER_LABEL}] mason ${who}: ${!ok ? `nothing to mend at (${to.q},${to.r})` : done ? `${what} at (${to.q},${to.r}) stands again (${n} actions of work)` : `mends ${what} at (${to.q},${to.r}) — ${n}/${rp.rounds || 3}`}`);
+  }
+  for (const r of revealsThisTurn) {
+    if (!r.build || r.build.b === 'repair' || r.proxied || (r.action !== 'P' && r.action !== 'EP') || r.effect) continue;
     const me = r.actor;
     const vme = view.get(me);
     // a hired builder (a follower whose npc has builds): only the hex it named, next to it, and only when it is free
@@ -5920,7 +5990,7 @@ async function doResolution() {
   // every resolver from the next action on (syncPlacedBuildings).
   for (const b of classAbilityOut.builds) {
     const id = `made:${b.q},${b.r}`;
-    if (b.by === PEER_ID_STRING && entity.worldEdits.some(e => e.id === id)) continue;
+    if (b.by === PEER_ID_STRING && entity.worldEdits.some(e => e.id === id)) { if (b.why !== 'repair') continue; entity.worldEdits = entity.worldEdits.filter(e => e.id !== id); }   // the mason mends a wall hex again: the new one
     console.log(`[${PEER_LABEL}] building made: ${b.made.label} at (${b.q},${b.r}) by ${b.by.slice(0, 14)} (${b.why}${b.made.copy_of ? `, copy of (${b.made.copy_of.q},${b.made.copy_of.r})` : ''}${b.random ? ', random hex' : ', picked hex'})`);
     if (b.by !== PEER_ID_STRING) continue;
     // CR: priest — one Shrine per Priest at a time (2026-11-17): my older Shrines become tombstones.
@@ -5980,6 +6050,11 @@ async function doResolution() {
     }
   }
   if (SIEGE) entity.siegeShots = entity.siegeShots.filter(s => shotEnds(s) > hg.action);
+  for (const x of classAbilityOut.repairs) if (x.by === PEER_ID_STRING) {
+    entity.repair = x.n > 0 && !x.done ? { q: x.q, r: x.r, n: x.n, at: hg.action } : null;
+    if (x.done && x.kind === 'building') { entity.worldEdits = entity.worldEdits.filter(e => e.id !== `vfix:${x.q},${x.r}`); entity.worldEdits.push({ id: `vfix:${x.q},${x.r}`, q: x.q, r: x.r, v: VILLAGE_ID, at: hg.action }); _autosave?.markDirty(); }
+    if (x.done) console.log(`[${PEER_LABEL}] mason: the ${x.kind} at (${x.q},${x.r}) is mended`);
+  }
   // Druid: my defence token on my tile.
   for (const tk of classAbilityOut.tokens) if (tk.by === PEER_ID_STRING) {
     const same = entity.tileTokens.find(x => x.kind === tk.kind && x.elem === tk.elem && x.q === tk.q && x.r === tk.r);
@@ -6097,7 +6172,9 @@ async function doResolution() {
   for (const [el, amount] of Object.entries(counterPen.get(PEER_ID_STRING) || {})) entity.elemPen.push({ elem: el, amount, until_turn: hg.turn });
   for (const t of tokensSpent) if (t.owner === PEER_ID_STRING) entity.tileTokens = entity.tileTokens.filter(x => x.id !== t.id);
   // World features I pulled / used up / destroyed: recorded as gone (every peer reads my world_edits_json).
-  const worldGone = (id, why) => { if (!entity.worldEdits.some(e => e.id === id && e.gone)) { entity.worldEdits = entity.worldEdits.filter(e => e.id !== id); entity.worldEdits.push({ id, gone: true, at: hg.action }); console.log(`[${PEER_LABEL}] world feature ${id} is gone (${why})`); } };
+  // (a village building the mason put back may be broken again: then a fresh gone edit, later than the repair)
+  const repairedSince = (id) => { const m = /^bld:(-?\d+),(-?\d+)$/.exec(id); const g = m && entity.worldEdits.find(e => e.id === id && e.gone); return !!g && !brokenHexes(ledgerEdits(villageLedger())).has(`${m[1]},${m[2]}`); };
+  const worldGone = (id, why) => { if (!entity.worldEdits.some(e => e.id === id && e.gone) || repairedSince(id)) { entity.worldEdits = entity.worldEdits.filter(e => e.id !== id); entity.worldEdits.push({ id, gone: true, at: hg.action }); console.log(`[${PEER_LABEL}] world feature ${id} is gone (${why})`); } };
   for (const t of tokensSpent) if (t.owner === 'world' && t.by === PEER_ID_STRING) worldGone(t.id, 'pulled');
   for (const d of destroyOutcomes) if ((d.result === 'destroyed' || d.result === 'taken') && d.owner === 'world' && d.actor === PEER_ID_STRING) worldGone(d.id, d.result);
   applyFortressOutcomes(destroyOutcomes);
@@ -6207,7 +6284,7 @@ async function doResolution() {
     const fxNames = new Map(effectOutcomes.filter(o => o.eff?.name).map(o => [o.eff.effect_id, o.eff.name]));
     const nameOf = (id) => fxNames.get(id) || prettyFx(id);
     const sideIdOf = (id) => { const v = view.get(id); return v ? sideOf(v.alliance) : null; };
-    const foes = (a, b) => { const sa = sideIdOf(a), sb = sideIdOf(b); return sa !== null && sb !== null && sa !== sb && !villageNeutral(view.get(a), view.get(b)); };
+    const foes = (a, b) => { const sa = sideIdOf(a), sb = sideIdOf(b); return sa !== null && sb !== null && sa !== sb && !villageNeutral(view.get(a), view.get(b), villageWarOf(view)); };
     const tileNow = (id) => { const v = view.get(id); return v && Number.isInteger(v.tile_q) ? { q: v.tile_q, r: v.tile_r } : null; };
     const at0 = (id) => { const s = viewBefore.get(id); return s && Number.isInteger(s.tile_q) ? { tile_q: s.tile_q, tile_r: s.tile_r } : null; };
     const near = (a, b, d) => { const pa = at0(a), pb = at0(b); return !!(pa && pb) && hexDistance(pa, pb) <= d; };
@@ -7007,9 +7084,15 @@ function npcEnemies() {   // merge 2026-11-22: HEAD's filter (F3 flag `hides`, c
 // the heroes (and their units) its village is hostile to, and whoever fights a hero the village counts as an ally.
 // Villages leave each other alone. A follower fights like any companion.
 // isWildMonsterSnap / villageNeutral: village-life.mjs (pure; the resolver judges villages neutral with it)
+// Planning-side war between two villages (the live ledger), cached a few seconds.
+let _planWar = { at: 0, dip: null };
+function planningWar(a, b) {
+  if (Date.now() - _planWar.at > 5000) _planWar = { at: Date.now(), dip: diplomacyLedger(villageLedger()) };
+  return atWar(villageById(MAP_SEED, a), villageById(MAP_SEED, b), _planWar.dip);
+}
 function villageFoe(p) {
   if (NPC_DEF && !IS_FOLLOWER) {
-    if (p.npc_id && !p.follower) return false;
+    if (p.npc_id && !p.follower) return !!p.village_id && !!VILLAGE_ID && p.village_id !== VILLAGE_ID && planningWar(VILLAGE_ID, p.village_id);   // villages at war (2026-11-25)
     if (isWildMonsterSnap(p)) return true;
     return villageHostile.has(p.owner_peer_id || p.shadow_of || p.peer_id) || villageAllyFoes.has(p.peer_id);
   }
@@ -7257,6 +7340,8 @@ function myLedgerUnit() { return { peer_id: PEER_ID_STRING, world_edits_json: JS
 function villageLedger() { return ledgerUnits([...livePeers().filter(Boolean), myLedgerUnit()]); }
 const ledgerEdits = (ledger) => ledger.flatMap(u => { try { return JSON.parse(u.world_edits_json || '[]').map(e => ({ ...e, by: u.peer_id })); } catch { return []; } });
 let agendaLast = '', agendaSayAt = -99, agendaSayN = 0, agendaCtxCache = null;
+// |hero alignment − my village race's alignment| (a hero's snapshot alignment_pct; 50 when it has none yet)
+const alignGap = (h) => NPC_DEF ? Math.abs((Number.isFinite(h?.alignment_pct) ? h.alignment_pct : 50) - raceAlignment(NPC_DEF.race)) : 0;
 const thankedQuests = new Set();
 function agendaContext() {
   const me = { q: entity.tile.q, r: entity.tile.r };
@@ -7274,10 +7359,13 @@ function agendaContext() {
       if (_hd(me, _tq(h)) > 20) continue;
       const rep = villageRep(MAP_SEED, v, h.peer_id, ledger, heroRaceOf(h));
       if (rep < v.reputation.hostile) { if (inThreat(h)) villageHostile.add(h.peer_id); }
+      else if (NPC_DEF.role === 'wanderer' && _hd(me, _tq(h)) <= 6 && alignGap(h) > ALIGN_HOSTILE_GAP) villageHostile.add(h.peer_id);   // 2026-11-25
       else if (rep >= v.reputation.ally_all) for (const o of peers) if (!o.npc_id && sideOf(o.alliance) !== sideOf(h.alliance) && _hd(_tq(o), _tq(h)) <= 3) villageAllyFoes.add(o.peer_id);
     }
   }
-  const foe = unit(npcEnemies().filter(p => Number.isInteger(p.tile_q)).sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)) || (a.peer_id < b.peer_id ? -1 : 1))[0]);
+  const foeSnap = npcEnemies().filter(p => Number.isInteger(p.tile_q)).sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)) || (a.peer_id < b.peer_id ? -1 : 1))[0];
+  // foe.war: one of a village at war with mine (2026-11-25: its fighters attack, the others keep away)
+  const foe = foeSnap ? { ...unit(foeSnap), war: foeSnap.npc_id && !foeSnap.follower && foeSnap.village_id && foeSnap.village_id !== VILLAGE_ID ? 1 : 0 } : null;
   const friends = peers.filter(p => sideOf(p.alliance) === MY_SIDE && _hd(me, _tq(p)) <= 6)
     .sort((a, b) => ((a.life ?? 0) / Math.max(1, a.life_max ?? 1)) - ((b.life ?? 0) / Math.max(1, b.life_max ?? 1)) || _hd(me, _tq(a)) - _hd(me, _tq(b)));
   const sh = peers.filter(p => heroSnap(p) && sideOf(p.alliance) !== MY_SIDE && _hd(me, _tq(p)) <= 12).sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)) || (a.peer_id < b.peer_id ? -1 : 1))[0];
@@ -7365,6 +7453,10 @@ function goalPlan(goal, ctx) {
       return t && t.dist > (t.gate ? 0 : goal.stop ?? 1) ? walkTo(t) : still;
     }
     case 'post': {   // go to the spot and hold it: the gate itself (barred), its inner hex, or home (the gate guard's post outside)
+      if (goal.at === 'wall' && wall) {   // a wall guard (2026-11-25): walks the ring inside the wall, two apart
+        const ring = ringHexes({ q: centre.q, r: centre.r }, wall.radius - 1);
+        return walkTo(ring[(homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]);
+      }
       const spot = goal.at === 'gate' ? wall?.gate : goal.at === 'gate_inner' ? wall?.inner : NPC_HOME;
       return spot && _hd(me, spot) > 0 ? walkTo(spot) : has('B') && ctx.foe && ctx.foe.dist <= 2 ? { code: 'B' } : still;
     }
@@ -7395,8 +7487,29 @@ function goalPlan(goal, ctx) {
       if (wall) { const ring = ringHexes({ q: centre.q, r: centre.r }, wall.radius - 1); return walkTo(ring[(homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]); }
       return AI_ROLE === 'builder' ? 'build' : still;
     }
+    case 'repair': {   // the village mason (2026-11-25): the nearest broken building / wall hex of my village, else tend the wall
+      const site = masonSite(me);
+      if (!site) return goalPlan({ do: wall ? 'post' : 'wander', at: 'wall', radius: 2 }, ctx);
+      if (_hd(me, site) === 1) { masonSay(`mending (${site.q},${site.r})`); return { code: 'EP', build: { q: site.q, r: site.r, b: 'repair' } }; }
+      const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+      const free = (q, r) => !occ.has(`${q},${r}`) && hexWalkableAt(MAP_SEED, q, r) && !isLabyrinthWallAt(MAP_SEED, q, r) && !buildingFeatureAt(MAP_SEED, q, r);
+      const st = ringStep({ me, site, free, maxNodes: 1500 });
+      masonSay(st?.stepTo ? `walking to (${site.q},${site.r})` : `no way to (${site.q},${site.r})`);
+      return st?.stepTo ? { code: moveCode, target: st.stepTo } : still;
+    }
     case 'idle': default: return still;
   }
+}
+// What the mason should mend: broken buildings (js/villages.js brokenHexes) and wall hexes a ram broke, of my village.
+let masonWhy = '';
+const masonSay = (why) => { if (why !== masonWhy) { masonWhy = why; console.log(`[${PEER_LABEL}] mason: ${why}`); } };
+function masonSite(me) {
+  const v = VILLAGE_ID ? villageById(MAP_SEED, VILLAGE_ID) : null;
+  if (!MASON || !v) return null;
+  const out = [...brokenHexes(ledgerEdits(villageLedger()))].map(k => { const [q, r] = k.split(',').map(Number); return { q, r }; })
+    .filter(h => villageHexAt(MAP_SEED, h.q, h.r)?.village?.id === v.id);
+  if (v.wall) for (const h of ringHexes({ q: v.q, r: v.r }, v.wall.radius)) if (isVillageWallAt(MAP_SEED, h.q, h.r) && !isLabyrinthWallAt(MAP_SEED, h.q, h.r)) out.push(h);
+  return out.sort((a, b) => _hd(me, a) - _hd(me, b) || a.q - b.q || a.r - b.r)[0] || null;
 }
 // Apply a plan { code, target?, build? } like llmApply does. true when applied.
 function applyNpcPlan(p) {
@@ -7459,7 +7572,9 @@ function agendaPlan() {
 // 20), each where its home hex is on my map. A villager seen dead is gone for good (`vgone:<label>`); one that walked
 // back in (no hero near) comes out again later. Wanderers walk out when a hero comes within WANDERER_NEAR of their spot.
 const VILLAGE_NEAR = Number(process.env.VILLAGE_NEAR ?? 30);
-const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 4 : 13));   // gate guard + the 3 outside the wall + trader, builder, smith, wizard, mercenary + 2 guards (2026-11-24) + dragon, engineer (2026-11-25)
+const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 4 : 15));   // 2026-11-25: the 15 of a village besides its fighters (+ diplomat, mason, 2 wall guards; − the 2nd quest giver)
+const VILLAGE_FIGHTERS = Number(process.env.VILLAGE_FIGHTERS ?? (IS_MOBILE ? 1 : 5));   // its fighters, while it is at war
+const villageAtWar = new Map();   // gate guard + the 3 outside the wall + trader, builder, smith, wizard, mercenary + 2 guards (2026-11-24) + dragon, engineer (2026-11-25)
 const WANDERER_NEAR = Number(process.env.WANDERER_NEAR ?? 25);
 const VILLAGER_LEAVE = Number(process.env.VILLAGER_LEAVE ?? 40);
 const villageSpawning = new Set(), villageLogged = new Map();
@@ -7479,18 +7594,38 @@ function spawnVillager(v, u, extra = {}) {
     .catch(e => console.warn(`[${PEER_LABEL}] village: ${u.name} could not walk out: ${e.message}`))
     .finally(() => setTimeout(() => villageSpawning.delete(u.label), 15_000));
 }
+// The ledger's gone villagers: `vgone:<label>` { turn } (died; older edits: the turn of their action), `venvoy:<label>`
+// { turn } (a diplomat who stayed in the other village), `vrec:<label>` (led away by a hero: null until it dies too).
+function villageGoneMap(edits) {
+  const out = new Map();
+  for (const e of edits) {
+    const m = /^v(gone|rec|envoy):(.+)$/.exec(String(e?.id || ''));
+    if (!m) continue;
+    if (m[1] === 'rec') { if (!out.has(m[2])) out.set(m[2], null); continue; }
+    const t = Number.isInteger(e.turn) ? e.turn : Math.floor((e.at ?? 0) / 3);
+    if (!Number.isFinite(out.get(m[2])) || t < out.get(m[2])) out.set(m[2], t);
+  }
+  return out;
+}
 function villageTick() {
   if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0 || !dimMap || selfStalled() || process.env.VILLAGES === '0') return;
   const me = { q: entity.tile.q, r: entity.tile.r };
   const peers = livePeers().filter(Boolean);
   const ledger = villageLedger(), edits = ledgerEdits(ledger);
-  const gone = new Set(edits.filter(e => /^v(gone|rec):/.test(e.id)).map(e => e.id.replace(/^v(gone|rec):/, '')));
+  // gone: label → the turn it died / left for good (its home building brings it back later — village-life.mjs
+  // villageUnits), null = led away by a hero and still alive there (no rebirth yet)
+  const gone = villageGoneMap(edits);
   const known = (q, r) => dimMap.has(q, r);
   const livePeer = (label) => peersPublic.has(`peer:${label}`) || companions.some(c => c.label === label);
-  // dead villagers of any village I can see: gone for good (the hero who sees it first records it)
-  for (const p of peers) if (p.npc_id && !p.follower && (p.life ?? 1) <= 0 && !p.village_leaving) {
-    const label = String(p.peer_id).replace(/^peer:/, '');
-    if (!gone.has(label) && !(entity.worldEdits || []).some(e => e.id === `vgone:${label}`)) { entity.worldEdits.push({ id: `vgone:${label}`, v: p.village_id, at: hg.action }); gone.add(label); console.log(`[${PEER_LABEL}] village: ${p.name || label} has fallen — ${p.village_id} has one fewer`); }
+  // dead villagers of any village I can see — and villagers a hero led away that died there (their `_f` follower):
+  // the hero who sees it first records it, with the turn (the rebirth clock)
+  for (const p of peers) if (p.npc_id && p.village_id && (p.life ?? 1) <= 0 && !p.village_leaving) {
+    const label = String(p.peer_id).replace(/^peer:/, '').replace(/_f$/, '');
+    if (p.follower && !/_[rw]\d+(_g\d+)?$/.test(label)) continue;   // a quest's new recruit is no resident
+    if (Number.isFinite(gone.get(label)) || (entity.worldEdits || []).some(e => e.id === `vgone:${label}`)) continue;   // (an envoy that stayed: venvoy, no death)
+    entity.worldEdits.push({ id: `vgone:${label}`, v: p.village_id, at: hg.action, turn: hg.turn }); gone.set(label, hg.turn);
+    const back = GAMEMODELS.npcs[p.npc_id] ? respawnDelay(GAMEMODELS.npcs[p.npc_id]) : null;
+    console.log(`[${PEER_LABEL}] village: ${p.name || label} has fallen — ${p.village_id} has one fewer${back ? ` (a new one in ${back} turns, while its building stands)` : ''}`);
   }
   for (const v of villagesNear(MAP_SEED, me.q, me.r, 100 + WANDERER_NEAR)) {
     for (const w of wanderersOf(MAP_SEED, v, gone)) {
@@ -7501,11 +7636,17 @@ function villageTick() {
     if (v.dist > VILLAGE_NEAR || villageSpawnerFor(v, VILLAGE_NEAR) !== PEER_ID_STRING) continue;
     let fe = edits.find(e => e.id === `vfound:${v.id}`);
     if (!fe) { fe = { id: `vfound:${v.id}`, v: v.id, turn: hg.turn, at: hg.action }; entity.worldEdits.push(fe); console.log(`[${PEER_LABEL}] village: ${v.team} of the ${v.race_name} found at (${v.q},${v.r}) on turn ${hg.turn}`); }
-    const broken = new Set(edits.filter(e => e.gone && /^bld:/.test(e.id)).map(e => e.id.slice(4)));
+    const broken = brokenHexes(edits);   // the mason's repairs stand them up again
     const units = villageUnits(MAP_SEED, v, { turn: hg.turn, founded: fe.turn ?? 0, gone, broken });
     const out = units.filter(u => livePeer(u.label));
     // the slots go to the units whose home hex I know (an unseen inside must not keep the gate people waiting)
-    for (const u of activeUnits(units.filter(u => livePeer(u.label) || known(u.q, u.r)), VILLAGE_ACTIVE)) if (!livePeer(u.label)) spawnVillager(v, u);
+    // the fighters (2026-11-25) walk out only while the village is at war with a village found — besides the others
+    const isFighter = (u) => GAMEMODELS.npcs[u.npc]?.role === 'fighter';
+    const war = villageRelations(MAP_SEED, v, ledger).some(x => x.war);
+    const can = units.filter(u => livePeer(u.label) || known(u.q, u.r));
+    const pick = [...activeUnits(can.filter(u => !isFighter(u)), VILLAGE_ACTIVE), ...(war ? activeUnits(can.filter(isFighter), VILLAGE_FIGHTERS) : [])];
+    if (war !== villageAtWar.get(v.id)) { villageAtWar.set(v.id, war); if (war) console.log(`[${PEER_LABEL}] village: ${v.team} is at war — its fighters walk out`); }
+    for (const u of pick) if (!livePeer(u.label)) spawnVillager(v, u);
     const sum = `${units.length}/${v.cap} units, ${out.length} out`;
     if (villageLogged.get(v.id) !== sum) { villageLogged.set(v.id, sum); console.log(`[${PEER_LABEL}] village: ${v.team} — ${sum}`); }
   }
@@ -7538,7 +7679,7 @@ function testFollowerTick() {
   testFollowerTick.done = true;
   console.log(`[${PEER_LABEL}] test follower: ${recruitFollowers(v, { kind: 'allies', count: 1, units: [id] }, 'test').join(', ')}`);
 }
-setInterval(() => { try { villageTick(); questTick(); trespassTick(); testNpcTick(); testFollowerTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
+setInterval(() => { try { villageTick(); questTick(); diplomacyTick(); trespassTick(); testNpcTick(); testFollowerTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
 // A villager (not a follower): walks back in when no hero has been near for 90 s, or leaves to follow a hero.
 let villagerHeroAt = Date.now(), villagerRecsSeen = '';
 if (NPC_DEF && !IS_FOLLOWER) setInterval(() => {
@@ -7567,11 +7708,21 @@ function noteVillageHits(res) {
     const label = String(victim).replace(/^peer:/, '');
     if ((entity.worldEdits || []).some(e => e.id === `vhit:${label}`)) continue;
     entity.worldEdits.push({ id: `vhit:${label}`, v: snap.village_id, at: hg.action });
+    // attacking a not hostile creature (2026-11-25): my alignment −5 (once per unit, like the relationship)
+    if (!String(snap.hostile_to_csv || '').split(',').includes(PEER_ID_STRING)) alignDeed(`hit:${label}`, -ALIGN_STEP, `you attacked ${snap.name || 'a villager'} who meant you no harm`);
     const v = villageById(MAP_SEED, snap.village_id);
     const now = v ? villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedgerWithMine(), MY_RACE) : null;
     console.log(`[${PEER_LABEL}] village: I hurt ${snap.name || label} — ${v?.team || snap.village_id} relationship ${v?.reputation?.villager_attacked ?? -5}% → ${now}%`);
     broadcastUI(handMsg({ notice: `⚔ You attacked ${snap.name || 'a villager'} — ${v?.team || 'the village'}: relationship ${now}%` }));
   }
+}
+// A deed that moves my alignment (`valign:<key>` { d }, once per key) — the notice says where it stands now.
+function alignDeed(key, d, why) {
+  if ((entity.worldEdits || []).some(e => e.id === `valign:${key}`)) return;
+  entity.worldEdits.push({ id: `valign:${key}`, d, at: hg.action });
+  const now = heroAlignment([myLedgerUnit()], PEER_ID_STRING, MY_RACE);
+  console.log(`[${PEER_LABEL}] alignment: ${d > 0 ? '+' : ''}${d}% (${why}) → ${now}% (${alignmentWords(now)})`);
+  broadcastUI(handMsg({ notice: `${d > 0 ? '☀' : '☾'} Alignment ${d > 0 ? '+' : ''}${d}% — ${why}: now ${now}% good (${alignmentWords(now)})` }));
 }
 // The ledger with my own latest edits in (my snapshot may lag a tick behind entity.worldEdits).
 function villageLedgerWithMine() {
@@ -7599,6 +7750,65 @@ function trespassTick() {
   }
 }
 const questBusy = new Set();
+// ---- diplomacy (2026-11-25): a diplomat I lead (my follower, snapshot diplomat_to) reaches the other village's disc →
+// `vdip:<pair>` { v, v2, d: +5 } (my relationship +5 % with both villages, and theirs with each other — once per
+// hero and pair) and `venvoy:<label>` { v, turn } (it stays there; its Ministry trains a new one, village-life.mjs).
+function diplomatTargets(c) {
+  const doneDip = new Set((entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith('vdip:')).map(e => e.id.slice(5)));
+  return villagesNear(MAP_SEED, c.p.tile_q, c.p.tile_r, 450).filter(o => o.id !== c.v.id && !doneDip.has(pairKey(c.v.id, o.id))).slice(0, 3);
+}
+const myDiplomat = () => livePeers().find(p => p?.owner_peer_id === PEER_ID_STRING && p.follower && p.diplomat_to && (p.life ?? 0) > 0)?.name || '';
+// Spy missions I paid a village's diplomat for (its sabotage quest, `vq:<quest>#n`) and have not used yet (`vspy:` from there).
+function spyMissionsLeft(v) {
+  const mine = entity.worldEdits || [];
+  const paid = mine.filter(e => typeof e.id === 'string' && e.id.startsWith('vq:') && e.v === v.id && (GAMEMODELS.quests[e.id.slice(3).replace(/#\d+$/, '')]?.rewards || []).some(r => r.kind === 'sabotage')).length;
+  const used = mine.filter(e => typeof e.id === 'string' && e.id.startsWith('vspy:') && e.v === v.id).length;
+  const going = livePeers().filter(p => p?.owner_peer_id === PEER_ID_STRING && p.follower && p.diplomat_spy && p.village_id === v.id && (p.life ?? 0) > 0).length;
+  return Math.max(0, paid - used - going);
+}
+// A wanderer of a village, out in the land, not mine yet: it may ask to be walked home.
+const homewardOk = (c) => c.def.role === 'wanderer' && !!c.v && !c.follower && !c.hired && _hd(_tq(c.p), c.v) > (c.v.clear_radius ?? 9);
+function wandererHomeTick(p) {
+  const to = villageById(MAP_SEED, p.homeward_to), label = String(p.peer_id).replace(/^peer:/, '').replace(/_f$/, '');
+  if (!to || _hd(_tq(p), to) > (to.clear_radius ?? 9) || (entity.worldEdits || []).some(e => e.id === `vhome:${label}`)) return;
+  entity.worldEdits.push({ id: `vhome:${label}`, v: to.id, d: DIPLOMACY_STEP, turn: hg.turn, at: hg.action });
+  alignDeed(`home:${label}`, ALIGN_STEP, `you walked ${p.name || 'a wanderer'} home`);
+  const rep = villageRep(MAP_SEED, to, PEER_ID_STRING, villageLedgerWithMine(), MY_RACE);
+  console.log(`[${PEER_LABEL}] homeward: ${p.name || label} is home in ${to.team} — my relationship ${rep}%`);
+  broadcastUI(handMsg({ notice: `🏠 ${p.name || 'The wanderer'} is home in ${to.team} — relationship +${DIPLOMACY_STEP}% → ${rep}%` }));
+  _autosave?.markDirty?.();
+  publishPublicState().catch(() => {});
+}
+function diplomacyTick() {
+  if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF) return;
+  for (const p of livePeers().filter(x => x?.owner_peer_id === PEER_ID_STRING && x.follower && x.homeward_to && (x.life ?? 0) > 0 && Number.isInteger(x.tile_q))) wandererHomeTick(p);
+  for (const p of livePeers().filter(x => x?.owner_peer_id === PEER_ID_STRING && x.follower && x.diplomat_to && (x.life ?? 0) > 0 && Number.isInteger(x.tile_q))) {
+    const to = villageById(MAP_SEED, p.diplomat_to), from = villageById(MAP_SEED, p.village_id);
+    const label = String(p.peer_id).replace(/^peer:/, '').replace(/_f$/, '');
+    if (!to || !from || _hd(_tq(p), to) > (to.clear_radius ?? 9) || (entity.worldEdits || []).some(e => e.id === `venvoy:${label}`)) continue;
+    if (p.diplomat_spy) {   // the paid mission: it whispers and sabotages — the two villages −5 % (each mission), I +5 % with its own
+      const n = (entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith(`vspy:${pairKey(from.id, to.id)}#`)).length + 1;
+      entity.worldEdits.push({ id: `vspy:${pairKey(from.id, to.id)}#${n}`, v: from.id, v2: to.id, d: -DIPLOMACY_STEP, turn: hg.turn, at: hg.action });
+      entity.worldEdits.push({ id: `venvoy:${label}`, v: from.id, to: to.id, spy: 1, turn: hg.turn, at: hg.action });
+      const led = villageLedgerWithMine(), rel = villageRelation(from, to, diplomacyLedger(led)), ra = villageRep(MAP_SEED, from, PEER_ID_STRING, led, MY_RACE);
+      console.log(`[${PEER_LABEL}] diplomacy: ${p.name || label} of ${from.team} spies in ${to.team} — the two villages ${rel}%${rel < WAR_BELOW ? ' (WAR)' : ''}; my relationship ${from.name} ${ra}%`);
+      broadcastUI(handMsg({ notice: `🗡 ${p.name || 'Your spy'} is at work in ${to.team} — ${from.team} and ${to.team} stand at ${rel}% now${rel < WAR_BELOW ? ' — WAR' : ''}; you: ${from.name} ${ra}%` }));
+      _autosave?.markDirty?.(); publishPublicState().catch(() => {});
+      continue;
+    }
+    const id = `vdip:${pairKey(from.id, to.id)}`;
+    if (!(entity.worldEdits || []).some(e => e.id === id)) entity.worldEdits.push({ id, v: from.id, v2: to.id, d: DIPLOMACY_STEP, turn: hg.turn, at: hg.action });
+    alignDeed(`dip:${label}`, ALIGN_STEP, `you brought the envoy of ${from.team} to ${to.team}`);
+    entity.worldEdits.push({ id: `venvoy:${label}`, v: from.id, to: to.id, turn: hg.turn, at: hg.action });
+    const led = villageLedgerWithMine();
+    const rel = villageRelation(from, to, diplomacyLedger(led));
+    const ra = villageRep(MAP_SEED, from, PEER_ID_STRING, led, MY_RACE), rb = villageRep(MAP_SEED, to, PEER_ID_STRING, led, MY_RACE);
+    console.log(`[${PEER_LABEL}] diplomacy: ${p.name || label} reached ${to.team} and stays as the envoy of ${from.team} — the two villages ${rel}%${rel < WAR_BELOW ? ' (still at war)' : ''}; my relationship ${from.name} ${ra}%, ${to.name} ${rb}%`);
+    broadcastUI(handMsg({ notice: `🕊 ${p.name || 'Your diplomat'} is the envoy of ${from.team} in ${to.team} now — they stand at ${rel}% with each other; you: ${from.name} ${ra}%, ${to.name} ${rb}%` }));
+    _autosave?.markDirty?.();
+    publishPublicState().catch(() => {});
+  }
+}
 function questTick() {
   if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0) return;
   const me = { q: entity.tile.q, r: entity.tile.r };
@@ -7660,6 +7870,7 @@ const ROLE_TOPICS = {
   trader: [['wares', 'What do you trade?']],
   healer: [['danger', 'Who comes to you wounded?']],
   dragon: [['danger', 'What do you see from up there?']],
+  diplomat: [['realm', 'Where are the other villages?'], ['relations', 'How does {village} stand with its neighbours?']],
 };
 function talkTopics(c) {
   const fill = (s) => s.replace(/\{village\}/g, c.v?.name || 'the village');
@@ -7674,12 +7885,23 @@ function talkTopics(c) {
     const allies = x.q.rewards.find(r => r.kind === 'allies');
     const hire = !!allies && (allies.units || []).includes(c.def.id);   // a builder's price: the reward is the builder himself
     const engine = !hire && allies ? (allies.units || []).map(u => GAMEMODELS.npcs[u]?.name || u).join(' / ') : '';   // an engineer's: an engine (2026-11-25)
+    const spy = x.q.rewards.some(r => r.kind === 'sabotage');   // the diplomat's price for a spy mission (2026-11-25)
+    if (spy) { t.push({ id: `quest:${x.id}`, ask: `Spy and sabotage for me — pay ${x.q.need_text.replace(/ from your archive$/, '')}`, ready: x.ready }); continue; }
     t.push({ id: `quest:${x.id}`, ask: hire ? `Hire me — pay ${x.q.need_text.replace(/ from your archive$/, '')}` : engine ? `Build me a ${engine} — pay ${x.q.need_text.replace(/ from your archive$/, '')}` : `Trade ${x.q.need_text.replace(/ from your archive$/, '')} → ${x.q.rewards.map(r => r.kind === 'effect' || r.kind === 'skill' ? talkCardName(r.id) : '').filter(Boolean).join(', ')}`, ready: x.ready });
   }
   if (c.mine && c.def.role === 'builder') {
     const busy = (entity.buildOrders || []).find(o => o.to === c.p.peer_id);
     for (const b of c.def.builds || []) t.push({ id: `build:${b.id}`, ask: busy?.b === b.id ? `${b.ask} (building…)` : b.ask, ready: busy?.b === b.id });
   }
+  if (c.def.role === 'diplomat' && c.v) {   // "propose to lead him to another village" (2026-11-25)
+    if (c.mine) t.push({ id: 'mission', ask: 'Where are we going?' });
+    else if (!c.follower) {
+      for (const o of diplomatTargets(c)) t.push({ id: `escort:${o.id}`, ask: `Come with me to ${o.team} (${o.race_name}, ${compassOf(c.me, o)}).`, ready: false });
+      if (spyMissionsLeft(c.v)) for (const o of villagesNear(MAP_SEED, c.p.tile_q, c.p.tile_r, 450).filter(o => o.id !== c.v.id).slice(0, 3)) t.push({ id: `spy:${o.id}`, ask: `Spy on ${o.team} for me (${o.race_name}, ${compassOf(c.me, o)}).`, ready: true });
+    }
+  }
+  if (homewardOk(c)) t.push({ id: 'homeward', ask: `Shall I walk you home to ${c.v.team}?` });   // a wanderer far from home (2026-11-25)
+  if (c.mine && c.p.homeward_to) t.push({ id: 'homeward_how', ask: 'How far is your home?' });
   for (const x of c.def.talk || []) t.push({ id: `t:${x.id}`, ask: fill(x.ask) });
   if (c.v) t.push({ id: 'standing', ask: `How does ${c.v.name} see me?` });
   t.push({ id: 'bye', ask: 'Farewell.' });
@@ -7726,6 +7948,9 @@ function talkAnswer(c, topic) {
   const line = (kind, q) => npcLine(c.def, kind, n, vars(q)).replace(/(^|[.!?]\s+)([a-z])/g, (_, a, b) => a + b.toUpperCase());
   const rp = c.v?.reputation || {};
   if (c.v && c.rep < rp.hostile && topic !== 'standing') return { text: line('warn') || 'Begone.' };
+  const myAlign = heroAlignment(villageLedgerWithMine(), PEER_ID_STRING, MY_RACE);
+  if (c.def.role === 'wanderer' && !c.follower && c.v && Math.abs(myAlign - raceAlignment(c.v.race)) > ALIGN_HOSTILE_GAP && topic !== 'standing')
+    return { text: `${line('warn') || 'Keep your distance.'} (You are ${myAlign}% good, the ${c.v.race_name} ${raceAlignment(c.v.race)}% — too far apart: this wanderer is hostile to you.)` };
   if (topic === 'who') return { text: `${c.p.name || c.def.name}. ${c.def.persona || ''} ${line('greet')}`.trim() };
   if (topic.startsWith('quest:')) {
     const x = c.quests.find(y => `quest:${y.id}` === topic);
@@ -7809,6 +8034,68 @@ function talkAnswer(c, topic) {
     publishPublicState().catch(() => {});
     return { text: `${what} it is — on the hex to your ${compassOf(c.me, site)}. Give me a moment${b.power ? `; stand on it when it is done: ${b.power.kind === 'stance' ? `an Empty Posture there fights as ${b.power.code === 'B' ? 'Block' : 'Posture'}` : b.power.kind === 'mend' ? '+1 life at the end of a turn' : b.power.kind === 'draw' ? 'a card drawn at the end of a turn' : 'a far place explored'}` : ''}.` };
   }
+  if (topic === 'realm' || topic === 'relations') {   // the diplomat: where the others live / how we stand with them
+    const dip = diplomacyLedger(villageLedger());
+    const list = topic === 'realm' ? villagesNear(MAP_SEED, c.p.tile_q, c.p.tile_r, 450).filter(o => o.id !== c.v?.id).slice(0, 4).map(o => ({ village: o, relation: villageRelation(c.v, o, dip) }))
+      : villageRelations(MAP_SEED, c.v, villageLedger()).slice(0, 6);
+    if (!list.length) return { text: topic === 'realm' ? 'No other folk live within a long walk of here — the land is empty, or wild.' : `No one has found another village yet — ${c.v.name} stands alone.` };
+    const word = (rel) => rel < WAR_BELOW ? 'at WAR with us' : rel >= 80 ? 'close friends of ours' : rel >= 60 ? 'on good terms with us' : 'wary of us';
+    return { text: list.map(x => `${x.village.team} of the ${x.village.race_name} — ${compassOf(c.me, x.village)}, ${walkWords(_hd(c.me, x.village), ROUND_SEC)}: ${word(x.relation)} (${x.relation}%).`).join(' ')
+      + (topic === 'realm' && !c.follower ? ' Lead me to one of them and I will speak for both our peoples.' : '') };
+  }
+  if (topic === 'mission') {
+    const to = villageById(MAP_SEED, c.p.diplomat_to);
+    return { text: to ? `To ${to.team} — ${compassOf(_tq(c.p), to)}, ${walkWords(_hd(_tq(c.p), to), ROUND_SEC)}. ${c.p.diplomat_spy ? 'Get me into their land; what I do there is my business.' : 'Walk me up to their village and I stay as our envoy.'}` : 'Home, I think.' };
+  }
+  if (topic.startsWith('escort:')) {
+    const to = villageById(MAP_SEED, topic.slice(7));
+    if (!to || !diplomatTargets(c).some(o => o.id === to.id)) return { text: 'Our people have spoken with them already — through you.' };
+    if (c.rep < rp.hostile) return { text: line('warn') || 'I do not travel with enemies of my village.' };
+    if (myDiplomat()) return { text: `You already lead ${myDiplomat()} — one embassy at a time.` };
+    if (c.dist > 2) return { text: 'Come closer, and we set out together.' };
+    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_escort: to.id, at: hg.action });
+    spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
+      env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '', DIPLOMAT_TO: to.id } })
+      .then(tag => { const x = companions.find(y => y.label === tag); if (x) { x.follower = true; x.escort = { from: c.v.id, to: to.id, label }; } })
+      .catch(e => console.warn(`[${PEER_LABEL}] escort failed: ${e.message}`));
+    broadcastUI(handMsg({ notice: `🕊 ${c.p.name || c.def.name} travels with you to ${to.team}` }));
+    _autosave?.markDirty?.();
+    publishPublicState().catch(() => {});
+    console.log(`[${PEER_LABEL}] diplomacy: ${c.p.name || label} of ${c.v.team} travels with me to ${to.team} (${Math.round(_hd(c.me, to))} hexes)`);
+    return { text: `Then let us go — ${to.team}, ${compassOf(c.me, to)}, ${walkWords(_hd(c.me, to), ROUND_SEC)}. Bring me to their village and I will stay there as our envoy.`, done: 'escort' };
+  }
+  if (topic === 'homeward' || topic === 'homeward_how') {
+    if (topic === 'homeward_how') { const to = villageById(MAP_SEED, c.p.homeward_to); return { text: to ? `${to.team} — ${compassOf(_tq(c.p), to)}, ${walkWords(_hd(_tq(c.p), to), ROUND_SEC)}. Walk me up to the village and I am home.` : 'Not far now, I hope.' }; }
+    if (!homewardOk(c)) return { text: line('greet') || 'I know my way, thank you.' };
+    if (c.dist > 2) return { text: 'Come closer, and we walk together.' };
+    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_homeward: 1, at: hg.action });
+    spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
+      env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '', HOMEWARD_TO: c.v.id } })
+      .then(tag => { const x = companions.find(y => y.label === tag); if (x) x.follower = true; })
+      .catch(e => console.warn(`[${PEER_LABEL}] homeward failed: ${e.message}`));
+    broadcastUI(handMsg({ notice: `🏠 ${c.p.name || c.def.name} walks home with you to ${c.v.team}` }));
+    _autosave?.markDirty?.(); publishPublicState().catch(() => {});
+    console.log(`[${PEER_LABEL}] homeward: ${c.p.name || label} walks with me to ${c.v.team} (${Math.round(_hd(c.me, c.v))} hexes)`);
+    return { text: `Gladly — ${c.v.team} is ${compassOf(c.me, c.v)}, ${walkWords(_hd(c.me, c.v), ROUND_SEC)}. They will thank you for it.`, done: 'homeward' };
+  }
+  if (topic.startsWith('spy:')) {   // the paid spy mission (2026-11-25): led there, it sows mistrust — the two villages −5 %
+    const to = villageById(MAP_SEED, topic.slice(4));
+    if (!to || to.id === c.v.id || !spyMissionsLeft(c.v)) return { text: 'Pay me first — and we never spoke of it.' };
+    if (myDiplomat()) return { text: `You already lead ${myDiplomat()} — one embassy at a time.` };
+    if (c.dist > 2) return { text: 'Closer. These things are not shouted.' };
+    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_spy: to.id, at: hg.action });
+    spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
+      env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '', DIPLOMAT_TO: to.id, DIPLOMAT_SPY: '1' } })
+      .then(tag => { const x = companions.find(y => y.label === tag); if (x) { x.follower = true; x.escort = { from: c.v.id, to: to.id, label, spy: true }; } })
+      .catch(e => console.warn(`[${PEER_LABEL}] spy escort failed: ${e.message}`));
+    broadcastUI(handMsg({ notice: `🗡 ${c.p.name || c.def.name} travels with you to ${to.team} — in secret` }));
+    _autosave?.markDirty?.(); publishPublicState().catch(() => {});
+    console.log(`[${PEER_LABEL}] diplomacy: ${c.p.name || label} of ${c.v.team} goes with me to spy on ${to.team}`);
+    return { text: `Quietly, then — ${to.team}, ${compassOf(c.me, to)}, ${walkWords(_hd(c.me, to), ROUND_SEC)}. Get me inside their land; I will see to the rest. They will trust ${c.v.name} less for it.`, done: 'spy' };
+  }
   if (topic === 'wares') {
     const bs = c.quests.filter(x => x.barter);
     return { text: bs.length ? `${bs.map(x => `${x.q.need_text.replace(/^one /, 'any ')} for ${x.q.rewards.map(r => r.kind === 'effect' || r.kind === 'skill' ? `a ${nameOf(r.id)} card` : rewardWords(r, nameOf)).filter(Boolean).join(' and ')}`).join('; ').replace(/^./, ch => ch.toUpperCase())}. ${bs.some(x => x.ready) ? 'And you carry something I want!' : 'Bring me something worth my while.'}` : 'Nothing today.' };
@@ -7818,7 +8105,8 @@ function talkAnswer(c, topic) {
     : { text: `${line('warn') || 'Not yet.'} (${c.rep}% — the gate opens at ${rp.enter}%; walking in uninvited costs ${rp.trespass}%.)` };
   if (topic === 'standing') {
     const open = c.quests.filter(x => !x.done).length;
-    return { text: `To ${c.v.team} you are ${standingWords(c.rep, rp)}: ${c.rep}%.${c.rep < rp.enter ? ` ${rp.enter}% opens the gate${open ? ' — help us and we will trust you more' : ''}.` : c.rep < rp.ally_all ? ` At ${rp.ally_all}% all of us fight at your side.` : ''}` };
+    return { text: `To ${c.v.team} you are ${standingWords(c.rep, rp)}: ${c.rep}%. You are ${myAlign}% good (${alignmentWords(myAlign)}); the ${c.v.race_name} ${raceAlignment(c.v.race)}%.`
+      + (c.def.role === 'wanderer' ? ` Wanderers more than ${ALIGN_HOSTILE_GAP}% apart from you are hostile.` : '') + `${c.rep < rp.enter ? ` ${rp.enter}% opens the gate${open ? ' — help us and we will trust you more' : ''}.` : c.rep < rp.ally_all ? ` At ${rp.ally_all}% all of us fight at your side.` : ''}` };
   }
   return { text: line('greet') || 'Safe roads.' };
 }
@@ -7870,6 +8158,8 @@ function completeQuest(q, qid, giver, v) {
     } else if (r.kind === 'allies') got.push(...recruitFollowers(v, r, qid, giver, n));
   }
   if (d) got.unshift(`+${d}% relationship with ${v.team}`);
+  if (q.rewards.some(r => r.kind === 'sabotage')) got.push(`${giver.name || 'the diplomat'} will spy for you — lead it to the village you want harmed`);
+  if (!q.consume) alignDeed(`quest:${qid}`, ALIGN_STEP, `you helped ${giver.name || 'a villager'}`);
   console.log(`[${PEER_LABEL}] quest done: ${q.name} for ${giver.name} (${v.team}) — ${got.join(', ')}`);
   broadcastUI(handMsg({ notice: `${q.consume ? '🤝 Traded' : '📜 Quest done'} — ${q.name} for ${giver.name || 'the village'}: ${got.join(', ')}` }));
   _autosave?.markDirty?.();
@@ -8782,6 +9072,13 @@ const uiHttp = http.createServer(async (req, res) => {
     try { u = decodeURIComponent((req.url || '/').split('?')[0]); } catch { res.writeHead(400); res.end(); return; }
     const ASSETS_DIR = process.env.CHAOSD6_ASSETS_DIR || '';
     const USER_DATA_DIR = process.env.CHAOSD6_USER_DATA_DIR || '';
+    // The village catalog = the one THIS peer loaded (b9 2026-11-25, phone: "no villages"): the OCI pack may lack it or hold
+    // another build, and a browser drawing other villages than its resolver plays is a silent mismatch.
+    if (u === '/assets/gamemodels/catalog.json' && GAMEMODELS) {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' });
+      res.end(GAMEMODELS_TEXT ||= JSON.stringify(GAMEMODELS));
+      return;
+    }
     if (u.startsWith('/assets/') && ASSETS_DIR) {
       const rel = u.slice('/assets'.length);
       if (await serve(ASSETS_DIR, rel)) return;

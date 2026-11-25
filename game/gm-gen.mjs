@@ -24,7 +24,7 @@ export const GM_KINDS = Object.freeze(['npc', 'building', 'monster']);
 export const BUNDLE_SCHEMA = 'chaosd6.gm-bundle/1';
 // Roles the generator writes. builder (builds[] + its price quest), the gate guard post and c2's dragon (centre post,
 // breath) / engineer (engine quests) / siege (followers only) stay hand-made for now.
-const HAND_MADE_ROLES = ['builder', 'dragon', 'engineer', 'siege'];
+const HAND_MADE_ROLES = ['builder', 'dragon', 'engineer', 'siege', 'diplomat', 'fighter'];   // + diplomat (Ministry, escort / spy), fighter (the war host) — c2 2026-11-25
 export const GEN_ROLES = Object.freeze(ROLES.filter(r => !HAND_MADE_ROLES.includes(r)));
 export const GEN_BUILDING_ROLES = Object.freeze(BUILDING_ROLES.filter(r => r !== 'centre'));   // one centre per village
 export const LINE_KINDS = Object.freeze(['greet', 'quest', 'thanks', 'lore', 'warn']);
@@ -438,6 +438,9 @@ export function autoFixNpc(b, { m = models(), pick = null } = {}) {
       const w = v.wall, cr = v.clear_radius ?? v.radius + 3;
       const at = post === 'outside' && w ? freeHex(v, { min: w.radius + 1, max: cr }) : freeHex(v, { min: 1, max: v.radius });
       if (at) {
+        // a full village (cap 20 since 2026-11-25: 15 + its fighters): the newcomer takes the place of one fighter
+        const fi = (v.residents || []).length >= Math.max(v.cap, 20) ? (v.residents || []).findLastIndex(r => m.npc[r.npc]?.role === 'fighter') : -1;
+        if (fi >= 0) { fixed.push(`${vid} is full: ${n.name} takes the place of one ${m.npc[v.residents[fi].npc].name}`); v.residents = v.residents.filter((_, i) => i !== fi); }
         v.residents = [...(v.residents || []), { npc: n.id, at, ...(post === 'outside' ? { post: 'outside' } : {}) }];
         if (v.residents.length > v.cap) { v.cap = Math.min(20, v.residents.length); }
         b.place.at = at;

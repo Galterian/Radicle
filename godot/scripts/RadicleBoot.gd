@@ -30,6 +30,10 @@ const SKILLS_RID := "rad:z2L7U9KeYdiynSmeg9gNoE84BP3i5"
 # chaosD6-Classes (game/classes-repo.mjs, infra/oci/classes-setup.sh): class definitions as data;
 # seeded so peers can read classes/<id>.json + lib/<id>.json at a pinned commit offline.
 const CLASSES_RID := "rad:zBCekM1pp1DM1WcVZFFXWH3FGXsi"
+# chaosD6-GameModels (game/tools/oci/gamemodels-rad-init.sh, 2026-11-25): races / buildings / NPCs / monsters / villages /
+# quests. The phone publishes its team's bundles there (bridge feature "gamemodels") and lists + votes on the other
+# teams' proposals, so it is seeded with scope ALL ("@all", ffi rid_scopes), the others with scope followed.
+const GAMEMODELS_RID := "rad:z48usa3nUHDWMc67TYwiFzL8DixbC"
 # TODO(C3) chaosD6-Classes (game/classes-repo.mjs, infra/oci/classes-setup.sh): no RID yet. After the user runs
 # game/tools/oci/classes-rad-init.sh, game/tools/out/_classes_rid_patch.py <rid> --apply adds the CLASSES_RID const
 # here and appends it to the seeded rid list below.
@@ -67,6 +71,9 @@ func _start_on_thread(alias: String) -> void:
     for extra in [DIMENSIONS_RID, EFFECTS_RID, SKILLS_RID, CLASSES_RID]:
         if not extra.is_empty():
             rid_list.append(extra)
+    # every player's namespace of chaosD6-GameModels (the other teams' proposals), the rest followed only
+    if not GAMEMODELS_RID.is_empty():
+        rid_list.append(GAMEMODELS_RID + "@all")
     var rids := ",".join(rid_list)
     var nid: String = _plugin.call("start", alias, rids, ProjectSettings.globalize_path(IDENTITY_PEM))
     call_deferred("_emit_result", nid)

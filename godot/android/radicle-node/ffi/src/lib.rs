@@ -69,15 +69,21 @@ const BRIDGE_FILE: &str = "bridge.json";
 /// The only file a profile branch holds (same as profile-sync.mjs / profiles-push.mjs).
 const PROFILE_FILE: &str = "profile.json";
 /// What the bridge serves (bridge.json `features`): POST /save, POST /publish,
-/// POST /publish `mode: "definition"` (defs).
-const BRIDGE_FEATURES: [&str; 3] = ["save", "publish", "defs"];
+/// POST /publish `mode: "definition"` (defs; "gamemodels": the GameModels folders + several manifest entries),
+/// POST /publish of refs/heads/votes/<me> (votes), POST /fetch (fetch).
+const BRIDGE_FEATURES: [&str; 6] = ["save", "publish", "defs", "votes", "gamemodels", "fetch"];
 /// Definition branches (game/editor-publish.mjs branchOf): refs/heads/players/<team-slug>/<slug>.
 const PLAYERS_REF_PREFIX: &str = "refs/heads/players/";
 /// The only directories a definition publish may write (+ DEFS_MANIFEST at the root).
-const DEFS_DIRS: [&str; 3] = ["skills", "effects", "classes"];
+/// chaosD6-Skills / -Effects / -Classes, and chaosD6-GameModels (2026-11-25: an NPC bundle = the NPC + its quests + the
+/// village / race it changes; a building; a monster). `lib/` stays hand-authored in every repo.
+const DEFS_DIRS: [&str; 9] = ["skills", "effects", "classes", "races", "buildings", "npcs", "monsters", "villages", "quests"];
 const DEFS_MANIFEST: &str = "index.json";
-const DEFS_MAX_FILES: usize = 8;
+const DEFS_MAX_FILES: usize = 24;
 const DEFS_FILE_MAX: usize = 256 << 10;
+/// Vote branches (game/proposal-votes.mjs voteBranch): refs/heads/votes/<voter id> = this node's own NID, votes/… only.
+const VOTES_REF_PREFIX: &str = "refs/heads/votes/";
+const VOTES_DIR: &str = "votes";
 /// Dimension branches (chaosD6-Dimensions): refs/heads/ActiveDimensions/<Name>,
 /// holding ActiveDimensions/<Name>/… only.
 const DIMENSIONS_REF_PREFIX: &str = "refs/heads/ActiveDimensions/";
@@ -110,9 +116,18 @@ fn rid(s: &str) -> Res<RepoId> {
     RepoId::from_str(&urn).map_err(err)
 }
 
-/// "rad:a,rad:b" → [a, b] (blank items skipped).
+/// "rad:a,rad:b" → [a, b] (blank items skipped; a trailing "@all" scope marker is dropped).
 fn rid_list(s: &str) -> Res<Vec<RepoId>> {
-    s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(rid).collect()
+    Ok(rid_scopes(s)?.into_iter().map(|(r, _)| r).collect())
+}
+
+/// "rad:a,rad:b@all" → [(a, Followed), (b, All)]. `@all`: every player's namespace (chaosD6-GameModels: the other
+/// teams' proposals the phone lists and votes on); the rest only the delegate's refs plus ours.
+fn rid_scopes(s: &str) -> Res<Vec<(RepoId, Scope)>> {
+    s.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|item| match item.strip_suffix("@all") {
+        Some(r) => rid(r).map(|r| (r, Scope::All)),
+        None => rid(item).map(|r| (r, Scope::Followed)),
+    }).collect()
 }
 
 fn signing_key(home: &Home) -> Res<SigningKey> {
@@ -217,13 +232,13 @@ fn init(home: &str, alias: &str, config_json: &str, rid_s: &str, follow: &str, i
     // Fail here with a readable error rather than inside run().
     Config::load(&home.config()).map_err(err)?;
 
-    let rids = rid_list(rid_s)?;
+    let rids = rid_scopes(rid_s)?;
     if rids.is_empty() {
         return Err("no rid to seed".into());
     }
     let mut policies = home.policies_mut().map_err(err)?;
-    for r in &rids {
-        policies.seed(r, Scope::Followed).map_err(err)?;
+    for (r, scope) in &rids {
+        policies.seed(r, *scope).map_err(err)?;
     }
     if !follow.is_empty() {
         policies.follow(&NodeId::from_str(follow).map_err(err)?, None).map_err(err)?;
@@ -408,12 +423,15 @@ fn serve(stream: TcpStream, home: &Home, token: &str) {
     if !auth {
         return respond(&stream, 403, serde_json::json!({ "ok": false, "error": "bad token" }));
     }
+    let fetch = line.starts_with("POST /fetch ");
     let (publish, max) = if line.starts_with("POST /save ") {
         (false, SAVE_MAX)
     } else if line.starts_with("POST /publish ") {
         (true, PUBLISH_MAX)
+    } else if fetch {
+        (false, SAVE_MAX)
     } else {
-        return respond(&stream, 404, serde_json::json!({ "ok": false, "error": "POST /save or POST /publish only" }));
+        return respond(&stream, 404, serde_json::json!({ "ok": false, "error": "POST /save, /publish or /fetch only" }));
     };
     if len == 0 || len > max {
         return respond(&stream, 404, serde_json::json!({ "ok": false, "error": format!("body must be 1..={max} bytes") }));
@@ -421,6 +439,15 @@ fn serve(stream: TcpStream, home: &Home, token: &str) {
     let mut body = vec![0; len];
     if rd.read_exact(&mut body).is_err() {
         return respond(&stream, 400, serde_json::json!({ "ok": false, "error": "short body" }));
+    }
+    if fetch {
+        return match fetch_repo(home, &body) {
+            Ok(n) => respond(&stream, 200, serde_json::json!({ "ok": true, "updated": n })),
+            Err(e) => {
+                log::warn!(target: "node", "bridge fetch: {e}");
+                respond(&stream, 200, serde_json::json!({ "ok": false, "error": e }))
+            }
+        };
     }
     if publish {
         return match publish_any(home, &body) {
@@ -438,6 +465,23 @@ fn serve(stream: TcpStream, home: &Home, token: &str) {
             log::warn!(target: "node", "bridge save: {e}");
             respond(&stream, 200, serde_json::json!({ "ok": false, "error": e }))
         }
+    }
+}
+
+/// POST /fetch { rid, seed }: fetch a seeded repo from `seed` now (the editor's "Refresh" of the GameModels proposals;
+/// the node also fetches on its own when the seed announces). → the number of refs updated.
+fn fetch_repo(home: &Home, body: &[u8]) -> Res<usize> {
+    let v: serde_json::Value = serde_json::from_slice(body).map_err(err)?;
+    let s = |k: &str| v[k].as_str().map(str::to_string).ok_or_else(|| format!("missing {k}"));
+    let rid = rid(&s("rid")?)?;
+    if !home.policies_mut().map_err(err)?.is_seeding(&rid).map_err(err)? {
+        return Err(format!("{rid} is not seeded by this node"));
+    }
+    let from = NodeId::from_str(&s("seed")?).map_err(err)?;
+    let mut node = Node::new(home.socket_from_env());
+    match node.fetch(rid, from, Duration::from_secs(45), None).map_err(err)? {
+        FetchResult::Success { updated, .. } => Ok(updated.len()),
+        FetchResult::Failed { reason } => Err(format!("fetch {rid} from {from}: {reason}")),
     }
 }
 
@@ -520,6 +564,17 @@ fn parse_publish(v: &serde_json::Value) -> Res<PublishRequest> {
         message: s("message")?,
         seed: s("seed")?,
     })
+}
+
+/// The one directory a snapshot publish owns: refs/heads/ActiveDimensions/<Name> → "ActiveDimensions/<Name>";
+/// refs/heads/votes/<me> → "votes" (game/proposal-votes-publish.mjs publishRepoBridge: all my votes, nothing else) —
+/// only my own vote branch.
+fn snapshot_dir(git_ref: &str, me: &str) -> Res<String> {
+    match git_ref.strip_prefix(VOTES_REF_PREFIX) {
+        Some(voter) if voter == me => Ok(VOTES_DIR.to_string()),
+        Some(_) => Err(format!("refusing {git_ref} (votes go on {VOTES_REF_PREFIX}{me})")),
+        None => Ok(format!("{DIMENSIONS_DIR}/{}", dimension_name(git_ref)?)),
+    }
 }
 
 /// refs/heads/ActiveDimensions/<Name> → <Name>, if a valid git ref name.
@@ -660,8 +715,7 @@ fn build_tree(repo: &git2::Repository, base: Option<git2::Oid>, keep: &str, prun
 /// there, if any), sign refs, announce. Returns (oid, unchanged).
 fn publish_commit(home: &Home, req: &PublishRequest) -> Res<(String, bool)> {
     let rid = rid(&req.rid)?;
-    let name = dimension_name(&req.git_ref)?;
-    let keep = format!("{DIMENSIONS_DIR}/{name}");
+    let keep = snapshot_dir(&req.git_ref, &NodeId::from(*signing_key(home)?.public_key()).to_string())?;
     let prefix = format!("{keep}/");
     for p in req.files.iter().map(|(p, _)| p).chain(&req.remove) {
         check_path(p, &prefix)?;
@@ -736,7 +790,8 @@ struct DefinitionRequest {
     base: String,
     /// <subdir>/<id>.json → exact file bytes.
     files: Vec<(String, Vec<u8>)>,
-    manifest: Option<ManifestUpdate>,
+    /// index.json entries, applied in order (one per definition of a GameModels bundle).
+    manifest: Vec<ManifestUpdate>,
     name: String,
     email: String,
     timestamp: i64,
@@ -757,16 +812,21 @@ fn parse_definition(v: &serde_json::Value) -> Res<DefinitionRequest> {
         Value::Array(a) if a.is_empty() => {}
         _ => return Err("a definition publish removes nothing (remove must be empty)".into()),
     }
-    let manifest = match &v["manifest"] {
-        Value::Null => None,
-        m @ Value::Object(_) => {
-            let f = |k: &str| m[k].as_str().map(str::to_string).ok_or_else(|| format!("missing manifest.{k}"));
-            if m["file"].as_str().unwrap_or(DEFS_MANIFEST) != DEFS_MANIFEST {
-                return Err(format!("manifest.file must be {DEFS_MANIFEST}"));
-            }
-            Some(ManifestUpdate { key: f("key")?, id: f("id")?, sha256: f("sha256")? })
+    let entry = |m: &Value| -> Res<ManifestUpdate> {
+        if !m.is_object() {
+            return Err("a manifest entry must be an object".into());
         }
-        _ => return Err("manifest must be an object".into()),
+        let f = |k: &str| m[k].as_str().map(str::to_string).ok_or_else(|| format!("missing manifest.{k}"));
+        if m["file"].as_str().unwrap_or(DEFS_MANIFEST) != DEFS_MANIFEST {
+            return Err(format!("manifest.file must be {DEFS_MANIFEST}"));
+        }
+        Ok(ManifestUpdate { key: f("key")?, id: f("id")?, sha256: f("sha256")? })
+    };
+    let manifest = match &v["manifest"] {
+        Value::Null => Vec::new(),
+        m @ Value::Object(_) => vec![entry(m)?],
+        Value::Array(a) => a.iter().map(entry).collect::<Res<_>>()?,
+        _ => return Err("manifest must be an object or an array".into()),
     };
     Ok(DefinitionRequest {
         rid: s("rid")?,
@@ -814,7 +874,7 @@ fn check_definition(req: &DefinitionRequest) -> Res<()> {
         return Err(format!("a definition publish holds 1..={DEFS_MAX_FILES} files"));
     }
     for (p, content) in &req.files {
-        let manifest_file = p == DEFS_MANIFEST && req.manifest.is_none();
+        let manifest_file = p == DEFS_MANIFEST && req.manifest.is_empty();
         if !manifest_file && !def_path_ok(p) {
             return Err(format!("path {p:?} is outside {}/<id>.json", DEFS_DIRS.join("|")));
         }
@@ -822,7 +882,10 @@ fn check_definition(req: &DefinitionRequest) -> Res<()> {
             return Err(format!("{p} is larger than {DEFS_FILE_MAX} bytes"));
         }
     }
-    if let Some(m) = &req.manifest {
+    if req.manifest.len() > DEFS_MAX_FILES {
+        return Err(format!("at most {DEFS_MAX_FILES} manifest entries"));
+    }
+    for m in &req.manifest {
         let id_ok = (1..=80).contains(&m.id.len()) && m.id.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_');
         let sha_ok = m.sha256.len() == 64 && m.sha256.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c));
         if !DEFS_DIRS.contains(&m.key.as_str()) || !id_ok || !sha_ok {
@@ -956,12 +1019,18 @@ fn definition_tree_commit(raw: &git2::Repository, main: git2::Oid, tip: Option<&
     let main_c = raw.find_commit(main).map_err(err)?;
     let main_tree = main_c.tree().map_err(err)?;
     let mut files = req.files.clone();
-    if let Some(m) = &req.manifest {
+    if !req.manifest.is_empty() {
         let old = main_tree.get_path(Path::new(DEFS_MANIFEST)).ok()
             .filter(|e| e.kind() == Some(git2::ObjectType::Blob))
             .and_then(|e| raw.find_blob(e.id()).ok())
             .map(|b| b.content().to_vec());
-        if let Some(text) = old.and_then(|o| manifest_update(&o, m)) {
+        // commitGit sets every entry on the parsed manifest, then stringifies once; re-parsing our own output between
+        // entries gives the same bytes (key order kept, numbers / strings round-trip).
+        let mut text = old;
+        for m in &req.manifest {
+            text = text.and_then(|o| manifest_update(&o, m));
+        }
+        if let Some(text) = text {
             files.retain(|(p, _)| p != DEFS_MANIFEST);
             files.push((DEFS_MANIFEST.to_string(), text));
         }
@@ -1007,7 +1076,7 @@ fn definition_commit(home: &Home, req: &DefinitionRequest) -> Res<(String, bool)
     check_definition(req)?;
     let rid = rid(&req.rid)?;
     if !home.policies_mut().map_err(err)?.is_seeding(&rid).map_err(err)? {
-        return Err(format!("{rid} is not seeded by this node (RadicleBoot.gd seeds chaosD6-Skills / -Effects / -Classes)"));
+        return Err(format!("{rid} is not seeded by this node (RadicleBoot.gd seeds chaosD6-Skills / -Effects / -Classes / -GameModels)"));
     }
     let signer = signing_key(home)?;
     let me = NodeId::from(*signer.public_key());
@@ -1233,7 +1302,7 @@ mod tests {
             git_ref: "refs/heads/players/Gold-Team/ice-wall".into(),
             base: "refs/heads/main".into(),
             files: files.iter().map(|(p, c)| (p.to_string(), c.as_bytes().to_vec())).collect(),
-            manifest: manifest.map(|(key, id, sha)| ManifestUpdate { key: key.into(), id: id.into(), sha256: sha.into() }),
+            manifest: manifest.map(|(key, id, sha)| ManifestUpdate { key: key.into(), id: id.into(), sha256: sha.into() }).into_iter().collect(),
             name: "Gold Team".into(),
             email: "z6Mkexample@chaosd6".into(),
             timestamp: 1_790_000_000,
@@ -1259,6 +1328,9 @@ mod tests {
             assert!(!base_ref_ok(bad), "{bad}");
         }
         for ok in ["skills/skill_ice_wall.json", "effects/effect_x.json", "classes/class_y-1.json"] {
+            assert!(def_path_ok(ok), "{ok}");
+        }
+        for ok in ["npcs/npc_empire_bard.json", "villages/vil_empire.json", "races/race_empire.json", "quests/quest_x.json", "buildings/bld_x.json", "monsters/mon_x.json"] {
             assert!(def_path_ok(ok), "{ok}");
         }
         for bad in ["lib/x.json", "skills/a/b.json", "skills/.json", "skills/x.txt", "skills/../index.json", "README.md", "skills/", "index.json",
@@ -1291,7 +1363,7 @@ mod tests {
             "manifest": { "file": "index.json", "key": "skills", "id": "skill_ice_wall", "sha256": SHA_A },
             "name": "Gold Team", "email": "z6Mk@chaosd6", "timestamp": 1_790_000_000, "message": "m\n", "seed": "z6Mk" });
         let r = parse_definition(&body).unwrap();
-        assert_eq!((r.files.len(), r.manifest.as_ref().unwrap().id.as_str(), r.timestamp), (1, "skill_ice_wall", 1_790_000_000));
+        assert_eq!((r.files.len(), r.manifest[0].id.as_str(), r.timestamp), (1, "skill_ice_wall", 1_790_000_000));
         let mut b2 = body.clone();
         b2["remove"] = serde_json::json!(["skills/x.json"]);
         assert!(parse_definition(&b2).is_err());
@@ -1368,6 +1440,51 @@ mod tests {
         assert_eq!(c3c.parent_ids().collect::<Vec<_>>(), [c1, main2]);
         assert!(paths(&raw, c3c.tree_id()).contains(&"skills/skill_new.json=n".to_string()));
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn gamemodels_bundles_votes_scopes() {
+        // A GameModels NPC bundle: three files + three manifest entries in one commit, the array form of `manifest`.
+        let body = serde_json::json!({ "rid": "rad:z48usa3nUHDWMc67TYwiFzL8DixbC", "ref": "refs/heads/players/sun-riders/npc-empire-bard",
+            "mode": "definition", "base": "refs/heads/main", "remove": [],
+            "files": { "npcs/npc_empire_bard.json": "{}\n", "villages/vil_empire.json": "{}\n", "races/race_empire.json": "{}\n" },
+            "manifest": [{ "file": "index.json", "key": "npcs", "id": "npc_empire_bard", "sha256": SHA_A },
+                { "file": "index.json", "key": "villages", "id": "vil_empire", "sha256": SHA_B },
+                { "file": "index.json", "key": "races", "id": "race_empire", "sha256": SHA_A }],
+            "name": "Sun Riders", "email": "z6Mk@chaosd6", "timestamp": 1_790_000_000, "message": "m\n", "seed": "z6Mk" });
+        let req = parse_definition(&body).unwrap();
+        assert_eq!(req.manifest.len(), 3);
+        check_definition(&req).unwrap();
+        let mut bad = body.clone();
+        bad["manifest"][1]["id"] = "vil_other".into();
+        assert!(check_definition(&parse_definition(&bad).unwrap()).is_err(), "an entry without its file");
+        bad["manifest"] = serde_json::json!([1]);
+        assert!(parse_definition(&bad).is_err());
+
+        let dir = std::env::temp_dir().join(format!("ffi-gm-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        let raw = git2::Repository::init_bare(&dir).unwrap();
+        let f = |p: &str, c: &str| (p.to_string(), c.as_bytes().to_vec());
+        let main_tree = build_tree(&raw, None, "", None, &[], &[f("lib/agenda_x.json", "{}\n"),
+            f("index.json", &format!("{{\"format\":1,\"races\":{{\"race_empire\":\"{SHA_B}\"}},\"npcs\":{{\"npc_z\":\"{SHA_B}\"}},\"villages\":{{}}}}"))]).unwrap();
+        let sig = git2::Signature::new("seed", "seed@x", &git2::Time::new(1, 0)).unwrap();
+        let main = raw.commit(None, &sig, &sig, "main\n", &raw.find_tree(main_tree).unwrap(), &[]).unwrap();
+        let (c, _) = definition_tree_commit(&raw, main, None, &req).unwrap();
+        let idx = paths(&raw, raw.find_commit(c).unwrap().tree_id()).into_iter().find(|p| p.starts_with("index.json=")).unwrap();
+        assert_eq!(idx, format!("index.json={{\n  \"format\": 1,\n  \"races\": {{\n    \"race_empire\": \"{SHA_A}\"\n  }},\n  \"npcs\": {{\n    \"npc_empire_bard\": \"{SHA_A}\",\n    \"npc_z\": \"{SHA_B}\"\n  }},\n  \"villages\": {{\n    \"vil_empire\": \"{SHA_B}\"\n  }}\n}}\n"));
+        std::fs::remove_dir_all(&dir).ok();
+
+        // Votes: only my own branch, and the whole votes/ directory.
+        let me = "z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT";
+        assert_eq!(snapshot_dir(&format!("refs/heads/votes/{me}"), me).unwrap(), "votes");
+        assert!(snapshot_dir("refs/heads/votes/z6MkOther", me).is_err());
+        assert_eq!(snapshot_dir("refs/heads/ActiveDimensions/Ashfall", me).unwrap(), "ActiveDimensions/Ashfall");
+        assert!(snapshot_dir("refs/heads/main", me).is_err());
+
+        // Seeding scopes: "@all" only where asked.
+        let s = rid_scopes("rad:z4Y11mZyhHRbkHMGN98w5gPwTWTFH, rad:z48usa3nUHDWMc67TYwiFzL8DixbC@all").unwrap();
+        assert_eq!(s.iter().map(|(_, sc)| *sc == Scope::All).collect::<Vec<_>>(), [false, true]);
+        assert_eq!(rid_list("rad:z48usa3nUHDWMc67TYwiFzL8DixbC@all").unwrap().len(), 1);
     }
 
     /// game/editor-publish.mjs commitGit (desktop git) and this node must give the same commit for the same

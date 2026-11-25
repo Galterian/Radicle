@@ -24,10 +24,20 @@ function source(dataDir, { dir = GAMEMODELS_DIR } = {}) {
   return { from: 'catalog', where: f, defs };
 }
 
-const entryOf = (def) => {
+// A village template has no name of its own (its team is "{name} Village", the name rolled per map): the editor calls
+// it after its race — vil_barbarians "Barbarian Village", vil_barbarians_hamlet "Barbarian Hamlet" (user 2026-11-25).
+const singular = (name) => String(name).replace(/ves$/, 'f').replace(/s$/, '');
+export function villageName(def, races = {}) {
+  const race = races[def.race];
+  const who = singular(race?.name || String(def.race || def.id).replace(/^(race|vil)_/, '').replace(/_hamlet$/, '').split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '));
+  return `${who} ${def.size === 'hamlet' ? 'Hamlet' : 'Village'}`;
+}
+
+const entryOf = (def, kind, defs) => {
   const res = def.card?.resources || def.resources || null;
-  const tags = [...new Set([def.race, def.role, ...(def.card?.tags || def.tags || [])].filter(t => typeof t === 'string' && t))];
-  return { id: def.id, name: def.name || def.card?.name || def.id, tags, ...(res ? { resources: res } : {}),
+  const tags = [...new Set([def.race, def.role, def.size, ...(def.card?.tags || def.tags || [])].filter(t => typeof t === 'string' && t))];
+  const name = def.name || def.card?.name || (kind === 'village' ? villageName(def, defs?.race) : def.id);
+  return { id: def.id, name, tags, ...(res ? { resources: res } : {}),
     versions: [{ version: def.version || def.card?.version || '1.0.0', status: 'canonical', weight: 1, data: def }] };
 };
 
@@ -46,6 +56,6 @@ export function gameModelsCollection(dataDir, folder, o = {}) {
   const kind = Object.keys(KINDS).find(k => KINDS[k][0] === folder);
   const s = kind && source(dataDir, o);
   if (!s) return null;
-  const entries = Object.values(s.defs[kind] || {}).filter(d => d?.id).sort((a, b) => a.id.localeCompare(b.id)).map(entryOf);
+  const entries = Object.values(s.defs[kind] || {}).filter(d => d?.id).sort((a, b) => a.id.localeCompare(b.id)).map(d => entryOf(d, kind, s.defs));
   return { collection: `gm_${folder}`, source: `chaosD6-GameModels ${folder}/ (${s.from === 'repo' ? path.basename(s.where) : 'compiled catalog'})`, entries };
 }

@@ -8,20 +8,39 @@
 //                                  (defs-collection.mjs definitionsCollection), as the node serves them live
 //   defs/index.json                { skill: [ids], effect: [ids], class: [ids] }
 //   defs/<kind>/<id>.json          the built-in definition files (game/skills-data/skills, effects-data/effects, classes-data/classes)
+//   gamemodels/index.json          the chaosD6-GameModels collections (races, NPCs, villages, monsters, …) as the node lists
+//   gamemodels/<folder>.json       them (gamemodels-collections.mjs), from GameModels MAIN — what is on Radicle, not the
+//                                  checkout's uncommitted work (2026-11-25: the public site had none)
 //
-//   node tools/rules-site-build.mjs --out <dir>        (the dir is emptied first; refuses / and the repo itself)
+//   node tools/rules-site-build.mjs --out <dir> [--gamemodels <dir>]   (the dir is emptied first; refuses / and the repo itself)
+//   --gamemodels: a GameModels tree to publish as it is (default: `git archive main` of the GameModels checkout)
 // Deploying is separate (game/tools/out/_ed_deploy_rules.sh: tar → scp → swap /var/www/rules on the seed).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { definitionsCollection, definitionsDirOf, resolveDefinitionsDir, definitionsCollectionText } from '../defs-collection.mjs';
+import { resolveGameModelsDir, KINDS } from '../gamemodels.mjs';
+import { gameModelsIndex, gameModelsCollection } from '../gamemodels-collections.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
 const REPO = path.resolve(GAME, '..');
 const DEF_DIRS = { skill: 'skills-data/skills', effect: 'effects-data/effects', class: 'classes-data/classes' };
 
-export function buildRulesSite(out, { repoRoot = REPO, gameDir = GAME, dataDir = path.join(repoRoot, 'data') } = {}) {
+// GameModels main of the checkout → a temp tree (index.json + the KINDS folders); null without a git checkout.
+function gameModelsMain(gmDir = resolveGameModelsDir()) {
+  if (!gmDir || !fs.existsSync(path.join(gmDir, '.git'))) return null;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'chaosd6-site-gm-'));
+  const subs = [...new Set(Object.values(KINDS).map(([sub]) => sub))];
+  const tar = execFileSync('git', ['-C', gmDir, 'archive', '--format=tar', 'main', 'index.json', ...subs], { maxBuffer: 256 << 20 });
+  execFileSync('tar', ['-x', '-C', tmp], { input: tar });
+  const commit = execFileSync('git', ['-C', gmDir, 'rev-parse', '--short', 'main'], { encoding: 'utf8' }).trim();
+  return { dir: tmp, commit, cleanup: () => fs.rmSync(tmp, { recursive: true, force: true }) };
+}
+
+export function buildRulesSite(out, { repoRoot = REPO, gameDir = GAME, dataDir = path.join(repoRoot, 'data'), gamemodels } = {}) {
   const abs = path.resolve(out);
   if (abs === path.parse(abs).root || abs === repoRoot || repoRoot.startsWith(abs + path.sep) || abs === dataDir) throw new Error(`refusing to build into ${abs}`);
   fs.rmSync(abs, { recursive: true, force: true });
@@ -63,6 +82,21 @@ export function buildRulesSite(out, { repoRoot = REPO, gameDir = GAME, dataDir =
     sum.defs[kind] = files.length;
   }
   fs.writeFileSync(path.join(abs, 'defs', 'index.json'), JSON.stringify(ids));
+  const gm = gamemodels ? { dir: gamemodels, commit: 'as given', cleanup: () => {} } : gameModelsMain();
+  sum.gamemodels = gm ? { from: gm.commit, collections: [] } : null;
+  try {
+    // without a checkout: the compiled catalog's subset (gameModelsIndex falls back by itself)
+    const gi = gameModelsIndex(dataDir, { dir: gm?.dir || null });
+    if (gi.available) {
+      fs.mkdirSync(path.join(abs, 'gamemodels'), { recursive: true });
+      fs.writeFileSync(path.join(abs, 'gamemodels', 'index.json'), JSON.stringify(gi));
+      for (const c of gi.collections) {
+        const folder = c.file.replace(/^gamemodels\//, '').replace(/\.json$/, '');
+        fs.writeFileSync(path.join(abs, 'gamemodels', folder + '.json'), JSON.stringify(gameModelsCollection(dataDir, folder, { dir: gm?.dir || null })));
+        (sum.gamemodels ||= { from: gi.source, collections: [] }).collections.push(`${folder} ${c.entries}`);
+      }
+    }
+  } finally { gm?.cleanup(); }
   return { out: abs, ...sum };
 }
 
@@ -70,9 +104,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const argv = process.argv.slice(2);
   const i = argv.indexOf('--out');
   if (i < 0 || !argv[i + 1]) { console.error('usage: node tools/rules-site-build.mjs --out <dir>'); process.exit(2); }
-  const s = buildRulesSite(argv[i + 1]);
+  const g = argv.indexOf('--gamemodels');
+  const s = buildRulesSite(argv[i + 1], g >= 0 ? { gamemodels: path.resolve(argv[g + 1]) } : {});
   console.log(`rules site → ${s.out}`);
   console.log(`  shell: rules.html + editor.html; editor/: ${s.editor} file(s)`);
   console.log(`  data/: ${s.data} file(s) copied; prebuilt: ${s.prebuilt.join(', ') || 'none'}`);
   console.log(`  defs/: ${Object.entries(s.defs).map(([k, n]) => `${n} ${k}`).join(', ')} (+ defs/index.json); no api/ (read-only)`);
+  console.log(`  gamemodels/: ${s.gamemodels?.collections.length ? `${s.gamemodels.collections.join(', ')} (GameModels ${s.gamemodels.from})` : 'none (no GameModels checkout or catalog)'}`);
 }

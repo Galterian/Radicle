@@ -336,6 +336,7 @@ export function setPlacedBuildings(list) {
     path: b.path || '', label: b.label || 'Building', kind: b.kind === 'wall' ? 'wall' : 'building', ...(b.kind === 'wall' ? { blocking: true } : {}), biome: b.biome || '', id: `made:${b.q},${b.r}`, desc: b.desc || '',
     ...(b.theme ? { theme: b.theme } : {}), ...(b.copy_of ? { copy_of: { q: b.copy_of.q, r: b.copy_of.r } } : {}), ...(b.bonus ? { bonus: b.bonus } : {}),
     placed: true, by: b.by || null, made_by: b.made_by || null,
+    ...(b.village_wall ? { village: { id: b.village_wall, wall: true } } : {}),   // a wall hex the village mason mended: drawn with the ring
   });
   notify();
   return true;

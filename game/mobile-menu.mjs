@@ -232,7 +232,8 @@ export async function planOf(body, file, deps = {}) {
     const dimName = String(body?.dimensionName || '').trim().slice(0, 40) || 'Ashfall-Micro';
     return { private: true, dimName, dimId: jp.privateDimId(dimName), env: { ...jp.PRIVATE_TEST_ENV, TEST_MODE: mode } };
   };
-  if (mode === 'test-random') return { mode, ...(await privateOf()) };
+  // proposals: "with other teams' proposals" (profile-ui.js; mobile-entry compiles them into the game's catalog)
+  if (mode === 'test-random') return { mode, ...(await privateOf()), proposals: body?.proposals === true };
   const p = loadProfile(file);
   // One dimension at a time (user ruling 2026-11-15) for Create Dimension / Restore / Test launches: a profile
   // character (or team member) alive in ANOTHER dimension the menu knows (the list cache) → 409 naming it. `except`

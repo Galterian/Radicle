@@ -11,6 +11,8 @@
 //   - effects-data/, skills-data/, classes-data/ (data programs, hooks, libs), replaced wholesale
 //   - the building catalogues (js/catalog/) and the rulebook data/*.json (NOT data/dimensions — the bundle's own)
 //   - the rules editor: repo-root editor.html + editor/*.js|css → the bundle root (served at /rules/ by the menu)
+//   - the compiled GameModels catalog (assets/gamemodels/catalog.json) and the GameModels definitions of its main
+//     (gamemodels-repo/), replaced wholesale
 // Then it checks that every relative import inside the staged bundle resolves, and that each copy is byte-identical.
 //
 //   node tools/stage-mobile-bundle.mjs            # stage
@@ -19,6 +21,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { builtinModules } from 'node:module';
+import os from 'node:os';
+import { execFileSync } from 'node:child_process';
 
 const GAME = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.resolve(GAME, '..');
@@ -68,6 +72,22 @@ for (const f of fs.readdirSync(path.join(ROOT, 'data')).filter(f => f.endsWith('
 // The compiled GameModels catalog (monsters / NPCs / buildings / villages; data/creatures.json is gone since 2026-11-25):
 // at assets/ beside the bundle's data/, where defs-collection resolveCatalogFile looks first.
 copies.push([path.join(ROOT, 'assets/gamemodels/catalog.json'), path.join(DEST, 'assets/gamemodels/catalog.json')]);
+// The chaosD6-GameModels definitions, read-only (2026-11-25, user: the phone generates / edits NPCs, buildings and
+// monsters by itself): its committed `main` — the tree the phone's own node publishes on top of, not the checkout's
+// uncommitted work — at <bundle>/gamemodels-repo (gamemodels.mjs GAMEMODELS_REPO_CANDIDATES). No tools/, no node_modules.
+const GM_STAGE = path.join(os.tmpdir(), `chaosd6-stage-gm-${process.pid}`);
+{
+  const { resolveGameModelsDir, KINDS } = await import('../gamemodels.mjs');
+  const gmDir = resolveGameModelsDir();
+  if (!gmDir) { console.error('[stage] no chaosD6-GameModels checkout: the phone could not generate NPCs / buildings / monsters'); process.exit(1); }
+  const subs = [...new Set(Object.values(KINDS).map(([sub]) => sub))];
+  fs.rmSync(GM_STAGE, { recursive: true, force: true }); fs.mkdirSync(GM_STAGE, { recursive: true });
+  const tar = execFileSync('git', ['-C', gmDir, 'archive', '--format=tar', 'main', 'index.json', ...subs], { maxBuffer: 256 << 20 });
+  execFileSync('tar', ['-x', '-C', GM_STAGE], { input: tar });
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+  for (const f of walk(GM_STAGE)) copies.push([f, path.join(DEST, 'gamemodels-repo', path.relative(GM_STAGE, f))]);
+}
+process.on('exit', () => { try { fs.rmSync(GM_STAGE, { recursive: true, force: true }); } catch {} });
 // Rules editor (2026-11-22): mobile-menu.mjs serves /rules/ from the repo-root editor.html + editor/ — on the phone
 // editor-api.mjs finds them beside the game code, so they land at the bundle root.
 if (fs.existsSync(path.join(ROOT, 'editor.html'))) {
@@ -83,7 +103,7 @@ if (CHECK_ONLY) {
   process.exit(stale.length ? 1 : 0);
 }
 
-for (const d of [...DATA_DIRS, 'editor']) fs.rmSync(path.join(DEST, d), { recursive: true, force: true });   // drop deleted defs / editor modules too
+for (const d of [...DATA_DIRS, 'editor', 'gamemodels-repo']) fs.rmSync(path.join(DEST, d), { recursive: true, force: true });   // drop deleted defs / editor modules / models too
 for (const [a, b] of copies) { fs.mkdirSync(path.dirname(b), { recursive: true }); fs.copyFileSync(a, b); }
 
 // Verify: byte-identical copies, and every relative import inside the staged bundle resolves.

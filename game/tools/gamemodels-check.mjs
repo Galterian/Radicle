@@ -48,9 +48,21 @@ assert.equal(goal(npc('npc_empire_reeve'), { stranger: { dist: 2, rep: 50, quest
 assert.equal(goal(npc('npc_empire_reeve'), { stranger: { dist: 5, rep: 50, quests_open: 1, quests_ready: 0 } }), 'beckon');
 assert.equal(goal(npc('npc_empire_reeve'), { stranger: { dist: 1, rep: 35, quests_open: 1, quests_ready: 0 } }), 'idle');
 assert.equal(goal(npc('npc_empire_reeve'), {}), 'idle');
-assert.equal(goal(npc('npc_empire_pikeman'), { stranger: { dist: 3, dist_village: 4, rep: 50 } }), 'warn');
-assert.equal(goal(npc('npc_empire_pikeman'), { stranger: { dist: 3, dist_village: 4, rep: 75 } }), 'patrol');
-assert.equal(goal(npc('npc_empire_pikeman'), { village: { ...village, alarm: true }, foe: { dist: 9 } }), 'alarm');
+assert.equal(goal(npc('npc_empire_halberdier'), { stranger: { dist: 3, dist_village: 4, rep: 50 } }), 'warn');
+assert.equal(goal(npc('npc_empire_halberdier'), { stranger: { dist: 3, dist_village: 4, rep: 75 } }), 'patrol');
+assert.equal(goal(npc('npc_empire_halberdier'), { village: { ...village, alarm: true }, foe: { dist: 9 } }), 'alarm');
+// villages at war (2026-11-25): wall guards walk the wall, fighters fall on a foe at war, civilians run from one
+assert.equal(goal(npc('npc_empire_pikeman'), {}), 'walk');
+assert.equal(goal(npc('npc_empire_pikeman'), { foe: { dist: 3, war: 1 } }), 'war');
+assert.equal(goal(npc('npc_empire_archer'), { foe: { dist: 12, war: 1 } }), 'war');
+assert.equal(goal(npc('npc_empire_archer'), { foe: { dist: 3, war: 0 } }), 'drill');
+assert.equal(goal(npc('npc_undead_fighter'), { foe: { dist: 5, war: 1 } }), 'war');
+assert.equal(goal(npc('npc_empire_trader'), { foe: { dist: 2, war: 1 } }), 'war_flee');
+assert.equal(goal(npc('npc_empire_halberdier'), { foe: { dist: 3, war: 1 } }), 'war');
+assert.equal(goal(npc('npc_empire_mason'), {}), 'mend');
+assert.equal(goal(npc('npc_empire_mason'), { foe: { dist: 2 } }), 'flee');
+assert.equal(goal(npc('npc_knights_diplomat'), { stranger: { dist: 5, rep: 50 } }), 'offer');
+assert.equal(goal(npc('npc_knights_diplomat'), { stranger: { dist: 1, rep: 50 } }), 'greet');
 assert.equal(goal(npc('npc_empire_builder'), { foe: { dist: 2 } }), 'flee');
 assert.equal(goal(npc('npc_empire_builder'), {}), 'build');
 assert.equal(goal(npc('npc_high_elves_lorekeeper'), { stranger: { dist: 2, rep: 50 } }), 'tell');
@@ -106,7 +118,7 @@ for (let s = 0; s < 40; s++) {
   assert.equal(nearestVillage(seed, 0, 0).id, o.id);
   assert.ok(villagesNear(seed, 0, 0, 300).length >= 1);
 }
-assert.deepEqual([...races].sort(), ['race_empire', 'race_high_elves']);
+assert.deepEqual([...races].sort(), Object.keys(cat.races).sort(), 'every race founds villages');
 
 // the map layer: featureAt answers the village buildings, fortressAt gives their bank, labyrinth walls stay out
 {
@@ -274,5 +286,74 @@ assert.equal(compass({ q: 0, r: 0 }, { q: -3, r: 6 }), 'south'); assert.equal(co
   }
   console.log('village dragons (30×4, breath 2, flying, post centre) and engineers (catapult / ballista / ram for one card)');
 }
-console.log(`villages: ${villages} placed over 40 seeds × 49 cells, all ≥ ${MIN_APART} apart, both races used`);
+// diplomats, the Ministry, rebirth, the mason, wall guards, fighters, all 16 races, villages at war, alignment (user 2026-11-25)
+{
+  const V = await import('../js/villages.js'), L = await import('../village-life.mjs');
+  planted(c => { delete c.race.race_orcs.alignment_pct; }, /race_orcs: alignment_pct 0..100/);
+  planted(c => { c.npc.npc_empire_trader.repairs = { rounds: 3 }; }, /repairs: only a builder mends/);
+  planted(c => { c.npc.npc_empire_mason.repairs = { rounds: 9 }; }, /repairs: \{ rounds 1..6 \}/);
+  planted(c => { c.npc.npc_empire_mason.builds = c.npc.npc_empire_builder.builds; c.npc.npc_empire_mason.build_max = 2; }, /the mason stays home/);
+  planted(c => { c.village.vil_empire.residents.push({ npc: 'npc_empire_peasant', at: [5, 0] }); c.village.vil_empire.cap = 20; c.village.vil_empire.residents.splice(0, 1); }, /at most two builders/);
+  planted(c => { c.village.vil_empire.layout = c.village.vil_empire.layout.filter(l => l.building !== 'bld_empire_ministry'); }, /needs the Ministry of Foreign Affairs/);
+  planted(c => { c.village.vil_empire.residents.find(r => r.post === 'wall').at = [0, -6]; }, /post "wall" starts on the ring inside the wall/);
+  planted(c => { c.npc.npc_empire_diplomat.home = null; }, /a diplomat needs its home/);
+  planted(c => { c.quest.quest_empire_trade_skill.rewards = [{ kind: 'sabotage' }]; }, /reward sabotage: a consume quest of a diplomat/);
+  const ALIGN = { race_high_elves: 100, race_wood_elves: 95, race_fey: 85, race_knights: 80, race_dwarves: 75, race_empire: 70, race_barbarians: 60, race_orcs: 55, race_minotaurs: 45, race_ssrathi: 40, race_dark_dwarves: 35, race_dark_elves: 30, race_swarm: 20, race_daemons: 15, race_plaguelords: 5, race_undead: 0 };
+  assert.deepEqual(Object.keys(cat.races).sort(), Object.keys(ALIGN).sort(), 'the 16 races');
+  for (const [race, pct] of Object.entries(ALIGN)) {
+    assert.equal(cat.races[race].alignment_pct, pct, `${race} ${pct}%`);
+    const vt = Object.values(cat.villages).find(v => v.race === race && !v.size), roles = vt.residents.map(r => cat.npcs[r.npc]);
+    assert.equal(vt.cap, 20); assert.equal(vt.residents.length, 20, `${race}: 20 residents`);
+    const count = (f) => roles.filter(f).length;
+    assert.deepEqual([count(n => n.role === 'dragon'), count(n => n.role === 'builder'), count(n => n.repairs), count(n => n.role === 'fighter'), vt.residents.filter(r => r.post === 'gate').length, vt.residents.filter(r => r.post === 'wall').length],
+      [1, 2, 1, 5, 1, 2], `${race}: 1 dragon, 2 builders (1 mason), 5 fighters, 1 gate guard, 2 wall guards`);
+    for (const role of ['quest_giver', 'storyteller', 'trader', 'smith', 'wizard', 'mercenary', 'healer', 'engineer', 'diplomat']) assert.equal(count(n => n.role === role), 1, `${race}: one ${role}`);
+    assert.ok(vt.layout.some(l => cat.buildings[l.building].role === 'ministry'), `${race}: its Ministry`);
+    for (const r of vt.residents) { const n = cat.npcs[r.npc]; if (n.home && n.role !== 'builder') assert.ok(vt.layout.some(l => l.building === n.home), `${race}: ${r.npc} is reborn in its home ${n.home}`); }
+    assert.ok(Object.values(cat.villages).some(v => v.race === race && v.size === 'hamlet'), `${race} hamlet`);
+    for (const b of vt.layout) assert.ok(!cat.buildings[b.building].produces, `${race}: ${b.building} produces nobody (they are reborn)`);
+  }
+  // relations: 100 − 2·gap, +5 per diplomat led, −5 per spy mission, war under 40
+  const he = { id: 'vil:1,0', race: 'race_high_elves' }, un = { id: 'vil:2,0', race: 'race_undead' }, em = { id: 'vil:3,0', race: 'race_empire' }, orc = { id: 'vil:4,0', race: 'race_orcs' };
+  assert.equal(V.villageRelation(he, em), 40); assert.equal(V.villageRelation(he, un), 0); assert.equal(V.villageRelation(em, orc), 70); assert.equal(V.villageRelation(he, he), 100);
+  assert.equal(V.atWar(he, em), false); assert.equal(V.atWar(he, un), true);
+  const led = (edits, id = 'peer:h') => ({ peer_id: id, world_edits_json: JSON.stringify(edits) });
+  const ledger = [led([{ id: `vdip:${V.pairKey(he.id, em.id)}`, v: he.id, v2: em.id, d: 5 }]), led([{ id: `vdip:${V.pairKey(he.id, em.id)}`, v: em.id, v2: he.id, d: 5 }], 'peer:h2')];
+  assert.equal(V.villageRelation(he, em, V.diplomacyLedger(ledger)), 50, 'two heroes led diplomats: +10');
+  const spied = [...ledger, led([{ id: `vspy:${V.pairKey(he.id, em.id)}#1`, v: em.id, v2: he.id, d: -5 }, { id: `vspy:${V.pairKey(he.id, em.id)}#2`, v: em.id, v2: he.id, d: -5 }, { id: `vspy:${V.pairKey(he.id, em.id)}#3`, v: em.id, v2: he.id, d: -5 }], 'peer:s')];
+  assert.equal(V.villageRelation(he, em, V.diplomacyLedger(spied)), 35); assert.equal(V.atWar(he, em, V.diplomacyLedger(spied)), true, 'spies drive them to war');
+  const emV = { ...em, reputation: cat.villages.vil_empire.reputation };
+  assert.equal(V.villageRep('s', emV, 'peer:s', spied), 65, 'the spy\'s client: +5 per mission'); assert.equal(V.villageRep('s', { ...he, reputation: cat.villages.vil_high_elves.reputation }, 'peer:s', spied), 50, 'the target never knows');
+  assert.equal(V.villageRep('s', emV, 'peer:w', [led([{ id: 'vhome:x_w0', v: em.id, d: 5 }], 'peer:w')]), 55, 'a wanderer walked home');
+  // the hero's alignment: its race + its deeds; neutrality of villages at war
+  assert.equal(V.heroAlignment([], 'peer:x', 'Undead'), 0); assert.equal(V.heroAlignment([], 'peer:x', ''), 50); assert.equal(V.heroAlignment([], 'peer:x', 'High Elves'), 100);
+  assert.equal(V.heroAlignment([led([{ id: 'valign:hit:a', d: -5 }, { id: 'valign:hit:b', d: -5 }, { id: 'valign:quest:q', d: 5 }], 'peer:x')], 'peer:x', 'Empire'), 65);
+  assert.equal(V.heroAlignment([led([{ id: 'valign:quest:q', d: 5 }], 'peer:x')], 'peer:x', 'High Elves'), 100, 'clamped');
+  const a = { peer_id: 'peer:a', npc_id: 'npc_undead_fighter', village_id: un.id }, b = { peer_id: 'peer:b', npc_id: 'npc_high_elves_longbow', village_id: he.id };
+  assert.equal(L.villageNeutral(a, b), true, 'no war judge: neutral');
+  assert.equal(L.villageNeutral(a, b, (x, y) => V.atWar(x === un.id ? un : he, y === un.id ? un : he)), false, 'villages at war fight');
+  assert.equal(L.villageNeutral(a, { ...a, peer_id: 'peer:c' }, () => true), true, 'one village never fights itself');
+  // repairs: a broken building counts until a repair as late
+  assert.deepEqual([...V.brokenHexes([{ id: 'bld:1,2', gone: true, at: 10 }, { id: 'bld:3,4', gone: true, at: 10 }, { id: 'vfix:3,4', at: 12 }])], ['1,2']);
+  assert.deepEqual([...V.brokenHexes([{ id: 'vfix:3,4', at: 12 }, { id: 'bld:3,4', gone: true, at: 20 }])], ['3,4'], 'broken again after the repair');
+  // rebirth: 20 turns (a fighter 50) from its home building, a new life label; a broken home waits; a recruit leaves the slot empty
+  let vx = null;
+  for (let cx = 1; cx < 6 && !vx; cx++) for (let cy = 0; cy < 6 && !vx; cy++) { const v = villageOfCell('seed1', cx, cy); if (v && !cat.villages[v.template].size) vx = v; }
+  const res = villageResidents('seed1', vx), ri = res.findIndex(r => cat.npcs[r.npc].role === 'diplomat'), fi = res.findIndex(r => cat.npcs[r.npc].role === 'fighter');
+  const dl = res[ri].label, fl = res[fi].label;
+  const units = (gone, turn, broken) => L.villageUnits('seed1', vx, { turn, founded: 0, gone, broken });
+  assert.equal(units(new Map(), 5).length, 20);
+  assert.equal(units(new Map([[dl, 10]]), 29).some(u => u.label.startsWith(dl)), false, 'not before 20 turns');
+  const back = units(new Map([[dl, 10]]), 30).find(u => u.label.startsWith(dl));
+  assert.equal(back?.label, `${dl}_g1`); assert.equal(back.born, 30);
+  const site = L.rebirthSite(vx, res[ri].npc);
+  assert.equal(site.building, cat.npcs[res[ri].npc].home, 'the diplomat comes back from the Ministry');
+  assert.equal(units(new Map([[dl, 10]]), 40, new Set([`${site.q},${site.r}`])).some(u => u.label.startsWith(dl)), false, 'a broken Ministry trains nobody');
+  assert.equal(units(new Map([[fl, 10]]), 59).some(u => u.label.startsWith(fl)), false); assert.ok(units(new Map([[fl, 10]]), 60).some(u => u.label === `${fl}_g1`), 'a fighter after 50');
+  assert.equal(units(new Map([[dl, null]]), 400).some(u => u.label.startsWith(dl)), false, 'led away and alive: no rebirth');
+  const bi = res.findIndex(r => cat.npcs[r.npc].role === 'builder');
+  assert.equal(L.rebirthSite(vx, res[bi].npc).building, cat.villages[vx.template].layout[0].building, 'the builders come back from the centre');
+  console.log('diplomats + Ministry, rebirth (20 / 50 turns), mason, wall guards, fighters, 16 races (20 each), relations, spies, war, alignment');
+}
+console.log(`villages: ${villages} placed over 40 seeds × 49 cells, all ≥ ${MIN_APART} apart, all ${races.size} races used`);
 console.log('all gamemodels checks passed');

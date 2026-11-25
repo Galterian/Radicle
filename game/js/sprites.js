@@ -362,12 +362,41 @@ export function createSoundBank() {
     } catch { return false; }
     return true;
   }
+  // A unit tapped / clicked (user 2026-11-25, media only): every tap plays its NEXT voice line — select, ready, order in
+  // turn (spawn / fx when it has none), per unit (`key`: the peer id) — and cuts the line still playing, so fast taps
+  // walk through its whole voice instead of repeating one line or being throttled away. `dedupeMs` drops the second
+  // report of ONE gesture (a phone tap that is also a click).
+  const cycle = new Map();   // unit key -> { i, at }
+  let speaking = null;
+  function voice(resources, { key = '', kinds = ['select', 'ready', 'order'], fallback = ['spawn', 'fx'], volume = 0.6, dedupeMs = 120 } = {}) {
+    if (muted || !resources) return false;
+    const lines = (ks) => ks.flatMap(k => (Array.isArray(resources.sounds?.[k]) ? resources.sounds[k] : []).filter(s => s?.path));
+    let list = lines(kinds);
+    if (!list.length) list = lines(fallback);
+    if (!list.length) return false;
+    const id = key || resources.wbc3_code || resources._entryName || list[0].path;
+    const now = performance.now();
+    const c = cycle.get(id) || { i: 0, at: -1e9 };
+    if (now - c.at < dedupeMs) return true;
+    cycle.set(id, { i: (c.i + 1) % list.length, at: now });
+    const url = assetUrl(list[c.i % list.length].path);
+    try {
+      let tpl = cache.get(url);
+      if (!tpl) { tpl = new Audio(url); tpl.preload = 'auto'; cache.set(url, tpl); }
+      try { speaking?.pause(); } catch { /* already gone */ }
+      const a = tpl.cloneNode();
+      a.volume = volume;
+      a.play().catch(() => { /* autoplay blocked until a gesture — fine */ });
+      speaking = a;
+    } catch { return false; }
+    return true;
+  }
   function playUrl(path, volume = 0.5) {
     if (muted || !path) return;
     try { const a = new Audio(assetUrl(path)); a.volume = volume; a.play().catch(() => {}); } catch { /* ignore */ }
   }
   return {
-    play, playUrl,
+    play, playUrl, voice,
     get muted() { return muted; },
     toggle() { muted = !muted; return muted; },
     set(m) { muted = !!m; },

@@ -515,7 +515,7 @@ function gmCard(d, { compact = false } = {}) {
   const where = b.place?.village ? `${b.place.post === 'wanderer' ? 'Wanders 50–100 hexes around' : b.place.post === 'outside' ? 'Waits outside the wall of' : 'Lives in'} ${b.place.village}${b.place.at ? ` (${b.place.at.join(',')})` : ''}` : 'Not placed in a village';
   return h('div', { class: 'gm-card' },
     h('div', { class: 'gm-head' }, gmPortrait(n.card?.resources?.sprites?.info?.path, { size: 96 }),
-      h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, n.name || n.id), h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, raceName(n.race)), h('span', { class: 'gm-pill r' }, roleName(n.role)), n.unit?.breath ? h('span', { class: 'gm-pill e' }, `🔥 breath ${n.unit.breath.range}`) : null, (n.unit?.tags || []).includes('flying') ? h('span', { class: 'gm-pill' }, 'flying') : null, n.siege ? h('span', { class: 'gm-pill e' }, `⚙ ${n.siege.class}`) : null, customBadge(), d.base ? h('span', { class: 'gm-pill e' }, `changes ${d.base}`) : null),
+      h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, n.name || n.id), h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, raceName(n.race)), h('span', { class: 'gm-pill r' }, roleName(n.role)), n.unit?.breath ? h('span', { class: 'gm-pill e' }, `🔥 breath ${n.unit.breath.range}`) : null, (n.unit?.tags || []).includes('flying') ? h('span', { class: 'gm-pill' }, 'flying') : null, n.siege ? h('span', { class: 'gm-pill e' }, `⚙ ${n.siege.class}`) : null, n.repairs ? h('span', { class: 'gm-pill' }, `mason · ${n.repairs.rounds} actions a repair`) : null, customBadge(), d.base ? h('span', { class: 'gm-pill e' }, `changes ${d.base}`) : null),
         h('div', { class: 'gm-persona' }, n.persona || ''), h('div', { class: 'au-hint' }, where))),
     bubbles.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'What it says'), h('div', { class: 'gm-bubbles' }, ...bubbles)) : null,
     talk.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, `Ask ${n.name}`), ...talk) : null,
@@ -585,7 +585,7 @@ async function routeList(rest) {
   drawGm(kind);
   if (wantBase && isGm(kind)) {
     if ([...base.options].some(o => o.value === wantBase)) base.value = wantBase;
-    else C.toast(`${wantBase} cannot be changed here (hand-made: builders, dragons, engineers, siege engines)`, 'error');
+    else C.toast(`${wantBase} cannot be changed here (hand-made: builders, masons, dragons, engineers, siege engines, diplomats, fighters)`, 'error');
   }
   kindSel.addEventListener('change', async () => {
     const k = kindSel.value;

@@ -791,7 +791,7 @@ async function openMine() {
   return pane(`${teamName()}'s definitions`, [
     h('p', { class: 'au-hint', text: `Skills, effects and classes ${teamName()} committed on its players/${team().slug || '<team>'}/… branches.` }),
     list, h('div', { class: 'au-bar' }, reload,
-      h('button', { class: 'au-btn', type: 'button', text: 'New skill / effect / class', onclick: () => C.navigate('#/new/') })),
+      h('button', { class: 'au-btn', type: 'button', text: 'New …', title: 'New skill, effect or class', onclick: () => C.navigate('#/new/') })),
   ]);
 }
 
@@ -800,7 +800,7 @@ async function openMine() {
 function once(id, fn) { if (!registered.has(id)) { registered.add(id); fn(); } }
 
 function installAuthoring() {
-  once('au-new', () => C.registerHeaderAction({ id: 'au-new', label: 'New skill / effect / class', icon: '+',
+  once('au-new', () => C.registerHeaderAction({ id: 'au-new', label: 'New …', title: 'New skill, effect or class', icon: '+',
     onClick: () => C.navigate('#/new/') }));
   once('au-mine', () => C.registerHeaderAction({ id: 'au-mine', label: 'My team\'s definitions', icon: '☰',
     onClick: () => C.navigate('#/mine') }));

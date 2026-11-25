@@ -291,6 +291,9 @@ export function villageRep(seed, v, heroId, ledger, heroRace = '') {
     else if (e.id.startsWith('vhit:') && e.v === v.id) rep += rp.villager_attacked ?? -5;
     else if (e.id.startsWith('ventry:') && e.v === v.id) rep += rp.trespass ?? -5;
     else if (e.id.startsWith('vwall:') && e.v === v.id) rep += rp.building_broken ?? -5;   // my siege ram broke a wall hex (2026-11-25)
+    else if (e.id.startsWith('vdip:') && (e.v === v.id || e.v2 === v.id)) rep += Number(e.d) || 0;   // I led its diplomat there / theirs here
+    else if (e.id.startsWith('vspy:') && e.v === v.id) rep += DIPLOMACY_STEP;   // I led its diplomat to spy (2026-11-25): the client thanks me, the target never knows
+    else if (e.id.startsWith('vhome:') && e.v === v.id) rep += Number(e.d) || 0;   // I walked one of its wanderers home
     else if (e.gone) { const m = /^bld:(-?\d+),(-?\d+)$/.exec(e.id); if (m && villageHexAt(seed, Number(m[1]), Number(m[2]))?.village?.id === v.id) rep += rp.building_broken ?? -5; }
   }
   return Math.max(0, Math.min(100, rep));
@@ -300,5 +303,67 @@ export function questsDone(ledger, heroId) {
   const mine = (ledger || []).find(u => u.peer_id === heroId);
   let edits = []; try { edits = JSON.parse(mine?.world_edits_json || '[]'); } catch {}
   return new Map((Array.isArray(edits) ? edits : []).filter(e => typeof e?.id === 'string' && e.id.startsWith('vq:')).map(e => [e.id.slice(3), e]));
+}
+// ---- between villages (user 2026-11-25) ----
+// Each race has an alignment, in percent of good (race.alignment_pct: High Elves 100 … Undead 0). Two villages start
+// at 100 − 2·|difference| (the closer the alignment, the better they get on; same race 100) and each diplomat a hero
+// led from one to the other adds +5 (`vdip:<vid a>|<vid b>` in that hero's world edits, the pair sorted — once per
+// hero and pair); clamped 0..100. Under WAR_BELOW (40) the two are at war: their people fight when they meet.
+export const WAR_BELOW = 40, DIPLOMACY_STEP = 5;
+export const raceAlignment = (race) => { const a = Number(cat?.races?.[race]?.alignment_pct); return Number.isFinite(a) ? a : 50; };
+export const pairKey = (a, b) => [String(a), String(b)].sort().join('|');
+// pair key → Σd of every hero's escort (+5, `vdip:`) and spy mission (−5, `vspy:<pair>#<n>`, the diplomat's sabotage
+// paid for — user 2026-11-25), from the ledger shape villageRep reads
+export function diplomacyLedger(ledger) {
+  const out = new Map();
+  for (const u of ledger || []) {
+    let edits = []; try { edits = JSON.parse(u?.world_edits_json || '[]'); } catch {}
+    for (const e of Array.isArray(edits) ? edits : []) if (typeof e?.id === 'string' && /^v(dip|spy):/.test(e.id) && e.v && e.v2) { const k = pairKey(e.v, e.v2); out.set(k, (out.get(k) || 0) + (Number(e.d) || 0)); }
+  }
+  return out;
+}
+// ---- a hero's alignment (user 2026-11-25: "Each Character should have alignment … attacking a not hostile creature
+// will drop your alignment with 5%. Helping NPC may rise your alignment with 5%. NPCs has its village alignment.
+// Monsters have no alignment") in percent of good: its race's alignment_pct (the race whose wbc3_race / name is the
+// character art's race; 50 for none) + Σ its `valign:<why>:<key>` { d } edits (±ALIGN_STEP), clamped 0..100.
+// A wanderer whose village's alignment lies more than ALIGN_HOSTILE_GAP away from a hero's is hostile to that hero.
+export const ALIGN_STEP = 5, ALIGN_HOSTILE_GAP = 30;
+export const raceOfHero = (heroRace) => Object.keys(cat?.races || {}).find(id => !!heroRace && String(heroRace).toLowerCase() === String(cat.races[id].wbc3_race || cat.races[id].name || '').toLowerCase()) || null;
+export function heroAlignment(ledger, heroId, heroRace = '') {
+  const race = raceOfHero(heroRace);
+  let a = race ? raceAlignment(race) : 50;
+  const mine = (ledger || []).find(u => u.peer_id === heroId);
+  let edits = []; try { edits = JSON.parse(mine?.world_edits_json || '[]'); } catch {}
+  for (const e of Array.isArray(edits) ? edits : []) if (typeof e?.id === 'string' && e.id.startsWith('valign:')) a += Number(e.d) || 0;
+  return Math.max(0, Math.min(100, a));
+}
+export const alignmentWords = (pct) => pct >= 80 ? 'good' : pct >= 60 ? 'decent' : pct >= 40 ? 'neutral' : pct >= 20 ? 'wicked' : 'evil';
+export function villageRelation(a, b, dip = new Map()) {
+  if (!a || !b) return 100;
+  if (a.id === b.id) return 100;
+  const base = 100 - 2 * Math.abs(raceAlignment(a.race) - raceAlignment(b.race));
+  return Math.max(0, Math.min(100, Math.round(base + (dip.get(pairKey(a.id, b.id)) || 0))));
+}
+export const atWar = (a, b, dip) => !!a && !!b && a.id !== b.id && villageRelation(a, b, dip) < WAR_BELOW;
+// The other villages a village knows (found by some hero: `vfound:` edits), nearest first, with the relation.
+export function villageRelations(seed, v, ledger) {
+  const dip = diplomacyLedger(ledger), seen = new Set();
+  for (const u of ledger || []) { let edits = []; try { edits = JSON.parse(u?.world_edits_json || '[]'); } catch {} for (const e of Array.isArray(edits) ? edits : []) if (typeof e?.id === 'string' && e.id.startsWith('vfound:')) seen.add(e.id.slice(7)); }
+  const out = [];
+  for (const id of seen) { const o = villageById(seed, id); if (o && o.id !== v.id) { const rel = villageRelation(v, o, dip); out.push({ village: o, relation: rel, war: rel < WAR_BELOW, dist: dist(v, o) }); } }
+  return out.sort((x, y) => x.dist - y.dist || (x.village.id < y.village.id ? -1 : 1));
+}
+// Repairs (the village mason, 2026-11-25): `vfix:q,r` { q, r, at } puts a broken village building back — a `bld:q,r`
+// gone edit counts only when no repair of that hex is as late. → the Set of 'q,r' still broken.
+export function brokenHexes(edits) {
+  const gone = new Map(), fixed = new Map();
+  for (const e of edits || []) {
+    if (typeof e?.id !== 'string') continue;
+    let m = /^bld:(-?\d+),(-?\d+)$/.exec(e.id);
+    if (m && e.gone) { const k = `${m[1]},${m[2]}`; gone.set(k, Math.max(gone.get(k) ?? -Infinity, e.at ?? 0)); continue; }
+    m = /^vfix:(-?\d+),(-?\d+)/.exec(e.id);
+    if (m) { const k = `${m[1]},${m[2]}`; fixed.set(k, Math.max(fixed.get(k) ?? -Infinity, e.at ?? 0)); }
+  }
+  return new Set([...gone].filter(([k, at]) => !(fixed.get(k) >= at)).map(([k]) => k));
 }
 export const standingOf = (rep, rp) => rep < rp.hostile ? 'hostile' : rep >= rp.ally_all ? 'ally' : rep >= rp.enter ? 'welcome' : 'stranger';

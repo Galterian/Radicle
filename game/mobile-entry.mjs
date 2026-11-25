@@ -219,6 +219,26 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         const prio = testPriorityEnv(file, { loadProfile });
         Object.assign(process.env, prio.env);
         console.log(`[mobile] Test Random character: ${prio.summary}`);
+        // with other teams' GameModels proposals (user 2026-11-25: the phone has every GameModels feature; ui-server.mjs
+        // does the same on a desktop): up to 3 foreign proposals from this node's Radicle storage compiled over the staged
+        // GameModels main into a temp catalog every peer reads. A proposed NPC spawns near me (peer.mjs testNpcTick); a
+        // proposed monster enters as a foe 6–8 hexes out (the phone has no launcher roster for TEST_FOES).
+        if (plan.proposals) {
+          try {
+            const { proposalTestCatalog } = await import('./gm-proposals.mjs');
+            const { whoAmI } = await import('./proposal-votes.mjs');
+            const { join, dirname } = await import('node:path');   // beside the profile: Android has no writable /tmp
+            const pt = await proposalTestCatalog({ profileFile: file, me: whoAmI({ profileFile: file }), max: 3, outDir: join(dirname(file), 'gm-proposals', String(plan.dimId || 'test')) });
+            if (!pt.file) console.log('[mobile] Test Random: no other team\'s GameModels proposal to try');
+            else {
+              const { TEST_FOES, TEST_NEAR_VILLAGE, ...env } = pt.env;
+              Object.assign(process.env, env);
+              const foes = String(TEST_FOES || '').split(',').filter(id => /^mon_[a-z0-9_]+$/.test(id)).map(id => ({ creature_id: id, name: pt.proposals.find(p => p.id === id)?.name || id }));
+              if (foes.length) teamAllies = { allies: [], tier: 'strong', file, profileEnv, foes };
+              console.log(`[mobile] Test Random with proposals: ${pt.proposals.map(p => `${p.kind} ${p.name || p.id} (${p.team || '?'})`).join(', ')}`);
+            }
+          } catch (e) { console.warn(`[mobile] Test Random: proposals skipped — ${e.message}`); }
+        }
       }
     }
   } catch (e) {
@@ -250,7 +270,7 @@ async function skirmishBots() {
     ...Array.from({ length: n(process.env.AI_BUILDERS, 2) }, (_, i) => { const c = any(); return { tag: `builder${i + 1}`, character: c.id, name: `Builder — ${c.name}`, alliance: 'npc_a', aiRole: 'builder', ring: [2, 3] }; }),
   ];
 }
-async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false, allySide = 'npc_a', monsters = [], bots = [] }) {
+async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false, allySide = 'npc_a', monsters = [], bots = [], foes = [] }) {
   const { Worker } = await import('node:worker_threads');
   const { Transform } = await import('node:stream');
   const net = await import('node:net');
@@ -338,6 +358,16 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
     console.log(`[regen] ${m.name} (${m.creature_id}) comes back as ${m.label} at its last tile (${m.tile.q},${m.tile.r})${m.life ? ` with ${m.life} life` : ''}`);
     await startWorker(m.label, m.name, { PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', CHARACTER_ID: '', CREATURE_ID: m.creature_id, ENTITY_NAME: m.name,
       ALLIANCE: 'npc_b', START_TILE: JSON.stringify(m.tile), START_LIFE: m.life ? String(m.life) : '', FORCE_CLASS: '' });
+  }
+  // Test Random with proposals: another team's proposed monster, a wild foe (npc_b) 6–8 hexes from me
+  for (const [i, f] of foes.entries()) {
+    const free = ringOf(6, 8).filter(t => !taken.has(`${t.q},${t.r}`));
+    const tile = free[Math.floor(Math.random() * free.length)];
+    if (!tile) { console.error(`[proposal] no free tile 6–8 hexes out for ${f.name}`); continue; }
+    taken.add(`${tile.q},${tile.r}`);
+    console.log(`[proposal] ${f.name} (${f.creature_id}) enters as ${label}-foe${i + 1} at (${tile.q},${tile.r})`);
+    await startWorker(`${label}-foe${i + 1}`, f.name, { PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', CHARACTER_ID: '', CREATURE_ID: f.creature_id, ENTITY_NAME: f.name,
+      ALLIANCE: 'npc_b', START_TILE: JSON.stringify(tile), START_LIFE: '', FORCE_CLASS: '' });
   }
   // AI skirmish bots (skirmishBots): no profile, no llama here (LLM_URL '') → llm-route asks the OCI 1.7B through
   // LLM_REMOTE_FILE (my llm.json), never my teammates' nodes (they are not my team's bots); none reachable → the rules.

@@ -861,7 +861,8 @@ export function editorStatus(ses) {
 }
 function openRulesEditor(kind = null) {
   const url = rulesEditorUrl(kind);
-  if (IS_MENU || IS_MOBILE) { location.href = url; return; }
+  // in place: the editor's "← Back" returns here (same tab → same sessionStorage; a WebView may send no referrer)
+  if (IS_MENU || IS_MOBILE) { try { sessionStorage.setItem('rules.backTo', location.pathname + location.search); } catch { /* private mode */ } location.href = url; return; }
   if (!window.open(url, '_blank')) location.href = url;   // popup blocked → same tab
 }
 async function editorSession() {

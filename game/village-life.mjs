@@ -5,24 +5,54 @@
 //   residents   the template's residents, there from the founding        label <vid>_r<i>
 //   produced    each standing producer building makes one of its NPC every `every_turns` turns after the founding,
 //               while fewer than `cap` units are alive                     label <vid>_p<building index>_<n>
-//   gone        a unit seen dead (`vgone:<label>` edit) or recruited by a hero (`vrec:<label>`) never comes back;
-//               its place in the cap is free again for the producers.
+//   reborn      (2026-11-25, the user: "each NPC in case of dying is produced again from a building in the village")
+//               a resident that died (`vgone:<label>` { turn }) — or that a hero led away and that died there, or a
+//               diplomat that stayed as an envoy — comes back from its home building RESPAWN_TURNS after (a fighter
+//               after FIGHTER_RESPAWN_TURNS), while that building stands: label <vid>_r<i>_g<n> (its n-th life). The
+//               builders come back from the centre building. A recruited unit still alive elsewhere leaves its slot empty.
 // Only a few are ACTIVE (a running peer) at a time — the nearest-to-a-hero villages, the most useful roles first —
 // the others are the village's count (its centre card shows it). A villager far from every hero leaves the map
 // (it is not gone: it walks out again when a hero comes near).
-import { villageResidents, villageWanderers, villagesNear, compass, villageCatalog } from './js/villages.js';
+import { villageResidents, villageWanderers, villagesNear, compass, villageCatalog, personName } from './js/villages.js';
 
 const dist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
-export const ROLE_PRIORITY = { dragon: -0.5, quest_giver: 0, storyteller: 1, trader: 2, builder: 3, engineer: 3.5, smith: 4, wizard: 5, mercenary: 6, guard: 7, healer: 8, villager: 9, wanderer: 10 };   // the builder before the guards: it is for hire (2026-11-24); the dragon always out, the engineer for hire too (2026-11-25)
+export const ROLE_PRIORITY = { dragon: -0.5, quest_giver: 0, storyteller: 1, trader: 2, builder: 3, engineer: 3.5, diplomat: 3.7, smith: 4, wizard: 5, mercenary: 6, guard: 7, healer: 8, fighter: 8.5, villager: 9, wanderer: 10 };   // + diplomat, fighter (2026-11-25)   // the builder before the guards: it is for hire (2026-11-24); the dragon always out, the engineer for hire too (2026-11-25)
 export const MAX_PRODUCED = 64;   // safety bound on the production timeline
 
-// → [{ label, npc, name, q, r, born, kind: 'resident'|'produced' }] alive at `turn` (founding `founded`; `gone`:
-// Set of labels; `broken`: Set of 'q,r' of broken buildings), oldest first, at most the village cap.
-export function villageUnits(seed, v, { turn, founded, gone = new Set(), broken = new Set() }) {
+export const RESPAWN_TURNS = 20, FIGHTER_RESPAWN_TURNS = 50;
+export const respawnDelay = (npc) => npc?.role === 'fighter' ? FIGHTER_RESPAWN_TURNS : RESPAWN_TURNS;
+// The resident slot label of a unit label: '<vid>_r3_g2' → '<vid>_r3' (a follower's '<label>_f' too).
+export const homeLabel = (label) => String(label || '').replace(/_f$/, '').replace(/_g\d+$/, '');
+// The hex a resident is (re)born at: its home building's when that building is in the layout (the builders: the
+// centre), else the centre. → { q, r, building } or null.
+export function rebirthSite(v, npcId) {
+  const cat = villageCatalog(), t = cat?.villages?.[v.template], n = cat?.npcs?.[npcId];
+  if (!t) return null;
+  const centre = (t.layout || []).find(l => cat.buildings[l.building]?.role === 'centre') || (t.layout || [])[0];
+  const home = n?.role === 'builder' ? centre : (t.layout || []).find(l => l.building === n?.home) || centre;
+  return home ? { q: v.q + home.at[0], r: v.r + home.at[1], building: home.building } : null;
+}
+// → [{ label, npc, name, q, r, born, kind: 'resident'|'produced', life }] alive at `turn` (founding `founded`;
+// `gone`: Map label → the turn it died / left (null: no rebirth — e.g. recruited, still alive) — a Set means "gone
+// for good" (older callers); `broken`: Set of 'q,r' of broken buildings), oldest first, at most the village cap.
+export function villageUnits(seed, v, { turn, founded, gone = new Map(), broken = new Set() }) {
   const cat = villageCatalog();
   const t = cat?.villages?.[v.template];
   if (!t || !Number.isInteger(founded)) return [];
-  const events = villageResidents(seed, v).map(r => ({ ...r, born: founded, kind: 'resident' }));
+  const goneTurn = (l) => gone instanceof Map ? (gone.has(l) ? gone.get(l) : undefined) : gone.has(l) ? null : undefined;
+  const events = [];
+  for (const r0 of villageResidents(seed, v)) {
+    let label = r0.label, born = founded, life = 0;
+    for (let n = 0; n <= MAX_PRODUCED; n++) {
+      const g = goneTurn(label);
+      if (g === undefined) { events.push({ ...r0, label, born, kind: 'resident', life, ...(life ? { name: personName(seed, v, `${r0.label}_g${life}`, r0.npc) } : {}) }); break; }
+      const site = rebirthSite(v, r0.npc);
+      if (!Number.isFinite(g) || !site || broken.has(`${site.q},${site.r}`)) break;   // waits for its building (or never)
+      const next = g + respawnDelay(cat.npcs[r0.npc]);
+      if (next > turn) break;
+      life = n + 1; label = `${r0.label}_g${life}`; born = next;
+    }
+  }
   (t.layout || []).forEach((l, bi) => {
     const b = cat.buildings[l.building];
     const q = v.q + l.at[0], r = v.r + l.at[1];
@@ -38,7 +68,7 @@ export function villageUnits(seed, v, { turn, founded, gone = new Set(), broken 
     if (alive.length >= t.cap) {
       if (e.kind === 'produced') continue;   // full: the producer waits (this slot is skipped)
     }
-    if (gone.has(e.label)) continue;
+    if (e.kind === 'produced' && goneTurn(e.label) !== undefined) continue;
     if (alive.length < t.cap) alive.push(e);
   }
   return alive;
@@ -137,10 +167,11 @@ export const isWildMonsterSnap = (p) => !!p?.creature_id && !p.owner_peer_id && 
 // villager's hostile_to_csv (by its id, its owner, the hero it shadows). peer.mjs enemyOf; pure, so every resolver
 // judges the same.
 export const isVillagerSnap = (p) => !!p?.npc_id && !p.follower && !!p.village_id;
-export function villageNeutral(a, b) {
+// `war(vidA, vidB)` (optional, 2026-11-25): true when two villages are at war (js/villages.js atWar) — their people fight.
+export function villageNeutral(a, b, war = null) {
   const va = isVillagerSnap(a), vb = isVillagerSnap(b);
   if (!va && !vb) return false;
-  if (va && vb) return true;
+  if (va && vb) return !(war && a.village_id !== b.village_id && war(a.village_id, b.village_id));
   const vil = va ? a : b, other = va ? b : a;
   if (!other || isWildMonsterSnap(other)) return false;
   const hostile = String(vil.hostile_to_csv || '').split(',').filter(Boolean);

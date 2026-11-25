@@ -79,7 +79,20 @@ ok(st?.publish?.state === 'published' && st.gm_kind === 'npc' && st.defs.length 
 const rr = await retryDefinition({ kind: 'gamemodels', id: 'npc_empire_bard', identity, team }, hooks);
 ok(rr.ok && rr.ref.commit === r3.ref.commit, 'retry republishes the stored bundle');
 const bad = await publishGameModels({ bundle: { id: b.id, name: b.name, version: b.version, kind: 'npc' }, defs, identity, team }, { ...hooks, via: 'bridge' });
-ok(bad.publish.state === 'pending' && /phone/.test(bad.publish.error), 'the phone: pending with a clear reason');
+ok(bad.publish.state === 'pending' && /phone Radicle node/.test(bad.publish.error), `the phone without its node: pending with a clear reason (${bad.publish.error})`);
+// the phone's own node (bridge feature "gamemodels"): one request, every file + the manifest entries in order, the same message
+const bridgeFile = path.join(tmp, 'bridge.json'), sent = [];
+fs.writeFileSync(bridgeFile, JSON.stringify({ port: 1, token: 't', nid: identity.id, features: ['save', 'publish', 'defs'] }));
+const old = await publishGameModels({ bundle: { id: b.id, name: b.name, version: b.version, kind: 'npc' }, defs, identity, team }, { ...hooks, via: 'bridge', bridgeFile, fetchImpl: async () => { throw new Error('must not call'); } });
+ok(old.publish.state === 'pending' && /update the app/.test(old.publish.error), 'an older app (no "gamemodels" feature): pending, update the app');
+fs.writeFileSync(bridgeFile, JSON.stringify({ port: 1, token: 't', nid: identity.id, features: ['save', 'publish', 'defs', 'votes', 'gamemodels', 'fetch'] }));
+const ph = await publishGameModels({ bundle: { id: b.id, name: b.name, version: b.version, kind: 'npc' }, defs, identity, team }, { ...hooks, via: 'bridge', bridgeFile,
+  fetchImpl: async (url, o) => { sent.push({ url, h: o.headers, b: JSON.parse(o.body) }); return { status: 200, json: async () => ({ ok: true, oid: 'f'.repeat(40) }) }; } });
+const q = sent[0]?.b;
+ok(ph.publish.state === 'published' && ph.ref.commit === 'f'.repeat(40) && sent[0]?.url.endsWith('/publish') && sent[0].h['x-bridge-token'] === 't', "the phone publishes through its own node (published, the node's oid)");
+ok(q?.mode === 'definition' && q.ref === 'refs/heads/players/moon-guard/npc-empire-bard' && q.base === 'refs/heads/main' && Object.keys(q.files).join() === defs.map(([sub, d]) => `${sub}/${d.id}.json`).join()
+  && q.manifest.map(m => `${m.key}:${m.id}`).join() === defs.map(([sub, d]) => `${sub}:${d.id}`).join() && /Chaosd6-Signature: ed25519:/.test(q.message) && q.seed === 'z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT',
+  'the bridge request: every file, the manifest entries in order, the signed message, the OCI seed only');
 
 // ---- the proposals list (gm-proposals.mjs) on a Radicle-like storage: the branch under the publisher's namespace
 const { listGmProposals } = await import('../gm-proposals.mjs');
@@ -91,16 +104,20 @@ git(['--git-dir', remote, 'update-ref', '-d', ref]);
 const voterProfile = path.join(tmp, 'voter', 'profile.json');
 fs.mkdirSync(path.dirname(voterProfile), { recursive: true });
 const voter = V.whoAmI({ profileFile: voterProfile, team: 'Sun Riders', create: true });
-let L = listGmProposals({ storageDir: remote, profileFile: voterProfile, me: voter });
+let L = await listGmProposals({ storageDir: remote, profileFile: voterProfile, me: voter });
+// the phone reads the same storage with isomorphic-git (no git binary there): the same list, field for field
+const Liso = await listGmProposals({ storageDir: remote, profileFile: voterProfile, me: voter, engine: 'iso' });
+const strip = (l) => JSON.stringify(l.proposals.map(({ at, ...x }) => x));
+ok(Liso.available && Liso.main === L.main && strip(Liso) === strip(L) && Liso.proposals[0]?.at?.slice(0, 19) === L.proposals[0]?.at?.slice(0, 19), `the phone's reader (isomorphic-git) lists the same (${Liso.proposals.length} proposal, at ${Liso.proposals[0]?.at} vs ${L.proposals[0]?.at})`);
 const p = L.proposals[0];
 ok(L.available && L.proposals.length === 1 && p.id === 'npc_empire_bard' && p.team === 'moon-guard' && p.ns === ns, `listed: ${L.proposals.map(x => `${x.branch} (${x.ns?.slice(0, 10)})`).join(', ')}`);
 ok(p.signature_ok && p.author === identity.id && p.commit === top, 'its author and signature verify');
 ok(p.bundle.kind === 'npc' && p.bundle.npc.lines.greet.includes('Mind the lions.') && p.bundle.touches.village?.id === 'vil_empire' && p.bundle.place?.post === 'outside', 'the bundle is rebuilt from the commit (npc, village, place)');
 ok(p.sha256 === r3.ref.sha256, 'its version (sha256) is the one the publisher returned');
-ok(!p.own && listGmProposals({ storageDir: remote, profileFile, me: V.whoAmI({ profileFile, team: 'Moon Guard' }) }).proposals[0].own, 'own: false for another team, true for the author team');
+ok(!p.own && (await listGmProposals({ storageDir: remote, profileFile, me: V.whoAmI({ profileFile, team: 'Moon Guard' }) })).proposals[0].own, 'own: false for another team, true for the author team');
 const vote = V.recordVote({ ref: p.ref, value: -2, comment: 'too sad', profileFile: voterProfile, team: 'Sun Riders' });
 ok(vote.vote.sig && vote.vote.kind === 'gamemodels' && vote.vote.repo === 'chaosD6-GameModels', 'a signed vote on it (kind gamemodels)');
-L = listGmProposals({ storageDir: remote, profileFile: voterProfile, me: voter });
+L = await listGmProposals({ storageDir: remote, profileFile: voterProfile, me: voter });
 ok(L.proposals[0].mine?.value === -2, 'my vote shows on the list');
 let threw = '';
 try { V.recordVote({ ref: p.ref, value: -3, comment: '', profileFile: voterProfile, team: 'Sun Riders' }); } catch (e) { threw = e.message; }
@@ -119,6 +136,11 @@ ok(/not yours|testing success/.test(pubErr), `another team's proposal is not pub
 
 // ---- Test Random with the proposals: the catalog + env the launcher would pass
 const { proposalTestCatalog } = await import('../gm-proposals.mjs');
+// the phone's Refresh: POST /fetch of its node (the OCI seed only)
+const { refreshGmProposals } = await import('../gm-proposals.mjs');
+const fsent = [];
+const rf = await refreshGmProposals({ bridgeFile, fetchImpl: async (url, o) => { fsent.push({ url, b: JSON.parse(o.body) }); return { status: 200, json: async () => ({ ok: true, updated: 2 }) }; } });
+ok(rf.ok && fsent[0]?.url.endsWith('/fetch') && fsent[0].b.seed === 'z6MknLjCKCXpzUoAEJArdxnjz2EbFoR3usfMornTh1FHK2zT' && /^rad:z48/.test(fsent[0].b.rid), `the phone's Refresh fetches through its node (${rf.out || rf.error})`);
 const tc = await proposalTestCatalog({ storageDir: remote, profileFile: voterProfile, me: voter, outDir: path.join(tmp, 'tc') });
 const cat = tc.file ? JSON.parse(fs.readFileSync(tc.file, 'utf8')) : {};
 ok(tc.proposals.map(x => x.id).join() === 'npc_empire_bard' && cat.npcs?.npc_empire_bard && cat.villages?.vil_empire, 'the proposal is in the compiled test catalog');

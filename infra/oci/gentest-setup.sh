@@ -8,7 +8,10 @@
 #     (game/ + data/ + assets/**/*.json from THIS checkout, node_modules included: pure JS),
 #   - unit chaosd6-gentest.service on 127.0.0.1:8097 — ONE test at a time, Nice 15 + CPUWeight 30 (the bot model's
 #     100 wins the cores), MemoryMax 3G,
-#   - the caddy route /gen-test/* (same Bearer key as /llm and /llm-big; the server checks it).
+#   - the caddy route /gen-test/* (same Bearer key as /llm and /llm-big; the server checks it),
+#   - the chaosD6-GameModels definitions of its committed main (2026-11-25: the phone tests NPC / building / monster
+#     drafts here too) at /opt/chaosd6-game/gamemodels-repo (CHAOSD6_GAMEMODELS_DIR); CHAOSD6_GAMEMODELS_REPO = the
+#     checkout to take them from (default: gamemodels.mjs's sibling candidates).
 # Needs llm-setup.sh --public --big first (the key file and the 8B).
 # Re-run after game code changes: it re-copies the code and restarts the unit.
 #
@@ -23,12 +26,19 @@ SSH_OPTS=(-i "$SSH_KEY" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-ne
 
 # 1. the code bundle (no logs, sessions, local Radicle / Gun state, scratch)
 BUNDLE="$(mktemp /tmp/chaosd6-game-XXXX.tgz)"
-trap 'rm -f "$BUNDLE"' EXIT
+GMT="$(mktemp -d /tmp/chaosd6-gm-XXXX)"
+trap 'rm -rf "$BUNDLE" "$GMT"' EXIT
+GM_REPO="${CHAOSD6_GAMEMODELS_REPO:-}"
+for c in ../chaosd6-gamemodels-repo ../../chaosd6-gamemodels-repo; do [ -z "$GM_REPO" ] && [ -d "$c/lib" ] && GM_REPO="$c"; done
+[ -n "$GM_REPO" ] || { echo "!! no chaosD6-GameModels checkout (set CHAOSD6_GAMEMODELS_REPO)" >&2; exit 1; }
+mkdir -p "$GMT/gamemodels-repo"
+git -C "$GM_REPO" archive --format=tar main index.json races buildings npcs monsters villages quests lib | tar -x -C "$GMT/gamemodels-repo"
+echo "GameModels: $(git -C "$GM_REPO" rev-parse --short main) of $GM_REPO"
 tar czf "$BUNDLE" \
   --exclude='game/logs' --exclude='game/sessions' --exclude='game/saves' --exclude='game/radata' --exclude='game/gun-data' \
   --exclude='game/radicle-work' --exclude='game/radicle.git' --exclude='game/tools/out' --exclude='game/host.log' --exclude='game/host.pid' \
   --exclude='*.log' \
-  game data $(find assets -name '*.json' 2>/dev/null)
+  game data $(find assets -name '*.json' 2>/dev/null) -C "$GMT" gamemodels-repo
 echo "bundle: $(du -h "$BUNDLE" | cut -f1)"
 scp "${SSH_OPTS[@]}" "$BUNDLE" "$OCI_HOST:/tmp/chaosd6-game.tgz"
 
@@ -86,6 +96,7 @@ Environment=GEN_TEST_MINUTES=$GEN_TEST_MINUTES
 Environment=GEN_TEST_PORT_BASE=7801
 Environment=LLM_BIG_URL=http://127.0.0.1:8096
 Environment=NOSTR_ENABLED=0
+Environment=CHAOSD6_GAMEMODELS_DIR=/opt/chaosd6-game/gamemodels-repo
 ExecStart=$N/bin/node /opt/chaosd6-game/game/tools/gen-test-server.mjs
 Restart=on-failure
 RestartSec=5

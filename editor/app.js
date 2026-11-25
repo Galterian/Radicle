@@ -35,9 +35,16 @@ const ID_PREFIX = [[/^elem_/, 'elements'], [/^rule_/, 'rules'], [/^effect_/, 'ef
   [/^session_/, 'dimension_session'], [/^(item|mine|tower|crystal)_/, 'terrain_items'],
   [/^race_/, 'gm_races'], [/^bld_/, 'gm_buildings'], [/^npc_/, 'gm_npcs'], [/^vil_/, 'gm_villages'], [/^quest_/, 'gm_quests'], [/^agenda_/, 'gm_lib']];
 const isMobile = () => matchMedia('(max-width: 760px)').matches;
+// Menu (user 2026-11-25): a tree. The URL name of a collection may differ from its id (the id is what proposals send).
+const ROUTE_AS = { characters: 'default_characters' };
+const LABEL_AS = { characters: 'Default characters', actions: 'Battle System' };
+const ADDITIONAL = new Set(['characters', 'creatures', 'terrain_items', 'contradictions']);   // Paper rules → Additional
+const OPEN_RULES = new Set(['effects', 'skills', 'classes', 'gm_monsters', 'gm_npcs', 'gm_quests']);
+const routeId = (c) => c?.route || c?.id;
+const labelOf = (c) => c.label || prettyId(c.id);
 
 /* ------------------------------------------------------------------ loaders */
-const collOf = (x) => (S.index?.collections || []).find(c => c.id === x || c.file === x) || null;
+const collOf = (x) => (S.index?.collections || []).find(c => c.id === x || c.file === x || c.route === x) || null;
 const fileOf = (x) => collOf(x)?.file || (String(x).endsWith('.json') ? String(x) : `${x}.json`);
 function getCollection(x) {
   const file = fileOf(x);
@@ -185,7 +192,7 @@ function registerHeaderAction(a) {
 function renderHeaderActions() {
   // Edit affordances only when signed in; `always: true` actions (e.g. "How to sign in") show on any node.
   const list = S.session ? S.headerActions.filter(a => loggedIn() || a.always) : [];
-  $('#header-actions').replaceChildren(...list.map(a => el('button', { class: 'btn', onclick: () => { document.body.classList.remove('menu-open'); a.onClick(); } },
+  $('#header-actions').replaceChildren(...list.map(a => el('button', { class: 'btn', title: a.title || null, onclick: () => { document.body.classList.remove('menu-open'); a.onClick(); } },
     a.icon ? el('span', { class: 'ico' }, a.icon) : null, a.label)));
   $('#menu-toggle').hidden = !list.length;
 }
@@ -215,29 +222,163 @@ function jsonView(value, label) {
 const R_HELP = { json: jsonView };
 
 /* ------------------------------------------------------------------ nav (collections) */
+// Every fold folds; the fold state is kept per browser. Paper rules (with its Concept) and Game Models start open.
+const NAV_KEY = 'rules.nav.open';
+const NAV_OPEN_FIRST = new Set(['paper', 'c/concept', 'gm']);
+let navOpen = {};
+try { navOpen = JSON.parse(localStorage.getItem(NAV_KEY) || '{}') || {}; } catch { navOpen = {}; }
+const isOpen = (k) => navOpen[k] ?? NAV_OPEN_FIRST.has(k);
+function toggleFold(k) {
+  navOpen[k] = !isOpen(k);
+  try { localStorage.setItem(NAV_KEY, JSON.stringify(navOpen)); } catch { /* private mode */ }
+  renderNav();
+}
+function sectionOf(c) {
+  const p = String(c.purpose || 'other');
+  if (/^chaosD6-GameModels/i.test(p)) return ['gm', 'Game Models'];
+  const g = p.split(/[;(]/)[0].trim() || 'other';
+  if (/^paper rules$/i.test(g)) return ['paper', 'Paper rules'];
+  return [g.toLowerCase().replace(/[^a-z0-9]+/g, '_'), g[0].toUpperCase() + g.slice(1)];
+}
+const openRulesBadge = () => el('span', { class: 'badge-open', title: 'Open rules: definitions a team can change — generate or propose a new version, test it, publish it, then the teams vote' }, 'open_rules');
+// A fold row: ▸/▾ + (a link or a plain label) + count. `k` = its fold key.
+function foldRow(k, label, { href, count, active, badge, depth = 0, cls = '' } = {}) {
+  const open = isOpen(k);
+  const caret = el('button', { class: 'nav-caret', 'aria-expanded': String(open), 'aria-label': (open ? 'Collapse ' : 'Expand ') + label,
+    onclick: (ev) => { ev.preventDefault(); ev.stopPropagation(); toggleFold(k); } }, open ? '▾' : '▸');
+  const body = [el('span', { class: 'nav-name' }, label), badge || null, count !== undefined ? el('span', { class: 'nav-count' }, count ?? '') : null];
+  return el('div', { class: `nav-row d${depth} ${cls}` + (active ? ' active' : '') }, caret,
+    href ? el('a', { class: 'nav-item', href }, ...body) : el('span', { class: 'nav-item nav-label', onclick: () => toggleFold(k) }, ...body));
+}
+function navLeaf(c, depth, active) {
+  const json = S.loaded.get(c.file);
+  const n = json ? (json.entries || []).length : c.entries;
+  return el('a', { class: `nav-item d${depth}` + (c.id === active ? ' active' : ''), href: '#/' + routeId(c), title: c.purpose || '' },
+    el('span', { class: 'nav-name' }, labelOf(c)), OPEN_RULES.has(c.id) ? openRulesBadge() : null,
+    el('span', { class: 'nav-count' + (json ? ' loaded' : '') }, n ?? ''));
+}
+const entryLeaf = (cid, e, depth, activeId) => el('a', { class: `nav-item nav-entry d${depth}` + (e.id === activeId ? ' active' : ''), href: `#/${cid}/${encodeURIComponent(e.id)}`, title: e.id },
+  el('span', { class: 'nav-name' }, e.name || e.id));
+// The GameModels collections a fold needs, loaded when it opens; null (+ a "Loading…" row) until they are.
+function gmLoaded(ids, depth, out) {
+  const missing = ids.map(collOf).filter(c => c && !S.loaded.has(c.file));
+  if (!missing.length) return (id) => S.loaded.get(collOf(id)?.file)?.entries || [];
+  missing.forEach(c => getCollection(c.file).catch(() => {}));
+  out.push(el('div', { class: `nav-note d${depth}` }, 'Loading…'));
+  return null;
+}
+const raceOfEntry = (e) => activeVersion(e)?.data?.race || '';
+const byName = (a, b) => (a.name || a.id).localeCompare(b.name || b.id);
+// Game Models → Races → <race> → its villages.
+function raceTree(depth, activeId) {
+  const out = [], entries = gmLoaded(['gm_races', 'gm_villages'], depth, out);
+  if (!entries) return out;
+  for (const r of [...entries('gm_races')].sort(byName)) {
+    const vils = entries('gm_villages').filter(e => raceOfEntry(e) === r.id);
+    const k = 'gm/race/' + r.id;
+    out.push(foldRow(k, r.name || r.id, { href: `#/gm_races/${encodeURIComponent(r.id)}`, count: vils.length, depth, active: r.id === activeId }));
+    if (isOpen(k)) for (const v of vils) out.push(entryLeaf('gm_villages', v, depth + 1, activeId));
+  }
+  return out;
+}
+// Game Models → NPCs → <race> (folded) → each NPC of that race; the NPCs of no known race last, as Common.
+function npcTree(depth, activeId) {
+  const out = [], entries = gmLoaded(['gm_races', 'gm_npcs'], depth, out);
+  if (!entries) return out;
+  const races = [...entries('gm_races')].sort(byName);
+  const known = new Set(races.map(r => r.id));
+  const groups = races.map(r => [r.id, r.name || r.id, entries('gm_npcs').filter(e => raceOfEntry(e) === r.id)])
+    .concat([['common', 'Common', entries('gm_npcs').filter(e => !known.has(raceOfEntry(e)))]]);
+  for (const [id, label, npcs] of groups) {
+    if (!npcs.length) continue;
+    const k = 'gm/npcs/' + id;
+    out.push(foldRow(k, label, { count: npcs.length, depth }));
+    if (isOpen(k)) for (const n of [...npcs].sort(byName)) out.push(entryLeaf('gm_npcs', n, depth + 1, activeId));
+  }
+  return out;
+}
+// The collection tree both menus show (the ☰ nav and the Collections list): sections → collections → nested collections.
+// Paper rules (user 2026-11-25): Concept holds Rules, Battle System and Stats; Stats holds Elements; the Core battle system
+// (battle_system.json) is the landing page of Battle System (actions.json), so it is no item of its own.
+const NEST = { concept: ['rules', 'actions', 'stats'], stats: ['elements'] };
+const LANDING = { actions: 'battle_system' };   // collection → the collection whose first entry is its landing page
+const LANDED = Object.fromEntries(Object.entries(LANDING).map(([a, b]) => [b, a]));
+const TREES = { gm_races: ['gm/races', raceTree], gm_npcs: ['gm/npcs', npcTree] };   // entry trees, nav only
+function buildTree() {
+  const sections = new Map();   // key → { key, label, cs }
+  for (const c of S.index.collections || []) {
+    if (LANDED[c.id] && collOf(LANDED[c.id])) continue;
+    const [k, label] = sectionOf(c);
+    if (!sections.has(k)) sections.set(k, { key: k, label, cs: [] });
+    sections.get(k).cs.push(c);
+  }
+  const out = [];
+  for (const s of sections.values()) {
+    const have = new Map(s.cs.map(c => [c.id, c]));
+    const nested = new Set(Object.entries(NEST).filter(([p]) => have.has(p)).flatMap(([, ks]) => ks));
+    const node = (c) => ({ c, key: TREES[c.id]?.[0] || 'c/' + c.id, tree: TREES[c.id]?.[1] || null,
+      kids: (NEST[c.id] || []).map(id => have.get(id)).filter(Boolean).map(node) });
+    const nodes = s.cs.filter(c => !nested.has(c.id) && !(s.key === 'paper' && ADDITIONAL.has(c.id))).map(node);
+    const extra = s.key === 'paper' ? s.cs.filter(c => ADDITIONAL.has(c.id)) : [];
+    if (extra.length) nodes.push({ key: 'paper/extra', label: 'Additional', kids: extra.map(node) });
+    out.push({ key: s.key, label: s.label, count: s.cs.length, kids: nodes });
+  }
+  return out;
+}
+// Fold keys from the root down to collection `id` (to open them when it is opened elsewhere).
+function foldsTo(tree, id) {
+  const walk = (ns, path) => {
+    for (const n of ns) {
+      if (n.c?.id === id) return path;
+      const p = walk(n.kids || [], [...path, n.key]);
+      if (p) return p;
+    }
+    return null;
+  };
+  return walk(tree, []) || [];
+}
+const countOf = (c) => { const j = S.loaded.get(c.file); return j ? (j.entries || []).length : c.entries; };
+function navNode(n, depth, active, activeId, items) {
+  if (!n.c) {   // a plain fold (Additional)
+    items.push(foldRow(n.key, n.label, { count: n.kids.length, depth }));
+    if (isOpen(n.key)) for (const k of n.kids) navNode(k, depth + 1, active, activeId, items);
+    return;
+  }
+  if (!n.kids.length && !n.tree) { items.push(navLeaf(n.c, depth, active)); return; }
+  items.push(foldRow(n.key, labelOf(n.c), { href: '#/' + routeId(n.c), count: countOf(n.c), depth, active: active === n.c.id, badge: OPEN_RULES.has(n.c.id) ? openRulesBadge() : null }));
+  if (!isOpen(n.key)) return;
+  for (const k of n.kids) navNode(k, depth + 1, active, activeId, items);
+  if (n.tree) items.push(...n.tree(depth + 1, activeId));
+}
+let navActiveWas = null, navEntryWas = null;
 function renderNav() {
   if (!S.index) return;
   const active = S.listFor;
-  const groups = new Map();
-  for (const c of S.index.collections || []) {
-    const g = String(c.purpose || 'other').split(/[;(]/)[0].trim() || 'other';
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(c);
-  }
-  const items = [];
-  for (const [g, cs] of groups) {
-    items.push(el('div', { class: 'nav-group' }, g));
-    for (const c of cs) {
-      const json = S.loaded.get(c.file);
-      const n = json ? (json.entries || []).length : c.entries;
-      items.push(el('a', { class: 'nav-item' + (c.id === active ? ' active' : ''), href: '#/' + c.id, title: c.purpose || '' },
-        el('span', { class: 'nav-name' }, c.label || prettyId(c.id)),
-        c.definitions ? el('span', { class: 'badge-defs', title: 'Cards built from the definitions in ' + c.definitions }, 'defs') : null,
-        c.catalog ? el('span', { class: 'badge-defs', title: 'Cards of the chaosD6-GameModels definitions (' + c.catalog + ')' }, 'models') : null,
-        el('span', { class: 'nav-count' + (json ? ' loaded' : '') }, n ?? '')));
+  const activeId = currentEntryId();
+  const tree = buildTree();
+  // Opening a collection opens the folds it sits in (not remembered — only a click on ▸/▾ is).
+  if (active && active !== navActiveWas) for (const k of foldsTo(tree, active)) if (!isOpen(k)) navOpen[k] = true;
+  navActiveWas = active;
+  // … and an open NPC / village opens its race's fold
+  if (activeId && activeId !== navEntryWas && (active === 'gm_npcs' || active === 'gm_villages')) {
+    const e = (S.loaded.get(collOf(active)?.file)?.entries || []).find(x => x.id === activeId);
+    const raceList = S.loaded.get(collOf('gm_races')?.file)?.entries;
+    if (!raceList && collOf('gm_races')) getCollection(collOf('gm_races').file).catch(() => {});   // renders again once loaded
+    else if (e) {
+      const known = (raceList || []).some(r => r.id === raceOfEntry(e));
+      const [top, k] = active === 'gm_npcs' ? ['gm/npcs', 'gm/npcs/' + (known ? raceOfEntry(e) : 'common')] : ['gm/races', 'gm/race/' + raceOfEntry(e)];
+      if (!isOpen(top)) navOpen[top] = true;
+      if (!isOpen(k)) navOpen[k] = true;
+      navEntryWas = activeId;
     }
   }
+  const items = [];
+  for (const s of tree) {
+    items.push(foldRow(s.key, s.label, { cls: 'nav-section', count: s.count }));
+    if (isOpen(s.key)) for (const n of s.kids) navNode(n, 1, active, activeId, items);
+  }
   $('#nav-list').replaceChildren(...items);
+  if (S.onHome) paintHomeList();
 }
 const closeDrawer = () => document.body.classList.remove('nav-open', 'menu-open');
 
@@ -253,10 +394,10 @@ function listItem(cid, e, showColl) {
   const nv = (e.versions || []).length;
   const d = v?.data || {};
   const sub = d.kind || (e.tags || []).slice(0, 3).join(' · ');
-  return el('a', { class: 'item', href: `#/${cid}/${encodeURIComponent(e.id)}`, dataset: { id: e.id } },
+  return el('a', { class: 'item', href: `#/${routeId(collOf(cid)) || cid}/${encodeURIComponent(e.id)}`, dataset: { id: e.id } },
     el('div', { class: 'item-top' }, el('span', { class: 'item-name' }, e.name || e.id),
       v ? statusPill(v.status) : null, nv > 1 ? el('span', { class: 'vcount', title: nv + ' versions' }, nv + 'v') : null),
-    el('div', { class: 'item-sub' }, showColl ? el('span', { class: 'item-coll' }, prettyId(cid)) : null, el('span', { class: 'mono' }, e.id), sub ? el('span', { class: 'muted' }, sub) : null));
+    el('div', { class: 'item-sub' }, showColl ? el('span', { class: 'item-coll' }, collOf(cid) ? labelOf(collOf(cid)) : prettyId(cid)) : null, el('span', { class: 'mono' }, e.id), sub ? el('span', { class: 'muted' }, sub) : null));
 }
 // Chunked list: 50 items, more as the sentinel scrolls into view (creatures and terrain are large).
 function chunkedList(rows, build) {
@@ -287,6 +428,9 @@ async function renderList(coll) {
   let json;
   try { json = await getCollection(coll.file); }
   catch (e) { list.replaceChildren(el('div', { class: 'empty err' }, String(e.message || e))); S.listFor = null; return; }
+  const landing = LANDING[coll.id] ? collOf(LANDING[coll.id]) : null;   // Battle System: its Core battle system page first
+  const pinned = landing ? ((await getCollection(landing.file).catch(() => null))?.entries || []).map(e => listItem(landing.id, e)) : [];
+  pinned.forEach(a => a.classList.add('pinned'));
   if (S.listFor !== coll.id || S.global) return;
   const entries = json.entries || [];
   const body = el('div', { class: 'list-body' });
@@ -299,9 +443,9 @@ async function renderList(coll) {
   };
   filter.addEventListener('input', debounce(paint, 120));
   list.replaceChildren(el('div', { class: 'list-head' },
-    el('div', { class: 'list-title' }, el('h2', null, coll.label || prettyId(coll.id)), el('span', { class: 'muted' }, `${entries.length} entries`),
-      coll.definitions ? el('span', { class: 'badge-defs' }, 'definitions') : null, coll.catalog ? el('span', { class: 'badge-defs' }, 'GameModels') : null),
-    filter), body);
+    el('div', { class: 'list-title' }, el('h2', null, labelOf(coll)), el('span', { class: 'muted' }, `${entries.length} entries`),
+      OPEN_RULES.has(coll.id) ? openRulesBadge() : null),
+    filter), pinned.length ? el('div', { class: 'items pinned-items' }, pinned) : null, body);
   paint();
 }
 function currentEntryId() { return decodeURIComponent((location.hash.replace(/^#\/?/, '').split('/')[1]) || ''); }
@@ -336,22 +480,47 @@ async function loadAllForSearch(ev) {
 const detail = () => $('#detail');
 function setDetail(...nodes) { detail().replaceChildren(...nodes); detail().scrollTop = 0; }
 function goBack(cid) {
-  const parent = cid ? '#/' + cid : '#/';
+  const parent = cid ? '#/' + (routeId(collOf(cid)) || cid) : '#/';
   // Back in history only when we came from the list (or the search results) — a shared deep link goes to the list.
   if (S.prevHash && (S.prevHash === parent || S.global)) history.back();
   else location.hash = parent;
 }
 function backButton(cid) { return el('button', { class: 'icon-btn back', 'aria-label': 'Back to the list', onclick: () => goBack(cid) }, '←'); }
 
+// A collection's purpose without its section's name ("paper rules; since …" → "since …"); the section heads say it.
+const purposeOf = (c) => String(c.purpose || '').replace(/^(paper rules|chaosD6-GameModels)\s*[;:]?\s*/i, '').trim();
+// The Collections list = the nav's tree (same folds, same fold state), each collection as a card with its purpose.
+function paintHomeList() {
+  const box = $('#list .home-tree');
+  if (!box) { S.onHome = false; return; }
+  const rows = [];
+  const caret = (k, label) => el('button', { class: 'nav-caret', 'aria-expanded': String(isOpen(k)), 'aria-label': (isOpen(k) ? 'Collapse ' : 'Expand ') + label,
+    onclick: (ev) => { ev.preventDefault(); ev.stopPropagation(); toggleFold(k); } }, isOpen(k) ? '▾' : '▸');
+  const card = (n, depth) => {
+    const c = n.c, folds = n.kids.length > 0;
+    rows.push(el('div', { class: `home-row d${depth}` }, folds ? caret(n.key, labelOf(c)) : el('span', { class: 'nav-caret-gap' }),
+      el('a', { class: 'item', href: '#/' + routeId(c) },
+        el('div', { class: 'item-top' }, el('span', { class: 'item-name' }, labelOf(c)), OPEN_RULES.has(c.id) ? openRulesBadge() : null, el('span', { class: 'vcount' }, String(countOf(c) ?? ''))),
+        purposeOf(c) ? el('div', { class: 'item-sub' }, el('span', { class: 'muted clamp' }, purposeOf(c))) : null)));
+    if (folds && isOpen(n.key)) for (const k of n.kids) walk(k, depth + 1);
+  };
+  const walk = (n, depth) => {
+    if (n.c) return card(n, depth);
+    rows.push(el('div', { class: `home-fold d${depth}`, onclick: () => toggleFold(n.key) }, caret(n.key, n.label), el('span', { class: 'home-fold-name' }, n.label), el('span', { class: 'vcount' }, String(n.count ?? n.kids.length))));
+    if (isOpen(n.key)) for (const k of n.kids) walk(k, depth + 1);
+  };
+  for (const s of buildTree()) walk(s, 0);
+  box.replaceChildren(...rows);
+}
 function renderHome() {
   S.rendered = true;
   document.body.classList.remove('has-detail');
-  S.listFor = null; renderNav();
-  const cs = S.index.collections || [];
-  $('#list').replaceChildren(el('div', { class: 'list-head' }, el('div', { class: 'list-title' }, el('h2', null, 'Collections'), el('span', { class: 'muted' }, cs.length + ' collections'))),
-    el('div', { class: 'items' }, cs.map(c => el('a', { class: 'item', href: '#/' + c.id },
-      el('div', { class: 'item-top' }, el('span', { class: 'item-name' }, prettyId(c.id)), c.definitions ? el('span', { class: 'badge-defs' }, 'defs') : null, el('span', { class: 'vcount' }, String(c.entries ?? ''))),
-      el('div', { class: 'item-sub' }, el('span', { class: 'muted clamp' }, c.purpose || ''))))));
+  S.listFor = null;
+  const cs = buildTree().reduce((n, s) => n + s.count, 0);
+  $('#list').replaceChildren(el('div', { class: 'list-head' }, el('div', { class: 'list-title' }, el('h2', null, 'Collections'), el('span', { class: 'muted' }, cs + ' collections'))),
+    el('div', { class: 'items home-tree' }));
+  S.onHome = true;
+  renderNav();   // paints the tree too
   const s = S.session;
   setDetail(el('div', { class: 'welcome card' },
     el('h2', null, S.index.name || 'Dimensions — living rulebook'),
@@ -373,7 +542,7 @@ async function renderCollectionOverview(coll) {
   for (const e of entries) { const v = activeVersion(e); if (v) tally[v.status] = (tally[v.status] || 0) + 1; }
   const top = Object.fromEntries(Object.entries(json).filter(([k]) => !['entries', 'collection', 'notes'].includes(k)));
   setDetail(el('div', { class: 'card overview' },
-    el('div', { class: 'detail-title' }, el('h2', null, prettyId(coll.id)), el('span', { class: 'mono muted' }, coll.file)),
+    el('div', { class: 'detail-title' }, el('h2', null, labelOf(coll)), el('span', { class: 'mono muted' }, coll.file)),
     pillRow(null, pillTag(entries.length + ' entries'), coll.writes ? pillTag('writes: ' + coll.writes) : null, coll.definitions ? pillTag('definitions: ' + coll.definitions) : null, coll.catalog ? pillTag('GameModels: monsters/<id>.json (' + coll.catalog + ')') : null,
       ...Object.entries(tally).map(([st, n]) => el('span', { class: 'pill-pair' }, statusPill(st), ' ' + n))),
     coll.purpose ? prose(coll.purpose) : null,
@@ -400,7 +569,7 @@ async function renderEntry(coll, eid, tab, seq) {
   const logic = versioned ? v?.logic : entry.logic;
   const avail = { card: true, logic: logic !== undefined && logic !== null, versions: versioned, definition: hasDef };
   if (!avail[tab]) tab = 'card';
-  const base = `#/${coll.id}/${encodeURIComponent(eid)}`;
+  const base = `#/${routeId(coll)}/${encodeURIComponent(eid)}`;
   const tabs = el('nav', { class: 'tabs', role: 'tablist' }, TABS.filter(([k]) => avail[k]).map(([k, label]) =>
     el('a', { class: 'tab' + (k === tab ? ' active' : ''), role: 'tab', 'aria-selected': String(k === tab), href: k === 'card' ? base : `${base}/${k}`,
       onclick: (ev) => { ev.preventDefault(); location.replace(ev.currentTarget.href); } },
@@ -431,7 +600,7 @@ function cardTab(coll, entry, v) {
   if (!v) {   // a named rule of logic_rules.json (not versioned)
     ['id', 'name', 'tags', 'description', 'params', 'examples', 'logic'].forEach(k => used.add(k));
     return el('div', { class: 'card' }, namedRuleBody(entry, r), moreFields(entry, used, r),
-      entry.logic !== undefined ? el('p', { class: 'muted small' }, 'The rule itself is on the ', el('a', { href: `#/${coll.id}/${encodeURIComponent(entry.id)}/logic` }, 'Logic'), ' tab.') : null);
+      entry.logic !== undefined ? el('p', { class: 'muted small' }, 'The rule itself is on the ', el('a', { href: `#/${routeId(coll)}/${encodeURIComponent(entry.id)}/logic` }, 'Logic'), ' tab.') : null);
   }
   const d = v.data || {};
   const fn = RENDERERS[coll.id] || genericBody;
@@ -541,7 +710,7 @@ async function findById(id) {
   for (const cid of order) {
     try {
       const json = await getCollection(collOf(cid).file);
-      if ((json.entries || []).some(e => e.id === id)) { location.replace(`#/${cid}/${encodeURIComponent(id)}`); return; }
+      if ((json.entries || []).some(e => e.id === id)) { location.replace(`#/${routeId(collOf(cid))}/${encodeURIComponent(id)}`); return; }
     } catch { /* try the next one */ }
   }
   toast(`No entry “${id}” in any collection`, 'error');
@@ -567,10 +736,19 @@ async function route() {
   if (!cid) { if (!S.global) renderHome(); else { document.body.classList.remove('has-detail'); setDetail(); } return; }
   const coll = collOf(cid);
   if (!coll) { setDetail(el('div', { class: 'empty err' }, `Unknown collection “${cid}”.`)); return; }
-  if (!S.global) renderList(coll);   // not awaited: the detail loads the same promise
+  if (cid !== routeId(coll)) { location.replace('#/' + [routeId(coll), eid, tab].filter(Boolean).map(encodeURIComponent).join('/')); return; }   // #/characters → #/default_characters
+  const host = LANDED[coll.id] ? collOf(LANDED[coll.id]) : null;   // battle_system lives in Battle System (actions)
+  if (host && !eid) { location.replace('#/' + routeId(host)); return; }
+  if (!S.global) renderList(host || coll);   // not awaited: the detail loads the same promise
+  const landing = !eid && LANDING[coll.id] ? collOf(LANDING[coll.id]) : null;
+  const first = landing ? (await getCollection(landing.file).catch(() => null))?.entries?.[0]?.id : null;
   if (eid) await renderEntry(coll, eid, tab || 'card', seq);
-  else await renderCollectionOverview(coll);
-  document.title = (eid ? `${eid} · ` : '') + prettyId(cid) + ' — Dimensions rules';
+  else if (first) {
+    await renderEntry(landing, first, 'card', seq);   // its landing page (Core battle system)
+    if (isMobile()) document.body.classList.remove('has-detail');   // the phone opens on the list; the page is pinned at its top
+  } else await renderCollectionOverview(coll);
+  renderNav();   // the menu marks the open entry too (race tree leaves)
+  document.title = (eid ? `${eid} · ` : '') + labelOf(coll) + ' — Dimensions rules';
 }
 
 /* ------------------------------------------------------------------ ctx for author.js (EDITOR_SPEC.md) */
@@ -580,8 +758,30 @@ const ctx = {
 };
 
 /* ------------------------------------------------------------------ boot */
+// "← Back" to the game (user 2026-11-25): the phone's menu opens the editor in place (no tabs), so this page needs its
+// own way back. The way back = the game page that opened it (same origin, not /rules/), kept for this tab's session.
+function wireBack() {
+  const KEY = 'rules.backTo';
+  try {
+    const ref = document.referrer ? new URL(document.referrer) : null;
+    if (ref && ref.origin === location.origin && !ref.pathname.startsWith('/rules')) sessionStorage.setItem(KEY, ref.pathname + ref.search);
+  } catch { /* no referrer */ }
+  let to = null;
+  try { to = sessionStorage.getItem(KEY); } catch { to = null; }
+  // a desktop tab opened by the game (window.opener) leaves the game in its own tab: no button there
+  document.body.classList.toggle('has-back', !!to && !window.opener);
+  $('#back-to-game').onclick = () => { location.href = to || '/'; };
+}
 function wireChrome() {
-  $('#nav-toggle').onclick = () => document.body.classList.toggle('nav-open');
+  wireBack();
+  // ☰: the drawer when narrow; on a wide screen it hides / shows the left menu (remembered) to leave more room to read
+  const NAV_HIDDEN = 'rules.nav.hidden';
+  try { document.body.classList.toggle('nav-hidden', localStorage.getItem(NAV_HIDDEN) === '1'); } catch { /* private mode */ }
+  $('#nav-toggle').onclick = () => {
+    if (matchMedia('(max-width: 1100px)').matches) { document.body.classList.toggle('nav-open'); return; }
+    const hidden = document.body.classList.toggle('nav-hidden');
+    try { localStorage.setItem(NAV_HIDDEN, hidden ? '1' : '0'); } catch { /* private mode */ }
+  };
   $('#nav-scrim').onclick = closeDrawer;
   $('#menu-toggle').onclick = () => document.body.classList.toggle('menu-open');
   const gs = $('#global-search');
@@ -608,11 +808,13 @@ async function boot() {
   ]).catch(e => { $('#list').replaceChildren(el('div', { class: 'empty err' }, 'Cannot load the rules index: ' + (e.message || e))); return [null, null]; });
   if (!index) return;
   // chaosD6-GameModels (2026-11-25): every kind of the GameModels repo (races, buildings, NPCs, monsters, villages,
-  // quests, …) as a read-only collection, listed by the node (game/gamemodels-collections.mjs); none on the public site
+  // quests, …) as a read-only collection, listed by the node (game/gamemodels-collections.mjs) or prebuilt on the public site
+  // (tools/rules-site-build.mjs, from GameModels main)
   try {
     const gm = await fetch('gamemodels/index.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null));
     for (const c of gm?.collections || []) if (!(index.collections || []).some(x => x.id === c.id)) index.collections.push(c);
   } catch { /* no GameModels on this node */ }
+  for (const c of index.collections || []) { if (ROUTE_AS[c.id]) c.route = ROUTE_AS[c.id]; if (LABEL_AS[c.id] && !c.label) c.label = LABEL_AS[c.id]; }
   S.index = ctx.index = index;
   S.session = ctx.session = session;
   renderMode(); renderNav(); renderHeaderActions();

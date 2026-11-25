@@ -144,7 +144,7 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       return sendJson(res, 200, { ok: true, draft: call(() => jobs.create({ kind, idea: typeof b.idea === 'string' ? b.idea : '', tags: Array.isArray(b.tags) ? b.tags : [], resources: pickOf(b.resources, kind),
         base: GM_KINDS.includes(kind) && typeof b.base === 'string' && /^(npc|bld|mon)_[a-z0-9_]+$/.test(b.base) ? b.base : null })) });
     }
-    case 'GET gm': {   // read-only: the GameModels checkout on this node (none on a phone yet → available false)
+    case 'GET gm': {   // read-only: the GameModels checkout on this node (the phone: the copy staged in its bundle)
       if (!GAMEMODELS_DIR) return sendJson(res, 200, { ok: true, available: false, edit: [], looks: { npc: [], building: [], monster: [] }, races: [], villages: [] });
       const m = gmModels();
       const sprite = (p) => (p?.path || p || null);
@@ -162,21 +162,20 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
     case 'GET proposals': {
       let me = null;
       try { const s = requireLogin(ctx); me = whoAmI({ profileFile: ctx.profileFile, team: s.team?.name || '' }); } catch { me = whoAmI({ profileFile: ctx.profileFile }); }
-      const l = listGmProposals({ profileFile: ctx.profileFile, me });
+      const l = await listGmProposals({ profileFile: ctx.profileFile, me });
       return sendJson(res, 200, { ok: true, ...l, proposals: l.proposals.map(({ ref, ...p }) => p), limits: { min: VOTE_MIN, max: VOTE_MAX, comment_max: COMMENT_MAX } });
     }
     case 'POST proposals/refresh': {
       requireLogin(ctx);
       await readJsonBody(req);
-      if (process.env.CHAOSD6_MOBILE === '1') fail(409, 'the phone has no GameModels storage yet — refresh on a desktop');
-      const r = refreshGmProposals();
-      return sendJson(res, r.ok ? 200 : 502, { ok: r.ok, ...(r.ok ? { out: r.out } : { error: `rad sync failed: ${r.error}` }) });
+      const r = await refreshGmProposals();   // desktop: rad sync; the phone: its node's bridge POST /fetch
+      return sendJson(res, r.ok ? 200 : 502, { ok: r.ok, ...(r.ok ? { out: r.out } : { error: `fetch from the OCI seed failed: ${r.error}` }) });
     }
     case 'POST proposals/try':
     case 'POST proposals/vote': {
       const s = requireLogin(ctx);
       const b = await readJsonBody(req);
-      const p = listGmProposals({ profileFile: ctx.profileFile }).proposals.find(x => x.branch === String(b.branch || '') && x.commit === String(b.commit || ''));
+      const p = (await listGmProposals({ profileFile: ctx.profileFile })).proposals.find(x => x.branch === String(b.branch || '') && x.commit === String(b.commit || ''));
       if (!p) fail(404, 'no such proposal in the local storage (refresh first)');
       if (route === 'POST proposals/try') return sendJson(res, 200, { ok: true, draft: call(() => jobs.importProposal({ kind: p.kind, bundle: p.bundle, proposal: p })) });
       const value = Number(b.value);

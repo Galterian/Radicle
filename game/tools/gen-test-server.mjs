@@ -7,6 +7,8 @@
 //   POST /tests   { def }        → 202 { id } | 400 the validator refuses it | 401 | 409 busy (one at a time) | 413
 //   GET  /tests/<id>             → { id, state: running|done, status: "[test] …", result? }
 // The def must pass the same validator a peer runs on a foreign effect (effect-gen.mjs checkDraft) before a game starts.
+// A chaosD6-GameModels bundle (an NPC / building / monster draft of gm-gen.mjs, 2026-11-25: the phone tests them here
+// too) is checked with gm-gen checkBundle against this host's GameModels checkout and played by tools/gm-gen-test.mjs.
 // Results are kept 6 h (at most 30). Env: PORT (8097), HOST (127.0.0.1), GEN_TEST_KEY_FILE (/etc/chaosd6-llm/api-key),
 // GEN_TEST_DIR (<tmp>/chaosd6-gentest-srv), GEN_TEST_MINUTES (3), LLM_BIG_URL (http://127.0.0.1:8096, the review).
 import http from 'node:http';
@@ -19,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 import { checkDraft } from '../effect-gen.mjs';
 import { checkSkillDraft } from '../skill-gen.mjs';
 import { checkClassDraft } from '../class-gen.mjs';
+import { GM_KINDS, checkBundle } from '../gm-gen.mjs';
+import { GAMEMODELS_DIR } from '../gamemodels.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
@@ -27,7 +31,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const KEY_FILE = process.env.GEN_TEST_KEY_FILE || '/etc/chaosd6-llm/api-key';
 const DIR = process.env.GEN_TEST_DIR || path.join(os.tmpdir(), 'chaosd6-gentest-srv');
 const MINUTES = Math.max(1, Math.min(10, Number(process.env.GEN_TEST_MINUTES) || 3));
-const BODY_MAX = 256 * 1024;
+const BODY_MAX = 1024 * 1024;   // a GameModels NPC bundle carries its village + race
+const isBundle = (def) => GM_KINDS.includes(def?.kind) && /^(npc|bld|mon)_[a-z0-9_]{1,58}$/.test(String(def.id || ''));
 const KEEP_MS = 6 * 3600_000, KEEP_N = 30;
 fs.mkdirSync(DIR, { recursive: true, mode: 0o700 });
 const readKey = () => { try { return fs.readFileSync(KEY_FILE, 'utf8').trim(); } catch { return ''; } };
@@ -73,7 +78,7 @@ function start(def) {
   const t = { id, state: 'running', status: '[test] 0:00 queued', result: null, at: Date.now(), def_id: def.id };
   const key = readKey();
   const env = { ...process.env, LLM_BIG_URL: process.env.LLM_BIG_URL || 'http://127.0.0.1:8096', ...(key ? { LLM_BIG_KEY: key } : {}) };
-  const child = spawn(process.execPath, [path.join(HERE, 'effect-gen-test.mjs'), file, '--minutes', String(MINUTES), '--every', '10', '--out', out, '--review'],
+  const child = spawn(process.execPath, [path.join(HERE, isBundle(def) ? 'gm-gen-test.mjs' : 'effect-gen-test.mjs'), file, '--minutes', String(MINUTES), '--every', '10', '--out', out, '--review'],
     { cwd: GAME, env, stdio: ['ignore', 'pipe', 'pipe'] });
   t.child = child;
   let buf = '';
@@ -103,8 +108,9 @@ const server = http.createServer(async (req, res) => {
       if (running) return send(res, 409, { ok: false, error: 'busy: a test game is running (one at a time) — try again in a few minutes' });
       const b = await body(req);
       const def = b.def;
-      if (!def || typeof def !== 'object' || !/^(effect|skill|class)_[a-z0-9_]{1,58}$/.test(String(def.id || ''))) return send(res, 400, { ok: false, error: 'def with an effect, skill or class id required' });
-      const v = String(def.id).startsWith('skill_') ? await checkSkillDraft(def) : String(def.id).startsWith('class_') ? await checkClassDraft(def) : await checkDraft(def);
+      if (!def || typeof def !== 'object' || !(isBundle(def) || /^(effect|skill|class)_[a-z0-9_]{1,58}$/.test(String(def.id || '')))) return send(res, 400, { ok: false, error: 'def with an effect, skill or class id (or a GameModels npc / building / monster bundle) required' });
+      if (isBundle(def) && !GAMEMODELS_DIR) return send(res, 503, { ok: false, error: 'this test service has no chaosD6-GameModels checkout (infra/oci/gentest-setup.sh)' });
+      const v = isBundle(def) ? checkBundle(def) : String(def.id).startsWith('skill_') ? await checkSkillDraft(def) : String(def.id).startsWith('class_') ? await checkClassDraft(def) : await checkDraft(def);
       if (!v.ok) return send(res, 400, { ok: false, error: `the validator refuses it (${v.verdict})`, problems: v.problems });
       if (running) return send(res, 409, { ok: false, error: 'busy' });
       const t = start(def);

@@ -40,6 +40,7 @@ ok(!b?.npc?.unit?.deck_effects.includes('effect_nope'), 'unknown deck effect dro
 const res = b?.touches?.village?.residents?.find(x => x.npc === 'npc_empire_bard');
 ok(res?.post === 'outside' && b.touches.race?.npcs.includes('npc_empire_bard'), `placed outside the wall of vil_empire at ${res?.at} and listed in the race`);
 ok(checkGameModels(overlay(m, b), {}).length <= checkGameModels(m, {}).length, 'the overlaid repo has no new problem');
+ok(b?.touches?.village?.residents?.length === 20 && b.touches.village.residents.filter(x => m.npc[x.npc]?.role === 'fighter').length === m.village.vil_empire.residents.filter(x => m.npc[x.npc]?.role === 'fighter').length - 1, 'the full village: the newcomer takes a fighter\'s place (still 20)');
 
 // ---- a quest giver whose first answer is broken: the loop asks again with the validator's report ------------------------
 let calls = 0;

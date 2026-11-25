@@ -29,6 +29,7 @@ body { display: flex; flex-direction: column; }
 #hud .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .pill { background: #1a2130; color: #c9d4e3; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .pill.phase { background: #3a2c66; color: #e0d7ff; }
+.pill.village { background: #33291a; color: #f0dcb0; cursor: pointer; }   /* the nearest village (2026-11-25) */
 .pill.timer { background: #2a1a1a; color: #ffb0b0; min-width: 56px; text-align: center; }
 
 /* Two columns, two rows. The side panel is a single grid cell that spans

@@ -7,7 +7,7 @@ import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS, featureAt as worldItemAt } from './map.js';   // worldItemAt: the seed's bonus items (Shrine, Crystal …), NOT features.js featureAt (buildings / walls)
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
-import { loadVillageCatalog, villageCatalog, villageOfCell, villageRep, questsDone, sameRace, villagesNear } from './villages.js';
+import { loadVillageCatalog, villageCatalog, villageOfCell, villageRep, questsDone, sameRace, villagesNear, brokenHexes, villageRelations, villageById, compass, alignmentWords, ALIGN_HOSTILE_GAP } from './villages.js';
 import { ledgerUnits } from './world-ledger.js';
 // Buildings created during play (Animator copy / Priest Shrine, 2026-11-14): everyone's world_edits_json
 // `made:q,r` → the features.js overlay (renderer + object cards repaint through onFeaturesChanged).
@@ -316,8 +316,10 @@ let _brokenKey = null, _broken = new Set();
 function brokenBuildings() {
   const key = state.entities.map(p => p.world_edits_json || '').join('|');
   if (key === _brokenKey) return _broken;
-  _brokenKey = key; _broken = new Set();
-  for (const p of state.entities) { let list = []; try { list = JSON.parse(p.world_edits_json || '[]'); } catch {} for (const e of list) if (e.gone && String(e.id).startsWith('bld:')) _broken.add(e.id); }
+  _brokenKey = key;
+  const all = [];
+  for (const p of state.entities) { try { all.push(...JSON.parse(p.world_edits_json || '[]')); } catch {} }
+  _broken = new Set([...brokenHexes(all)].map(k => `bld:${k}`));   // a village building the mason mended stands again (2026-11-25)
   return _broken;
 }
 // Dungeon edits (`dng:q,r` { explored: turn }) from everyone's world edits — latest per dungeon.
@@ -1453,6 +1455,44 @@ function dimOutDone(m) {
   setTimeout(tryMenu, 2500);
 }
 setInterval(updateDimOutButton, 1000);
+// The nearest village (user 2026-11-25: "I cannot find villages"): a HUD pill with its name, race, compass direction
+// and distance — villages sit 35–55 hexes from the spawn, out of sight. A click walks towards it: the farthest hex I
+// know on the straight line there (the journey goes on as the map opens up; click again further on).
+function nearestVillageOf(me) {
+  if (!villageCatalog() || !state.map?.seed || !me || !Number.isInteger(me.tile_q)) return null;
+  return villagesNear(state.map.seed, me.tile_q, me.tile_r, 400)[0] || null;
+}
+function updateVillagePill() {
+  const el = document.getElementById('village-pill');
+  if (!el) return;
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const v = nearestVillageOf(me);
+  el.hidden = !v;
+  if (!v) return;
+  const d = Math.round(hexDistanceQR({ q: me.tile_q, r: me.tile_r }, v));
+  el.textContent = d <= (v.clear_radius ?? 9) ? `🏘 ${v.team} (${v.race_name}) — here` : `🏘 ${v.team} (${v.race_name}) — ${compass({ q: me.tile_q, r: me.tile_r }, v)}, ${d} hexes`;
+}
+setInterval(updateVillagePill, 1000);
+function walkTowardsVillage() {
+  const me = state.entities.find(p => p.peer_id === state.myPeerId);
+  const v = nearestVillageOf(me);
+  if (!v) return;
+  const a = { q: me.tile_q, r: me.tile_r }, gate = v.wall?.outer || { q: v.q, r: v.r };   // the gate guard's post, else the centre
+  const n = hexDistanceQR(a, gate), blocked = blockedTilesExcluding(me.peer_id);
+  for (let k = n; k >= 1; k--) {   // cube lerp a → gate, the farthest known, reachable hex first
+    const t = k / n, x = a.q + (gate.q - a.q) * t, z = a.r + (gate.r - a.r) * t, y = -x - z;
+    let rx = Math.round(x), rz = Math.round(z); const ry = Math.round(y);
+    const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+    if (dx > dy && dx > dz) rx = -ry - rz; else if (!(dy > dz)) rz = -rx - ry;
+    if (!knownHex(rx, rz)) continue;
+    const path = findPath(a, { q: rx, r: rz }, blocked, knownHex);
+    if (!path.length) continue;
+    state.ui.chasePeerId = null; state.ui.destinationTile = { q: rx, r: rz }; state.ui.pathPlan = path; state.ui.selectedTarget = path[0];
+    logUI(`🏘 walking towards ${v.team} (${v.race_name}) — ${compass(a, v)}, ${n} hexes${k < n ? `; the map ends ${n - k} hexes short, click again further on` : ''}`, 'phase');
+    return;
+  }
+  logUI(`🏘 ${v.team} lies ${compass(a, v)}, ${n} hexes — no known way there yet`, 'phase');
+}
 // Unattended characters (rule_unattended_character, user 2026-11-16): "make some visual leader flag and the
 // unattended characters that those player is leading a status of 'follow <this leader character>'".
 // Roster tags: ⚑ leader N on a master, "follow <leader>" on its followers, "unattended" on a leaderless one.
@@ -1470,6 +1510,15 @@ function unattendedTagsHtml(e) {
     out.push(`<span class="ros-village${hostile ? ' hostile' : ''}" title="${escHtml(`${e.team_name || 'village'} — ${n?.role?.replace('_', ' ') || 'villager'}${e.follower ? ', follows its hero' : hostile ? ', hostile to you' : ', neutral'}`)}">🏘 ${escHtml(e.follower ? 'follower' : n?.role === 'quest_giver' ? 'quests' : n?.role?.replace('_', ' ') || 'villager')}</span>`);
     if (e.siege_class) { const k = n?.siege || {}; out.push(`<span class="ros-builder" title="${escHtml(`${e.siege_class}: ${k.kind === 'ram' ? `next to a wall for ${k.rounds || 3} actions in a row breaks it` : `shoots ${k.min}–${k.max} hexes once a turn${k.kind === 'ballista' ? ', hurting every foe on the first ' + k.max + ' hexes of the line' : ''}`}; only Empty Posture / Empty Move`)}">⚙ ${escHtml(e.siege_class)}</span>`); }
     if (n?.unit?.breath) out.push(`<span class="ros-village hostile" title="Breath Attack: each Attack hits every enemy within ${n.unit.breath.range}${(n.unit.tags || []).includes('flying') ? '; flies over walls' : ''}">🔥 breath ${n.unit.breath.range}</span>`);
+    if (e.diplomat_spy) out.push('<span class="ros-follow" title="a spy mission: led into the other village it sows mistrust (−5 % between the two)">🗡 spy</span>');
+    else if (e.diplomat_to) out.push('<span class="ros-follow" title="an envoy on its way: led into the other village both think better of each other (+5 %)">🕊 envoy</span>');
+    if (e.homeward_to) out.push('<span class="ros-follow" title="walked home to its village: +5 % with it">🏠 homeward</span>');
+  }
+  // alignment (2026-11-25): heroes and NPCs carry one (percent of good); monsters none
+  if (Number.isFinite(e?.alignment_pct)) {
+    const me = state.entities.find(p => p.peer_id === state.myPeerId);
+    const gap = e.peer_id !== state.myPeerId && Number.isFinite(me?.alignment_pct) ? Math.abs(me.alignment_pct - e.alignment_pct) : null;
+    out.push(`<span class="ros-builder" title="${escHtml(`alignment ${e.alignment_pct}% good (${alignmentWords(e.alignment_pct)})${gap != null ? ` — ${gap}% from yours${gap > ALIGN_HOSTILE_GAP && villageCatalog()?.npcs?.[e.npc_id]?.role === 'wanderer' ? ': this wanderer is hostile to you' : ''}` : ''}`)}">☯ ${e.alignment_pct}%</span>`);
   }
   if (Number(e?.leader) > 0) out.push(`<span class="ros-leader" title="leads ${e.leader} unattended character${e.leader === 1 ? '' : 's'}">⚑ leader ${e.leader}</span>`);
   if (e?.shadow_of) out.push(e.led_by ? `<span class="ros-follow" title="unattended — its player closed the game; it follows its master">follow ${escHtml(followLeaderName(e))}</span>`
@@ -2203,12 +2252,25 @@ function villageCardText(o, broken) {
   if (broken) lines.push('Broken — the village will not forget who did it.');
   const p = v.produces && cat.npcs[v.produces.npc];
   if (p && !broken) lines.push(`Makes a ${p.name} every ${v.produces.every_turns} turns while the village has fewer than ${full?.cap ?? 20} units.`);
+  // whom it brings back when they fall (2026-11-25, village-life.mjs rebirthSite: the npc's home; the builders: the centre)
+  const t = cat.villages[full?.template];
+  const homeOf = (n) => n?.role === 'builder' ? (t?.layout || []).find(l => cat.buildings[l.building]?.role === 'centre')?.building : n?.home;
+  const reborn = [...new Set((t?.residents || []).map(rs => cat.npcs[rs.npc]).filter(n => n && homeOf(n) === v.building).map(n => n.role === 'fighter' ? `${n.name} (50 turns)` : `${n.name} (20 turns)`))];
+  if (reborn.length) lines.push(`${broken ? 'Once mended it brings back' : 'Brings back'} who falls: ${reborn.join(', ')}.`);
+  // the Ministry of Foreign Affairs: a live count of this village's relations with every village found so far
+  if (v.role === 'ministry' && full) {
+    const rel = villageRelations(state.map.seed, full, ledgerUnits(state.entities || []));
+    lines.push(rel.length ? `Relations of ${full.team} (100 − 2 × the alignment gap, +5 per diplomat led between them, −5 per spy mission; under 40% WAR):\n${rel.map(x => `${x.war ? '⚔' : '•'} ${x.village.team} (${x.village.race_name}, ${Math.round(x.dist)} hexes ${compass(full, x.village)}) — ${x.relation}%${x.war ? ' — WAR' : ''}`).join('\n')}`
+      : 'No other village found yet — its diplomats know only rumours.');
+  }
   if (v.role === 'centre') {
     const rp = full?.reputation || {};
     const rep = villageRepOf(full, state.myPeerId);
     const standing = rep < rp.hostile ? 'hostile — its people attack you near the village' : rep >= rp.ally_all ? 'ally — every villager fights at your side' : rep >= rp.enter ? 'welcome — the gate is open to you' : 'stranger — the gate stays shut';
     const kin = sameRace(full, myHeroRace()) ? ` You are of the ${v.race_name}: you started at ${rp.start_same_race}%.` : ` You started at ${rp.start}% (${v.race_name} heroes start at ${rp.start_same_race}%).`;
-    lines.push(`Your relationship with ${v.team}: ${rep}% (${standing}).${kin}\nUnder ${rp.hostile}% hostile · ${rp.enter}% opens the gate · ${rp.ally_all}% the whole village joins you.\nQuest +5% · attacking a villager ${rp.villager_attacked}% (once per villager) · breaking a building ${rp.building_broken}% · walking in below ${rp.enter}% ${rp.trespass}% (each time).`);
+    const myA = state.entities.find(p => p.peer_id === state.myPeerId)?.alignment_pct, raceA = cat.races[full?.race]?.alignment_pct;
+    if (Number.isFinite(myA) && Number.isFinite(raceA)) lines.push(`Alignment: you ${myA}% good (${alignmentWords(myA)}), the ${v.race_name} ${raceA}% — its wanderers turn hostile beyond ${ALIGN_HOSTILE_GAP}% apart. Helping +5%, attacking someone who meant no harm −5%.`);
+    lines.push(`Your relationship with ${v.team}: ${rep}% (${standing}).${kin}\nUnder ${rp.hostile}% hostile · ${rp.enter}% opens the gate · ${rp.ally_all}% the whole village joins you.\nQuest +5% · a wanderer walked home +5% · its diplomat led to another village +5% · attacking a villager ${rp.villager_attacked}% (once per villager) · breaking a building ${rp.building_broken}% · walking in below ${rp.enter}% ${rp.trespass}% (each time).`);
     const qs = (cat.villages[full?.template]?.quests || []).map(id => cat.quests[id] && { ...cat.quests[id], id }).filter(Boolean);
     const done = questsDone(ledgerUnits(state.entities || []), state.myPeerId);
     if (qs.length) lines.push(`Quests:\n${qs.map(q => done.has(q.id) ? `✓ ${q.name} — done` : `• ${q.name} — ${cat.npcs[q.giver]?.name || 'someone'} asks for ${q.need_text} (${q.rewards.map(rewardText).join(', ')})`).join('\n')}`);
@@ -2513,11 +2575,10 @@ function classStatsLine(classId, colours = null) {
   return Object.entries(cols).map(([st, els]) => `${st[0].toUpperCase()}${st.slice(1)} (${els.map(x => x.replace('elem_', '')).join('/')})`).join(' · ');
 }
 // My class card clicked: the ability goes out with this action (toggle). Card-attach classes need the hand card first.
-// Clicking / tapping any unit plays its mapped sound (select, else order / spawn / fx).
+// Clicking / tapping any unit plays its mapped sounds — the next voice line on every tap (select → ready → order, else
+// spawn / fx), per unit (sprites.js voice; media only, user 2026-11-25).
 function playUnitSound(p) {
-  const res = resOf(p);
-  for (const k of ['select', 'order', 'spawn', 'fx']) if (sounds.play(res, k)) return true;
-  return false;
+  return sounds.voice(resOf(p), { key: p.peer_id || '' });
 }
 function clickClassCard() {
   const cs = state.classState;
@@ -3935,6 +3996,7 @@ function wireInput() {
   // Combo marker: click / tap toggles the combo (lit when it can start).
   document.getElementById('combo-marker')?.addEventListener('click', (e) => { e.stopPropagation(); toggleCombo(); });
   document.getElementById('dimout-btn')?.addEventListener('click', (e) => { e.stopPropagation(); send({ kind: 'dim_out', active: myDimOutLeft() == null }); });
+  document.getElementById('village-pill')?.addEventListener('click', (e) => { e.stopPropagation(); walkTowardsVillage(); });
   document.querySelectorAll('#slots .slot').forEach(slotEl => {
     const key = slotEl.dataset.slot;
     const slotKey = key === 'EMPTY' ? 'EMPTY' : Number(key);

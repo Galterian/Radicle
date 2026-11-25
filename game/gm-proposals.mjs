@@ -2,11 +2,14 @@
 // games). Another team's NPC / building / monster lives on players/<team>/<id> of chaosD6-GameModels (editor-publish.mjs
 // publishGameModels: one signed commit of several definition files + index.json on top of main). Nobody meets it in a
 // normal game (the game catalog is main only), so the editor lists them from the LOCAL Radicle storage of the repo:
-//   listGmProposals({ storageDir, profileFile, me }) → [{ kind, id, name, team, branch, ns, commit, sha256, author,
+//   await listGmProposals({ storageDir, profileFile, me }) → [{ kind, id, name, team, branch, ns, commit, sha256, author,
 //     signature_ok, at, subject, bundle, files[], votes: {n, mean, review}, mine, own }]
-// read-only (git for-each-ref / diff / show on the storage; no network). refreshGmProposals() = `rad sync <rid> --fetch
-// --seed <OCI seed>` — the OCI seed ONLY, never a public seed. A proposal's bundle is rebuilt from the files its commit
-// changes (gm-gen.mjs bundle shape), so the editor's card, the private test game and the vote all see the same thing.
+// read-only (refs / diff / show on the storage; no network) — the git CLI on a desktop, isomorphic-git on the phone (no
+// git binary there; its in-app node keeps the storage at <dirname of bridge.json>/storage, the GameModels repo seeded
+// with scope all — RadicleBoot.gd). refreshGmProposals() = `rad sync <rid> --fetch --seed <OCI seed>` on a desktop, the
+// node bridge POST /fetch on the phone — the OCI seed ONLY, never a public seed. A proposal's bundle is rebuilt from the
+// files its commit changes (gm-gen.mjs bundle shape), so the editor's card, the private test game and the vote all see
+// the same thing.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,29 +20,82 @@ import { BUNDLE_SCHEMA } from './gm-gen.mjs';
 import { gmSignedOf, verifyDefinitionSignature, trailersOf, defSha, GAMEMODELS_RID } from './editor-publish.mjs';
 import { OCI_SEED_NID, collectionOf, normalizeTarget, authorConflict, loadVotes, votesFile } from './proposal-votes.mjs';
 
-const radHome = () => process.env.RAD_HOME || path.join(os.homedir(), '.radicle');
+const isPhone = () => process.env.CHAOSD6_MOBILE === '1';
+// The phone's node: RAD_HOME = the directory of its bridge.json (RadicleBoot.gd bridge_file()).
+const radHome = () => (process.env.CHAOSD6_RADICLE_BRIDGE ? path.dirname(process.env.CHAOSD6_RADICLE_BRIDGE) : process.env.RAD_HOME || path.join(os.homedir(), '.radicle'));
 export const gmStorageDir = (rid = GAMEMODELS_RID) => path.join(radHome(), 'storage', String(rid).replace(/^rad:/, ''));
 const SUB_KIND = Object.fromEntries(Object.entries(DEF_KINDS).map(([k, [sub]]) => [sub, k]));   // npcs → npc
 const MAIN_KIND = { npc: 'npc', building: 'building', monster: 'monster' };
-const git = (gitdir, args) => execFileSync('git', ['--git-dir', gitdir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 << 20 }).trim();
+const DEF_FILE_RE = /^[a-z]+\/[a-z0-9_]+\.json$/;
+
+// The few reads a proposal needs, on a bare repo: engine 'git' (the CLI) | 'iso' (isomorphic-git, the phone).
+function gitReader(gitdir) {
+  const git = (args) => execFileSync('git', ['--git-dir', gitdir, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 << 20 }).trim();
+  return {
+    refs: async () => git(['for-each-ref', '--format=%(refname)', 'refs/namespaces/', 'refs/heads/']).split('\n').filter(Boolean),
+    resolve: async (ref) => git(['rev-parse', ref]),
+    mergeBase: async (a, b) => git(['merge-base', a, b]),
+    changed: async (base, tip) => git(['diff', '--name-only', base, tip]).split('\n').filter(f => DEF_FILE_RE.test(f)),
+    show: async (tip, f) => git(['show', `${tip}:${f}`]),
+    meta: async (tip) => ({ message: git(['log', '-1', '--format=%B', tip]), at: git(['log', '-1', '--format=%cI', tip]) }),
+  };
+}
+async function isoReader(gitdir) {
+  const iso = (await import('isomorphic-git')).default;
+  const o = { fs, gitdir };
+  const tree = async (oid, filepath) => { try { return (await iso.readTree({ ...o, oid, ...(filepath ? { filepath } : {}) })).tree; } catch { return []; } };
+  const pad = (n) => String(Math.abs(n)).padStart(2, '0');
+  return {
+    // every ref under refs/heads/ and refs/namespaces/ (loose + packed)
+    refs: async () => [...(await iso.listRefs({ ...o, filepath: 'refs/heads' }).catch(() => [])).map(r => `refs/heads/${r}`),
+      ...(await iso.listRefs({ ...o, filepath: 'refs/namespaces' }).catch(() => [])).map(r => `refs/namespaces/${r}`)],
+    resolve: (ref) => iso.resolveRef({ ...o, ref }),
+    mergeBase: async (a, b) => { const m = await iso.findMergeBase({ ...o, oids: [a, b] }); if (!m.length) throw new Error('no merge base'); return m[0]; },
+    // the definition files (<subdir>/<id>.json) whose blob differs between the two trees (git diff --name-only, depth 2)
+    changed: async (base, tip) => {
+      const out = [];
+      const [bt, tt] = [await tree(base), await tree(tip)];
+      for (const d of tt.filter(e => e.type === 'tree')) {
+        const was = bt.find(e => e.path === d.path);
+        if (was?.oid === d.oid) continue;
+        const [bf, tf] = [was ? await tree(base, d.path) : [], await tree(tip, d.path)];
+        const names = new Set([...bf, ...tf].filter(e => e.type === 'blob').map(e => e.path));
+        for (const n of names) if (bf.find(e => e.path === n)?.oid !== tf.find(e => e.path === n)?.oid) out.push(`${d.path}/${n}`);
+      }
+      for (const d of bt.filter(e => e.type === 'tree' && !tt.some(t => t.path === e.path))) {
+        for (const f of (await tree(base, d.path)).filter(e => e.type === 'blob')) out.push(`${d.path}/${f.path}`);
+      }
+      return out.filter(f => DEF_FILE_RE.test(f)).sort();
+    },
+    show: async (tip, f) => Buffer.from((await iso.readBlob({ ...o, oid: tip, filepath: f })).blob).toString('utf8'),
+    meta: async (tip) => {
+      const { commit: c } = await iso.readCommit({ ...o, oid: tip });
+      const off = -c.committer.timezoneOffset, t = new Date((c.committer.timestamp + off * 60) * 1000).toISOString().slice(0, 19);
+      return { message: c.message.replace(/\n+$/, ''), at: `${t}${off < 0 ? '-' : '+'}${pad(Math.trunc(off / 60))}:${pad(off % 60)}` };
+    },
+  };
+}
+const readerOf = async (gitdir, engine = isPhone() ? 'iso' : 'git') => (engine === 'iso' ? isoReader(gitdir) : gitReader(gitdir));
 
 /** The canonical main of the storage: refs/heads/main, else the first delegate namespace's main. */
-function mainOf(gitdir, refs) {
-  if (refs.includes('refs/heads/main')) return git(gitdir, ['rev-parse', 'refs/heads/main']);
+async function mainOf(rd, refs) {
+  if (refs.includes('refs/heads/main')) return rd.resolve('refs/heads/main');
   const r = refs.find(x => /^refs\/namespaces\/[^/]+\/refs\/heads\/main$/.test(x));
-  return r ? git(gitdir, ['rev-parse', r]) : null;
+  return r ? rd.resolve(r) : null;
 }
 
 /** One proposal commit → the bundle it carries (or null): the files it changes against its merge base with main. */
-export function bundleOfCommit(gitdir, main, tip) {
-  const base = (() => { try { return git(gitdir, ['merge-base', main, tip]); } catch { return main; } })();
-  const changed = git(gitdir, ['diff', '--name-only', base, tip]).split('\n').filter(f => /^[a-z]+\/[a-z0-9_]+\.json$/.test(f));
+export async function bundleOfCommit(gitdir, main, tip, { engine, rd = null } = {}) {
+  rd = rd || await readerOf(gitdir, engine);
+  let base = main;
+  try { base = await rd.mergeBase(main, tip); } catch { base = main; }
+  const changed = await rd.changed(base, tip);
   const defs = [];
   for (const f of changed) {
     const [sub] = f.split('/');
     const kind = SUB_KIND[sub];
     if (!kind) continue;
-    try { defs.push([kind, sub, JSON.parse(git(gitdir, ['show', `${tip}:${f}`]))]); } catch { /* deleted / unreadable: not part of the bundle */ }
+    try { defs.push([kind, sub, JSON.parse(await rd.show(tip, f))]); } catch { /* deleted / unreadable: not part of the bundle */ }
   }
   const main0 = defs.find(([k]) => MAIN_KIND[k]);
   if (!main0) return null;
@@ -61,10 +117,11 @@ export function bundleOfCommit(gitdir, main, tip) {
 }
 
 /** Every GameModels proposal in the local storage (newest first). me = { voter, nid, handles } for the author check. */
-export function listGmProposals({ storageDir = gmStorageDir(), profileFile = '', me = null } = {}) {
-  if (!fs.existsSync(storageDir)) return { available: false, why: `chaosD6-GameModels is not in this node's Radicle storage (${GAMEMODELS_RID})`, proposals: [] };
-  const refs = git(storageDir, ['for-each-ref', '--format=%(refname)', 'refs/namespaces/', 'refs/heads/']).split('\n').filter(Boolean);
-  const main = mainOf(storageDir, refs);
+export async function listGmProposals({ storageDir = gmStorageDir(), profileFile = '', me = null, engine } = {}) {
+  if (!fs.existsSync(storageDir)) return { available: false, why: `chaosD6-GameModels is not in this node's Radicle storage yet (${GAMEMODELS_RID})${isPhone() ? ' — the app seeds it; try Refresh' : ''}`, proposals: [] };
+  const rd = await readerOf(storageDir, engine);
+  const refs = await rd.refs();
+  const main = await mainOf(rd, refs);
   if (!main) return { available: false, why: 'no main branch in the storage yet', proposals: [] };
   const mine = new Map(loadVotes(votesFile(profileFile)).map(v => [v.key, v]));
   const out = [];
@@ -73,10 +130,9 @@ export function listGmProposals({ storageDir = gmStorageDir(), profileFile = '',
     if (!m) continue;
     const [, ns, branch, team] = m;
     let tip, info;
-    try { tip = git(storageDir, ['rev-parse', r]); info = bundleOfCommit(storageDir, main, tip); } catch { continue; }
+    try { tip = await rd.resolve(r); info = await bundleOfCommit(storageDir, main, tip, { rd }); } catch { continue; }
     if (!info) continue;
-    const msg = git(storageDir, ['log', '-1', '--format=%B', tip]);
-    const at = git(storageDir, ['log', '-1', '--format=%cI', tip]);
+    const { message: msg, at } = await rd.meta(tip);
     const tr = trailersOf(msg);
     const signed = gmSignedOf(info.bundle.id, info.defs);
     const author = tr['Chaosd6-Author'] || '';
@@ -90,8 +146,21 @@ export function listGmProposals({ storageDir = gmStorageDir(), profileFile = '',
   out.sort((a, b) => String(b.at).localeCompare(String(a.at)));
   return { available: true, rid: GAMEMODELS_RID, main, proposals: out };
 }
-/** Fetch the latest proposals from the OCI seed into the local storage (desktop; `rad` CLI). → { ok, out|error } */
-export function refreshGmProposals({ timeoutSec = 60 } = {}) {
+
+/** Fetch the latest proposals from the OCI seed into the local storage: a desktop's `rad` CLI, the phone's node bridge
+ *  POST /fetch (feature "fetch"). → { ok, out|error } */
+export async function refreshGmProposals({ timeoutSec = 60, bridgeFile = isPhone() ? process.env.CHAOSD6_RADICLE_BRIDGE || '' : '', fetchImpl = globalThis.fetch } = {}) {
+  if (bridgeFile || isPhone()) {
+    let b = null;
+    try { b = JSON.parse(fs.readFileSync(bridgeFile, 'utf8')); } catch { return { ok: false, error: 'the phone Radicle node is not running (no bridge.json)' }; }
+    if (!Array.isArray(b?.features) || !b.features.includes('fetch')) return { ok: false, error: 'the phone Radicle node cannot fetch on demand yet (update the app) — it still syncs on its own' };
+    try {
+      const r = await fetchImpl(`http://127.0.0.1:${b.port}/fetch`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-bridge-token': b.token },
+        body: JSON.stringify({ rid: GAMEMODELS_RID, seed: OCI_SEED_NID }), signal: AbortSignal.timeout((timeoutSec + 15) * 1000) });
+      const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
+      return j.ok ? { ok: true, out: `${j.updated ?? 0} refs updated from the OCI seed` } : { ok: false, error: String(j.error || 'fetch failed').slice(0, 300) };
+    } catch (e) { return { ok: false, error: `bridge: ${e.name === 'TimeoutError' ? 'timeout' : e.message}` }; }
+  }
   const env = { ...process.env };
   const radBin = path.join(os.homedir(), '.radicle', 'bin');
   if (fs.existsSync(radBin) && !String(env.PATH || '').includes(radBin)) env.PATH = `${radBin}${path.delimiter}${env.PATH || ''}`;
@@ -105,11 +174,13 @@ export function refreshGmProposals({ timeoutSec = 60 } = {}) {
  *  repo + up to `max` proposals that are not mine (newest first, signed, passing the check against main) compiled into
  *  <outDir>/catalog.json — the launcher passes it as GAMEMODELS_CATALOG_FILE. → { file, proposals: [{ kind, id, name,
  *  team, ref }], env } where env = { GAMEMODELS_CATALOG_FILE, GAMEMODELS_PROPOSALS (JSON of the refs) } plus, for the
- *  first NPC / monster, the c2 test hooks (GAMEMODELS_TEST_VILLAGE + _TEST_NPC + TEST_NEAR_VILLAGE, or TEST_FOES). */
-export async function proposalTestCatalog({ storageDir = gmStorageDir(), profileFile = '', me = null, max = 3, outDir }) {
+ *  first NPC / monster, the c2 test hooks (GAMEMODELS_TEST_VILLAGE + _TEST_NPC + TEST_NEAR_VILLAGE, or TEST_FOES).
+ *  The phone: the GameModels definitions staged in the bundle (gamemodels.mjs candidate <game>/gamemodels-repo). */
+export async function proposalTestCatalog({ storageDir = gmStorageDir(), profileFile = '', me = null, max = 3, outDir, engine }) {
   const { loadGameModels, compileCatalog, GAMEMODELS_DIR } = await import('./gamemodels.mjs');
   const { overlay, checkBundle } = await import('./gm-gen.mjs');
-  const l = listGmProposals({ storageDir, profileFile, me });
+  const l = await listGmProposals({ storageDir, profileFile, me, engine });
+  if (!l.available || !GAMEMODELS_DIR) return { file: null, proposals: [], env: {} };
   const base = loadGameModels(GAMEMODELS_DIR);
   let m = base;
   const used = [];

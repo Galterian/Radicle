@@ -157,6 +157,11 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   }
 
   // ---- test ----
+  // A runner RESULT (tools/effect-gen-test.mjs | gm-gen-test.mjs, here or on OCI's gen-test service) → draft.test.
+  const testOf = (kind, res, extra = {}) => ({ pass: !!res.pass, why: res.why || [], casts: res.casts, lands: res.lands, errors: res.errors, divergences: res.divergences,
+    lines: (res.lines || []).slice(0, 40), error_lines: res.errorLines || [], review: res.review || null, at: res.at, ms: res.ms ?? null, dimension: res.dimension,
+    ...(isGm(kind) ? { spawned: !!res.spawned, talks: res.talks, agenda: res.agenda, quests: res.quests, village: !!res.village, in_layout: !!res.in_layout, notes: res.notes || [], talk: (res.talk || []).slice(0, 24),
+      booted: !!res.booted, chases: res.chases, casts: res.casts, hits: res.hits, kills: res.kills, monster_died: !!res.monsterDied } : {}), ...extra });
   function runTest(d) {
     return new Promise((resolve) => {
       const out = path.join(dir, `${d.draft_id}.test.json`);
@@ -179,11 +184,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
         try { res = JSON.parse(fs.readFileSync(out, 'utf8')); } catch {}
         const x = read(d.draft_id) || d;
         x.status = '';
-        x.test = res ? { pass: !!res.pass, why: res.why || [], casts: res.casts, lands: res.lands, errors: res.errors, divergences: res.divergences,
-          lines: (res.lines || []).slice(0, 40), error_lines: res.errorLines || [], review: res.review || null, at: res.at, ms: res.ms, dimension: res.dimension,
-          ...(isGm(d.kind) ? { spawned: !!res.spawned, talks: res.talks, agenda: res.agenda, quests: res.quests, village: !!res.village, in_layout: !!res.in_layout, notes: res.notes || [], talk: (res.talk || []).slice(0, 24),
-            booted: !!res.booted, chases: res.chases, casts: res.casts, hits: res.hits, kills: res.kills, monster_died: !!res.monsterDied } : {}) }
-          : { pass: false, why: [`the test runner exited with code ${code} and no result`] };
+        x.test = res ? testOf(d.kind, res) : { pass: false, why: [`the test runner exited with code ${code} and no result`] };
         x.suggestions = res?.review?.suggestions || [];
         talkTest(x);
         if (x.test.pass) setState(x, 'testing success', isGm(d.kind) ? gmBrief(d.kind, x.test) : `cast ${res.casts}×, landed ${res.lands}×`);
@@ -244,11 +245,10 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   const finishRemote = (d, res) => {
     const x = read(d.draft_id) || d;
     x.status = ''; delete x.remote_test;
-    x.test = { pass: !!res.pass, why: res.why || [], casts: res.casts, lands: res.lands, errors: res.errors, divergences: res.divergences,
-      lines: (res.lines || []).slice(0, 40), error_lines: res.errorLines || [], review: res.review || null, at: res.at, ms: res.ms ?? null, where: 'oci' };
+    x.test = testOf(x.kind, res, { where: 'oci' });
     x.suggestions = res.review?.suggestions || [];
     talkTest(x);
-    if (x.test.pass) setState(x, 'testing success', `on OCI: cast ${res.casts}×, landed ${res.lands}×`);
+    if (x.test.pass) setState(x, 'testing success', `on OCI: ${isGm(x.kind) ? gmBrief(x.kind, x.test) : `cast ${res.casts}×, landed ${res.lands}×`}`);
     else { x.fails = (x.fails | 0) + 1; setState(x, `testing failed ${x.fails}`, x.test.why.join('; ')); }
     return write(x);
   };
@@ -346,7 +346,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       if (!(d.state === 'preview' || isFailed(d.state) || d.state === 'testing success')) throw Object.assign(new Error(`cannot test while ${d.state}`), { status: 409 });
       refuseBusy();
       saveDraft(d.def, defsDir(d.kind));   // the file the runner reads = the def shown
-      const rt = isGm(d.kind) ? null : remoteTest();   // a GameModels test needs the GameModels checkout: here only
+      const rt = remoteTest();   // the phone: on OCI's gen-test service (a GameModels bundle too: OCI has the GameModels checkout)
       setState(d, 'testing', rt ? 'on OCI' : ''); d.status = `[test] 0:00 starting${rt ? ' · on OCI' : ''}`; d.status_at = nowIso(); write(d);
       start(d, 'test', () => (rt ? runTestRemote(d, rt) : runTest(d)));
       return d;
