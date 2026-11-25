@@ -5,11 +5,13 @@
 import fs from 'node:fs';
 import { EFFECT_RULES, playableEffects, builtinEffectEntries } from '../effects.mjs';
 import { LogicEngine } from '../logic-engine.mjs';
+import { readCollection } from '../defs-collection.mjs';
+import { fileURLToPath } from 'node:url';
 import { monsterDeckConfig, pickThematicEffects, pickRandomEffects, monsterDeckSeed, npcCastChoice, npcCastable, affordable, affordableFor, effectKind, npcStuckCard } from '../monster-deck.mjs';
 
 let fails = 0, n = 0;
 const eq = (label, got, want) => { n++; const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) { fails++; console.log(`FAIL ${label}: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`); } };
-const rd = (f) => JSON.parse(fs.readFileSync(new URL(`../../data/${f}.json`, import.meta.url), 'utf8'));
+const rd = (f) => readCollection(fileURLToPath(new URL('../../data', import.meta.url)), f);   // split A: creatures = the GameModels catalog's
 const live = (v) => v.status !== 'rejected' && v.status !== 'superseded';
 const act = (e) => [...e.versions.filter(live)].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0] ?? e.versions[0];
 const effects = builtinEffectEntries();   // F9: the cards = the definitions' card blocks

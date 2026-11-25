@@ -9,6 +9,8 @@ import { ALL_ELEMS } from './effect-engine.mjs';
 import { GEN_KINDS as FX_KINDS, GEN_DURATIONS } from './effect-gen.mjs';
 import { SKILL_ACTIONS, SKILL_STATS } from './skill-gen.mjs';
 import { CLASS_KINDS, CLASS_NEEDS, CLASS_POWERS } from './class-gen.mjs';
+import { GEN_ROLES, GEN_BUILDING_ROLES, MONSTER_TAGS, models as gmModels } from './gm-gen.mjs';
+import { GAMEMODELS_DIR } from './gamemodels.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCOPES = ['target', 'all_enemies', 'all_adjacent', 'all_seen', 'everyone', 'self', 'self_or_ally', 'self_or_enemy'];
@@ -47,6 +49,31 @@ function groupsOf(kind) {
       power: { label: 'power', mode: 'set', values: [...CLASS_POWERS], has: (d, v) => d.power?.[v] !== undefined && d.power[v] !== false, now: (d) => Object.keys(d.power || {}).join(', ') || 'none' },
       needs: { label: 'targets', mode: 'one', values: [...CLASS_NEEDS], has: (d, v) => d.flags?.needs === v, now: (d) => d.flags?.needs ?? 'none' },
     };
+  }
+  // GameModels (gm-gen.mjs; the def is a bundle { npc, quests, place } / { building, place } / { monster })
+  if (kind === 'monster') {
+    const mo = (d) => d.monster || {};
+    const agendas = GAMEMODELS_DIR ? (() => { try { return Object.keys(Object.values(gmModels().lib)[0]?.agendas || {}).filter(a => a.startsWith('monster_')); } catch { return []; } })() : [];
+    return {
+      tag: { label: 'card tag', mode: 'set', values: [...MONSTER_TAGS], has: (d, v) => (mo(d).card?.tags || []).includes(v), now: (d) => (mo(d).card?.tags || []).join(', ') || 'none' },
+      agenda: { label: 'hunts as', mode: 'one', values: agendas, has: (d, v) => mo(d).agenda?.uses === v, now: (d) => mo(d).agenda?.uses ?? 'none' },
+      actions: { label: 'actions per round', mode: 'one', values: ['1', '2', '3', '4'], has: (d, v) => String(mo(d).card?.data?.actions_per_round) === v, now: (d) => String(mo(d).card?.data?.actions_per_round ?? 'none') },
+      rider: { label: 'rider on', mode: 'one', values: ['A', 'M', 'B', 'P'], has: (d, v) => mo(d).card?.data?.on_action_rider?.action === v, now: (d) => mo(d).card?.data?.on_action_rider?.action ?? 'none' },
+    };
+  }
+  if (kind === 'npc' || kind === 'building') {
+    const races = GAMEMODELS_DIR ? (() => { try { return Object.keys(gmModels().race); } catch { return []; } })() : [];
+    const obj = (d) => (kind === 'npc' ? d.npc : d.building) || {};
+    const g = {
+      race: { label: 'race', mode: 'one', values: races, has: (d, v) => obj(d).race === v, now: (d) => obj(d).race ?? 'none' },
+      role: { label: 'role', mode: 'one', values: [...(kind === 'npc' ? GEN_ROLES : GEN_BUILDING_ROLES)], has: (d, v) => obj(d).role === v, now: (d) => obj(d).role ?? 'none' },
+    };
+    if (kind === 'npc') {
+      g.lives = { label: 'lives', mode: 'one', values: ['resident', 'outside', 'wanderer'], has: (d, v) => d.place?.post === v, now: (d) => d.place?.post ?? 'nowhere' };
+      g.has = { label: 'has', mode: 'set', values: ['quests', 'talk', 'lore'], has: (d, v) => (v === 'quests' ? (d.quests || []).length > 0 : v === 'talk' ? (d.npc?.talk || []).length > 0 : (d.npc?.lines?.lore || []).length > 0),
+        now: (d) => [(d.quests || []).length ? 'quests' : '', d.npc?.talk?.length ? 'talk' : '', d.npc?.lines?.lore?.length ? 'lore' : ''].filter(Boolean).join(', ') || 'none' };
+    }
+    return g;
   }
   return {};
 }

@@ -9,7 +9,7 @@
 // Routes: #/gen/ (drafts + the description form), #/gen/<kind> (the form for that kind), #/gen/d/<draft_id> (one draft).
 // Nothing here touches `document` at import time.
 
-const KINDS = ['effect', 'skill', 'class'];
+const KINDS = ['effect', 'skill', 'class', 'npc', 'building', 'monster'];
 const POLL_MS = 10_000;
 let C = null;
 
@@ -91,6 +91,38 @@ export const GEN_CSS = `
 .gen-talk-msg pre{margin:2px 0 0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
 .gen-talk-msg.r-player{border-color:#3d7be0}.gen-talk-msg.r-model{border-color:#b36bff}.gen-talk-msg.r-validator{border-color:#e0a03d}.gen-talk-msg.r-test{border-color:#2ea043}
 .gen-talk-who{font-size:.8em;font-weight:700;opacity:.8}
+.gm-card{display:flex;flex-direction:column;gap:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--border,rgba(127,127,127,.35));
+  background:linear-gradient(180deg,rgba(224,160,61,.07),transparent 120px)}
+.gm-head{display:flex;gap:14px;align-items:flex-start}
+.gm-portrait{flex:0 0 auto;border-radius:10px;border:1px solid rgba(224,160,61,.55);background:#14161c no-repeat top center/100% auto;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+.gm-portrait.gm-bld{background-size:contain;background-position:center}.gm-portrait .au-hint{font-size:.7em;text-align:center;padding:3px;color:#aab}
+.gm-id{display:flex;flex-direction:column;gap:5px;min-width:0}
+.gm-name{font-size:1.25em;font-weight:700;letter-spacing:.01em}
+.gm-pills{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.gm-pill{font-size:.78em;font-weight:600;padding:1px 9px;border-radius:999px;background:rgba(61,123,224,.2);border:1px solid rgba(61,123,224,.45)}
+.gm-pill.r{background:rgba(224,160,61,.2);border-color:rgba(224,160,61,.5)}.gm-pill.e{background:rgba(46,160,67,.18);border-color:rgba(46,160,67,.5)}
+.gm-persona{font-style:italic;opacity:.9}
+.gm-sec{display:flex;flex-direction:column;gap:6px}
+.gm-sec-k{font-size:.78em;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.65}
+.gm-bubbles{display:flex;flex-direction:column;gap:6px}
+.gm-bubble{position:relative;align-self:flex-start;max-width:min(560px,92%);padding:6px 12px;border-radius:14px 14px 14px 4px;
+  background:rgba(127,127,127,.13);border:1px solid rgba(127,127,127,.25);line-height:1.35}
+.gm-bubble-k{display:block;font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.6;margin-bottom:1px}
+.gm-bubble.k-quest{border-color:rgba(224,160,61,.55)}.gm-bubble.k-thanks{border-color:rgba(46,160,67,.5)}.gm-bubble.k-warn{border-color:rgba(217,83,79,.55)}
+.gm-bubble.k-lore,.gm-bubble.k-talk{border-color:rgba(179,107,255,.5)}
+.gm-ask{border-left:3px solid rgba(61,123,224,.6);padding:2px 0 2px 10px}.gm-ask>summary{cursor:pointer;font-weight:600;margin-bottom:4px}
+.gm-ask .gm-bubble{margin:3px 0}
+.gm-quest{padding:8px 10px;border-radius:8px;border:1px solid rgba(224,160,61,.45);background:rgba(224,160,61,.06);display:flex;flex-direction:column;gap:4px}
+.gm-quest.barter{border-color:rgba(46,160,160,.5);background:rgba(46,160,160,.06)}
+.gm-quest-name{font-weight:700}
+.gm-rewards{display:flex;flex-wrap:wrap;gap:5px}
+.gm-reward{font-size:.8em;padding:1px 8px;border-radius:999px;background:rgba(46,160,67,.16);border:1px solid rgba(46,160,67,.4)}
+.gm-stats{display:flex;flex-direction:column;gap:3px;max-width:420px}
+.gm-stat{display:grid;grid-template-columns:5.5em 1fr 2em;gap:8px;align-items:center;font-size:.85em}
+.gm-stat i{display:block;height:7px;border-radius:4px;background:linear-gradient(90deg,#3d7be0,#b36bff)}.gm-stat b{text-align:right}
+.gm-facts{display:flex;flex-direction:column;gap:4px}
+@media (max-width:640px){.gm-head{flex-direction:column;align-items:center;text-align:center}.gm-pills{justify-content:center}.gm-bubble{max-width:100%}}
 @media (max-width:640px){.gen-draft-facts{grid-template-columns:1fr}.gen-item .gen-idea{flex-basis:100%;white-space:normal}.au-bar .au-btn{flex:1 1 auto}.gen-tag-label{min-width:0;flex-basis:100%}}
 `;
 
@@ -371,8 +403,135 @@ function unitShow(pick) {
   const full = (resCache?.units || []).find(x => unitKey(x) === unitKey(u));
   return [h('div', { class: 'gen-media-fields' }, h('div', null, h('b', null, u.unit), ` · ${u.race}`), ...voiceCycler(full?.sounds || u.sounds || []))];
 }
-const pickerFor = (kind, init) => (kind === 'class' ? unitPicker(init) : mediaPicker(init));
-const showFor = (kind, pick) => (kind === 'class' ? unitShow(pick) : mediaShow(pick));
+// ---------------------------------------------------------------- GameModels (npc, building, monster; game/gm-gen.mjs)
+// A GameModels draft borrows the art of an existing NPC / building ("looks like"), and is shown as a card that reads
+// like the game: portrait, persona, what it says (speech bubbles), the questions a hero can ask, its quests.
+const GM_KINDS = ['npc', 'building', 'monster'];
+const isGm = (k) => GM_KINDS.includes(k);
+let gmCache = null;
+async function loadGm() {
+  if (!gmCache) { try { gmCache = await genApi('gm'); } catch { gmCache = { available: false, edit: [], looks: { npc: [], building: [], monster: [] }, races: [], villages: [] }; } }
+  return gmCache;
+}
+const raceName = (id) => gmCache?.races?.find(r => r.id === id)?.name || String(id || '').replace(/^race_/, '').replace(/_/g, ' ');
+const roleName = (r) => String(r || '').replace(/_/g, ' ');
+/** A portrait: the top of the unit's info picture (the WBC3 info panel: portrait on top), or a building's base picture. */
+function gmPortrait(p, { size = 72, building = false } = {}) {
+  const box = h('div', { class: `gm-portrait${building ? ' gm-bld' : ''}`, style: { width: `${size}px`, height: `${size}px` } });
+  if (!p) { box.append(h('span', { class: 'au-hint' }, '?')); return box; }
+  const url = mediaUrl(p);
+  const probe = new Image();
+  probe.onload = () => { box.style.backgroundImage = `url("${url}")`; };
+  probe.onerror = () => box.replaceChildren(h('span', { class: 'au-hint' }, 'not on this node yet'));
+  probe.src = url;
+  return box;
+}
+function lookOf(kind, id) { return (gmCache?.looks?.[kind] || []).find(x => x.id === id) || null; }
+async function gmLookPicker(kind, initial = null) {
+  const gm = await loadGm();
+  const k = kind;
+  let cur = initial?.[k] || '';
+  const looks = gm.looks?.[k] || [];
+  const race = h('select', { class: 'gen-race' }, h('option', { value: '' }, 'every race'), ...(gm.races || []).map(r => h('option', { value: r.id }, r.name)));
+  const grid = h('div', { class: 'gen-gallery' });
+  const label = h('div', { class: 'au-hint' });
+  const draw = () => {
+    label.textContent = cur ? `Looks like: ${lookOf(k, cur)?.name || cur}${lookOf(k, cur)?.wbc3 ? ` (${lookOf(k, cur).wbc3})` : ''}` : `Looks like: picked for you (${k === 'monster' ? 'a monster of the same race and tags' : `a${k === 'npc' ? 'n NPC' : ' building'} of the same race and role`})`;
+    grid.replaceChildren(...looks.filter(x => !race.value || x.race === race.value).map(x => {
+      const b = h('button', { class: `gen-thumb${x.id === cur ? ' on' : ''}`, type: 'button', title: `${x.name} — ${raceName(x.race)}, ${roleName(x.role)}` },
+        h('div', { class: 'gen-thumb-box' }, gmPortrait(k === 'building' ? x.base : x.info, { size: 56, building: k === 'building' })), h('span', { class: 'gen-thumb-name' }, x.name));
+      b.addEventListener('click', () => { cur = cur === x.id ? '' : x.id; draw(); });
+      return b;
+    }));
+  };
+  race.addEventListener('change', draw);
+  draw();
+  const el = h('div', { class: 'gen-voice' }, h('div', { class: 'gen-res' }, race, label), h('details', { class: 'gen-gallery-box', open: true }, h('summary', null, 'Pick a look'), grid));
+  return { el, value: () => (cur ? { [k]: cur } : null), set: (p) => { cur = p?.[k] || ''; draw(); } };
+}
+function gmLookShow(kind, pick) {
+  const k = kind;
+  const x = pick?.[k] ? lookOf(k, pick[k]) : null;
+  return [h('div', { class: 'gen-media-row' }, gmPortrait(x ? (k === 'building' ? x.base : x.info) : null, { size: 64, building: k === 'building' }),
+    h('span', { class: 'au-hint' }, x ? `${x.name} — ${raceName(x.race)}` : (k === 'monster' ? 'picked for you (same race and tags)' : 'picked for you (same race and role)')))];
+}
+const LINE_LABEL = { greet: 'greets you', quest: 'asks for help', thanks: 'thanks you', lore: 'tells you', warn: 'warns you' };
+const REWARD_TEXT = (r) => (r.kind === 'reputation' ? `+${r.value}% reputation` : r.kind === 'allies' ? `${r.count || 1} ${r.count > 1 ? 'allies' : 'ally'} join you (${(r.units || []).map(u => String(u).replace(/^npc_[a-z]+_(?:elves_)?/, '').replace(/_/g, ' ')).join(', ')})`
+  : r.kind === 'effect' ? `the ${String(r.id).replace(/^effect_/, '').replace(/_/g, ' ')} card` : r.kind === 'skill' ? `the ${String(r.id).replace(/^skill_/, '').replace(/_/g, ' ')} skill` : r.kind === 'enter' ? 'the gate opens' : r.kind);
+const fill = (s, n) => String(s).replace(/\{name\}/g, n.name).replace(/\{village\}/g, 'the village').replace(/\{need\}/g, '…').replace(/\{reward\}/g, '').replace(/\{lore\}/g, '(news of the Dimension)').replace(/\{village_dir\}|\{lore_dir\}/g, 'north').replace(/\{village_dist\}/g, 'a day');
+/** The card of an NPC bundle (or a building one): reads like the game. */
+function gmCard(d, { compact = false } = {}) {
+  const b = d.def || {};
+  if (b.monster) {
+    const x = b.monster, dd = x.card?.data || {}, st = dd.stats || {};
+    const fx = (e) => String(e || '').replace(/^effect_/, '').replace(/_/g, ' ');
+    const sum = ['vitality', 'world', 'matter', 'will'].reduce((a, k) => a + (st[k] || 0), 0);
+    const power = d.check?.power ?? null;
+    return h('div', { class: 'gm-card' },
+      h('div', { class: 'gm-head' }, gmPortrait(x.card?.resources?.sprites?.info?.path, { size: 96 }),
+        h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, x.name || x.id),
+          h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, x.race || '?'), ...(x.card?.tags || []).map(t => h('span', { class: 'gm-pill r' }, t)), customBadge(), d.base ? h('span', { class: 'gm-pill e' }, `changes ${d.base}`) : null),
+          h('div', { class: 'gm-persona' }, x.temper || ''), h('div', { class: 'au-hint' }, `hunts as ${String(x.agenda?.uses || '?').replace(/^monster_/, '')}${x.card?.resources?.wbc3_name ? ` · looks like a ${x.card.resources.wbc3_name}` : ''}`))),
+      h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'Creature card'),
+        h('div', { class: 'gm-stats' }, ...['vitality', 'world', 'matter', 'will'].map(k => h('div', { class: 'gm-stat' }, h('span', null, k), h('i', { style: { width: `${Math.min(100, (st[k] || 0) * 3.3)}%` } }), h('b', null, String(st[k] ?? '?'))))),
+        h('div', { class: 'gm-facts' },
+          h('span', null, h('b', null, 'Life '), `${dd.life ?? '?'} (Σ ${sum} / 10)`),
+          h('span', null, h('b', null, 'Actions '), `${dd.actions_per_round ?? '?'} a round`),
+          dd.innate_effect ? h('span', null, h('b', null, 'Innate '), fx(dd.innate_effect)) : null,
+          dd.on_action_rider ? h('span', null, h('b', null, 'Rider '), `+${dd.on_action_rider.bonus_damage} damage on ${dd.on_action_rider.action}`) : null,
+          power !== null ? h('span', null, h('b', null, 'Power '), `${power}${d.check?.base_power != null ? ` (was ${d.check.base_power}, ±15 % allowed)` : d.check?.range ? ` (monsters: ${d.check.range[0]}–${d.check.range[1]})` : ''}`) : null)),
+      h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'Its deck'), h('div', { class: 'gm-rewards' }, ...(dd.deck_effects || []).map(e => h('span', { class: 'gm-reward k-effect' }, fx(e))))));
+  }
+  if (b.building) {
+    const x = b.building;
+    return h('div', { class: 'gm-card' },
+      h('div', { class: 'gm-head' }, gmPortrait(x.card?.resources?.sprites?.base, { size: 96, building: true }),
+        h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, x.name || x.id), h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, raceName(x.race)), h('span', { class: 'gm-pill r' }, roleName(x.role)), customBadge()),
+          h('div', { class: 'gm-persona' }, x.text || ''))),
+      h('div', { class: 'gm-facts' },
+        h('span', null, h('b', null, 'Stands until '), `a hero banks ${x.bank?.value ?? '?'} ${x.bank?.stat || ''} next to it`),
+        x.produces ? h('span', null, h('b', null, 'Trains '), `${String(x.produces.npc).replace(/^npc_/, '').replace(/_/g, ' ')} every ${x.produces.every_turns} turns`) : null,
+        b.place?.village ? h('span', null, h('b', null, 'In '), `${b.place.village}${b.place.at ? ` at (${b.place.at.join(',')})` : ''}`) : null));
+  }
+  const n = b.npc;
+  if (!n) return h('div', { class: 'au-hint' }, 'No definition yet.');
+  const bubbles = Object.entries(n.lines || {}).flatMap(([k, ls]) => (ls || []).slice(0, compact ? 1 : 6).map(l => h('div', { class: `gm-bubble k-${k}` }, h('span', { class: 'gm-bubble-k' }, LINE_LABEL[k] || k), fill(l, n))));
+  const talk = (n.talk || []).map(t => h('details', { class: 'gm-ask' }, h('summary', null, `“${t.ask}”`), ...(t.say || []).map(s => h('div', { class: 'gm-bubble k-talk' }, fill(s, n)))));
+  const quests = (b.quests || []).map(q => h('div', { class: `gm-quest${q.consume ? ' barter' : ''}` },
+    h('div', { class: 'gm-quest-name' }, q.consume ? '⇄ ' : '❖ ', q.name, q.repeatable ? h('span', { class: 'au-hint' }, ' · repeatable') : null),
+    h('div', null, h('b', null, q.consume ? 'Trade: ' : 'Bring: '), q.need_text || '?'),
+    h('div', { class: 'gm-rewards' }, ...(q.rewards || []).map(r => h('span', { class: `gm-reward k-${r.kind}` }, REWARD_TEXT(r))))));
+  const st = n.unit?.stats || {};
+  const stats = h('div', { class: 'gm-stats' }, ...['vitality', 'world', 'matter', 'will'].map(k => h('div', { class: 'gm-stat' }, h('span', null, k), h('i', { style: { width: `${Math.min(100, (st[k] || 0) * 5)}%` } }), h('b', null, String(st[k] ?? '?')))),
+    h('div', { class: 'au-hint' }, `life ${n.unit?.life ?? '?'} · ${n.unit?.actions_per_round ?? '?'} action(s) a round · casts ${(n.unit?.deck_effects || []).map(e => String(e).replace(/^effect_/, '').replace(/_/g, ' ')).join(', ') || '—'}`));
+  const where = b.place?.village ? `${b.place.post === 'wanderer' ? 'Wanders 50–100 hexes around' : b.place.post === 'outside' ? 'Waits outside the wall of' : 'Lives in'} ${b.place.village}${b.place.at ? ` (${b.place.at.join(',')})` : ''}` : 'Not placed in a village';
+  return h('div', { class: 'gm-card' },
+    h('div', { class: 'gm-head' }, gmPortrait(n.card?.resources?.sprites?.info?.path, { size: 96 }),
+      h('div', { class: 'gm-id' }, h('div', { class: 'gm-name' }, n.name || n.id), h('div', { class: 'gm-pills' }, h('span', { class: 'gm-pill' }, raceName(n.race)), h('span', { class: 'gm-pill r' }, roleName(n.role)), customBadge(), d.base ? h('span', { class: 'gm-pill e' }, `changes ${d.base}`) : null),
+        h('div', { class: 'gm-persona' }, n.persona || ''), h('div', { class: 'au-hint' }, where))),
+    bubbles.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'What it says'), h('div', { class: 'gm-bubbles' }, ...bubbles)) : null,
+    talk.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, `Ask ${n.name}`), ...talk) : null,
+    quests.length ? h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'Quests'), ...quests) : null,
+    compact ? null : h('div', { class: 'gm-sec' }, h('div', { class: 'gm-sec-k' }, 'As a unit'), stats));
+}
+// "Start from" + the quick asks (user 2026-11-25: "more quest options dialogs or more story teller options")
+const GM_ASKS = {
+  npc: [
+    ['＋ Quest dialog', 'Add two new questions a hero can ask (talk topics) about the quests: why it needs it, where to look, what happens after — each with 2–3 answers in its own voice.'],
+    ['＋ Storyteller tales', 'Add three storyteller talk topics (a legend, a rumour of a nearby danger, a story about another village), each with 2–3 vivid answers, and two more lore lines.'],
+    ['＋ A quest', 'Add one new quest it gives: a clear thing to bring (an effect or skill card), a fitting reward, and quest / thanks lines that mention it.'],
+    ['＋ More lines', 'Add two more lines of each kind it already has, in the same voice, without repeating the old ones.'],
+  ],
+  building: [['＋ Better text', 'Rewrite its text to be vivid and in-world (1–2 sentences), keeping what it does.']],
+  monster: [
+    ['＋ Vivid temper', 'Rewrite its temper: 1–2 vivid sentences — what it looks like, how it hunts, what the villages say about it.'],
+    ['＋ Fiercer', 'Make it hit harder in its own style (its stats, rider or deck), staying within the balance limits.'],
+    ['＋ Trickier', 'Give it a cleverer deck: one control or defence effect that fits its temper, keeping its power.'],
+  ],
+};
+const pickerFor = (kind, init) => (isGm(kind) ? gmLookPicker(kind, init) : kind === 'class' ? unitPicker(init) : mediaPicker(init));
+const showFor = (kind, pick) => (isGm(kind) ? gmLookShow(kind, pick) : kind === 'class' ? unitShow(pick) : mediaShow(pick));
+const mediaLabelOf = (kind) => (isGm(kind) ? 'Looks like' : kind === 'class' ? 'Voice (a unit)' : 'Picture & sound');
 
 // ---------------------------------------------------------------- #/gen/ and #/gen/<kind>
 async function routeList(rest) {
@@ -382,27 +541,50 @@ async function routeList(rest) {
   try { info = await genApi('drafts'); } catch (e) { C.toast(errText(e), 'error'); }
   const kinds = info.kinds || ['effect'];
   const kind = kinds.includes(want) ? want : 'effect';
-  const kindSel = h('select', { id: 'gen-kind' }, ...KINDS.map(k => h('option', { value: k, disabled: !kinds.includes(k), selected: k === kind }, kinds.includes(k) ? k : `${k} (coming)`)));
+  const KIND_LABEL = { npc: 'village NPC (quests, dialog, stories)', building: 'village building', monster: 'wild monster (creature card, deck, temper)' };
+  const kindSel = h('select', { id: 'gen-kind' }, ...KINDS.map(k => h('option', { value: k, disabled: !kinds.includes(k), selected: k === kind }, kinds.includes(k) ? (KIND_LABEL[k] || k) : `${k} (coming)`)));
   const idea = h('textarea', { id: 'gen-idea', class: 'au-prose', rows: 4, maxlength: 1000 });
   const placeholder = { effect: 'e.g. "Frost Nova: every adjacent enemy takes water damage and loses one action."',
     skill: 'e.g. "Quick Step: riding on a Move, the first blow that hits me this action does one less damage."',
-    class: 'e.g. "Field Medic: tap to restore one life token to me or an adjacent ally; colours vitality, water, harmony."' };
+    class: 'e.g. "Field Medic: tap to restore one life token to me or an adjacent ally; colours vitality, water, harmony."',
+    npc: 'e.g. "An old High Elf ferryman who waits outside the wall, tells sad legends of the drowned city and asks for a Water Shield to cross the river."',
+    building: 'e.g. "An Empire windmill: tough to break (matter), it trains a peasant every 25 turns."',
+    monster: 'e.g. "A salt-crusted tusker of the Orc hills that charges anything smelling of iron; tough, slow, three blows a round."' };
   // Tags (user 2026-11-23): the well-known tags of the built-ins, a hard requirement — the draft is checked against them.
   const tags = tagEditor(kind);
   idea.placeholder = placeholder[kind] || '';
   // Resources (user 2026-11-23): any picture / sound of chaosD6-Resources, also the ones the phone has not downloaded;
-  // a class: the whole voice of one unit
+  // a class: the whole voice of one unit; an NPC / building: the look of an existing one
   let res = await pickerFor(kind);
-  const resRow = h('div', { class: 'au-row' }, h('label', null, kind === 'class' ? 'Voice (a unit)' : 'Picture & sound'), res.el);
+  const resRow = h('div', { class: 'au-row' }, h('label', null, mediaLabelOf(kind)), res.el);
+  // GameModels: start from an existing NPC / building ("add more quest dialog / storyteller options") or a new one
+  const gm = await loadGm();
+  const base = h('select', { id: 'gen-base' });
+  const asks = h('div', { class: 'gen-chips' });
+  const baseRow = h('div', { class: 'au-row' }, h('label', { for: 'gen-base' }, 'Start from'), h('div', null, base, h('div', { class: 'au-hint' }, 'A new one, or change an existing one — then say what to add. Quick asks:'), asks));
+  const gmNote = h('div', { class: 'au-hint' });
+  const drawGm = (k) => {
+    baseRow.hidden = !isGm(k);
+    gmNote.textContent = isGm(k) && !gm.available ? 'No chaosD6-GameModels checkout on this node: NPCs, buildings and monsters are generated on a desktop for now.' : '';
+    if (!isGm(k)) return;
+    const list = (gm.edit || []).filter(x => x.kind === k);
+    const byRace = [...new Set(list.map(x => x.race))];
+    base.replaceChildren(h('option', { value: '' }, `— a new ${k} —`),
+      ...byRace.map(r => h('optgroup', { label: raceName(r) }, ...list.filter(x => x.race === r).map(x => h('option', { value: x.id }, `${x.name} (${roleName(x.role)})`)))));
+    asks.replaceChildren(...(GM_ASKS[k] || []).map(([label, text]) => h('button', { class: 'gen-chip', type: 'button', title: text, onclick: () => { idea.value = idea.value.trim() ? `${idea.value.trim()}\n${text}` : text; idea.focus(); } }, label)));
+  };
+  drawGm(kind);
   kindSel.addEventListener('change', async () => {
     const k = kindSel.value;
     idea.placeholder = placeholder[k] || ''; tags.setKind(k);
     res = await pickerFor(k);
-    resRow.replaceChildren(h('label', null, k === 'class' ? 'Voice (a unit)' : 'Picture & sound'), res.el);
+    resRow.replaceChildren(h('label', null, mediaLabelOf(k)), res.el);
+    drawGm(k);
   });
   const go = h('button', { class: 'au-btn au-primary', type: 'button' }, 'Create preview');
   go.addEventListener('click', () => act(go, async () => {
-    const r = await genApi('create', { method: 'POST', body: { kind: kindSel.value, idea: idea.value, tags: tags.value(), resources: res.value() } });
+    const k = kindSel.value;
+    const r = await genApi('create', { method: 'POST', body: { kind: k, idea: idea.value, tags: tags.value(), resources: res.value(), ...(isGm(k) && base.value ? { base: base.value } : {}) } });
     C.toast('Generating — this takes a few minutes on the big model', 'ok');
     C.navigate(`#/gen/d/${r.draft.draft_id}`);
   }));
@@ -427,7 +609,8 @@ async function routeList(rest) {
     h('div', { class: 'au-sec' }, 'New from a description'),
     h('p', { class: 'au-hint' }, 'Describe a new card in words. The model writes it, the validator prices it, a private test game plays it, and you publish it on your team\'s branch, marked custom.'),
     model, busy,
-    h('div', { class: 'au-row' }, h('label', { for: 'gen-kind' }, 'Kind'), kindSel),
+    h('div', { class: 'au-row' }, h('label', { for: 'gen-kind' }, 'Kind'), kindSel), gmNote,
+    baseRow,
     h('div', { class: 'au-row' }, h('label', { for: 'gen-idea' }, 'Description'), idea),
     h('div', { class: 'au-row' }, h('label', null, 'Tags'), h('div', null, h('div', { class: 'au-hint' }, 'Pick the tags it must have — the draft is checked against every one. An element can be added more than once (water, fire, water = two water in the cost).'), tags.el)),
     resRow,
@@ -458,6 +641,15 @@ function openKeySheet(info) {
 
 // ---------------------------------------------------------------- #/gen/d/<draft_id>
 function previewSheet(d) {
+  if (isGm(d.kind)) {
+    let json;
+    try { json = C.jsonfmt ? C.jsonfmt.renderJson(d.def || {}, { width: 96 }) : null; } catch { json = null; }
+    C.openSheet(`Preview — ${d.def?.name || d.def?.id || ''}`, h('div', { class: 'au-form' },
+      h('p', { class: 'au-hint' }, 'Read-only: what the test game and the publish use. To change it, use Retry and say what to change.'),
+      gmCard(d), (d.problems || []).length ? h('ul', null, ...d.problems.map(p => h('li', null, p))) : null,
+      h('details', null, h('summary', null, 'Definitions JSON (the NPC / building, its quests, the village and race it changes)'), json ? h('div', { class: 'code' }, json) : h('pre', { class: 'gen-log' }, JSON.stringify(d.def, null, 2)))), { wide: true });
+    return;
+  }
   const def = d.def || {};
   const f = def.flags || {};
   let json;
@@ -497,12 +689,14 @@ async function routeDraft(rest) {
   // the picture + sound: shown with the animated preview and ▶; "Change…" saves another pick (POST media — not priced,
   // the verdict and the test stand)
   await loadResources();
+  if (isGm(d.kind)) await loadGm();
+  const gmBox = h('div', { hidden: !isGm(d.kind) });   // the NPC / building card, inline (the "pretty" view of the draft)
   const mediaEl = h('div', { class: 'gen-media-show' });
   const bMedia = h('button', { class: 'au-btn', type: 'button' }, 'Change…');
   const mediaEdit = h('div', { class: 'gen-media-edit', hidden: true });
   const mediaNow = await pickerFor(d.kind, d.resources);
-  const mediaLabel = d.kind === 'class' ? 'Voice (a unit)' : 'Picture & sound';
-  const bMediaSave = h('button', { class: 'au-btn au-primary', type: 'button' }, d.kind === 'class' ? 'Save the voice' : 'Save picture & sound');
+  const mediaLabel = mediaLabelOf(d.kind);
+  const bMediaSave = h('button', { class: 'au-btn au-primary', type: 'button' }, isGm(d.kind) ? 'Save the look' : d.kind === 'class' ? 'Save the voice' : 'Save picture & sound');
   mediaEdit.append(mediaNow.el, h('div', { class: 'au-bar' }, bMediaSave));
   // the retry box: the tags (editable, prefilled) and the media as well
   const retryTags = tagEditor(d.kind || 'effect', d.tags || []);
@@ -526,6 +720,7 @@ async function routeDraft(rest) {
 
   const render = () => {
     title.replaceChildren(d.def?.name || '(no definition yet)');
+    if (isGm(d.kind)) gmBox.replaceChildren(d.def ? gmCard(d) : h('div', { class: 'au-hint' }, RUNNING.includes(d.state) ? 'The model is writing it…' : 'No definition yet.'));
     stateEl.replaceChildren(statePill(d.state));
     idea.replaceChildren(`"${d.idea}"${(d.extras || []).length ? ` + ${d.extras.length} change(s)` : ''}`);
     status.textContent = RUNNING.includes(d.state) ? (d.status || '…') : '';
@@ -545,12 +740,13 @@ async function routeDraft(rest) {
       ? h('div', { class: 'gen-talk-round' }, t.text)
       : h('div', { class: `gen-talk-msg r-${t.role}` }, h('span', { class: 'gen-talk-who' }, { player: 'You', model: `Model${t.attempt ? ` · attempt ${t.attempt}` : ''}`, validator: `Validator${t.verdict ? ` · ${t.verdict}` : ''}`, test: 'Test game' }[t.role] || t.role), h('pre', null, t.text))));
     bRetry.disabled = RUNNING.includes(d.state) || d.state === 'published';
-    bPub.disabled = d.state !== 'testing success';
+    bPub.disabled = d.state !== 'testing success' || isGm(d.kind);
     bPub.hidden = d.state === 'published';
+    if (isGm(d.kind)) bPub.title = 'Publishing NPCs and buildings comes with the chaosD6-GameModels team branches (not on Radicle yet)';
     const pub = C.session?.publish || {};
     pubHint.hidden = !(d.state === 'testing success' && pub.ready === false);
     pubHint.textContent = `Publishing is not ready on this node${pub.why ? `: ${pub.why}` : ''} — the commit stays pending until it is (retry it under "My team's definitions").`;
-    bPub.title = d.state === 'testing success' ? '' : 'Only after "testing success"';
+    if (!isGm(d.kind)) bPub.title = d.state === 'testing success' ? '' : 'Only after "testing success"';
     bDel.disabled = RUNNING.includes(d.state);
     const t = d.test;
     testBox.hidden = !t;
@@ -612,6 +808,7 @@ async function routeDraft(rest) {
     h('div', { class: 'gen-draft-facts' },
       h('div', { class: 'gen-fact' }, h('span', { class: 'gen-fact-k' }, 'Tags'), tagsEl, tagWhy),
       h('div', { class: 'gen-fact' }, h('span', { class: 'gen-fact-k' }, mediaLabel), h('div', { class: 'gen-media-line' }, mediaEl, bMedia), mediaEdit)),
+    gmBox,
     status,
     h('div', { class: 'au-bar gen-bar' }, bShow, bTest, bRetry, bPub, h('span', { class: 'au-grow' }), bDel), pubHint,
     retryBox, testBox,

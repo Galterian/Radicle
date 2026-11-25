@@ -445,7 +445,7 @@ function collectionFile(c) {
   const col = ((C.index && C.index.collections) || []).find((x) => x.id === c);
   return (col && col.file) || `${c}.json`;
 }
-const isProposable = (c, entry) => loggedIn() && !C.isDefinitions(c) && c !== 'effects' && c !== 'skills'
+const isProposable = (c, entry) => loggedIn() && !C.isDefinitions(c) && !C.isCatalog?.(c) && c !== 'effects' && c !== 'skills'
   && !!entry && Array.isArray(entry.versions) && entry.versions.length > 0;
 
 export function openProposal(c, entry) {

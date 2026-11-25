@@ -10,10 +10,11 @@ import { createKnownMap, initialBlock, seedForDimension, hash32 } from './js/map
 import { biomeFor } from './js/biome.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featuresReady } from './js/features.js';
 import { setBigFeatureCatalog, bigFeaturesReady } from './js/bigfeature.js';
-import { setVillageCatalog, villageCatalogReady } from './js/villages.js';
+import { setVillageCatalog, villageCatalogReady, testCatalogOverrides, gameModelsCatalogTries } from './js/villages.js';
 import { fortressAt } from './js/building-bonus.js';
 import { fancyLabel } from './js/names.js';
 import { DEFAULT_RELAYS } from './nostr-bus.mjs';
+import { readCollection } from './defs-collection.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -86,8 +87,8 @@ function ensureBuildingCatalogs() {
     if (hit) { try { set(JSON.parse(fsSync.readFileSync(hit, 'utf8'))); } catch {} }
   }
   if (!villageCatalogReady()) {   // villages (chaosD6-GameModels) put buildings + a cleared disc on the map too
-    const f = [path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])].find(x => fsSync.existsSync(x));
-    if (f) { try { setVillageCatalog(JSON.parse(fsSync.readFileSync(f, 'utf8'))); } catch {} }
+    const f = gameModelsCatalogTries([path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])], process.env).find(x => fsSync.existsSync(x));
+    if (f) { try { setVillageCatalog(testCatalogOverrides(JSON.parse(fsSync.readFileSync(f, 'utf8')), process.env)); } catch {} }
   }
 }
 
@@ -98,11 +99,10 @@ export function comboCatalog() {
   if (_combos) return _combos;
   _combos = new Map();
   const dirs = [process.env.CHAOSD6_DATA_DIR, path.resolve(__dirname, '..', 'data'), path.resolve(__dirname, 'data')].filter(Boolean);
-  for (const file of ['characters.json', 'creatures.json']) {
-    const hit = dirs.map(d => path.join(d, file)).find(f => fsSync.existsSync(f));
-    if (!hit) continue;
+  const dataDir = dirs.find(d => fsSync.existsSync(path.join(d, 'index.json')));
+  for (const id of dataDir ? ['characters', 'creatures'] : []) {
     try {
-      for (const e of JSON.parse(fsSync.readFileSync(hit, 'utf8')).entries || []) {
+      for (const e of readCollection(dataDir, id).entries || []) {   // split A: creatures = the GameModels catalog's
         const vs = e.versions || [];   // peer.mjs pickActive: the heaviest version not rejected / superseded
         const v = vs.filter(x => x.status !== 'rejected' && x.status !== 'superseded').sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0] ?? vs[0];
         if (Array.isArray(v?.data?.combo) && v.data.combo.length) _combos.set(e.id, v.data.combo.slice(0, 3));

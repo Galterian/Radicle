@@ -163,9 +163,11 @@ export const getPath = (obj, p) => (p === undefined || p === null || p === '' ? 
 // Effect isolation F9: a collection whose index.json entry names `definitions` is read from the definitions' card
 // blocks (defs-collection.mjs), not its data file. Such a collection is authored in its own repo (chaosD6-Effects);
 // logic-apply skips it, rebalance check refuses proposals on it.
-export { definitionsCollection, definitionsDirOf } from './defs-collection.mjs';
+// Split A (2026-11-25): a collection whose entry names `catalog` (creatures) is read from the compiled GameModels
+// catalog (defs-collection.mjs catalogCollection) — authored in chaosD6-GameModels, likewise skipped / refused.
+export { definitionsCollection, definitionsDirOf, authoredElsewhere } from './defs-collection.mjs';
 
-import { definitionsCollection, definitionsDirOf, resolveDefinitionsDir } from './defs-collection.mjs';
+import { definitionsCollection, definitionsDirOf, resolveDefinitionsDir, catalogSourceOf, resolveCatalogFile, catalogCollection } from './defs-collection.mjs';
 
 export class LogicEngine {
   constructor({ dataDir = DATA_DIR, collections = null } = {}) {
@@ -182,7 +184,10 @@ export class LogicEngine {
       const def = definitionsDirOf(this.index, id);
       const dir = def && resolveDefinitionsDir(dataDir, def);
       if (def && !dir) throw new Error(`collection ${id}: definitions directory ${def} not found`);
-      const json = def ? definitionsCollection(id, dir) : JSON.parse(fs.readFileSync(path.join(dataDir, `${id}.json`), 'utf8'));
+      const cs = !def && catalogSourceOf(this.index, id), cf = cs && resolveCatalogFile(dataDir, cs.file);
+      if (cs && !cf) throw new Error(`collection ${id}: catalog ${cs.file} not found (node tools/gamemodels-build.mjs)`);
+      const json = def ? definitionsCollection(id, dir) : cs ? catalogCollection(id, cf, cs.key) : JSON.parse(fs.readFileSync(path.join(dataDir, `${id}.json`), 'utf8'));
+      if (!json) throw new Error(`collection ${id}: ${cf} has no "${cs.key}" (rebuild it: node tools/gamemodels-build.mjs)`);
       this.collections.set(id, json);
       for (const e of json.entries || []) this.catalog.set(e.id, { collection: id, entry: e });
     }

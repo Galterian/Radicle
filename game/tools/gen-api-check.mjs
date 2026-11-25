@@ -178,7 +178,7 @@ try {
   ok(r.status === 200 && r.json.draft.state === 'generating' && /^gen_/.test(r.json.draft.draft_id), 'create → generating');
   const id = r.json.draft.draft_id;
   ok((await post('create', { idea: 'another one at the same time' })).status === 409, 'one job at a time → 409');
-  ok((await post('create', { kind: 'monster', idea: 'a monster please now' })).status === 400, 'an unknown kind → 400');
+  ok((await post('create', { kind: 'dimension', idea: 'a dimension please now' })).status === 400, 'an unknown kind → 400');
   await sleep(80);
   ok(/^\[gen\] 0:0\d attempt 1\/3 \d+% · writing answer/.test((await get(`drafts/${id}`)).json.draft.status), 'status line in the [gen] format while generating');
   let d = await waitState(id, /^preview$/);

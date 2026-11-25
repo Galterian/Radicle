@@ -223,7 +223,9 @@ def main():
     manifest = load_manifest()
     mapping = {}
     enrich('characters.json', CHARACTERS, manifest, mapping)
-    enrich('creatures.json', CREATURES, manifest, mapping)
+    # Split A (2026-11-25): the monster cards (and their `resources`) moved to chaosD6-GameModels monsters/<id>.json
+    # (chaosd6.monster/2 card.resources) — data/creatures.json is a frozen record and mapping_units.json has no mon_
+    # keys any more. CREATURES above stays as the record of the picks.
     enrich('classes.json', CLASSES, manifest, mapping)
     out = os.path.join(ROOT, 'assets', 'mapping_units.json')
     os.makedirs(os.path.dirname(out), exist_ok=True)

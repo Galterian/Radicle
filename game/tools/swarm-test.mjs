@@ -246,6 +246,14 @@ function startAgent(peerId, port, attempt = 0) {
       .map(t => ({ ...t, d: hexDistance({ q: me.tile_q, r: me.tile_r }, { q: t.q, r: t.r }) })).sort((x, y) => x.d - y.d) : [];
     enemies.sort((x, y) => dist(x) - dist(y));
     const near = enemies[0];
+    // SWARM_VISIT_NPC=<npc id> (tools/gm-gen-test.mjs, the GameModels editor's test): walk to that villager and ask
+    // each of its questions once (one per planning phase, within the talk range; never "hire" or a build order).
+    const visit = VISIT_NPC ? [...a.peers.values()].find(p => p.npc_id === VISIT_NPC && (p.life ?? 0) > 0 && Number.isInteger(p.tile_q)) : null;
+    if (visit && dist(visit) <= 3) {
+      const next = (a.talkTopics || []).find(t => !(a.talked ||= new Set()).has(t));
+      if (!a.talkTopics || a.talkNpc !== visit.peer_id) { a.talkNpc = visit.peer_id; send({ kind: 'talk', npc: visit.peer_id }); }
+      else if (next) { a.talked.add(next); a.talks = (a.talks || 0) + 1; send({ kind: 'talk', npc: visit.peer_id, topic: next }); }
+    }
     const slotOf = code => a.hand.findIndex(c => isAction(c) && c.code === code);
     const actionIdx = a.hand.map((c, i) => isAction(c) ? i : -1).filter(i => i >= 0);
     // Recast / untap my own class when it is owed (a Posture emission — Invisibility survives it). A tapped
@@ -452,7 +460,8 @@ function startAgent(peerId, port, attempt = 0) {
     // A trap-aware class without a disable ability (a trap charge): walk onto a visible enemy trap within 8 hexes —
     // hunting monsters exercises the threat charge.
     const trapGoal = myProfile?.trapAware && !myProfile.recs.has('disable_traps') && Math.random() < 0.6 ? foeTraps.find(t => t.d >= 1 && t.d <= 8) : null;
-    if (trapGoal) { a.dest = { q: trapGoal.q, r: trapGoal.r }; a.trapWalks = (a.trapWalks || 0) + 1; }
+    if (visit && dist(visit) > 2 && (a.talkTopics || [null]).some(t => !a.talked?.has(t)) && !(near && dist(near) <= 2)) { a.dest = { q: visit.tile_q, r: visit.tile_r }; a.visitWalks = (a.visitWalks || 0) + 1; }
+    else if (trapGoal) { a.dest = { q: trapGoal.q, r: trapGoal.r }; a.trapWalks = (a.trapWalks || 0) + 1; }
     // Class precondition walk (botClassPolicy goal): a building / trap, a wild monster or an enemy (classProfile).
     else if (classGoal) a.dest = { q: classGoal.q, r: classGoal.r };
     else if (corpse) a.dest = { q: corpse.tile_q, r: corpse.tile_r };
@@ -475,6 +484,7 @@ function startAgent(peerId, port, attempt = 0) {
     if (m.kind === 'hello') { a.me = m.peer_id; a.hand = m.hand || []; if (m.map) { a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); } for (const p of m.peers || []) a.peers.set(p.peer_id, p); log(`  ${peerId} hello: map ${a.map.size()} hexes / ${a.map.blockCount()} blocks`); }
     if (m.kind === 'map') { if (m.map.seed !== a.map.seed) a.map = createKnownMap(m.map.seed, [initialBlock()]); a.map.addBlocks(m.map.blocks); }
     if (m.kind === 'hand') { a.hand = m.hand || a.hand; if (m.bonus) a.bonusMax = m.bonus.max || 0; if (m.casting !== undefined) a.casting = m.casting || null; if (m.class_state) a.classState = m.class_state; if (m.queued_class_ability !== undefined) a.queuedClass = !!m.queued_class_ability; if (Array.isArray(m.fortresses)) a.fortresses = m.fortresses; if (m.phylactery_target !== undefined) a.phylTarget = m.phylactery_target || null; if (m.queued_phylactery !== undefined) a.queuedPhyl = !!m.queued_phylactery; }
+    if (m.kind === 'talk' && m.npc === a.talkNpc) a.talkTopics = (m.topics || []).filter(t => !t.disabled && t.id !== 'hire' && t.id !== 'bye' && !String(t.id).startsWith('build:')).map(t => t.id);
     if (m.kind === 'peers') for (const p of m.peers || []) a.peers.set(p.peer_id, { ...(a.peers.get(p.peer_id) || {}), ...p });
     if (m.kind === 'phase' && m.name === 'planning') { a.rounds++; a.queuedClass = false;setTimeout(() => plan(m.turn, m.round), 300 + Math.random() * 1500); }
   };
@@ -488,6 +498,7 @@ function startAgent(peerId, port, attempt = 0) {
 // SWARM_MODE=test-random (tools/effect-gen-test.mjs, 2026-11-23): a PRIVATE test game instead — loopback, no Door,
 // no bus — with only the launcher's roster (player-1, ally-1, foe-1, foe-2); nobody joins, player-1's agent drives.
 const PRIVATE_RUN = process.env.SWARM_MODE === 'test-random';
+const VISIT_NPC = process.env.SWARM_VISIT_NPC || '';
 const host = await api('/api/launch', { mode: PRIVATE_RUN ? 'test-random' : 'host', dimensionName: DIM, ai: process.env.SWARM_AI === '1' });
 if (!host.ok) { console.error('host failed', host); process.exit(1); }
 log(`hosted ${DIM}: player-1 on :${host.peerPort}`);
@@ -608,7 +619,7 @@ while (Date.now() < endAt) {
   await audit('live');
 }
 for (const a of agents) { try { a.ws.onclose = null; a.ws.close(); } catch {} }
-log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0} class-walks ${a.classWalks || 0} trap-walks ${a.trapWalks || 0} invis-casts ${a.invisCasts || 0} invis-moves ${a.invisMoves || 0} invis-breaks ${a.invisBreaks || 0} natural-strikes ${a.natStrikes || 0} tower-walks ${a.towerWalks || 0}`).join('; ')}`);
+log(`agents stopped: ${agents.map(a => `${a.peerId.replace('peer:', '')} rounds ${a.rounds} moves ${a.moves} attacks ${a.attacks} skills ${a.skillsPlayed} trances ${a.trances} effects ${a.effectsCast || 0} hastes ${a.hastes || 0} summons ${a.summons || 0} continued ${a.continued || 0} class-uses ${a.classUses || 0} class-strikes ${a.classStrikes || 0} class-recasts ${a.classRecasts || 0} class-walks ${a.classWalks || 0} trap-walks ${a.trapWalks || 0} invis-casts ${a.invisCasts || 0} invis-moves ${a.invisMoves || 0} invis-breaks ${a.invisBreaks || 0} natural-strikes ${a.natStrikes || 0} tower-walks ${a.towerWalks || 0} visit-walks ${a.visitWalks || 0} talks ${a.talks || 0}`).join('; ')}`);
 await sleep(20_000);
 const fin = await audit('settled');
 

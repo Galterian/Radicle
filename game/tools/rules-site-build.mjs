@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { definitionsCollection, definitionsDirOf, resolveDefinitionsDir } from '../defs-collection.mjs';
+import { definitionsCollection, definitionsDirOf, resolveDefinitionsDir, definitionsCollectionText } from '../defs-collection.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GAME = path.resolve(HERE, '..');
@@ -39,6 +39,13 @@ export function buildRulesSite(out, { repoRoot = REPO, gameDir = GAME, dataDir =
   const index = JSON.parse(fs.readFileSync(path.join(dataDir, 'index.json'), 'utf8'));
   for (const c of index.collections || []) {
     const def = definitionsDirOf(index, c.id);
+    if (!def && c.catalog) {   // split A: the creatures from the compiled GameModels catalog
+      const txt = definitionsCollectionText(dataDir, c.file || `${c.id}.json`);
+      if (!txt) throw new Error(`collection ${c.id}: catalog ${c.catalog}#${c.catalog_key || c.id} not found`);
+      fs.writeFileSync(path.join(abs, 'data', c.file || `${c.id}.json`), txt);
+      sum.prebuilt.push(`${c.file || c.id} (${JSON.parse(txt).entries.length} entries)`);
+      continue;
+    }
     if (!def) continue;
     const dir = resolveDefinitionsDir(dataDir, def);
     if (!dir) throw new Error(`collection ${c.id}: definitions directory ${def} not found`);

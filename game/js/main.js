@@ -3301,6 +3301,18 @@ window.chaosHud = Object.assign(window.chaosHud || {}, { effectSourceNotice, set
     const p = renderer.tilePx(q, r), a = renderer.toWorld(0, 0), b = renderer.toWorld(1, 1), rect = canvas.getBoundingClientRect();
     canvas.dispatchEvent(new MouseEvent('contextmenu', { clientX: rect.left + (p.x - a.x) / (b.x - a.x), clientY: rect.top + (p.y - a.y) / (b.y - a.y), bubbles: true, cancelable: true }));
     return true;
+  },
+  // test hook: a journey to (q, r) as a right-click outside planning sets it (no pixel picking — in a crowd the
+  // units' sprites take the click); it walks from the next planning on → the path length (0: no path)
+  journeyTo: (q, r) => {
+    const me = state.entities.find(p => p.peer_id === driverId());
+    if (!me || !Number.isInteger(me.tile_q)) return 0;
+    const path = findPath({ q: me.tile_q, r: me.tile_r }, { q, r }, blockedTilesExcluding(me.peer_id), knownHex);
+    state.ui.chasePeerId = null;
+    state.ui.destinationTile = { q, r };
+    state.ui.pathPlan = path.length ? path : null;
+    state.ui.selectedTarget = path.length ? path[0] : { q, r };
+    return path.length;
   } });
 // Dev: ?fxsrc=demo|all&fxnotice=1 — fire one notice of each kind a few seconds after load (screenshots / tests).
 if (DEV_FIXTURE && new URL(location.href).searchParams.get('fxnotice') === '1') {

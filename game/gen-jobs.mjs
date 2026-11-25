@@ -15,13 +15,19 @@ import { fileURLToPath } from 'node:url';
 import { genConfig, generateEffect, saveDraft, formatStatus, checkDraft, validatorReport } from './effect-gen.mjs';
 import { generateSkill } from './skill-gen.mjs';
 import { generateClass } from './class-gen.mjs';
+import { GM_KINDS, generateGameModel, bundleFromRepo, gmLook } from './gm-gen.mjs';
 import { tagsPrompt, tagProblems, cleanTags } from './gen-tags.mjs';
 import { profileDir } from './profile.mjs';
 import { deviceSigner, authHeaders, OCI_URLS } from './oci-auth.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const GEN_KINDS = ['effect', 'skill', 'class'];   // user order: effects → phone → skills → classes
-const generateOf = (o) => (o.kind === 'skill' ? generateSkill(o) : o.kind === 'class' ? generateClass(o) : generateEffect(o));
+export const GEN_KINDS = ['effect', 'skill', 'class', ...GM_KINDS];   // user order: effects → phone → skills → classes; then the GameModels (2026-11-25)
+const isGm = (kind) => GM_KINDS.includes(kind);
+// a GameModels test (tools/gm-gen-test.mjs): what it saw, in the editor's words
+const gmBrief = (kind, t) => (kind === 'monster' ? `${t.booted ? 'in the game' : 'never in the game'} · chases ${t.chases ?? 0}, casts ${t.casts ?? 0}, hits ${t.hits ?? 0}, kills ${t.kills ?? 0}${t.monster_died ? ', died' : ''}`
+  : kind === 'npc' ? `${t.spawned ? 'spawned' : 'never spawned'} · answers ${t.talks ?? 0}, agenda steps ${t.agenda ?? 0}, quests ${t.quests ?? 0}` : `village ${t.village ? 'found' : 'not found'}, ${t.in_layout ? 'in its layout' : 'not in its layout'}`) + ` · errors ${t.errors ?? 0} · divergences ${t.divergences ?? 0}`;
+// a GameModels draft's look (d.resources = { npc | building: <id whose art it borrows> }) goes in as the generator's pick
+const generateOf = (o) => (isGm(o.kind) ? generateGameModel({ ...o, pick: o.resources || null }) : o.kind === 'skill' ? generateSkill(o) : o.kind === 'class' ? generateClass(o) : generateEffect(o));
 
 // The resource picks { sprite, sound } (paths of game/gen-resources.json, checked by gen-api) → the def: an effect's
 // card.resources, a skill's resources (/1, skill-engine validateResources). Same shape as the built-ins' card.resources.
@@ -52,7 +58,8 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   llmFile = path.join(profileDir(), 'llm.json'), env = process.env, generate = generateOf, spawnImpl = spawn, statsImpl = null, fetchImpl = (...a) => globalThis.fetch(...a),
   everyMs = STATUS_EVERY_MS, testMinutes = Number(env.GEN_TEST_MINUTES) || 3, log = () => {} } = {}) {
   let current = null;   // { draft_id, what: 'generate' | 'test', child? }
-  const defsDir = (kind) => (kind === 'skill' ? skillDraftsDir : kind === 'class' ? classDraftsDir : draftsDir);
+  const gmDraftsDir = path.join(path.dirname(draftsDir), 'gm-drafts');
+  const defsDir = (kind) => (kind === 'skill' ? skillDraftsDir : kind === 'class' ? classDraftsDir : isGm(kind) ? gmDraftsDir : draftsDir);
   const file = (id) => path.join(dir, `${id}.json`);
   const read = (id) => { try { return JSON.parse(fs.readFileSync(file(id), 'utf8')); } catch { return null; } };
   const write = (d) => { fs.mkdirSync(dir, { recursive: true }); d.updated_at = nowIso(); const t = `${file(d.draft_id)}.tmp`; fs.writeFileSync(t, JSON.stringify(d, null, 2) + '\n'); fs.renameSync(t, file(d.draft_id)); return d; };
@@ -60,7 +67,8 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
   // the test game + the big model's review of it, into the conversation (the next retry answers it)
   const talkTest = (x) => {
     const t = x.test || {};
-    const head = `${t.pass ? 'PASS' : 'FAIL'} · ${x.kind === 'skill' ? 'plays' : x.kind === 'class' ? 'uses' : 'casts'} ${t.casts ?? 0}, lands ${t.lands ?? 0} · errors ${t.errors ?? 0} · divergences ${t.divergences ?? 0}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}`;
+    const head = isGm(x.kind) ? `${t.pass ? 'PASS' : 'FAIL'} · ${gmBrief(x.kind, t)}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}${t.notes?.length ? ` (${t.notes.join('; ')})` : ''}${x.kind === 'npc' && t.talk?.length ? `\n${t.talk.slice(0, 6).map(c => `  «${c.ask}» → «${c.answer}»`).join('\n')}` : ''}`
+      : `${t.pass ? 'PASS' : 'FAIL'} · ${x.kind === 'skill' ? 'plays' : x.kind === 'class' ? 'uses' : 'casts'} ${t.casts ?? 0}, lands ${t.lands ?? 0} · errors ${t.errors ?? 0} · divergences ${t.divergences ?? 0}${t.why?.length ? ` — ${t.why.join('; ')}` : ''}`;
     const rv = t.review ? (t.review.error ? `review: ${t.review.error}` : [`review: ${t.review.summary || ''}`, ...(t.review.suggestions || []).map(s => `  → ${s}`)].join('\n')) : '';
     x.talk = [...(x.talk || []), { role: 'test', at: nowIso(), text: [head, rv].filter(Boolean).join('\n').slice(0, 3000) }].slice(-120);
   };
@@ -108,7 +116,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     let r;
     try {
       const kind = d.kind || 'effect';
-      r = await generate({ kind, idea: [d.idea, ...(d.extras || []), tagsPrompt(kind, d.tags)].filter(Boolean).join('\n'), cfg, prior, changes,
+      r = await generate({ kind, idea: [d.idea, ...(d.extras || []), tagsPrompt(kind, d.tags)].filter(Boolean).join('\n'), cfg, prior, changes, ...(isGm(kind) ? { resources: d.resources || null } : {}),
         tagCheck: d.tags?.length ? (def) => tagProblems(kind, def, d.tags) : null,
         onProgress: (p) => { prog = p; }, log: (t) => { const x = read(d.draft_id) || d; note(x, `[gen] ${t}`); write(x); } });
     } catch (e) { r = { ok: false, error: e.message, tries: [] }; }
@@ -118,12 +126,13 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     // The conversation (the player's words, each answer, the validator's report on it) — one round per create / retry.
     if (r.talk?.length) x.talk = [...(x.talk || []), { role: 'round', text: prior ? `retry ${(x.talk || []).filter(t => t.role === 'round').length}` : 'create', at: nowIso() }, ...r.talk].slice(-120);
     if (r.def) {
-      applyResources(x.kind, r.def, x.resources);   // the player's picture / sound (not priced: the verdict stands)
+      if (!isGm(x.kind)) applyResources(x.kind, r.def, x.resources);   // the player's picture / sound (not priced: the verdict stands); a GameModels look is applied by its generator
       x.def = r.def; x.verdict = r.verdict; x.problems = r.problems || [];
       x.tag_problems = r.tag_problems || [];
       for (const p of x.tag_problems) note(x, `[tags] ${p}`);
-      x.check = r.check?.power ? { ratio: r.check.judged_ratio ?? null, band: r.check.band || null } : null;
-      x.report = validatorReport(r.check);   // the rebalance script's output on the def shown
+      // a GameModels monster: { power, base_power, range } of the creature power score (gm-gen.mjs monsterBalance)
+      x.check = isGm(x.kind) ? (r.check || null) : r.check?.power ? { ratio: r.check.judged_ratio ?? null, band: r.check.band || null } : null;
+      x.report = isGm(x.kind) ? [] : validatorReport(r.check);   // the rebalance script's output on the def shown
       for (const l of x.report) note(x, `[rebalance] ${l}`);
       const old = x.file;
       x.file = saveDraft(r.def, defsDir(x.kind));
@@ -152,7 +161,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     return new Promise((resolve) => {
       const out = path.join(dir, `${d.draft_id}.test.json`);
       try { fs.rmSync(out, { force: true }); } catch {}
-      const child = spawnImpl(process.execPath, [path.join(HERE, 'tools', 'effect-gen-test.mjs'), d.file, '--minutes', String(testMinutes), '--every', String(Math.round(everyMs / 1000)), '--out', out, '--review'],
+      const child = spawnImpl(process.execPath, [path.join(HERE, 'tools', isGm(d.kind) ? 'gm-gen-test.mjs' : 'effect-gen-test.mjs'), d.file, '--minutes', String(testMinutes), '--every', String(Math.round(everyMs / 1000)), '--out', out, '--review'],
         { cwd: HERE, env: { ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
       if (current) current.child = child;
       let buf = '';
@@ -171,11 +180,13 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
         const x = read(d.draft_id) || d;
         x.status = '';
         x.test = res ? { pass: !!res.pass, why: res.why || [], casts: res.casts, lands: res.lands, errors: res.errors, divergences: res.divergences,
-          lines: (res.lines || []).slice(0, 40), error_lines: res.errorLines || [], review: res.review || null, at: res.at, ms: res.ms, dimension: res.dimension }
+          lines: (res.lines || []).slice(0, 40), error_lines: res.errorLines || [], review: res.review || null, at: res.at, ms: res.ms, dimension: res.dimension,
+          ...(isGm(d.kind) ? { spawned: !!res.spawned, talks: res.talks, agenda: res.agenda, quests: res.quests, village: !!res.village, in_layout: !!res.in_layout, notes: res.notes || [], talk: (res.talk || []).slice(0, 24),
+            booted: !!res.booted, chases: res.chases, casts: res.casts, hits: res.hits, kills: res.kills, monster_died: !!res.monsterDied } : {}) }
           : { pass: false, why: [`the test runner exited with code ${code} and no result`] };
         x.suggestions = res?.review?.suggestions || [];
         talkTest(x);
-        if (x.test.pass) setState(x, 'testing success', `cast ${res.casts}×, landed ${res.lands}×`);
+        if (x.test.pass) setState(x, 'testing success', isGm(d.kind) ? gmBrief(d.kind, x.test) : `cast ${res.casts}×, landed ${res.lands}×`);
         else { x.fails = (x.fails | 0) + 1; setState(x, `testing failed ${x.fails}`, x.test.why.join('; ')); }
         write(x);
         resolve(x);
@@ -280,16 +291,19 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
     list: () => { try { return fs.readdirSync(dir).filter(f => /^gen_[a-z0-9]+\.json$/.test(f)).map(f => read(f.slice(0, -5))).filter(Boolean).map(summary).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at))); } catch { return []; } },
     get: (id) => (DRAFT_ID_RE.test(String(id)) ? read(id) : null),
     // tags: ["group:value"] (gen-tags.mjs — checked on the draft); resources: { sprite, sound } paths (gen-api checks them)
-    create({ kind = 'effect', idea, tags = [], resources = null }) {
+    // base (a GameModels kind): the id of a repo NPC / building to change — the model gets it as its prior answer
+    create({ kind = 'effect', idea, tags = [], resources = null, base = null }) {
       if (!GEN_KINDS.includes(kind)) throw Object.assign(new Error(`generation of ${kind}s is not built yet (${GEN_KINDS.join(', ')} are)`), { status: 400 });
       const text = String(idea || '').trim();
       const picked = cleanTags(kind, tags);
       if (text.length < 8 && !(picked.length && text.length >= 3)) throw Object.assign(new Error('describe it in a sentence or two'), { status: 400 });
       refuseBusy();
-      const d = { draft_id: `gen_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`, kind, idea: text.slice(0, 1000), tags: picked, resources: resources || null, extras: [], state: 'generating', fails: 0,
+      const prior = base && isGm(kind) ? bundleFromRepo(kind, String(base)) : null;
+      if (base && !prior) throw Object.assign(new Error(`no ${kind} ${base} in chaosD6-GameModels`), { status: 404 });
+      const d = { draft_id: `gen_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`, kind, idea: text.slice(0, 1000), tags: picked, resources: resources || null, ...(prior ? { base: String(base) } : {}), extras: [], state: 'generating', fails: 0,
         def: null, verdict: null, problems: [], suggestions: [], status: '[gen] 0:00 starting', status_at: nowIso(), log: [], created_at: nowIso() };
       note(d, 'state: generating'); write(d);
-      start(d, 'generate', () => runGenerate(d));
+      start(d, 'generate', () => runGenerate(d, prior ? { prior, changes: text } : {}));
       return d;
     },
     retry(id, { extra = '', suggestions = [], tags = undefined, resources = undefined } = {}) {
@@ -317,7 +331,7 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       if (!(d.state === 'preview' || isFailed(d.state) || d.state === 'testing success')) throw Object.assign(new Error(`cannot test while ${d.state}`), { status: 409 });
       refuseBusy();
       saveDraft(d.def, defsDir(d.kind));   // the file the runner reads = the def shown
-      const rt = remoteTest();
+      const rt = isGm(d.kind) ? null : remoteTest();   // a GameModels test needs the GameModels checkout: here only
       setState(d, 'testing', rt ? 'on OCI' : ''); d.status = `[test] 0:00 starting${rt ? ' · on OCI' : ''}`; d.status_at = nowIso(); write(d);
       start(d, 'test', () => (rt ? runTestRemote(d, rt) : runTest(d)));
       return d;
@@ -328,12 +342,15 @@ export function createGenJobs({ dir = path.join(profileDir(), 'gen-drafts'), dra
       if (!d) throw Object.assign(new Error('no such draft'), { status: 404 });
       if (RUNNING_STATES.includes(d.state) || d.state === 'published') throw Object.assign(new Error(`cannot change the media while ${d.state}`), { status: 409 });
       d.resources = pick || null;
-      if (d.def) {
+      if (d.def && isGm(d.kind)) {
+        gmLook(d.def, d.resources);   // borrow the picked NPC's / building's art (not priced, no regeneration)
+        saveDraft(d.def, defsDir(d.kind));
+      } else if (d.def) {
         if (d.kind === 'skill' || d.kind === 'class') delete d.def.resources; else if (d.def.card) delete d.def.card.resources;
         applyResources(d.kind, d.def, d.resources);
         saveDraft(d.def, defsDir(d.kind));
       }
-      note(d, `media: ${pick?.unit ? `unit ${pick.unit.race}/${pick.unit.unit} (${pick.unit.sounds.length} sounds)` : pick ? [pick.sprite, pick.sound].filter(Boolean).map(p => path.basename(p)).join(' + ') : 'none'}`);
+      note(d, `media: ${pick?.npc || pick?.building ? `looks like ${pick.npc || pick.building}` : pick?.unit ? `unit ${pick.unit.race}/${pick.unit.unit} (${pick.unit.sounds.length} sounds)` : pick ? [pick.sprite, pick.sound].filter(Boolean).map(p => path.basename(p)).join(' + ') : 'none'}`);
       return write(d);
     },
     /** publish step bookkeeping (gen-api.mjs does the validate + publishDefinition). */

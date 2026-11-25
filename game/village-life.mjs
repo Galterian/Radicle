@@ -13,7 +13,7 @@
 import { villageResidents, villageWanderers, villagesNear, compass, villageCatalog } from './js/villages.js';
 
 const dist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
-export const ROLE_PRIORITY = { quest_giver: 0, storyteller: 1, trader: 2, builder: 3, smith: 4, wizard: 5, mercenary: 6, guard: 7, healer: 8, villager: 9, wanderer: 10 };   // the builder before the guards: it is for hire (2026-11-24)
+export const ROLE_PRIORITY = { dragon: -0.5, quest_giver: 0, storyteller: 1, trader: 2, builder: 3, engineer: 3.5, smith: 4, wizard: 5, mercenary: 6, guard: 7, healer: 8, villager: 9, wanderer: 10 };   // the builder before the guards: it is for hire (2026-11-24); the dragon always out, the engineer for hire too (2026-11-25)
 export const MAX_PRODUCED = 64;   // safety bound on the production timeline
 
 // → [{ label, npc, name, q, r, born, kind: 'resident'|'produced' }] alive at `turn` (founding `founded`; `gone`:

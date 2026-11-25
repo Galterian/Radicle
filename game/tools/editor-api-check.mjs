@@ -306,14 +306,15 @@ try {
 
   // ---------------------------------------------------------------- proposals
   console.log('proposals');
-  const cfile = path.join(dataDir, 'creatures.json');
+  // split A (2026-11-25): creatures are the GameModels catalog's (refused below) - the data-proposal fixture is characters
+  const cfile = path.join(dataDir, 'characters.json');
   const before = fs.readFileSync(cfile, 'utf8');
   const cj = JSON.parse(before);
   const entry = cj.entries[0];
   const { activeVersion } = await import('../logic-engine.mjs');
   const act = activeVersion(entry);
-  r = await post('proposals', { collection: 'creatures', entry_id: entry.id, data: act.data, notes: 'same stats, checking the pipeline' });
-  check(r.status === 200 && r.json?.ok === true, `proposal on creatures/${entry.id} (${r.json?.error || ''} ${(r.json?.errors || []).join('; ')})`);
+  r = await post('proposals', { collection: 'characters', entry_id: entry.id, data: act.data, notes: 'same stats, checking the pipeline' });
+  check(r.status === 200 && r.json?.ok === true, `proposal on characters/${entry.id} (${r.json?.error || ''} ${(r.json?.errors || []).join('; ')})`);
   const [maj, min] = act.version.split('.').map(Number);
   check(r.json?.version === `${maj}.${min + 1}.0` && r.json.parent_version === act.version, `version bump ${act.version} → ${r.json?.version}`);
   const after = fs.readFileSync(cfile, 'utf8');
@@ -325,19 +326,24 @@ try {
   check(nv.status === 'proposal' && nv.weight === 0 && nv.origin === 'player_vote' && nv.parent_version === act.version && /Gold Team/.test(nv.notes) && nv.notes.includes(me.id) && nv.created_at, 'version fields: proposal, weight 0, player_vote, parent, notes with team + identity');
   check(/"weight": 0\.0/.test(after.split(`"version": "${r.json?.version}"`)[1] || ''), 'weight written as 0.0 (writeDataFile)');
   check(r.json?.verdict === 'accept' && Array.isArray(r.json.counters) && !r.json.counters.length && r.json.within_tolerance === true, `unchanged stats → rebalance verdict accept, no counters (${r.json?.verdict})`);
-  r = await post('proposals', { collection: 'creatures', entry_id: entry.id, data: act.data });
+  r = await post('proposals', { collection: 'characters', entry_id: entry.id, data: act.data });
   check(r.json?.version === `${maj}.${min + 2}.0`, 'next proposal takes the next free version');
   // the shared tools/rebalance.mjs checkProposal: blocked → refused, needs_rework → appended (as `check --apply`)
   const { checkProposal } = await import('./rebalance.mjs');   // importing must not run the CLI
   const { LogicEngine } = await import('../logic-engine.mjs');
   const rhox = JSON.parse(fs.readFileSync(path.join(HERE, 'proposals', 'contradictions', 'mon_rhox_brute-1.1.0.json'), 'utf8'));
-  const cr = checkProposal(JSON.parse(JSON.stringify(rhox)), { eng: new LogicEngine({ dataDir }) });
-  check(cr.verdict === 'blocked' && cr.ok === false && cr.errors.some(e => /deck_effects_affordable/.test(e)) && Array.isArray(cr.counters) && cr.applied === null, 'checkProposal: contradiction fixture → blocked with errors (as rebalance.mjs check)');
+  let cthrew = null; try { checkProposal(JSON.parse(JSON.stringify(rhox)), { eng: new LogicEngine({ dataDir }) }); } catch (e) { cthrew = e.message; }
+  check(/GameModels/.test(cthrew || ''), 'checkProposal throws for the catalog collection creatures (split A)');
+  const blk = { collection: 'characters', entry_id: entry.id, version: { version: '9.0.0', origin: 'player_vote', parent_version: act.version, data: { ...act.data, stats: { ...act.data.stats, vitality: act.data.stats.vitality + 60 } } } };
+  const cr = checkProposal(JSON.parse(JSON.stringify(blk)), { eng: new LogicEngine({ dataDir }) });
+  check(cr.verdict === 'blocked' && cr.ok === false && cr.errors.some(e => /stat_sum_within_5_or_species_40/.test(e)) && Array.isArray(cr.counters) && cr.applied === null, 'checkProposal: contradiction fixture → blocked with errors (as rebalance.mjs check)');
   let threw = null; try { checkProposal({ collection: 'effects', entry_id: 'effect_fireball', version: { version: '9.0.0', data: {} } }, { eng: new LogicEngine({ dataDir }) }); } catch (e) { threw = e.message; }
   check(/effects-data|rebalancing-check/.test(threw || ''), 'checkProposal throws for a definitions collection (F9b)');
   const cbefore = fs.readFileSync(cfile, 'utf8');
-  r = await post('proposals', { collection: rhox.collection, entry_id: rhox.entry_id, data: rhox.version.data, notes: 'contradiction' });
-  check(r.status === 400 && r.json?.verdict === 'blocked' && (r.json.errors || []).some(e => /deck_effects_affordable/.test(e)) && fs.readFileSync(cfile, 'utf8') === cbefore, 'blocked proposal → 400 with verdict + errors, nothing written');
+  r = await post('proposals', { collection: 'creatures', entry_id: rhox.entry_id, data: rhox.version.data, notes: 'contradiction' });
+  check(r.status === 400 && /GameModels/.test(r.json?.error || ''), `proposals refuse the catalog collection creatures (${r.json?.error})`);
+  r = await post('proposals', { collection: blk.collection, entry_id: blk.entry_id, data: blk.version.data, notes: 'contradiction' });
+  check(r.status === 400 && r.json?.verdict === 'blocked' && (r.json.errors || []).some(e => /stat_sum_within_5_or_species_40/.test(e)) && fs.readFileSync(cfile, 'utf8') === cbefore, 'blocked proposal → 400 with verdict + errors, nothing written');
   const clfile = path.join(dataDir, 'classes.json');
   const anim = JSON.parse(fs.readFileSync(clfile, 'utf8')).entries.find(e => e.id === 'class_animator');
   if (anim && (activeVersion(anim).rebalance_links || []).length) {
@@ -355,11 +361,11 @@ try {
     r = await post('proposals', { collection: c, entry_id: c === 'effects' ? 'effect_fireball' : 'skill_dodge', data: {} });
     check(r.status === 400 && /definitions|POST definitions/.test(r.json?.error || ''), `proposals refuse the definitions collection ${c}`);
   }
-  r = await post('proposals', { collection: 'creatures', entry_id: 'creature_does_not_exist', data: {} });
+  r = await post('proposals', { collection: 'characters', entry_id: 'char_does_not_exist', data: {} });
   check(r.status === 404, 'proposal on an unknown entry → 404');
   r = await post('proposals', { collection: 'logic_rules', entry_id: 'x', data: {} });
   check(r.status === 400 || r.status === 404, 'proposal on logic_rules refused');
-  check(fs.readFileSync(path.join(REPO, 'data', 'creatures.json'), 'utf8') === before, 'the real data/creatures.json untouched');
+  check(fs.readFileSync(path.join(REPO, 'data', 'characters.json'), 'utf8') === before, 'the real data/characters.json untouched');
   check(!fs.readFileSync(path.join(REPO, 'data', 'classes.json'), 'utf8').includes('strong animator'), 'the real data/classes.json untouched');
 } finally {
   server.close();

@@ -79,9 +79,11 @@
     {
       "id": "creatures",
       "file": "creatures.json",
+      "catalog": "gamemodels/catalog.json",
+      "catalog_key": "creatures",
       "entries": 29,
-      "writes": "vote-driven",
-      "purpose": "paper rules"
+      "writes": "chaosD6-GameModels",
+      "purpose": "paper rules; since split A (2026-11-25) the monster cards are chaosD6-GameModels monsters/<id>.json (chaosd6.monster/2 card blocks), compiled into assets/gamemodels/catalog.json `creatures` — creatures.json is a frozen record (its version history), `file` the served name /data/creatures.json"
     },
     {
       "id": "terrain_items",

@@ -69,8 +69,9 @@ import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, s
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
-import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround } from './js/villages.js';
+import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround, testCatalogOverrides, gameModelsCatalogTries } from './js/villages.js';
 import { npcCreatureEntries } from './gamemodels.mjs';
+import { makeShot, shotStrikes, shotEnds, flyerHop } from './js/siege.js';   // siege engines + flyers (user 2026-11-25)
 import { agendaGoal, questMet } from './agenda.mjs';
 import { villageUnits, activeUnits, wanderersOf, npcLine, loreFact, intelLine, archiveItems, rewardWords, villageNeutral, isWildMonsterSnap } from './village-life.mjs';
 import { setBuildingSkills, configureFortress, FORTRESS, fortressBankStep, fortressBonusDice, fortressBonusOf, FORTRESS_TOKEN_EFFECT, fortressTokenElem } from './js/building-bonus.js';
@@ -95,7 +96,7 @@ import { buildingBonusAt, bonusText, fortressAt, teleportTargets, wallArc, explo
 import { start as autosaveStart, loadTmj as autosaveLoadTmj } from './tools/autosave.mjs';
 import { loadProfile, characterOf, dropRandomDeckCard, addArchivedCard, removeArchivedCard, profilePath } from './profile.mjs';
 import { pvHandle, pvHello } from './proposal-votes.mjs';   // PV: proposal votes on foreign defs (profile side store, never the state hash)
-import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
+import { definitionsCollectionText, catalogSourceOf } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { phylacteryConfig, possessArchivePick, phylacteryPick, releasedCompanions } from './possess.mjs';   // Possess / Phylactery (user ruling 2026-11-17)
 import { boundReleaseOf, boundReleases, releasedBoundView } from './bound-release.mjs';   // bound-creature release judged on the frozen view (2026-11-19)
 
@@ -347,11 +348,11 @@ for (const [rel, set] of [['features/feature_table.json', setFeatureCatalog], ['
 // chaosD6-GameModels (2026-11-24): races, village buildings, NPCs, monster agendas, quests — one compiled catalog
 // (tools/gamemodels-build.mjs). Villages change featureAt(): a peer without it diverges from peers that have it.
 const GAMEMODELS = (() => {
-  const tries = [path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])];
+  const tries = gameModelsCatalogTries([path.resolve(__dirname, '..', 'assets', 'gamemodels', 'catalog.json'), ...(process.env.CHAOSD6_ASSETS_DIR ? [path.resolve(process.env.CHAOSD6_ASSETS_DIR, 'gamemodels', 'catalog.json')] : [])], process.env);
   const hit = tries.find(f => fsSync.existsSync(f));
   if (!hit) { console.warn(`[catalog] gamemodels/catalog.json NOT FOUND (${tries.join(' | ')}) — no villages on this peer; it will diverge from peers that have them`); return null; }
   const txt = fsSync.readFileSync(hit, 'utf8');
-  const j = JSON.parse(txt);
+  const j = testCatalogOverrides(JSON.parse(txt), process.env);
   setVillageCatalog(j);
   console.log(`[catalog] gamemodels ${String(j.hash || '').slice(0, 10)} from ${hit}`);
   return j;
@@ -367,8 +368,13 @@ function pickActive(entry) {
 }
 
 const data = {};
+// Split A (2026-11-25): the monster creature cards are the GameModels catalog's `creatures` (monster/2), the copy this
+// peer's villages came from — data/creatures.json (a frozen record) only when that catalog has none.
+const DATA_INDEX = await loadJson('index.json');
 for (const n of ['battle_system', 'actions', 'characters', 'creatures', 'classes', 'elements']) {
-  const f = await loadJson(`${n}.json`);
+  const cs = catalogSourceOf(DATA_INDEX, n), fromCat = cs && GAMEMODELS?.[cs.key]?.entries ? GAMEMODELS[cs.key] : null;
+  if (cs && !fromCat) console.warn(`[catalog] ${n}: the gamemodels catalog has no "${cs.key}" — data/${n}.json (frozen record) instead; peers with a newer catalog will diverge`);
+  const f = fromCat || await loadJson(`${n}.json`);
   data[n] = Object.fromEntries(f.entries.map(e => [e.id, pickActive(e)]));
 }
 // Villagers are played like creatures (their own stats, deck, life): the GameModels NPC units join data.creatures.
@@ -487,7 +493,11 @@ const libp2p = await createLibp2p({
   streamMuxers: [yamux()],
   services: {
     identify: identify({ agentVersion: `chaosd6-dimensions/0.1.0 (${PEER_LABEL})` }),
-    pubsub: gossipsub({ allowPublishToZeroTopicPeers: true, emitSelf: false }),
+    // No IP-colocation penalty (2026-11-24): gossipsub scores (peers on one IP − 10)² × −5, and one machine runs the
+    // hero, its companions, the monsters and a village's 11+ villagers — past ~14 local peers every one of them sat
+    // under the graylist (−80): publishes reached 0 recipients, only Gun's slim records got through (no npc_id, no
+    // world edits — a hired builder never left its village, its follower took the villagers for foes).
+    pubsub: gossipsub({ allowPublishToZeroTopicPeers: true, emitSelf: false, scoreParams: { IPColocationFactorWeight: 0 } }),
   },
 });
 await libp2p.start();
@@ -1349,29 +1359,33 @@ function buildHexNextToMe(builderTile) {
 }
 // Hired builder: my leader's order for me → walk next to its hex, then Posture with build { q, r, b } (once a turn).
 const hiredTried = new Map();   // order id → hg.action I last tried it
+// What keeps me from my order — logged once each time it changes (the agenda lines' habit).
+let hiredWhy = '';
+function hiredWait(why) { if (why !== hiredWhy) { hiredWhy = why; if (why) console.log(`[${PEER_LABEL}] hired builder: ${why}`); } }
 function hiredBuildPlan() {
   if (!HIRED_BUILDER || entity.life <= 0) return false;
   const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
-  if (npcEnemies().some(p => hexDistance(here, p) <= 1)) { if (process.env.DEBUG_HIRED) console.log(`[${PEER_LABEL}] DEBUG_HIRED foe in contact: ${npcEnemies().filter(p => hexDistance(here, p) <= 1).map(p => p.name || p.peer_id).join(', ')}`); return false; }
   let orders = [];
   try { orders = JSON.parse(peersPublic.get(ownerPeerId)?.build_orders_json || '[]'); } catch { orders = []; }
   const o = orders.find(x => x?.to === PEER_ID_STRING && NPC_DEF.builds.some(b => b.id === x.b) && Number.isInteger(x.q) && Number.isInteger(x.r) && !buildingFeatureAt(MAP_SEED, x.q, x.r));
-  if (process.env.DEBUG_HIRED) console.log(`[${PEER_LABEL}] DEBUG_HIRED owner ${ownerPeerId} seen ${peersPublic.has(ownerPeerId)} orders ${peersPublic.get(ownerPeerId)?.build_orders_json} → ${o ? o.id : 'none'}`);
-  if (!o) return false;
+  if (!o) { hiredWait(''); return false; }
+  const foes = npcEnemies().filter(p => hexDistance(here, p) <= 1);
+  if (foes.length) { hiredWait(`order ${o.b} at (${o.q},${o.r}) waits: foe in contact (${foes.map(_nameOf).join(', ')})`); return false; }
   const me = { q: entity.tile.q, r: entity.tile.r }, key = `${o.q},${o.r}`;
   const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
   const free = (q, r) => !occ.has(`${q},${r}`) && hexWalkableAt(MAP_SEED, q, r) && !isLabyrinthWallAt(MAP_SEED, q, r) && !buildingFeatureAt(MAP_SEED, q, r);
   const has = (code) => hand.some(c => c.kind === 'action' && c.code === code);
   const step = ringStep({ me, site: { q: o.q, r: o.r }, free, maxNodes: 1500 });
-  if (process.env.DEBUG_HIRED) console.log(`[${PEER_LABEL}] DEBUG_HIRED at ${me.q},${me.r} step ${JSON.stringify(step)}`);
   if (step?.build) {
+    if (occ.has(key)) hiredWait(`order ${o.b} at (${key}) waits: someone stands on the hex`);
     if (occ.has(key) || builderBuiltTurn === hg.turn || hg.action - (hiredTried.get(o.id) ?? -99) < 3) return applyNpcPlan({ code: has('P') ? 'P' : 'EP' });
-    hiredTried.set(o.id, hg.action);
+    hiredTried.set(o.id, hg.action); hiredWait('');
     const label = NPC_DEF.builds.find(b => b.id === o.b)?.ask || o.b;
     console.log(`[${PEER_LABEL}] hired builder: building for my leader at (${key}) — "${label}"`);
     return applyNpcPlan({ code: has('P') ? 'P' : 'EP', build: { q: o.q, r: o.r, b: o.b } });
   }
-  if (step?.stepTo) return applyNpcPlan({ code: has('M') ? 'M' : 'EM', target: step.stepTo });
+  if (step?.stepTo) { hiredWait(`order ${o.b} at (${key}): walking from (${me.q},${me.r})`); return applyNpcPlan({ code: has('M') ? 'M' : 'EM', target: step.stepTo }); }
+  hiredWait(`order ${o.b} at (${key}) waits: no way there from (${me.q},${me.r})`);
   return false;
 }
 function syncPlacedBuildings(view) {
@@ -1553,6 +1567,12 @@ const NPC_HOME = NPC_DEF && /^-?\d+$/.test(process.env.HOME_Q || '') && /^-?\d+$
 const IS_FOLLOWER = !!NPC_DEF && process.env.FOLLOWER === '1';
 // A builder a hero hired (its price: a consume quest, user 2026-11-24) — builds what its leader orders (npc.builds).
 const HIRED_BUILDER = IS_FOLLOWER && NPC_DEF?.role === 'builder' && Array.isArray(NPC_DEF?.builds) && NPC_DEF.builds.length > 0;
+// A siege engine an engineer built for a hero (user 2026-11-25): GameModels npc.siege { kind, class, min, max, speed |
+// rounds } — it follows its hero, plays only EP / EM and uses its class once a turn (siegePlan; resolver "siege").
+const SIEGE = IS_FOLLOWER && NPC_DEF?.role === 'siege' && NPC_DEF.siege ? NPC_DEF.siege : null;
+entity.siegeShots = [];   // my shots in flight (js/siege.js makeShot records) — snapshot siege_shots_json
+entity.siegeTurn = -1;    // the turn my class was last used (ready again at the start of the next)
+entity.ram = null;        // Battering Ram: { q, r, n, at } — the wall hex I strike, n actions in a row up to action `at`
 const AGENDA = (NPC_DEF && !IS_FOLLOWER ? NPC_DEF.agenda : null) || (IS_MONSTER && !NPC_DEF ? GAMEMODELS?.monsters?.[CREATURE_ID]?.agenda : null) || null;
 const villageHostile = new Set();    // villager: heroes my village is hostile to (snapshot hostile_to_csv)
 const villageAllyFoes = new Set();   // villager: units fighting a hero my village counts as an ally
@@ -1722,6 +1742,7 @@ let queuedDestroy = null;  // { stat } — Rule 24: emit that stat's element aga
 let queuedAttach = null;   // hand index of a second effect card the queued effect works on (Traps Mastery lays it as its trap; Space Bending alt)
 let queuedLink = null;     // { peer_id, stat } — Spirit Link: the ally stat clicked in the unit list
 let queuedBuild = null;    // { q, r } (null q/r = any free hex) — NPC builder: raise a Barricade with this Posture (AI skirmish)
+let queuedSiege = null;    // { q, r } — siege engine: shoot at / ram this hex with this Empty Posture (siegePlan)
 let queuedElem = null;     // element id — general_ux_tokens: the element a token-making cast should create (Artifice tile token)
 let queuedPhylactery = null; // { auto: true } (2026-11-17: the resolver picks the nearest enemy's best permanent) — Phylactery holder: shatter this action
 let queuedPossessPick = null; // card_id of the archive creature my next Possess plays (UI pick; none → the strongest, possessArchivePick)
@@ -2078,6 +2099,8 @@ function currentStateSnapshot(slim = false) {
     dim_out_until_turn: dimOut ? dimOut.until_turn : -1, dim_out_start_turn: dimOut ? dimOut.start_turn : -1,
     ai_role: AI_ROLE,   // AI skirmish: 'builder' lets every resolver raise my Barricades (reveal `build`)
     ...(NPC_DEF ? { npc_id: NPC_ID, village_id: VILLAGE_ID, home_q: NPC_HOME?.q ?? null, home_r: NPC_HOME?.r ?? null, follower: IS_FOLLOWER ? 1 : 0, hostile_to_csv: [...villageHostile].sort().join(','), village_leaving: villageLeaving ? 1 : 0 } : {}),   // GameModels villager
+    // siege engine (2026-11-25): its ammunition in flight, the turn its class was used, the ram's wall count — the resolver reads them
+    ...(SIEGE ? { siege_class: SIEGE.class, siege_shots_json: JSON.stringify(entity.siegeShots), siege_turn: entity.siegeTurn, ram_json: JSON.stringify(entity.ram) } : {}),
     world_edits_json: JSON.stringify(entity.worldEdits || []),
     world_ledger_json: JSON.stringify(entity.worldLedger || []),
     awake_lend_json: JSON.stringify(entity.awakeLend || null),
@@ -3597,11 +3620,15 @@ async function doPlanningEnd() {
     ? { q: Number.isInteger(queuedBuild.q) ? queuedBuild.q : null, r: Number.isInteger(queuedBuild.r) ? queuedBuild.r : null, ...(HIRED_BUILDER && typeof queuedBuild.b === 'string' ? { b: queuedBuild.b } : {}) } : null;
   if (queuedBuild && !build) console.log(`[${PEER_LABEL}] npc builder: no Barricade this action — ${skipping ? 'a lost action' : proxy ? 'a proxy action' : phylactery ? 'phylactery' : effectCard ? `casting ${effectCard.effect_id}` : trance ? 'Battle Trance' : `played ${code}, not a Posture`}`);
   queuedBuild = null;
+  // Siege engines (2026-11-25): the class use (a shot / a ram blow) rides on an Empty Posture, committed in the hash.
+  const siege = SIEGE && queuedSiege && !skipping && !proxy && !phylactery && !effectCard && !trance && code === 'EP' && Number.isInteger(queuedSiege.q) && Number.isInteger(queuedSiege.r)
+    ? { q: queuedSiege.q, r: queuedSiege.r } : null;
+  queuedSiege = null;
   const revealCode = trance ? 'BT' : code;
   myLastSalt = randomBytes(12).toString('hex');
   const effectTag = effectCard ? `${effectCard.effect_id}${every ? '∀' : ''}:${effectCard.element_cost.join('+')}:${effectStep}/${effectOf}:${(effectKept || []).map(v => v ?? '-').join(',')}` : '';
   const bonusTag = bonus.map(b => `${b.action}${b.trance ? `[${b.trance.join('+')}]` : ''}:${targetTag(b.target)}:${b.skillIds.join(',')}:${b.effect ? `${b.effect.effect_id}${b.effect.step}/${b.effect.of}` : ''}:${b.destroy ? b.destroy.stat : ''}`).join('|');
-  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${effectTag}::${destroy ? destroy.stat : ''}::${bonusTag}${manipAlt ? `::manip:${manipAlt.code}:${targetTag(manipAlt.target)}` : ''}${build ? `::build:${build.q},${build.r}` : ''}::${myLastSalt}`);
+  const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${effectTag}::${destroy ? destroy.stat : ''}::${bonusTag}${manipAlt ? `::manip:${manipAlt.code}:${targetTag(manipAlt.target)}` : ''}${build ? `::build:${build.q},${build.r}` : ''}${siege ? `::siege:${siege.q},${siege.r}` : ''}::${myLastSalt}`);
   myLastReveal = {
     code: revealCode, trance: options, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null,
     optionCardIds: [card ? card.card_id : null, extraCard ? extraCard.card_id : null],
@@ -3631,7 +3658,7 @@ async function doPlanningEnd() {
     effectElem: effectCard && (EFFECT_RULES[effectCard.effect_id]?.altTileToken || TILE_TOKEN_CHOICE[effectCard.effect_id]) ? (queuedElem || null) : null,
     effectStep, effectOf,
     skipping, destroy, phylactery, proxy, classAbility, manipAlt,
-    build, say: takeSay(),   // AI skirmish: Barricade intent; the unit's line (shown with the reveal, never the commit)
+    build, siege, say: takeSay(),   // AI skirmish: Barricade intent; siege engine shot / ram blow; the unit's line (shown with the reveal, never the commit)
     bonus,
   };
   await emitEnvelope({
@@ -3691,6 +3718,7 @@ async function doReveal() {
       combo_step: null,
       salt: myLastReveal.salt,
       ...(myLastReveal.build ? { build: myLastReveal.build } : {}),
+      ...(myLastReveal.siege ? { siege: myLastReveal.siege } : {}),
       ...(myLastReveal.say ? { say: myLastReveal.say } : {}),   // AI skirmish: UI speech balloon (llm-brain.mjs cleanSay on every side)
     },
   });
@@ -3733,7 +3761,7 @@ async function doResolution() {
     const effArr = Array.isArray(env.payload.effects) ? env.payload.effects : [];
     const eff0 = effArr[0] || null;
     noteRecentAct(env.actor_peer_id, env.payload.action);
-    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0, salt: env.payload.salt || '', destroy: env.payload.destroy || null, phylactery: env.payload.phylactery || null, proxy: env.payload.proxy || null, classAbility: env.payload.class_ability || null, bonus: env.payload.bonus || null, manipAlt: env.payload.manip_alt || null, build: env.payload.build || null });
+    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0, salt: env.payload.salt || '', destroy: env.payload.destroy || null, phylactery: env.payload.phylactery || null, proxy: env.payload.proxy || null, classAbility: env.payload.class_ability || null, bonus: env.payload.bonus || null, manipAlt: env.payload.manip_alt || null, build: env.payload.build || null, siege: env.payload.siege || null });
     const s = env.state;
     if (s && s.peer_id === env.actor_peer_id && Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) {
       view.set(env.actor_peer_id, { ...(view.get(env.actor_peer_id) || {}), ...s });
@@ -3765,7 +3793,7 @@ async function doResolution() {
   syncPlacedBuildings(view);
   // Include our own reveal in case we didn't receive it from pubsub self-echo.
   if (myLastReveal && !revealsThisTurn.find(r => r.actor === PEER_ID_STRING)) {
-    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null, salt: myLastReveal.salt, destroy: myLastReveal.destroy || null, phylactery: myLastReveal.phylactery || null, proxy: myLastReveal.proxy ? { for: myLastReveal.proxy.for, action: myLastReveal.proxy.action, target: wrapTarget(myLastReveal.proxy.target) } : null, classAbility: myLastReveal.classAbility ? { id: myLastReveal.classAbility.id, target: wrapTarget(myLastReveal.classAbility.target), attach: myLastReveal.classAbility.attach || null, stat: myLastReveal.classAbility.stat || null } : null, bonus: bonusWire(myLastReveal.bonus), manipAlt: myLastReveal.manipAlt ? { code: myLastReveal.manipAlt.code, target: wrapTarget(myLastReveal.manipAlt.target) } : null, build: myLastReveal.build || null, effect: myLastReveal.effectId ? {
+    revealsThisTurn.push({ actor: PEER_ID_STRING, action: myLastReveal.code, target: wrapTarget(myLastReveal.target), skills: myLastReveal.skillIds || [], trance: myLastReveal.trance ? [...myLastReveal.trance] : null, salt: myLastReveal.salt, destroy: myLastReveal.destroy || null, phylactery: myLastReveal.phylactery || null, proxy: myLastReveal.proxy ? { for: myLastReveal.proxy.for, action: myLastReveal.proxy.action, target: wrapTarget(myLastReveal.proxy.target) } : null, classAbility: myLastReveal.classAbility ? { id: myLastReveal.classAbility.id, target: wrapTarget(myLastReveal.classAbility.target), attach: myLastReveal.classAbility.attach || null, stat: myLastReveal.classAbility.stat || null } : null, bonus: bonusWire(myLastReveal.bonus), manipAlt: myLastReveal.manipAlt ? { code: myLastReveal.manipAlt.code, target: wrapTarget(myLastReveal.manipAlt.target) } : null, build: myLastReveal.build || null, siege: myLastReveal.siege || null, effect: myLastReveal.effectId ? {
       effect_id: myLastReveal.effectId, name: myLastReveal.effectName, elements: myLastReveal.effectElements || [], types: myLastReveal.effectTypes || [],
       is_permanent: myLastReveal.effectPermanent, is_damage: myLastReveal.effectDamage, is_point_buy: myLastReveal.effectPointBuy, scope: myLastReveal.effectScope,
       is_instant: myLastReveal.effectInstant, every: myLastReveal.effectEvery, aura: myLastReveal.effectAura, step: myLastReveal.effectStep, of: myLastReveal.effectOf, kept: myLastReveal.effectKept, summon: myLastReveal.effectSummon || null,
@@ -3789,6 +3817,8 @@ async function doResolution() {
   const lifeOf = (id) => id === PEER_ID_STRING ? entity.life - bonusDmgToMe : (view.get(id)?.life ?? 0);
   for (let i = revealsThisTurn.length - 1; i >= 0; i--) if (lifeOf(revealsThisTurn[i].actor) <= 0) revealsThisTurn.splice(i, 1);
   revealsThisTurn.sort((a, b) => a.actor.localeCompare(b.actor));
+  // Siege engines play only Empty Posture / Empty Move (user 2026-11-25): anything else of theirs is an Empty Posture.
+  for (const r of revealsThisTurn) if (view.get(r.actor)?.siege_class && !['EP', 'EM'].includes(r.action)) { r.action = 'EP'; r.trance = null; r.effect = null; r.skills = []; r.bonus = null; r.siege = null; }
   // E4 foreign effects (effects-handshake.mjs, HANDSHAKE.md): a reveal ref whose sha any revealer listed in
   // fx_missing is POSTPONED on every peer (its effect leaves the resolver input; my own re-emits next action);
   // a held one gets effect.fx = {key} (castOf → effects.mjs runs the pinned def); one I still lack after a short
@@ -4320,8 +4350,13 @@ async function doResolution() {
   //  occupancy veto) and the neighbour order is fixed.
   const occupiedBefore = new Map();
   for (const p of view.values()) if (p && p.life > 0) occupiedBefore.set(`${p.tile_q},${p.tile_r}`, p.peer_id);
+  // Flying (user 2026-11-25, creature tag `flying` / `flyer` — the village dragons): a flyer passes over a wall or
+  // scenery in its way — the step goes onto the open hex beyond it (js/siege.js flyerHop); it still lands on open ground.
+  const flies = (id) => { const tags = data.creatures[view.get(id)?.creature_id]?.tags || []; return tags.includes('flying') || tags.includes('flyer'); };
+  const breathOf = (id) => GAMEMODELS?.npcs?.[view.get(id)?.npc_id]?.unit?.breath?.range || 0;   // Breath Attack reach (0 = none)
   const stepsAlong = (actorId, from, to, n) => {
     let cur = { q: from.q, r: from.r };
+    const flyer = flies(actorId);
     for (let i = 0; i < n; i++) {
       const dNow = hexDistance({ tile_q: cur.q, tile_r: cur.r }, { tile_q: to.q, tile_r: to.r });
       if (dNow === 0) break;
@@ -4329,6 +4364,10 @@ async function doResolution() {
       const free = n => { const o = occupiedBefore.get(`${n.q},${n.r}`); return (!o || o === actorId) && !obstacleBlocks(actorId, n.q, n.r) && !labyrinthBlocks(n.q, n.r); };
       const straight = opts.slice().sort((a, b) => a.d - b.d)[0];
       const next = opts.find(n => n.d < dNow && free(n)) || straight;
+      if (flyer && !free(next)) {
+        const hop = flyerHop(cur, to, (q, r) => obstacleBlocks(actorId, q, r) || labyrinthBlocks(q, r));
+        if (hop && free(hop)) { cur = { q: hop.q, r: hop.r }; continue; }
+      }
       cur = { q: next.q, r: next.r };
     }
     return cur;
@@ -4486,7 +4525,7 @@ async function doResolution() {
   const isCounter = (r) => { const k = EFFECT_RULES[r.effect?.effect_id] || {}; return !!(k.shieldElem || k.disableElem || k.voidThisAction || k.zone); };
   // ---- class abilities, part 1 (user ruling 2026-10-30): what must be known before casts and damage ----
   // `r.classAbility = { id, target, attach, stat }` is the clicked class card; statics need no click.
-  const classAbilityOut = { used: [], heals: [], discards: [], peeks: [], traps: [], tokens: [], armor: [], illusion: [], revives: [], moves: [], stealth: [], rogueTrap: [], lures: [], builds: [] };
+  const classAbilityOut = { used: [], heals: [], discards: [], peeks: [], traps: [], tokens: [], armor: [], illusion: [], revives: [], moves: [], stealth: [], rogueTrap: [], lures: [], builds: [], siegeShots: [], siegeRams: [] };   // siege*: the siege engines' class (2026-11-25)
   const elementalistPending = [];       // { actor, value, stat } — counted as used once the damage cast lands
   const abilityOf = (r) => (r.classAbility && typeof r.classAbility.id === 'string' && classReady(r.actor, r.classAbility.id) && lifeOf(r.actor) > 0) ? r.classAbility : null;
   const abilityTile = (ab) => ab?.target?.kind === 'tile' ? ab.target.ref : null;
@@ -4902,7 +4941,8 @@ async function doResolution() {
     const atk = view.get(r.actor), def = view.get(defId);
     if (!atk || !def || !(enemyOf(r.actor, defId) || (aimedAt(r, defId) && sideFoes(r.actor, defId)))) return;
     // SKR-05 Ranged Weapon "+1 range" (ruling 2026-11-16): the holder's Attack reaches 2 hexes; every other strike needs contact.
-    if (hexDistance(postTile(r.actor), postTile(defId)) > skillHook('attack_range', null, skCtx, { attacker: r.actor, code })) return;
+    const reach = Math.max(skillHook('attack_range', null, skCtx, { attacker: r.actor, code }), code === 'A' ? breathOf(r.actor) : 0);
+    if (hexDistance(postTile(r.actor), postTile(defId)) > reach) return;
     let defCode = codeVs(defId, r.actor);
     if (code === 'B') {
       // Block scores against Attacks aimed at the blocker — not on a Ranged Weapon holder from beyond contact, nor on a taunter.
@@ -4947,7 +4987,16 @@ async function doResolution() {
   };
   const targetOf = (r) => r.target?.kind === 'character' ? r.target.ref : null;
   const enemyRevealers = (r) => revealsThisTurn.filter(o => o.actor !== r.actor && enemyOf(r.actor, o.actor)).map(o => o.actor);
+  // Breath Attack (user 2026-11-25, the village dragons: GameModels unit.breath { range }): the Attack strikes every
+  // living enemy within `range` of the breather (after the moves), each like a normal Attack on it.
+  const breathFoes = (r) => [...view.keys()].filter(id => id !== r.actor && lifeOf(id) > 0 && enemyOf(r.actor, id) && hexDistance(postTile(r.actor), postTile(id)) <= breathOf(r.actor)).sort();
   const strikeWith = (r, code, victimOfTargeted) => {
+    if (code === 'A' && breathOf(r.actor) > 0) {
+      const foes = breathFoes(r);
+      if (foes.length && r.actor === PEER_ID_STRING) log(`[${PEER_LABEL}] breath attack: ${foes.length} enemy(ies) within ${breathOf(r.actor)} — ${foes.map(id => view.get(id)?.name || id.slice(0, 8)).join(', ')}`);
+      for (const e of foes) strike(r, code, e);
+      return;
+    }
     if (code === 'A' || code === 'M') { if (victimOfTargeted) strike(r, code, victimOfTargeted); }
     else if (code === 'P' || code === 'B') for (const e of enemyRevealers(r)) strike(r, code, e);
   };
@@ -5181,6 +5230,35 @@ async function doResolution() {
     const site = createBuilding(r, me, { made: barricadeMade(), range: 1, picked, why: 'builder' });
     if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] npc builder: ${site ? `a Barricade rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex next to me' : ''}` : 'no free hex next to me — nothing built'}`);
   }
+  // Siege engines (user 2026-11-25): a siege follower's Empty Posture with `siege { q, r }` uses its class (GameModels
+  // npc.siege), judged on its snapshot so every peer agrees:
+  //   catapult / ballista — once a turn (siege_turn), ready again at the start of the next: the shot (js/siege.js
+  //     makeShot) goes into the engine's snapshot and strikes from the next action on (the flight pass below)
+  //   ram — next to a wall hex (labyrinth, village wall, Barricade) or a fortress and not moving: one more blow in a
+  //     row (ram_json); at `rounds` blows the wall breaks — the ram records `moved:q,r` vacated / `bld:q,r` gone
+  for (const r of revealsThisTurn) {
+    if (!r.siege || r.proxied || r.action !== 'EP' || r.effect) continue;
+    const me = r.actor, vme = view.get(me), sg = GAMEMODELS?.npcs?.[vme?.npc_id]?.siege;
+    if (!sg || !vme?.follower || lifeOf(me) <= 0 || !Number.isInteger(r.siege.q) || !Number.isInteger(r.siege.r)) continue;
+    const from = { q: vme.tile_q, r: vme.tile_r }, to = { q: r.siege.q, r: r.siege.r }, who = vme.name || me.slice(0, 14);
+    if (sg.kind === 'ram') {
+      const wall = isLabyrinthWallAt(MAP_SEED, to.q, to.r), fz = wall ? null : fortressAt(MAP_SEED, to.q, to.r, worldEditsNow);
+      let prev = null; try { prev = JSON.parse(vme.ram_json || 'null'); } catch { prev = null; }
+      const ok = !!(wall || fz) && hexD(from, to) === 1 && !nextTiles.has(me);
+      const n = ok ? (prev && prev.q === to.q && prev.r === to.r && prev.at === hg.action - 1 ? (prev.n | 0) : 0) + 1 : 0;
+      const broke = ok && n >= (sg.rounds || 3);
+      const what = fz ? fz.source || 'fortress' : isVillageWallAt(MAP_SEED, to.q, to.r) ? 'village wall' : 'wall';
+      classAbilityOut.siegeRams.push({ by: me, owner: vme.owner_peer_id || '', q: to.q, r: to.r, n, broke, kind: fz ? 'fortress' : 'wall',
+        village: broke && wall && isVillageWallAt(MAP_SEED, to.q, to.r) ? villageAround(MAP_SEED, to.q, to.r)?.id || null : null });
+      log(`[${PEER_LABEL}] siege ${who} (${sg.class}): ${!ok ? `no wall next to it at (${to.q},${to.r}) — the blows start again` : broke ? `the ${what} at (${to.q},${to.r}) breaks (${n} blows in a row)` : `strikes the ${what} at (${to.q},${to.r}) — ${n}/${sg.rounds || 3} in a row`}`);
+      continue;
+    }
+    if (vme.siege_turn === hg.turn) { log(`[${PEER_LABEL}] siege ${who} (${sg.class}): already used this turn — ready again next turn`); continue; }
+    const shot = makeShot(sg, from, to, hg.action, `${me.slice(-6)}:${hg.action}`);
+    if (!shot) { log(`[${PEER_LABEL}] siege ${who} (${sg.class}): (${to.q},${to.r}) is ${hexD(from, to)} hexes off — out of its reach ${sg.min}..${sg.max}`); continue; }
+    classAbilityOut.siegeShots.push({ by: me, shot });
+    log(`[${PEER_LABEL}] siege ${who} (${sg.class}): ${sg.kind === 'catapult' ? 'a stone' : 'a bolt'} flies at (${to.q},${to.r}), ${hexD(from, to)} hexes — it strikes on action ${shot.at + 1}${shotEnds(shot) > shot.at + 1 ? `..${shotEnds(shot)}` : ''}`);
+  }
   for (const e of elementalistPending) {
     if (!effectOutcomes.some(x => x.actor === e.actor && !x.bonus && !x.channel && x.oc.status === 'done' && (x.oc.hits || []).length)) continue;
     // CR: elementalist — once per ACTION (2026-11-17): a perAction class is never marked used for the turn
@@ -5362,6 +5440,24 @@ async function doResolution() {
       if (dmg > 0 && hit.healDealt) oc.heals.push({ on: actor, amount: dmg });
       if (spent && defId === PEER_ID_STRING && shieldSkill && !brokenShield.includes(shieldSkill)) brokenShield.push(shieldSkill);   // the spent shield's id(s)
       if (actor === PEER_ID_STRING || defId === PEER_ID_STRING) log(`[${PEER_LABEL}] cast ${eff.effect_id} [${eff.elements.join('+')}] ${actor.slice(0, 8)} → ${defId.slice(0, 8)}: ${legs.map(l => `${l.kind} Σ${l.sum}`).join(' + ')}${spent ? ` (shield −${spent})` : ''}${zoned ? ' (no-damage zone)' : ''} → ${dmg} dmg`);
+    }
+  }
+  // Siege ammunition in flight (user 2026-11-25, js/siege.js): every engine's shots (its snapshot siege_shots_json)
+  // strike the hexes due this action — 1 damage to each enemy of the engine standing there after this action's moves;
+  // a stone (catapult) lands on its one hex, a bolt (ballista) passes hexes 1..3. A flying ammunition: walls do not stop it.
+  if (!bonusRound) for (const id of [...view.keys()].sort()) {
+    const sv = view.get(id);
+    if (!sv?.siege_shots_json) continue;
+    let shots = []; try { shots = JSON.parse(sv.siege_shots_json); } catch { shots = []; }
+    for (const s of Array.isArray(shots) ? shots : []) for (const h of shotStrikes(s, hg.action)) {
+      const why = s.kind === 'catapult' ? 'Catapult stone' : 'Ballista bolt';
+      const hit = [...view.keys()].filter(o => o !== id && lifeOf(o) > 0 && enemyOf(id, o) && (() => { const t = postTile(o); return t && t.tile_q === h.q && t.tile_r === h.r; })()).sort();
+      for (const o of hit) {
+        let d = untouchable(o, id, true) ? 0 : 1;
+        if (d > 0 && absorbedByShieldToken(o)) d = 0;
+        if (d > 0) addDmg(o, id, d, 'effect', why);
+      }
+      log(`[${PEER_LABEL}] siege: ${sv.name || id.slice(0, 14)}'s ${why.toLowerCase()} ${s.kind === 'catapult' ? 'lands' : 'passes'} at (${h.q},${h.r}) — ${hit.length ? hit.map(o => view.get(o)?.name || o.slice(0, 8)).join(', ') + ' hit' : 'nobody there'}`);
     }
   }
   // Death Ward: a warded unit that would die this action keeps 1 hp and is moved
@@ -7336,7 +7432,25 @@ function villageTick() {
     if (villageLogged.get(v.id) !== sum) { villageLogged.set(v.id, sum); console.log(`[${PEER_LABEL}] village: ${v.team} — ${sum}`); }
   }
 }
-setInterval(() => { try { villageTick(); questTick(); trespassTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
+// Test games (GAMEMODELS_TEST_NPC=<npc id>, private dimensions only — the GameModels editor's test): one unit of that
+// NPC ~6 hexes from the hero, a unit of the nearest village (its home: where it stands), label test_npc_<id>.
+function testNpcTick() {
+  const id = process.env.GAMEMODELS_TEST_NPC;
+  if (!id || !DIM_PRIVATE || !GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0 || !dimMap) return;
+  const label = `test_npc_${id.replace(/[^a-z0-9]+/gi, '_')}`;
+  if (peersPublic.has(`peer:${label}`) || companions.some(c => c.label === label) || villageSpawning.has(label)) return;
+  const npc = GAMEMODELS.npcs[id];
+  if (!npc) { if (!testNpcTick.warned) { testNpcTick.warned = true; console.warn(`[${PEER_LABEL}] GAMEMODELS_TEST_NPC: no npc "${id}" in the catalog`); } return; }
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const v = villagesNear(MAP_SEED, me.q, me.r, 400)[0];
+  if (!v) return;
+  const occupied = new Set(livePeers().filter(p => p && Number.isInteger(p.tile_q)).map(p => `${p.tile_q},${p.tile_r}`));
+  const at = tileInRing(me, { min: 5, max: 7, seed: MAP_SEED, salt: label, occupied, isBlocked: (q, r) => !dimMap.has(q, r) || !hexWalkableAt(MAP_SEED, q, r) });
+  if (!at) return;
+  console.log(`[${PEER_LABEL}] test npc: ${npc.name} (${id}) of ${v.team} at (${at.q},${at.r})`);
+  spawnVillager(v, { npc: id, q: at.q, r: at.r, label, name: `${npc.name} of ${v.name}` });
+}
+setInterval(() => { try { villageTick(); questTick(); trespassTick(); testNpcTick(); } catch (e) { console.warn(`[${PEER_LABEL}] village tick: ${e.message}`); } }, 5_000).unref?.();
 // A villager (not a follower): walks back in when no hero has been near for 90 s, or leaves to follow a hero.
 let villagerHeroAt = Date.now(), villagerRecsSeen = '';
 if (NPC_DEF && !IS_FOLLOWER) setInterval(() => {
@@ -7745,10 +7859,13 @@ async function npcPlanRules() {
     if (dOwner > 1 && !near.length && !IS_GOLEM) {
       const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
       const spot = hexNeighbours(owner.tile_q, owner.tile_r).filter(t => dimMap.has(t.q, t.r) && !occ.has(`${t.q},${t.r}`)).sort((a, b) => hexDistance(here, { tile_q: a.q, tile_r: a.r }) - hexDistance(here, { tile_q: b.q, tile_r: b.r }))[0];
+      // A villager who follows a hero walks round walls (npcStepToward's BFS) — the greedy step stuck it behind its
+      // village gate with the gate guard on the outer post (2026-11-25).
+      const via = IS_FOLLOWER ? npcStepToward(spot || { q: owner.tile_q, r: owner.tile_r }) : null;
       const mi = hand.findIndex(c => c.code === 'M');
-      queued = mi >= 0 && hexDistance(here, { tile_q: spot?.q ?? owner.tile_q, tile_r: spot?.r ?? owner.tile_r }) <= 1 ? [mi] : ['EMPTY'];
+      queued = mi >= 0 && (via || hexDistance(here, { tile_q: spot?.q ?? owner.tile_q, tile_r: spot?.r ?? owner.tile_r }) <= 1) ? [mi] : ['EMPTY'];
       queuedSkills = []; queuedExtra = null;
-      target = spot ? { q: spot.q, r: spot.r } : { q: owner.tile_q, r: owner.tile_r };
+      target = via || (spot ? { q: spot.q, r: spot.r } : { q: owner.tile_q, r: owner.tile_r });
       return;
     }
     if (!near.length) { const pi = hand.findIndex(c => c.code === 'P' || c.code === 'B'); queued = pi >= 0 ? [pi] : ['EMPTY']; queuedSkills = []; queuedExtra = null; target = null; return; }

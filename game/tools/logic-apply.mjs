@@ -15,7 +15,7 @@
 // re-serialises with 2-space indentation like the rest of data/.
 import fs from 'node:fs';
 import path from 'node:path';
-import { LogicEngine, DATA_DIR, activeVersion, writeDataFile, definitionsDirOf } from '../logic-engine.mjs';
+import { LogicEngine, DATA_DIR, activeVersion, writeDataFile, authoredElsewhere } from '../logic-engine.mjs';
 
 const args = process.argv.slice(2);
 const file = args.find(a => !a.startsWith('--'));
@@ -28,7 +28,7 @@ if (!collection || !map.entries) { console.error('mapping needs { collection, en
 const eng = new LogicEngine();
 // Effect isolation F9: a collection read from definitions (index.json `definitions`) has no data file to write — its
 // logic blocks live in the definitions' card blocks (authored in their own repo). Skipped, not an error (apply-all.sh).
-if (definitionsDirOf(eng.index, collection)) { console.log(`${collection}: skipped — read from ${definitionsDirOf(eng.index, collection)} (card.logic); edit the definitions instead`); process.exit(0); }
+if (authoredElsewhere(eng.index, collection)) { console.log(`${collection}: skipped — read from ${authoredElsewhere(eng.index, collection)} (card.logic); edit the definitions instead`); process.exit(0); }
 const dataPath = path.join(DATA_DIR, `${collection}.json`);
 const json = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
 const byId = new Map((json.entries || []).map(e => [e.id, e]));

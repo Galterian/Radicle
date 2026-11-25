@@ -69,6 +69,8 @@ function getDefsIndex() {
   return S.defsIndex;
 }
 const isDefinitions = (cid) => !!collOf(cid)?.definitions;
+// split A (2026-11-25): creatures = the chaosD6-GameModels monster cards, read from the compiled catalog
+const isCatalog = (cid) => !!collOf(cid)?.catalog;
 const kindOfCollection = (cid) => KIND_OF[collOf(cid)?.id || cid] || null;
 function invalidate(x) {
   const file = fileOf(x);
@@ -229,6 +231,7 @@ function renderNav() {
       items.push(el('a', { class: 'nav-item' + (c.id === active ? ' active' : ''), href: '#/' + c.id, title: c.purpose || '' },
         el('span', { class: 'nav-name' }, prettyId(c.id)),
         c.definitions ? el('span', { class: 'badge-defs', title: 'Cards built from the definitions in ' + c.definitions }, 'defs') : null,
+        c.catalog ? el('span', { class: 'badge-defs', title: 'Cards of the chaosD6-GameModels definitions (' + c.catalog + ')' }, 'models') : null,
         el('span', { class: 'nav-count' + (json ? ' loaded' : '') }, n ?? '')));
     }
   }
@@ -295,7 +298,7 @@ async function renderList(coll) {
   filter.addEventListener('input', debounce(paint, 120));
   list.replaceChildren(el('div', { class: 'list-head' },
     el('div', { class: 'list-title' }, el('h2', null, prettyId(coll.id)), el('span', { class: 'muted' }, `${entries.length} entries`),
-      coll.definitions ? el('span', { class: 'badge-defs' }, 'definitions') : null),
+      coll.definitions ? el('span', { class: 'badge-defs' }, 'definitions') : null, coll.catalog ? el('span', { class: 'badge-defs' }, 'GameModels') : null),
     filter), body);
   paint();
 }
@@ -369,7 +372,7 @@ async function renderCollectionOverview(coll) {
   const top = Object.fromEntries(Object.entries(json).filter(([k]) => !['entries', 'collection', 'notes'].includes(k)));
   setDetail(el('div', { class: 'card overview' },
     el('div', { class: 'detail-title' }, el('h2', null, prettyId(coll.id)), el('span', { class: 'mono muted' }, coll.file)),
-    pillRow(null, pillTag(entries.length + ' entries'), coll.writes ? pillTag('writes: ' + coll.writes) : null, coll.definitions ? pillTag('definitions: ' + coll.definitions) : null,
+    pillRow(null, pillTag(entries.length + ' entries'), coll.writes ? pillTag('writes: ' + coll.writes) : null, coll.definitions ? pillTag('definitions: ' + coll.definitions) : null, coll.catalog ? pillTag('GameModels: monsters/<id>.json (' + coll.catalog + ')') : null,
       ...Object.entries(tally).map(([st, n]) => el('span', { class: 'pill-pair' }, statusPill(st), ' ' + n))),
     coll.purpose ? prose(coll.purpose) : null,
     typeof json.notes === 'string' ? [el('h4', { class: 'section-h' }, 'Notes'), prose(json.notes)] : null,
@@ -570,7 +573,7 @@ async function route() {
 
 /* ------------------------------------------------------------------ ctx for author.js (EDITOR_SPEC.md) */
 const ctx = {
-  session: null, api, refreshSession, index: null, getCollection, getDefinition, isDefinitions, kindOfCollection, activeVersion,
+  session: null, api, refreshSession, index: null, getCollection, getDefinition, isDefinitions, isCatalog, kindOfCollection, activeVersion,
   toast, openSheet, confirm: confirmDialog, registerHeaderAction, registerEntryAction, registerRoute, navigate, invalidate, jsonfmt, el,
 };
 

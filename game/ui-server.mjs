@@ -41,17 +41,17 @@ import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tile
   dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
 import { seedForDimension } from './js/map.js';
 import { hexDistance } from './js/hex.js';
-import { setVillageCatalog, villageCatalogReady, villageOfCell } from './js/villages.js';
+import { setVillageCatalog, villageCatalogReady, villageOfCell, testCatalogOverrides, gameModelsCatalogTries } from './js/villages.js';
 // The spawn cell's village (GameModels catalog loaded once, lazily) — TEST_NEAR_VILLAGE starts the roster next to it.
 function villageNearSpawn(seed) {
   if (!villageCatalogReady()) {
-    const f = [path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'gamemodels', 'catalog.json')].find(x => fsSync.existsSync(x));
-    if (f) { try { setVillageCatalog(JSON.parse(fsSync.readFileSync(f, 'utf8'))); } catch {} }
+    const f = gameModelsCatalogTries([path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'gamemodels', 'catalog.json')], process.env).find(x => fsSync.existsSync(x));
+    if (f) { try { setVillageCatalog(testCatalogOverrides(JSON.parse(fsSync.readFileSync(f, 'utf8')), process.env)); } catch {} }
   }
   return villageCatalogReady() ? villageOfCell(seed, 0, 0) : null;
 }
 import { randomBytes } from 'node:crypto';
-import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
+import { definitionsCollectionText, readCollection } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API), launcher only
 import { handleProfileApi, attachProfileSync, profilePath, loadProfile, characterOf, topCharacter, teamCharacters, profileEnv } from './profile.mjs';
 import { testPriorityEnv } from './test-priority.mjs';   // Test Random character: my drafts, then my team's published defs first (user 2026-11-23)
@@ -73,7 +73,7 @@ function randomCharacter() {
 // "Monster" joins (creatureId 'random'): any creature that isn't rejected / superseded.
 function randomCreature() {
   try {
-    const doc = JSON.parse(fsSync.readFileSync(path.join(DATA_DIR, 'creatures.json'), 'utf8'));
+    const doc = readCollection(DATA_DIR, 'creatures');
     const list = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status)));
     const e = list[Math.floor(Math.random() * list.length)];
     if (e) { console.log(`[launcher] random creature: ${e.id} (of ${list.length})`); return { id: e.id, name: e.name || e.id }; }
@@ -83,7 +83,7 @@ function randomCreature() {
 // A creature id's display name from creatures.json (the id itself when unknown).
 function creatureName(id) {
   try {
-    const doc = JSON.parse(fsSync.readFileSync(path.join(DATA_DIR, 'creatures.json'), 'utf8'));
+    const doc = readCollection(DATA_DIR, 'creatures');
     return (doc.entries || []).find(e => e?.id === id)?.name || id;
   } catch { return id; }
 }
@@ -1211,6 +1211,13 @@ const server = http.createServer(async (req, res) => {
   // Binary files resolve through symlinks into ../../warlords_battlecry_resources;
   // readFile follows them, and the path-traversal check happens before.
   // Catalogue JSONs come from this repo's assets/, media from the resolved media root (asset-root.mjs).
+  // Test games (GAMEMODELS_CATALOG_FILE / GAMEMODELS_TEST_VILLAGE): the browser gets the catalog the peers read.
+  if (p === '/assets/gamemodels/catalog.json' && (process.env.GAMEMODELS_CATALOG_FILE || process.env.GAMEMODELS_TEST_VILLAGE)) {
+    const f = gameModelsCatalogTries([assetFile('gamemodels/catalog.json')].filter(Boolean), process.env).find(x => fsSync.existsSync(x));
+    if (!f) { res.writeHead(404); return res.end('not found'); }
+    try { const body = JSON.stringify(testCatalogOverrides(JSON.parse(fsSync.readFileSync(f, 'utf8')), process.env)); res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); return res.end(body); }
+    catch (e) { res.writeHead(500); return res.end(String(e.message)); }
+  }
   if (p.startsWith('/assets/')) {
     const abs = assetFile(p.slice('/assets/'.length).replace(/\.\./g, ''));
     if (!abs) { res.writeHead(404); return res.end('not found'); }

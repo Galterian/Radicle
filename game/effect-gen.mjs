@@ -456,7 +456,9 @@ export async function generateDef(spec, { idea, cfg = genConfig(process.env), fe
   if (!idea || !String(idea).trim()) return { ok: false, error: `describe the ${spec.kind}`, tries: [] };
   taken ||= spec.taken();
   // compact (2026-11-23): pretty-printed JSON cost the 8B a third more tokens — at 0.75 tok/s on OCI that is minutes
-  const messages = [{ role: 'system', content: `${spec.systemPrompt()}\n\nWrite the JSON object compactly on ONE line: no indentation, no line breaks.` },{ role: 'user', content: `New ${spec.kind}: ${String(idea).trim().slice(0, 1000)}\n/no_think` }];
+  const messages = [{ role: 'system', content: `${spec.systemPrompt()}\n\nWrite the JSON object compactly on ONE line: no indentation, no line breaks.` },{ role: 'user', content: prior?.source?.collection === 'gamemodels'   // an edit of a repo definition (gm-gen.mjs): not "new"
+    ? `Here is an existing ${spec.kind}. The player wants: ${String(idea).trim().slice(0, 1000)}\n/no_think`
+    : `New ${spec.kind}: ${String(idea).trim().slice(0, 1000)}\n/no_think` }];
   if (prior && typeof prior === 'object') {
     messages.push({ role: 'assistant', content: JSON.stringify(spec.strip(prior)).slice(0, 12_000) });
     messages.push({ role: 'user', content: `Change it: ${String(changes || 'make it work as described').trim().slice(0, 2000)}\nKeep the id "${prior.id}". Answer with the whole corrected JSON object.\n/no_think` });
@@ -478,7 +480,7 @@ export async function generateDef(spec, { idea, cfg = genConfig(process.env), fe
     let def = null, res;
     if (!raw) res = { ok: false, verdict: 'reject', problems: ['the answer is not one JSON object'] };
     else {
-      def = spec.assemble(raw, { model: cfg.model, idea, taken });
+      def = spec.assemble(raw, { model: cfg.model, idea, taken, prior });
       if (prior?.id && raw.id === prior.id) def.id = prior.id;   // a retry keeps its draft's id (taken only holds the built-ins)
       const fixed = spec.autoFix ? spec.autoFix(def) : [];
       if (fixed.length) { def.source.auto_fixed = fixed; log(`attempt ${i}: auto-fixed — ${fixed.join('; ')}`); }

@@ -219,11 +219,13 @@ async function propose(ctx, body, s) {
   if (logic !== undefined && logic !== null && !isObj(logic)) fail(400, 'logic must be an object');
   const clean = (x, n) => String(x ?? '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').trim().slice(0, n);
   return withDataLock(async () => {
-    const { LogicEngine, activeVersion, writeDataFile, definitionsDirOf } = await import('./logic-engine.mjs');
+    const { LogicEngine, activeVersion, writeDataFile, definitionsDirOf, authoredElsewhere } = await import('./logic-engine.mjs');
     const index = JSON.parse(fs.readFileSync(path.join(ctx.dataDir, 'index.json'), 'utf8'));
     const c = (index.collections || []).find(x => x.id === collection);
     if (!c) fail(404, `no collection ${collection}`);
     if (definitionsDirOf(index, collection)) fail(400, `${collection} is read from ${c.definitions}: definitions are authored as a new ${collection.replace(/s$/, '')} (POST definitions), never as data proposals`);
+    // split A (2026-11-25): the monster cards are chaosD6-GameModels monster/2 definitions (published to the team branch)
+    if (authoredElsewhere(index, collection)) fail(400, `${collection} is read from ${authoredElsewhere(index, collection)}: a monster is a chaosD6-GameModels definition (monsters/<id>.json card) — change it there, never as a data proposal`);
     if (collection === 'logic_rules') fail(400, 'logic_rules is the rule vocabulary, not a versioned collection');
     const file = path.join(ctx.dataDir, c.file || `${collection}.json`);
     const json = JSON.parse(fs.readFileSync(file, 'utf8'));

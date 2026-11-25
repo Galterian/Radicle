@@ -25,6 +25,17 @@ export function setVillageCatalog(j) {
   return !!cat;
 }
 export const villageCatalog = () => cat;
+// Test-game knobs on a catalog object (node: peer.mjs, ui-server.mjs, join-plan.mjs — each process reads its env; the
+// launcher serves the browser the same overridden catalog): GAMEMODELS_TEST_VILLAGE=<template id> → the spawn cell's
+// village. The test NPC (GAMEMODELS_TEST_NPC) is spawned by the hero's peer (peer.mjs testNpcTick).
+export function testCatalogOverrides(j, env = {}) {
+  if (!j || typeof j !== 'object' || !env.GAMEMODELS_TEST_VILLAGE) return j;
+  if (!j.villages?.[env.GAMEMODELS_TEST_VILLAGE]) { console.warn(`[gamemodels] GAMEMODELS_TEST_VILLAGE: no village template "${env.GAMEMODELS_TEST_VILLAGE}" in the catalog`); return j; }
+  return { ...j, test_spawn_village: env.GAMEMODELS_TEST_VILLAGE };
+}
+// The catalog file a node process reads: GAMEMODELS_CATALOG_FILE (a test game's own compiled catalog, e.g. with
+// draft definitions) before the usual places.
+export function gameModelsCatalogTries(defaults, env = {}) { return [...(env.GAMEMODELS_CATALOG_FILE ? [env.GAMEMODELS_CATALOG_FILE] : []), ...defaults]; }
 export const villageCatalogReady = () => !!cat;
 export const onVillagesChanged = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 // Browser: fetch the catalog once (node calls setVillageCatalog with the file).
@@ -70,6 +81,9 @@ function rawVillage(seed, cx, cy) {
     const h = Object.keys(cat.villages).sort().find(t => cat.villages[t].size === 'hamlet' && cat.villages[t].race === race0);
     if (h) template = h;
   }
+  // Test games (GAMEMODELS_TEST_VILLAGE, set into the catalog by testCatalogOverrides): the spawn cell's village is
+  // that template — in the catalog, so the browser and every peer pick the same one.
+  if (cx === 0 && cy === 0 && cat.test_spawn_village && cat.villages[cat.test_spawn_village]) template = cat.test_spawn_village;
   const v = cat.villages[template], race = cat.races[v.race];
   const np = race?.village_names || { prefix: ['New'], suffix: ['town'] };
   const name = np.prefix[Math.floor(roll(seed, `n1:${cx},${cy}`) * np.prefix.length)] + np.suffix[Math.floor(roll(seed, `n2:${cx},${cy}`) * np.suffix.length)];

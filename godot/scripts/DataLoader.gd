@@ -23,6 +23,10 @@ func load_all() -> void:
 		# Effect isolation F9: a collection whose index entry names `definitions` (effects) is built from the
 		# definitions' card blocks, like game/defs-collection.mjs; its data file (a frozen record) is the fallback.
 		var parsed = _from_definitions(root, _definitions_dir(index, kind), kind)
+		# Split A (2026-11-25): a collection whose index entry names `catalog` (creatures) is read from the compiled
+		# chaosD6-GameModels catalog (assets/gamemodels/catalog.json, key `catalog_key`) — the monster/2 cards.
+		if parsed == null:
+			parsed = _from_catalog(root, index, kind)
 		if parsed == null:
 			parsed = Assets.read_json(root.path_join("data/%s.json" % kind))
 		if parsed == null:
@@ -41,6 +45,22 @@ static func _definitions_dir(index: Variant, kind: String) -> String:
 		if typeof(c) == TYPE_DICTIONARY and str(c.get("id", "")) == kind and c.has("definitions"):
 			return str(c["definitions"])
 	return ""
+
+
+## The catalog's collection ({"collection", "entries"}) for a kind whose index entry names `catalog`, or null.
+static func _from_catalog(root: String, index: Variant, kind: String) -> Variant:
+	if typeof(index) != TYPE_DICTIONARY:
+		return null
+	for c in index.get("collections", []):
+		if typeof(c) == TYPE_DICTIONARY and str(c.get("id", "")) == kind and c.has("catalog"):
+			var cat = Assets.read_json(root.path_join("assets").path_join(str(c["catalog"])))
+			if typeof(cat) != TYPE_DICTIONARY:
+				return null
+			var coll = cat.get(str(c.get("catalog_key", kind)), null)
+			if typeof(coll) == TYPE_DICTIONARY and typeof(coll.get("entries", null)) == TYPE_ARRAY:
+				return coll
+			return null
+	return null
 
 
 ## {"entries": [...]} from <root>/<rel>/*.json `card` blocks (one canonical version each), or null when the

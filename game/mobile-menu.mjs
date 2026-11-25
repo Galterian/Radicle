@@ -39,7 +39,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { definitionsCollectionText } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
+import { definitionsCollectionText, readCollection } from './defs-collection.mjs';   // F9: /data/effects.json = the definitions' cards
 import { handleProfileApi, profilePath, loadProfile, characterOf, teamCharacters, topCharacter } from './profile.mjs';
 import { handleEditorRequest } from './editor-api.mjs';   // rules editor /rules/* (+ its node API)
 
@@ -149,7 +149,7 @@ async function listDimensionsDefault({ limit = 30, mines = null, include = [] } 
 
 function randomEntryId(dataDir, file, fallback) {
   try {
-    const doc = JSON.parse(fsSync.readFileSync(path.join(dataDir, file), 'utf8'));
+    const doc = readCollection(dataDir, file.replace(/\.json$/, ''));   // split A: creatures from the GameModels catalog
     const ids = (doc.entries || []).filter(e => e?.id && (e.versions || []).some(v => !['rejected', 'superseded'].includes(v.status))).map(e => e.id);
     if (ids.length) return ids[Math.floor(Math.random() * ids.length)];
   } catch { /* fallback */ }

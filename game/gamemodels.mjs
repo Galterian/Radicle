@@ -31,12 +31,23 @@ export const KINDS = {
   race: ['races', 'chaosd6.race/1', /^race_[a-z0-9_]+$/],
   building: ['buildings', 'chaosd6.building/1', /^bld_[a-z0-9_]+$/],
   npc: ['npcs', 'chaosd6.npc/1', /^npc_[a-z0-9_]+$/],
-  monster: ['monsters', 'chaosd6.monster/1', /^mon_[a-z0-9_]+$/],
+  // monster/2 (2026-11-25): the definition carries its creature card (stats, life, deck — once data/creatures.json);
+  // monster/1 (an agenda only) still loads, its `creature` naming a /2 monster or a built-in creature
+  monster: ['monsters', ['chaosd6.monster/2', 'chaosd6.monster/1'], /^mon_[a-z0-9_]+$/],
   village: ['villages', 'chaosd6.village/1', /^vil_[a-z0-9_]+$/],
   quest: ['quests', 'chaosd6.quest/1', /^quest_[a-z0-9_]+$/],
   lib: ['lib', 'chaosd6.agenda-lib/1', /^agenda_[a-z0-9_]+$/],
 };
-export const ROLES = ['quest_giver', 'storyteller', 'builder', 'healer', 'guard', 'villager', 'wanderer', 'smith', 'wizard', 'mercenary', 'trader'];
+// dragon (user 2026-11-25): guards the centre building (post "centre"); engineer: builds a siege engine for a price
+// (its consume quests reward one); siege: the engine itself — a follower that only plays EP / EM (npc.siege)
+export const ROLES = ['quest_giver', 'storyteller', 'builder', 'healer', 'guard', 'villager', 'wanderer', 'smith', 'wizard', 'mercenary', 'trader', 'dragon', 'engineer', 'siege'];
+// A siege engine's class (npc.siege, user 2026-11-25), once per turn, ready at the start of each turn:
+//   catapult — a stone onto a hex min..max away (2..4), flying `speed` hexes an action: 1 damage to an enemy there
+//   ballista — a bolt along a line, hexes 1..max (3): 1 damage to each enemy on its path as it passes
+//   ram      — next to a wall for `rounds` actions in a row (3): the wall hex breaks
+export const SIEGE_KINDS = { catapult: { min: 2, max: 4 }, ballista: { min: 1, max: 3 }, ram: { min: 1, max: 1 } };
+// unit.tags the engine reads: flying (passes over walls and scenery, lands on open ground)
+export const UNIT_TAGS = ['flying'];
 export const BUILDING_ROLES = ['centre', 'keep', 'producer', 'temple', 'shop', 'lore', 'house', 'tower'];
 // What a hired builder's building does (npc.builds[].power → js/building-bonus.js, for a hero standing on it).
 export const BUILD_POWERS = ['stance', 'mend', 'draw', 'explore'];
@@ -66,11 +77,13 @@ export function loadGameModels(dir = GAMEMODELS_DIR) {
   return out;
 }
 
-// The effect / skill / creature ids this game tree knows (for checkGameModels `known`).
+// The effect / skill / creature ids this game tree knows (for checkGameModels `known`). The monster creatures are the
+// GameModels' own monster/2 cards (checked there); `creatures` = the built-in ones (data/creatures_builtin.json).
 export function knownIds(game = HERE) {
   const ids = (d) => new Set(fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.json')).map(f => f.replace(/\.json$/, '')) : []);
-  const cre = JSON.parse(fs.readFileSync(path.resolve(game, '..', 'data', 'creatures.json'), 'utf8'));
-  return { effects: ids(path.join(game, 'effects-data', 'effects')), skills: ids(path.join(game, 'skills-data', 'skills')), creatures: new Set(cre.entries.map(e => e.id)) };
+  const bf = path.resolve(game, '..', 'data', 'creatures_builtin.json');
+  const bi = fs.existsSync(bf) ? JSON.parse(fs.readFileSync(bf, 'utf8')) : { entries: [] };
+  return { effects: ids(path.join(game, 'effects-data', 'effects')), skills: ids(path.join(game, 'skills-data', 'skills')), creatures: new Set((bi.entries || []).map(e => e.id)) };
 }
 
 // Every problem as one line. `known` = { effects: Set, skills: Set, creatures: Set } (ids the game has) and
@@ -81,7 +94,7 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
   const lib = Object.values(m.lib)[0];
   if (Object.keys(m.lib).length !== 1) err.push(`lib: exactly one agenda library expected, found ${Object.keys(m.lib).length}`);
   for (const [kind, [, schema, re]] of Object.entries(KINDS)) for (const [id, d] of Object.entries(m[kind])) {
-    if (d.schema !== schema) e(id, `schema "${d.schema}" ≠ ${schema}`);
+    if (![schema].flat().includes(d.schema)) e(id, `schema "${d.schema}" ≠ ${[schema].flat().join(' | ')}`);
     if (!re.test(id)) e(id, `id must match ${re}`);
     if (kind !== 'lib' && kind !== 'village' && typeof d.name !== 'string') e(id, 'missing name');
   }
@@ -126,6 +139,26 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
     else if (u.life !== Math.round(STATS.reduce((a, k) => a + u.stats[k], 0) / 10)) e(id, `unit.life ${u.life} ≠ round(Σstats/10) (ruling 2026-10-28)`);
     if (!Number.isInteger(u.actions_per_round) || u.actions_per_round < 1 || u.actions_per_round > 4) e(id, 'unit.actions_per_round 1..4');
     for (const fx of u.deck_effects || []) if (known?.effects && !known.effects.has(fx)) e(id, `unknown deck effect ${fx}`);
+    if (u.tags !== undefined && !(Array.isArray(u.tags) && u.tags.every(t => UNIT_TAGS.includes(t)))) e(id, `unit.tags: a list of ${UNIT_TAGS.join('|')}`);
+    // breath (a dragon's Breath Attack): its Attack strikes every enemy within `range`
+    if (u.breath !== undefined && !(Number.isInteger(u.breath?.range) && u.breath.range >= 1 && u.breath.range <= 3)) e(id, 'unit.breath: { range 1..3 }');
+    if (n.role === 'dragon' && !u.breath) e(id, 'a dragon needs unit.breath');
+    // siege (user 2026-11-25): the engine an engineer builds — { kind, class, min, max, speed?, rounds? }
+    if ((n.role === 'siege') !== (n.siege !== undefined)) e(id, 'siege: exactly the siege role has one');
+    if (n.siege !== undefined) {
+      const s = n.siege, k = SIEGE_KINDS[s?.kind];
+      if (!k) e(id, `siege.kind not in ${Object.keys(SIEGE_KINDS).join('|')}`);
+      else {
+        if (typeof s.class !== 'string' || !s.class) e(id, 'siege.class: its class name ("Catapult Siege Engine")');
+        if (!(Number.isInteger(s.min) && Number.isInteger(s.max) && s.min >= k.min && s.max <= k.max && s.min <= s.max)) e(id, `siege ${s.kind}: min ${k.min}..max ${k.max}`);
+        if (s.kind !== 'ram' && !(Number.isInteger(s.speed) && s.speed >= 1 && s.speed <= 4)) e(id, 'siege.speed: hexes the ammunition flies per action (1..4)');
+        if (s.kind === 'ram' && !(Number.isInteger(s.rounds) && s.rounds >= 1 && s.rounds <= 6)) e(id, 'siege.rounds: actions in a row next to a wall (1..6)');
+      }
+      if (n.quests?.length || n.builds) e(id, 'a siege engine gives no quests and builds nothing');
+    }
+    // an engineer's price: consume quests whose allies reward is one siege engine
+    if (n.role === 'engineer' && !(n.quests || []).some(q => m.quest[q]?.consume && (m.quest[q].rewards || []).some(r => r.kind === 'allies' && (r.units || []).some(u => m.npc[u]?.role === 'siege'))))
+      e(id, 'an engineer needs a consume quest whose allies reward is a siege engine');
     for (const q of n.quests || []) if (m.quest[q]?.giver !== id) e(id, `quest ${q} missing or given by someone else`);
     if (n.role === 'quest_giver' && !(n.quests || []).length) e(id, 'a quest_giver needs quests');
     if (n.role === 'trader' && !(n.quests || []).some(q => m.quest[q]?.consume)) e(id, 'a trader needs a barter (a quest with consume: true)');
@@ -159,7 +192,22 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
     if (!n.card?.resources?.sprites?.idle?.path) e(id, 'card.resources.sprites.idle.path needed');
   }
   for (const [id, mo] of Object.entries(m.monster)) {
-    if (known?.creatures && !known.creatures.has(mo.creature)) e(id, `unknown creature ${mo.creature}`);
+    if (mo.schema === 'chaosd6.monster/1') {
+      if (m.monster[mo.creature]?.schema !== 'chaosd6.monster/2' && !(known?.creatures?.has(mo.creature) ?? true)) e(id, `unknown creature ${mo.creature} (a monster/2 of this repo or a built-in creature)`);
+    } else {
+      // the creature card (chaosD6 VersionedEntry data, one canonical version): its stats, life by the ruling, its deck
+      const c = mo.card, d = c?.data || {};
+      if (mo.creature !== undefined) e(id, 'monster/2 has no creature: its card is the creature');
+      if (typeof c?.name !== 'string' || !c.name) e(id, 'card.name needed');
+      if (!/^\d+\.\d+\.\d+$/.test(c?.version || '')) e(id, 'card.version (semver of the creature card) needed');
+      if (!Array.isArray(c?.tags)) e(id, 'card.tags must be a list');
+      if (!STATS.every(k => Number.isInteger(d.stats?.[k]) && d.stats[k] >= 0)) e(id, 'card.data.stats needs integer vitality/world/matter/will');
+      else if (d.life !== Math.round(STATS.reduce((a, k) => a + d.stats[k], 0) / 10)) e(id, `card.data.life ${d.life} ≠ round(Σstats/10) (ruling 2026-10-28)`);
+      if (!Number.isInteger(d.actions_per_round) || d.actions_per_round < 1 || d.actions_per_round > 4) e(id, 'card.data.actions_per_round 1..4');
+      for (const fx of [...(d.deck_effects || []), ...(d.innate_effect ? [d.innate_effect] : [])]) if (known?.effects && !known.effects.has(fx)) e(id, `unknown effect ${fx}`);
+      for (const l of c?.rebalance_links || []) if (!m.monster[l] && !(known?.effects ? known.effects.has(l) : /^effect_/.test(l))) e(id, `rebalance_links: ${l} is neither a monster nor an effect`);
+      for (const s of Object.values(c?.resources?.sprites || {})) sprite(id, s?.path);
+    }
     agendaCheck(id, mo.agenda);
   }
   for (const [id, q] of Object.entries(m.quest)) {
@@ -213,6 +261,10 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
         if (!w) e(id, `resident ${rs.npc}: post "outside" needs a wall`);
         else if (!(dist(rs.at) > w.radius && dist(rs.at) <= cr)) e(id, `resident ${rs.npc}: post "outside" stands between the wall and the cleared edge (${w.radius} < d ≤ ${cr})`);
         else if (nextToGate) e(id, `resident ${rs.npc}: post "outside" must not stand next to the gate`);
+      } else if (rs.post === 'centre') {
+        // the village dragon (user 2026-11-25): next to the centre building, which it guards
+        if (dist(rs.at) !== 1) e(id, `resident ${rs.npc}: post "centre" stands next to the centre building (distance 1)`);
+        if (m.npc[rs.npc]?.role !== 'dragon') e(id, `resident ${rs.npc}: only a dragon holds post "centre"`);
       } else if (dist(rs.at) > v.radius) e(id, `resident ${rs.npc} outside the radius`);
       else if (rs.post !== undefined) e(id, `resident ${rs.npc}: unknown post "${rs.post}"`);
     }
@@ -244,10 +296,20 @@ export function compileCatalog(m) {
     races: Object.fromEntries(Object.entries(m.race).map(([id, r]) => [id, pick(r, ['name', 'temper', 'village', 'village_names', 'person_names', 'wbc3_race'])])),
     buildings: Object.fromEntries(Object.entries(m.building).map(([id, b]) => [id, { ...pick(b, ['name', 'race', 'role', 'bank', 'blocks', 'produces', 'text']), sprites: b.card.resources.sprites }])),
     villages: Object.fromEntries(Object.entries(m.village).map(([id, v]) => [id, pick(v, ['race', 'size', 'team', 'radius', 'clear_radius', 'cap', 'layout', 'residents', 'wanderers', 'reputation', 'quests', 'wall'])])),
-    npcs: Object.fromEntries(Object.entries(m.npc).map(([id, n]) => [id, { ...pick(n, ['name', 'race', 'role', 'home', 'persona', 'lines', 'quests', 'unit', 'talk', 'builds', 'build_max']), agenda: compileAgenda(n.agenda, lib), resources: n.card.resources }])),
-    monsters: Object.fromEntries(Object.entries(m.monster).map(([id, mo]) => [id, { creature: mo.creature, agenda: compileAgenda(mo.agenda, lib) }])),
+    npcs: Object.fromEntries(Object.entries(m.npc).map(([id, n]) => [id, { ...pick(n, ['name', 'race', 'role', 'home', 'persona', 'lines', 'quests', 'unit', 'talk', 'builds', 'build_max', 'siege']), agenda: compileAgenda(n.agenda, lib), resources: n.card.resources }])),
+    monsters: Object.fromEntries(Object.entries(m.monster).map(([id, mo]) => [id, { creature: mo.creature ?? id, agenda: compileAgenda(mo.agenda, lib) }])),
+    // the creatures collection (data/index.json creatures → catalog_key): the monster/2 cards as chaosD6 VersionedEntries
+    creatures: creaturesCollection(m),
     quests: Object.fromEntries(Object.entries(m.quest).map(([id, q]) => [id, pick(q, ['name', 'race', 'giver', 'need_text', 'need', 'consume', 'rewards', 'repeatable'])])),
   };
+}
+
+// monster/2 cards → { collection: 'creatures', entries } (one canonical version each, like defs-collection.mjs F9).
+export function creaturesCollection(m) {
+  const entries = Object.values(m.monster).filter(mo => mo.schema === 'chaosd6.monster/2' && mo.card).sort((a, b) => a.id.localeCompare(b.id))
+    .map(mo => ({ id: mo.id, name: mo.card.name, tags: mo.card.tags || [], ...(mo.card.resources ? { resources: mo.card.resources } : {}),
+      versions: [{ version: mo.card.version, status: 'canonical', weight: 1, data: mo.card.data, ...(mo.card.rebalance_links ? { rebalance_links: mo.card.rebalance_links } : {}), ...(mo.card.logic ? { logic: mo.card.logic } : {}) }] }));
+  return { collection: 'creatures', source: 'chaosD6-GameModels monsters/', entries };
 }
 
 // The id → sha256 index the repo carries (like the effects/skills/classes repos).
@@ -261,7 +323,7 @@ export function buildIndex(m) {
 // monster/companion with its own stats, deck and life.
 export function npcCreatureEntries(catalog) {
   return Object.fromEntries(Object.entries(catalog?.npcs || {}).map(([id, n]) => [id, {
-    id, name: n.name, tags: ['npc', n.role],
+    id, name: n.name, tags: ['npc', n.role, ...(n.unit.tags || [])],
     data: { stats: n.unit.stats, life: n.unit.life, actions_per_round: n.unit.actions_per_round, dice_pattern: null, innate_effect: n.unit.innate_effect || null, on_action_rider: null, deck_effects: n.unit.deck_effects || [] },
   }]));
 }

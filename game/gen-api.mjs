@@ -5,7 +5,10 @@
 //   GET  drafts/<draft_id>     → { draft }   (def, state, status line, test result, suggestions, log)
 //   GET  vocab?kind=effect|skill|class → { groups: [{ id, label, values }] }   the tag chips (gen-tags.mjs)
 //   GET  resources             → { sprites: [{path, name, in_pack, grid}], sounds, units: [{race, unit, sounds}] }   game/gen-resources.json
-//   POST create   { kind, idea, tags[], resources: {sprite, sound} | {unit: "<race>/<unit>"} (a class) }  → { draft }   starts the generation
+//   GET  gm                    → { available, edit: [{kind, id, name, race, role}], looks: {npc: [...], building: [...], monster: [...]}, races, villages }
+//                                  the GameModels kinds (npc, building, monster; gm-gen.mjs): what to start from, whose art to borrow
+//   POST create   { kind, idea, tags[], resources: {sprite, sound} | {unit: "<race>/<unit>"} (a class) | {npc|building: id}
+//                   (a GameModels look; monster: {monster: id}), base?: an NPC / building / monster id to change (GameModels kinds) }  → { draft }   starts the generation
 //   POST retry    { draft_id, extra, suggestions[], tags?, resources? } → { draft }   regenerates from the preview + the changes
 //   POST media    { draft_id, resources }                → { draft }   the picture / sound only (not priced, no regeneration)
 //   POST test     { draft_id }                       → { draft }   starts the private background test game
@@ -24,6 +27,8 @@ import { genConfig } from './effect-gen.mjs';
 import { publishDefinition } from './editor-publish.mjs';
 import { loadProfile, addArchivedCard, addCustomClass } from './profile.mjs';
 import { vocab } from './gen-tags.mjs';
+import { GM_KINDS, catalogForEdit, models as gmModels } from './gm-gen.mjs';
+import { GAMEMODELS_DIR } from './gamemodels.mjs';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +65,12 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
   // unit's whole voice set from the catalogue (user 2026-11-23)
   const pickOf = (r, kind = 'effect') => {
     if (!r || typeof r !== 'object') return null;
+    if (GM_KINDS.includes(kind)) {   // a look-alike: an NPC / building of the GameModels repo whose art the draft borrows
+      const k = kind, id = r[k] ? String(r[k]) : '';
+      if (!id) return null;
+      if (!gmModels()[k]?.[id]) fail(400, `no ${k} ${id} in chaosD6-GameModels`);
+      return { [k]: id };
+    }
     const c = resourceCatalogue();
     if (kind === 'class') {
       if (!r.unit) return null;
@@ -123,7 +134,21 @@ export async function handleGenApi(req, res, url, sub, ctx, { readJsonBody, requ
       requireLogin(ctx);
       const b = await readJsonBody(req);
       const kind = String(b.kind || 'effect');
-      return sendJson(res, 200, { ok: true, draft: call(() => jobs.create({ kind, idea: typeof b.idea === 'string' ? b.idea : '', tags: Array.isArray(b.tags) ? b.tags : [], resources: pickOf(b.resources, kind) })) });
+      return sendJson(res, 200, { ok: true, draft: call(() => jobs.create({ kind, idea: typeof b.idea === 'string' ? b.idea : '', tags: Array.isArray(b.tags) ? b.tags : [], resources: pickOf(b.resources, kind),
+        base: GM_KINDS.includes(kind) && typeof b.base === 'string' && /^(npc|bld|mon)_[a-z0-9_]+$/.test(b.base) ? b.base : null })) });
+    }
+    case 'GET gm': {   // read-only: the GameModels checkout on this node (none on a phone yet → available false)
+      if (!GAMEMODELS_DIR) return sendJson(res, 200, { ok: true, available: false, edit: [], looks: { npc: [], building: [], monster: [] }, races: [], villages: [] });
+      const m = gmModels();
+      const sprite = (p) => (p?.path || p || null);
+      return sendJson(res, 200, { ok: true, available: true, edit: catalogForEdit({ m }),
+        looks: {
+          npc: Object.values(m.npc).map(n => ({ id: n.id, name: n.name, race: n.race, role: n.role, info: sprite(n.card?.resources?.sprites?.info), idle: sprite(n.card?.resources?.sprites?.idle), wbc3: n.card?.resources?.wbc3_name || '' })),
+          building: Object.values(m.building).map(x => ({ id: x.id, name: x.name, race: x.race, role: x.role, base: sprite(x.card?.resources?.sprites?.base), info: sprite(x.card?.resources?.sprites?.info) })),
+          monster: Object.values(m.monster).filter(x => x.card?.resources?.sprites).map(x => ({ id: x.id, name: x.name, race: x.race, role: (x.card.tags || []).join(', '), info: sprite(x.card.resources.sprites.info), idle: sprite(x.card.resources.sprites.idle), wbc3: x.card.resources.wbc3_name || '' })),
+        },
+        races: Object.values(m.race).map(r => ({ id: r.id, name: r.name, temper: r.temper || '' })),
+        villages: Object.entries(m.village).map(([id, v]) => ({ id, race: v.race, size: v.size || 'village', walled: !!v.wall })) });
     }
     case 'POST retry': {
       requireLogin(ctx);

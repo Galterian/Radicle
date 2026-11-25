@@ -30,6 +30,7 @@ import os from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { playableEffects, EFFECT_RULES, builtinEffectCatalog } from './effects.mjs';
 import { fancyLabel } from './js/names.js';
+import { readCollection } from './defs-collection.mjs';
 import { SKILLS_IMPLEMENTED, NEGATING_SKILLS, TRANCE, builtinSkillCatalog } from './skills.mjs';   // S1; skill isolation: + builtinSkillCatalog
 
 // S1: the skills the resolver plays, the negating ones and Battle Trance come from skills.mjs (SKILL_RULES).
@@ -106,7 +107,7 @@ function pickActive(entry) {
 const _catalogs = new Map();
 export function loadCatalog(dataDir) {
   if (_catalogs.has(dataDir)) return _catalogs.get(dataDir);
-  const read = (n) => Object.fromEntries(JSON.parse(fs.readFileSync(path.join(dataDir, `${n}.json`), 'utf8')).entries.map(e => [e.id, pickActive(e)]));
+  const read = (n) => Object.fromEntries(readCollection(dataDir, n).entries.map(e => [e.id, pickActive(e)]));   // split A: creatures from the GameModels catalog
   const characters = read('characters'), creatures = read('creatures'), classes = read('classes'), skills = Object.fromEntries(builtinSkillCatalog().entries.map(e => [e.id, pickActive(e)])), effects = Object.fromEntries(builtinEffectCatalog().entries.map(e => [e.id, pickActive(e)]));   // F9 / skill isolation: effect + skill cards = definitions
   const portraitOf = (r) => r?.portrait?.path || r?.sprites?.info?.path || null;
   const soundOf = (r) => r?.sounds?.select?.[0]?.path || r?.sounds?.ready?.[0]?.path || r?.sounds?.order?.[0]?.path || null;
