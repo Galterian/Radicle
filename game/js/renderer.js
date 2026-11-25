@@ -3,6 +3,7 @@ import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward, hex
 import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame, teamSource } from './sprites.js';
 import { villageColour, ALLY_GREEN, villageAround, villageWallRing } from './villages.js';
 import { hash32 } from './map.js';
+import { shotPosAt } from './siege.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
 
 // Speech balloons (AI skirmish): the speaker's name on top, the line word-wrapped to ~180 px (≤ 3 lines), the tail
@@ -70,7 +71,7 @@ function drawSpeechBalloons(ctx, balloons) {
     ctx.restore();
   }
 }
-import { loadFeatures, featureAt, featureImage, onFeaturesChanged } from './features.js';
+import { loadFeatures, featureAt, featureImage, onFeaturesChanged, isVacantHex } from './features.js';
 import { buildingBonusAt } from './building-bonus.js';
 import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
@@ -205,7 +206,8 @@ function buildVillageWalls(seed, features) {
   for (const [vid, it] of firstOf) {
     const v = villageAround(seed, it.q, it.r), ring = villageWallRing(v);
     if (!ring) continue;
-    const H = ring.hexes, n = H.length, cy = hexToPixel(v.q, v.r).y;
+    // a wall hex broken by a siege ram (vacated) is a gap like the gate
+    const H = ring.hexes.map(h => isVacantHex(h.q, h.r) ? { ...h, gate: true } : h), n = H.length, cy = hexToPixel(v.q, v.r).y;
     const add = (p, key) => pieces.push({ ...p, key, vid, cy, sprites: ring.sprites });
     const seen = (h) => shown.has(`${h.q},${h.r}`);
     for (let i = 0; i < n; i++) {
@@ -284,6 +286,7 @@ function drawWallPiece(ctx, p, seed, hexH) {
   } else ctx.drawImage(src, b.x, b.y, b.w, b.h, p.x - dw / 2, p.y + base + 2 - dh, dw, dh);
 }
 
+const SHOT_MS = 900, shotSeen = new Map();   // siege shots: "peer@action" → when that action counter was first drawn
 export function createRenderer(canvas, state) {
   const ctx = canvas.getContext('2d');
 
@@ -1095,6 +1098,31 @@ export function createRenderer(canvas, state) {
       ctx.restore();
     }
 
+    // Siege ammunition in flight (2026-11-25, js/siege.js): the engine's snapshot shots, `action` = the engine's next
+    // action; the flight of the action after launch eases in over SHOT_MS from the moment that counter was seen.
+    for (const e of state.entities) {
+      if (!e.siegeShots?.length) continue;
+      const seenKey = `${e.peerId}@${e.siegeAction}`;
+      if (!shotSeen.has(seenKey)) { if (shotSeen.size > 200) shotSeen.clear(); shotSeen.set(seenKey, now); }
+      const ease = Math.min(1, (now - shotSeen.get(seenKey)) / SHOT_MS);
+      for (const s of e.siegeShots) {
+        const p = shotPosAt(s, Math.max(0, e.siegeAction - s.at - 1 + ease));
+        if (!p) continue;
+        const c = tilePx(p.q, p.r), lift = 26 * p.arc;
+        ctx.save();
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        if (s.kind === 'ballista') {
+          const f = tilePx(s.from.q, s.from.r), a = Math.atan2(c.y - f.y, c.x - f.x);
+          ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(c.x - 9 * Math.cos(a), c.y - 8 - 9 * Math.sin(a)); ctx.lineTo(c.x + 9 * Math.cos(a), c.y - 8 + 9 * Math.sin(a)); ctx.stroke();
+        } else {
+          ctx.fillStyle = '#8a8478'; ctx.strokeStyle = '#2b2924'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(c.x, c.y - 8 - lift, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
     if (balloons.length) drawSpeechBalloons(ctx, balloons);
 
     // Threat areas my journey walks into: a ring of tiny red arrows on the hexes

@@ -1468,6 +1468,8 @@ function unattendedTagsHtml(e) {
     const n = villageCatalog()?.npcs?.[e.npc_id];
     const hostile = String(e.hostile_to_csv || '').split(',').includes(state.myPeerId);
     out.push(`<span class="ros-village${hostile ? ' hostile' : ''}" title="${escHtml(`${e.team_name || 'village'} — ${n?.role?.replace('_', ' ') || 'villager'}${e.follower ? ', follows its hero' : hostile ? ', hostile to you' : ', neutral'}`)}">🏘 ${escHtml(e.follower ? 'follower' : n?.role === 'quest_giver' ? 'quests' : n?.role?.replace('_', ' ') || 'villager')}</span>`);
+    if (e.siege_class) { const k = n?.siege || {}; out.push(`<span class="ros-builder" title="${escHtml(`${e.siege_class}: ${k.kind === 'ram' ? `next to a wall for ${k.rounds || 3} actions in a row breaks it` : `shoots ${k.min}–${k.max} hexes once a turn${k.kind === 'ballista' ? ', hurting every foe on the first ' + k.max + ' hexes of the line' : ''}`}; only Empty Posture / Empty Move`)}">⚙ ${escHtml(e.siege_class)}</span>`); }
+    if (n?.unit?.breath) out.push(`<span class="ros-village hostile" title="Breath Attack: each Attack hits every enemy within ${n.unit.breath.range}${(n.unit.tags || []).includes('flying') ? '; flies over walls' : ''}">🔥 breath ${n.unit.breath.range}</span>`);
   }
   if (Number(e?.leader) > 0) out.push(`<span class="ros-leader" title="leads ${e.leader} unattended character${e.leader === 1 ? '' : 's'}">⚑ leader ${e.leader}</span>`);
   if (e?.shadow_of) out.push(e.led_by ? `<span class="ros-follow" title="unattended — its player closed the game; it follows its master">follow ${escHtml(followLeaderName(e))}</span>`
@@ -3988,6 +3990,7 @@ function wireInput() {
           shadow: !!p.shadow_of,   // unattended (rule_unattended_character): drawn dimmed, "follow <leader>" / "unattended" tag
           leader: Number(p.leader) || 0,   // ⚑ flag: a master of unattended characters
           aiRole: p.ai_role || '',   // AI skirmish: a builder gets a 🔨 before its name
+          siegeShots: p.siege_shots_json ? (() => { try { return JSON.parse(p.siege_shots_json); } catch { return []; } })() : null, siegeAction: Number(p.action) || 0,   // a siege engine's ammunition in flight
           followName: p.shadow_of ? followLeaderName(p) : '',
           // Dimension Out countdown (rule_dimension_out): rounds left before it leaves, null = not channelling.
           dimOutLeft: Number(p.dim_out_until_turn) >= 0 && typeof state.turn === 'number' ? Math.max(0, Number(p.dim_out_until_turn) - state.turn) : null,

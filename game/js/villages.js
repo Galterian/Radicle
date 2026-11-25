@@ -272,7 +272,8 @@ export function villageById(seed, id) {
 // A hero's relationship with a village, in percent (user 2026-11-24), from the world-edit ledger:
 //   start 50 % — start_same_race 70 % when the hero's character art is of the village's race (heroRace = its WBC3 race)
 //   + each quest done (`vq:` d, +5)   − each villager the hero hurt (`vhit:<label>`, once per unit, −5)
-//   − each building of the village it broke (`bld:q,r` gone, −5)   − each time it walked inside the wall below `enter`
+//   − each building of the village it broke (`bld:q,r` gone, −5), each wall hex its siege ram broke (`vwall:q,r`, −5)
+//   − each time it walked inside the wall below `enter`
 //   (`ventry:`, −5); clamped to 0..100. Under `hostile` (40) the village attacks it in its threat area; at `enter`
 //   (70) the gate opens; at `ally_all` (90) every villager fights at its side.
 export const sameRace = (v, heroRace) => {
@@ -289,6 +290,7 @@ export function villageRep(seed, v, heroId, ledger, heroRace = '') {
     if (e.id.startsWith('vq:') && e.v === v.id) rep += Number(e.d) || 0;
     else if (e.id.startsWith('vhit:') && e.v === v.id) rep += rp.villager_attacked ?? -5;
     else if (e.id.startsWith('ventry:') && e.v === v.id) rep += rp.trespass ?? -5;
+    else if (e.id.startsWith('vwall:') && e.v === v.id) rep += rp.building_broken ?? -5;   // my siege ram broke a wall hex (2026-11-25)
     else if (e.gone) { const m = /^bld:(-?\d+),(-?\d+)$/.exec(e.id); if (m && villageHexAt(seed, Number(m[1]), Number(m[2]))?.village?.id === v.id) rep += rp.building_broken ?? -5; }
   }
   return Math.max(0, Math.min(100, rep));

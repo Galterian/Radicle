@@ -247,6 +247,32 @@ assert.equal(compass({ q: 0, r: 0 }, { q: -3, r: 6 }), 'south'); assert.equal(co
   assert.equal(villageNeutral({ ...vil, follower: 1 }, wild), false, 'a follower is no villager');
   assert.equal(villageNeutral(hero, wild), false, 'no village, no say');
   console.log('villages neutral in the resolver: friendly heroes, other villages; hostile heroes + wild monsters fight');
+  // the village dragon, the engineer and his siege engines (user 2026-11-25)
+  planted(c => { delete c.npc.npc_empire_dragon.unit.breath; }, /a dragon needs unit.breath/);
+  planted(c => { c.npc.npc_empire_dragon.unit.tags = ['swimming']; }, /unit.tags: a list of/);
+  planted(c => { c.npc.npc_empire_catapult.siege.min = 1; }, /siege catapult: min 2/);
+  planted(c => { c.npc.npc_empire_ram.siege.rounds = 0; }, /siege.rounds/);
+  planted(c => { c.npc.npc_empire_catapult.quests = ['quest_empire_engine_ram']; }, /gives no quests/);
+  planted(c => { c.npc.npc_empire_reeve.siege = c.npc.npc_empire_catapult.siege; }, /exactly the siege role has one/);
+  planted(c => { c.npc.npc_empire_engineer.quests = []; for (const k of ['catapult', 'ballista', 'ram']) c.quest[`quest_empire_engine_${k}`].giver = 'npc_empire_reeve'; }, /an engineer needs a consume quest/);
+  planted(c => { c.village.vil_empire.residents.find(r => r.post === 'centre').at = [2, -1]; }, /post "centre" stands next to the centre building/);
+  planted(c => { c.village.vil_empire.residents.find(r => r.post === 'centre').npc = 'npc_empire_reeve'; }, /only a dragon holds post "centre"/);
+  for (const race of ['empire', 'high_elves']) {
+    const d = cat.npcs[`npc_${race}_dragon`], u = d.unit;
+    assert.deepEqual([u.stats.vitality, u.stats.world, u.stats.matter, u.stats.will, u.breath.range], [30, 30, 30, 30, 2], `${race} dragon 30/30/30/30, breath 2`);
+    assert.ok(u.tags.includes('flying'));
+    const vt = Object.values(cat.villages).find(v => v.race === `race_${race}` && !v.size);
+    assert.ok(vt.residents.some(r => r.npc === `npc_${race}_dragon` && r.post === 'centre') && vt.residents.some(r => r.npc === `npc_${race}_engineer`), `${race} village houses its dragon and engineer`);
+    for (const k of ['catapult', 'ballista', 'ram']) {
+      const s = cat.npcs[`npc_${race}_${k}`];
+      assert.deepEqual([s.role, s.unit.stats.matter, s.unit.stats.vitality + s.unit.stats.world + s.unit.stats.will, s.siege.kind], ['siege', 25, 0, k]);
+      const q = cat.quests[`quest_${race}_engine_${k}`];
+      assert.ok(q.consume && q.repeatable && q.rewards.some(r => r.kind === 'allies' && r.count === 1 && r.units.includes(`npc_${race}_${k}`)), `${race} ${k}: one archive card`);
+    }
+    assert.equal(goal(npc(`npc_${race}_dragon`), { foe: { dist: 2 } }), 'breathe');
+    assert.equal(goal(npc(`npc_${race}_dragon`), { me: { ...me, dist_home: 5 } }), 'leash');
+  }
+  console.log('village dragons (30×4, breath 2, flying, post centre) and engineers (catapult / ballista / ram for one card)');
 }
 console.log(`villages: ${villages} placed over 40 seeds × 49 cells, all ≥ ${MIN_APART} apart, both races used`);
 console.log('all gamemodels checks passed');

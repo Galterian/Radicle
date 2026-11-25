@@ -291,6 +291,8 @@ const mix32 = (h) => { h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 1
 const _placed = new Map();   // "q,r" → feature record
 const _vacant = new Set();   // "q,r" a building was moved away from (Awake) — no feature there
 let _placedKey = '';
+// A hex whose building or wall was moved away or broken (a siege ram breaks wall hexes, 2026-11-25).
+export const isVacantHex = (q, r) => _vacant.has(`${q},${r}`);
 // The real (catalogue) building a feature record stands for — what an Animator may copy.
 const NOT_BUILDING = /\btree\b|tree of|grove|thorns|gravestone|faerie ring/i;
 export const isBuildingFeature = (f) => !!f && (f.kind || 'building') === 'building' && !f.blocking && !NOT_BUILDING.test(f.label || '');

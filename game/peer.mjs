@@ -67,7 +67,7 @@ import { slimMemberRecord, gunMemberPatch, pickGunMember, gunMergeable, recordBy
 import { orderedMerge, pickClockRef, cohortDeadline, meshZones, resolverPeers, clockFrame, notePrior, resolverBase, pickStartClock, lastKnownClock, saveClockCand } from './merge-order.mjs';   // snapshot ordering + join / phase clock (Swarm-0407)
 import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, seedForDimension, DEFAULT_REVEAL_RADIUS, INITIAL_SIZE, featureAt, MONSTER_SIGHT_RADIUS, HERO_SIGHT_RADIUS } from './js/map.js';
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
-import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS } from './js/features.js';
+import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS, placedBuildingAt } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
 import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround, testCatalogOverrides, gameModelsCatalogTries } from './js/villages.js';
 import { npcCreatureEntries } from './gamemodels.mjs';
@@ -1387,6 +1387,50 @@ function hiredBuildPlan() {
   if (step?.stepTo) { hiredWait(`order ${o.b} at (${key}): walking from (${me.q},${me.r})`); return applyNpcPlan({ code: has('M') ? 'M' : 'EM', target: step.stepTo }); }
   hiredWait(`order ${o.b} at (${key}) waits: no way there from (${me.q},${me.r})`);
   return false;
+}
+// Siege engine (user 2026-11-25, rulings "do as recommended"): after the follow plan (npcPlanRules) — the class when
+// it has a use, else the follow step as an Empty Move / Empty Posture (an engine plays nothing else).
+//   catapult / ballista: once a turn, at the nearest enemy min..max hexes away (a catapult never at the hex next to it)
+//   ram: the wall hex (labyrinth, village wall, Barricade) or fortress nearest my hero, within 3 of it — walk next to
+//        it, then strike it every action (3 in a row break it)
+let siegeWhy = '';
+function siegeSay(why) { if (why !== siegeWhy) { siegeWhy = why; if (why) console.log(`[${PEER_LABEL}] siege engine: ${why}`); } }
+function siegePlan() {
+  if (!SIEGE || entity.life <= 0) return;
+  const me = { q: entity.tile.q, r: entity.tile.r };
+  const asEmpty = () => {   // the follow plan, as an engine plays it
+    const tile = target && typeof target === 'object' && Number.isInteger(target.q) ? target : null;
+    queued = ['EMPTY']; queuedSkills = []; queuedExtra = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; queuedDestroy = null;
+    target = tile;
+  };
+  if (SIEGE.kind === 'ram') {
+    const owner = ownerPeerId ? peersPublic.get(ownerPeerId) : null;
+    if (!owner || !Number.isInteger(owner.tile_q)) { siegeSay(''); return asEmpty(); }
+    const ot = _tq(owner), gone = worldLens(peersPublic).edits;
+    // never my own side's Barricades, nor the wall of a village that opens its gate to my hero (it would only cost
+    // the hero −5 % there): a village wall only where the hero is not welcome
+    const ours = (by) => !!by && (by === ownerPeerId || peersPublic.get(by)?.owner_peer_id === ownerPeerId);
+    const vwallOk = (q, r) => { const v = villageAround(MAP_SEED, q, r); return !v || villageRep(MAP_SEED, v, ownerPeerId, villageLedger(), '') < (v.reputation?.enter ?? 70); };
+    const breakable = (q, r) => (isLabyrinthWallAt(MAP_SEED, q, r) && !ours(placedBuildingAt(q, r)?.by) && (!isVillageWallAt(MAP_SEED, q, r) || vwallOk(q, r))) || !!fortressAt(MAP_SEED, q, r, gone);
+    const cur = entity.ram && breakable(entity.ram.q, entity.ram.r) && _hd(ot, entity.ram) <= 3 ? { q: entity.ram.q, r: entity.ram.r } : null;
+    const wall = cur || discAround(ot, 3).filter(h => breakable(h.q, h.r)).sort((a, b) => _hd(a, ot) - _hd(b, ot) || _hd(a, me) - _hd(b, me) || a.q - b.q || a.r - b.r)[0];
+    if (!wall) { siegeSay(''); return asEmpty(); }
+    if (_hd(me, wall) === 1) { siegeSay(`ramming the wall at (${wall.q},${wall.r})`); applyNpcPlan({ code: 'EP' }); queuedSiege = { q: wall.q, r: wall.r }; return; }
+    const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== PEER_ID_STRING).map(p => `${p.tile_q},${p.tile_r}`));
+    const free = (q, r) => !occ.has(`${q},${r}`) && hexWalkableAt(MAP_SEED, q, r) && !isLabyrinthWallAt(MAP_SEED, q, r) && !buildingFeatureAt(MAP_SEED, q, r);
+    const st = ringStep({ me, site: { q: wall.q, r: wall.r }, free, maxNodes: 1500 });
+    if (st?.stepTo) { siegeSay(`rolling to the wall at (${wall.q},${wall.r})`); applyNpcPlan({ code: 'EM', target: st.stepTo }); return; }
+    siegeSay(`no way to the wall at (${wall.q},${wall.r})`);
+    return asEmpty();
+  }
+  if (entity.siegeTurn === hg.turn) return asEmpty();
+  const foes = npcEnemies().filter(p => Number.isInteger(p.tile_q)).map(p => ({ p, d: _hd(me, _tq(p)) }))
+    .filter(x => x.d >= SIEGE.min && x.d <= SIEGE.max).sort((a, b) => a.d - b.d || (a.p.life ?? 0) - (b.p.life ?? 0) || a.p.peer_id.localeCompare(b.p.peer_id));
+  if (!foes.length) return asEmpty();
+  const t = foes[0].p;
+  siegeSay(`${SIEGE.class}: shooting at ${t.name || t.peer_id.slice(0, 14)} (${t.tile_q},${t.tile_r}), ${foes[0].d} hexes`);
+  applyNpcPlan({ code: 'EP' });
+  queuedSiege = { q: t.tile_q, r: t.tile_r };
 }
 function syncPlacedBuildings(view) {
   const units = [...view.entries()].map(([id, v]) => ({ peer_id: id, world_edits_json: id === PEER_ID_STRING ? JSON.stringify(entity.worldEdits || []) : v?.world_edits_json, world_ledger_json: v?.world_ledger_json }));
@@ -5903,6 +5947,30 @@ async function doResolution() {
     entity.worldEdits.push({ id, q: b.q, r: b.r, made: b.made, at: hg.action });
     _autosave?.markDirty();
   }
+  // Siege engines (2026-11-25): my shot goes into my snapshot (it strikes from the next action on, every resolver);
+  // my ram's blow count, the wall it broke (my world edit); the hero whose ram broke a village wall records that too
+  // (`vwall:q,r` — −5 % with the village, js/villages.js villageRep).
+  for (const x of classAbilityOut.siegeShots) if (x.by === PEER_ID_STRING) { entity.siegeShots.push(x.shot); entity.siegeTurn = hg.turn; }
+  for (const x of classAbilityOut.siegeRams) {
+    if (x.by === PEER_ID_STRING) {
+      entity.ram = x.n > 0 && !x.broke ? { q: x.q, r: x.r, n: x.n, at: hg.action } : null;
+      if (x.broke) {
+        const id = x.kind === 'fortress' ? `bld:${x.q},${x.r}` : `moved:${x.q},${x.r}`;
+        entity.worldEdits = entity.worldEdits.filter(e => e.id !== id);
+        entity.worldEdits.push(x.kind === 'fortress' ? { id, gone: true, at: hg.action } : { id, q: x.q, r: x.r, vacated: true, at: hg.action });
+        console.log(`[${PEER_LABEL}] siege: I broke the ${x.kind} at (${x.q},${x.r})`);
+        _autosave?.markDirty();
+      }
+    }
+    if (x.broke && x.village && x.owner === PEER_ID_STRING && !entity.worldEdits.some(e => e.id === `vwall:${x.q},${x.r}`)) {
+      entity.worldEdits.push({ id: `vwall:${x.q},${x.r}`, v: x.village, at: hg.action });
+      const v = villageById(MAP_SEED, x.village);
+      const now = v ? villageRep(MAP_SEED, v, PEER_ID_STRING, villageLedgerWithMine(), MY_RACE) : null;
+      console.log(`[${PEER_LABEL}] village: my ram broke the wall of ${v?.team || x.village} at (${x.q},${x.r}) — relationship → ${now}%`);
+      broadcastUI(handMsg({ notice: `🧱 Your ram broke the wall of ${v?.team || 'a village'} — relationship ${now}%` }));
+    }
+  }
+  if (SIEGE) entity.siegeShots = entity.siegeShots.filter(s => shotEnds(s) > hg.action);
   // Druid: my defence token on my tile.
   for (const tk of classAbilityOut.tokens) if (tk.by === PEER_ID_STRING) {
     const same = entity.tileTokens.find(x => x.kind === tk.kind && x.elem === tk.elem && x.q === tk.q && x.r === tk.r);
@@ -7266,7 +7334,8 @@ function goalPlan(goal, ctx) {
     case 'attack': {
       const f = who(goal.target);
       if (!f) return still;
-      if (f.dist <= 1) return has('A') ? { code: 'A', target: f.id } : still;
+      // a dragon breathes from where it stands (unit.breath: its Attack reaches every foe within range)
+      if (f.dist <= Math.max(1, NPC_DEF?.unit?.breath?.range || 0)) return has('A') ? { code: 'A', target: f.id } : still;
       return has('M') ? { code: 'M', target: f.id } : walkTo(f);
     }
     case 'cast': return 'rules';
@@ -7381,7 +7450,7 @@ function agendaPlan() {
 // 20), each where its home hex is on my map. A villager seen dead is gone for good (`vgone:<label>`); one that walked
 // back in (no hero near) comes out again later. Wanderers walk out when a hero comes within WANDERER_NEAR of their spot.
 const VILLAGE_NEAR = Number(process.env.VILLAGE_NEAR ?? 30);
-const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 4 : 11));   // gate guard + the 3 outside the wall + trader, builder, smith, wizard, mercenary + 2 guards (2026-11-24)
+const VILLAGE_ACTIVE = Number(process.env.VILLAGE_ACTIVE ?? (IS_MOBILE ? 4 : 13));   // gate guard + the 3 outside the wall + trader, builder, smith, wizard, mercenary + 2 guards (2026-11-24) + dragon, engineer (2026-11-25)
 const WANDERER_NEAR = Number(process.env.WANDERER_NEAR ?? 25);
 const VILLAGER_LEAVE = Number(process.env.VILLAGER_LEAVE ?? 40);
 const villageSpawning = new Set(), villageLogged = new Map();
@@ -7571,6 +7640,7 @@ const ROLE_TOPICS = {
   mercenary: [['hire', 'Will you fight at my side?']],
   trader: [['wares', 'What do you trade?']],
   healer: [['danger', 'Who comes to you wounded?']],
+  dragon: [['danger', 'What do you see from up there?']],
 };
 function talkTopics(c) {
   const fill = (s) => s.replace(/\{village\}/g, c.v?.name || 'the village');
@@ -7582,8 +7652,10 @@ function talkTopics(c) {
   const open = c.follower ? [] : c.quests.filter(x => !x.done && !x.barter);
   for (const x of open) t.push({ id: `quest:${x.id}`, ask: x.ready ? `I bring ${x.q.need_text}.` : open.length > 1 ? `What do you need? (${x.q.name})` : 'What do you need?', ready: x.ready });
   for (const x of c.follower ? [] : c.quests.filter(x => x.barter && !x.done)) {
-    const hire = x.q.rewards.some(r => r.kind === 'allies');   // a builder's price: the reward is the builder himself
-    t.push({ id: `quest:${x.id}`, ask: hire ? `Hire me — pay ${x.q.need_text.replace(/ from your archive$/, '')}` : `Trade ${x.q.need_text.replace(/ from your archive$/, '')} → ${x.q.rewards.map(r => r.kind === 'effect' || r.kind === 'skill' ? talkCardName(r.id) : '').filter(Boolean).join(', ')}`, ready: x.ready });
+    const allies = x.q.rewards.find(r => r.kind === 'allies');
+    const hire = !!allies && (allies.units || []).includes(c.def.id);   // a builder's price: the reward is the builder himself
+    const engine = !hire && allies ? (allies.units || []).map(u => GAMEMODELS.npcs[u]?.name || u).join(' / ') : '';   // an engineer's: an engine (2026-11-25)
+    t.push({ id: `quest:${x.id}`, ask: hire ? `Hire me — pay ${x.q.need_text.replace(/ from your archive$/, '')}` : engine ? `Build me a ${engine} — pay ${x.q.need_text.replace(/ from your archive$/, '')}` : `Trade ${x.q.need_text.replace(/ from your archive$/, '')} → ${x.q.rewards.map(r => r.kind === 'effect' || r.kind === 'skill' ? talkCardName(r.id) : '').filter(Boolean).join(', ')}`, ready: x.ready });
   }
   if (c.mine && c.def.role === 'builder') {
     const busy = (entity.buildOrders || []).find(o => o.to === c.p.peer_id);
@@ -7643,6 +7715,9 @@ function talkAnswer(c, topic) {
     // a hire (the reward is the giver himself): once — he works for you, or he is on his way to
     const hire = x.q.rewards.some(r => r.kind === 'allies' && (r.units || []).includes(c.p.npc_id));
     if (hire && (c.hired || c.follower)) return { text: 'I already work for you.' };
+    // an engineer's engine (2026-11-25, ruling "one engine at a time"): not while one of mine still rolls
+    const engine = x.q.rewards.some(r => r.kind === 'allies' && (r.units || []).some(u => GAMEMODELS.npcs[u]?.role === 'siege'));
+    if (engine && x.ready && mySiegeEngine()) return { text: `One engine at a time — ${mySiegeEngine()} still follows you. Bring it back to the scrapyard (let it be destroyed) and I build you another.` };
     if (!x.ready) {
       if (x.barter) return { text: `${line('quest', x.q) || `Give me ${x.q.need_text}, and you shall have ${vars(x.q).reward}.`} You have nothing of the kind on you yet.` };
       return { text: `${line('quest', x.q) || `Bring me ${x.q.need_text}.`} (${x.q.rewards.map(r => rewardWords(r, nameOf)).filter(Boolean).join(', ')})` };
@@ -7773,7 +7848,7 @@ function completeQuest(q, qid, giver, v) {
       c.from = String(giver.name || '').slice(0, 60);
       archive.push(c); got.push(`${c.name || r.id} (archive)`);
       if (profileChar) { try { addArchivedCard(PROFILE_FILE, PROFILE_CHAR_ID, { kind: r.kind, id: r.id }, `quest: ${q.name}`); } catch (e) { console.warn(`[${PEER_LABEL}] profile archive write failed: ${e.message}`); } }
-    } else if (r.kind === 'allies') got.push(...recruitFollowers(v, r, qid, giver));
+    } else if (r.kind === 'allies') got.push(...recruitFollowers(v, r, qid, giver, n));
   }
   if (d) got.unshift(`+${d}% relationship with ${v.team}`);
   console.log(`[${PEER_LABEL}] quest done: ${q.name} for ${giver.name} (${v.team}) — ${got.join(', ')}`);
@@ -7782,7 +7857,15 @@ function completeQuest(q, qid, giver, v) {
   publishPublicState().catch(() => {});
   return gave;
 }
-function recruitFollowers(v, r, qid, giver = null) {
+// The siege engine following me (its name), '' when none — an engineer builds one at a time (2026-11-25).
+function mySiegeEngine() {
+  const p = livePeers().find(x => x?.owner_peer_id === PEER_ID_STRING && x.follower && (x.life ?? 0) > 0 && GAMEMODELS?.npcs?.[x.npc_id]?.role === 'siege');
+  if (p) return p.name || GAMEMODELS.npcs[p.npc_id].name;
+  const c = companions.find(x => x.siege && !livePeers().some(y => y?.peer_id === `peer:${x.label}` && (y.life ?? 0) <= 0));
+  return c ? c.name || 'your engine' : '';
+}
+// `n` (a repeatable quest's n-th time): part of a new unit's label, so each engine is a new peer.
+function recruitFollowers(v, r, qid, giver = null, n = 0) {
   const out = [];
   const me = { q: entity.tile.q, r: entity.tile.r };
   const taken = new Set();
@@ -7794,21 +7877,22 @@ function recruitFollowers(v, r, qid, giver = null) {
       : livePeers().filter(p => p?.village_id === v.id && p.npc_id === npc && !p.follower && (p.life ?? 0) > 0 && !taken.has(p.peer_id) && Number.isInteger(p.tile_q))
         .sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)))[0];
     if (hireOfGiver && !vill) continue;
-    const label = vill ? String(vill.peer_id).replace(/^peer:/, '') : `${v.id.replace(/[^a-z0-9]+/gi, '_')}_q_${qid}_${i}`;
+    const label = vill ? String(vill.peer_id).replace(/^peer:/, '') : `${v.id.replace(/[^a-z0-9]+/gi, '_')}_q_${qid}${n ? `_${n}` : ''}_${i}`;
     if (vill) { taken.add(vill.peer_id); entity.worldEdits.push({ id: `vrec:${label}`, v: v.id, by_quest: qid, at: hg.action }); }
     const name = `${vill?.name || `${GAMEMODELS.npcs[npc].name} of ${v.name}`}`;
     spawnCompanion(null, { creature_id: npc, name, at: vill ? { q: vill.tile_q, r: vill.tile_r } : null, wild: false, label: `${label}_f`,
       env: { CHARACTER_ID: '', CREATURE_ID: npc, ENTITY_NAME: name, NPC_ID: npc, VILLAGE_ID: v.id, FOLLOWER: '1', PROFILE_TEAM: '' } })
-      .then(tag => { const c = companions.find(x => x.label === tag); if (c) c.follower = true; })
+      .then(tag => { const c = companions.find(x => x.label === tag); if (c) { c.follower = true; if (GAMEMODELS.npcs[npc].role === 'siege') { c.siege = true; c.name = name; } } })
       .catch(e => console.warn(`[${PEER_LABEL}] follower failed: ${e.message}`));
     out.push(`${name} follows you`);
   }
   return out;
 }
 async function npcPlan() {
-  npcFree = false; queuedBuild = null;
+  npcFree = false; queuedBuild = null; queuedSiege = null;
   await npcPlanRules();
   if (HIRED_BUILDER && hiredBuildPlan()) return;   // an order from my leader comes before following it
+  if (SIEGE) return siegePlan();                    // a siege engine: its class, else the follow step (EP / EM only)
   const used = AI_ROLE ? llmApply() : false;
   const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
   const calm = !npcEnemies().some(p => hexDistance(here, p) <= 2);

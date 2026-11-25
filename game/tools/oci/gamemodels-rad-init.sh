@@ -33,8 +33,12 @@ BR=$(git symbolic-ref --short HEAD)
 [ "$BR" = main ] || { echo "!! $REPO is on '$BR', expected main" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "!! $REPO has uncommitted changes" >&2; git status --short >&2; exit 1; }
 git rev-parse --verify -q HEAD >/dev/null || { echo "!! no commits yet" >&2; exit 1; }
+# the repo's tools need json-logic-js (node_modules/ is gitignored): npm first; behind the corporate proxy npm may fail —
+# then the game's own copy (the same library the game evaluates agendas with)
+if [ ! -d node_modules/json-logic-js ]; then
+  npm install --no-audit --no-fund >/dev/null 2>&1 || { echo "npm install failed — using $GAME_ROOT/game/node_modules/json-logic-js"; mkdir -p node_modules && cp -r "$GAME_ROOT/game/node_modules/json-logic-js" node_modules/; }
+fi
 node tools/manifest.mjs --check
-[ -d node_modules ] || npm install --no-audit --no-fund >/dev/null
 node tools/check.mjs >/dev/null || { echo "!! tools/check.mjs fails (pins/schema) — fix before publishing" >&2; node tools/check.mjs >&2; exit 1; }
 command -v rad >/dev/null || { echo "!! rad CLI not found" >&2; exit 1; }
 rad node status >/dev/null 2>&1 || { echo "!! local radicle-node is not running: start it (rad node start) and re-run" >&2; [ "$DRY" = 1 ] || exit 1; }
