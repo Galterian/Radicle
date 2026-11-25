@@ -315,9 +315,40 @@ const visionGrants = [];   // { kind:'vision-grant', q, r, until_turn, from_name
 // Public Nostr bus handle; created once the peer-state machinery below exists.
 // Declared up here so emitEnvelope/publishPublicState can reference it safely.
 let bus = null;
+// UI backlog guard (user 2026-11-25: the hero stopped, its peer at heap 2.4 GB — a 60 s heap sample put 907 MB of live
+// allocations in here: JSON frames queued on a tab that reads slower than ~25 units gossip). The roster (`peers`, the
+// whole livePeers() list, asked for on every gossip / Gun merge — Gun alone ~1,400 member writes/min) goes out at most
+// every PEERS_UI_MS, built when it is sent; a tab more than UI_BACKLOG behind skips the droppable frames (`evt`, the
+// event-log echo — its env.state snapshot never went to the UI anyway) and gets the roster once it has caught up.
+const UI_BACKLOG = 4 * 1024 * 1024, PEERS_UI_MS = 250;
+let peersUiTimer = null, peersUiDropped = false;
+function peersToUI(dropped = false) {
+  peersUiDropped ||= dropped;
+  for (const ws of uiClients) ws._peersDue = true;
+  if (!peersUiTimer) peersUiTimer = setTimeout(flushPeersUI, PEERS_UI_MS);
+}
+function flushPeersUI() {
+  peersUiTimer = null;
+  let payload = null, behind = false;
+  for (const ws of uiClients) {
+    if (!ws._peersDue) continue;
+    if (ws.bufferedAmount > UI_BACKLOG) { behind = true; continue; }
+    payload ||= JSON.stringify({ kind: 'peers', peers: peersForUI(), ...(peersUiDropped ? { dropped: true } : {}) });
+    try { ws.send(payload); } catch {}
+    ws._peersDue = false;
+  }
+  if (behind) peersUiTimer = setTimeout(flushPeersUI, 1000); else peersUiDropped = false;
+}
 function broadcastUI(msg) {
-  const payload = JSON.stringify(msg);
-  for (const ws of uiClients) { try { ws.send(payload); } catch {} }
+  if (msg?.kind === 'peers') { peersToUI(!!msg.dropped); return; }
+  const droppable = msg?.kind === 'evt';
+  if (droppable && msg.env?.state) msg = { ...msg, env: { ...msg.env, state: undefined } };
+  let payload = null;
+  for (const ws of uiClients) {
+    if (droppable && ws.bufferedAmount > UI_BACKLOG) continue;
+    payload ||= JSON.stringify(msg);
+    try { ws.send(payload); } catch {}
+  }
 }
 // Foreign effects (chaosD6-Effects E4, effects-handshake.mjs): refs on commit / reveal, fetch + serve over
 // /chaos/<dim>/effects/1 (bus `fx` fallback), `fx_have` on the slim snapshot. Inert with no foreign effect.
@@ -2070,7 +2101,7 @@ function receiveEnvelope(env, via) {
   if (n <= 3 || n % 50 === 0) console.log(`[${PEER_LABEL}] ${via} rx #${n}: ${env.type} from ${env.actor_peer_id}`);
   hg.otherParent = env._hash;
   tapePush(env);
-  if (env.state && mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: peersForUI() });
+  if (env.state && mergePeerState(env.state)) peersToUI();
   inboxApply(env);
   broadcastUI({ kind: 'evt', env, from_peer: true });
 }
@@ -2080,7 +2111,7 @@ libp2p.services.pubsub.addEventListener('message', (ev) => {
     const env = JSON.parse(new TextDecoder().decode(ev.detail.data)); netStat('libp2p', 'in', env?.type || env?.kind, ev.detail.data.length);
     // Full public snapshot frame (not an envelope: no tape, no hash — older builds drop it on dimension_id).
     // `clock` (M6 step 1): the slim core record sent on every clock change (publishClock) — merged the same way.
-    if ((env?.kind === 'state' || env?.kind === 'clock') && env.dim === DIM_ID) { if (mergePeerState(env.state)) broadcastUI({ kind: 'peers', peers: peersForUI() }); return; }
+    if ((env?.kind === 'state' || env?.kind === 'clock') && env.dim === DIM_ID) { if (mergePeerState(env.state)) peersToUI(); return; }
     receiveEnvelope(env, 'libp2p');
   }
   catch (e) { console.warn(`[${PEER_LABEL}] bad pubsub frame: ${e.message}`); }
@@ -2265,7 +2296,7 @@ setInterval(() => {
     const ls = Date.parse(p?.last_seen || 0);
     if (!Number.isFinite(ls) || ls < cutoff) { peersPublic.delete(id); wireHeard.delete(id); mapSync?.forget(id); swept++; }
   }
-  if (swept) broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true });
+  if (swept) peersToUI(true);
 }, 60_000);
 
 async function postJson(url, body) {
@@ -2329,7 +2360,7 @@ function mergePeerState(p, via = 'wire') {
     outPeers.set(p.peer_id, { ...prev, ...p });
     if (peersPublic.delete(p.peer_id)) {
       console.log(`[${PEER_LABEL}] out: ${p.name || p.peer_id} (${p.peer_id}) left the dimension`);
-      setTimeout(() => broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true }), 0);
+      setTimeout(() => peersToUI(true), 0);
     }
     return false;
   }
@@ -2341,7 +2372,7 @@ function mergePeerState(p, via = 'wire') {
     if (p.shadow_of || peersPublic.get(p.replaces)?.shadow_of) { supersededBy.set(p.replaces, p.peer_id); supersededBy.delete(p.peer_id); }
     peersPublic.delete(p.replaces);
     console.log(`[${PEER_LABEL}] ${p.name || p.peer_id} takes the place of ${p.replaces}`);
-    setTimeout(() => broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true }), 0);
+    setTimeout(() => peersToUI(true), 0);
   }
   noteTile(p.tile_q, p.tile_r);
   if (p.multiaddrs_csv) dialPeerAddrs(p.peer_id, p.multiaddrs_csv.split(',').filter(Boolean)).catch(() => {});
@@ -2705,7 +2736,7 @@ setInterval(() => {
     const label = `${String(p.peer_id).replace(/^peer:/, '').replace(/-r\d+$/, '')}-r${++summonSeq}`;
     const name = String(p.name || data.creatures[p.creature_id]?.name || p.creature_id);
     peersPublic.delete(p.peer_id);
-    broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true });
+    peersToUI(true);
     console.log(`[${PEER_LABEL}] ${name} (${p.peer_id}) has been silent ${Math.round((now - Date.parse(p.last_seen || 0)) / 1000)}s — a fresh one takes its place at (${p.tile_q},${p.tile_r})`);
     spawnCompanion(null, { creature_id: p.creature_id, name, at: { q: p.tile_q, r: p.tile_r }, wild: true, label, ignore: p.peer_id, env: { CHARACTER_ID: '', CREATURE_ID: p.creature_id, ENTITY_NAME: name, REPLACES_PEER_ID: p.peer_id, START_LIFE: String(p.life) } })
       .catch(e => console.warn(`[${PEER_LABEL}] replacement failed: ${e.message}`));
@@ -2741,7 +2772,7 @@ setInterval(() => {
     const label = `${String(hero).replace(/^peer:/, '')}-sh${Date.now().toString(36).slice(-5)}`;
     supersededBy.set(p.peer_id, `peer:${label}`);
     peersPublic.delete(p.peer_id);
-    broadcastUI({ kind: 'peers', peers: peersForUI(), dropped: true });
+    peersToUI(true);
     console.log(`[${PEER_LABEL}] shadow: ${p.name || hero} (${p.peer_id}) silent ${Math.round(silent / 1000)}s — it stands unattended at (${p.tile_q},${p.tile_r}) hp ${p.life}, computer-operated${p.ally_of ? ` (ally-join link ${p.ally_of})` : ''}`);
     const stats = { vitality: p.stat_vitality, world: p.stat_world, matter: p.stat_matter, will: p.stat_will };
     spawnCompanion(null, { creature_id: null, name: `${p.name || hero} (unattended)`, at: { q: p.tile_q, r: p.tile_r }, wild: true, label, ignore: p.peer_id,
@@ -2986,7 +3017,7 @@ async function publishPublicState(viaBus = false) {
     libp2p.services.pubsub.publish(TOPIC_STRONG, frame).catch(() => {});
   }
   if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/state`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, state: snap });
-  broadcastUI({ kind: 'peers', peers: peersForUI() });
+  peersToUI();
 }
 
 // Answer a newcomer (bus `who`, or a new libp2p subscriber to our topic) with our full state, after a
@@ -3020,7 +3051,7 @@ if (NOSTR_ENABLED) {
     },
     onEvent(type, payload) {
       if (type === 'env') receiveEnvelope(payload, 'bus');
-      else if (type === 'state' || type === 'clock') { if (mergePeerState(payload)) broadcastUI({ kind: 'peers', peers: peersForUI() }); }
+      else if (type === 'state' || type === 'clock') { if (mergePeerState(payload)) peersToUI(); }
       else if (type === 'who' && payload?.peer_id && payload.peer_id !== PEER_ID_STRING) whoReply('bus');
       else if (type === 'map' && busRpc && payload?.to === PEER_ID_STRING) busRpc.deliver(payload);   // map-sync request/response addressed to us (M3; metered by the bus as kind `map`)
       else if (type === 'fx' && payload?.to === PEER_ID_STRING) fxPeer.onBus(payload);   // E4 foreign-effect fetch addressed to us
@@ -3058,7 +3089,7 @@ dimRoot.get('doors').get(DOOR_ID).get('members').map().on((m) => {
   netStat('gun', 'in', 'members', m && typeof m === 'object' ? Object.keys(m).length * 24 : 0);   // ≈ bytes without a stringify
   const rec = pickGunMember(m);
   const p = rec && rec.peer_id !== PEER_ID_STRING ? gunMergeable(peersPublic.get(rec.peer_id), rec) : null;
-  if (p && mergePeerState(p, 'gun')) broadcastUI({ kind: 'peers', peers: peersForUI() });
+  if (p && mergePeerState(p, 'gun')) peersToUI();
 });
 
 // Optional discovery mirror: pull everyone's registered state and merge.
@@ -3070,7 +3101,7 @@ async function pullDiscoveryState() {
     const j = await r.json();
     let changed = false;
     for (const p of j.peers || []) if (p.state && mergePeerState(p.state)) changed = true;
-    if (changed) broadcastUI({ kind: 'peers', peers: peersForUI() });
+    if (changed) peersToUI();
   } catch {}
 }
 if (DISCOVERY_URL) { setInterval(pullDiscoveryState, 2500); setTimeout(pullDiscoveryState, 1200); }

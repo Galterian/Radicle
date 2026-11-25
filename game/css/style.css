@@ -1532,4 +1532,4 @@ html.mobile .slot.skill .card .fx-src::before { content: '⎇'; }
 #banter-strip b.foe { color: #ff9a9a; }
 #banter-strip .banter-x { position: absolute; top: 2px; right: 3px; pointer-events: auto; background: transparent; border: 0; color: #9fb0c8; cursor: pointer; font-size: 11px; padding: 0 3px; }
 #banter-strip.idle .banter-x { pointer-events: none; }
-html.mobile #banter-strip { font-size: 11px; max-width: 80%; }
+html.mobile #banter-strip { font-size: 11px; max-width: calc(100vw - var(--m-panel-w) - 24px); z-index: 22; }   /* over the deck bar (20), the hand never hides it */

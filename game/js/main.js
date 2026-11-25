@@ -3487,7 +3487,9 @@ function banterStrip(e, text) {
   }
   // Pinned to the map's bottom-left corner (fixed: the map sits in a grid / fills the phone screen).
   const r = document.getElementById('stage')?.getBoundingClientRect();
-  if (r) { box.style.left = `${Math.round(r.left + 8)}px`; box.style.bottom = `${Math.round(window.innerHeight - r.bottom + (IS_MOBILE_UI ? 150 : 8))}px`; }
+  // Phone (user 2026-11-25 "the discussion on the mobile as well"): the hand covers the map's bottom → just above the deck bar.
+  const deckTop = IS_MOBILE_UI ? document.getElementById('deck-bar')?.getBoundingClientRect().top : null;
+  if (r) { box.style.left = `${Math.round(r.left + 8)}px`; box.style.bottom = `${Math.round(Number.isFinite(deckTop) && deckTop > 40 ? window.innerHeight - deckTop + 6 : window.innerHeight - r.bottom + (IS_MOBILE_UI ? 150 : 8))}px`; }
   const li = document.createElement('li');
   const who = document.createElement('b');
   who.textContent = `${String(e.name || peerShort(e.peer_id)).replace(/^(Builder|Rival|Ally) — /, '')}: `;
