@@ -2012,17 +2012,29 @@ const actionKey = (turn, round) => turn * ROUNDS_PER_TURN + round;
 // reads the TMJ) rotates to hashgraph.1.jsonl past TAPE_MAX_BYTES, so a dimension's local footprint stays
 // ≤ 2 × cap: default 512 KB on the phone (it was 1.8 MB after 32 turns), 16 MB on desktop; 0 = unbounded.
 const TAPE_MAX_BYTES = Number(process.env.TAPE_MAX_BYTES ?? (IS_MOBILE ? 512 * 1024 : 16 * 1024 * 1024));
-let tapePruneAt = 2000;
+// Lean tape (user 2026-11-26: "fix its memory issue and you may remove the tape" — phone). Every envelope carries a
+// full public snapshot (`state`, up to ~25 KB) and on the phone the hero, villagers, allies and bots are each their own
+// peer instance in the one app, each with its own tape: up to 2000 snapshots apiece before the old prune. Only the
+// resolver's reveal loop reads env.state, and only for this action's reveals — so the tape keeps the snapshot on
+// reveals of the current + previous action, drops it everywhere else, and prunes to the last two turns once per
+// action (not at 2000 entries). The disk tape is off on the phone (TAPE_FILE=1 brings it back; desktop tools read it).
+const TAPE_FILE = process.env.TAPE_FILE ? process.env.TAPE_FILE !== '0' : !IS_MOBILE;
+const leanEnv = (e) => { if (!e.state) return e; const { state, ...rest } = e; return rest; };   // a copy: the caller still sends env
+let tapePruneAt = 2000, tapeAction = null;
 function tapePush(env) {
-  hg.tape.push(env);
+  hg.tape.push(env.type === 'evt_action_reveal' ? env : leanEnv(env));
   if (env.type === 'evt_state_hash' && env.payload?.state_hash) hg.lastStateHash = env.payload.state_hash;
-  if (hg.tape.length <= tapePruneAt) return;
+  const act = actionKey(hg.turn, hg.round);
+  if (act === tapeAction && hg.tape.length <= tapePruneAt) return;
+  tapeAction = act;
   const keepFrom = hg.turn - 1;
-  hg.tape = hg.tape.filter(e => !Number.isInteger(e.turn) || e.turn >= keepFrom);
+  hg.tape = hg.tape.filter(e => !Number.isInteger(e.turn) || e.turn >= keepFrom)
+    .map(e => e.state && Number.isInteger(e.turn) && actionKey(e.turn, e.round) < act - 1 ? leanEnv(e) : e);
   tapePruneAt = Math.max(2000, hg.tape.length * 2);
 }
 let tapeDirReady = false, tapeAppends = 0;
 async function tapeAppend(line) {
+  if (!TAPE_FILE) return;
   const abs = path.join(__dirname, 'sessions', DIM_NAME, 'hashgraph.jsonl');
   if (!tapeDirReady) { await fs.mkdir(path.dirname(abs), { recursive: true }); tapeDirReady = true; }
   await fs.appendFile(abs, line + '\n');
@@ -2351,6 +2363,12 @@ function mergePeerState(p, via = 'wire') {
   // unless it takes that place back (its snapshot names the one that replaced it). Never two copies.
   if (supersededBy.has(p.peer_id) && p.replaces !== supersededBy.get(p.peer_id)) return false;
   if (SHADOW_OF && p.replaces === PEER_ID_STRING) { shadowStepDown(p); return false; }
+  // A hero restored elsewhere under a new id replaced me: the others keep me out from now on (supersededBy). Said once,
+  // so a second live copy shows in its log (no exit: on the phone this may be the app's main process).
+  if (!SHADOW_OF && p.replaces === PEER_ID_STRING && !mergePeerState.replacedSaid) {
+    mergePeerState.replacedSaid = true;
+    console.warn(`[${PEER_LABEL}] replaced: ${p.name || p.peer_id} (${p.peer_id}, joined ${p.joined_at || '?'}) took my place (I joined ${JOINED_AT}) — the others no longer see me`);
+  }
   // Left the dimension (`out`: an unattended character alone too long, a Dimension Out): dropped, no corpse, and
   // ignored from then on — unless the same peer id joins again (a fresh joined_at, not out).
   const tomb = outPeers.get(p.peer_id);
@@ -2369,7 +2387,13 @@ function mergePeerState(p, via = 'wire') {
   notePrior(snapPrior, prev, merged);   // Swarm-0559: the statement from before its owner resolved its newest action
   peersPublic.set(p.peer_id, merged);
   if (p.replaces && p.replaces !== p.peer_id && peersPublic.has(p.replaces)) {
-    if (p.shadow_of || peersPublic.get(p.replaces)?.shadow_of) { supersededBy.set(p.replaces, p.peer_id); supersededBy.delete(p.peer_id); }
+    // Every replace keeps the replaced id out (b9 2026-11-26, phone: "my shadow and the restored me at once"): a hero
+    // restored under a NEW peer id replaces its old id, which then came back on its own snapshots and was shadowed
+    // again. Hero ↔ shadow swaps as before; any other replace only by a replacer newer than the replaced one's last
+    // statement, so an old echo naming `replaces` cannot knock a live peer out (c2).
+    const old = peersPublic.get(p.replaces);
+    const current = !old?.last_seen || Date.parse(p.last_seen || 0) >= Date.parse(old.last_seen);
+    if (p.shadow_of || old?.shadow_of || current) { supersededBy.set(p.replaces, p.peer_id); supersededBy.delete(p.peer_id); }
     peersPublic.delete(p.replaces);
     console.log(`[${PEER_LABEL}] ${p.name || p.peer_id} takes the place of ${p.replaces}`);
     setTimeout(() => peersToUI(true), 0);
@@ -6489,6 +6513,13 @@ async function doResolution() {
   // Apply changes only to my own entity in the authoritative sense.
   const myMove = nextTiles.get(PEER_ID_STRING);
   if (myMove) {
+    // Diagnostics (2026-11-26, vil_0_0_r0 T751: its own resolver moved it 3 hexes, every other peer kept it at its post
+    // — 478 turns out of step): a step of more than 2 hexes names what moved me, so the next such divergence has a cause.
+    const jump = hexDistance({ tile_q: entity.tile.q, tile_r: entity.tile.r }, { tile_q: myMove.q, tile_r: myMove.r });
+    if (jump > 2) {
+      const why = [journeyResults.get(PEER_ID_STRING), ...(relocations || []).filter(x => (x.who || x.peer_id) === PEER_ID_STRING), ...(classAbilityOut.moves || []).filter(x => x.who === PEER_ID_STRING)];
+      console.log(`[${PEER_LABEL}] self jump T${hg.turn}.R${hg.round + 1}: (${entity.tile.q},${entity.tile.r}) → (${myMove.q},${myMove.r}), ${jump} hexes — my reveal ${myLastReveal?.code || '—'} → ${JSON.stringify(myLastReveal?.target ?? null)}; ${JSON.stringify(why).slice(0, 400)}`);
+    }
     entity.tile = myMove;
     // Rogue: after a stealthy step, monsters neither wake nor chase me for the rest of the turn.
     if (classAbilityOut.stealth.includes(PEER_ID_STRING)) { CS.spendCharge(entity.classStore, entity.classId, 'threat', hg.turn, 1); console.log(`[${PEER_LABEL}] ${clShort(entity.classId)}: threat charge spent — unseen by monsters for the rest of turn ${hg.turn}`); }
