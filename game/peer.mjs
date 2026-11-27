@@ -545,11 +545,13 @@ const myGunUrl = NOGUN ? '' : `http://${PEER_PUBLIC_IP}:${PEER_PORT_GUN}/gun`;  
 console.log(`[${PEER_LABEL}] libp2p peer id = ${libp2p.peerId.toString()}`);
 console.log(`[${PEER_LABEL}] bound ${BIND_HOST}:${PEER_PORT_LIBP2P}; advertising ${myMaddrs.join(', ')}`);
 
-// Dial bootstrap peers.
-for (const addr of BOOTSTRAP_MADDRS) {
-  try { await libp2p.dial(multiaddr(addr)); console.log(`[${PEER_LABEL}] dialed ${addr}`); }
+// Dial bootstrap peers — all at once, 6 s each (2026-11-27: one by one, a phone joining a Door with ~15 unreachable
+// LAN / loopback addresses waited 10 s on each before its UI port opened — "waiting for the game on :7401 — 167 s").
+// Whoever is missed here is re-dialled later (dialPeerAddrs / healMesh).
+await Promise.allSettled(BOOTSTRAP_MADDRS.map(async (addr) => {
+  try { await libp2p.dial(multiaddr(addr), { signal: AbortSignal.timeout(6_000) }); console.log(`[${PEER_LABEL}] dialed ${addr}`); }
   catch (e) { console.warn(`[${PEER_LABEL}] dial ${addr} failed: ${e.message}`); }
-}
+}));
 
 // -------- GunDB relay (per peer) --------
 const gunHttp = NOGUN ? null : http.createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('gun relay'); });
@@ -1041,6 +1043,7 @@ async function spawnCompanionWorker(env) {
   delete env.JOIN_URI;
   const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
   (globalThis.__chaosWorkers ||= []).push(w);   // the phone's Dimension Out stops them with me (mobile-entry.mjs)
+  w.once('exit', () => { const all = globalThis.__chaosWorkers || [], i = all.indexOf(w); if (i >= 0) all.splice(i, 1); });   // a villager walking back in is let go
   const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'companion UI socket at ').replace(/peer listening on/g, 'companion listening at');
   const relabel = () => {
     let tail = '';
@@ -5405,6 +5408,12 @@ async function doResolution() {
       log(`[${PEER_LABEL}] hired builder ${vme.name || me.slice(0, 14)}: ${site ? `a ${made.label} rises at (${picked.q},${picked.r})` : `cannot build ${r.build.b} at (${picked?.q},${picked?.r}) — the hex is not free`}`);
       continue;
     }
+    // A ring site (picked) is built there or not at all (2026-11-27 "not a consistent wall around the hamlet": a taken
+    // site used to put the Barricade on a random hex next to the builder — off the ring); the planner tries again.
+    if (picked && !(hexD({ q: vme.tile_q, r: vme.tile_r }, picked) === 1 && buildSiteFree(picked))) {
+      if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] npc builder: the ring wall site (${picked.q},${picked.r}) is not free — nothing built`);
+      continue;
+    }
     const site = createBuilding(r, me, { made: barricadeMade(), range: 1, picked, why: 'builder' });
     if (me === PEER_ID_STRING) log(`[${PEER_LABEL}] npc builder: ${site ? `a Barricade rises at (${site.dest.q},${site.dest.r})${site.random ? ' — a random free hex next to me' : ''}` : 'no free hex next to me — nothing built'}`);
   }
@@ -6705,7 +6714,14 @@ async function doResolution() {
     })
     .sort((a, b) => a.id.localeCompare(b.id));
   const stateHash = digestObj(regionState);
-  if (!fxRes?.abstain && !skRes?.abstain /* S4 */ && !clRes?.abstain /* CH */ && !clVer.abstain /* phase 6 */ && !fxVer.abstain /* F9 */ && !skVer.abstain /* SV */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState });   // E4: abstain = a foreign def I could not load
+  // Local only (not hashed, not sent): how I resolved each revealer — its start tile, its move and aim, a veto, the
+  // action its held snapshot had resolved — so a STATE DIVERGENCE line says on each side where the two parted
+  // (2026-11-27: Swarm-0506 T15.R2, the monsters put player-1's new summon one hex off and the logs could not say why).
+  const regionWhy = new Map(revealsThisTurn.map(r => {
+    const p = view.get(r.actor), aim = tileOf(r.target), to = nextTiles.get(r.actor);
+    return [r.actor, `${p ? `from (${p.tile_q},${p.tile_r}) snap a${p.resolved_action ?? '?'}` : 'not in view'} ${r.moveAs || r.action || r.declared || '?'}${aim ? ` aim (${aim.q},${aim.r})` : ''}${to ? ` moved to (${to.q},${to.r})` : ' no move'}${vetoed.has(r.actor) ? ` vetoed: ${vetoed.get(r.actor)}` : ''}`];
+  }));
+  if (!fxRes?.abstain && !skRes?.abstain /* S4 */ && !clRes?.abstain /* CH */ && !clVer.abstain /* phase 6 */ && !fxVer.abstain /* F9 */ && !skVer.abstain /* SV */) lastStateHashes.set(hg.action, { hash: stateHash, region: regionState, why: regionWhy });   // E4: abstain = a foreign def I could not load
   if (lastStateHashes.size > 8) lastStateHashes.delete(Math.min(...lastStateHashes.keys()));
   // Per-actor action summary so the UI can float an action icon (⚔️ / 🛡 / 🤺
   // / 👁 / ➙) for every revealer this round, mirroring the damage-float path.
@@ -7209,7 +7225,7 @@ function llmOptions() {
   const ringOpt = AI_ROLE === 'builder' && !(near && dist(near) <= 1) ? builderRingPlan() : null;
   if (ringOpt) opts.unshift(ringOpt);
   // No Barricades around myself while ring work is left (user 2026-11-23: "they are building a wall around themselves").
-  else if (AI_ROLE === 'builder' && ringFinished() && builderBuiltTurn !== hg.turn && !(near && dist(near) <= 1)) {
+  else if (AI_ROLE === 'builder' && !VILLAGE_ID && ringFinished() && builderBuiltTurn !== hg.turn && !(near && dist(near) <= 1)) {
     const code = has('P') ? 'P' : 'EP';
     const spots = near ? [...freeNear].sort((a, b) => hexDistance({ tile_q: a.q, tile_r: a.r }, near) - hexDistance({ tile_q: b.q, tile_r: b.r }, near) || a.q - b.q || a.r - b.r) : freeNear;
     spots.slice(0, 3).forEach((t, i) => opts.push({ label: `Build a barricade ${i === 0 && near ? `between you and ${_nameOf(near)}` : `on free hex ${i + 1} next to you`}`, plan: { code, build: { q: t.q, r: t.r } } }));
@@ -7386,7 +7402,9 @@ function builderFallback() {
   const pi = hand.findIndex(c => c.kind === 'action' && c.code === 'P');
   queued = pi >= 0 ? [pi] : ['EP'];
   queuedSkills = hand.map((c, i) => c.kind === 'skill' && !c.is_trance && c.requires === 'P' ? i : -1).filter(i => i >= 0);
-  if (builderBuiltTurn !== hg.turn && ringFinished()) queuedBuild = { q: null, r: null };   // a random hex next to me only once the ring is done
+  // A village / hamlet builder never puts a Barricade on a random hex next to itself, not even once its ring stands
+  // (2026-11-27: it walled itself in and the ring around the hamlet looked broken); the AI-skirmish builder still does.
+  if (builderBuiltTurn !== hg.turn && ringFinished() && !VILLAGE_ID) queuedBuild = { q: null, r: null };
 }
 function ringFinished() { return !BUILDER_RING.length || builderRingPlan.done === true; }
 // ================= GameModels: agendas, villages, quests (2026-11-24) =================
@@ -7645,9 +7663,13 @@ function villageSpawnerFor(at, radius) {
   if (_hd({ q: entity.tile.q, r: entity.tile.r }, at) <= radius && !ids.includes(PEER_ID_STRING)) ids.push(PEER_ID_STRING);
   return ids.sort()[0] || null;
 }
+// The phone (2026-11-27, 700–900 MB): every villager is a whole peer.mjs worker in the app's one Node process, so all
+// villages and wanderers together keep at most VILLAGE_MAX_MOBILE out (desktop: separate processes, no cap).
+const VILLAGE_MAX_MOBILE = Number(process.env.VILLAGE_MAX_MOBILE ?? 5);
 function spawnVillager(v, u, extra = {}) {
   const npc = GAMEMODELS.npcs[u.npc];
   if (!npc || villageSpawning.has(u.label)) return;
+  if (IS_MOBILE && companions.filter(c => c.village).length + villageSpawning.size >= VILLAGE_MAX_MOBILE) return;
   villageSpawning.add(u.label);
   const env = { CHARACTER_ID: '', CREATURE_ID: u.npc, ENTITY_NAME: u.name, ALLIANCE: v.alliance, NPC_ID: u.npc, VILLAGE_ID: v.id, HOME_Q: String(u.q), HOME_R: String(u.r),
     PROFILE_TEAM: v.team, AI_ROLE: npc.role === 'builder' && !v.wall ? 'builder' : '', BUILDER_RING_RADIUS: String(Math.max(3, (v.clear_radius ?? 9) - 1)), WILD_LURKERS: '0', ...extra };
@@ -8395,7 +8417,7 @@ function checkStateHash(env) {
   for (const e of mine.region) {
     const t = theirs.get(e.id);
     if (!t) continue;
-    if (t.tile[0] !== e.tile[0] || t.tile[1] !== e.tile[1] || t.life !== e.life) diffs.push(`${e.id}: ours (${e.tile}) hp${e.life} vs theirs (${t.tile}) hp${t.life}`);
+    if (t.tile[0] !== e.tile[0] || t.tile[1] !== e.tile[1] || t.life !== e.life) diffs.push(`${e.id}: ours (${e.tile}) hp${e.life} vs theirs (${t.tile}) hp${t.life} [I resolved it ${mine.why?.get(e.id) || '?'}]`);
     else if ((t.fx || e.fx) && t.fx !== e.fx) diffs.push(`${e.id}: foreign effect ours ${e.fx || 'none'} vs theirs ${t.fx || 'none'}`);   // E4
     else if ((t.sk || e.sk) && t.sk !== e.sk) diffs.push(`${e.id}: foreign skill ours ${e.sk || 'none'} vs theirs ${t.sk || 'none'}`);   // S4
     else if ((t.cl || e.cl) && t.cl !== e.cl) diffs.push(`${e.id}: foreign class ours ${e.cl || 'none'} vs theirs ${t.cl || 'none'}`);   // CH
@@ -9171,12 +9193,14 @@ const uiHttp = http.createServer(async (req, res) => {
 });
 // Mobile only: lazy fill of user://assets from the same static pack
 // AssetBootstrap.gd downloads from. One fetch per file (concurrent requests
-// share it); misses are remembered so a file the pack lacks isn't re-asked.
+// share it); a miss is remembered for 10 min so a file the pack lacks isn't re-asked on every frame, yet a pack
+// republished while the app runs heals without a restart (2026-11-27: 472 NPC sheets were missing from the pack).
 const PACK_BASE = process.env.CHAOSD6_PACK_BASE || 'https://92-5-138-121.sslip.io/pack';
 const packInFlight = new Map();
-const packMisses = new Set();
+const packMisses = new Map();   // rel → time of the 404
+const PACK_MISS_MS = 10 * 60_000;
 function fetchPackAsset(root, rel) {
-  if (!IS_MOBILE || packMisses.has(rel) || rel.includes('..')) return Promise.resolve(false);
+  if (!IS_MOBILE || Date.now() - (packMisses.get(rel) ?? -Infinity) < PACK_MISS_MS || rel.includes('..')) return Promise.resolve(false);
   if (packInFlight.has(rel)) return packInFlight.get(rel);
   const p = (async () => {
     const abs = path.resolve(root, '.' + rel);
@@ -9184,7 +9208,7 @@ function fetchPackAsset(root, rel) {
     try {
       const url = `${PACK_BASE}/assets${rel.split('/').map(encodeURIComponent).join('/')}`;
       const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
-      if (!r.ok) { packMisses.add(rel); return false; }
+      if (!r.ok) { packMisses.set(rel, Date.now()); return false; }
       const buf = Buffer.from(await r.arrayBuffer());
       await fs.mkdir(path.dirname(abs), { recursive: true });
       await fs.writeFile(`${abs}.part`, buf);
@@ -9339,6 +9363,9 @@ wss.on('connection', (ws) => {
           queuedDestroy = { stat, ...(bld ? { building: bld } : {}), ...(cls ? { class: cls, elem: typeof m.elem === 'string' ? m.elem : null } : {}), ...(rean ? { reanimated: rean, elem: typeof m.elem === 'string' ? m.elem : null } : {}), ...(m.recast && entity.classArchived ? { recast: true } : {}), ...(m.untap && entity.classTapped && !entity.classArchived ? { untap: true } : {}) };
           const pi = hand.findIndex(c => c.kind === 'action' && c.code === 'P');
           queued = [pi >= 0 ? pi : 'EMPTY'];
+          // The emission needs the Empty slot to be a Posture: a tile target left from a walk would make it an Empty Move,
+          // which emits nothing (2026-11-27 "aiming trading post not working"). A unit target (strike / untap) stays.
+          if (target && typeof target === 'object' && 'q' in target && 'r' in target) target = null;
           queuedSkills = queuedSkills.filter(i => hand[i]?.kind === 'skill' && !hand[i].is_trance && (hand[i].requires === 'P' || hand[i].requires === 'M'));
           queuedExtra = null;
           if (!keepsCastOnDestroy()) { queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false; }

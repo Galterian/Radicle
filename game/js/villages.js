@@ -184,6 +184,13 @@ export function villageWallRing(v) {
   }
   return { hexes: out, sprites: t.sprites || {} };
 }
+// The wall sprites of a race (its full village's wall — a hamlet has none of its own): { joint, horizontal, vertical }
+// or null. The renderer dresses an NPC builder's Barricade ring in them (2026-11-27).
+export function raceWallSprites(race) {
+  if (!cat || !race) return null;
+  const t = Object.keys(cat.villages).sort().find(k => cat.villages[k].race === race && cat.villages[k].wall?.sprites?.joint);
+  return t ? cat.villages[t].wall.sprites : null;
+}
 // The team colour of a village id ("vil:cx,cy") — each village its own (user 2026-11-24): a hash-picked hue that is
 // never green (your allies) nor red (the monsters), nor the players' light blue; saturated so it reads apart from the
 // pastel alliance colours. The renderer tints the village's units, walls and buildings with it (WBC3 player ramp).

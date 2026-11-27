@@ -502,6 +502,14 @@ function resumeJourney() {
     return false;
   }
   const blocked = blockedTilesExcluding(me.peer_id);
+  // The same for a destination nobody can stand on (a fortress / village building, a wall, an obstacle): next to it is
+  // there — the building's stat buy needs exactly that hex, and the walk would otherwise circle it (2026-11-27).
+  if (blocked(dest.q, dest.r) && hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, { tile_q: dest.q, tile_r: dest.r }) <= 1) {
+    state.ui.pathPlan = null;
+    state.ui.destinationTile = null;
+    logUI(`journey ended — next to (${dest.q},${dest.r}), which nobody can stand on`, 'phase');
+    return false;
+  }
   const path = findPath({ q: me.tile_q, r: me.tile_r }, dest, blocked, knownHex);
   if (!path.length) {
     cancelPathJourney('blocked');
@@ -1686,10 +1694,10 @@ function renderRoster() {
     // — the icon canvas has to be a live node so the sprite paints into it.
     if (permIds.length) {
       const stack = row.querySelector('.perm-cards');
-      // Over three permanents: default-collapse into a chevron that expands
+      // Over six permanents (user 2026-11-27, was three): default-collapse into a chevron that expands
       // in place. Keeps the roster scannable while still a click away from
       // the full stack.
-      const collapsed = permIds.length > 3;
+      const collapsed = permIds.length > 6;
       if (collapsed) stack.classList.add('collapsed');
       // Pass the point-buy die per card so a corner badge shows next to the
       // icon (Rule 12/24). Class cards keep their chip-based colour UI.
@@ -1726,11 +1734,11 @@ function renderRoster() {
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'perm-toggle';
-        toggle.textContent = `+${permIds.length - 2} more…`;
+        toggle.textContent = `+${permIds.length - 6} more…`;
         toggle.addEventListener('click', (ev) => {
           ev.stopPropagation();
           const isOpen = stack.classList.toggle('open');
-          toggle.textContent = isOpen ? 'collapse' : `+${permIds.length - 2} more…`;
+          toggle.textContent = isOpen ? 'collapse' : `+${permIds.length - 6} more…`;
         });
         stack.appendChild(toggle);
       }
@@ -2402,6 +2410,7 @@ function showObjectCard(obj, clientX, clientY, keepPos = false) {
         const off = state.destroy?.building === `${fz.q},${fz.r}`;
         state.destroy = off ? null : { stat: fz.stat, building: `${fz.q},${fz.r}` };   // optimistic; the next hand msg is the truth
         send({ kind: 'destroy', stat: fz.stat, building: `${fz.q},${fz.r}` });
+        if (!off) cancelPathJourney('stat buy');   // a walk onto the building would re-queue an Empty Move every action
         logUI(off ? `break ${obj.label}: cancelled` : `staged: emit ${fz.stat} against the ${obj.label} at (${fz.q},${fz.r}) — Posture / Empty Posture`, 'phase');
         showObjectCard(obj, NaN, NaN);
       });
@@ -2499,6 +2508,11 @@ function permShortcutsForIds(permIds, entity) {
 }
 
 // The permanents' strip tooltips: the definitions' ui.perm_help (F8, via fxUi).
+// Each card also prints its description, clamped to three lines (user 2026-11-27); the full text stays on hover / tap.
+function permDesc(id) {
+  const t = skillInfo(id)?.text || fxUi(id).perm_help || '';
+  return t ? `<div class="ds">${escHtml(t)}</div>` : '';
+}
 let lastPermsHtml = '';
 function renderPerms() {
   const el = document.getElementById('perms');
@@ -2553,11 +2567,12 @@ function renderPerms() {
       : fxUi(p.id).possess ? possessPermLine()
       : p.die ? `⚄${p.die}` : 'perm';
     const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
-    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}${votedLow(p.id) ? ' voted-low' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${fxUi(p.id).summon ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div></div>`;
+    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}${votedLow(p.id) ? ' voted-low' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${fxUi(p.id).summon ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div>${permDesc(p.id)}</div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
   el.innerHTML = html;
+  el.classList.toggle('many', perms.length + (classHtml ? 1 : 0) > 3);   // two rows: six fit where three did
   el.hidden = perms.length === 0 && !classHtml;
   moveTitlesToData(el);
   el.querySelectorAll('.perm.clickable:not(.class-card)').forEach(d => d.addEventListener('click', () => { clickPermanent(Number(d.dataset.k)); if (tapCount(`perm:${d.dataset.k}`) >= 3) commitNow('triple-click'); }));
@@ -3472,8 +3487,8 @@ function playBanter(lines) {
   }
   b.playingUntil = Date.now() + at + 3000;
 }
-// The 💬 strip: the scene's last three lines, small and translucent over the map's bottom-left corner, click-through
-// except its ✕ (mutes banter); it fades 8 s after the last line. textContent only (lines and names are untrusted).
+// The 💬 strip: the scene's last six lines, small and translucent over the map's bottom-left corner, click-through
+// except its ✕ (mutes banter); it fades 24 s after the last line (user 2026-11-27: 3× slower, twice the lines). textContent only (lines and names are untrusted).
 function banterStrip(e, text) {
   let box = document.getElementById('banter-strip');
   if (!box) {
@@ -3497,10 +3512,10 @@ function banterStrip(e, text) {
   li.append(who, document.createTextNode(text));
   const ol = box.querySelector('ol');
   ol.appendChild(li);
-  while (ol.children.length > 3) ol.firstChild.remove();
+  while (ol.children.length > 6) ol.firstChild.remove();
   box.classList.remove('idle');
   clearTimeout(banterStrip.t);
-  banterStrip.t = setTimeout(() => box.classList.add('idle'), 8000);
+  banterStrip.t = setTimeout(() => box.classList.add('idle'), 24000);
 }
 
 // Encounter defeated (user ruling 2026-11-13): once every enemy the team has seen is down and none
@@ -3935,6 +3950,41 @@ function tripleCommit(key) {
       if (row.scrollWidth <= row.clientWidth + 1 || Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) return;
       row.scrollLeft += ev.deltaY; ev.preventDefault();
     }, { passive: false });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+
+// Unit list drag-scroll (user 2026-11-27 "make it dragable instead of scroller"): the roster hides its scrollbars;
+// press and drag up / down with the mouse to scroll it (a finger scrolls natively). Same rules as the cards row:
+// past a few pixels it is a drag, and the click that ends it is swallowed (no row toggles, no stat pill fires).
+(function rosterDrag() {
+  const init = () => {
+    const box = document.getElementById('roster');
+    if (!box) return;
+    let drag = null, swallowClick = false;
+    box.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType !== 'mouse' || ev.button !== 0) return;
+      if (box.scrollHeight <= box.clientHeight + 1) return;
+      drag = { id: ev.pointerId, y: ev.clientY, top: box.scrollTop, moved: false };
+    });
+    window.addEventListener('pointermove', (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      const dy = ev.clientY - drag.y;
+      if (!drag.moved && Math.abs(dy) < 6) return;
+      drag.moved = true;
+      box.classList.add('dragging');
+      box.scrollTop = drag.top - dy;
+      ev.preventDefault();
+    }, { passive: false });
+    const end = (ev) => {
+      if (!drag || ev.pointerId !== drag.id) return;
+      if (drag.moved) { swallowClick = true; setTimeout(() => { swallowClick = false; }, 0); }
+      box.classList.remove('dragging');
+      drag = null;
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    box.addEventListener('click', (ev) => { if (swallowClick) { ev.stopPropagation(); ev.preventDefault(); swallowClick = false; } }, true);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

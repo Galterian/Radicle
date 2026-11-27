@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-25T10:31:28.011Z",
-  "total_bytes": 383998521,
-  "count": 2632,
+  "generated": "2026-11-27T00:19:22.117Z",
+  "total_bytes": 573745067,
+  "count": 3474,
   "missing": 0,
   "entries": [
     {
@@ -4430,8 +4430,78 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Barbarians/Altar of Tempest/Altar of Tempest - base [BPAT].png",
+      "size": 23158,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Altar of Tempest/Altar of Tempest - construction [BPATz].png",
+      "size": 36473,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Altar of Tempest/Altar of Tempest - info [BPATi].png",
+      "size": 28692,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Barbarians/Camp/Camp - base [BACA].png",
       "size": 42766,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Camp/Camp - construction [BACAz].png",
+      "size": 106584,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Camp/Camp - info [BACAi].png",
+      "size": 34417,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Chieftain's Hut/Chieftain's Hut - base [BPHU].png",
+      "size": 38788,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Chieftain's Hut/Chieftain's Hut - construction [BPHUz].png",
+      "size": 93359,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Chieftain's Hut/Chieftain's Hut - info [BPHUi].png",
+      "size": 28794,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Corral/Corral - base [BPCO].png",
+      "size": 32781,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Corral/Corral - construction [BPCOz].png",
+      "size": 65776,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Corral/Corral - info [BPCOi].png",
+      "size": 24829,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 1)/Fortress (level 1) - base [BKB0].png",
+      "size": 63983,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 1)/Fortress (level 1) - construction [BKB0z].png",
+      "size": 153703,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 1)/Fortress (level 1) - info [BKB0i].png",
+      "size": 33868,
       "src": "resources"
     },
     {
@@ -4440,8 +4510,53 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 2)/Fortress (level 2) - info [BKB1i].png",
+      "size": 34334,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 3)/Fortress (level 3) - base [BKB2].png",
+      "size": 70339,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 3)/Fortress (level 3) - info [BKB2i].png",
+      "size": 29963,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 4)/Fortress (level 4) - base [BKB3].png",
+      "size": 75818,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 4)/Fortress (level 4) - info [BKB3i].png",
+      "size": 33890,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 5)/Fortress (level 5) - base [BKB4].png",
+      "size": 83249,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Fortress (level 5)/Fortress (level 5) - info [BKB4i].png",
+      "size": 30689,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Barbarians/Mill/Mill - base [BPMI].png",
       "size": 14980,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Mill/Mill - construction [BPMIz].png",
+      "size": 28558,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Mill/Mill - info [BPMIi].png",
+      "size": 23903,
       "src": "resources"
     },
     {
@@ -4450,8 +4565,103 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Barbarians/Scout Tower/Scout Tower - construction [BPSTz].png",
+      "size": 44001,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Barbarians/Scout Tower/Scout Tower - info [BPSTi].png",
+      "size": 20738,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Chaos Shrine/Chaos Shrine - base [BPCS].png",
+      "size": 29799,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Chaos Shrine/Chaos Shrine - construction [BPCSz].png",
+      "size": 63514,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Chaos Shrine/Chaos Shrine - info [BPCSi].png",
+      "size": 25454,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 1)/Doomspire (level 1) - base [BKV0].png",
+      "size": 130321,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 1)/Doomspire (level 1) - construction [BKV0z].png",
+      "size": 322373,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 1)/Doomspire (level 1) - info [BKV0i].png",
+      "size": 32176,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 2)/Doomspire (level 2) - base [BKV1].png",
+      "size": 136066,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 2)/Doomspire (level 2) - info [BKV1i].png",
+      "size": 35337,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 3)/Doomspire (level 3) - base [BKV2].png",
+      "size": 139388,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Doomspire (level 3)/Doomspire (level 3) - info [BKV2i].png",
+      "size": 32289,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Daemons/Gallows/Gallows - base [BPGA].png",
       "size": 33776,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Gallows/Gallows - construction [BPGAz].png",
+      "size": 78778,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Gallows/Gallows - info [BPGAi].png",
+      "size": 30544,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Lightning Spire (level 1)/Lightning Spire (level 1) - base [BWL0].png",
+      "size": 17071,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Lightning Spire (level 1)/Lightning Spire (level 1) - construction [BWL0z].png",
+      "size": 46035,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Lightning Spire (level 1)/Lightning Spire (level 1) - info [BWL0i].png",
+      "size": 14827,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Lightning Spire (level 2)/Lightning Spire (level 2) - base [BWL1].png",
+      "size": 19704,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Lightning Spire (level 2)/Lightning Spire (level 2) - info [BWL1i].png",
+      "size": 18806,
       "src": "resources"
     },
     {
@@ -4460,8 +4670,93 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Daemons/Pit/Pit - construction [BAPIz].png",
+      "size": 87049,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Pit/Pit - info [BAPIi].png",
+      "size": 30840,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Daemons/Portal/Portal - base [BPPO].png",
       "size": 33137,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Portal/Portal - construction [BPPOz].png",
+      "size": 77159,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Portal/Portal - info [BPPOi].png",
+      "size": 26718,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Summoning Tower (level 1)/Summoning Tower (level 1) - base [BAS0].png",
+      "size": 34691,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Summoning Tower (level 1)/Summoning Tower (level 1) - construction [BAS0z].png",
+      "size": 82481,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Summoning Tower (level 1)/Summoning Tower (level 1) - info [BAS0i].png",
+      "size": 26429,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Summoning Tower (level 2)/Summoning Tower (level 2) - base [BAS1].png",
+      "size": 41149,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Daemons/Summoning Tower (level 2)/Summoning Tower (level 2) - info [BAS1i].png",
+      "size": 29650,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Ancestral Hall/Ancestral Hall - base [BPAH].png",
+      "size": 38581,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Ancestral Hall/Ancestral Hall - construction [BPAHz].png",
+      "size": 83506,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Ancestral Hall/Ancestral Hall - info [BPAHi].png",
+      "size": 30655,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 1)/Furnace (level 1) - base [BKA0].png",
+      "size": 92179,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 1)/Furnace (level 1) - construction [BKA0z].png",
+      "size": 226185,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 1)/Furnace (level 1) - info [BKA0i].png",
+      "size": 31691,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 2)/Furnace (level 2) - base [BKA1].png",
+      "size": 96723,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 2)/Furnace (level 2) - info [BKA1i].png",
+      "size": 31137,
       "src": "resources"
     },
     {
@@ -4470,8 +4765,78 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 3)/Furnace (level 3) - info [BKA2i].png",
+      "size": 31808,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 4)/Furnace (level 4) - base [BKA3].png",
+      "size": 100229,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Furnace (level 4)/Furnace (level 4) - info [BKA3i].png",
+      "size": 31965,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Dark Dwarves/Guild/Guild - base [BAGU].png",
       "size": 36566,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Guild/Guild - construction [BAGUz].png",
+      "size": 84652,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Guild/Guild - info [BAGUi].png",
+      "size": 22743,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Hall of Golems/Hall of Golems - base [BAHG].png",
+      "size": 32335,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Hall of Golems/Hall of Golems - construction [BAHGz].png",
+      "size": 87772,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Hall of Golems/Hall of Golems - info [BAHGi].png",
+      "size": 21832,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Mortar/Mortar - base [BWMO].png",
+      "size": 12928,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Mortar/Mortar - construction [BWMOz].png",
+      "size": 38252,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Mortar/Mortar - info [BWMOi].png",
+      "size": 20345,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Siege Workshop/Siege Workshop - base [BASW].png",
+      "size": 40059,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Siege Workshop/Siege Workshop - construction [BASWz].png",
+      "size": 85209,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Siege Workshop/Siege Workshop - info [BASWi].png",
+      "size": 25404,
       "src": "resources"
     },
     {
@@ -4495,8 +4860,83 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Trader/Trader - construction [BPTRz].png",
+      "size": 63458,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Dwarves/Trader/Trader - info [BPTRi].png",
+      "size": 18454,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 1)/Dark Tower (level 1) - base [BKT0].png",
+      "size": 80445,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 1)/Dark Tower (level 1) - construction [BKT0z].png",
+      "size": 220858,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 1)/Dark Tower (level 1) - info [BKT0i].png",
+      "size": 25310,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 2)/Dark Tower (level 2) - base [BKT1].png",
+      "size": 80842,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 2)/Dark Tower (level 2) - info [BKT1i].png",
+      "size": 26214,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 3)/Dark Tower (level 3) - base [BKT2].png",
       "size": 87191,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 3)/Dark Tower (level 3) - info [BKT2i].png",
+      "size": 28550,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 4)/Dark Tower (level 4) - base [BKT3].png",
+      "size": 90702,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 4)/Dark Tower (level 4) - info [BKT3i].png",
+      "size": 28272,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 5)/Dark Tower (level 5) - base [BKT4].png",
+      "size": 93524,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Dark Tower (level 5)/Dark Tower (level 5) - info [BKT4i].png",
+      "size": 28963,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Gallery/Gallery - base [BPGL].png",
+      "size": 24409,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Gallery/Gallery - construction [BPGLz].png",
+      "size": 53536,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Gallery/Gallery - info [BPGLi].png",
+      "size": 24038,
       "src": "resources"
     },
     {
@@ -4505,8 +4945,58 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - construction [BAAGz].png",
+      "size": 99114,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Kargothian Gate/Kargothian Gate - info [BAAGi].png",
+      "size": 31493,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Reformatory/Reformatory - base [BPDU].png",
+      "size": 35451,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Reformatory/Reformatory - construction [BPDUz].png",
+      "size": 81835,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Reformatory/Reformatory - info [BPDUi].png",
+      "size": 30970,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Dark Elves/Tomb/Tomb - base [BPTO].png",
       "size": 32038,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Tomb/Tomb - construction [BPTOz].png",
+      "size": 66328,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Tomb/Tomb - info [BPTOi].png",
+      "size": 30385,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Tree of Pain/Tree of Pain - base [BATP].png",
+      "size": 71590,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Tree of Pain/Tree of Pain - construction [BATPz].png",
+      "size": 148450,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dark Elves/Tree of Pain/Tree of Pain - info [BATPi].png",
+      "size": 24822,
       "src": "resources"
     },
     {
@@ -4525,8 +5015,103 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Dwarves/Armory/Armory - base [BAAR].png",
+      "size": 68980,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Armory/Armory - construction [BAARz].png",
+      "size": 167009,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Armory/Armory - info [BAARi].png",
+      "size": 31025,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Brewery/Brewery - base [BPBR].png",
+      "size": 53529,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Brewery/Brewery - construction [BPBRz].png",
+      "size": 128180,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Brewery/Brewery - info [BPBRi].png",
+      "size": 24804,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 1)/Citadel (level 1) - base [BKD0].png",
       "size": 64276,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 1)/Citadel (level 1) - construction [BKD0z].png",
+      "size": 144290,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 1)/Citadel (level 1) - info [BKD0i].png",
+      "size": 28582,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 2)/Citadel (level 2) - base [BKD1].png",
+      "size": 77469,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 2)/Citadel (level 2) - info [BKD1i].png",
+      "size": 27075,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 3)/Citadel (level 3) - base [BKD2].png",
+      "size": 89696,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 3)/Citadel (level 3) - info [BKD2i].png",
+      "size": 28079,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 4)/Citadel (level 4) - base [BKD3].png",
+      "size": 90178,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 4)/Citadel (level 4) - info [BKD3i].png",
+      "size": 26803,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 5)/Citadel (level 5) - base [BKD4].png",
+      "size": 93585,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Citadel (level 5)/Citadel (level 5) - info [BKD4i].png",
+      "size": 28756,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/College/College - base [BPCL].png",
+      "size": 28898,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/College/College - construction [BPCLz].png",
+      "size": 55916,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/College/College - info [BPCLi].png",
+      "size": 16686,
       "src": "resources"
     },
     {
@@ -4535,8 +5120,43 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Dwarves/Foundry/Foundry - construction [BPFOz].png",
+      "size": 167360,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Foundry/Foundry - info [BPFOi].png",
+      "size": 37823,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Dwarves/Trading Post/Trading Post - base [BPTP].png",
       "size": 65266,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Trading Post/Trading Post - construction [BPTPz].png",
+      "size": 151955,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Trading Post/Trading Post - info [BPTPi].png",
+      "size": 24304,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Workshop/Workshop - base [BPWS].png",
+      "size": 51202,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Workshop/Workshop - construction [BPWSz].png",
+      "size": 123796,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Dwarves/Workshop/Workshop - info [BPWSi].png",
+      "size": 29984,
       "src": "resources"
     },
     {
@@ -4645,6 +5265,16 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Empire/Palace (level 2)/Palace (level 2) - base [BKP1].png",
+      "size": 68893,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Empire/Palace (level 2)/Palace (level 2) - info [BKP1i].png",
+      "size": 36655,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Empire/Quartermaster/Quartermaster - base [BPQM].png",
       "size": 17758,
       "src": "resources"
@@ -4660,8 +5290,73 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 1)/Dreamhold (level 1) - base [BKF0].png",
+      "size": 34396,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 1)/Dreamhold (level 1) - construction [BKF0z].png",
+      "size": 77921,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 1)/Dreamhold (level 1) - info [BKF0i].png",
+      "size": 18100,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 2)/Dreamhold (level 2) - base [BKF1].png",
+      "size": 42810,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 2)/Dreamhold (level 2) - info [BKF1i].png",
+      "size": 17058,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 3)/Dreamhold (level 3) - base [BKF2].png",
+      "size": 48123,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 3)/Dreamhold (level 3) - info [BKF2i].png",
+      "size": 18083,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 4)/Dreamhold (level 4) - base [BKF3].png",
+      "size": 53251,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 4)/Dreamhold (level 4) - info [BKF3i].png",
+      "size": 16085,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 5)/Dreamhold (level 5) - base [BKF4].png",
+      "size": 55290,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Dreamhold (level 5)/Dreamhold (level 5) - info [BKF4i].png",
+      "size": 17199,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - base [BPFR].png",
       "size": 10700,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - construction [BPFRz].png",
+      "size": 15220,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Faerie Ring/Faerie Ring - info [BPFRi].png",
+      "size": 17187,
       "src": "resources"
     },
     {
@@ -4670,8 +5365,73 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Fey/Magic Pool/Magic Pool - construction [BPMPz].png",
+      "size": 46788,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Magic Pool/Magic Pool - info [BPMPi].png",
+      "size": 29344,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Orb of Wonder/Orb of Wonder - base [BPOW].png",
+      "size": 4218,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Orb of Wonder/Orb of Wonder - construction [BPOWz].png",
+      "size": 7381,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Orb of Wonder/Orb of Wonder - info [BPOWi].png",
+      "size": 16955,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Rainbow/Rainbow - base [BPRB].png",
+      "size": 2783,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Rainbow/Rainbow - construction [BPRBz].png",
+      "size": 7510,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Rainbow/Rainbow - info [BPRBi].png",
+      "size": 13146,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Tome/Tome - base [BPTM].png",
+      "size": 3454,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Tome/Tome - construction [BPTMz].png",
+      "size": 4522,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Tome/Tome - info [BPTMi].png",
+      "size": 19735,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - base [BAUG].png",
       "size": 11297,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - construction [BAUGz].png",
+      "size": 17986,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Fey/Unicorn Grove/Unicorn Grove - info [BAUGi].png",
+      "size": 24174,
       "src": "resources"
     },
     {
@@ -4810,6 +5570,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/High Elves/White Tower (level 2)/White Tower (level 2) - info [BKE1i].png",
+      "size": 20083,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/High Elves/White Tower (level 3)/White Tower (level 3) - base [BKE2].png",
       "size": 34775,
       "src": "resources"
@@ -4820,13 +5585,88 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Knights/Cathedral/Cathedral - construction [BPCAz].png",
+      "size": 95668,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Cathedral/Cathedral - info [BPCAi].png",
+      "size": 24283,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Fletcher/Fletcher - base [BPFL].png",
+      "size": 30482,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Fletcher/Fletcher - construction [BPFLz].png",
+      "size": 69433,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Fletcher/Fletcher - info [BPFLi].png",
+      "size": 25943,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Garrison/Garrison - base [BAGA].png",
+      "size": 61750,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Garrison/Garrison - construction [BAGAz].png",
+      "size": 152261,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Garrison/Garrison - info [BAGAi].png",
+      "size": 17680,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Knights/Keep (level 1)/Keep (level 1) - base [BKK0].png",
       "size": 84473,
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 1)/Keep (level 1) - construction [BKK0z].png",
+      "size": 215595,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 1)/Keep (level 1) - info [BKK0i].png",
+      "size": 33725,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Knights/Keep (level 2)/Keep (level 2) - base [BKK1].png",
       "size": 88793,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 2)/Keep (level 2) - info [BKK1i].png",
+      "size": 40848,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 3)/Keep (level 3) - base [BKK2].png",
+      "size": 93834,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 3)/Keep (level 3) - info [BKK2i].png",
+      "size": 37419,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 4)/Keep (level 4) - base [BKK3].png",
+      "size": 97317,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Keep (level 4)/Keep (level 4) - info [BKK3i].png",
+      "size": 42163,
       "src": "resources"
     },
     {
@@ -4850,8 +5690,58 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Knights/Shrine of the Sword/Shrine of the Sword - construction [BPSSz].png",
+      "size": 81143,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Shrine of the Sword/Shrine of the Sword - info [BPSSi].png",
+      "size": 25859,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Smithy/Smithy - base [BPSM].png",
+      "size": 54956,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Smithy/Smithy - construction [BPSMz].png",
+      "size": 114982,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Smithy/Smithy - info [BPSMi].png",
+      "size": 26518,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Stables/Stables - base [BPSB].png",
+      "size": 59601,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Stables/Stables - construction [BPSBz].png",
+      "size": 163164,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Knights/Stables/Stables - info [BPSBi].png",
+      "size": 34071,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Minotaurs/Ale Store/Ale Store - base [BPIN].png",
       "size": 35403,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ale Store/Ale Store - construction [BPINz].png",
+      "size": 70564,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ale Store/Ale Store - info [BPINi].png",
+      "size": 29232,
       "src": "resources"
     },
     {
@@ -4860,8 +5750,58 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Minotaurs/Altar of Sartek/Altar of Sartek - construction [BPDAz].png",
+      "size": 55041,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Altar of Sartek/Altar of Sartek - info [BPDAi].png",
+      "size": 23655,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Arena/Arena - base [BPAR].png",
+      "size": 48815,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Arena/Arena - construction [BPARz].png",
+      "size": 108351,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Arena/Arena - info [BPARi].png",
+      "size": 36133,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Minotaurs/Henge/Henge - base [BPHG].png",
       "size": 98641,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Henge/Henge - construction [BPHGz].png",
+      "size": 220971,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Henge/Henge - info [BPHGi].png",
+      "size": 34187,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ironworks/Ironworks - base [BPIW].png",
+      "size": 41748,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ironworks/Ironworks - construction [BPIWz].png",
+      "size": 78939,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ironworks/Ironworks - info [BPIWi].png",
+      "size": 32350,
       "src": "resources"
     },
     {
@@ -4870,8 +5810,73 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - construction [BPLOz].png",
+      "size": 83278,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Lookout/Lookout - info [BPLOi].png",
+      "size": 27008,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Pen/Pen - base [BAPN].png",
+      "size": 38726,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Pen/Pen - construction [BAPNz].png",
+      "size": 77864,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Pen/Pen - info [BAPNi].png",
+      "size": 28611,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 1)/Ziggurat (level 1) - base [BKH0].png",
+      "size": 105617,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 1)/Ziggurat (level 1) - construction [BKH0z].png",
+      "size": 256578,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 1)/Ziggurat (level 1) - info [BKH0i].png",
+      "size": 34044,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 2)/Ziggurat (level 2) - base [BKH1].png",
       "size": 111141,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 2)/Ziggurat (level 2) - info [BKH1i].png",
+      "size": 33639,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 3)/Ziggurat (level 3) - base [BKH2].png",
+      "size": 114007,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 3)/Ziggurat (level 3) - info [BKH2i].png",
+      "size": 33311,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 4)/Ziggurat (level 4) - base [BKH3].png",
+      "size": 118092,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Minotaurs/Ziggurat (level 4)/Ziggurat (level 4) - info [BKH3i].png",
+      "size": 34063,
       "src": "resources"
     },
     {
@@ -5215,8 +6220,48 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Orcs/Battleyard/Battleyard - base [BABY].png",
+      "size": 46245,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Battleyard/Battleyard - construction [BABYz].png",
+      "size": 91714,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Battleyard/Battleyard - info [BABYi].png",
+      "size": 17627,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Beast Pit/Beast Pit - base [BABP].png",
+      "size": 27769,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Beast Pit/Beast Pit - construction [BABPz].png",
+      "size": 64433,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Beast Pit/Beast Pit - info [BABPi].png",
+      "size": 28121,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Orcs/Goblin Tower/Goblin Tower - base [BAGT].png",
       "size": 26260,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Goblin Tower/Goblin Tower - construction [BAGTz].png",
+      "size": 89910,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Goblin Tower/Goblin Tower - info [BAGTi].png",
+      "size": 12230,
       "src": "resources"
     },
     {
@@ -5225,8 +6270,128 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Orcs/Hovel/Hovel - construction [BPOHz].png",
+      "size": 58518,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Hovel/Hovel - info [BPOHi].png",
+      "size": 22551,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 1)/Orchold (level 1) - base [BKO0].png",
+      "size": 46415,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 1)/Orchold (level 1) - construction [BKO0z].png",
+      "size": 59592,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 1)/Orchold (level 1) - info [BKO0i].png",
+      "size": 27352,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 2)/Orchold (level 2) - base [BKO1].png",
+      "size": 52650,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 2)/Orchold (level 2) - info [BKO1i].png",
+      "size": 29823,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 3)/Orchold (level 3) - base [BKO2].png",
+      "size": 54304,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 3)/Orchold (level 3) - info [BKO2i].png",
+      "size": 30890,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 4)/Orchold (level 4) - base [BKO3].png",
+      "size": 55012,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 4)/Orchold (level 4) - info [BKO3i].png",
+      "size": 32892,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 5)/Orchold (level 5) - base [BKO4].png",
+      "size": 59501,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Orchold (level 5)/Orchold (level 5) - info [BKO4i].png",
+      "size": 34338,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Shaman's Hut/Shaman's Hut - base [BASM].png",
+      "size": 36643,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Shaman's Hut/Shaman's Hut - construction [BASMz].png",
+      "size": 76061,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Shaman's Hut/Shaman's Hut - info [BASMi].png",
+      "size": 28813,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Orcs/Totem/Totem - base [BWTP].png",
       "size": 11309,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Totem/Totem - construction [BWTPz].png",
+      "size": 15791,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Orcs/Totem/Totem - info [BWTPi].png",
+      "size": 13245,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Casket/Casket - base [BPPP].png",
+      "size": 9807,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Casket/Casket - construction [BPPPz].png",
+      "size": 21878,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Casket/Casket - info [BPPPi].png",
+      "size": 17417,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Cess Pool/Cess Pool - base [BACP].png",
+      "size": 31381,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Cess Pool/Cess Pool - construction [BACPz].png",
+      "size": 73464,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Cess Pool/Cess Pool - info [BACPi].png",
+      "size": 19313,
       "src": "resources"
     },
     {
@@ -5235,8 +6400,43 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Plaguelords/Fire Cave/Fire Cave - info [BPFCi].png",
+      "size": 28255,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 1)/Hall of Plague (level 1) - base [BKG0].png",
+      "size": 99745,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 1)/Hall of Plague (level 1) - construction [BKG0z].png",
+      "size": 225984,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 1)/Hall of Plague (level 1) - info [BKG0i].png",
+      "size": 37075,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 2)/Hall of Plague (level 2) - base [BKG1].png",
       "size": 108418,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 2)/Hall of Plague (level 2) - info [BKG1i].png",
+      "size": 36648,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 3)/Hall of Plague (level 3) - base [BKG2].png",
+      "size": 119541,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hall of Plague (level 3)/Hall of Plague (level 3) - info [BKG2i].png",
+      "size": 36870,
       "src": "resources"
     },
     {
@@ -5245,13 +6445,78 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hydra Cave/Hydra Cave - construction [BPHCz].png",
+      "size": 72936,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Hydra Cave/Hydra Cave - info [BPHCi].png",
+      "size": 27187,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Plaguelords/Ice Cave/Ice Cave - base [BPIC].png",
       "size": 37799,
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Plaguelords/Laboratory/Laboratory - base [BPLB].png",
+      "size": 42253,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Laboratory/Laboratory - construction [BPLBz].png",
+      "size": 101158,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Laboratory/Laboratory - info [BPLBi].png",
+      "size": 33891,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Plague Pile/Plague Pile - base [BPSP].png",
+      "size": 10796,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Plague Pile/Plague Pile - construction [BPSPz].png",
+      "size": 19251,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Plague Pile/Plague Pile - info [BPSPi].png",
+      "size": 18149,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Plaguelords/Plague Shrine/Plague Shrine - base [BPPS].png",
       "size": 34012,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Plague Shrine/Plague Shrine - construction [BPPSz].png",
+      "size": 83441,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Plague Shrine/Plague Shrine - info [BPPSi].png",
+      "size": 21798,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Temple of Eyes/Temple of Eyes - base [BATE].png",
+      "size": 29095,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Temple of Eyes/Temple of Eyes - construction [BATEz].png",
+      "size": 78926,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Plaguelords/Temple of Eyes/Temple of Eyes - info [BATEi].png",
+      "size": 26399,
       "src": "resources"
     },
     {
@@ -5265,8 +6530,28 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Barbarian)/Tower (Barbarian) - construction [BWTBz].png",
+      "size": 43892,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Barbarian)/Tower (Barbarian) - info [BWTBi].png",
+      "size": 16528,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Daemon)/Tower (Daemon) - base [BWTV].png",
       "size": 26180,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Daemon)/Tower (Daemon) - construction [BWTVz].png",
+      "size": 58909,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Daemon)/Tower (Daemon) - info [BWTVi].png",
+      "size": 24055,
       "src": "resources"
     },
     {
@@ -5275,13 +6560,43 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Dark Dwarf)/Tower (Dark Dwarf) - construction [BWTAz].png",
+      "size": 54852,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Dark Dwarf)/Tower (Dark Dwarf) - info [BWTAi].png",
+      "size": 19431,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Dark Elf)/Tower (Dark Elf) - base [BWTK].png",
       "size": 26408,
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Dark Elf)/Tower (Dark Elf) - construction [BWTKz].png",
+      "size": 52042,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Dark Elf)/Tower (Dark Elf) - info [BWTKi].png",
+      "size": 20823,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Dwarf)/Tower (Dwarf) - base [BWTD].png",
       "size": 29961,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Dwarf)/Tower (Dwarf) - construction [BWTDz].png",
+      "size": 44532,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Dwarf)/Tower (Dwarf) - info [BWTDi].png",
+      "size": 20401,
       "src": "resources"
     },
     {
@@ -5302,6 +6617,16 @@
     {
       "path": "assets/Sprites/Buildings/Shared/Tower (Fey)/Tower (Fey) - base [BWTF].png",
       "size": 20152,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Fey)/Tower (Fey) - construction [BWTFz].png",
+      "size": 40762,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Fey)/Tower (Fey) - info [BWTFi].png",
+      "size": 13601,
       "src": "resources"
     },
     {
@@ -5340,8 +6665,28 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Minotaur)/Tower (Minotaur) - construction [BWTRz].png",
+      "size": 62406,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Minotaur)/Tower (Minotaur) - info [BWTRi].png",
+      "size": 24027,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Orc)/Tower (Orc) - base [BWTO].png",
       "size": 23247,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Orc)/Tower (Orc) - construction [BWTOz].png",
+      "size": 54247,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Orc)/Tower (Orc) - info [BWTOi].png",
+      "size": 13973,
       "src": "resources"
     },
     {
@@ -5350,8 +6695,28 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Plaguelords)/Tower (Plaguelords) - construction [BWTGz].png",
+      "size": 58565,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Plaguelords)/Tower (Plaguelords) - info [BWTGi].png",
+      "size": 24117,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Ssrathi)/Tower (Ssrathi) - base [BWTL].png",
       "size": 14524,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Ssrathi)/Tower (Ssrathi) - construction [BWTLz].png",
+      "size": 21320,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Ssrathi)/Tower (Ssrathi) - info [BWTLi].png",
+      "size": 16136,
       "src": "resources"
     },
     {
@@ -5360,13 +6725,43 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Swarm)/Tower (Swarm) - construction [BWTEz].png",
+      "size": 33805,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Swarm)/Tower (Swarm) - info [BWTEi].png",
+      "size": 18441,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - base [BWTU].png",
       "size": 27976,
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - construction [BWTUz].png",
+      "size": 47761,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Undead)/Tower (Undead) - info [BWTUi].png",
+      "size": 19177,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Shared/Tower (Wood Elf)/Tower (Wood Elf) - base [BWTW].png",
       "size": 36776,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Wood Elf)/Tower (Wood Elf) - construction [BWTWz].png",
+      "size": 66631,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Tower (Wood Elf)/Tower (Wood Elf) - info [BWTWi].png",
+      "size": 21146,
       "src": "resources"
     },
     {
@@ -5387,6 +6782,11 @@
     {
       "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x1 horizontal)/Walls (evil, 2x1 horizontal) - base [BWE1].png",
       "size": 10382,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Shared/Walls (evil, 2x2 joint)/Walls (evil, 2x2 joint) - base [BWE0].png",
+      "size": 13145,
       "src": "resources"
     },
     {
@@ -5435,6 +6835,31 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Ssrathi/Hatchery/Hatchery - construction [BPHAz].png",
+      "size": 39284,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Hatchery/Hatchery - info [BPHAi].png",
+      "size": 28428,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Religious Sect/Religious Sect - base [BARS].png",
+      "size": 23966,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Religious Sect/Religious Sect - construction [BARSz].png",
+      "size": 54900,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Religious Sect/Religious Sect - info [BARSi].png",
+      "size": 28037,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Ssrathi/Sacred Pool/Sacred Pool - base [BPCP].png",
       "size": 23320,
       "src": "resources"
@@ -5450,8 +6875,48 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Ssrathi/Saurus Pen/Saurus Pen - base [BPLP].png",
+      "size": 36459,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Saurus Pen/Saurus Pen - construction [BPLPz].png",
+      "size": 77898,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Saurus Pen/Saurus Pen - info [BPLPi].png",
+      "size": 17504,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Ssrathi/Scrying Pool/Scrying Pool - base [BPYP].png",
       "size": 19146,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Scrying Pool/Scrying Pool - construction [BPYPz].png",
+      "size": 42371,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Scrying Pool/Scrying Pool - info [BPYPi].png",
+      "size": 15742,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 1)/Sun Temple (level 1) - base [BKL0].png",
+      "size": 23186,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 1)/Sun Temple (level 1) - construction [BKL0z].png",
+      "size": 55062,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 1)/Sun Temple (level 1) - info [BKL0i].png",
+      "size": 23671,
       "src": "resources"
     },
     {
@@ -5460,8 +6925,168 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 2)/Sun Temple (level 2) - info [BKL1i].png",
+      "size": 15076,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 3)/Sun Temple (level 3) - base [BKL2].png",
+      "size": 29172,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 3)/Sun Temple (level 3) - info [BKL2i].png",
+      "size": 26960,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 4)/Sun Temple (level 4) - base [BKL3].png",
+      "size": 30572,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Sun Temple (level 4)/Sun Temple (level 4) - info [BKL3i].png",
+      "size": 27604,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Warrior Sect/Warrior Sect - base [BAKS].png",
+      "size": 28543,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Warrior Sect/Warrior Sect - construction [BAKSz].png",
+      "size": 59754,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Warrior Sect/Warrior Sect - info [BAKSi].png",
+      "size": 29756,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Worker Sect/Worker Sect - base [BAWS].png",
+      "size": 27494,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Worker Sect/Worker Sect - construction [BAWSz].png",
+      "size": 58482,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Ssrathi/Worker Sect/Worker Sect - info [BAWSi].png",
+      "size": 11409,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Burial Hall/Burial Hall - base [BABC].png",
+      "size": 28806,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Burial Hall/Burial Hall - construction [BABCz].png",
+      "size": 67987,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Burial Hall/Burial Hall - info [BABCi].png",
+      "size": 24914,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 1)/Dunekeep (level 1) - base [BKR0].png",
+      "size": 48520,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 1)/Dunekeep (level 1) - construction [BKR0z].png",
+      "size": 97318,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 1)/Dunekeep (level 1) - info [BKR0i].png",
+      "size": 20665,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 2)/Dunekeep (level 2) - base [BKR1].png",
       "size": 49651,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 2)/Dunekeep (level 2) - info [BKR1i].png",
+      "size": 17306,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 3)/Dunekeep (level 3) - base [BKR2].png",
+      "size": 51300,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Dunekeep (level 3)/Dunekeep (level 3) - info [BKR2i].png",
+      "size": 17485,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 1)/Hive (level 1) - base [BAH0].png",
+      "size": 25037,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 1)/Hive (level 1) - construction [BAH0z].png",
+      "size": 36970,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 1)/Hive (level 1) - info [BAH0i].png",
+      "size": 15880,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 2)/Hive (level 2) - base [BAH1].png",
+      "size": 34942,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 2)/Hive (level 2) - info [BAH1i].png",
+      "size": 17368,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 3)/Hive (level 3) - base [BAH2].png",
+      "size": 52341,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 3)/Hive (level 3) - info [BAH2i].png",
+      "size": 27731,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 4)/Hive (level 4) - base [BAH3].png",
+      "size": 51008,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Hive (level 4)/Hive (level 4) - info [BAH3i].png",
+      "size": 27006,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Queen/Queen - base [BPSQ].png",
+      "size": 30712,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Queen/Queen - construction [BPSQz].png",
+      "size": 62081,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Queen/Queen - info [BPSQi].png",
+      "size": 30577,
       "src": "resources"
     },
     {
@@ -5470,8 +7095,28 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Swarm/Shrine of Melkor/Shrine of Melkor - construction [BPSKz].png",
+      "size": 30139,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Shrine of Melkor/Shrine of Melkor - info [BPSKi].png",
+      "size": 25562,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Swarm/Watcher/Watcher - base [BPWA].png",
       "size": 24130,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Watcher/Watcher - construction [BPWAz].png",
+      "size": 37655,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Swarm/Watcher/Watcher - info [BPWAi].png",
+      "size": 18120,
       "src": "resources"
     },
     {
@@ -5495,8 +7140,103 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Undead/Barrow/Barrow - construction [BPBAz].png",
+      "size": 51628,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Barrow/Barrow - info [BPBAi].png",
+      "size": 22761,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Undead/Black Library/Black Library - base [BPBL].png",
       "size": 38448,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Black Library/Black Library - construction [BPBLz].png",
+      "size": 96189,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Black Library/Black Library - info [BPBLi].png",
+      "size": 30287,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Boneyard/Boneyard - base [BPDM].png",
+      "size": 38522,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Boneyard/Boneyard - construction [BPDMz].png",
+      "size": 66574,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Boneyard/Boneyard - info [BPDMi].png",
+      "size": 29676,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Cage/Cage - base [BPCG].png",
+      "size": 26229,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Cage/Cage - construction [BPCGz].png",
+      "size": 64906,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Cage/Cage - info [BPCGi].png",
+      "size": 23381,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 1)/Deathkeep (level 1) - base [BKU0].png",
+      "size": 93171,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 1)/Deathkeep (level 1) - construction [BKU0z].png",
+      "size": 247450,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 1)/Deathkeep (level 1) - info [BKU0i].png",
+      "size": 28866,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 2)/Deathkeep (level 2) - base [BKU1].png",
+      "size": 97750,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 2)/Deathkeep (level 2) - info [BKU1i].png",
+      "size": 31041,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 3)/Deathkeep (level 3) - base [BKU2].png",
+      "size": 100965,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 3)/Deathkeep (level 3) - info [BKU2i].png",
+      "size": 32161,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 4)/Deathkeep (level 4) - base [BKU3].png",
+      "size": 103760,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Deathkeep (level 4)/Deathkeep (level 4) - info [BKU3i].png",
+      "size": 33081,
       "src": "resources"
     },
     {
@@ -5505,8 +7245,28 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Undead/Gravestone/Gravestone - construction [BAGRz].png",
+      "size": 17851,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Gravestone/Gravestone - info [BAGRi].png",
+      "size": 20559,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Undead/Graveyard/Graveyard - base [BAGY].png",
       "size": 54111,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Graveyard/Graveyard - construction [BAGYz].png",
+      "size": 123879,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Undead/Graveyard/Graveyard - info [BAGYi].png",
+      "size": 27163,
       "src": "resources"
     },
     {
@@ -5515,8 +7275,73 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Buildings/Wood Elves/Forest Tower/Forest Tower - construction [BPFTz].png",
+      "size": 85267,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Forest Tower/Forest Tower - info [BPFTi].png",
+      "size": 27105,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 1)/Haven (level 1) - base [BKW0].png",
+      "size": 92983,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 1)/Haven (level 1) - construction [BKW0z].png",
+      "size": 171012,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 1)/Haven (level 1) - info [BKW0i].png",
+      "size": 29278,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 2)/Haven (level 2) - base [BKW1].png",
+      "size": 95650,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 2)/Haven (level 2) - info [BKW1i].png",
+      "size": 28015,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 3)/Haven (level 3) - base [BKW2].png",
+      "size": 106472,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 3)/Haven (level 3) - info [BKW2i].png",
+      "size": 29560,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 4)/Haven (level 4) - base [BKW3].png",
+      "size": 111910,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Haven (level 4)/Haven (level 4) - info [BKW3i].png",
+      "size": 32540,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - base [BPHO].png",
       "size": 16765,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - construction [BPHOz].png",
+      "size": 30661,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Healing Orb/Healing Orb - info [BPHOi].png",
+      "size": 20369,
       "src": "resources"
     },
     {
@@ -5537,6 +7362,31 @@
     {
       "path": "assets/Sprites/Buildings/Wood Elves/Magic Well/Magic Well - base [BPMW].png",
       "size": 9446,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Magic Well/Magic Well - construction [BPMWz].png",
+      "size": 15009,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Magic Well/Magic Well - info [BPMWi].png",
+      "size": 17764,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Rangers' Guild/Rangers' Guild - base [BPRG].png",
+      "size": 49537,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Rangers' Guild/Rangers' Guild - construction [BPRGz].png",
+      "size": 138293,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Buildings/Wood Elves/Rangers' Guild/Rangers' Guild - info [BPRGi].png",
+      "size": 20591,
       "src": "resources"
     },
     {
@@ -5955,6 +7805,41 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - attack [AMHXa].png",
+      "size": 1198555,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - cast [AMHXc].png",
+      "size": 199003,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - death [AMHXd].png",
+      "size": 769129,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - fidget [AMHXf].png",
+      "size": 1549967,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - idle [AMHX].png",
+      "size": 84895,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - info [AMHXi].png",
+      "size": 24175,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Barbarian Hero/Barbarian Hero - walk [AMHXw].png",
+      "size": 789732,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Barbarians/Barbarian/Barbarian - attack [ABIXa].png",
       "size": 356409,
       "src": "resources"
@@ -6020,6 +7905,121 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Barbarians/Rider/Rider - attack [ABCXa].png",
+      "size": 666734,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Rider/Rider - death [ABCXd].png",
+      "size": 933963,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Rider/Rider - fidget [ABCXf].png",
+      "size": 748268,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Rider/Rider - idle [ABCX].png",
+      "size": 81664,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Rider/Rider - info [ABCXi].png",
+      "size": 24954,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Rider/Rider - walk [ABCXw].png",
+      "size": 730629,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Tempest/Tempest - death [ATBXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Tempest/Tempest - fidget [ATBXf].png",
+      "size": 2197695,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Tempest/Tempest - idle [ATBX].png",
+      "size": 2060867,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Tempest/Tempest - info [ATBXi].png",
+      "size": 27056,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Tempest/Tempest - walk [ATBXw].png",
+      "size": 2142984,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Thrall/Thrall - attack [ABBXa].png",
+      "size": 196140,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Thrall/Thrall - death [ABBXd].png",
+      "size": 281564,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Thrall/Thrall - fidget [ABBXf].png",
+      "size": 329848,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Thrall/Thrall - idle [ABBX].png",
+      "size": 29192,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Thrall/Thrall - info [ABBXi].png",
+      "size": 19412,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/Thrall/Thrall - walk [ABBXw].png",
+      "size": 268067,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/War Dog/War Dog - attack [ABDXa].png",
+      "size": 343499,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/War Dog/War Dog - death [ABDXd].png",
+      "size": 393676,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/War Dog/War Dog - fidget [ABDXf].png",
+      "size": 368706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/War Dog/War Dog - idle [ABDX].png",
+      "size": 56967,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/War Dog/War Dog - info [ABDXi].png",
+      "size": 29231,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Barbarians/War Dog/War Dog - walk [ABDXw].png",
+      "size": 370338,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Barbarians/Warlord/Warlord - attack [ABEXa].png",
       "size": 653373,
       "src": "resources"
@@ -6047,6 +8047,31 @@
     {
       "path": "assets/Sprites/Units/Barbarians/Warlord/Warlord - walk [ABEXw].png",
       "size": 685506,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Balora/Balora - death [ATVXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Balora/Balora - fidget [ATVXf].png",
+      "size": 2078450,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Balora/Balora - idle [ATVX].png",
+      "size": 2352655,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Balora/Balora - info [ATVXi].png",
+      "size": 32747,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Balora/Balora - walk [ATVXw].png",
+      "size": 1961815,
       "src": "resources"
     },
     {
@@ -6147,6 +8172,151 @@
     {
       "path": "assets/Sprites/Units/Daemons/Imp/Imp - walk [AAIMw].png",
       "size": 261992,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Nightmare/Nightmare - attack [AVCXa].png",
+      "size": 329408,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Nightmare/Nightmare - death [AVCXd].png",
+      "size": 386350,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Nightmare/Nightmare - fidget [AVCXf].png",
+      "size": 470309,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Nightmare/Nightmare - idle [AVCX].png",
+      "size": 65848,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Nightmare/Nightmare - info [AVCXi].png",
+      "size": 27978,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Nightmare/Nightmare - walk [AVCXw].png",
+      "size": 375288,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Quasit/Quasit - attack [AVBXa].png",
+      "size": 140400,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Quasit/Quasit - death [AVBXd].png",
+      "size": 11657,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Quasit/Quasit - fidget [AVBXf].png",
+      "size": 178166,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Quasit/Quasit - idle [AVBX].png",
+      "size": 18164,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Quasit/Quasit - info [AVBXi].png",
+      "size": 13704,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Quasit/Quasit - walk [AVBXw].png",
+      "size": 88881,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Reaper/Reaper - attack [AVJXa].png",
+      "size": 344820,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Reaper/Reaper - death [AVJXd].png",
+      "size": 434757,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Reaper/Reaper - fidget [AVJXf].png",
+      "size": 385691,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Reaper/Reaper - idle [AVJX].png",
+      "size": 48880,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Reaper/Reaper - info [AVJXi].png",
+      "size": 20734,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Reaper/Reaper - walk [AVJXw].png",
+      "size": 358879,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Salamander/Salamander - attack [AVDXa].png",
+      "size": 466122,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Salamander/Salamander - death [AVDXd].png",
+      "size": 771819,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Salamander/Salamander - fidget [AVDXf].png",
+      "size": 703536,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Salamander/Salamander - idle [AVDX].png",
+      "size": 125441,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Salamander/Salamander - info [AVDXi].png",
+      "size": 19125,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Salamander/Salamander - walk [AVDXw].png",
+      "size": 1187994,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Succubus/Succubus - death [AVIXd].png",
+      "size": 11476,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Succubus/Succubus - fidget [AVIXf].png",
+      "size": 631894,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Succubus/Succubus - idle [AVIX].png",
+      "size": 684859,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Succubus/Succubus - info [AVIXi].png",
+      "size": 24489,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Daemons/Succubus/Succubus - walk [AVIXw].png",
+      "size": 593827,
       "src": "resources"
     },
     {
@@ -6290,6 +8460,86 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dark Dwarves/Firebomb/Firebomb - attack [AASXa].png",
+      "size": 30503,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Firebomb/Firebomb - fidget [AASXf].png",
+      "size": 28421,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Firebomb/Firebomb - idle [AASX].png",
+      "size": 5512,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Firebomb/Firebomb - info [AASXi].png",
+      "size": 16297,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Firebomb/Firebomb - walk [AASXw].png",
+      "size": 19220,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Grond/Grond - attack [ATAXa].png",
+      "size": 413917,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Grond/Grond - death [ATAXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Grond/Grond - fidget [ATAXf].png",
+      "size": 1487017,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Grond/Grond - idle [ATAX].png",
+      "size": 177155,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Grond/Grond - info [ATAXi].png",
+      "size": 32307,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Grond/Grond - walk [ATAXw].png",
+      "size": 1445480,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Hellbore/Hellbore - death [AANXd].png",
+      "size": 36042,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Hellbore/Hellbore - fidget [AANXf].png",
+      "size": 944548,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Hellbore/Hellbore - idle [AANX].png",
+      "size": 118863,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Hellbore/Hellbore - info [AANXi].png",
+      "size": 23326,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Dwarves/Hellbore/Hellbore - walk [AANXw].png",
+      "size": 364440,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dark Dwarves/Iron Golem/Iron Golem - attack [AAJXa].png",
       "size": 437570,
       "src": "resources"
@@ -6380,6 +8630,71 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - attack [AKGXa].png",
+      "size": 377912,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - cast [AKGXc].png",
+      "size": 54758,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - death [AKGXd].png",
+      "size": 377284,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - fidget [AKGXf].png",
+      "size": 547906,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - idle [AKGX].png",
+      "size": 46571,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - info [AKGXi].png",
+      "size": 17813,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Blackguard/Blackguard - walk [AKGXw].png",
+      "size": 259643,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Archer/Dark Archer - attack [AKMXa].png",
+      "size": 279893,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Archer/Dark Archer - death [AKMXd].png",
+      "size": 555717,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Archer/Dark Archer - fidget [AKMXf].png",
+      "size": 291459,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Archer/Dark Archer - idle [AKMX].png",
+      "size": 42853,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Archer/Dark Archer - info [AKMXi].png",
+      "size": 19530,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Archer/Dark Archer - walk [AKMXw].png",
+      "size": 446514,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dark Elves/Dark Elf Hero/Dark Elf Hero - attack [AKHXa].png",
       "size": 608775,
       "src": "resources"
@@ -6450,6 +8765,66 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Rider/Dark Rider - attack [AKCXa].png",
+      "size": 703784,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Rider/Dark Rider - death [AKCXd].png",
+      "size": 901752,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Rider/Dark Rider - fidget [AKCXf].png",
+      "size": 738535,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Rider/Dark Rider - idle [AKCX].png",
+      "size": 99936,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Rider/Dark Rider - info [AKCXi].png",
+      "size": 27879,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Dark Rider/Dark Rider - walk [AKCXw].png",
+      "size": 481292,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Kargoth/Kargoth - attack [ATKXa].png",
+      "size": 853596,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Kargoth/Kargoth - death [ATKXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Kargoth/Kargoth - fidget [ATKXf].png",
+      "size": 1173984,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Kargoth/Kargoth - idle [ATKX].png",
+      "size": 144565,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Kargoth/Kargoth - info [ATKXi].png",
+      "size": 30764,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Kargoth/Kargoth - walk [ATKXw].png",
+      "size": 1004618,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dark Elves/Queen Spider/Queen Spider - attack [AKLXa].png",
       "size": 206497,
       "src": "resources"
@@ -6510,6 +8885,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dark Elves/Spider Priestess/Spider Priestess - attack [AKOXa].png",
+      "size": 223018,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Spider Priestess/Spider Priestess - death [AKOXd].png",
+      "size": 19763,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Spider Priestess/Spider Priestess - fidget [AKOXf].png",
+      "size": 383207,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Spider Priestess/Spider Priestess - idle [AKOX].png",
+      "size": 48070,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Spider Priestess/Spider Priestess - info [AKOXi].png",
+      "size": 18462,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dark Elves/Spider Priestess/Spider Priestess - walk [AKOXw].png",
+      "size": 329371,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dragons/Celestial Dragon/Celestial Dragon - death [AADCd].png",
       "size": 11579,
       "src": "resources"
@@ -6532,6 +8937,31 @@
     {
       "path": "assets/Sprites/Units/Dragons/Celestial Dragon/Celestial Dragon - walk [AADCw].png",
       "size": 1469889,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Dragonliche/Dragonliche - death [AADUd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Dragonliche/Dragonliche - fidget [AADUf].png",
+      "size": 1088144,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Dragonliche/Dragonliche - idle [AADU].png",
+      "size": 532761,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Dragonliche/Dragonliche - info [AADUi].png",
+      "size": 21595,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Dragonliche/Dragonliche - walk [AADUw].png",
+      "size": 1062803,
       "src": "resources"
     },
     {
@@ -6560,6 +8990,31 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dragons/Frost Dragon/Frost Dragon - death [AADWd].png",
+      "size": 11657,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Frost Dragon/Frost Dragon - fidget [AADWf].png",
+      "size": 1170907,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Frost Dragon/Frost Dragon - idle [AADW].png",
+      "size": 654460,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Frost Dragon/Frost Dragon - info [AADWi].png",
+      "size": 20278,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Frost Dragon/Frost Dragon - walk [AADWw].png",
+      "size": 1291766,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dragons/Storm Dragon/Storm Dragon - death [AADBd].png",
       "size": 19087,
       "src": "resources"
@@ -6582,6 +9037,31 @@
     {
       "path": "assets/Sprites/Units/Dragons/Storm Dragon/Storm Dragon - walk [AADBw].png",
       "size": 1972371,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Swamp Dragon/Swamp Dragon - death [AADGd].png",
+      "size": 11579,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Swamp Dragon/Swamp Dragon - fidget [AADGf].png",
+      "size": 2101097,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Swamp Dragon/Swamp Dragon - idle [AADG].png",
+      "size": 1031135,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Swamp Dragon/Swamp Dragon - info [AADGi].png",
+      "size": 16170,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dragons/Swamp Dragon/Swamp Dragon - walk [AADGw].png",
+      "size": 1920022,
       "src": "resources"
     },
     {
@@ -6612,6 +9092,36 @@
     {
       "path": "assets/Sprites/Units/Dwarves/Dwarf Berserker/Dwarf Berserker - walk [ADJXw].png",
       "size": 501703,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - attack [ADMXa].png",
+      "size": 383377,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - death [ADMXd].png",
+      "size": 267021,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - fidget [ADMXf].png",
+      "size": 386216,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - idle [ADMX].png",
+      "size": 31109,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - info [ADMXi].png",
+      "size": 24465,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - walk [ADMXw].png",
+      "size": 242756,
       "src": "resources"
     },
     {
@@ -6655,6 +9165,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - attack [ADIXa].png",
+      "size": 213655,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - death [ADIXd].png",
+      "size": 354702,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - fidget [ADIXf].png",
+      "size": 246306,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - idle [ADIX].png",
+      "size": 31382,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - info [ADIXi].png",
+      "size": 21799,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - walk [ADIXw].png",
+      "size": 217158,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dwarves/Dwarf Lord/Dwarf Lord - attack [ADGXa].png",
       "size": 234242,
       "src": "resources"
@@ -6690,6 +9230,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Runner/Dwarf Runner - attack [ADSXa].png",
+      "size": 198511,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Runner/Dwarf Runner - death [ADSXd].png",
+      "size": 218428,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Runner/Dwarf Runner - fidget [ADSXf].png",
+      "size": 199281,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Runner/Dwarf Runner - idle [ADSX].png",
+      "size": 23990,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Runner/Dwarf Runner - info [ADSXi].png",
+      "size": 24730,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Dwarf Runner/Dwarf Runner - walk [ADSXw].png",
+      "size": 174090,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Dwarves/Khazrimi Guard/Khazrimi Guard - attack [ADLXa].png",
       "size": 348881,
       "src": "resources"
@@ -6717,6 +9287,91 @@
     {
       "path": "assets/Sprites/Units/Dwarves/Khazrimi Guard/Khazrimi Guard - walk [ADLXw].png",
       "size": 315660,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/King Khalid/King Khalid - death [ATDXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/King Khalid/King Khalid - fidget [ATDXf].png",
+      "size": 1703525,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/King Khalid/King Khalid - idle [ATDX].png",
+      "size": 293171,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/King Khalid/King Khalid - info [ATDXi].png",
+      "size": 40181,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/King Khalid/King Khalid - walk [ATDXw].png",
+      "size": 1504159,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Runelord/Runelord - attack [ADOXa].png",
+      "size": 291594,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Runelord/Runelord - death [ADOXd].png",
+      "size": 379011,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Runelord/Runelord - fidget [ADOXf].png",
+      "size": 249018,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Runelord/Runelord - idle [ADOX].png",
+      "size": 42099,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Runelord/Runelord - info [ADOXi].png",
+      "size": 24620,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Runelord/Runelord - walk [ADOXw].png",
+      "size": 293094,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Smith/Smith - attack [ADBXa].png",
+      "size": 214841,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Smith/Smith - death [ADBXd].png",
+      "size": 249630,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Smith/Smith - fidget [ADBXf].png",
+      "size": 238873,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Smith/Smith - idle [ADBX].png",
+      "size": 29593,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Smith/Smith - info [ADBXi].png",
+      "size": 22391,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Dwarves/Smith/Smith - walk [ADBXw].png",
+      "size": 222288,
       "src": "resources"
     },
     {
@@ -7045,6 +9700,66 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Fey/Faerie Dragon/Faerie Dragon - death [AFMXd].png",
+      "size": 11476,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Faerie Dragon/Faerie Dragon - fidget [AFMXf].png",
+      "size": 499086,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Faerie Dragon/Faerie Dragon - idle [AFMX].png",
+      "size": 517280,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Faerie Dragon/Faerie Dragon - info [AFMXi].png",
+      "size": 21277,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Faerie Dragon/Faerie Dragon - walk [AFMXw].png",
+      "size": 514042,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - attack [AFHXa].png",
+      "size": 377565,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - cast [AFHXc].png",
+      "size": 46395,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - death [AFHXd].png",
+      "size": 500640,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - fidget [AFHXf].png",
+      "size": 408627,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - idle [AFHX].png",
+      "size": 53905,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - info [AFHXi].png",
+      "size": 21032,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Fey Hero/Fey Hero - walk [AFHXw].png",
+      "size": 379815,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Fey/Leprechaun/Leprechaun - attack [AFNXa].png",
       "size": 202495,
       "src": "resources"
@@ -7072,6 +9787,181 @@
     {
       "path": "assets/Sprites/Units/Fey/Leprechaun/Leprechaun - walk [AFNXw].png",
       "size": 102439,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Oakman/Oakman - attack [AFBXa].png",
+      "size": 405559,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Oakman/Oakman - death [AFBXd].png",
+      "size": 261787,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Oakman/Oakman - fidget [AFBXf].png",
+      "size": 426726,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Oakman/Oakman - idle [AFBX].png",
+      "size": 46898,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Oakman/Oakman - info [AFBXi].png",
+      "size": 34041,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Oakman/Oakman - walk [AFBXw].png",
+      "size": 410150,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Pixie/Pixie - attack [AEXXa].png",
+      "size": 72160,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Pixie/Pixie - death [AEXXd].png",
+      "size": 229281,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Pixie/Pixie - fidget [AEXXf].png",
+      "size": 184888,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Pixie/Pixie - idle [AEXX].png",
+      "size": 14953,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Pixie/Pixie - info [AEXXi].png",
+      "size": 13184,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Pixie/Pixie - walk [AEXXw].png",
+      "size": 150943,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Spriggan/Spriggan - attack [AFIXa].png",
+      "size": 142801,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Spriggan/Spriggan - death [AFIXd].png",
+      "size": 177734,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Spriggan/Spriggan - fidget [AFIXf].png",
+      "size": 150425,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Spriggan/Spriggan - idle [AFIX].png",
+      "size": 20399,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Spriggan/Spriggan - info [AFIXi].png",
+      "size": 14809,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Spriggan/Spriggan - walk [AFIXw].png",
+      "size": 137102,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sprite/Sprite - attack [AASPa].png",
+      "size": 224949,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sprite/Sprite - death [AASPd].png",
+      "size": 116387,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sprite/Sprite - fidget [AASPf].png",
+      "size": 246785,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sprite/Sprite - idle [AASP].png",
+      "size": 227274,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sprite/Sprite - info [AASPi].png",
+      "size": 22007,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sprite/Sprite - walk [AASPw].png",
+      "size": 245361,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sylph/Sylph - death [AFJXd].png",
+      "size": 11657,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sylph/Sylph - fidget [AFJXf].png",
+      "size": 36886,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sylph/Sylph - idle [AFJX].png",
+      "size": 32737,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sylph/Sylph - info [AFJXi].png",
+      "size": 9723,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/Sylph/Sylph - walk [AFJXw].png",
+      "size": 34164,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/The Forestmaster/The Forestmaster - attack [ATFXa].png",
+      "size": 777428,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/The Forestmaster/The Forestmaster - death [ATFXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/The Forestmaster/The Forestmaster - fidget [ATFXf].png",
+      "size": 1132055,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/The Forestmaster/The Forestmaster - idle [ATFX].png",
+      "size": 143499,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/The Forestmaster/The Forestmaster - info [ATFXi].png",
+      "size": 30482,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Fey/The Forestmaster/The Forestmaster - walk [ATFXw].png",
+      "size": 712151,
       "src": "resources"
     },
     {
@@ -7310,6 +10200,31 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/High Elves/King Lunarion/King Lunarion - death [ATEXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/High Elves/King Lunarion/King Lunarion - fidget [ATEXf].png",
+      "size": 2400306,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/High Elves/King Lunarion/King Lunarion - idle [ATEX].png",
+      "size": 2401645,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/High Elves/King Lunarion/King Lunarion - info [ATEXi].png",
+      "size": 34353,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/High Elves/King Lunarion/King Lunarion - walk [ATEXw].png",
+      "size": 2264346,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/High Elves/Longbow/Longbow - attack [AEMXa].png",
       "size": 256514,
       "src": "resources"
@@ -7465,6 +10380,26 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Knights/Dancing Sword/Dancing Sword - fidget [AHLXf].png",
+      "size": 107504,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Dancing Sword/Dancing Sword - idle [AHLX].png",
+      "size": 95783,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Dancing Sword/Dancing Sword - info [AHLXi].png",
+      "size": 12105,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Dancing Sword/Dancing Sword - walk [AHLXw].png",
+      "size": 105357,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Knights/Inquisitor/Inquisitor - attack [AHGXa].png",
       "size": 228007,
       "src": "resources"
@@ -7570,6 +10505,41 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - attack [AHH1a].png",
+      "size": 357571,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - cast [AHH1c].png",
+      "size": 53188,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - death [AHH1d].png",
+      "size": 322117,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - fidget [AHH1f].png",
+      "size": 318786,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - idle [AHH1].png",
+      "size": 36172,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - info [AHH1i].png",
+      "size": 18738,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight Hero (variant 1)/Knight Hero (variant 1) - walk [AHH1w].png",
+      "size": 249848,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Knights/Knight Hero/Knight Hero - attack [AHHXa].png",
       "size": 613754,
       "src": "resources"
@@ -7640,6 +10610,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Knights/Knight/Knight - attack [Ahdxa].png",
+      "size": 888649,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight/Knight - death [Ahdxd].png",
+      "size": 1048201,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight/Knight - fidget [Ahdxf].png",
+      "size": 901458,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight/Knight - idle [Ahdx].png",
+      "size": 91213,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight/Knight - info [Ahdxi].png",
+      "size": 27437,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Knight/Knight - walk [Ahdxw].png",
+      "size": 526400,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Knights/Peasant/Peasant - attack [Ahbxa].png",
       "size": 234955,
       "src": "resources"
@@ -7675,6 +10675,61 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Knights/Sirian/Sirian - death [ATHXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Sirian/Sirian - fidget [ATHXf].png",
+      "size": 2033426,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Sirian/Sirian - idle [ATHX].png",
+      "size": 212360,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Sirian/Sirian - info [ATHXi].png",
+      "size": 32548,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Sirian/Sirian - walk [ATHXw].png",
+      "size": 1697891,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Squire/Squire - attack [Ahmxa].png",
+      "size": 326271,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Squire/Squire - death [Ahmxd].png",
+      "size": 388549,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Squire/Squire - fidget [Ahmxf].png",
+      "size": 373932,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Squire/Squire - idle [Ahmx].png",
+      "size": 37676,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Squire/Squire - info [Ahmxi].png",
+      "size": 17177,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Knights/Squire/Squire - walk [Ahmxw].png",
+      "size": 354208,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Knights/Swordsman/Swordsman - attack [AHKXa].png",
       "size": 200994,
       "src": "resources"
@@ -7702,6 +10757,36 @@
     {
       "path": "assets/Sprites/Units/Knights/Swordsman/Swordsman - walk [AHKXw].png",
       "size": 221354,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Axe Thrower/Axe Thrower - attack [AMNXa].png",
+      "size": 656034,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Axe Thrower/Axe Thrower - death [AMNXd].png",
+      "size": 444630,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Axe Thrower/Axe Thrower - fidget [AMNXf].png",
+      "size": 514239,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Axe Thrower/Axe Thrower - idle [AMNX].png",
+      "size": 44031,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Axe Thrower/Axe Thrower - info [AMNXi].png",
+      "size": 23504,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Axe Thrower/Axe Thrower - walk [AMNXw].png",
+      "size": 380720,
       "src": "resources"
     },
     {
@@ -7900,6 +10985,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Minotaurs/Skull of Sartek/Skull of Sartek - attack [ATMXa].png",
+      "size": 313528,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Skull of Sartek/Skull of Sartek - death [ATMXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Skull of Sartek/Skull of Sartek - fidget [ATMXf].png",
+      "size": 2084609,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Skull of Sartek/Skull of Sartek - idle [ATMX].png",
+      "size": 308667,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Skull of Sartek/Skull of Sartek - info [ATMXi].png",
+      "size": 36751,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Minotaurs/Skull of Sartek/Skull of Sartek - walk [ATMXw].png",
+      "size": 2015382,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Orcs/Giant/Giant - attack [AOGXa].png",
       "size": 351766,
       "src": "resources"
@@ -7940,6 +11055,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Orcs/Goblin Chief/Goblin Chief - attack [AOKXa].png",
+      "size": 186649,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin Chief/Goblin Chief - death [AOKXd].png",
+      "size": 244820,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin Chief/Goblin Chief - fidget [AOKXf].png",
+      "size": 221608,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin Chief/Goblin Chief - idle [AOKX].png",
+      "size": 28797,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin Chief/Goblin Chief - info [AOKXi].png",
+      "size": 24661,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin Chief/Goblin Chief - walk [AOKXw].png",
+      "size": 203547,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Orcs/Goblin Shaman/Goblin Shaman - attack [AONXa].png",
       "size": 207882,
       "src": "resources"
@@ -7970,6 +11115,96 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Orcs/Goblin/Goblin - attack [AOSXa].png",
+      "size": 181755,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin/Goblin - death [AOSXd].png",
+      "size": 241459,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin/Goblin - fidget [AOSXf].png",
+      "size": 214349,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin/Goblin - idle [AOSX].png",
+      "size": 25610,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin/Goblin - info [AOSXi].png",
+      "size": 25408,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Goblin/Goblin - walk [AOSXw].png",
+      "size": 198954,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold Sniper/Kobold Sniper - attack [AOOXa].png",
+      "size": 405400,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold Sniper/Kobold Sniper - death [AOOXd].png",
+      "size": 428552,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold Sniper/Kobold Sniper - fidget [AOOXf].png",
+      "size": 376178,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold Sniper/Kobold Sniper - idle [AOOX].png",
+      "size": 54999,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold Sniper/Kobold Sniper - info [AOOXi].png",
+      "size": 20938,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold Sniper/Kobold Sniper - walk [AOOXw].png",
+      "size": 369720,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold/Kobold - attack [AOBXa].png",
+      "size": 210700,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold/Kobold - death [AOBXd].png",
+      "size": 318450,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold/Kobold - fidget [AOBXf].png",
+      "size": 265319,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold/Kobold - idle [AOBX].png",
+      "size": 32234,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold/Kobold - info [AOBXi].png",
+      "size": 20331,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Kobold/Kobold - walk [AOBXw].png",
+      "size": 264081,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Orcs/Ogre/Ogre - attack [AOJXa].png",
       "size": 799441,
       "src": "resources"
@@ -7997,6 +11232,71 @@
     {
       "path": "assets/Sprites/Units/Orcs/Ogre/Ogre - walk [AOJXw].png",
       "size": 1105425,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - attack [AOHXa].png",
+      "size": 550477,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - cast [AOHXc].png",
+      "size": 157840,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - death [AOHXd].png",
+      "size": 742618,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - fidget [AOHXf].png",
+      "size": 1001925,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - idle [AOHX].png",
+      "size": 69521,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - info [AOHXi].png",
+      "size": 29018,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc Hero/Orc Hero - walk [AOHXw].png",
+      "size": 546771,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc/Orc - attack [AOIXa].png",
+      "size": 342901,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc/Orc - death [AOIXd].png",
+      "size": 448771,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc/Orc - fidget [AOIXf].png",
+      "size": 398965,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc/Orc - idle [AOIX].png",
+      "size": 47331,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc/Orc - info [AOIXi].png",
+      "size": 24056,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Orcs/Orc/Orc - walk [AOIXw].png",
+      "size": 331132,
       "src": "resources"
     },
     {
@@ -8060,6 +11360,126 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Plaguelords/Cryohydra/Cryohydra - attack [AGCYa].png",
+      "size": 1647931,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Cryohydra/Cryohydra - death [AGCYd].png",
+      "size": 1781185,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Cryohydra/Cryohydra - fidget [AGCYf].png",
+      "size": 1693930,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Cryohydra/Cryohydra - idle [AGCY].png",
+      "size": 225796,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Cryohydra/Cryohydra - info [AGCYi].png",
+      "size": 29737,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Cryohydra/Cryohydra - walk [AGCYw].png",
+      "size": 1743065,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Eye of Flame/Eye of Flame - attack [AGFLa].png",
+      "size": 134003,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Eye of Flame/Eye of Flame - death [AGFLd].png",
+      "size": 18695,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Eye of Flame/Eye of Flame - fidget [AGFLf].png",
+      "size": 155077,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Eye of Flame/Eye of Flame - idle [AGFL].png",
+      "size": 55288,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Eye of Flame/Eye of Flame - info [AGFLi].png",
+      "size": 30941,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Eye of Flame/Eye of Flame - walk [AGFLw].png",
+      "size": 306987,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Gazer/Gazer - attack [AGGZa].png",
+      "size": 110293,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Gazer/Gazer - death [AGGZd].png",
+      "size": 19763,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Gazer/Gazer - fidget [AGGZf].png",
+      "size": 117494,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Gazer/Gazer - idle [AGGZ].png",
+      "size": 45670,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Gazer/Gazer - info [AGGZi].png",
+      "size": 28384,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Gazer/Gazer - walk [AGGZw].png",
+      "size": 254711,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Ghoul/Ghoul - attack [AGPCa].png",
+      "size": 259737,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Ghoul/Ghoul - death [AGPCd].png",
+      "size": 363023,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Ghoul/Ghoul - fidget [AGPCf].png",
+      "size": 318285,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Ghoul/Ghoul - idle [AGPC].png",
+      "size": 39693,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Ghoul/Ghoul - info [AGPCi].png",
+      "size": 24244,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Ghoul/Ghoul - walk [AGPCw].png",
+      "size": 279377,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Plaguelords/Hydra/Hydra - attack [AGHYa].png",
       "size": 1257418,
       "src": "resources"
@@ -8087,6 +11507,26 @@
     {
       "path": "assets/Sprites/Units/Plaguelords/Hydra/Hydra - walk [AGHYw].png",
       "size": 1329847,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Lord Antharg/Lord Antharg - fidget [ATGXf].png",
+      "size": 916920,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Lord Antharg/Lord Antharg - idle [ATGX].png",
+      "size": 170317,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Lord Antharg/Lord Antharg - info [ATGXi].png",
+      "size": 22695,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Lord Antharg/Lord Antharg - walk [ATGXw].png",
+      "size": 983938,
       "src": "resources"
     },
     {
@@ -8122,6 +11562,96 @@
     {
       "path": "assets/Sprites/Units/Plaguelords/Plague Priest/Plague Priest - walk [AGGXw].png",
       "size": 258656,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Pyrohydra/Pyrohydra - attack [AGPYa].png",
+      "size": 1543614,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Pyrohydra/Pyrohydra - death [AGPYd].png",
+      "size": 1630626,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Pyrohydra/Pyrohydra - fidget [AGPYf].png",
+      "size": 1595503,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Pyrohydra/Pyrohydra - idle [AGPY].png",
+      "size": 217928,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Pyrohydra/Pyrohydra - info [AGPYi].png",
+      "size": 30243,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Pyrohydra/Pyrohydra - walk [AGPYw].png",
+      "size": 1636838,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Slime/Slime - attack [AGSLa].png",
+      "size": 49330,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Slime/Slime - death [AGSLd].png",
+      "size": 61191,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Slime/Slime - fidget [AGSLf].png",
+      "size": 51920,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Slime/Slime - idle [AGSL].png",
+      "size": 18516,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Slime/Slime - info [AGSLi].png",
+      "size": 22320,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Slime/Slime - walk [AGSLw].png",
+      "size": 52500,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Spore/Spore - attack [AGSPa].png",
+      "size": 75222,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Spore/Spore - death [AGSPd].png",
+      "size": 19763,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Spore/Spore - fidget [AGSPf].png",
+      "size": 82832,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Spore/Spore - idle [AGSP].png",
+      "size": 30092,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Spore/Spore - info [AGSPi].png",
+      "size": 31627,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Plaguelords/Spore/Spore - walk [AGSPw].png",
+      "size": 169621,
       "src": "resources"
     },
     {
@@ -8200,6 +11730,56 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Ssrathi/Chameleon/Chameleon - attack [ALBXa].png",
+      "size": 145637,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Chameleon/Chameleon - death [ALBXd].png",
+      "size": 198776,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Chameleon/Chameleon - fidget [ALBXf].png",
+      "size": 208655,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Chameleon/Chameleon - idle [ALBX].png",
+      "size": 25731,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Chameleon/Chameleon - info [ALBXi].png",
+      "size": 20746,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Chameleon/Chameleon - walk [ALBXw].png",
+      "size": 143279,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Iriki/Iriki - fidget [ATLXf].png",
+      "size": 1420561,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Iriki/Iriki - idle [ATLX].png",
+      "size": 200997,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Iriki/Iriki - info [ATLXi].png",
+      "size": 39814,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Iriki/Iriki - walk [ATLXw].png",
+      "size": 1381364,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Ssrathi/Lizard Rider/Lizard Rider - attack [ALCXa].png",
       "size": 646165,
       "src": "resources"
@@ -8265,6 +11845,101 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Ssrathi/Snakeman/Snakeman - attack [ALIXa].png",
+      "size": 571732,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakeman/Snakeman - death [ALIXd].png",
+      "size": 531835,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakeman/Snakeman - fidget [ALIXf].png",
+      "size": 412608,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakeman/Snakeman - idle [ALIX].png",
+      "size": 50917,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakeman/Snakeman - info [ALIXi].png",
+      "size": 21873,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakeman/Snakeman - walk [ALIXw].png",
+      "size": 398759,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakepriest/Snakepriest - attack [ALMXa].png",
+      "size": 249364,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakepriest/Snakepriest - death [ALMXd].png",
+      "size": 341383,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakepriest/Snakepriest - fidget [ALMXf].png",
+      "size": 288513,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakepriest/Snakepriest - idle [ALMX].png",
+      "size": 38808,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakepriest/Snakepriest - info [ALMXi].png",
+      "size": 16029,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Snakepriest/Snakepriest - walk [ALMXw].png",
+      "size": 279865,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - attack [ALHXa].png",
+      "size": 392534,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - cast [ALHXc].png",
+      "size": 75919,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - death [ALHXd].png",
+      "size": 453486,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - fidget [ALHXf].png",
+      "size": 461508,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - idle [ALHX].png",
+      "size": 59983,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - info [ALHXi].png",
+      "size": 28742,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Ssrathi/Ssrathi Hero/Ssrathi Hero - walk [ALHXw].png",
+      "size": 296952,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Ssrathi/Triceratops/Triceratops - attack [ALDXa].png",
       "size": 742343,
       "src": "resources"
@@ -8325,6 +12000,126 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Swarm/Giant Ant/Giant Ant - attack [ARBXa].png",
+      "size": 59839,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Giant Ant/Giant Ant - death [ARBXd].png",
+      "size": 144565,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Giant Ant/Giant Ant - fidget [ARBXf].png",
+      "size": 110446,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Giant Ant/Giant Ant - idle [ARBX].png",
+      "size": 27145,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Giant Ant/Giant Ant - info [ARBXi].png",
+      "size": 20392,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Giant Ant/Giant Ant - walk [ARBXw].png",
+      "size": 121578,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Husk/Husk - attack [ARJXa].png",
+      "size": 176178,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Husk/Husk - death [ARJXd].png",
+      "size": 165320,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Husk/Husk - fidget [ARJXf].png",
+      "size": 248464,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Husk/Husk - idle [ARJX].png",
+      "size": 31921,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Husk/Husk - info [ARJXi].png",
+      "size": 15685,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Husk/Husk - walk [ARJXw].png",
+      "size": 187525,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scarab/Scarab - attack [ARMXa].png",
+      "size": 172216,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scarab/Scarab - death [ARMXd].png",
+      "size": 146862,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scarab/Scarab - fidget [ARMXf].png",
+      "size": 103522,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scarab/Scarab - idle [ARMX].png",
+      "size": 29095,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scarab/Scarab - info [ARMXi].png",
+      "size": 9737,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scarab/Scarab - walk [ARMXw].png",
+      "size": 137021,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpion/Scorpion - attack [ARIXa].png",
+      "size": 253184,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpion/Scorpion - death [ARIXd].png",
+      "size": 310159,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpion/Scorpion - fidget [ARIXf].png",
+      "size": 278973,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpion/Scorpion - idle [ARIX].png",
+      "size": 45103,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpion/Scorpion - info [ARIXi].png",
+      "size": 21950,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpion/Scorpion - walk [ARIXw].png",
+      "size": 213373,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Swarm/Scorpionman/Scorpionman - attack [ARCXa].png",
       "size": 1073764,
       "src": "resources"
@@ -8352,6 +12147,76 @@
     {
       "path": "assets/Sprites/Units/Swarm/Scorpionman/Scorpionman - walk [ARCXw].png",
       "size": 354617,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - attack [ARGXa].png",
+      "size": 973434,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - cast [ARGXc].png",
+      "size": 152706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - death [ARGXd].png",
+      "size": 1165454,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - fidget [ARGXf].png",
+      "size": 1170206,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - idle [ARGX].png",
+      "size": 149308,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - info [ARGXi].png",
+      "size": 32713,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Scorpionpriest/Scorpionpriest - walk [ARGXw].png",
+      "size": 757772,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - attack [ARHXa].png",
+      "size": 453168,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - cast [ARHXc].png",
+      "size": 73356,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - death [ARHXd].png",
+      "size": 573595,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - fidget [ARHXf].png",
+      "size": 561266,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - idle [ARHX].png",
+      "size": 66183,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - info [ARHXi].png",
+      "size": 27092,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Swarm/Swarm Hero/Swarm Hero - walk [ARHXw].png",
+      "size": 462674,
       "src": "resources"
     },
     {
@@ -8560,6 +12425,66 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Undead/Shadow/Shadow - attack [AUXXa].png",
+      "size": 108949,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Shadow/Shadow - death [AUXXd].png",
+      "size": 102975,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Shadow/Shadow - fidget [AUXXf].png",
+      "size": 124904,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Shadow/Shadow - idle [AUXX].png",
+      "size": 29367,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Shadow/Shadow - info [AUXXi].png",
+      "size": 13539,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Shadow/Shadow - walk [AUXXw].png",
+      "size": 109071,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - attack [AUCXa].png",
+      "size": 452213,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - death [AUCXd].png",
+      "size": 715850,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - fidget [AUCXf].png",
+      "size": 557808,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - idle [AUCX].png",
+      "size": 75063,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - info [AUCXi].png",
+      "size": 27469,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - walk [AUCXw].png",
+      "size": 477684,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Undead/Skeleton/Skeleton - attack [AUIXa].png",
       "size": 588054,
       "src": "resources"
@@ -8620,6 +12545,196 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - attack [AUHXa].png",
+      "size": 484349,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - cast [AUHXc].png",
+      "size": 138165,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - death [AUHXd].png",
+      "size": 626003,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - fidget [AUHXf].png",
+      "size": 626980,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - idle [AUHX].png",
+      "size": 61292,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - info [AUHXi].png",
+      "size": 21734,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Undead Hero/Undead Hero - walk [AUHXw].png",
+      "size": 377383,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - attack [AUGXa].png",
+      "size": 643648,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - cast [AUGXc].png",
+      "size": 97507,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - death [AUGXd].png",
+      "size": 488311,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - fidget [AUGXf].png",
+      "size": 373062,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - idle [AUGX].png",
+      "size": 43006,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - info [AUGXi].png",
+      "size": 29780,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Vampire/Vampire - walk [AUGXw].png",
+      "size": 315877,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wight/Wight - attack [AUJXa].png",
+      "size": 442346,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wight/Wight - death [AUJXd].png",
+      "size": 547653,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wight/Wight - fidget [AUJXf].png",
+      "size": 362235,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wight/Wight - idle [AUJX].png",
+      "size": 39520,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wight/Wight - info [AUJXi].png",
+      "size": 23417,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wight/Wight - walk [AUJXw].png",
+      "size": 274639,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wraith/Wraith - attack [AUKXa].png",
+      "size": 186290,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wraith/Wraith - death [AUKXd].png",
+      "size": 224621,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wraith/Wraith - fidget [AUKXf].png",
+      "size": 208859,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wraith/Wraith - idle [AUKX].png",
+      "size": 48168,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wraith/Wraith - info [AUKXi].png",
+      "size": 18800,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Wraith/Wraith - walk [AUKXw].png",
+      "size": 185534,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Zombie/Zombie - attack [AUBXa].png",
+      "size": 255007,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Zombie/Zombie - death [AUBXd].png",
+      "size": 222363,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Zombie/Zombie - fidget [AUBXf].png",
+      "size": 239924,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Zombie/Zombie - idle [AUBX].png",
+      "size": 25325,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Zombie/Zombie - info [AUBXi].png",
+      "size": 19211,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Undead/Zombie/Zombie - walk [AUBXw].png",
+      "size": 182396,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Ancient Treant/Ancient Treant - attack [AWKXa].png",
+      "size": 452085,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Ancient Treant/Ancient Treant - death [AWKXd].png",
+      "size": 55078,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Ancient Treant/Ancient Treant - fidget [AWKXf].png",
+      "size": 1258461,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Ancient Treant/Ancient Treant - idle [AWKX].png",
+      "size": 140539,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Ancient Treant/Ancient Treant - info [AWKXi].png",
+      "size": 21125,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Ancient Treant/Ancient Treant - walk [AWKXw].png",
+      "size": 1168368,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Wood Elves/Druid/Druid - attack [AWNXa].png",
       "size": 233896,
       "src": "resources"
@@ -8650,6 +12765,41 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - attack [AWGXa].png",
+      "size": 252047,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - cast [AWGXc].png",
+      "size": 46956,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - death [AWGXd].png",
+      "size": 209961,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - fidget [AWGXf].png",
+      "size": 238660,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - idle [AWGX].png",
+      "size": 26462,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - info [AWGXi].png",
+      "size": 18269,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Dryad/Dryad - walk [AWGXw].png",
+      "size": 304637,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sprites/Units/Wood Elves/Elven Hunter/Elven Hunter - attack [AEEXa].png",
       "size": 432915,
       "src": "resources"
@@ -8677,6 +12827,36 @@
     {
       "path": "assets/Sprites/Units/Wood Elves/Elven Hunter/Elven Hunter - walk [AEEXw].png",
       "size": 414927,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Forestguard/Forestguard - attack [AWIXa].png",
+      "size": 478234,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Forestguard/Forestguard - death [AWIXd].png",
+      "size": 347989,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Forestguard/Forestguard - fidget [AWIXf].png",
+      "size": 485834,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Forestguard/Forestguard - idle [AWIX].png",
+      "size": 41370,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Forestguard/Forestguard - info [AWIXi].png",
+      "size": 18203,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Forestguard/Forestguard - walk [AWIXw].png",
+      "size": 458554,
       "src": "resources"
     },
     {
@@ -8810,6 +12990,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sprites/Units/Wood Elves/Woodrider/Woodrider - attack [AWCXa].png",
+      "size": 698570,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Woodrider/Woodrider - death [AWCXd].png",
+      "size": 886345,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Woodrider/Woodrider - fidget [AWCXf].png",
+      "size": 758338,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Woodrider/Woodrider - idle [AWCX].png",
+      "size": 100346,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Woodrider/Woodrider - info [Awcxi].png",
+      "size": 28527,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sprites/Units/Wood Elves/Woodrider/Woodrider - walk [AWCXw].png",
+      "size": 483781,
+      "src": "resources"
+    },
+    {
       "path": "assets/asset_index.json",
       "size": 353366,
       "src": "code"
@@ -8826,7 +13036,7 @@
     },
     {
       "path": "assets/gamemodels/catalog.json",
-      "size": 544192,
+      "size": 1574999,
       "src": "code"
     },
     {

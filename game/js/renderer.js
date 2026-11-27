@@ -1,7 +1,7 @@
 // 2D isometric hex renderer. Flat-top hexes with vertical squash for the iso feel.
 import { hexToPixel, hexCorners, pixelToHex, HEX_SIZE, H_SQUASH, stepToward, hexDistance } from './hex.js';
 import { createUnitAnim, resourcesFor, dirIndexFromVector, loadFrames, loadResources, loadTerrain, terrainTile, terrainMeta, onAssetsChanged, effectStrip, drawEffectFrame, teamSource } from './sprites.js';
-import { villageColour, ALLY_GREEN, villageAround, villageWallRing } from './villages.js';
+import { villageColour, ALLY_GREEN, villageAround, villageWallRing, raceWallSprites } from './villages.js';
 import { hash32 } from './map.js';
 import { shotPosAt } from './siege.js';
 import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatter.js';
@@ -71,7 +71,7 @@ function drawSpeechBalloons(ctx, balloons) {
     ctx.restore();
   }
 }
-import { loadFeatures, featureAt, featureImage, onFeaturesChanged, isVacantHex } from './features.js';
+import { loadFeatures, featureAt, featureImage, onFeaturesChanged, isVacantHex, LAB_WALL_PATHS } from './features.js';
 import { buildingBonusAt } from './building-bonus.js';
 import { loadBigFeatures, bigFeatureAt, bigFeatureImage, onBigFeaturesChanged } from './bigfeature.js';
 
@@ -228,6 +228,39 @@ function buildVillageWalls(seed, features) {
   }
   return pieces.sort((a, b) => a.key - b.key || WALL_RANK[a.kind] - WALL_RANK[b.kind]);
 }
+// An NPC builder's Barricades (made_by npc_builder) and the Creation walls, drawn as a WBC3 wall too (2026-11-27 "a
+// proper wall … a consistent wall, a circle around the hamlet"): in the race's wall (a hamlet's = its race's full
+// village's) and the village's colour inside a village, the neutral wall outside. Neighbouring Barricades join like
+// a village wall — a horizontal piece along a row, a vertical + horizontal staircase on the slants — with a joint
+// tower where a run ends or turns.
+const NEUTRAL_WALL = { joint: LAB_WALL_PATHS[0], horizontal: LAB_WALL_PATHS[1], vertical: LAB_WALL_PATHS[2] };
+function wallLookAt(seed, q, r) {
+  const v = villageAround(seed, q, r);
+  return { vid: v?.id || null, sprites: (v && raceWallSprites(v.race)) || NEUTRAL_WALL };
+}
+const HEX_DIRS6 = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];   // d and d + 3 are opposite
+function buildBarricadeWalls(seed, features) {
+  const at = new Map(), pieces = [];
+  for (const it of features) if (it.f.made_by === 'npc_builder' && it.f.kind === 'wall') at.set(`${it.q},${it.r}`, it);
+  for (const it of at.values()) {
+    const look = wallLookAt(seed, it.q, it.r), A = hexToPixel(it.q, it.r);
+    const add = (p, key) => pieces.push({ ...p, key, ...look });
+    const dirs = [];
+    for (let d = 0; d < 6; d++) {
+      const b = at.get(`${it.q + HEX_DIRS6[d][0]},${it.r + HEX_DIRS6[d][1]}`);
+      if (!b) continue;
+      dirs.push(d);
+      if (d >= 3) continue;   // each pair once
+      const B = hexToPixel(b.q, b.r);
+      if (Math.abs(A.y - B.y) < 1) { add({ kind: 'horizontal', x0: Math.min(A.x, B.x), x1: Math.max(A.x, B.x), y: A.y }, A.y); continue; }
+      const [U, L] = A.y < B.y ? [A, B] : [B, A];
+      add({ kind: 'vertical', x: U.x, y0: U.y, y1: L.y }, L.y);
+      add({ kind: 'horizontal', x0: Math.min(U.x, L.x), x1: Math.max(U.x, L.x), y: L.y }, L.y);
+    }
+    if (!(dirs.length === 2 && dirs[1] - dirs[0] === 3)) add({ kind: 'joint', x: A.x, y: A.y }, A.y);
+  }
+  return pieces.sort((a, b) => a.key - b.key || WALL_RANK[a.kind] - WALL_RANK[b.kind]);
+}
 // Some WBC3 building sprites are a row of animation frames (Black Portal 736×112, Shrine 1184×147: 8 frames each) —
 // drawn whole they read as a row of 8 buildings (2026-11-24, the "purple domes" along the village wall). The frame
 // width: the even split of a wide sheet whose frames come out closest to square.
@@ -361,7 +394,8 @@ export function createRenderer(canvas, state) {
         const f = featureAt(map.seed, t.q, t.r);
         if (f) tileCache.features.push({ q: t.q, r: t.r, x: t.x, y: t.y, f });
       }
-      tileCache.walls = buildVillageWalls(map.seed, tileCache.features);
+      tileCache.walls = buildVillageWalls(map.seed, tileCache.features).concat(buildBarricadeWalls(map.seed, tileCache.features))
+        .sort((a, b) => a.key - b.key || WALL_RANK[a.kind] - WALL_RANK[b.kind]);
       // Already y-sorted courtesy of iterating `tileCache.tiles` in draw order.
     }
     return tileCache;
@@ -689,7 +723,7 @@ export function createRenderer(canvas, state) {
     // strip don't line up into visible rows.
     for (const it of featureItems) {
       if (!inView(it.x, it.y)) continue;
-      if (it.f.village?.wall) continue;   // drawn as one run (buildVillageWalls)
+      if (it.f.village?.wall || (it.f.made_by === 'npc_builder' && it.f.kind === 'wall')) continue;   // drawn as one run (buildVillageWalls / buildBarricadeWalls)
       const tex = featureImage(it.f.path);
       if (!tex) continue;
       const h32 = hash32(`${state.map.seed}:j:${it.q}:${it.r}`);
@@ -866,14 +900,14 @@ export function createRenderer(canvas, state) {
       }
     }
 
-    // Obstacles (Creation): a wall glyph with its hit points, centre of the hex.
+    // Obstacles (Creation, building walls): a WBC3 wall tower (the 🧱 glyph until its sprite is in) with its hit points.
     for (const o of (state.obstacles || [])) {
       const { x, y } = tilePx(o.q, o.r);
       if (!inView(x, y)) continue;
-      ctx.font = `${Math.round(HEX_SIZE * 0.9)}px sans-serif`;
+      const look = wallLookAt(state.map.seed, o.q, o.r);
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#c9a56a';
-      ctx.fillText('🧱', x, y + HEX_SIZE * 0.3);
+      if (featureImage(look.sprites.joint)?.ready) drawWallPiece(ctx, { kind: 'joint', x, y, ...look }, state.map.seed, HEX_SIZE * H_SQUASH * 2);
+      else { ctx.font = `${Math.round(HEX_SIZE * 0.9)}px sans-serif`; ctx.fillStyle = '#c9a56a'; ctx.fillText('🧱', x, y + HEX_SIZE * 0.3); }
       ctx.font = 'bold 8px ui-monospace, Consolas, monospace';
       ctx.fillStyle = '#ffe6b0';
       ctx.fillText(`${o.hp}`, x + HEX_SIZE * 0.4, y - HEX_SIZE * 0.35);

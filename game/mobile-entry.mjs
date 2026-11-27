@@ -428,6 +428,7 @@ if (!isMainThread) {
   await import('./peer.mjs');
 } else {
   const nativeSetTimeout = globalThis.setTimeout, nativeSetInterval = globalThis.setInterval;
+  const nativeClearTimeout = globalThis.clearTimeout, nativeClearInterval = globalThis.clearInterval;
   for (let run = 1; ; run++) {
     if (run > 1) {
       for (const k of Object.keys(process.env)) if (!(k in BASE_ENV)) delete process.env[k];
@@ -441,21 +442,31 @@ if (!isMainThread) {
     // Timers created by this run's peer module (its stack names peer.mjs) — cleared when it stops.
     const mine = new Set();
     const copyProps = (dst, src) => { for (const k of Object.keys(src)) { try { dst[k] = src[k]; } catch {} } return dst; };   // own enumerable string keys only
-    const fromPeer = () => /peer\.mjs/.test(new Error().stack || '');
+    // (a short stack: building a full one on every timer Gun / libp2p / yamux start was a steady CPU cost on the phone)
+    const fromPeer = () => { const lim = Error.stackTraceLimit; Error.stackTraceLimit = 24; try { return /peer\.mjs/.test(new Error().stack || ''); } finally { Error.stackTraceLimit = lim; } };
     // (Gun hangs helpers on the global setTimeout — setTimeout.each / .turn / .poll: the wrappers carry them over)
-    globalThis.setTimeout = copyProps(function (...a) { const h = nativeSetTimeout(...a); if (fromPeer()) mine.add(h); return h; }, nativeSetTimeout);
+    // A timeout leaves `mine` when it fires or is cleared (2026-11-27: the Set kept every timer of the game — and each
+    // one's callback closure — for the whole session: part of the phone's 700–900 MB).
+    globalThis.setTimeout = copyProps(function (fn, ...a) {
+      if (typeof fn !== 'function' || !fromPeer()) return nativeSetTimeout(fn, ...a);
+      const h = nativeSetTimeout(function (...b) { mine.delete(h); return fn.apply(this, b); }, ...a);
+      mine.add(h); return h;
+    }, nativeSetTimeout);
     globalThis.setInterval = copyProps(function (...a) { const h = nativeSetInterval(...a); if (fromPeer()) mine.add(h); return h; }, nativeSetInterval);
+    globalThis.clearTimeout = function (h) { mine.delete(h); return nativeClearTimeout(h); };
+    globalThis.clearInterval = function (h) { mine.delete(h); return nativeClearInterval(h); };
     const left = new Promise(res => { globalThis.__chaosMobileLeave = res; });
     // (not awaited: a module whose top level never settles must not keep me from stopping it)
     import(run === 1 ? './peer.mjs' : `./peer.mjs?run=${run}`).catch(e => console.error(`[mobile] peer failed: ${e.stack || e.message}`));
     const info = await left;
     console.log(`[mobile] ${info?.dimension || 'the dimension'}: ${info?.why || 'left'} — stopping the game, back to the start menu`);
     try { await globalThis.__chaosPeerStop?.(); } catch (e) { console.error(`[mobile] peer stop: ${e.message}`); }
-    for (const h of mine) { clearTimeout(h); clearInterval(h); }
+    for (const h of mine) { nativeClearTimeout(h); nativeClearInterval(h); }
     for (const w of globalThis.__chaosWorkers || []) { try { await w.terminate(); } catch {} }
     globalThis.__chaosWorkers = [];
     copyProps(nativeSetTimeout, globalThis.setTimeout); copyProps(nativeSetInterval, globalThis.setInterval);   // keep what Gun added
     globalThis.setTimeout = nativeSetTimeout; globalThis.setInterval = nativeSetInterval;
+    globalThis.clearTimeout = nativeClearTimeout; globalThis.clearInterval = nativeClearInterval;
     globalThis.__chaosMobileLeave = null; globalThis.__chaosPeerStop = null;
   }
 }

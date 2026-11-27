@@ -118,6 +118,13 @@ if (( DO_BUILD )); then
   done
   "$NODE_BIN" game/tools/effects-check.mjs | tail -1
   "$NODE_BIN" game/tools/stage-mobile-bundle.mjs || { echo "[deploy] staging the phone bundle failed — not building" >&2; exit 1; }
+  # The phone downloads only what godot/assets_manifest.json lists (AssetBootstrap) — a manifest older than the GameModels
+  # catalog left 472 NPC sheets out (Thrain's portrait broken, units as blue discs; 2026-11-27). Regenerate it every build;
+  # files it adds must reach OCI's /pack too (infra/oci/upload-asset-pack.sh — the user's push).
+  OLD_N=$("$NODE_BIN" -e 'try{console.log(require(process.argv[1]).entries.length)}catch{console.log(0)}' "$PWD/godot/assets_manifest.json")
+  "$NODE_BIN" tools/build-asset-manifest.mjs >/dev/null || { echo "[deploy] building the asset manifest failed — not building" >&2; exit 1; }
+  NEW_N=$("$NODE_BIN" -e 'console.log(require(process.argv[1]).entries.length)' "$PWD/godot/assets_manifest.json")
+  [[ "$NEW_N" != "$OLD_N" ]] && echo "[deploy] asset manifest: $OLD_N → $NEW_N files — run infra/oci/upload-asset-pack.sh so the phone can fetch them"
   # The APK takes the bundle from the plugin's AAR (plugins/nodejs_mobile/nodejs_mobile.aar), NOT from src/main/assets:
   # without rebuilding it every APK from 11-16 to 0.94 shipped the 11-16 game code (found 2026-11-23). Rebuild + verify.
   ( cd godot/android/plugins/nodejs_mobile && ./gradlew --no-daemon assembleRelease -q ) \

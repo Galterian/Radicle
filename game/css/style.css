@@ -67,8 +67,10 @@ main {
 /* Roster and event log share the panel 50/50. The log always sits pinned at
    the panel's bottom; the roster scrolls internally when the cast list grows
    beyond its half. No empty gap: the two halves together fill the panel. */
-#roster { display: flex; flex-direction: column; gap: 6px; flex: 1 1 50%; min-height: 0; max-height: 50%; overflow-y: auto; }
-.ros { padding: 6px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; position: relative; }
+#roster { display: flex; flex-direction: column; gap: 4px; flex: 1 1 50%; min-height: 0; max-height: 50%; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+#roster::-webkit-scrollbar { display: none; }   /* user 2026-11-27: drag the list (dragScroll), no scrollbars */
+#roster.dragging, #roster.dragging * { cursor: grabbing !important; user-select: none; }
+.ros { padding: 4px 8px; background: #141a24; border-radius: 4px; font-size: 12px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 6px; cursor: pointer; position: relative; }
 .ros:hover { background: #1a2130; }
 .ros.filter-active { outline: 1px solid #a08eff; background: #1b1a2e; }
 /* Collapsible roster rows: by default only the head (thumb + name + hp line)
@@ -81,7 +83,7 @@ main {
 .ros .stats,
 .ros .perm-cards { display: none; }
 .ros.expanded .stats { display: flex; }
-.ros.expanded .perm-cards { display: flex; }
+.ros.expanded .perm-cards { display: grid; }
 .ros .ros-filter { position: absolute; top: 4px; right: 24px; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #6a7a92; border: 1px solid #26303f; border-radius: 50%; background: transparent; cursor: pointer; padding: 0; line-height: 1; }
 .ros .ros-filter:hover { color: #a08eff; border-color: #a08eff55; background: #1b1a2e; }
 .ros.filter-active .ros-filter { color: #a08eff; border-color: #a08eff; }
@@ -446,7 +448,7 @@ html.mobile .dimout-btn { font-size: 13px; padding: 6px 10px; min-height: 34px; 
 
 /* ---- WBC3 art: roster thumbnails, hero card, hover card ------------------ */
 .ros { justify-content: flex-start; align-items: center; }
-.ros .txt { display: flex; justify-content: space-between; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.ros .txt { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 6px; flex: 1 1 0; min-width: 0; }   /* wrap: stats + permanents take full rows (no sideways overflow) */
 .ros .thumb { width: 28px; height: 28px; object-fit: cover; object-position: top; border-radius: 3px; border: 1px solid #262e3c; background: #0b0d12; flex: 0 0 auto; image-rendering: pixelated; }
 .ros .thumb.info { object-fit: cover; object-position: 50% 0; }
 #hero-card { display: flex; gap: 10px; align-items: center; background: #141a24; border: 1px solid #262e3c; border-radius: 6px; padding: 8px; margin-bottom: 8px; flex: 0 0 auto; }
@@ -656,13 +658,21 @@ html.mobile .dimout-btn { font-size: 13px; padding: 6px 10px; min-height: 34px; 
 .skill-icon.sprite-loaded .skill-icon-glyph { display: none; }
 
 /* --- Roster permanents stack ------------------------------------------- */
+/* user 2026-11-27: compact — two cards a row, two text lines each, six shown before "+N more…". */
 .ros .perm-cards {
   flex-basis: 100%;
-  display: flex; flex-direction: column; gap: 3px;
-  margin-top: 4px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px;
+  margin-top: 2px;
 }
-.ros .perm-cards.collapsed .skill-card:nth-child(n+3) { display: none; }
-.ros .perm-cards.collapsed.open .skill-card:nth-child(n+3) { display: flex; }
+.ros .perm-cards .skill-card { min-height: 0; padding: 3px 4px; gap: 4px; font-size: 9.5px; line-height: 1.2; }
+.ros .perm-cards .skill-card .skill-card-name { font-size: 10px; }
+.ros .perm-cards .skill-card .skill-card-badge { display: none; }   /* every card here is a permanent */
+.ros .perm-cards .skill-card .skill-card-text { -webkit-line-clamp: 2; margin-top: 1px; }
+.ros .perm-cards .perm-toggle { grid-column: 1 / -1; }
+.ros.expanded { align-items: flex-start; }
+.ros:has(> .thumb) .txt .perm-cards { margin-left: -34px; }   /* the cards run under the portrait (28px + 6px gap): full width */
+.ros .perm-cards.collapsed .skill-card:nth-child(n+7) { display: none; }
+.ros .perm-cards.collapsed.open .skill-card:nth-child(n+7) { display: flex; }
 .ros .perm-toggle {
   background: #1a2130; border: 1px solid #262e3c; color: #8aa0bf;
   border-radius: 3px; padding: 2px 6px; font: 500 10px/1.2 ui-sans-serif, sans-serif;
@@ -959,6 +969,8 @@ html.mobile #combo-marker.possible { border-color: #6ad99f; }
 html.mobile #combo-marker.armed { border-color: #ffe66e; background: rgba(40, 34, 14, 0.82); }
 html.mobile #combo-marker .cm-slot { width: 13px; height: 15px; font-size: 9px; }
 html.mobile #perms { margin-left: 4px; gap: 4px; }
+html.mobile #perms .perm .ds { display: none; }   /* 50px cards: the tap shows the text */
+html.mobile #perms .perm:has(.ds) { width: 50px; }
 html.mobile #perms .perm { width: 50px; min-height: 48px; padding: 4px 3px 3px; font-size: 8px; background: rgba(16, 21, 30, 0.72); border-color: #6ad99f66; text-shadow: 0 1px 2px #000; }
 html.mobile #perms .perm.class-card { background: rgba(38, 32, 18, 0.78); border-color: #8f7a2a; }
 
@@ -1024,6 +1036,14 @@ html.mobile #object-card { max-width: 56vw; }
 }
 #perms .perm .nm { text-transform: capitalize; }
 #perms .perm .cd { margin-top: 3px; color: #8aa0bf; font-size: 9px; }
+/* user 2026-11-27: the description on the card (three lines), and two rows once there are more than three cards. */
+#perms .perm:has(.ds) { width: 108px; }
+#perms .perm .ds { margin-top: 2px; color: #a9bccd; font-size: 8.5px; line-height: 1.2; text-align: left;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+#perms .perm.active .ds { color: #3a3a1a; }
+#perms.many { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); align-items: end; gap: 4px 6px; }
+#perms.many .perm { min-height: 0; padding-top: 12px; }
+#perms.many .perm .ds { -webkit-line-clamp: 2; }
 #perms .perm.clickable { cursor: pointer; border-color: #6a8f3a; }
 #perms .perm.clickable:hover { outline: 1px solid #ffe66e; }
 #perms .perm.active { background: #ffe66e; color: #0b0d12; }
@@ -1049,7 +1069,7 @@ html.mobile #object-card { max-width: 56vw; }
 
 /* ---- WBC3 art: roster thumbnails, hero card, hover card ------------------ */
 .ros { justify-content: flex-start; align-items: center; }
-.ros .txt { display: flex; justify-content: space-between; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.ros .txt { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 6px; flex: 1 1 0; min-width: 0; }   /* wrap: stats + permanents take full rows (no sideways overflow) */
 .ros .thumb { width: 28px; height: 28px; object-fit: cover; object-position: top; border-radius: 3px; border: 1px solid #262e3c; background: #0b0d12; flex: 0 0 auto; image-rendering: pixelated; }
 .ros .thumb.info { object-fit: cover; object-position: 50% 0; }
 #hero-card { display: flex; gap: 10px; align-items: center; background: #141a24; border: 1px solid #262e3c; border-radius: 6px; padding: 8px; margin-bottom: 8px; flex: 0 0 auto; }
@@ -1524,7 +1544,7 @@ html.mobile .slot.skill .card .fx-src::before { content: '⎇'; }
 .ros-village.hostile { background: #3a1c1c; color: #ffb0a8; border-color: #8a3a32; }
 /* AI skirmish banter strip (main.js banterStrip): unobtrusive and click-through except its ✕ */
 #banter-strip { position: fixed; left: 8px; bottom: 8px; max-width: min(420px, 70%); padding: 4px 22px 4px 8px; border-radius: 8px; background: rgba(10, 14, 22, 0.55);
-  color: #e8ecf1; font-size: 12px; line-height: 1.35; pointer-events: none; transition: opacity 1.2s ease; z-index: 5; }
+  color: #e8ecf1; font-size: 12px; line-height: 1.35; pointer-events: none; transition: opacity 3.6s ease; z-index: 5; }
 #banter-strip.idle { opacity: 0; }
 #banter-strip ol { list-style: none; margin: 0; padding: 0; }
 #banter-strip li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
