@@ -1232,7 +1232,7 @@
       ]
     },
     "rule_unattended_character": {
-      "description": "User ruling 2026-11-16 (revised): heroes without owner (character_id, no owner_peer_id) silent for data.unattended.silence_ms (120000; env SHADOW_MS shortens it for tests) become unattended: peer.mjs - run by the live hero with the smallest peer id, never by an unattended one - spawns an ordinary peer process (spawnCompanion wild, no owner) with SHADOW_OF = the hero's peer id, REPLACES_PEER_ID = the silent peer, ALLY_OF = its ally-join link, CHARACTER_ID / ENTITY_NAME / ALLIANCE / FORCE_CLASS / START_LIFE / SHADOW_STATS_JSON from its last snapshot, on its tile. It is not HUMAN: npcPlan plays it as an allied bot. Master (unattendedLeader): a group mate's live master is kept (sticky), else the live, alive human character of its link group (ally_of edges, same side) with the earliest joined_at (tie: peer id); published as led_by (followers) and leader (master). With a master npcPlan uses the summon owner-follow branch (walk next to it, fight what is in contact); without one it holds: npcCast / fight in contact, else Posture / Block. Takeover: the returning player (restore-here / restore / rejoin / a unit-list join of that profile character) boots with REPLACES_PEER_ID = the unattended peer and its life, ALLY_OF empty (it leaves the group); killed = dead there (death card: shadow_death, game/shadow-settle.mjs). Vanish: no living attended character (or its master) within data.unattended.vanish_radius for data.unattended.vanish_after_ms (env UNATTENDED_VANISH_MS for tests) -> it publishes out, pushes its Door and exits; receivers drop it, join-plan.mjs doorRecords drops out records (no longer alive there).",
+      "description": "User ruling 2026-11-16 (revised): heroes without owner (character_id, no owner_peer_id) silent for data.unattended.silence_ms (60000 since 1.1.0, user ruling 2026-11-27 — the minute of rule_unit_standin; env SHADOW_MS shortens it for tests) become unattended: peer.mjs - run by the live hero with the smallest peer id, never by an unattended one - spawns an ordinary peer process (spawnCompanion wild, no owner) with SHADOW_OF = the hero's peer id, REPLACES_PEER_ID = the silent peer, ALLY_OF = its ally-join link, CHARACTER_ID / ENTITY_NAME / ALLIANCE / FORCE_CLASS / START_LIFE / SHADOW_STATS_JSON from its last snapshot, on its tile. It is not HUMAN: npcPlan plays it as an allied bot. Master (unattendedLeader): a group mate's live master is kept (sticky), else the live, alive human character of its link group (ally_of edges, same side) with the earliest joined_at (tie: peer id); published as led_by (followers) and leader (master). With a master npcPlan uses the summon owner-follow branch (walk next to it, fight what is in contact); without one it holds: npcCast / fight in contact, else Posture / Block. Takeover: the returning player (restore-here / restore / rejoin / a unit-list join of that profile character) boots with REPLACES_PEER_ID = the unattended peer and its life, ALLY_OF empty (it leaves the group); killed = dead there (death card: shadow_death, game/shadow-settle.mjs). Vanish: no living attended character (or its master) within data.unattended.vanish_radius for data.unattended.vanish_after_ms (env UNATTENDED_VANISH_MS for tests) -> it publishes out, pushes its Door and exits; receivers drop it, join-plan.mjs doorRecords drops out records (no longer alive there).",
       "prerequisites": [
         {
           "id": "hero_silent",
@@ -1465,6 +1465,114 @@
                     "var": "proposal.data.dimension_out.rounds"
                   },
                   50
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": []
+    },
+    "rule_unit_standin": {
+      "description": "User ruling 2026-11-27 (S6): peer.mjs, run by the live hero with the smallest peer id every 10 s, finds a monster or villager (creature_id; not owned, not summoned, not built-in, not a follower or a villager walking home) whose last snapshot is older than data.standin.silence_ms (GHOST_MS) and spawns its STAND-IN: a wild monster through spawnCompanion, a villager through spawnVillager (its village, NPC, home; on the phone within VILLAGE_MAX_MOBILE), with STANDIN_OF = the original peer id (a silent stand-in passes its own original on), REPLACES_PEER_ID = the silent peer, START_LIFE, on its tile. UNIT_LABEL (the original label) keeps what the unit derives from its label (village slot, builder post, recruit edits, monster deck); observers read unitLabelOf(snapshot). Hand-back: the original hearing a snapshot with standin_of = itself (standinSeen) takes the tile and life, names the stand-in in replaces; the stand-in hearing replaces = itself steps down (shadowStepDown); every peer keeps the replaced side out (supersededBy). Since 1.1.0 (user answer 2026-11-27) the summoner also stands in for its own spawned creature (Summoning, Golems, Elementals) while it holds the permanent: the same creature for the same permanent; its summons list names the stand-in and swaps back on the hand-back.",
+      "prerequisites": [
+        {
+          "id": "unit_silent",
+          "description": "The unit is alive and its last snapshot is older than silence_ms.",
+          "when": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "silent_ms"
+                  },
+                  {
+                    "var": "entry.data.standin.silence_ms"
+                  }
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "standin_life",
+          "description": "The stand-in starts with the unit's current life.",
+          "target": "target",
+          "unit": "life",
+          "value": {
+            "var": "target.life"
+          }
+        },
+        {
+          "id": "silence_ms",
+          "description": "Silence before a stand-in runs the unit on.",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "var": "entry.data.standin.silence_ms"
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "keeps-scope",
+          "description": "A new version keeps the scope.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.scope"
+              },
+              {
+                "var": "entry.data.scope"
+              }
+            ]
+          }
+        },
+        {
+          "id": "text-long-enough",
+          "description": "The rule text is longer than 40 characters.",
+          "assert": {
+            ">": [
+              {
+                "len": [
+                  {
+                    "var": "proposal.data.text"
+                  }
+                ]
+              },
+              40
+            ]
+          }
+        },
+        {
+          "id": "silence-sane",
+          "description": "silence_ms between 10 s and 1 h.",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.standin.silence_ms"
+                  },
+                  10000
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "proposal.data.standin.silence_ms"
+                  },
+                  3600000
                 ]
               }
             ]

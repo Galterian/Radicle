@@ -27,7 +27,10 @@ func play_effect(effect_id: String, at: Vector2i, additive := true) -> void:
 		burst(Hex.hex_to_pixel(at.x, at.y), Color(0.95, 0.7, 0.3))
 	var snd = res.get("sounds", {})
 	if typeof(snd) == TYPE_DICTIONARY:
-		var fx = snd.get("fx", [])
+		# The spell (STEZ) sound first, as js/main.js plays it on a completed cast; fx when there is none.
+		var fx = snd.get("spell", [])
+		if typeof(fx) != TYPE_ARRAY or fx.is_empty():
+			fx = snd.get("fx", [])
 		if typeof(fx) == TYPE_ARRAY and not fx.is_empty():
 			var pick = fx[randi() % fx.size()]
 			var p := str(pick.get("path", "")) if typeof(pick) == TYPE_DICTIONARY else str(pick)

@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-27T00:19:22.117Z",
-  "total_bytes": 573745067,
-  "count": 3474,
+  "generated": "2026-11-28T10:13:01.072Z",
+  "total_bytes": 631054693,
+  "count": 4154,
   "missing": 0,
   "entries": [
     {
@@ -525,6 +525,51 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Deathblow.wav",
+      "size": 112556,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Order 1.wav",
+      "size": 32424,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Order 2.wav",
+      "size": 80614,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Order 3.wav",
+      "size": 82514,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Order 4.wav",
+      "size": 100590,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Select 1.wav",
+      "size": 28618,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Select 2.wav",
+      "size": 27440,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Select 3.wav",
+      "size": 92110,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Barbarians/Barbarian Hero/Barbarian Hero - Select 4.wav",
+      "size": 127778,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Heroes/Daemons/Daemon Hero/Daemon Hero - CantBuild.wav",
       "size": 101328,
       "src": "resources"
@@ -750,6 +795,96 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Deathblow.wav",
+      "size": 47802,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Order 1.wav",
+      "size": 19066,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Order 2.wav",
+      "size": 18842,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Order 3.wav",
+      "size": 35706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Order 4.wav",
+      "size": 27194,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Select 1.wav",
+      "size": 15034,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Select 2.wav",
+      "size": 22650,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Select 3.wav",
+      "size": 21274,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 2/Default Hero Voice 2 - Select 4.wav",
+      "size": 49210,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Deathblow.wav",
+      "size": 73210,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Order 1.wav",
+      "size": 36602,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Order 2.wav",
+      "size": 40442,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Order 3.wav",
+      "size": 26554,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Order 4.wav",
+      "size": 61370,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Select 1.wav",
+      "size": 45050,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Select 2.wav",
+      "size": 40634,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Select 3.wav",
+      "size": 40890,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Default Heroes/Default Hero Voice 6/Default Hero Voice 6 - Select 4.wav",
+      "size": 34298,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Heroes/Dwarves/Dwarf Hero/Dwarf Hero - CantBuild.wav",
       "size": 78548,
       "src": "resources"
@@ -822,6 +957,51 @@
     {
       "path": "assets/Sounds/Heroes/Dwarves/Dwarf Hero/Dwarf Hero - Spell 3.wav",
       "size": 73636,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Deathblow.wav",
+      "size": 109104,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Order 1.wav",
+      "size": 30712,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Order 2.wav",
+      "size": 35398,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Order 3.wav",
+      "size": 44344,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Order 4.wav",
+      "size": 77986,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Select 1.wav",
+      "size": 53232,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Select 2.wav",
+      "size": 31762,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Select 3.wav",
+      "size": 55672,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Fey/Fey Hero/Fey Hero - Select 4.wav",
+      "size": 67238,
       "src": "resources"
     },
     {
@@ -1047,6 +1227,96 @@
     {
       "path": "assets/Sounds/Heroes/Minotaurs/Minotaur Hero/Minotaur Hero - Spell 3.wav",
       "size": 129520,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Deathblow.wav",
+      "size": 106004,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Order 1.wav",
+      "size": 59182,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Order 2.wav",
+      "size": 68864,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Order 3.wav",
+      "size": 103464,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Order 4.wav",
+      "size": 113718,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Select 1.wav",
+      "size": 117814,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Select 2.wav",
+      "size": 104852,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Select 3.wav",
+      "size": 122674,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Orcs/Orc Hero/Orc Hero - Select 4.wav",
+      "size": 104852,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Deathblow.wav",
+      "size": 127518,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Order 1.wav",
+      "size": 105416,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Order 2.wav",
+      "size": 74316,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Order 3.wav",
+      "size": 137832,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Order 4.wav",
+      "size": 143086,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Select 1.wav",
+      "size": 131748,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Select 2.wav",
+      "size": 127528,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Select 3.wav",
+      "size": 148260,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Heroes/Undead/Undead Hero/Undead Hero - Select 4.wav",
+      "size": 156116,
       "src": "resources"
     },
     {
@@ -1290,6 +1560,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/Disease.wav",
+      "size": 66422,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/Disembark.wav",
       "size": 86624,
       "src": "resources"
@@ -1335,6 +1610,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/Fire (2).wav",
+      "size": 57256,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/Fire.wav",
       "size": 57244,
       "src": "resources"
@@ -1360,6 +1640,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/Highlight.wav",
+      "size": 41644,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/IceCrit.wav",
       "size": 80142,
       "src": "resources"
@@ -1372,6 +1657,11 @@
     {
       "path": "assets/Sounds/SoundFX/LightningH1.wav",
       "size": 445670,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/SoundFX/LightningL1.wav",
+      "size": 480998,
       "src": "resources"
     },
     {
@@ -1395,6 +1685,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/Night.wav",
+      "size": 872574,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/Pad.wav",
       "size": 49710,
       "src": "resources"
@@ -1412,6 +1707,11 @@
     {
       "path": "assets/Sounds/SoundFX/Poison.wav",
       "size": 66308,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/SoundFX/Rain.wav",
+      "size": 311526,
       "src": "resources"
     },
     {
@@ -1525,6 +1825,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/STEZ24.wav",
+      "size": 129578,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/STEZ25.wav",
       "size": 131114,
       "src": "resources"
@@ -1575,6 +1880,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/STEZ43.wav",
+      "size": 114542,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/STEZ44.wav",
       "size": 81760,
       "src": "resources"
@@ -1605,6 +1915,11 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/SoundFX/Statpop.wav",
+      "size": 46264,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/SoundFX/Stomp.wav",
       "size": 37832,
       "src": "resources"
@@ -1632,6 +1947,11 @@
     {
       "path": "assets/Sounds/SoundFX/drum.wav",
       "size": 93314,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/SoundFX/electric.wav",
+      "size": 239524,
       "src": "resources"
     },
     {
@@ -1770,6 +2090,161 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Deathblow - Ride them down!.wav",
+      "size": 61054,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Order 1 - Lead on!.wav",
+      "size": 29886,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Order 2 - We ride.wav",
+      "size": 32766,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Order 3 - Like the wind!.wav",
+      "size": 53310,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Ready - Ready to ride!.wav",
+      "size": 60350,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Select 1 - Lord.wav",
+      "size": 20510,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Select 2 - Master.wav",
+      "size": 28222,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Rider/Rider - Select 3 - Where do we ride.wav",
+      "size": 47166,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Order 1 - Behold!.wav",
+      "size": 66484,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Order 2 - Fear my fury!.wav",
+      "size": 95942,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Order 3 - Bow before your god!.wav",
+      "size": 107468,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Order 4 - Bring on the storm!.wav",
+      "size": 92100,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Ready - I am Tempest!.wav",
+      "size": 110030,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Select 1 - I rule the sky!.wav",
+      "size": 89538,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Select 2 - The anger of thunder.wav",
+      "size": 97222,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Select 3 - The speed of lightning.wav",
+      "size": 112592,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Tempest/Tempest - Select 4.wav",
+      "size": 90818,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Deathblow - I... I... I hit him!.wav",
+      "size": 88584,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Order 1 - As you wish.wav",
+      "size": 49048,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Order 2 - Yes Master.wav",
+      "size": 56784,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Order 3 - I'm so tired.wav",
+      "size": 85880,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Ready - I serve only you, Master.wav",
+      "size": 126310,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Select 1 - Ma... Master.wav",
+      "size": 53958,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Select 2 - Don't... Don't hurt me.wav",
+      "size": 66236,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/Thrall/Thrall - Select 3 - No, Master, no!.wav",
+      "size": 83424,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/War Dog/War Dog - Deathblow - Vicious growl.wav",
+      "size": 90490,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/War Dog/War Dog - Order 1 - Short growl.wav",
+      "size": 30522,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/War Dog/War Dog - Order 2 - Affirmative growl.wav",
+      "size": 49530,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/War Dog/War Dog - Ready - Howl.wav",
+      "size": 181626,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/War Dog/War Dog - Select 1 - Barking.wav",
+      "size": 23226,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Barbarians/War Dog/War Dog - Select 2 - Low growl.wav",
+      "size": 55610,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Barbarians/Warlord/Warlord - Deathblow - Die, you filthy pig!.wav",
       "size": 255594,
       "src": "resources"
@@ -1817,6 +2292,56 @@
     {
       "path": "assets/Sounds/Units/Barbarians/Warlord/Warlord - Select 4 - Strap on your swords!.wav",
       "size": 153294,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Deathblow - Unworthy creature!.wav",
+      "size": 110170,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Order 1 - Ha!.wav",
+      "size": 34606,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Order 2 - I go where I wish.wav",
+      "size": 84764,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Order 3 - None may follow.wav",
+      "size": 82594,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Order 4 - This world is mine.wav",
+      "size": 115816,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Ready - The shadow of Balora has fallen upon this land.wav",
+      "size": 202888,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Select 1 - Worm!.wav",
+      "size": 47634,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Select 2 - I am your better.wav",
+      "size": 75428,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Select 3 - Take your leave.wav",
+      "size": 62020,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Balora/Balora - Select 4 - You think to command me.wav",
+      "size": 100832,
       "src": "resources"
     },
     {
@@ -1897,6 +2422,151 @@
     {
       "path": "assets/Sounds/Units/Daemons/Imp/Imp - Select 3 - Trick them.wav",
       "size": 33198,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Nightmare/Nightmare - Order 1.wav",
+      "size": 43642,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Nightmare/Nightmare - Order 2.wav",
+      "size": 45050,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Nightmare/Nightmare - Ready.wav",
+      "size": 110458,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Nightmare/Nightmare - Select 1.wav",
+      "size": 75258,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Nightmare/Nightmare - Select 2.wav",
+      "size": 73594,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Deathblow - Hey, bite my tail monkey boy.wav",
+      "size": 113536,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Order 1 - Yes.wav",
+      "size": 36560,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Order 2 - Your merest whim.wav",
+      "size": 56948,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Order 3 - Be cruel to me, Master!.wav",
+      "size": 70650,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Ready - I grovel before you, Master.wav",
+      "size": 92906,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Select 1 - Master.wav",
+      "size": 39600,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Select 2 - What now!.wav",
+      "size": 42640,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Quasit/Quasit - Select 3 - Hurt me Master!.wav",
+      "size": 58086,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Deathblow - Violent whooshing.wav",
+      "size": 64098,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Order 1 - Loud roar.wav",
+      "size": 43898,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Order 2 - High roar.wav",
+      "size": 44410,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Order 3 - Short roar.wav",
+      "size": 71162,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Ready - Long roar.wav",
+      "size": 168930,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Select 1 - Short hiss.wav",
+      "size": 74618,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Select 2 - Low hiss.wav",
+      "size": 65786,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Salamander/Salamander - Select 3 - Long hiss.wav",
+      "size": 132986,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Deathblow.wav",
+      "size": 71918,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Order 1.wav",
+      "size": 54148,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Order 2.wav",
+      "size": 78902,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Order 3.wav",
+      "size": 103222,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Ready.wav",
+      "size": 101486,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Select 1.wav",
+      "size": 92364,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Select 2.wav",
+      "size": 40252,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Daemons/Succubus/Succubus - Select 3.wav",
+      "size": 59794,
       "src": "resources"
     },
     {
@@ -2055,6 +2725,126 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Dark Dwarves/Firebomb/Firebomb - Order 1.wav",
+      "size": 21048,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Firebomb/Firebomb - Ready.wav",
+      "size": 102202,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Firebomb/Firebomb - Select 1.wav",
+      "size": 54914,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Deathblow - Smash puny thing!.wav",
+      "size": 95262,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Order 1 - Crush!.wav",
+      "size": 34242,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Order 2 - Smash!.wav",
+      "size": 49554,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Order 3 - Grond is destroyer.wav",
+      "size": 113866,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Order 4 - Grond leave trails of.wav",
+      "size": 143248,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Ready - Grond is here to shake the earth.wav",
+      "size": 195442,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Select 1 - I am Grond.wav",
+      "size": 113458,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Select 2 - Grond ready.wav",
+      "size": 89214,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Select 3 - Grond is big!.wav",
+      "size": 86686,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Grond/Grond - Select 4 - Grond breaks worlds!.wav",
+      "size": 115528,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Hellbore/Hellbore - Order 1.wav",
+      "size": 37656,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Hellbore/Hellbore - Ready.wav",
+      "size": 94566,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Hellbore/Hellbore - Select 1.wav",
+      "size": 39646,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Deathblow - Bind!.wav",
+      "size": 52522,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Order 1 - Copper.wav",
+      "size": 79274,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Order 2 - Silver.wav",
+      "size": 89258,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Order 3 - Gold.wav",
+      "size": 65578,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Ready - Iron golem ready.wav",
+      "size": 172330,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Select 1 - Iron.wav",
+      "size": 83882,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Select 2 - Steel.wav",
+      "size": 92458,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Dwarves/Iron Golem/Iron Golem - Select 3 - Tin.wav",
+      "size": 67114,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Dark Dwarves/Stone Golem/Stone Golem - Deathblow - Bane!.wav",
       "size": 70152,
       "src": "resources"
@@ -2145,6 +2935,81 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Deathblow - Writhe in pain!.wav",
+      "size": 125660,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Order 1 - Burn.wav",
+      "size": 67862,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Order 2 - For the Dark Flame.wav",
+      "size": 94774,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Order 3 - Kargoth guides me.wav",
+      "size": 97910,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Order 4 - Fire consumes me.wav",
+      "size": 125230,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Ready - I am the instrument of Kargoth's will.wav",
+      "size": 177634,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Select 1 - I am the void.wav",
+      "size": 118100,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Select 2 - My soul has fled.wav",
+      "size": 121998,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Select 3 - I see only darkness.wav",
+      "size": 116800,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Blackguard/Blackguard - Select 4 - Nothing remains.wav",
+      "size": 101208,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Archer/Dark Archer - Order 1 - My pleasure.wav",
+      "size": 67578,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Archer/Dark Archer - Order 2 - As you wish, Master.wav",
+      "size": 79354,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Archer/Dark Archer - Ready - My life is yours to do with as you will.wav",
+      "size": 154490,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Archer/Dark Archer - Select 1 - I live to serve.wav",
+      "size": 84858,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Archer/Dark Archer - Select 2 - Name your desire.wav",
+      "size": 74234,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Dark Elves/Dark Infantry/Dark Infantry - Deathblow - Ready the rack!.wav",
       "size": 84730,
       "src": "resources"
@@ -2172,6 +3037,101 @@
     {
       "path": "assets/Sounds/Units/Dark Elves/Dark Infantry/Dark Infantry - Select 2 - Death.wav",
       "size": 41722,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Deathblow - Taste my dark blade!.wav",
+      "size": 114554,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Order 1 - All shall perish.wav",
+      "size": 86240,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Order 2 - There is no escape.wav",
+      "size": 87568,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Order 3 - And there is no justice.wav",
+      "size": 112824,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Order 4 - All shall perish.wav",
+      "size": 86240,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Ready - Darkness rides the land.wav",
+      "size": 103462,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Select 1 - Chaos reigns.wav",
+      "size": 87624,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Select 2 - The end is nigh.wav",
+      "size": 104708,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Select 3 - Dark Lords are rising.wav",
+      "size": 105514,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Dark Rider/Dark Rider - Select 4 - The reign of heroes is ended.wav",
+      "size": 127446,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Order 1 - Show me pain.wav",
+      "size": 82984,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Order 2 - Inflict suffering.wav",
+      "size": 85170,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Order 3 - Burn everything!.wav",
+      "size": 91210,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Order 4 - Destroy this place.wav",
+      "size": 89798,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Ready - I have become death, Destroyer of worlds!.wav",
+      "size": 204190,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Select 1 - Give me blood.wav",
+      "size": 84278,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Select 2 - Offer me souls.wav",
+      "size": 97338,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Select 3 - Bring me victims.wav",
+      "size": 98088,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Kargoth/Kargoth - Select 4 - I weave a web of doom!.wav",
+      "size": 147874,
       "src": "resources"
     },
     {
@@ -2240,6 +3200,101 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Order 1 - Indeed.wav",
+      "size": 59758,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Order 2 - Feel my bite.wav",
+      "size": 88312,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Order 3 - Praise Aranea!.wav",
+      "size": 93174,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Order 4 - Touch the web of magic.wav",
+      "size": 85216,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Ready - Aranea's eyes are upon you.wav",
+      "size": 103068,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Select 1 - Doom is near!.wav",
+      "size": 87392,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Select 2 - I see destruction.wav",
+      "size": 109910,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Select 3 - There will be much death!.wav",
+      "size": 166654,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dark Elves/Spider Priestess/Spider Priestess - Select 4 - The Mistress speaks through me.wav",
+      "size": 139884,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Celestial Dragon/Celestial Dragon - Order 1.wav",
+      "size": 131704,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Celestial Dragon/Celestial Dragon - Order 2.wav",
+      "size": 131706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Celestial Dragon/Celestial Dragon - Ready.wav",
+      "size": 131704,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Celestial Dragon/Celestial Dragon - Select 1.wav",
+      "size": 131706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Celestial Dragon/Celestial Dragon - Select 2.wav",
+      "size": 131704,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Dragonliche/Dragonliche - Order 1.wav",
+      "size": 128632,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Dragonliche/Dragonliche - Order 2.wav",
+      "size": 123000,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Dragonliche/Dragonliche - Ready.wav",
+      "size": 186360,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Dragonliche/Dragonliche - Select 1.wav",
+      "size": 119316,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Dragonliche/Dragonliche - Select 2.wav",
+      "size": 119316,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Dragons/Fire Dragon/Fire Dragon - Order 1.wav",
       "size": 128632,
       "src": "resources"
@@ -2265,6 +3320,31 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Dragons/Frost Dragon/Frost Dragon - Order 1.wav",
+      "size": 101496,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Frost Dragon/Frost Dragon - Order 2.wav",
+      "size": 60154,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Frost Dragon/Frost Dragon - Ready.wav",
+      "size": 128994,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Frost Dragon/Frost Dragon - Select 1.wav",
+      "size": 132986,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Frost Dragon/Frost Dragon - Select 2.wav",
+      "size": 101496,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Dragons/Storm Dragon/Storm Dragon - Order 1.wav",
       "size": 128632,
       "src": "resources"
@@ -2287,6 +3367,31 @@
     {
       "path": "assets/Sounds/Units/Dragons/Storm Dragon/Storm Dragon - Select 2.wav",
       "size": 123000,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Swamp Dragon/Swamp Dragon - Order 1.wav",
+      "size": 89138,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Swamp Dragon/Swamp Dragon - Order 2.wav",
+      "size": 89138,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Swamp Dragon/Swamp Dragon - Ready.wav",
+      "size": 133170,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Swamp Dragon/Swamp Dragon - Select 1.wav",
+      "size": 89138,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dragons/Swamp Dragon/Swamp Dragon - Select 2.wav",
+      "size": 89138,
       "src": "resources"
     },
     {
@@ -2337,6 +3442,71 @@
     {
       "path": "assets/Sounds/Units/Dwarves/Dwarf Berserker/Dwarf Berserker - Select 4 - Rip their arms off!.wav",
       "size": 99386,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Order 1 - Okay.wav",
+      "size": 26626,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Order 2 - Oh, that'll help.wav",
+      "size": 51630,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Order 3 - That's it, then!.wav",
+      "size": 46966,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Ready - Nice day for a bit of target practice.wav",
+      "size": 98282,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Select 1 - Again.wav",
+      "size": 25884,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Select 2 - Can I help ye.wav",
+      "size": 32760,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Crossbow/Dwarf Crossbow - Select 3 - No. You point - I shoot.wav",
+      "size": 103562,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - Deathblow - I need a good drink.wav",
+      "size": 49612,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - Order 1 - As you wish.wav",
+      "size": 33532,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - Order 2 - Off we go then.wav",
+      "size": 38908,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - Ready - For a mug of ale, I'll do anything you want.wav",
+      "size": 84620,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - Select 1 - Cheers!.wav",
+      "size": 21612,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Infantry/Dwarf Infantry - Select 2 - I'm thirsty.wav",
+      "size": 33916,
       "src": "resources"
     },
     {
@@ -2395,6 +3565,36 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Runner/Dwarf Runner - Deathblow - I'll get ye.wav",
+      "size": 30992,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Runner/Dwarf Runner - Order 1 - I'm on to it.wav",
+      "size": 28784,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Runner/Dwarf Runner - Order 2 - Let's go.wav",
+      "size": 21308,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Runner/Dwarf Runner - Ready - Ready to run.wav",
+      "size": 32254,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Runner/Dwarf Runner - Select 1 - Aye.wav",
+      "size": 29672,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Dwarf Runner/Dwarf Runner - Select 2 - I'm ready.wav",
+      "size": 30990,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Dwarves/Khazrimi Guard/Khazrimi Guard - Deathblow - For the King!.wav",
       "size": 56746,
       "src": "resources"
@@ -2442,6 +3642,171 @@
     {
       "path": "assets/Sounds/Units/Dwarves/Khazrimi Guard/Khazrimi Guard - Select 4 - The King approaches!.wav",
       "size": 64554,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Order 1 - Faster!.wav",
+      "size": 48302,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Order 2 - Come on lads!.wav",
+      "size": 64936,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Order 3 - I'm not that heavy, am I.wav",
+      "size": 73254,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Order 4 - Me granny could run faster than you lot.wav",
+      "size": 120390,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Ready - Show some respect, the King is here!.wav",
+      "size": 204544,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Select 1 - Lift me up!.wav",
+      "size": 47608,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Select 2 - By the hammer of Meranon.wav",
+      "size": 71868,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Select 3 - Make way for the King.wav",
+      "size": 77876,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/King Khalid/King Khalid - Select 4 - You've got nothing to fear from these bunch o….wav",
+      "size": 135152,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Order 1 - Aye.wav",
+      "size": 26704,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Order 2 - Concentrate.wav",
+      "size": 51964,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Order 3 - Eternal vigilance.wav",
+      "size": 112748,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Order 4 - Waver, and you shall fall.wav",
+      "size": 123460,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Ready - The runes foretell.. A great victory.wav",
+      "size": 173448,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Select 1 - I call Khoren, rune of power.wav",
+      "size": 160542,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Select 2 - I name Arkhor, rune of strength.wav",
+      "size": 168984,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Select 3 - I call Kutar, rune of death.wav",
+      "size": 174342,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Runelord/Runelord - Select 4 - I name Osen, rune of life.wav",
+      "size": 143992,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Deathblow - Ha! I should'a joined the army.wav",
+      "size": 64764,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Order 1 - As ye wish.wav",
+      "size": 32796,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Order 2 - T'will be done!.wav",
+      "size": 33244,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Order 3 - If ye say so.wav",
+      "size": 38652,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Ready - Ye need a smith, I believe.wav",
+      "size": 47932,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Select 1 - Aye sir.wav",
+      "size": 21340,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Select 2 - What do you need.wav",
+      "size": 21852,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Dwarves/Smith/Smith - Select 3 - Give me something to build.wav",
+      "size": 44284,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Order 1 - Careful.wav",
+      "size": 29546,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Order 2 - Take aim.wav",
+      "size": 33770,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Order 3 - Fire!.wav",
+      "size": 23210,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Ready - Imperial archer reporting for duty.wav",
+      "size": 85546,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Select 1 - Ready.wav",
+      "size": 26026,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Select 2 - Cycling targets.wav",
+      "size": 49962,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Archer/Archer - Select 3 - Quivers are full.wav",
+      "size": 41450,
       "src": "resources"
     },
     {
@@ -2542,6 +3907,126 @@
     {
       "path": "assets/Sounds/Units/Empire/Elephant/Elephant - Select 4 - People down there look like ants.wav",
       "size": 78890,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Deathblow - Slice and dice!.wav",
+      "size": 89416,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Order 1 - Away!.wav",
+      "size": 53988,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Order 2 - Step lively!.wav",
+      "size": 70748,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Order 3 - Company will advance!.wav",
+      "size": 87720,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Ready - Halberdier, present and correct!.wav",
+      "size": 131846,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Select 1 - Ready!.wav",
+      "size": 64466,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Select 2 - Present arms!.wav",
+      "size": 123360,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Halberdier/Halberdier - Select 3 - Company will form up!.wav",
+      "size": 120814,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Deathblow - Cut the dogs down!.wav",
+      "size": 70040,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Order 1 - Done.wav",
+      "size": 22236,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Order 2 - I fight, you pay.wav",
+      "size": 97226,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Order 3 - It's your coin.wav",
+      "size": 69134,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Order 4 - This will cost.wav",
+      "size": 75478,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Ready - Sword for hire!.wav",
+      "size": 63696,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Select 1 - Yes.wav",
+      "size": 32658,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Select 2 - Point the way.wav",
+      "size": 47384,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Select 3 - You pay, I fight.wav",
+      "size": 83634,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Mercenary/Mercenary - Select 4 - I serve the highest bidder.wav",
+      "size": 98290,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Pikeman/Pikeman - Deathblow - Disembowel him, Sir!.wav",
+      "size": 92290,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Pikeman/Pikeman - Order 1 - Quick march!.wav",
+      "size": 38380,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Pikeman/Pikeman - Order 2 - Yes Sir!.wav",
+      "size": 31338,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Pikeman/Pikeman - Ready - Reporting for duty, Sir!.wav",
+      "size": 94180,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Pikeman/Pikeman - Select 1 - Sir.wav",
+      "size": 21622,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Empire/Pikeman/Pikeman - Select 2 - Attention!.wav",
+      "size": 80866,
       "src": "resources"
     },
     {
@@ -2700,6 +4185,31 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Fey/Faerie Dragon/Faerie Dragon - Order 1.wav",
+      "size": 58106,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Faerie Dragon/Faerie Dragon - Order 2.wav",
+      "size": 49146,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Faerie Dragon/Faerie Dragon - Ready.wav",
+      "size": 81850,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Faerie Dragon/Faerie Dragon - Select 1.wav",
+      "size": 54906,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Faerie Dragon/Faerie Dragon - Select 2.wav",
+      "size": 67604,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Fey/Leprechaun/Leprechaun - Order 1 - Tricked ya!.wav",
       "size": 36522,
       "src": "resources"
@@ -2732,6 +4242,246 @@
     {
       "path": "assets/Sounds/Units/Fey/Leprechaun/Leprechaun - Select 3 - Answer me this.wav",
       "size": 62342,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Deathblow.wav",
+      "size": 113398,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Order 1.wav",
+      "size": 68950,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Order 2.wav",
+      "size": 85618,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Order 3.wav",
+      "size": 78952,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Ready.wav",
+      "size": 168958,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Select 1.wav",
+      "size": 60616,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Select 2.wav",
+      "size": 72006,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Oakman/Oakman - Select 3.wav",
+      "size": 84508,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Order 1 - Okay.wav",
+      "size": 49104,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Order 2 - Say please.wav",
+      "size": 106474,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Order 3 - First, tell me I'm pretty!.wav",
+      "size": 131748,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Ready - Who shall dance with the pixie.wav",
+      "size": 108160,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Select 1 - Hee hee-hee-hee heeaaah!.wav",
+      "size": 97296,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Select 2 - Look at me!.wav",
+      "size": 87942,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Pixie/Pixie - Select 3 - Dance with me!.wav",
+      "size": 92152,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Deathblow - Get THAT in ya!.wav",
+      "size": 41720,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Order 1 - Aye.wav",
+      "size": 24086,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Order 2 - Let's be off!.wav",
+      "size": 36868,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Order 3 - I'll be on me way, then.wav",
+      "size": 51858,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Ready - Ready for a wee bit'a fun!.wav",
+      "size": 59350,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Select 1 - To be sure.wav",
+      "size": 34660,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Select 2 - Whatcha wantin'.wav",
+      "size": 34686,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Spriggan/Spriggan - Select 3 - Look at that, will ya!.wav",
+      "size": 46126,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Order 1 - Mmh-mmm!.wav",
+      "size": 21722,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Order 2 - Waa-aahaahaahaa.wav",
+      "size": 37562,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Order 3 - Weeeeee!.wav",
+      "size": 95738,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Ready - Ooooh!.wav",
+      "size": 64890,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Select 1 - Hmmm.wav",
+      "size": 21562,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Select 2 - Hee-hee-hee, hee-hee-hee-hee-hee-hee!.wav",
+      "size": 72314,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sprite/Sprite - Select 3 - Ooooh!.wav",
+      "size": 64890,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Deathblow - You're no fun!.wav",
+      "size": 85814,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Order 1 - Pretty!.wav",
+      "size": 61536,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Order 2 - Lavender and Lilac!.wav",
+      "size": 92604,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Order 3 - Dewdrops and Cowslips.wav",
+      "size": 115998,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Ready - Spring is in the air!.wav",
+      "size": 96312,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Select 1 - Flowers!.wav",
+      "size": 66130,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Select 2 - Buttercups and rainbows.wav",
+      "size": 117966,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/Sylph/Sylph - Select 3 - You smell like a violet!.wav",
+      "size": 126498,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Deathblow - Growl. You were warned!.wav",
+      "size": 150582,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Order 1 - Run!.wav",
+      "size": 48580,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Order 2 - Flee!.wav",
+      "size": 51606,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Order 3 - Feel my wrath!.wav",
+      "size": 84896,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Order 4 - Leave this place or die!.wav",
+      "size": 134326,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Ready - Beware mortals, the Forestmaster approaches….wav",
+      "size": 184720,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Select 1 - Heed my warnings!.wav",
+      "size": 88174,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Select 2 - Leave this place or die!.wav",
+      "size": 120512,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Select 3 - Death to all mortals.wav",
+      "size": 96526,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Fey/The Forestmaster/The Forestmaster - Select 4 - Ancient power protects me.wav",
+      "size": 118864,
       "src": "resources"
     },
     {
@@ -2832,6 +4582,41 @@
     {
       "path": "assets/Sounds/Units/Fliers/Wyvern/Wyvern - Select 3.wav",
       "size": 132986,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Order 1.wav",
+      "size": 15216,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Order 2.wav",
+      "size": 27382,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Order 3.wav",
+      "size": 40950,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Ready.wav",
+      "size": 55958,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Select 1.wav",
+      "size": 10698,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Select 2.wav",
+      "size": 20674,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Ancient Wisp/Ancient Wisp - Select 3.wav",
+      "size": 148452,
       "src": "resources"
     },
     {
@@ -2960,6 +4745,91 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Deathblow - Off with his head!.wav",
+      "size": 55376,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Order 1 - Duty leads us.wav",
+      "size": 74108,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Order 2 - Honor guides us.wav",
+      "size": 74722,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Order 3 - Courage strengthens us.wav",
+      "size": 96154,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Order 4 - Such is the will of the King.wav",
+      "size": 106884,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Ready - Make way for the Moon King!.wav",
+      "size": 120510,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Select 1 - To arms!.wav",
+      "size": 49006,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Select 2 - Take off your weapons.wav",
+      "size": 61706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Select 3 - Swear fealty to me.wav",
+      "size": 91236,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/King Lunarion/King Lunarion - Select 4 - Submit to my power.wav",
+      "size": 89680,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Order 1 - Very well.wav",
+      "size": 25488,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Order 2 - In due course.wav",
+      "size": 50682,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Order 3 - Fire away!.wav",
+      "size": 49236,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Ready - My arrows fly at your command.wav",
+      "size": 121442,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Select 1 - Our arrows nocked.wav",
+      "size": 62332,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Select 2 - Our bows strung.wav",
+      "size": 61362,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Longbow/Longbow - Select 3 - Let lesser races beware!.wav",
+      "size": 94048,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/High Elves/Moonguard/Moonguard - Conversion - I claim this site in Lunarion's name.wav",
       "size": 130042,
       "src": "resources"
@@ -3042,6 +4912,96 @@
     {
       "path": "assets/Sounds/Units/High Elves/Mystic/Mystic - Select 3 - My magic is strong.wav",
       "size": 73722,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Unicorn/Unicorn - Order 1.wav",
+      "size": 51322,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Unicorn/Unicorn - Order 2.wav",
+      "size": 29470,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Unicorn/Unicorn - Ready.wav",
+      "size": 88248,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Unicorn/Unicorn - Select 1.wav",
+      "size": 51128,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Unicorn/Unicorn - Select 2.wav",
+      "size": 43218,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Order 1.wav",
+      "size": 15216,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Order 2.wav",
+      "size": 27384,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Order 3.wav",
+      "size": 40952,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Ready.wav",
+      "size": 55960,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Select 1.wav",
+      "size": 5420,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Select 2.wav",
+      "size": 20674,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/High Elves/Wisp/Wisp - Select 3.wav",
+      "size": 148454,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Dancing Sword/Dancing Sword - Deathblow.wav",
+      "size": 94716,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Dancing Sword/Dancing Sword - Order 1.wav",
+      "size": 80892,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Dancing Sword/Dancing Sword - Order 2.wav",
+      "size": 80892,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Dancing Sword/Dancing Sword - Ready.wav",
+      "size": 92412,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Dancing Sword/Dancing Sword - Select 1.wav",
+      "size": 59324,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Dancing Sword/Dancing Sword - Select 2.wav",
+      "size": 59324,
       "src": "resources"
     },
     {
@@ -3185,6 +5145,46 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Deathblow - Another notch in my blade.wav",
+      "size": 81934,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Order 1 - We're off.wav",
+      "size": 55182,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Order 2 - Move out!.wav",
+      "size": 51726,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Order 3 - Keep it lively.wav",
+      "size": 69502,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Ready - A good day for a battle, eh.wav",
+      "size": 94606,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Select 1 - Gather the troops.wav",
+      "size": 35662,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Select 2 - This looks promising.wav",
+      "size": 37966,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Knight/Knight - Select 3 - Looking forward to a good fight!.wav",
+      "size": 49678,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Knights/Peasant/Peasant - Build - All done!.wav",
       "size": 37548,
       "src": "resources"
@@ -3235,6 +5235,91 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Deathblow - Feel the pain!.wav",
+      "size": 114492,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Order 1 - Onwards!.wav",
+      "size": 69030,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Order 2 - Towards absolution.wav",
+      "size": 103952,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Order 3 - Feel my wrath.wav",
+      "size": 88798,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Order 4 - Slay the unholy ones.wav",
+      "size": 135578,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Ready - Behold the bright blade of Justice!.wav",
+      "size": 148754,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Select 1 - Behold!.wav",
+      "size": 84184,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Select 2 - Judgment hath come!.wav",
+      "size": 97362,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Select 3 - The light shall rise.wav",
+      "size": 104610,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Sirian/Sirian - Select 4 - The dark shall fall.wav",
+      "size": 92750,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Order 1 - As you wish.wav",
+      "size": 32966,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Order 2 - With all due haste.wav",
+      "size": 54444,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Order 3 - As my Lord wills it.wav",
+      "size": 51282,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Ready - It is my honor to serve you.wav",
+      "size": 59792,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Select 1 - My Lord.wav",
+      "size": 34466,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Select 2 - Your command.wav",
+      "size": 40626,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Knights/Squire/Squire - Select 3 - I humbly await your orders.wav",
+      "size": 71926,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Knights/Swordsman/Swordsman - Deathblow - Eyes open and ears to the ground!.wav",
       "size": 91002,
       "src": "resources"
@@ -3262,6 +5347,41 @@
     {
       "path": "assets/Sounds/Units/Knights/Swordsman/Swordsman - Select 2 - On watch.wav",
       "size": 25850,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Order 1 - Aaargh!.wav",
+      "size": 52222,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Order 2 - To glory!.wav",
+      "size": 44542,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Order 3 - I smell blood.wav",
+      "size": 84862,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Ready - Let the battle begin.wav",
+      "size": 85758,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Select 1 - Growl.wav",
+      "size": 67326,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Select 2 - I grow thirsty.wav",
+      "size": 96126,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Axe Thrower/Axe Thrower - Select 3 - Let me feed.wav",
+      "size": 58494,
       "src": "resources"
     },
     {
@@ -3460,6 +5580,51 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Order 1 - Despair!.wav",
+      "size": 81744,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Order 2 - Sense the terror!.wav",
+      "size": 109770,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Order 3 - They tremble!.wav",
+      "size": 95758,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Order 4 - None will survive!.wav",
+      "size": 124952,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Ready - The eyes of Sartek are upon you.wav",
+      "size": 174192,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Select 1 - Look into my eyes!.wav",
+      "size": 120280,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Select 2 - I see weakness.wav",
+      "size": 107420,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Select 3 - Abandon hope.wav",
+      "size": 93422,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Minotaurs/Skull of Sartek/Skull of Sartek - Select 4 - Flee from the rage of Sartek.wav",
+      "size": 166992,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Orcs/Giant/Giant - Conversion - This is for you, now food for me.wav",
       "size": 145852,
       "src": "resources"
@@ -3515,6 +5680,46 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Deathblow - My club, your head, big smack!.wav",
+      "size": 164656,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Order 1 - Going.wav",
+      "size": 37992,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Order 2 - Ya!.wav",
+      "size": 47636,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Order 3 - Like crazy!.wav",
+      "size": 55528,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Ready - Goblin here.wav",
+      "size": 60352,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Select 1 - You call me.wav",
+      "size": 45006,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Select 2 - What you want.wav",
+      "size": 37992,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin Chief/Goblin Chief - Select 3 - Not make sense.wav",
+      "size": 60790,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Orcs/Goblin Shaman/Goblin Shaman - Order 1 - Pay homage.wav",
       "size": 87568,
       "src": "resources"
@@ -3557,6 +5762,111 @@
     {
       "path": "assets/Sounds/Units/Orcs/Goblin Shaman/Goblin Shaman - Select 4 - Face my wrath.wav",
       "size": 103952,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin/Goblin - Deathblow - Gotcha!.wav",
+      "size": 20478,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin/Goblin - Order 1 - Go!.wav",
+      "size": 22142,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin/Goblin - Order 2 - On my way.wav",
+      "size": 35902,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin/Goblin - Ready - Ready.wav",
+      "size": 39038,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin/Goblin - Select 1 - Hee hee hee hee hee hee!.wav",
+      "size": 65918,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Goblin/Goblin - Select 2 - Yes.wav",
+      "size": 23902,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Order 1 - Ready.wav",
+      "size": 44414,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Order 2 - Aim.wav",
+      "size": 40812,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Order 3 - Fire!.wav",
+      "size": 45616,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Ready - Just need one clear shot.wav",
+      "size": 104482,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Select 1 - Yeah.wav",
+      "size": 37208,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Select 2 - Way to go!.wav",
+      "size": 60034,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold Sniper/Kobold Sniper - Select 3 - Don't mess with me.wav",
+      "size": 69642,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Deathblow - You not so smart now, eh!.wav",
+      "size": 95652,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Order 1 - Yeah.wav",
+      "size": 28162,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Order 2 - You wait!.wav",
+      "size": 43444,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Order 3 - I'll be back for you.wav",
+      "size": 69792,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Ready - What you want.wav",
+      "size": 52400,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Select 1 - Growl.wav",
+      "size": 124694,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Select 2 - Lemme go!.wav",
+      "size": 44554,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Kobold/Kobold - Select 3 - Don't touch me.wav",
+      "size": 54676,
       "src": "resources"
     },
     {
@@ -3607,6 +5917,46 @@
     {
       "path": "assets/Sounds/Units/Orcs/Ogre/Ogre - Select 4 - What you want with me.wav",
       "size": 89984,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Deathblow - Chop you up!.wav",
+      "size": 59614,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Order 1 - Kill.wav",
+      "size": 65122,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Order 2 - Burn.wav",
+      "size": 72036,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Order 3 - I crush skulls.wav",
+      "size": 118706,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Ready - Smash heads, break necks!.wav",
+      "size": 125562,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Select 1 - Growl.wav",
+      "size": 54752,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Select 2 - I very strong!.wav",
+      "size": 122162,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Orcs/Orc/Orc - Select 3 - Thy no mess with orc.wav",
+      "size": 125620,
       "src": "resources"
     },
     {
@@ -3695,6 +6045,116 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Plaguelords/Cryohydra/Cryohydra - Deathblow.wav",
+      "size": 62650,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Cryohydra/Cryohydra - Order 1.wav",
+      "size": 52602,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Cryohydra/Cryohydra - Order 2.wav",
+      "size": 105084,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Cryohydra/Cryohydra - Ready.wav",
+      "size": 105084,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Cryohydra/Cryohydra - Select 1.wav",
+      "size": 105084,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Cryohydra/Cryohydra - Select 2.wav",
+      "size": 52602,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Eye of Flame/Eye of Flame - Deathblow.wav",
+      "size": 82042,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Eye of Flame/Eye of Flame - Order 1.wav",
+      "size": 63098,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Eye of Flame/Eye of Flame - Order 2.wav",
+      "size": 52366,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Eye of Flame/Eye of Flame - Ready.wav",
+      "size": 205436,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Eye of Flame/Eye of Flame - Select 1.wav",
+      "size": 69308,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Eye of Flame/Eye of Flame - Select 2.wav",
+      "size": 126076,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Gazer/Gazer - Order 1.wav",
+      "size": 34972,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Gazer/Gazer - Ready.wav",
+      "size": 163708,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Gazer/Gazer - Select 1.wav",
+      "size": 34972,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Order 1 - As you will.wav",
+      "size": 106282,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Order 2 - The hunger.wav",
+      "size": 104746,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Order 3 - Warm flesh.wav",
+      "size": 131370,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Ready - The Plague Lord calls.wav",
+      "size": 182314,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Select 1 - I smell blood.wav",
+      "size": 163114,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Select 2 - Feel my pain.wav",
+      "size": 133930,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Ghoul/Ghoul - Select 3 - Taste my flesh.wav",
+      "size": 132138,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Plaguelords/Hydra/Hydra - Deathblow.wav",
       "size": 32440,
       "src": "resources"
@@ -3722,6 +6182,56 @@
     {
       "path": "assets/Sounds/Units/Plaguelords/Hydra/Hydra - Select 2.wav",
       "size": 111228,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Deathblow - You are stricken!.wav",
+      "size": 82730,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Order 1 - Give in.wav",
+      "size": 71466,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Order 2 - Do not struggle.wav",
+      "size": 86022,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Order 3 - Embrace the Plague.wav",
+      "size": 107398,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Order 4 - Civilization will fall.wav",
+      "size": 120618,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Ready - Plague is come to this land.wav",
+      "size": 131114,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Select 1 - Life, ebbs away.wav",
+      "size": 148010,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Select 2 - The world is dying.wav",
+      "size": 108202,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Select 3 - Plague is eternal.wav",
+      "size": 86570,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Lord Antharg/Lord Antharg - Select 4 - Time does not heal all wounds.wav",
+      "size": 156458,
       "src": "resources"
     },
     {
@@ -3772,6 +6282,221 @@
     {
       "path": "assets/Sounds/Units/Plaguelords/Plague Priest/Plague Priest - Select 4 - Only death brings release.wav",
       "size": 139050,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Pyrohydra/Pyrohydra - Deathblow.wav",
+      "size": 63162,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Pyrohydra/Pyrohydra - Order 1.wav",
+      "size": 56122,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Pyrohydra/Pyrohydra - Order 2.wav",
+      "size": 112126,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Pyrohydra/Pyrohydra - Ready.wav",
+      "size": 112126,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Pyrohydra/Pyrohydra - Select 1.wav",
+      "size": 112126,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Pyrohydra/Pyrohydra - Select 2.wav",
+      "size": 56122,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Slime/Slime - Deathblow.wav",
+      "size": 23836,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Slime/Slime - Order 1.wav",
+      "size": 44732,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Slime/Slime - Order 2.wav",
+      "size": 20348,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Slime/Slime - Ready.wav",
+      "size": 53684,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Slime/Slime - Select 1.wav",
+      "size": 24188,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Slime/Slime - Select 2.wav",
+      "size": 20348,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Spore/Spore - Deathblow.wav",
+      "size": 39036,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Spore/Spore - Order 1.wav",
+      "size": 39036,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Spore/Spore - Order 2.wav",
+      "size": 23804,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Spore/Spore - Ready.wav",
+      "size": 223868,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Spore/Spore - Select 1.wav",
+      "size": 46588,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Plaguelords/Spore/Spore - Select 2.wav",
+      "size": 23548,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Ballista/Ballista - Ready - Ballista! Armed and dangerous!.wav",
+      "size": 107024,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Battering Ram/Battering Ram - Order 1.wav",
+      "size": 34936,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Battering Ram/Battering Ram - Ready - Battering Ram! Rolling out!.wav",
+      "size": 98542,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Battering Ram/Battering Ram - Select 1.wav",
+      "size": 94968,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Catapult/Catapult - Order 1.wav",
+      "size": 34936,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Catapult/Catapult - Ready - Catapult! Fire away!.wav",
+      "size": 119782,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Siege/Catapult/Catapult - Select 1.wav",
+      "size": 94968,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Deathblow - Surprise!.wav",
+      "size": 51134,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Order 1 - Yes, yes!.wav",
+      "size": 50770,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Order 2 - Run, run!.wav",
+      "size": 47146,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Order 3 - As master wishes.wav",
+      "size": 85202,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Ready - Now, quick, must build!.wav",
+      "size": 103978,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Select 1 - Now you see me.wav",
+      "size": 56450,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Select 2 - Now you don't!.wav",
+      "size": 47086,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Chameleon/Chameleon - Select 3 - You too slow.wav",
+      "size": 61282,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Deathblow - ... at the mighty Iriki.wav",
+      "size": 122282,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Order 1 - Oh yes!.wav",
+      "size": 85674,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Order 2 - A sacrifice.wav",
+      "size": 89514,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Order 3 - Our time approaches.wav",
+      "size": 103466,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Order 4 - The Sun God speaks to me.wav",
+      "size": 155178,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Ready - Tremble unbelievers, Iriki is here.wav",
+      "size": 207146,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Select 1 - Unbelievers!.wav",
+      "size": 109482,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Select 2 - ...take this land.wav",
+      "size": 142122,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Select 3 - Cold bloods shall rule.wav",
+      "size": 141610,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Iriki/Iriki - Select 4 - Warm bloods must die.wav",
+      "size": 127914,
       "src": "resources"
     },
     {
@@ -3880,6 +6605,91 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Deathblow - The venom flows!.wav",
+      "size": 145142,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Order 1 - Yes.wav",
+      "size": 52778,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Order 2 - We obey!.wav",
+      "size": 69766,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Order 3 - Be warned!.wav",
+      "size": 81834,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Ready - Allies for the Ssrathi.wav",
+      "size": 128554,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Select 1 - Blood is cold.wav",
+      "size": 108074,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Select 2 - Anger is hot.wav",
+      "size": 109866,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakeman/Snakeman - Select 3 - Vengeance is like fire!.wav",
+      "size": 172586,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Order 1 - As He wills it.wav",
+      "size": 124678,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Order 2 - Feel His glow.wav",
+      "size": 112646,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Order 3 - Behold the Sun God!.wav",
+      "size": 155142,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Order 4 - Bask in His radiance.wav",
+      "size": 132358,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Ready - The Sun God calls us.wav",
+      "size": 176390,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Select 1 - Bow fools!.wav",
+      "size": 122118,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Select 2 - 'Tis a sad day.wav",
+      "size": 121862,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Select 3 - Ho, worthless ones.wav",
+      "size": 124934,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Ssrathi/Snakepriest/Snakepriest - Select 4.wav",
+      "size": 131590,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Ssrathi/Triceratops/Triceratops - Deathblow.wav",
       "size": 48190,
       "src": "resources"
@@ -3940,6 +6750,136 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Swarm/Giant Ant/Giant Ant - Deathblow.wav",
+      "size": 55548,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Giant Ant/Giant Ant - Order 1.wav",
+      "size": 43772,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Giant Ant/Giant Ant - Order 2.wav",
+      "size": 72188,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Giant Ant/Giant Ant - Ready.wav",
+      "size": 105724,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Giant Ant/Giant Ant - Select 1.wav",
+      "size": 72572,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Giant Ant/Giant Ant - Select 2.wav",
+      "size": 58172,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Deathblow - You will be consumed!.wav",
+      "size": 113578,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Order 1 - To dust.wav",
+      "size": 61418,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Order 2 - Drained away!.wav",
+      "size": 64810,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Order 3 - No memories.wav",
+      "size": 82666,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Ready - We serve you, Master!.wav",
+      "size": 116010,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Select 1 - Dry bones.wav",
+      "size": 48938,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Select 2 - Parched.wav",
+      "size": 65386,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Husk/Husk - Select 3 - Sand.wav",
+      "size": 74794,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scarab/Scarab - Deathblow.wav",
+      "size": 152700,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scarab/Scarab - Order 1.wav",
+      "size": 117500,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scarab/Scarab - Order 2.wav",
+      "size": 60410,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scarab/Scarab - Ready.wav",
+      "size": 65594,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scarab/Scarab - Select 1.wav",
+      "size": 136318,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scarab/Scarab - Select 2.wav",
+      "size": 88314,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpion/Scorpion - Deathblow.wav",
+      "size": 77374,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpion/Scorpion - Order 1.wav",
+      "size": 74812,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpion/Scorpion - Order 2.wav",
+      "size": 54524,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpion/Scorpion - Ready.wav",
+      "size": 87740,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpion/Scorpion - Select 1.wav",
+      "size": 45884,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpion/Scorpion - Select 2.wav",
+      "size": 59452,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Swarm/Scorpionman/Scorpionman - Deathblow - Feel my sting!.wav",
       "size": 109610,
       "src": "resources"
@@ -3987,6 +6927,51 @@
     {
       "path": "assets/Sounds/Units/Swarm/Scorpionman/Scorpionman - Select 4 - We are hungry.wav",
       "size": 90922,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Order 1 - Yes!.wav",
+      "size": 54122,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Order 2 - We are strong!.wav",
+      "size": 90922,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Order 3 - Our enemies are weak.wav",
+      "size": 143914,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Order 4 - Pain has made us great!.wav",
+      "size": 172586,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Ready - Praise Melkor, Lord of Famine!.wav",
+      "size": 188970,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Select 1 - Pain gives strength.wav",
+      "size": 85290,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Select 2 - Pleasure must me denied!.wav",
+      "size": 138794,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Select 3 - Enjoy your suffering!.wav",
+      "size": 169258,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Swarm/Scorpionpriest/Scorpionpriest - Select 4.wav",
+      "size": 137770,
       "src": "resources"
     },
     {
@@ -4135,6 +7120,86 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Deathblow - Bow before your master.wav",
+      "size": 112510,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Order 1 - Indeed.wav",
+      "size": 42174,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Order 2 - 'Tis a trifle.wav",
+      "size": 62590,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Order 3 - I grow tired of this.wav",
+      "size": 94206,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Ready - Darkness arrives!.wav",
+      "size": 117502,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Select 1 - What now.wav",
+      "size": 61950,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Select 2 - I am ready.wav",
+      "size": 62718,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Shadow/Shadow - Select 3 - Always ready!.wav",
+      "size": 81406,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Deathblow - To dust!.wav",
+      "size": 63624,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Order 1 - Slash them.wav",
+      "size": 55974,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Order 2 - Trample them.wav",
+      "size": 64958,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Order 3 - Break them.wav",
+      "size": 53364,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Ready - We ride, again.wav",
+      "size": 113270,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Select 1 - To war.wav",
+      "size": 47424,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Select 2 - Eternal battle.wav",
+      "size": 75036,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Skeleton Cavalry/Skeleton Cavalry - Select 3 - There is no peace for us.wav",
+      "size": 105800,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Undead/Skeleton/Skeleton - Deathblow - Feed the worms!.wav",
       "size": 87062,
       "src": "resources"
@@ -4215,6 +7280,211 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Deathblow - Your blood is good.wav",
+      "size": 86522,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Order 1 - As you wish.wav",
+      "size": 45562,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Order 2 - It would be a pleasure.wav",
+      "size": 71674,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Order 4.wav",
+      "size": 77818,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Ready - I have arrived for the feast, yes.wav",
+      "size": 84218,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Select 1 - Yes.wav",
+      "size": 27130,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Select 2 - Great master.wav",
+      "size": 43386,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Select 3 - What is it you ask.wav",
+      "size": 60666,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Vampire/Vampire - Select 4 - I am the Chosen One.wav",
+      "size": 74874,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wight/Wight - Deathblow - Die!.wav",
+      "size": 45884,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wight/Wight - Order 1 - Aaahhh.wav",
+      "size": 63036,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wight/Wight - Order 2 - Yes, Master!.wav",
+      "size": 78716,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wight/Wight - Ready - I feel stronger!.wav",
+      "size": 123004,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wight/Wight - Select 1 - Great One.wav",
+      "size": 55676,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wight/Wight - Select 2 - Set us free.wav",
+      "size": 64510,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Deathblow - Come to me!.wav",
+      "size": 82686,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Order 1 - With ease.wav",
+      "size": 77310,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Order 2 - For You, my Lord.wav",
+      "size": 75134,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Order 3 - My touch is death.wav",
+      "size": 99070,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Ready - Free, at last!.wav",
+      "size": 98046,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Select 1 - Yes, Lord.wav",
+      "size": 57598,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Select 2 - What now.wav",
+      "size": 54526,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Wraith/Wraith - Select 3 - Feel my power.wav",
+      "size": 118910,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Deathblow - Meat!.wav",
+      "size": 56190,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Order 1 - Yes.wav",
+      "size": 57470,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Order 2 - Going.wav",
+      "size": 37886,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Order 3 - Feed me now!.wav",
+      "size": 113278,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Ready - You called.wav",
+      "size": 52862,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Select 1 - Yes.wav",
+      "size": 47550,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Select 2 - Master.wav",
+      "size": 61182,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Undead/Zombie/Zombie - Select 3 - Feed me.wav",
+      "size": 45118,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Deathblow - Return to the earth.wav",
+      "size": 93928,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Order 1 - Mmm.wav",
+      "size": 85248,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Order 2 - Always hasty.wav",
+      "size": 102514,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Order 3 - I remember.wav",
+      "size": 100942,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Order 4 - Time has not been kind.wav",
+      "size": 144742,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Ready - Oooh... How the years have passed.wav",
+      "size": 260164,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Select 1 - Oooh.wav",
+      "size": 192602,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Select 2 - The forest speaks.wav",
+      "size": 99700,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Select 3 - The things I have seen.wav",
+      "size": 101108,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Ancient Treant/Ancient Treant - Select 4 - So much has changed.wav",
+      "size": 116592,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Wood Elves/Druid/Druid - Order 1 - Okay.wav",
       "size": 36666,
       "src": "resources"
@@ -4250,6 +7520,56 @@
       "src": "resources"
     },
     {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Deathblow - Ooh, I hate that.wav",
+      "size": 73210,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Order 1 - Ooh yes.wav",
+      "size": 86348,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Order 2 - Not here!.wav",
+      "size": 56144,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Order 3 - Stay close to me.wav",
+      "size": 66664,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Order 4 - Mmm, do that again!.wav",
+      "size": 91098,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Ready - Would I lead you astray.wav",
+      "size": 104334,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Select 1 - My Lord!.wav",
+      "size": 55806,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Select 2 - Don't leave me.wav",
+      "size": 54108,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Select 3 - I like that.wav",
+      "size": 61912,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Dryad/Dryad - Select 4 - I've been a bad girl.wav",
+      "size": 91438,
+      "src": "resources"
+    },
+    {
       "path": "assets/Sounds/Units/Wood Elves/Elven Hunter/Elven Hunter - Order 1.wav",
       "size": 40830,
       "src": "resources"
@@ -4282,6 +7602,46 @@
     {
       "path": "assets/Sounds/Units/Wood Elves/Elven Hunter/Elven Hunter - Select 3.wav",
       "size": 72652,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Deathblow - Leave this place!.wav",
+      "size": 82308,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Order 1 - Yes Lord.wav",
+      "size": 51396,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Order 2 - As you request.wav",
+      "size": 70072,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Order 3 - The forest waits.wav",
+      "size": 82954,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Ready - The forest guides my spear.wav",
+      "size": 111932,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Select 1 - Friend or foe.wav",
+      "size": 80920,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Select 2 - My life for this land.wav",
+      "size": 82308,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Forestguard/Forestguard - Select 3 - I must protect the land.wav",
+      "size": 91324,
       "src": "resources"
     },
     {
@@ -4427,6 +7787,46 @@
     {
       "path": "assets/Sounds/Units/Wood Elves/Treant/Treant - Select 4 - The earth abides.wav",
       "size": 119162,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Deathblow - Tree killer!.wav",
+      "size": 41850,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Order 1 - We go.wav",
+      "size": 21498,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Order 2 - For the Goddess!.wav",
+      "size": 38010,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Order 3 - With all haste.wav",
+      "size": 38074,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Ready - We ride the woods.wav",
+      "size": 51962,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Select 1 - Lord.wav",
+      "size": 19450,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Select 2 - You need us.wav",
+      "size": 33786,
+      "src": "resources"
+    },
+    {
+      "path": "assets/Sounds/Units/Wood Elves/Woodrider/Woodrider - Select 3 - The woods are our home.wav",
+      "size": 59514,
       "src": "resources"
     },
     {
@@ -13036,7 +16436,7 @@
     },
     {
       "path": "assets/gamemodels/catalog.json",
-      "size": 1574999,
+      "size": 1959027,
       "src": "code"
     },
     {
@@ -16946,7 +20346,7 @@
     },
     {
       "path": "data/rules.json",
-      "size": 166119,
+      "size": 182967,
       "src": "code"
     },
     {
@@ -16966,7 +20366,7 @@
     },
     {
       "path": "data/sync_protocol.json",
-      "size": 53589,
+      "size": 76778,
       "src": "code"
     },
     {
@@ -16981,7 +20381,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_anger.json",
-      "size": 6547,
+      "size": 6660,
       "src": "code"
     },
     {
@@ -16991,17 +20391,17 @@
     },
     {
       "path": "game/effects-data/effects/effect_aura.json",
-      "size": 4768,
+      "size": 4878,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_awake.json",
-      "size": 9515,
+      "size": 9624,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_awe.json",
-      "size": 6050,
+      "size": 6164,
       "src": "code"
     },
     {
@@ -17011,7 +20411,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_banish.json",
-      "size": 6785,
+      "size": 6894,
       "src": "code"
     },
     {
@@ -17031,22 +20431,22 @@
     },
     {
       "path": "game/effects-data/effects/effect_confusion.json",
-      "size": 5222,
+      "size": 5334,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_creation.json",
-      "size": 8338,
+      "size": 8480,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_dark_matter.json",
-      "size": 5898,
+      "size": 6007,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_delay_time.json",
-      "size": 4511,
+      "size": 4621,
       "src": "code"
     },
     {
@@ -17056,7 +20456,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_disruption.json",
-      "size": 4912,
+      "size": 5025,
       "src": "code"
     },
     {
@@ -17091,7 +20491,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_emotions_bombard.json",
-      "size": 4573,
+      "size": 4691,
       "src": "code"
     },
     {
@@ -17116,7 +20516,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_golems_air.json",
-      "size": 7213,
+      "size": 7355,
       "src": "code"
     },
     {
@@ -17126,7 +20526,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_golems_water.json",
-      "size": 7407,
+      "size": 7549,
       "src": "code"
     },
     {
@@ -17146,7 +20546,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_inner_fire.json",
-      "size": 3922,
+      "size": 4031,
       "src": "code"
     },
     {
@@ -17156,22 +20556,22 @@
     },
     {
       "path": "game/effects-data/effects/effect_light_darkness.json",
-      "size": 4869,
+      "size": 4983,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_lightning.json",
-      "size": 5687,
+      "size": 5796,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_love.json",
-      "size": 6327,
+      "size": 6440,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_metaphysics.json",
-      "size": 4736,
+      "size": 4846,
       "src": "code"
     },
     {
@@ -17181,17 +20581,17 @@
     },
     {
       "path": "game/effects-data/effects/effect_mind_blast.json",
-      "size": 5208,
+      "size": 5325,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_mists.json",
-      "size": 6192,
+      "size": 6301,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_mutate.json",
-      "size": 6150,
+      "size": 6292,
       "src": "code"
     },
     {
@@ -17211,7 +20611,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_phantom.json",
-      "size": 4245,
+      "size": 4358,
       "src": "code"
     },
     {
@@ -17236,12 +20636,12 @@
     },
     {
       "path": "game/effects-data/effects/effect_shield.json",
-      "size": 4368,
+      "size": 4484,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_sleep.json",
-      "size": 5167,
+      "size": 5277,
       "src": "code"
     },
     {
@@ -17251,7 +20651,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_space_bending.json",
-      "size": 6701,
+      "size": 6817,
       "src": "code"
     },
     {
@@ -17261,7 +20661,7 @@
     },
     {
       "path": "game/effects-data/effects/effect_summoning.json",
-      "size": 6451,
+      "size": 6561,
       "src": "code"
     },
     {
@@ -17296,12 +20696,12 @@
     },
     {
       "path": "game/effects-data/effects/effect_turn_life.json",
-      "size": 5330,
+      "size": 5442,
       "src": "code"
     },
     {
       "path": "game/effects-data/effects/effect_vision.json",
-      "size": 4623,
+      "size": 4737,
       "src": "code"
     },
     {

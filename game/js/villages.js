@@ -13,14 +13,28 @@
 import { hash32 } from './map.js';
 
 export const VILLAGE_CELL = 200, VILLAGE_INSET = 50, MIN_APART = 100;
-export const ORIGIN_MIN = 35, ORIGIN_MAX = 55, VILLAGE_RATE = 0.75, HAMLET_RATE = 0.4;
+export const ORIGIN_MIN = 35, ORIGIN_MAX = 55, VILLAGE_RATE = 0.75, OUTPOST_RATE = 0.4;
+// Layout 2 (user 2026-11-28: "make the villages twice smaller, and the distances between them cut by half"): NEW
+// dimensions only — their map seed ends in LAYOUT_V2_MARK (js/map.js seedForNewDimension), so every peer and browser
+// of a dimension, reading the same seed off its Door, agrees; an older dimension keeps its villages where they stood.
+// Half the grid, half the villages (villageTemplate derives the half-size template from the catalog's), each
+// village with 4 towers on its wall and 2 catapults + 1 ballista posted inside, each outpost with 1 tower + 1 ballista.
+export const LAYOUT_V2_MARK = '~v2';
+export const villageLayoutOf = (seed) => String(seed ?? '').endsWith(LAYOUT_V2_MARK) ? 2 : 1;
+const GEOM = {
+  1: { cell: VILLAGE_CELL, inset: VILLAGE_INSET, apart: MIN_APART, oMin: ORIGIN_MIN, oMax: ORIGIN_MAX },
+  2: { cell: 100, inset: 25, apart: 50, oMin: 18, oMax: 28 },
+};
+export const villageGeometry = (seed) => GEOM[villageLayoutOf(seed)];
+export const TOWER_HP = 4, TOWER_RANGE = 4;   // a wall tower: 4 HP, shoots the nearest enemy of its village within 4 once a turn
+export const isOutpostTemplate = (t) => t?.size === 'outpost' || t?.size === 'hamlet';   // 'hamlet': the catalogs before the rename (2026-11-28)
 
 let cat = null, catHash = '';
 const listeners = new Set();
 export function setVillageCatalog(j) {
   cat = j && typeof j === 'object' && j.villages ? j : null;
   catHash = cat?.hash || '';
-  _cells.clear(); _hexes.clear();
+  _cells.clear(); _hexes.clear(); _tpl.clear();
   for (const fn of listeners) { try { fn(); } catch {} }
   return !!cat;
 }
@@ -57,42 +71,146 @@ function ringPoint(d, u1, u2) {
 
 const _cells = new Map();   // `${seed}|cx,cy` → village | null
 const _hexes = new Map();   // `${seed}|vid` → Map("q,r" → { building, def })
+const _tpl = new Map();     // template id → its layout-2 (half-size) template
+
+// ---- the layout-2 template (2026-11-28) ----
+const hexLen = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
+// The offset (q, r) moved along its own direction to exactly `d` hexes from the centre (cube rounding of the scaled
+// vector: its largest component is ±d exactly, so the rounded hex is exactly d out).
+function toDist([q, r], d) {
+  const n = hexLen([q, r]);
+  if (!n || d <= 0) return [0, 0];
+  const x = q * d / n, z = r * d / n, y = -x - z;
+  let rx = Math.round(x), ry = Math.round(y), rz = Math.round(z);
+  const dx = Math.abs(rx - x), dy = Math.abs(ry - y), dz = Math.abs(rz - z);
+  if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz; else rz = -rx - ry;
+  return [rx + 0, rz + 0];
+}
+const AXIAL_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+// The first free offset at `want`, else around it (rings 1, 2) no farther than `maxD` from the centre — so no two
+// buildings of a halved layout share a hex.
+function freeOffset(want, taken, maxD) {
+  const key = (a) => `${a[0]},${a[1]}`;
+  if (!taken.has(key(want)) && hexLen(want) <= maxD) return want;
+  for (let k = 1; k <= 2; k++) for (const [dq, dr] of AXIAL_DIRS) { const c = [want[0] + dq * k, want[1] + dr * k]; if (!taken.has(key(c)) && hexLen(c) <= maxD) return c; }
+  return want;
+}
+// Compass points of a ring of radius R as js/hex.js draws it (north = up): N (R/2, −R), E (R, 0), S (−R/2, R), W (−R, 0).
+const COMPASS = [['north', [1, -2]], ['east', [1, 0]], ['south', [-1, 2]], ['west', [-1, 0]]];
+const siegeNpcOf = (race, kind) => Object.keys(cat?.npcs || {}).sort().find(k => cat.npcs[k].race === race && cat.npcs[k].role === 'siege' && cat.npcs[k].siege?.kind === kind) || null;
+const towerBuildingOf = (race) => Object.keys(cat?.buildings || {}).sort().find(k => cat.buildings[k].race === race && cat.buildings[k].role === 'tower') || null;
+// The half-size template: the wall at half its radius (8 → 4), the buildings inside at half their distance, every
+// resident at its post (gate guard right outside the gate, wall guards on the ring inside, the people outside just past
+// the wall, the others at half distance), wanderers at half the ring; then the defences:
+//   village — a tower on each of the north, east, south and west walls (ON the wall ring, the gate's hex excepted —
+//             the tower moves one hex along), and behind three of them (never the wall with the gate) a siege engine
+//             inside: 2 catapults and a ballista, real villagers (counted in the cap, which grows by 3)
+//   outpost — no wall: one tower on its north edge and a ballista next to it inside
+function halfTemplate(id, t) {
+  const out = { ...t, layout_version: 2 };
+  const outpost = isOutpostTemplate(t);
+  const R1 = t.wall?.radius || 0, R2 = R1 ? Math.round(R1 / 2) : 0;
+  const disc = Math.max(1, Math.round((t.radius || 2) / 2));
+  out.radius = disc;
+  out.clear_radius = R2 ? R2 + 1 : Math.round((t.clear_radius ?? t.radius + 3) / 2);
+  const inMax = R2 ? R2 - 2 : disc;   // buildings: inside the wall's inner ring (kept for the guards and engines)
+  const taken = new Set();
+  out.layout = (t.layout || []).map(l => {
+    const at = freeOffset(toDist(l.at, Math.ceil(hexLen(l.at) / 2)), taken, inMax);
+    taken.add(`${at[0]},${at[1]}`);
+    return { ...l, at };
+  });
+  if (t.wall && R2) out.wall = { ...t.wall, radius: R2, gate: toDist(t.wall.gate, R2) };
+  out.residents = (t.residents || []).map(rs => {
+    const n = hexLen(rs.at);
+    const d = !R2 ? Math.min(disc, Math.ceil(n / 2))
+      : rs.post === 'gate' ? R2 + 1 : rs.post === 'wall' ? R2 - 1 : rs.post === 'outside' ? Math.max(R2 + 1, n - R1 + R2) : Math.min(R2 - 1, Math.ceil(n / 2));
+    return { ...rs, at: toDist(rs.at, d) };
+  });
+  if (t.wanderers?.ring) out.wanderers = { ...t.wanderers, ring: t.wanderers.ring.map(x => Math.ceil(x / 2)) };
+  if (t.reputation?.threat_radius) out.reputation = { ...t.reputation, threat_radius: Math.round(t.reputation.threat_radius / 2) };
+  const towerB = towerBuildingOf(t.race);
+  const towers = [], engines = [];
+  if (!outpost && out.wall) {
+    const gate = out.wall.gate, ring = ringOffsets(R2);
+    const gi = ring.findIndex(h => h[0] === gate[0] && h[1] === gate[1]);
+    const near = COMPASS.map(([dir, v]) => ({ dir, at: toDist(v, R2) }))
+      .map(x => ({ ...x, gd: hexLen([x.at[0] - gate[0], x.at[1] - gate[1]]) }));
+    const gateWall = [...near].sort((a, b) => a.gd - b.gd)[0].dir;
+    for (const x of near) {
+      let at = x.at;
+      if (at[0] === gate[0] && at[1] === gate[1]) at = ring[(gi + 1) % ring.length];   // the gate's own hex: one along
+      towers.push({ dir: x.dir, at, building: towerB });
+      if (x.dir !== gateWall) engines.push({ dir: x.dir, at: toDist(at, R2 - 1) });
+    }
+    const kinds = ['catapult', 'catapult', 'ballista'];
+    engines.slice(0, 3).forEach((e, i) => { const npc = siegeNpcOf(t.race, kinds[i]); if (npc) out.residents.push({ npc, at: e.at, post: 'siege', dir: e.dir }); });
+  } else if (outpost) {
+    const at = toDist(COMPASS[0][1], disc);
+    towers.push({ dir: 'north', at, building: towerB });
+    const npc = siegeNpcOf(t.race, 'ballista');
+    if (npc) out.residents.push({ npc, at: toDist(at, Math.max(1, disc - 1)), post: 'siege', dir: 'north' });
+  }
+  out.towers = towers.filter(x => x.building);
+  out.cap = (t.cap || 0) + out.residents.filter(r => r.post === 'siege').length;
+  return out;
+}
+// The hexes of the ring of radius R around (0, 0) in walking order (offsets), starting at the south-west corner —
+// the order villageWallRing walks.
+function ringOffsets(R) {
+  const out = [];
+  let q = RING_DIRS[4][0] * R, r = RING_DIRS[4][1] * R;
+  for (let i = 0; i < 6; i++) for (let j = 0; j < R; j++) { out.push([q, r]); q += RING_DIRS[i][0]; r += RING_DIRS[i][1]; }
+  return out;
+}
+// The template a village of a dimension uses: the catalog's (layout 1) or its half-size form (layout 2).
+export function templateOf(templateId, layout = 1) {
+  const t = cat?.villages?.[templateId];
+  if (!t || layout !== 2) return t || null;
+  let h = _tpl.get(templateId);
+  if (!h) { h = halfTemplate(templateId, t); _tpl.set(templateId, h); }
+  return h;
+}
+export const villageTemplate = (v) => templateOf(v?.template, v?.layout || 1);
 // The candidate centre of a cell before the spawn-cell spacing rule.
 function rawVillage(seed, cx, cy) {
   if (!cat) return null;
-  // full villages only (the pick stays what it was before hamlets existed); a hamlet replaces one of its race below
+  // full villages only (the pick stays what it was before outposts existed); an outpost replaces one of its race below
   const templates = Object.keys(cat.villages).filter(t => !cat.villages[t].size).sort();
   if (!templates.length) return null;
+  const G = villageGeometry(seed), layout = villageLayoutOf(seed);
   let q, r;
   if (cx === 0 && cy === 0) {
-    const d = ORIGIN_MIN + Math.floor(roll(seed, 'od') * (ORIGIN_MAX - ORIGIN_MIN + 1));
+    const d = G.oMin + Math.floor(roll(seed, 'od') * (G.oMax - G.oMin + 1));
     ({ q, r } = ringPoint(d, roll(seed, 'oa'), roll(seed, 'ot')));
   } else {
     if (roll(seed, `p:${cx},${cy}`) >= VILLAGE_RATE) return null;
-    const span = VILLAGE_CELL - 2 * VILLAGE_INSET;
-    q = cx * VILLAGE_CELL + VILLAGE_INSET + Math.floor(roll(seed, `q:${cx},${cy}`) * span);
-    r = cy * VILLAGE_CELL + VILLAGE_INSET + Math.floor(roll(seed, `r:${cx},${cy}`) * span);
+    const span = G.cell - 2 * G.inset;
+    q = cx * G.cell + G.inset + Math.floor(roll(seed, `q:${cx},${cy}`) * span);
+    r = cy * G.cell + G.inset + Math.floor(roll(seed, `r:${cx},${cy}`) * span);
   }
   let template = templates[Math.floor(roll(seed, `t:${cx},${cy}`) * templates.length)];
-  // Smaller villages (user 2026-11-24): HAMLET_RATE of the cells away from the spawn hold a hamlet of the same race —
-  // no wall, three buildings, a handful of people (a quest giver, a storyteller, a builder for hire, a trader).
-  if ((cx || cy) && roll(seed, `h:${cx},${cy}`) < HAMLET_RATE) {
+  // Smaller villages (user 2026-11-24; "rename the hamlet to outpost" 2026-11-28): OUTPOST_RATE of the cells away
+  // from the spawn hold an outpost of the same race — no wall, three buildings, a handful of people (a quest giver, a
+  // storyteller, a builder for hire, a trader).
+  if ((cx || cy) && roll(seed, `h:${cx},${cy}`) < OUTPOST_RATE) {
     const race0 = cat.villages[template].race;
-    const h = Object.keys(cat.villages).sort().find(t => cat.villages[t].size === 'hamlet' && cat.villages[t].race === race0);
+    const h = Object.keys(cat.villages).sort().find(t => isOutpostTemplate(cat.villages[t]) && cat.villages[t].race === race0);
     if (h) template = h;
   }
   // Test games (GAMEMODELS_TEST_VILLAGE, set into the catalog by testCatalogOverrides): the spawn cell's village is
   // that template — in the catalog, so the browser and every peer pick the same one.
   if (cx === 0 && cy === 0 && cat.test_spawn_village && cat.villages[cat.test_spawn_village]) template = cat.test_spawn_village;
-  const v = cat.villages[template], race = cat.races[v.race];
+  const v = templateOf(template, layout), race = cat.races[v.race];
   const np = race?.village_names || { prefix: ['New'], suffix: ['town'] };
   const name = np.prefix[Math.floor(roll(seed, `n1:${cx},${cy}`) * np.prefix.length)] + np.suffix[Math.floor(roll(seed, `n2:${cx},${cy}`) * np.suffix.length)];
   return {
     id: `vil:${cx},${cy}`, cell: [cx, cy], q, r, template, race: v.race, race_name: race?.name || v.race, name,
-    team: String(v.team || '{name} Village').replace('{name}', name),
+    team: String(v.team || '{name} Village').replace('{name}', name).replace(/ Hamlet$/, ' Outpost'),
     alliance: `village_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${cx}_${cy}`.replace(/-/g, 'm'),
     radius: v.radius, clear_radius: v.clear_radius ?? v.radius + 3, cap: v.cap, reputation: v.reputation,
     wall: wallOf(v.wall, q, r),
+    ...(layout === 2 ? { layout, towers: (v.towers || []).map(tw => ({ q: q + tw.at[0], r: r + tw.at[1], dir: tw.dir, building: tw.building })) } : {}),
   };
 }
 // The wall ring (user 2026-11-24: "an unpassable wall around the village with one guard in front of its gate"):
@@ -110,7 +228,7 @@ export function villageOfCell(seed, cx, cy) {
   let v = rawVillage(seed, cx, cy);
   if (v && !(cx === 0 && cy === 0) && Math.abs(cx) <= 1 && Math.abs(cy) <= 1) {
     const o = rawVillage(seed, 0, 0);
-    if (o && dist(o, v) < MIN_APART) v = null;
+    if (o && dist(o, v) < villageGeometry(seed).apart) v = null;
   }
   if (_cells.size > 4096) _cells.clear();
   _cells.set(k, v);
@@ -118,20 +236,21 @@ export function villageOfCell(seed, cx, cy) {
 }
 // Villages whose centre is within `radius` of (q, r), nearest first.
 export function villagesNear(seed, q, r, radius = 150) {
-  const out = [];
-  const c0 = floorDiv(q - radius, VILLAGE_CELL), c1 = floorDiv(q + radius, VILLAGE_CELL);
-  const d0 = floorDiv(r - radius, VILLAGE_CELL), d1 = floorDiv(r + radius, VILLAGE_CELL);
+  const out = [], G = villageGeometry(seed);
+  const c0 = floorDiv(q - radius, G.cell), c1 = floorDiv(q + radius, G.cell);
+  const d0 = floorDiv(r - radius, G.cell), d1 = floorDiv(r + radius, G.cell);
   const seen = new Set();
   const consider = (v) => { if (v && !seen.has(v.id)) { seen.add(v.id); const d = dist(v, { q, r }); if (d <= radius) out.push({ ...v, dist: d }); } };
   for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) consider(villageOfCell(seed, cx, cy));
-  if (dist({ q, r }, { q: 0, r: 0 }) <= radius + ORIGIN_MAX) consider(villageOfCell(seed, 0, 0));
+  if (dist({ q, r }, { q: 0, r: 0 }) <= radius + G.oMax) consider(villageOfCell(seed, 0, 0));
   return out.sort((a, b) => a.dist - b.dist || (a.id < b.id ? -1 : 1));
 }
 export const nearestVillage = (seed, q, r, radius = 400) => villagesNear(seed, q, r, radius)[0] || null;
 // The village whose cleared disc holds (q, r), or null. Only the hex's own cell and the spawn village can.
 export function villageAround(seed, q, r) {
-  const cands = [villageOfCell(seed, floorDiv(q, VILLAGE_CELL), floorDiv(r, VILLAGE_CELL))];
-  if (Math.abs(q) <= ORIGIN_MAX + 20 && Math.abs(r) <= ORIGIN_MAX + 20) cands.push(villageOfCell(seed, 0, 0));
+  const G = villageGeometry(seed);
+  const cands = [villageOfCell(seed, floorDiv(q, G.cell), floorDiv(r, G.cell))];
+  if (Math.abs(q) <= G.oMax + 20 && Math.abs(r) <= G.oMax + 20) cands.push(villageOfCell(seed, 0, 0));
   for (const v of cands) if (v && dist(v, { q, r }) <= v.clear_radius) return v;
   return null;
 }
@@ -140,11 +259,12 @@ function hexesOf(seed, v) {
   let m = _hexes.get(k);
   if (m) return m;
   m = new Map();
-  for (const l of cat.villages[v.template].layout || []) {
+  const t = villageTemplate(v);
+  for (const l of t.layout || []) {
     const def = cat.buildings[l.building];
     if (def) m.set(`${v.q + l.at[0]},${v.r + l.at[1]}`, { building: l.building, def, at: l.at });
   }
-  const w = cat.villages[v.template].wall;
+  const w = t.wall;
   if (v.wall && w) {
     const R = v.wall.radius;
     for (let dq = -R; dq <= R; dq++) for (let dr = Math.max(-R, -dq - R); dr <= Math.min(R, -dq + R); dr++) {
@@ -154,6 +274,12 @@ function hexesOf(seed, v) {
       const shape = a.filter(x => x === R).length > 1 ? 'joint' : Math.abs(dr) === R ? 'horizontal' : 'vertical';
       m.set(`${v.q + dq},${v.r + dr}`, { wall: true, path: w.sprites?.[shape] || w.sprites?.joint || '' });
     }
+  }
+  // Layout-2 towers (2026-11-28): on the wall ring (a wall hex that is a tower — impassable like the wall, broken
+  // the same way), or on an outpost's edge (no wall: the tower alone blocks its hex).
+  for (const tw of v.towers || []) {
+    const def = cat.buildings[tw.building];
+    m.set(`${tw.q},${tw.r}`, { wall: true, tower: true, building: tw.building, def, dir: tw.dir, path: def?.sprites?.base || w?.sprites?.joint || '' });
   }
   if (_hexes.size > 256) _hexes.clear();
   _hexes.set(k, m);
@@ -166,6 +292,7 @@ export function villageHexAt(seed, q, r) {
   const v = villageAround(seed, q, r);
   if (!v) return null;
   const b = hexesOf(seed, v).get(`${q},${r}`);
+  if (b?.tower) return { village: v, wall: true, tower: true, path: b.path, building: b.building, def: b.def, dir: b.dir };
   if (b?.wall) return { village: v, wall: true, path: b.path };
   return b ? { village: v, building: b.building, def: b.def, at: b.at } : { village: v, clear: true };
 }
@@ -174,17 +301,18 @@ export const isVillageWallAt = (seed, q, r) => !!villageHexAt(seed, q, r)?.wall;
 // draws the wall as one continuous run along it instead of a sprite per hex.
 const RING_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
 export function villageWallRing(v) {
-  const w = v?.wall, t = cat?.villages?.[v?.template]?.wall;
+  const w = v?.wall, t = villageTemplate(v)?.wall;
   if (!w || !t) return null;
   const R = w.radius, out = [];
+  const towerAt = new Set((v.towers || []).map(tw => `${tw.q},${tw.r}`));   // layout 2: a tower stands in the run
   let q = v.q + RING_DIRS[4][0] * R, r = v.r + RING_DIRS[4][1] * R;
   for (let i = 0; i < 6; i++) for (let j = 0; j < R; j++) {
-    out.push({ q, r, corner: j === 0, gate: q === w.gate.q && r === w.gate.r });
+    out.push({ q, r, corner: j === 0, gate: q === w.gate.q && r === w.gate.r, ...(towerAt.has(`${q},${r}`) ? { tower: true } : {}) });
     q += RING_DIRS[i][0]; r += RING_DIRS[i][1];
   }
   return { hexes: out, sprites: t.sprites || {} };
 }
-// The wall sprites of a race (its full village's wall — a hamlet has none of its own): { joint, horizontal, vertical }
+// The wall sprites of a race (its full village's wall — an outpost has none of its own): { joint, horizontal, vertical }
 // or null. The renderer dresses an NPC builder's Barricade ring in them (2026-11-27).
 export function raceWallSprites(race) {
   if (!cat || !race) return null;
@@ -211,9 +339,14 @@ export const ALLY_GREEN = '#6ad99f';   // = renderer ALLIANCE_COLOR.npc_a: a vil
 // The impassable wall feature of a wall hex (features.js labyrinthWallAt answers it, so every blocking rule holds).
 export function villageWallFeature(seed, q, r, h = villageHexAt(seed, q, r)) {
   if (!h?.wall) return null;
-  const w = cat.villages[h.village.template].wall;
+  const w = villageTemplate(h.village)?.wall || {};
+  const vil = { id: h.village.id, name: h.village.name, team: h.village.team, race: h.village.race, race_name: h.village.race_name, wall: true };
+  // a tower (layout 2): blocks like the wall, shoots at the village's enemies, falls to TOWER_HP hits or a ram
+  if (h.tower) return { path: h.path, label: `${h.village.name} ${h.def?.name || 'Tower'}`, kind: 'wall', biome: '', blocking: true, id: `village_wall/${h.village.id}:${q},${r}`,
+    desc: `${h.def?.text || 'A tower of the village.'} It shoots a stone at the nearest enemy of ${h.village.team} within ${TOWER_RANGE} hexes once a turn. ${TOWER_HP} HP — Attacks and siege shots wear it down; a ram next to it for 3 actions breaks it.`,
+    tower: { hp: TOWER_HP, range: TOWER_RANGE, dir: h.dir }, village: { ...vil, tower: true } };
   return { path: h.path, label: `${h.village.name} ${w.name || 'Wall'}`, kind: 'wall', biome: '', blocking: true, id: `village_wall/${h.village.id}:${q},${r}`,
-    desc: w.text || 'The village wall: no way in but the gate.', village: { id: h.village.id, name: h.village.name, team: h.village.team, race: h.village.race, race_name: h.village.race_name, wall: true } };
+    desc: w.text || 'The village wall: no way in but the gate.', village: vil };
 }
 // The feature object features.js featureAt() answers for a village building hex.
 export function villageFeatureAt(seed, q, r) {
@@ -231,12 +364,12 @@ export function villageFeatureAt(seed, q, r) {
 // The village's residents ({ npc, q, r, name }) and wanderer spots (50–100 hexes out) — deterministic; the
 // spawner (peer.mjs) still looks for the nearest walkable free hex.
 export function villageResidents(seed, v) {
-  const t = cat?.villages?.[v.template];
+  const t = villageTemplate(v);
   if (!t) return [];
   return (t.residents || []).map((rs, i) => ({ npc: rs.npc, q: v.q + rs.at[0], r: v.r + rs.at[1], ...(rs.post ? { post: rs.post } : {}), label: `${v.id.replace(/[^a-z0-9]+/gi, '_')}_r${i}`, name: personName(seed, v, `r${i}`, rs.npc, i) }));
 }
 export function villageWanderers(seed, v) {
-  const t = cat?.villages?.[v.template];
+  const t = villageTemplate(v);
   if (!t?.wanderers) return [];
   const [lo, hi] = t.wanderers.ring;
   return (t.wanderers.npcs || []).map((npc, i) => {

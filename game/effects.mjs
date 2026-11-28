@@ -50,7 +50,7 @@ export const tileTokenElem = (cast, el, myStat) => pickTileTokenElem(EFFECT_RULE
 // { id: {id, name, tags, data} } in id order — the shape peer.mjs pickActive gave data.effects; builtinEffectCatalog()
 // → a data/effects.json-shaped collection (one canonical version per effect, + resources) for the browser / Godot.
 const cardIds = () => [...dataEngine.defs.keys()].sort().filter(id => dataEngine.defs.get(id).card);
-export const builtinEffectEntries = () => Object.fromEntries(cardIds().map(id => { const c = dataEngine.defs.get(id).card; return [id, { id, name: c.name, tags: [...(c.tags || [])], data: JSON.parse(JSON.stringify(c.data)) }]; }));
+export const builtinEffectEntries = () => Object.fromEntries(cardIds().map(id => { const c = dataEngine.defs.get(id).card; return [id, { id, name: c.name, tags: [...(c.tags || [])], ...(c.resources?.summon_unit ? { resources: { summon_unit: { ...c.resources.summon_unit } } } : {}), data: JSON.parse(JSON.stringify(c.data)) }]; }));
 export const builtinEffectCatalog = () => ({ collection: 'effects', source: 'game/effects-data/effects (card blocks)', entries: cardIds().map(id => {
   const d = dataEngine.defs.get(id), c = d.card;
   return { id, name: c.name, tags: [...(c.tags || [])], ...(c.resources ? { resources: JSON.parse(JSON.stringify(c.resources)) } : {}), versions: [{ version: d.version, status: 'canonical', weight: 1, data: JSON.parse(JSON.stringify(c.data)) }] };

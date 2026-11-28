@@ -69,7 +69,7 @@ import { createKnownMap, initialBlock, discBlock, isBlock, blockTiles, hash32, s
 import { stepToward as hexStepToward, neighbours as hexNeighbours } from './js/hex.js';
 import { isLabyrinthWallAt, setFeatureCatalog, featureAt as buildingFeatureAt, isBuildingFeature, placedBuildingsFrom, setPlacedBuildings, catalogSpriteFor, LAB_WALL_PATHS, placedBuildingAt } from './js/features.js';
 import { setBigFeatureCatalog } from './js/bigfeature.js';
-import { setVillageCatalog, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround, testCatalogOverrides, gameModelsCatalogTries, brokenHexes, diplomacyLedger, villageRelation, villageRelations, atWar, pairKey, villageHexAt, WAR_BELOW, DIPLOMACY_STEP, heroAlignment, raceAlignment, alignmentWords, ALIGN_STEP, ALIGN_HOSTILE_GAP } from './js/villages.js';
+import { setVillageCatalog, villageTemplate, villagesNear, villageById, villageRep, questsDone, isVillageWallAt, compass, villageAround, testCatalogOverrides, gameModelsCatalogTries, brokenHexes, diplomacyLedger, villageRelation, villageRelations, atWar, pairKey, villageHexAt, WAR_BELOW, DIPLOMACY_STEP, heroAlignment, raceAlignment, alignmentWords, ALIGN_STEP, ALIGN_HOSTILE_GAP } from './js/villages.js';
 import { npcCreatureEntries } from './gamemodels.mjs';
 import { makeShot, shotStrikes, shotEnds, flyerHop } from './js/siege.js';   // siege engines + flyers (user 2026-11-25)
 import { agendaGoal, questMet } from './agenda.mjs';
@@ -104,6 +104,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // -------- config via env --------
 const PEER_LABEL        = process.env.PEER_LABEL        || 'player-1';          // human-readable
+// Freeze hunt (S10, 2026-11-27): the heavy paths leave a breadcrumb; the stall line names the last one (see SELF_STALL_MS).
+let busyMark = 'boot', busyMarkAt = Date.now();
+const mark = (what) => { busyMark = what; busyMarkAt = Date.now(); };
 // When this peer is hosted inside the Android APK (nodejs-mobile), the Kotlin
 // side sets CHAOSD6_MOBILE=1. That flag disables operations that require a
 // POSIX subprocess fork (companion summons via spawn()) or a desktop toolchain
@@ -173,6 +176,14 @@ const isHumanAlliance = (a) => a === 'player' || a === 'player_c' || a === 'play
 // hero whose game fell silent — SHADOW_OF = that hero's peer id. Never a human hand (npcPlan plays it as an allied
 // bot that follows its master, unattendedLeader), on the hero's side.
 const SHADOW_OF = process.env.SHADOW_OF || '';
+// Stand-in (S6, user ruling 2026-11-27, rule_unit_standin): a monster or villager whose peer fell silent for a minute is
+// run on by a live hero's game — STANDIN_OF = the original unit's peer id — until the original is heard again and takes
+// its unit back (standinSeen); then I step down (shadowStepDown). UNIT_LABEL is the original's label: whatever a
+// villager / monster derives from its label (its village slot, builder post, recruit edit, monster deck) stays the same.
+const STANDIN_OF = process.env.STANDIN_OF || '';
+const UNIT_LABEL = STANDIN_OF ? String(STANDIN_OF).replace(/^peer:/, '') : PEER_LABEL;
+// The unit label of any snapshot (a stand-in answers for its original).
+const unitLabelOf = (p) => String(p?.standin_of || p?.peer_id || '').replace(/^peer:/, '');
 const IS_HUMAN = !SHADOW_OF && (isHumanAlliance(ALLIANCE) || (process.env.HUMAN === '1' && !process.env.OWNER_PEER_ID));
 // The ally-join link (user ruling 2026-11-16): the peer id of the unit I joined next to as its ally (launcher unit
 // list → ALLY_OF), published as ally_of — unattended characters linked this way form one group under one master.
@@ -291,6 +302,25 @@ const COMMIT_WAIT_MS    = Number(process.env.COMMIT_WAIT_MS   || 800);
 const REVEAL_WAIT_MS    = Number(process.env.REVEAL_WAIT_MS   || 1500);
 // Extra wait for a reveal whose commit we already hold (a phone over the Nostr bus is seconds slower).
 const REVEAL_GRACE_MS   = Number(process.env.REVEAL_GRACE_MS  || 4000);
+// S7 fixed clock (user 2026-11-27, scale to ~20 nodes; CLOCK_SCHEDULE=1, off by default): action N runs on the wall
+// clock from EPOCH + N·P to EPOCH + (N+1)·P — planning, then a hard commit window (COMMIT_WAIT_MS), then a hard reveal
+// window (REVEAL_WAIT_MS), resolved at the boundary. Nobody waits on a busy or slow member any more: a reveal that
+// misses the window is replaced by its standing order (standingOrder) on every peer. EPOCH is shared: each peer
+// publishes its own (clock_epoch) and adopts the smallest one it hears that agrees with its publisher's action —
+// a smaller epoch only ever moves the action number forward, so the mesh converges on the oldest schedule.
+const CLOCK_SCHEDULE = process.env.CLOCK_SCHEDULE === '1';
+// One action = ROUND_SEC (6 s) with every phase included (user 2026-11-27: "6 seconds should be with all the phases
+// included") — planning gets what the hard commit + reveal windows leave (6000 - 800 - 1500 = 3.7 s by default).
+const CLOCK_PERIOD_MS = Number(process.env.CLOCK_PERIOD_MS || ROUND_SEC * 1000);
+let clockEpoch = null;
+let standingTarget = null;   // S7: the hero's next journey hex (UI), reset every planning window (standingOrder)
+const cohortSelf = new Map();   // S7: action -> Map("q,r|life" -> {tile, life, n}) — noteCohortSelf / adoptCohortSelf
+const REVEAL_LATE_MS = Number(process.env.REVEAL_LATE_MS || 300);   // a reveal sent later than this before the boundary misses the others
+const STANDING_ACTIONS = Number(process.env.STANDING_ACTIONS || ROUNDS_PER_TURN);
+const playedFor = new Map();   // action -> [{actor, kind, status, kept}] — fallbacks / standing orders my resolver played
+let catchUpSpan = null;   // S7: {from, to, adopted} — the actions my last clock catch-up skipped
+const scheduleEnds = (n) => { const end = clockEpoch + (n + 1) * CLOCK_PERIOD_MS; return { planning: end - COMMIT_WAIT_MS - REVEAL_WAIT_MS, reveal: end - REVEAL_WAIT_MS, resolution: end }; };
+const scheduledAction = () => Math.floor((Date.now() - clockEpoch) / CLOCK_PERIOD_MS);
 const HAND_SIZE         = 5;
 // Region tiers (sync_region_tiers). Movement per round is bounded so the
 // strong region can be a fixed radius: an Empty Move covers at most
@@ -323,6 +353,7 @@ let bus = null;
 const UI_BACKLOG = 4 * 1024 * 1024, PEERS_UI_MS = 250;
 let peersUiTimer = null, peersUiDropped = false;
 function peersToUI(dropped = false) {
+  mark('peersToUI');
   peersUiDropped ||= dropped;
   for (const ws of uiClients) ws._peersDue = true;
   if (!peersUiTimer) peersUiTimer = setTimeout(flushPeersUI, PEERS_UI_MS);
@@ -599,6 +630,9 @@ const gun = NOGUN ? nullGun() : Gun({
   axe: false,
   multicast: false,
   faith: false,
+  // gun/lib/stats.js: every 5 s Object.keys(the whole graph), a stats object serialised and written to a file next to
+  // the Gun module, plus os.loadavg() — nothing reads it, and on the phone it ran in every worker (2026-11-27).
+  stats: false,
 });
 if (!NOGUN) netAttachGun(gun);
 netStart({ label: PEER_LABEL });
@@ -636,6 +670,7 @@ async function dialPeerAddrs(peerId, addrs, force = false) {
     const last = dialled.get(theirPid) || 0;
     if (!force && Date.now() - last < DIAL_RETRY_MS) continue;
     if (!force && libp2p.getConnections().some(c => c.remotePeer.toString() === theirPid && c.status === 'open')) continue;
+    if (!force && !linkWanted(peerId)) continue;   // S4: outside my link budget (rankLinks)
     dialled.set(theirPid, Date.now());
     try {
       await libp2p.dial(multiaddr(addr));
@@ -671,6 +706,7 @@ async function healMesh() {
     if (pubsubPeers.has(pid)) continue;
     const member = peersPublic.get(peerId);
     if (!member || Date.parse(member.last_seen || 0) < Date.now() - 60_000) continue;  // gone, not broken
+    if (!linkWanted(peerId)) continue;   // S4: outside my link budget — gossip reaches it through the others
     const conns = libp2p.getConnections().filter(c => c.remotePeer.toString() === pid && c.status === 'open');
     if (!conns.length) { await dialPeerAddrs(peerId, [addr]); continue; }
     if (myPid > pid) continue;
@@ -681,6 +717,70 @@ async function healMesh() {
     await dialPeerAddrs(peerId, [addr], true);
   }
 }
+
+// Link budget (S4, user 2026-11-27: "connect to the closer peers and those with less latencies as priority — the idea
+// is to increase the responsiveness"). With ~20 nodes in one area every peer used to link to every other. Now each
+// keeps LINK_CAP direct links: the cheapest by hex distance + measured round trip (each 100 ms counts as a hex), plus
+// LINK_LONG links to farther peers chosen by a stable hash so the mesh never splits into islands (gossipsub relays
+// the rest). Unwanted links are not dialled or healed; open ones are hung up only past LINK_PRUNE_AT, so a link the
+// OTHER side wants (it may rank me higher than I rank it) is not torn down and re-dialled in a loop. Env LIBP2P_LINKS.
+const LINK_CAP = Number(process.env.LIBP2P_LINKS ?? (IS_MOBILE ? 8 : 12)), LINK_LONG = 2, LINK_PRUNE_AT = Math.ceil(LINK_CAP * 1.5);
+const RTT_PROTO = `/chaos/${DIM_ID}/rtt/1`;
+const rttOf = new Map();   // libp2p peer id → smoothed round trip (ms), stream open included
+await libp2p.handle(RTT_PROTO, async (stream) => {
+  try { for await (const chunk of stream) { if (!stream.send(chunk instanceof Uint8Array ? chunk : chunk.subarray())) await stream.onDrain(); break; } await stream.close(); }
+  catch (e) { try { stream.abort(e); } catch {} }
+}, { maxInboundStreams: 4 });
+async function rttProbe(conn) {
+  const t0 = performance.now();
+  const s = await conn.newStream(RTT_PROTO, { signal: AbortSignal.timeout(3_000) });
+  try {
+    if (!s.send(new Uint8Array([1]))) await s.onDrain();
+    await s.close();
+    for await (const _ of s) break;
+  } catch (e) { try { s.abort(e); } catch {} throw e; }
+  return performance.now() - t0;
+}
+let linkWantedSet = null, linkTicks = 0;
+const linkPrunedAt = new Map();   // libp2p peer id → when I closed it; one that is back within 5 min wants me: it stays   // app peer ids I want a direct link to (null = no ranking yet: dial everyone)
+function rankLinks() {
+  const now = Date.now(), me = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const rows = [];
+  for (const [pid, { peerId }] of addrsOf) {
+    const p = peersPublic.get(peerId);
+    if (!p || now - Date.parse(p.last_seen || 0) > 60_000) continue;
+    const d = Number.isInteger(p.tile_q) ? hexDistance(me, p) : 50;
+    rows.push({ pid, peerId, cost: d + (rttOf.get(pid) ?? 50) / 100, h: hash32(`${PEER_ID_STRING}|${peerId}`) });
+  }
+  rows.sort((a, b) => a.cost - b.cost || (a.peerId < b.peerId ? -1 : 1));
+  const near = rows.slice(0, Math.max(0, LINK_CAP - LINK_LONG));
+  const far = rows.slice(near.length).sort((a, b) => a.h - b.h).slice(0, LINK_LONG);
+  const owner = ownerPeerId || process.env.OWNER_PEER_ID || '';
+  linkWantedSet = new Set([...near, ...far].map(r => r.peerId).concat(owner ? [owner] : []));
+  return rows;
+}
+const linkWanted = (peerId) => !linkWantedSet || linkWantedSet.size < LINK_CAP || linkWantedSet.has(peerId);
+setInterval(async () => { try {   // try: the first ticks may come before the state below (entity, peersPublic …) is declared
+  if (LIBP2P_DIAL_OFF) return;
+  const conns = libp2p.getConnections().filter(c => c.status === 'open');
+  // measure the links I have (a few per tick, the stalest first)
+  const byPid = new Map(conns.map(c => [c.remotePeer.toString(), c]));
+  const probe = [...byPid.keys()].sort((a, b) => (rttOf.has(a) ? 1 : 0) - (rttOf.has(b) ? 1 : 0)).slice(0, 4);
+  for (const pid of probe) {
+    try { const ms = await rttProbe(byPid.get(pid)); const o = rttOf.get(pid); rttOf.set(pid, o == null ? ms : o * 0.7 + ms * 0.3); }
+    catch { /* an old peer without the protocol: its distance alone ranks it */ }
+  }
+  const ranked = rankLinks();
+  if (++linkTicks % 4 === 1) { const r = [...rttOf.values()].sort((x, y) => x - y); console.log(`[${PEER_LABEL}] link budget: ${byPid.size} open, ${linkWantedSet.size}/${ranked.length} wanted (cap ${LINK_CAP}, prune past ${LINK_PRUNE_AT}), rtt median ${r.length ? Math.round(r[r.length >> 1]) : '?'} ms`); }
+  if (byPid.size <= LINK_PRUNE_AT) return;
+  const extra = [...byPid.keys()].filter(pid => { const who = addrsOf.get(pid)?.peerId; return who && !linkWanted(who) && Date.now() - (linkPrunedAt.get(pid) || 0) > 300_000; })
+    .sort((a, b) => (rttOf.get(b) ?? 0) - (rttOf.get(a) ?? 0)).slice(0, byPid.size - LINK_PRUNE_AT);
+  for (const pid of extra) {
+    dialled.set(pid, Date.now()); linkPrunedAt.set(pid, Date.now());
+    console.log(`[${PEER_LABEL}] link budget: ${byPid.size} links > ${LINK_PRUNE_AT} — closing the one to ${addrsOf.get(pid)?.peerId} (far / slow; gossip still reaches it)`);
+    try { await libp2p.hangUp(byPid.get(pid).remotePeer); } catch {}
+  }
+} catch (e) { if (!(e instanceof ReferenceError)) console.warn(`[${PEER_LABEL}] link budget: ${e.message}`); } }, 15_000).unref?.();
 
 // -------- optional discovery mirror (LAN accelerator) --------
 async function registerWithDiscovery() {
@@ -913,6 +1013,18 @@ const dropPermanent = (id) => {
   // The card that made this permanent leaves the holding for the discard pile.
   if (had) releaseHeld(id);
 };
+// The holder takes at most PERM_HOLD_MAX permanents (user 2026-11-28: "Let them be 5 max (before starting replacing the
+// old ones)"); the class card is not counted. One more lands → my oldest (landing order) falls, its card to the discard
+// pile. Applied by the owner after every landing, so every peer reads the result in my snapshot.
+const PERM_HOLD_MAX = 5;
+const heldPerms = () => [...entity.permanents].filter(p => !String(p).startsWith('class_'));
+function capPermanents() {
+  for (let held = heldPerms(), guard = 0; held.length > PERM_HOLD_MAX && guard < 64; held = heldPerms(), guard++) {
+    const old = held[0];
+    console.log(`[${PEER_LABEL}] permanents holder full (${held.length} > ${PERM_HOLD_MAX}): my oldest ${data.effects[old]?.name || data.skills[old]?.name || old} makes room`);
+    dropPermanent(old);
+  }
+}
 // Permanent cards (user spec): a card whose permanent landed is not discarded —
 // it sits in my permanents holding until the permanent falls, then it is discarded.
 const heldCards = [];
@@ -936,6 +1048,7 @@ entity.wards = [];          // peer ids under my Death Ward
 entity.wardBy = {};         // ward peer id → the permanent that placed it (F3: dropped with it)
 const companions = [];      // processes I spawned: { peer_id, label, proc, port, perm }
 let summonSeq = 0;
+let moduleReady = false;   // the whole module has run (S6: the stand-in timer reaches the village code declared far below)
 const vanishedThisAction = [];   // { peer_id, name, q, r, bound } — for the UI (💨), rides out with the state hash
 const releasedLogged = new Set();   // released companions the resolver already left out (logged once — possess.mjs releasedCompanions)
 const freePort = () => new Promise((res, rej) => { const sv = net.createServer(); sv.on('error', rej); sv.listen(0, '127.0.0.1', () => { const prt = sv.address().port; sv.close(() => res(prt)); }); });
@@ -990,6 +1103,13 @@ async function spawnPhantom(permId) {
 // A companion process on the free tile next to me (nearest free one within two hexes if all six are taken).
 // `at`: enter on that hex (or next to it); `ringOnly`: next to it only; `wild`: an unowned monster
 // (a lurker by a building trap, or the replacement of a vanished one) — no owner, no permanent holds it.
+// S5 (2026-11-27): a companion (villager, monster, summon, stand-in — a full peer all the same) runs with a small young
+// generation. Measured with 13 villagers: 203 → 166 MB RSS each at a 1 MB semi-space, at four times the GC time; 2 MB
+// is the trade. The old generation gets a ceiling far above the ~55 MB a peer uses. My own (the hero's) heap is left
+// alone: it has the UI to keep responsive. Env COMPANION_SEMI_MB / COMPANION_OLD_MB override (0 = V8's default).
+const COMPANION_SEMI_MB = Number(process.env.COMPANION_SEMI_MB ?? 2), COMPANION_OLD_MB = Number(process.env.COMPANION_OLD_MB ?? 384);
+const COMPANION_NODE_ARGS = [...(COMPANION_SEMI_MB > 0 ? [`--max-semi-space-size=${COMPANION_SEMI_MB}`] : []), ...(COMPANION_OLD_MB > 0 ? [`--max-old-space-size=${COMPANION_OLD_MB}`] : [])];
+const COMPANION_LIMITS = { ...(COMPANION_SEMI_MB > 0 ? { maxYoungGenerationSizeMb: COMPANION_SEMI_MB * 3 } : {}), ...(COMPANION_OLD_MB > 0 ? { maxOldGenerationSizeMb: COMPANION_OLD_MB } : {}) };
 async function spawnCompanion(permId, { creature_id, name, env: extraEnv, at = null, ringOnly = false, wild = false, label = null, ignore = null }) {
   const occ = new Set(livePeers().filter(p => p && p.life > 0 && p.peer_id !== ignore).map(p => `${p.tile_q},${p.tile_r}`)); occ.add(`${entity.tile.q},${entity.tile.r}`);
   // A companion that is still booting has no snapshot yet: its entry tile counts as taken (two summons
@@ -1011,7 +1131,7 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv, at = n
     MAP_SEED, MAP_BLOCKS_FILE: blocksFile, BOOTSTRAP: [...myMaddrs, ...BOOTSTRAP_MADDRS].join(','), PEER_GUN_URLS: [myGunUrl, ...PEER_GUN_URLS].join(','),
     JOIN_SYNC_WAIT_MS: '4000', OWNER_PEER_ID: wild ? '' : PEER_ID_STRING, FORCE_EFFECTS: '', FORCE_SKILLS: '', FORCE_OPENING: '', FORCE_ARCHIVE: '', FORCE_CLASS: wild && process.env.FORCE_CLASS_MONSTERS === '1' ? (process.env.FORCE_CLASS || '') : '', REPLACES_PEER_ID: '', START_LIFE: '', START_ACTION: String(hg.action), START_CLOCK_SRC: `spawner ${PEER_LABEL}`, START_TURN: '', START_ROUND: '',
     PROFILE_FILE: '', PROFILE_CHAR_ID: '', PROFILE_TEAM: '', TEAM_GATE: '', TEAM_GATE_DOOR: '', HUMAN: '',
-    SHADOW_OF: '', SHADOW_STATS_JSON: '', SHADOW_DEATH_CARD: '', SHADOW_PROFILE_CHAR_ID: '', ALLY_OF: '', DIM_OUT_ON_START: '',
+    SHADOW_OF: '', STANDIN_OF: '', SHADOW_STATS_JSON: '', SHADOW_DEATH_CARD: '', SHADOW_PROFILE_CHAR_ID: '', ALLY_OF: '', DIM_OUT_ON_START: '',
     RAISED_BY: String(permId || '').startsWith('class_') ? permId : '',   // C1 ruling 2026-11-16: a class-raised companion (Necromancer)
     FORCE_FOREIGN_CLASS: '', FOREIGN_CLASS_REF_JSON: '',   // CH: a companion does not inherit my foreign class (the phantom passes it below)
     ...(process.env.TEST_PRIORITY === '1' ? { FORCE_FOREIGN_SKILL: '', FORCE_FOREIGN_EFFECT: '', FOREIGN_CARD_REFS_JSON: '', TEST_PRIORITY: '' } : {}),   // nor my Test Random drafts (test-priority.mjs)
@@ -1019,11 +1139,22 @@ async function spawnCompanion(permId, { creature_id, name, env: extraEnv, at = n
     ...extraEnv,
   };
   delete env.MAP_BLOCKS;
-  const proc = IS_MOBILE ? await spawnCompanionWorker(env) : spawn(process.execPath, [fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-  proc.stdout.on('data', b => process.stdout.write(b));
-  proc.stderr.on('data', b => process.stderr.write(b));
+  const proc = IS_MOBILE ? await spawnCompanionWorker(env) : spawn(process.execPath, [...COMPANION_NODE_ARGS, fileURLToPath(import.meta.url)], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  if (IS_MOBILE) {
+    proc.stdout.on('data', b => process.stdout.write(b));
+    proc.stderr.on('data', b => process.stderr.write(b));
+  } else {
+    // S11 (2026-11-27): on the desktop each companion writes its own peer_<label>.log beside mine (hollow-hollows-5:
+    // 90% of the hero's log was its companions'), so one unit's story reads on its own; I keep the lifecycle lines.
+    const own = fsSync.createWriteStream(path.join(_dirForUi, `peer_${String(tag).replace(/[^a-z0-9._-]+/gi, '_')}.log`), { flags: 'a' });
+    own.on('error', () => {});
+    own.write(`\n===== ${new Date().toISOString()} — ${tag} started by ${PEER_LABEL} =====\n`);
+    proc.stdout.on('data', b => own.write(b));
+    proc.stderr.on('data', b => own.write(b));
+    proc.on('exit', () => own.end());
+  }
   proc.on('exit', (c) => { console.log(`[${PEER_LABEL}] summoned ${tag} left (${c ?? 'signal'})`); const i = companions.findIndex(x => x.proc === proc); if (i >= 0) companions.splice(i, 1); });
-  companions.push({ peer_id: `peer:${tag}`, label: tag, proc, port: pH, perm: permId, tile, wild });
+  companions.push({ peer_id: `peer:${tag}`, label: tag, proc, port: pH, perm: permId, tile, wild, standinOf: env.STANDIN_OF || '' });
   if (!wild) entity.summons.push({ peer_id: `peer:${tag}`, creature_id, name, bound: false, perm: permId, mode: 'spawn' });
   console.log(`[${PEER_LABEL}] ${name} enters at (${tile.q},${tile.r}) as ${tag}`);
   return tag;
@@ -1041,7 +1172,7 @@ async function spawnCompanionWorker(env) {
   const { Worker } = await import('node:worker_threads');
   const { Transform } = await import('node:stream');
   delete env.JOIN_URI;
-  const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
+  const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true, resourceLimits: COMPANION_LIMITS });
   (globalThis.__chaosWorkers ||= []).push(w);   // the phone's Dimension Out stops them with me (mobile-entry.mjs)
   w.once('exit', () => { const all = globalThis.__chaosWorkers || [], i = all.indexOf(w); if (i >= 0) all.splice(i, 1); });   // a villager walking back in is let go
   const reword = (s) => s.replace(/UI socket on ws:\/\//g, 'companion UI socket at ').replace(/peer listening on/g, 'companion listening at');
@@ -1247,7 +1378,12 @@ const foreignBootClass = await clPeer.boot(process.env.FORCE_FOREIGN_CLASS ? { f
   let cls = foreignBootClass ? foreignBootClass.id   // CH: a foreign class I booted with
     : profileChar && data.classes[profileChar.class_id] ? profileChar.class_id : forced && data.classes[forced] ? forced : null;
   // A monster's class follows from its creature id (every peer derives the same one); a character draws one.
-  if (!cls && entity.kind === 'creature') cls = pool[parseInt(sha256Hex(`class:${CREATURE_ID}`).slice(0, 8), 16) % pool.length];
+  // A village's fighting people — guards (gate, wall), mercenaries, fighters — hold a fighting class (user 2026-11-28:
+  // "The Guards also should have a class and should be able to fight … like the mercenaries and the fighter units").
+  const FIGHT_CLASSES = ['class_warrior', 'class_reaver', 'class_barbarian', 'class_noble', 'class_assassin', 'class_guardian', 'class_overlord', 'class_weapon_master', 'class_kensei', 'class_paladin'].filter(c => data.classes[c]);
+  const npcRoleNow = GAMEMODELS?.npcs?.[CREATURE_ID]?.role;
+  const fightPool = ['guard', 'mercenary', 'fighter'].includes(npcRoleNow) && FIGHT_CLASSES.length ? FIGHT_CLASSES : null;
+  if (!cls && entity.kind === 'creature') { const pl = fightPool || pool; cls = pl[parseInt(sha256Hex(`class:${CREATURE_ID}`).slice(0, 8), 16) % pl.length]; }
   if (!cls) cls = pool[Math.floor(Math.random() * pool.length)];
   entity.classId = cls;
   entity.className = data.classes[cls]?.name || clPeer.info(cls)?.name || cls;   // CH: a foreign class's own name
@@ -1358,7 +1494,7 @@ function recoverFromDiscard(pred, what) {
 const BUILDER_MAX_STANDING = Number(process.env.BUILDER_MAX_STANDING) > 0 ? Number(process.env.BUILDER_MAX_STANDING) : 150;   // the ring wall (6R = 120 hexes at R 20)
 // A village wall hex put back by the mason (2026-11-25): the ring's own piece, impassable again.
 function villageWallMade(vh, q, r) {
-  const w = GAMEMODELS?.villages?.[vh.village.template]?.wall || {};
+  const w = villageTemplate(vh.village)?.wall || {};
   return { label: `${vh.village.name} ${w.name || 'Wall'}`, path: vh.path || '', desc: `${w.text || 'The village wall.'} Mended by the village mason.`, biome: '', kind: 'wall', blocking: true, made_by: 'village_mason', village_wall: vh.village.id };
 }
 function barricadeMade() {
@@ -1464,10 +1600,17 @@ function siegePlan() {
     siegeSay(`no way to the wall at (${wall.q},${wall.r})`);
     return asEmpty();
   }
-  if (entity.siegeTurn === hg.turn) return asEmpty();
+  // a posted engine (no hero to follow): its village's foes (agendaContext keeps villageHostile current), back to its
+  // post when it stands elsewhere, else it holds (EP)
+  if (SIEGE_POSTED) {
+    agendaContext();
+    if (NPC_HOME && _hd(me, NPC_HOME) > 0 && entity.siegeTurn !== hg.turn) { const st = npcStepToward(NPC_HOME); if (st) { siegeSay(`back to my post at (${NPC_HOME.q},${NPC_HOME.r})`); applyNpcPlan({ code: 'EM', target: st }); return; } }
+  }
+  const hold = () => SIEGE_POSTED ? applyNpcPlan({ code: 'EP' }) : asEmpty();
+  if (entity.siegeTurn === hg.turn) return hold();
   const foes = npcEnemies().filter(p => Number.isInteger(p.tile_q)).map(p => ({ p, d: _hd(me, _tq(p)) }))
     .filter(x => x.d >= SIEGE.min && x.d <= SIEGE.max).sort((a, b) => a.d - b.d || (a.p.life ?? 0) - (b.p.life ?? 0) || a.p.peer_id.localeCompare(b.p.peer_id));
-  if (!foes.length) return asEmpty();
+  if (!foes.length) return hold();
   const t = foes[0].p;
   siegeSay(`${SIEGE.class}: shooting at ${t.name || t.peer_id.slice(0, 14)} (${t.tile_q},${t.tile_r}), ${foes[0].d} hexes`);
   applyNpcPlan({ code: 'EP' });
@@ -1671,7 +1814,10 @@ const IS_FOLLOWER = !!NPC_DEF && process.env.FOLLOWER === '1';
 const HIRED_BUILDER = IS_FOLLOWER && NPC_DEF?.role === 'builder' && Array.isArray(NPC_DEF?.builds) && NPC_DEF.builds.length > 0;
 // A siege engine an engineer built for a hero (user 2026-11-25): GameModels npc.siege { kind, class, min, max, speed |
 // rounds } — it follows its hero, plays only EP / EM and uses its class once a turn (siegePlan; resolver "siege").
-const SIEGE = IS_FOLLOWER && NPC_DEF?.role === 'siege' && NPC_DEF.siege ? NPC_DEF.siege : null;
+// A village's own engine (layout 2, user 2026-11-28: "2 catapults and one ballista … on the different walls inside
+// guarding"): a villager (no follower) posted inside the wall (home = its post) — it shoots the village's foes.
+const SIEGE_POSTED = !IS_FOLLOWER && !!NPC_DEF && NPC_DEF.role === 'siege' && !!process.env.VILLAGE_ID;
+const SIEGE = (IS_FOLLOWER || SIEGE_POSTED) && NPC_DEF?.role === 'siege' && NPC_DEF.siege ? NPC_DEF.siege : null;
 // The village mason (2026-11-25): a villager whose npc has `repairs` mends its village's broken buildings and wall.
 const MASON = !IS_FOLLOWER && NPC_DEF?.repairs ? NPC_DEF.repairs : null;
 // A diplomat a hero leads (2026-11-25): the village it travels to; once its hero records `venvoy:<me>` it stays there.
@@ -1681,12 +1827,12 @@ const DIPLOMAT_SPY = !!DIPLOMAT_TO && process.env.DIPLOMAT_SPY === '1';   // a s
 const HOMEWARD_TO = IS_FOLLOWER && NPC_DEF?.role === 'wanderer' ? process.env.HOMEWARD_TO || '' : '';
 if (HOMEWARD_TO) setInterval(() => {
   if (vanishing || entity.life <= 0) return;
-  const me = PEER_LABEL.replace(/_f$/, '');
+  const me = UNIT_LABEL.replace(/_f$/, '');
   if (ledgerEdits(villageLedger()).some(e => e.id === `vhome:${me}`)) vanish(`home again in ${villageById(MAP_SEED, HOMEWARD_TO)?.team || HOMEWARD_TO}`);
 }, 5_000).unref?.();
 if (DIPLOMAT_TO) setInterval(() => {
   if (vanishing || entity.life <= 0) return;
-  const me = PEER_LABEL.replace(/_f$/, '');
+  const me = UNIT_LABEL.replace(/_f$/, '');
   if (ledgerEdits(villageLedger()).some(e => e.id === `venvoy:${me}`)) vanish(`I stay in ${villageById(MAP_SEED, DIPLOMAT_TO)?.team || DIPLOMAT_TO} as the envoy of my village`);
 }, 5_000).unref?.();
 entity.repair = null;   // { q, r, n, at } — actions of work in a row on that hex (snapshot repair_json)
@@ -1715,7 +1861,7 @@ if (IS_MONSTER && !profileChar && data.creatures[CREATURE_ID]) {
   const known = (id) => EFFECTS_IMPLEMENTED.includes(id) && !!data.effects[id] && id !== INNATE_ID;
   const rec = (data.creatures[CREATURE_ID].data?.deck_effects || []).filter(known);
   const thematic = [...new Set(rec.length ? rec : pickThematicEffects(data.creatures[CREATURE_ID], data.effects, EFFECTS_IMPLEMENTED.filter(known), EFFECT_RULES, MONSTER_DECK_CFG))].slice(0, MONSTER_DECK_CFG.thematic);
-  const random = pickRandomEffects(monsterDeckSeed(MAP_SEED, PEER_LABEL, CREATURE_ID), EFFECTS_IMPLEMENTED.filter(known), thematic, MONSTER_DECK_CFG.random);
+  const random = pickRandomEffects(monsterDeckSeed(MAP_SEED, UNIT_LABEL, CREATURE_ID), EFFECTS_IMPLEMENTED.filter(known), thematic, MONSTER_DECK_CFG.random);
   for (const id of [...thematic, ...random]) deck.push(makeEffectCard(id));
   console.log(`[${PEER_LABEL}] monster deck: ${CREATURE_ID} thematic [${thematic.join(',')}]${rec.length ? '' : ' (computed — no deck_effects in data)'} + random [${random.join(',')}] — ${deck.length} cards`);
 }
@@ -1768,7 +1914,13 @@ function makeEffectCard(id) {
         if (!sk) return null;
         if (sk === 'resurrect') return { pending: true, need: 0 };
         const kind = sk === 'library' ? null : sk;
-        const ids = Object.keys(data.creatures).filter(cid => (data.creatures[cid].data?.built_in || null) === kind);
+        const all = Object.keys(data.creatures).filter(cid => (data.creatures[cid].data?.built_in || null) === kind);
+        // The card names its unit (resources.summon_unit, "Air Elemental" / "Iron Golem"): Elementals — Air brings the
+        // Air one (World Elemental), not any elemental (user bug 2026-11-27: it summoned a Matter Elemental). A random
+        // one of the matching kind only when the card names none (Bronze: two golems share the sprite).
+        const unit = String((e.resources || e.card?.resources)?.summon_unit?.wbc3_name || '');
+        const named = kind && unit ? all.filter(cid => BUILT_IN_CREATURES[cid] && unit.startsWith(`${BUILT_IN_CREATURES[cid].assetKey} `)) : [];
+        const ids = named.length ? named : all;
         const cid = ids[Math.floor(Math.random() * ids.length)];
         return { creature_id: cid, name: data.creatures[cid].name, need: kind ? (d.stat_buy_total || rule.summon.need || 24) : statSumOf(data.creatures[cid].data?.stats) };
       })(),
@@ -2025,7 +2177,7 @@ const TAPE_FILE = process.env.TAPE_FILE ? process.env.TAPE_FILE !== '0' : !IS_MO
 const leanEnv = (e) => { if (!e.state) return e; const { state, ...rest } = e; return rest; };   // a copy: the caller still sends env
 let tapePruneAt = 2000, tapeAction = null;
 function tapePush(env) {
-  hg.tape.push(env.type === 'evt_action_reveal' ? env : leanEnv(env));
+  hg.tape.push(env.type === 'evt_action_reveal' || env.type === 'evt_fallback' ? env : leanEnv(env));
   if (env.type === 'evt_state_hash' && env.payload?.state_hash) hg.lastStateHash = env.payload.state_hash;
   const act = actionKey(hg.turn, hg.round);
   if (act === tapeAction && hg.tape.length <= tapePruneAt) return;
@@ -2057,7 +2209,7 @@ function digestObj(o) { return sha256Hex(JSON.stringify(o)); }
 
 let lastEnvelopeAt = 0;
 let lastBusAt = 0;                 // last envelope / snapshot that went out on the Nostr bus
-async function emitEnvelope({ type, payload, actionIndex = hg.round, viaBus = null }) {
+async function emitEnvelope({ type, payload, actionIndex = hg.round, viaBus = null, state = null }) {
   const env = {
     type,
     dimension_id: DIM_ID,
@@ -2072,7 +2224,7 @@ async function emitEnvelope({ type, payload, actionIndex = hg.round, viaBus = nu
     // Piggyback our public snapshot so receivers always resolve against fresh
     // tile/life and the bus doesn't need a separate state event every round
     // (public relays rate-limit chatty senders).
-    state: currentStateSnapshot(true),
+    state: state || currentStateSnapshot(true),
   };
   env._hash = digestObj(env);
   hg.selfParent = env._hash;
@@ -2107,6 +2259,7 @@ let busRxCount = 0;
 const envSeen = new Set();
 const envSeenOrder = [];
 function receiveEnvelope(env, via) {
+  mark('receiveEnvelope');
   if (!env || env.actor_peer_id === PEER_ID_STRING || env.dimension_id !== DIM_ID) return;
   if (!env._hash || envSeen.has(env._hash)) return;
   envSeen.add(env._hash); envSeenOrder.push(env._hash);
@@ -2203,7 +2356,7 @@ function currentStateSnapshot(slim = false) {
     tile_q: entity.tile.q, tile_r: entity.tile.r, life: entity.life, life_max: entity.lifeMax,
     alliance: entity.alliance, name: entity.name, source_id: entity.sourceId, last_seen: new Date().toISOString(),
     owner_peer_id: ownerPeerId || '', build_orders_json: JSON.stringify(pruneBuildOrders()), summoned_csv: entity.summons.map(x => x.peer_id).join(','), wards_csv: entity.wards.join(','), entry_q: START_TILE.q, entry_r: START_TILE.r,
-    turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt, resolved_action: resolvedAction,
+    turn: hg.turn, round: hg.round, action: hg.action, phase: currentPhase, phase_ends_at: phaseEndsAt, resolved_action: resolvedAction, ...(CLOCK_SCHEDULE && clockEpoch !== null ? { clock_epoch: clockEpoch } : {}),
     map_blocks: dimMap ? dimMap.blockCount() : 0,
     ...(mapSync ? { map_root: mapSync.myRoot() } : {}),   // map-sync.mjs digest root (~12 B); absent = pre-M3 build / legacy sim
     ...fxPeer.snapshotFields(),   // E4: fx_have "id@sha16,…" — foreign effects I hold and serve; absent without any
@@ -2229,7 +2382,7 @@ function currentStateSnapshot(slim = false) {
     illusion: entity.illusion || 0, class_state_json: CS.classStateJson(entity.classStore),   // phase 2: the generic class state (phase 4: the per-class fields are gone; phase 5: reanim_down_csv too)
     ...reanimFields(), replaces: replacesNow,
     // Hero shadows (rule_hero_shadow): whose shadow I am, my death card, and (dead shadow) who killed it.
-    shadow_of: SHADOW_OF, death_card_json: JSON.stringify(deathCardRef()), shadow_death_json: shadowDeath ? JSON.stringify(shadowDeath) : '',
+    shadow_of: SHADOW_OF, standin_of: STANDIN_OF, death_card_json: JSON.stringify(deathCardRef()), shadow_death_json: shadowDeath ? JSON.stringify(shadowDeath) : '',
     // Unattended characters (rule_unattended_character): a human hand?, my ally-join link and join time (the group's
     // master is its earliest human join), my master (unattended), how many follow me, and `out` (left the dimension).
     human: IS_HUMAN ? 1 : 0, ally_of: allyOfNow, joined_at: JOINED_AT, instance: INSTANCE_ID, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), out: outNow ? 1 : 0,
@@ -2348,6 +2501,7 @@ function dupSelfSeen(p) {
   setTimeout(() => process.exit(0), 200);
 }
 function mergePeerState(p, via = 'wire') {
+  mark('mergePeerState');
   if (p && typeof p === 'object' && p.peer_id === PEER_ID_STRING) dupSelfSeen(p);
   if (!p || typeof p !== 'object' || !p.peer_id || p.peer_id === PEER_ID_STRING) return false;
   if (!isFresh(p)) return false;
@@ -2365,10 +2519,10 @@ function mergePeerState(p, via = 'wire') {
   // Hero shadows (rule_hero_shadow): one side of a hero ↔ shadow swap stays out once the other took its place —
   // unless it takes that place back (its snapshot names the one that replaced it). Never two copies.
   if (supersededBy.has(p.peer_id) && p.replaces !== supersededBy.get(p.peer_id)) return false;
-  if (SHADOW_OF && p.replaces === PEER_ID_STRING) { shadowStepDown(p); return false; }
+  if ((SHADOW_OF || STANDIN_OF) && p.replaces === PEER_ID_STRING) { shadowStepDown(p); return false; }   // S6: a stand-in steps down the same way
   // A hero restored elsewhere under a new id replaced me: the others keep me out from now on (supersededBy). Said once,
   // so a second live copy shows in its log (no exit: on the phone this may be the app's main process).
-  if (!SHADOW_OF && p.replaces === PEER_ID_STRING && !mergePeerState.replacedSaid) {
+  if (!SHADOW_OF && !STANDIN_OF && p.replaces === PEER_ID_STRING && !p.standin_of && !mergePeerState.replacedSaid) {
     mergePeerState.replacedSaid = true;
     console.warn(`[${PEER_LABEL}] replaced: ${p.name || p.peer_id} (${p.peer_id}, joined ${p.joined_at || '?'}) took my place (I joined ${JOINED_AT}) — the others no longer see me`);
   }
@@ -2386,6 +2540,7 @@ function mergePeerState(p, via = 'wire') {
     return false;
   }
   if (p.shadow_of === PEER_ID_STRING && p.peer_id !== replacesNow && !SHADOW_OF) heroShadowSeen(p);
+  if (p.standin_of === PEER_ID_STRING && p.peer_id !== replacesNow && !SHADOW_OF && !STANDIN_OF) standinSeen(p);
   const merged = { ...prev, ...p };
   notePrior(snapPrior, prev, merged);   // Swarm-0559: the statement from before its owner resolved its newest action
   peersPublic.set(p.peer_id, merged);
@@ -2396,8 +2551,9 @@ function mergePeerState(p, via = 'wire') {
     // statement, so an old echo naming `replaces` cannot knock a live peer out (c2).
     const old = peersPublic.get(p.replaces);
     const current = !old?.last_seen || Date.parse(p.last_seen || 0) >= Date.parse(old.last_seen);
-    if (p.shadow_of || old?.shadow_of || current) { supersededBy.set(p.replaces, p.peer_id); supersededBy.delete(p.peer_id); }
+    if (p.shadow_of || old?.shadow_of || p.standin_of || old?.standin_of || current) { supersededBy.set(p.replaces, p.peer_id); supersededBy.delete(p.peer_id); }
     peersPublic.delete(p.replaces);
+    for (const s of entity.summons) if (s.peer_id === p.replaces) s.peer_id = p.peer_id;   // S6: my summon's original took it back from its stand-in
     console.log(`[${PEER_LABEL}] ${p.name || p.peer_id} takes the place of ${p.replaces}`);
     setTimeout(() => peersToUI(true), 0);
   }
@@ -2434,6 +2590,7 @@ const knownHex = (q, r) => dimMap.has(q, r);
 const blockAddedAt = [];   // when each block arrived here (ms), oldest first — see offerMapSync
 function mapSummary() { return { seed: MAP_SEED, reveal_radius: REVEAL_RADIUS, blocks: dimMap.blocks(), tiles: dimMap.size(), bounds: dimMap.bounds() }; }
 function addMapBlock(b, via) {
+  mark('addMapBlock');
   if (!isBlock(b) || !dimMap.addBlock(b)) return false;
   for (const t of blockTiles(b)) mapSketchAdd(`${t.q},${t.r}`);
   blockAddedAt.push(Date.now());
@@ -2729,25 +2886,38 @@ function discoverTrapMonsters(cq, cr) {
 // Shadows (user ruling 2026-11-12): a wild monster whose peer has been silent for two minutes is replaced by
 // a fresh one of the same creature, same life, on the same tile — by the live hero with the smallest peer
 // id, so only one of us does it. Summoned creatures are never replaced (follow-up ruling, same day).
-const GHOST_MS = 120_000;
+// Stand-ins (S6, user ruling 2026-11-27, rule_unit_standin): after ONE minute, villagers too, and the silent original
+// takes its unit back when it is heard again (the replacement used to stay for good).
+const GHOST_MS = 60_000;
 // Was it ME who went quiet? (2026-11-23, New-Silent-Wilds: the box swapped, both builders froze for ~2 min, woke up to
 // find every snapshot 127 s old and EACH spawned stand-ins for the hero — who had left cleanly — and fresh monsters.)
 // A 1 s tick that comes > 5 s late means my own event loop stalled; then nobody is judged silent until a full silence
 // window has passed with me awake, so the snapshots that were only stale on my side get refreshed first.
 const SELF_STALL_MS = 5_000;
 let selfTickAt = Date.now(), selfStallUntil = 0;
+// S10: what a freeze was. cpu ≈ the freeze → my own JS / GC was busy (the mark says where); cpu ≈ 0 → the OS did not run
+// me (swap — see the major page faults —, a paused VM, a dozing phone). Every stall > 2 s is logged, also the ones
+// inside the silence window (they used to be swallowed).
+let gcMs = 0;
+try { const { PerformanceObserver } = await import('node:perf_hooks'); new PerformanceObserver(l => { for (const e of l.getEntries()) gcMs += e.duration; }).observe({ entryTypes: ['gc'] }); } catch {}
+let selfRu = process.resourceUsage(), selfGcAt = gcMs;
 setInterval(() => {
-  const now = Date.now();
-  if (now - selfTickAt > SELF_STALL_MS) {
-    if (now >= selfStallUntil) console.log(`[${PEER_LABEL}] stall: my event loop was frozen ${Math.round((now - selfTickAt) / 1000)}s — nobody is judged silent for ${Math.round(Math.max(GHOST_MS, SHADOW_MS) / 1000)}s`);
-    selfStallUntil = now + Math.max(GHOST_MS, SHADOW_MS);
+  const now = Date.now(), ru = process.resourceUsage(), gap = now - selfTickAt;
+  if (gap > 2_000) {
+    const cpu = (ru.userCPUTime + ru.systemCPUTime - selfRu.userCPUTime - selfRu.systemCPUTime) / 1e6;
+    const why = `cpu ${cpu.toFixed(1)}s (sys ${((ru.systemCPUTime - selfRu.systemCPUTime) / 1e6).toFixed(1)}), gc ${((gcMs - selfGcAt) / 1000).toFixed(1)}s, major faults ${ru.majorPageFault - selfRu.majorPageFault}, last mark ${busyMark} ${Math.round((now - busyMarkAt) / 100) / 10}s ago, rss ${Math.round(process.memoryUsage.rss() / 1048576)} MB`;
+    if (gap <= SELF_STALL_MS) console.log(`[${PEER_LABEL}] stall: my event loop was late ${Math.round(gap / 100) / 10}s — ${why}`);
+    else {
+      console.log(`[${PEER_LABEL}] stall: my event loop was frozen ${Math.round(gap / 1000)}s — ${why}${now >= selfStallUntil ? ` — nobody is judged silent for ${Math.round(Math.max(GHOST_MS, SHADOW_MS) / 1000)}s` : ''}`);
+      selfStallUntil = now + Math.max(GHOST_MS, SHADOW_MS);
+    }
   }
-  selfTickAt = now;
+  selfTickAt = now; selfRu = ru; selfGcAt = gcMs;
 }, 1_000).unref?.();
 const selfStalled = (now = Date.now()) => now < selfStallUntil || now - selfTickAt > SELF_STALL_MS;
 const replacedGhosts = new Set();
 setInterval(() => {
-  if (IS_COMPANION || SHADOW_OF || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
+  if (!moduleReady || IS_COMPANION || SHADOW_OF || entity.kind !== 'character' || entity.life <= 0 || !dimMap) return;
   const now = Date.now();
   if (selfStalled(now)) return;
   const heroes = livePeers().filter(p => p && p.character_id && !p.owner_peer_id && !p.shadow_of && (p.life ?? 0) > 0 && (p.peer_id === PEER_ID_STRING || isFresh(p))).map(p => p.peer_id).sort();
@@ -2755,20 +2925,55 @@ setInterval(() => {
   for (const p of livePeers()) {
     if (!p || p.peer_id === PEER_ID_STRING || replacedGhosts.has(p.peer_id) || !p.creature_id || (p.life ?? 0) <= 0 || !Number.isInteger(p.tile_q)) continue;
     if (now - Date.parse(p.last_seen || 0) < GHOST_MS) continue;
-    // Monsters only: a summoned / bound / summon-only creature is left as it is.
+    // Monsters and villagers: a summoned / bound / summon-only creature is left as it is (ruling 2026-11-12).
     if (p.owner_peer_id || data.creatures[p.creature_id]?.data?.built_in || summonedByAnyone.has(p.peer_id)) continue;
-    if (p.npc_id) continue;   // a villager: its village (villageTick) brings it back
-    if (heroes[0] !== PEER_ID_STRING || companions.filter(c => c.wild && !c.village).length >= MAX_WILD_CHILDREN) continue;
-    replacedGhosts.add(p.peer_id);
-    const label = `${String(p.peer_id).replace(/^peer:/, '').replace(/-r\d+$/, '')}-r${++summonSeq}`;
+    // a hero leads it (a recruit / escort) or it is walking home for good: its hero's game answers for it
+    if (p.npc_id && (p.follower || p.village_leaving)) continue;
+    const vil = p.npc_id ? villageById(MAP_SEED, p.village_id) : null;
+    if (p.npc_id && (!vil || !GAMEMODELS?.npcs?.[p.npc_id])) continue;
+    if (heroes[0] !== PEER_ID_STRING || (!vil && companions.filter(c => c.wild && !c.village).length >= MAX_WILD_CHILDREN)) continue;
+    // S6 (rule_unit_standin): the stand-in answers for the ORIGINAL (a stand-in that fell silent gets a stand-in of the
+    // same original); the original takes its unit back when it is heard again (standinSeen).
+    const orig = p.standin_of || p.peer_id, origLabel = String(orig).replace(/^peer:/, '');
+    const label = `${origLabel}-s${++summonSeq}`;
     const name = String(p.name || data.creatures[p.creature_id]?.name || p.creature_id);
+    const env = { STANDIN_OF: orig, REPLACES_PEER_ID: p.peer_id, START_LIFE: String(p.life) };
+    if (vil && IS_MOBILE && companions.filter(c => c.village).length + villageSpawning.size >= VILLAGE_MAX_MOBILE) continue;   // the phone's cap (spawnVillager)
+    replacedGhosts.add(p.peer_id);
+    supersededBy.set(p.peer_id, `peer:${label}`);   // like a hero's shadow: its old snapshots stay out here too
     peersPublic.delete(p.peer_id);
     peersToUI(true);
-    console.log(`[${PEER_LABEL}] ${name} (${p.peer_id}) has been silent ${Math.round((now - Date.parse(p.last_seen || 0)) / 1000)}s — a fresh one takes its place at (${p.tile_q},${p.tile_r})`);
-    spawnCompanion(null, { creature_id: p.creature_id, name, at: { q: p.tile_q, r: p.tile_r }, wild: true, label, ignore: p.peer_id, env: { CHARACTER_ID: '', CREATURE_ID: p.creature_id, ENTITY_NAME: name, REPLACES_PEER_ID: p.peer_id, START_LIFE: String(p.life) } })
-      .catch(e => console.warn(`[${PEER_LABEL}] replacement failed: ${e.message}`));
+    console.log(`[${PEER_LABEL}] stand-in: ${name} (${p.peer_id}) has been silent ${Math.round((now - Date.parse(p.last_seen || 0)) / 1000)}s — I run it on as ${label} at (${p.tile_q},${p.tile_r}) hp ${p.life} until ${origLabel} is back`);
+    if (vil) spawnVillager(vil, { npc: p.npc_id, name, label, q: Number.isInteger(p.home_q) ? p.home_q : p.tile_q, r: Number.isInteger(p.home_r) ? p.home_r : p.tile_r, at: { q: p.tile_q, r: p.tile_r }, ignore: p.peer_id }, env);
+    else spawnCompanion(null, { creature_id: p.creature_id, name, at: { q: p.tile_q, r: p.tile_r }, wild: true, label, ignore: p.peer_id, env: { CHARACTER_ID: '', CREATURE_ID: p.creature_id, ENTITY_NAME: name, ...env } })
+      .catch(e => console.warn(`[${PEER_LABEL}] stand-in failed: ${e.message}`));
   }
-}, 20_000);
+}, 10_000);
+// S6 summons (user answer 2026-11-27: "The Elementals should be replaced by Elementals, the Golem should be replaced by
+// Golem, and the summon creature should be replaced by Summoning effect"): a creature I spawned for a permanent I still
+// hold, silent for GHOST_MS, gets its stand-in from ME — the same creature for the same permanent (my summons list names
+// the stand-in instead); the original takes it back when heard again (the replace swaps the list entry back,
+// mergePeerState). Bound / raised creatures and a summoner who is silent too are not covered.
+const summonStandins = new Set();
+setInterval(() => {
+  if (!moduleReady || IS_COMPANION || entity.life <= 0 || !dimMap || selfStalled()) return;
+  const now = Date.now();
+  for (const s of [...entity.summons]) {
+    if (s.mode !== 'spawn' || !entity.permanents.has(s.perm) || summonStandins.has(s.peer_id)) continue;
+    const p = peersPublic.get(s.peer_id);
+    if (!p || (p.life ?? 0) <= 0 || !Number.isInteger(p.tile_q) || now - Date.parse(p.last_seen || 0) < GHOST_MS) continue;
+    summonStandins.add(s.peer_id);
+    const orig = p.standin_of || p.peer_id, origLabel = String(orig).replace(/^peer:/, ''), label = `${origLabel}-s${++summonSeq}`;
+    supersededBy.set(s.peer_id, `peer:${label}`);
+    peersPublic.delete(s.peer_id);
+    entity.summons.splice(entity.summons.indexOf(s), 1);   // spawnCompanion lists the stand-in for the same permanent
+    peersToUI(true);
+    console.log(`[${PEER_LABEL}] stand-in: my ${s.name || p.name} (${s.peer_id}) has been silent ${Math.round((now - Date.parse(p.last_seen || 0)) / 1000)}s — the same creature stands in as ${label} for ${summonLabel(s.perm) || s.perm}, hp ${p.life}`);
+    spawnCompanion(s.perm, { creature_id: s.creature_id || p.creature_id, name: s.name || p.name, at: { q: p.tile_q, r: p.tile_r }, label, ignore: s.peer_id,
+      env: { CHARACTER_ID: '', CREATURE_ID: s.creature_id || p.creature_id, ENTITY_NAME: String(p.name || s.name), STANDIN_OF: orig, REPLACES_PEER_ID: s.peer_id, START_LIFE: String(p.life) } })
+      .catch(e => console.warn(`[${PEER_LABEL}] summon stand-in failed: ${e.message}`));
+  }
+}, 10_000);
 // Unattended characters (rule_unattended_character, user ruling 2026-11-16, revised): "after 2 minutes the character
 // should be PC operated" — a hero (a character with no owner: a player's hero, a HUMAN profile hero, a team ally
 // whose device vanished; never a summon) silent for SHADOW_MS (120 s, the same as GHOST_MS; always, not only in
@@ -2813,7 +3018,7 @@ setInterval(() => {
 function shadowStepDown(p) {
   if (_shadowLeaving) return;
   _shadowLeaving = true;
-  console.log(`[${PEER_LABEL}] shadow: ${p.name || p.peer_id} (${p.peer_id}) takes my place${p.peer_id === SHADOW_OF ? ' — my hero is back' : ''} (hp ${p.life}); the shadow steps down`);
+  console.log(`[${PEER_LABEL}] ${STANDIN_OF ? 'stand-in' : 'shadow'}: ${p.name || p.peer_id} (${p.peer_id}) takes my place${p.peer_id === SHADOW_OF ? ' — my hero is back' : p.peer_id === STANDIN_OF ? ' — the original is back' : ''} (hp ${p.life}); the ${STANDIN_OF ? 'stand-in' : 'shadow'} steps down`);
   setTimeout(() => process.exit(0), 300);
 }
 // I am a hero and I hear a shadow of me (my game was cut off long enough for one to stand in): I take its place
@@ -2829,6 +3034,17 @@ function heroShadowSeen(s) {
   if (entity.life <= 0 && profileChar && s.shadow_death_json) {
     import('./shadow-settle.mjs').then(m => m.settleShadowDeaths(PROFILE_FILE, [{ ...s, profile_char_id: PROFILE_CHAR_ID }])).then(r => r?.length && console.log(`[${PEER_LABEL}] shadow: ${r.map(x => x.text).join('; ')}`)).catch(e => console.warn(`[${PEER_LABEL}] shadow settle failed: ${e.message}`));
   }
+  publishPublicState().catch(() => {});
+}
+// S6 (rule_unit_standin, user ruling 2026-11-27): I am a monster / villager whose game was silent long enough for a
+// live hero's game to run my unit on, and I hear that stand-in: I take my unit back as it stands now — its tile, its
+// life (dead if it was killed) — and my snapshots name it in `replaces`, so it steps down and the others drop it.
+function standinSeen(s) {
+  replacesNow = s.peer_id;
+  const before = `hp ${entity.life} at (${entity.tile.q},${entity.tile.r})`;
+  if (Number.isFinite(s.life)) entity.life = Math.max(0, s.life);
+  if (Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) entity.tile = { q: s.tile_q, r: s.tile_r };
+  console.log(`[${PEER_LABEL}] stand-in: ${s.peer_id} ran my unit while I was silent — I take it back (${before} → hp ${entity.life} at (${entity.tile.q},${entity.tile.r}))`);
   publishPublicState().catch(() => {});
 }
 // Unattended characters — the master (user ruling 2026-11-16): "any player who joins him will become his master,
@@ -3008,7 +3224,8 @@ function fullStateDue() { return Date.now() - lastFullBusAt >= FULL_STATE_BUS_MS
 // goes out at once as a small `clock` frame (the slim core record, ~300 B): on libp2p always, on the bus
 // when it opens a planning window (≈1 relay event per action — the handshake envelopes already carry the
 // reveal / resolution phases). Deduped on action|phase|deadline; receivers merge it like any snapshot.
-const CLOCK_KEYS = GUN_MEMBER_CORE.filter(k => k !== 'gun_v');
+const CLOCK_KEYS = [...GUN_MEMBER_CORE.filter(k => k !== 'gun_v'), 'clock_epoch'];   // clock_epoch: S7 (only set with CLOCK_SCHEDULE=1)
+const LEAN_COMMIT = process.env.LEAN_COMMIT !== '0';
 let lastClockSig = '', lastClockBusSig = '';
 function publishClock(snap) {
   const { sig, rec } = clockFrame(snap, CLOCK_KEYS);
@@ -3022,6 +3239,7 @@ function publishClock(snap) {
 // `viaBus` is for the heartbeat/startup/join paths; the per-round calls skip
 // it because every envelope already carries the snapshot.
 async function publishPublicState(viaBus = false) {
+  mark('publishPublicState');
   const snap = currentStateSnapshot();
   // World edits / build orders made outside a resolution (a quest handed in, a builder hired, an order given) ride
   // on no envelope while I stand and talk, and Gun / clock frames carry neither — send the full state now, or the
@@ -3185,10 +3403,43 @@ function stepToward(from, to) {
 // window instead of stretching the round. Reveal / resolution are gated on the
 // other members' envelopes and only use their ms budget as a cap.
 let roundDeadline = phaseEndsAt;
+function adoptEpoch() {
+  for (const p of clockPeers()) {
+    const e = Number(p.clock_epoch);
+    if (p.peer_id === PEER_ID_STRING || !Number.isFinite(e) || e <= 0 || (clockEpoch !== null && e >= clockEpoch) || typeof p.action !== 'number') continue;
+    if (Math.abs(Math.floor((Date.now() - e) / CLOCK_PERIOD_MS) - p.action) > 1) continue;   // not this peer's own schedule — ignore
+    console.log(`[${PEER_LABEL}] clock schedule: epoch ${clockEpoch === null ? 'set' : `moved ${clockEpoch - e}ms earlier`} from ${p.peer_id.slice(0, 14)} (action ${p.action})`);
+    clockEpoch = e;
+  }
+}
+// S8 (user 2026-11-27, "especially for the NPCs and Monsters"): a bot plans its next action while the planning window
+// is still open — a short settle after it opens, so the others' post-resolution snapshots are in — instead of at the
+// deadline, where every peer's commit, gossip and resolver land at once. The plan is committed at the deadline as
+// before. Not for LLM bots (their answer arrives during the window) or the hero. NPC_PREPLAN=0/1 overrides.
+const NPC_PREPLAN = process.env.NPC_PREPLAN ? process.env.NPC_PREPLAN === '1' : CLOCK_SCHEDULE;
+let prePlan = null;   // { action, done: Promise }
+function schedulePrePlan() {
+  if (!NPC_PREPLAN || IS_HUMAN || AI_ROLE || entity.life <= 0) return;
+  const act = hg.action, settle = Math.min(1500, Math.max(0, (phaseEndsAt - Date.now()) * 0.3));
+  setTimeout(() => {
+    if (hg.action !== act || currentPhase !== 'planning' || prePlan?.action === act || Date.now() > phaseEndsAt - 200) return;
+    prePlan = { action: act, done: npcPlan().catch(e => console.warn(`[${PEER_LABEL}] pre-plan failed: ${e.message}`)) };
+  }, settle);
+}
 function enterPhase(name) {
   currentPhase = name;
   let ms;
-  if (name === 'planning') {
+  if (name === 'planning' && CLOCK_SCHEDULE) {
+    standingTarget = null;
+    adoptEpoch();
+    if (clockEpoch === null) { clockEpoch = Date.now() - hg.action * CLOCK_PERIOD_MS; console.log(`[${PEER_LABEL}] clock schedule: my own epoch (action ${hg.action} starts now, ${CLOCK_PERIOD_MS}ms per action)`); }
+    phaseEndsAt = roundDeadline = scheduleEnds(hg.action).planning;
+    ms = phaseEndsAt - Date.now();
+  } else if (name !== 'planning' && CLOCK_SCHEDULE && clockEpoch !== null) {
+    phaseEndsAt = scheduleEnds(hg.action)[name];
+    ms = phaseEndsAt - Date.now();
+  } else if (name === 'planning') {
+    standingTarget = null;   // S7: the UI re-sends it with this window's journey step
     // Keep at least a 2s declaration window if a handshake ran long.
     roundDeadline = Math.max(roundDeadline + ROUND_SEC * 1000, Date.now() + 2000);
     // Sub-action offset correction (Swarm-0407): when every fresh peer already planning this action
@@ -3229,6 +3480,7 @@ function enterPhase(name) {
   // M6 step 1: a new planning window / deadline on the wire at once (deduped). Reveal / resolution are
   // announced by the commit / reveal envelopes themselves — no extra frame (keeps it ≈ 2 frames per action).
   if (name === 'planning') publishClock(currentStateSnapshot(true));
+  if (name === 'planning') { adoptCohortSelf(); schedulePrePlan(); const act = hg.action; setTimeout(() => { if (hg.action === act) buildFallback(); }, Math.min(800, Math.max(0, ms * 0.2))); }
   if (name === 'planning' && AI_ROLE && llmRouter?.available() && !IS_HUMAN) llmKick();
   broadcastUI({ kind: 'phase', name, seconds: Math.round(ms / 100) / 10, heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
 }
@@ -3344,6 +3596,40 @@ function targetTag(t) {
   return '';
 }
 
+// Standing orders (S7, user answer 2026-11-27: "standing order, but in case it was on journey continue the journey"):
+// every commit names what I play in the actions after it whose reveal of mine does not reach the others in time (up
+// to STANDING_ACTIONS) — an Empty Move on along where I am heading. A hero's journey: the farthest straight path hex
+// from this step, sent by the UI (`standing` WS message). A bot / monster / villager: the tile its latest move (this
+// action or the one before — walkers pause between steps) aims at; a one-hex step is carried on two hexes the same
+// way, so the Empty Move's half-way walk goes one hex further instead of standing on the tile it just reached.
+// Nothing while I cast (a move would break the cast) or when I am not heading anywhere: a missing reveal stays what
+// it was — no action. Only EM: no card, no damage, no cast.
+let lastMoveAim = null;   // { q, r, from: {q, r}, action } — my latest move's tile target and the hex it left from (bots)
+function standingOrder() {
+  if (casting || entity.life <= 0 || !myLastReveal || myLastReveal.effectId) return null;
+  if (IS_HUMAN) return standingTarget ? { action: 'EM', target: { q: standingTarget.q, r: standingTarget.r } } : null;
+  const t = myLastReveal.target;
+  if ((myLastReveal.code === 'EM' || myLastReveal.code === 'M') && t && typeof t === 'object' && Number.isInteger(t.q) && Number.isInteger(t.r)) lastMoveAim = { q: t.q, r: t.r, from: { q: entity.tile.q, r: entity.tile.r }, action: hg.action };
+  const h = headingTile();
+  return h ? { action: 'EM', target: h } : null;
+}
+// Where I am heading: the hero's journey hex from the UI; a bot's latest move target (this action or the one before),
+// a one-hex step carried on two hexes. Standing on it already (the fallback is built after the move landed): on in the
+// same direction it came from, one hex further. null = not heading anywhere.
+function headingTile() {
+  if (IS_HUMAN) return standingTarget ? { q: standingTarget.q, r: standingTarget.r } : null;
+  if (!lastMoveAim || hg.action - lastMoveAim.action > 1) return null;
+  if (lastMoveAim.q === entity.tile.q && lastMoveAim.r === entity.tile.r) {
+    const fr = lastMoveAim.from;
+    if (!fr || (fr.q === entity.tile.q && fr.r === entity.tile.r)) return null;
+    const d = hexDistance({ tile_q: fr.q, tile_r: fr.r }, { tile_q: entity.tile.q, tile_r: entity.tile.r }) || 1;
+    return { q: entity.tile.q + Math.round((entity.tile.q - fr.q) / d) * 2, r: entity.tile.r + Math.round((entity.tile.r - fr.r) / d) * 2 };
+  }
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const aim = hexDistance(here, { tile_q: lastMoveAim.q, tile_r: lastMoveAim.r }) > 1 ? lastMoveAim
+    : { q: 2 * lastMoveAim.q - entity.tile.q, r: 2 * lastMoveAim.r - entity.tile.r };
+  return { q: aim.q, r: aim.r };
+}
 function wrapTarget(t) {
   if (typeof t === 'string') return { kind: 'character', ref: t };
   if (t && typeof t === 'object' && 'q' in t && 'r' in t) return { kind: 'tile', ref: { q: t.q, r: t.r } };
@@ -3363,19 +3649,10 @@ function stripTargetFor(code, target) {
   }
 }
 
-async function doPlanningEnd() {
-  // Dead entities spectate: no commit, no reveal, nothing to resolve. The
-  // round loop keeps running so the clock stays aligned with the live mesh
-  // (joiners sync against us) and the standoff check can lift when someone new
-  // arrives — but a corpse must not keep swinging.
-  // A corpse still freezes its member set like everyone else — otherwise a peer
-  // that joins mid-action (a freshly summoned creature) is in the dead peer's
-  // resolution but in nobody else's, and the two sides disagree on a hit.
-  freezeRoundMembers();
-  if (entity.life <= 0) { myLastReveal = null; return; }
-  // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
-  if (!IS_HUMAN) await npcPlan();
-
+// The plan → reveal step of doPlanningEnd, on its own so a late-reveal fallback is built exactly like a real plan
+// (buildFallback, user 2026-11-27). dry = a what-if: no Dimension Out cancel, no Possess fall, no speech line taken;
+// dryPlan() runs it on a copy of the queue / cast and restores everything it touches. Synchronous on purpose.
+function buildPlan(dry) {
   // Decode the single queued pick. The queue can hold either a hand slot index
   // or one of the Empty-type markers. 'EMPTY' is the combined slot — rule 6
   // says Empty Move must be "declared first", which we interpret as: EM when a
@@ -3456,7 +3733,7 @@ async function doPlanningEnd() {
   }
   // Dimension Out (rule_dimension_out, interrupted_by move / attack / cast): playing a move off my hex, an attack or
   // an effect cast ends the channel, like any cast (Rule 19). Postures, Blocks and Empty Postures keep it going.
-  if (dimOut) {
+  if (dimOut && !dry) {
     const moved = code === 'M' || (code === 'EM' && target && typeof target === 'object' && (target.q !== entity.tile.q || target.r !== entity.tile.r));
     const cast = typeof queuedEffect === 'number';
     const by = DIM_OUT_CFG.interrupted_by || [];
@@ -3475,7 +3752,7 @@ async function doPlanningEnd() {
   if (entity.possessing && entity.possessMode === 'possess' && !possessedNow) {
     const v = peersPublic.get(entity.possessing.peer_id);
     const booting = !v && Date.now() - (entity.possessing.at || 0) < 30_000 && companions.some(c => c.peer_id === entity.possessing.peer_id);
-    if (!booting) {
+    if (!booting && !dry) {
       console.log(`[${PEER_LABEL}] possess: ${entity.possessing.name || entity.possessing.peer_id.slice(0, 14)} ${v && (v.life ?? 0) <= 0 ? 'is dead' : 'is gone'} — my Possess permanent falls, I play my own hero again`);
       for (let i = entity.summons.length - 1; i >= 0; i--) if (isPossessPerm(entity.summons[i].perm)) entity.summons.splice(i, 1);   // died: no card back
       dropPermanent(possessPermOf(entity.permanents) || possessPermOf(Object.keys(EFFECT_RULES))); publishPublicState().catch(() => {});
@@ -3787,7 +4064,7 @@ async function doPlanningEnd() {
   const effectTag = effectCard ? `${effectCard.effect_id}${every ? '∀' : ''}:${effectCard.element_cost.join('+')}:${effectStep}/${effectOf}:${(effectKept || []).map(v => v ?? '-').join(',')}` : '';
   const bonusTag = bonus.map(b => `${b.action}${b.trance ? `[${b.trance.join('+')}]` : ''}:${targetTag(b.target)}:${b.skillIds.join(',')}:${b.effect ? `${b.effect.effect_id}${b.effect.step}/${b.effect.of}` : ''}:${b.destroy ? b.destroy.stat : ''}`).join('|');
   const commitHash = sha256Hex(`${revealCode}::${targetTag(normTarget)}::${skillIds.join(',')}::${trance ? options.join('+') : ''}::${effectTag}::${destroy ? destroy.stat : ''}::${bonusTag}${manipAlt ? `::manip:${manipAlt.code}:${targetTag(manipAlt.target)}` : ''}${build ? `::build:${build.q},${build.r}` : ''}${siege ? `::siege:${siege.q},${siege.r}` : ''}::${myLastSalt}`);
-  myLastReveal = {
+  const reveal = {
     code: revealCode, trance: options, target: normTarget, salt: myLastSalt, cardId: card ? card.card_id : null,
     optionCardIds: [card ? card.card_id : null, extraCard ? extraCard.card_id : null],
     skillIds, skillNames: mySkills.map(c => c.name), skillCardIds: mySkills.map(c => c.card_id),
@@ -3816,18 +4093,163 @@ async function doPlanningEnd() {
     effectElem: effectCard && (EFFECT_RULES[effectCard.effect_id]?.altTileToken || TILE_TOKEN_CHOICE[effectCard.effect_id]) ? (queuedElem || null) : null,
     effectStep, effectOf,
     skipping, destroy, phylactery, proxy, classAbility, manipAlt,
-    build, siege, say: takeSay(),   // AI skirmish: Barricade intent; siege engine shot / ram blow; the unit's line (shown with the reveal, never the commit)
+    build, siege, say: dry ? null : takeSay(),   // AI skirmish: Barricade intent; siege engine shot / ram blow; the unit's line (shown with the reveal, never the commit)
     bonus,
   };
+  return { reveal, commitHash, code };
+}
+async function doPlanningEnd() {
+  mark('doPlanningEnd');
+  // Dead entities spectate: no commit, no reveal, nothing to resolve. The
+  // round loop keeps running so the clock stays aligned with the live mesh
+  // (joiners sync against us) and the standoff check can lift when someone new
+  // arrives — but a corpse must not keep swinging.
+  // A corpse still freezes its member set like everyone else — otherwise a peer
+  // that joins mid-action (a freshly summoned creature) is in the dead peer's
+  // resolution but in nobody else's, and the two sides disagree on a hit.
+  freezeRoundMembers();
+  if (entity.life <= 0) { myLastReveal = null; return; }
+  // If this is an NPC (not the player tab's peer), auto-plan via weighted AI.
+  if (!IS_HUMAN) { if (prePlan?.action === hg.action) await prePlan.done; else await npcPlan(); }   // S8: planned during the window
+
+  const { reveal: planned, commitHash, code } = buildPlan(false);
+  myLastReveal = planned;
+  // S9 (2026-11-27): the commit carries only my clock record (who / where / life / action / phase / deadline — what the
+  // handshake waits on); the full snapshot rides on the reveal (the resolver reads that one) and the state hash. One
+  // ~2 KB snapshot less per peer per action; receivers merge partial records. LEAN_COMMIT=0 sends the full one again.
   await emitEnvelope({
     type: 'evt_action_commit',
-    payload: { commitment: commitHash, empty_move_announced: code === 'EM', ...(myLastReveal.effectFx ? { fx_ref: myLastReveal.effectFx } : {}), ...(myLastReveal.skillRefs?.length ? { sk_ref: myLastReveal.skillRefs } : {}), ...(myLastReveal.clRef ? { cl_ref: myLastReveal.clRef } : {}) },   // S4 sk_ref; CH cl_ref
+    ...(LEAN_COMMIT ? { state: clockFrame(currentStateSnapshot(true), CLOCK_KEYS).rec } : {}),
+    payload: { commitment: commitHash, empty_move_announced: code === 'EM', ...((so => so ? { standing: so } : {})(standingOrder())), ...(myLastReveal.effectFx ? { fx_ref: myLastReveal.effectFx } : {}), ...(myLastReveal.skillRefs?.length ? { sk_ref: myLastReveal.skillRefs } : {}), ...(myLastReveal.clRef ? { cl_ref: myLastReveal.clRef } : {}) },   // S4 sk_ref; CH cl_ref
   });
   if (DISCOVERY_URL) await postJson(`${DISCOVERY_URL}/commit`, { dimension_id: DIM_ID, peer_id: PEER_ID_STRING, turn: hg.action, commitment: commitHash });
 }
 
+// The reveal payload of a plan (myLastReveal, or my late-reveal fallback) — one wire format for both.
+function revealWire(r) {
+  return {
+    action: r.code,
+    trance: r.trance || null,
+    effects: r.effectId ? [{
+      effect_id: r.effectId,
+      name: r.effectName,
+      elements: r.effectElements || [],
+      types: r.effectTypes || [],
+      is_permanent: r.effectPermanent,
+      is_damage: r.effectDamage,
+      is_point_buy: r.effectPointBuy,
+      scope: r.effectScope,
+      is_instant: r.effectInstant, every: r.effectEvery, aura: r.effectAura,
+      step: r.effectStep, of: r.effectOf, kept: r.effectKept, summon: r.effectSummon || null,
+      attach: r.effectAttach || null, card_id: r.effectCardId || null, link: r.effectLink || null, elem: r.effectElem || null, ...(r.effectPossess ? { possess: r.effectPossess } : {}),
+      ...(r.effectFx ? { ref: r.effectFx } : {}),   // E4: a foreign effect resolves from this ref only
+    }] : [],
+    skills: r.skillIds, skill_names: r.skillNames, class_ability_tapped: false,
+    destroy: r.destroy || null,
+    phylactery: r.phylactery || null,
+    proxy: r.proxy ? { for: r.proxy.for, action: r.proxy.action, target: wrapTarget(r.proxy.target) } : null,
+    class_ability: r.classAbility ? { id: r.classAbility.id, target: wrapTarget(r.classAbility.target), attach: r.classAbility.attach || null, stat: r.classAbility.stat || null } : null,
+    bonus: bonusWire(r.bonus),
+    manip_alt: r.manipAlt ? { code: r.manipAlt.code, target: wrapTarget(r.manipAlt.target) } : null,
+    target: wrapTarget(r.target),
+    combo_step: null,
+    salt: r.salt,
+    ...(r.build ? { build: r.build } : {}),
+    ...(r.siege ? { siege: r.siege } : {}),
+    ...(r.say ? { say: r.say } : {}),   // AI skirmish: UI speech balloon (llm-brain.mjs cleanSay on every side)
+  };
+}
+// A what-if plan: setup() sets the queue it is built from; the queue, the cast and the class / Haste books are restored.
+function dryPlan(setup) {
+  const saved = { queued, target, queuedSkills, queuedExtra, queuedEffect, queuedEffect2, queuedChain, queuedAura, casting, queuedBonus, queuedDestroy,
+    queuedBuild, queuedSiege, queuedAttach, queuedLink, queuedElem, queuedPhylactery, queuedClassAbility, planEmitSpends, lastAttackTarget, myLastSalt,
+    cu: entity.classUsedTurn, ct: entity.classTapped, hu: entity.hasteUsedTurn };
+  const log = console.log;
+  let out = null, why = '';
+  try {
+    queued = [...queued]; queuedSkills = [...queuedSkills]; queuedChain = [...queuedChain]; queuedBonus = [...queuedBonus];
+    casting = casting ? structuredClone(casting) : null;
+    why = setup();
+    console.log = () => {};
+    out = buildPlan(true);
+  } finally {
+    console.log = log;
+    ({ queued, target, queuedSkills, queuedExtra, queuedEffect, queuedEffect2, queuedChain, queuedAura, casting, queuedBonus, queuedDestroy,
+      queuedBuild, queuedSiege, queuedAttach, queuedLink, queuedElem, queuedPhylactery, queuedClassAbility, planEmitSpends, lastAttackTarget, myLastSalt } = saved);
+    entity.classUsedTurn = saved.cu; entity.classTapped = saved.ct; entity.hasteUsedTurn = saved.hu;
+  }
+  return { ...out, why };
+}
+// Late-reveal fallback (user 2026-11-27: "Late reveal due to peer irresponsiveness should be the most beneficial for me,
+// not no action" + the priority list): early in every planning window I build — from my own hand, tile and cast — what
+// is played for me if my reveal does not reach the others in time, and publish it at once (evt_fallback, with my
+// snapshot). Only the fallback is public early; my real plan stays committed / secret. Priority:
+//   a. casting → the cast goes on (its next element; at its LAST element the cast holds instead — the landing needs me);
+//   b. an enemy in contact → my armed combo's next card, else an Attack / Block / Move card I hold, with the instants
+//      (skills) that ride on it; else Empty Posture;
+//   c. on a journey / chase → keep walking (Empty Move toward where I am heading);
+//   d. otherwise Empty Posture.
+let myFallback = null;   // { action, reveal, why, applied } — the fallback I published for that action
+function fallbackSetup() {
+  queuedBonus = []; queuedDestroy = null; queuedClassAbility = false; queuedPhylactery = null; queuedBuild = null; queuedSiege = null;
+  queuedExtra = null; queuedAttach = null; queuedSkills = [];
+  const idxOf = (code) => hand.findIndex(c => c?.kind === 'action' && c.code === code);
+  if (casting) {
+    const at = chainAt(casting.entries, casting.emitted + 1);
+    if (at && casting.emitted + 1 < at.total) {
+      const ei = hand.findIndex(c => c.card_id === at.entry.cardId), ei2 = at.entry.cardId2 ? hand.findIndex(c => c.card_id === at.entry.cardId2) : -1;
+      const pi = idxOf('P');
+      queuedEffect = ei >= 0 ? ei : null; queuedEffect2 = ei2 >= 0 ? ei2 : null; queuedChain = []; queuedAura = !!casting.aura;
+      queued = [pi >= 0 ? pi : 'EMPTY'];
+      if (typeof target !== 'string') target = null;
+      return `the cast goes on (${at.entry.effectId} ${at.step}/${at.of})`;
+    }
+    casting = null; queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false;
+    queued = ['EMPTY']; target = null;
+    return 'hold';
+  }
+  queuedEffect = null; queuedEffect2 = null; queuedChain = []; queuedAura = false;
+  const here = { tile_q: entity.tile.q, tile_r: entity.tile.r };
+  const foes = livePeers().filter(p => p && p.peer_id !== PEER_ID_STRING && (p.life ?? 0) > 0 && sideOf(p.alliance) !== MY_SIDE && villageFoe(p)
+    && Number.isInteger(p.tile_q) && hexDistance(here, p) <= 1).sort((a, b) => (a.life - b.life) || a.peer_id.localeCompare(b.peer_id));
+  if (foes.length) {
+    let pick = null, why = '';
+    const seq = Array.isArray(entity.combo) ? entity.combo : [], cs = entity.comboState;
+    if (cs?.active && seq.length) {
+      const need = String(seq[cs.slot | 0] || '').toUpperCase(), i = idxOf(need);
+      if (i >= 0) pick = i; else if (need === 'M' || need === 'P') pick = 'EMPTY';   // EP stands in for an M / P slot (ruling 2026-11-05)
+      if (pick !== null) why = `combo ${seq.join('')} slot ${(cs.slot | 0) + 1}`;
+    }
+    if (pick === null) for (const c of ['A', 'B', 'M']) { const i = idxOf(c); if (i >= 0) { pick = i; why = `contact: ${c}`; break; } }
+    if (pick !== null) {
+      const code = pick === 'EMPTY' ? 'EP' : hand[pick].code;
+      queued = [pick]; target = code === 'A' || code === 'M' ? foes[0].peer_id : null;
+      queuedSkills = hand.map((c, i) => ({ c, i })).filter(({ c }) => c?.kind === 'skill' && !c.is_trance && !c.sk && skillRidesOn([code], c.requires)).map(({ i }) => i);
+      return why + (queuedSkills.length ? ` + ${queuedSkills.map(i => hand[i].name).join(', ')}` : '') + ` vs ${foes[0].name || foes[0].peer_id.slice(0, 14)}`;
+    }
+  }
+  const h = headingTile();
+  if (h) { queued = ['EMPTY']; target = { q: h.q, r: h.r }; return `keep walking toward (${h.q},${h.r})`; }
+  queued = ['EMPTY']; target = null;
+  return 'Empty Posture';
+}
+function buildFallback() {
+  if (entity.life <= 0 || currentPhase !== 'planning' || myFallback?.action === hg.action) return;
+  let built;
+  try { built = dryPlan(fallbackSetup); } catch (e) { console.warn(`[${PEER_LABEL}] fallback not built: ${e.message}`); return; }
+  const fb = { ...built.reveal, fallback: true, ...(built.why === 'hold' ? { holdCast: true } : {}) };
+  myFallback = { action: hg.action, reveal: fb, why: built.why, applied: false };
+  emitEnvelope({ type: 'evt_fallback', payload: revealWire(fb), viaBus: true }).catch(() => {});
+  console.log(`[${PEER_LABEL}] fallback for T${hg.turn}.R${hg.round + 1}: ${built.why === 'hold' ? 'Empty Posture, the cast holds (its last element needs me)' : built.why} → ${fb.code}${fb.effectId ? ` + ${fb.effectId} ${fb.effectStep}/${fb.effectOf}` : ''}`);
+}
 async function doReveal() {
+  mark('doReveal');
   if (!myLastReveal) return;
+  if (CLOCK_SCHEDULE && clockEpoch !== null && myFallback?.action === hg.action && Date.now() > scheduleEnds(hg.action).resolution - REVEAL_LATE_MS) {
+    console.log(`[${PEER_LABEL}] my reveal for T${hg.turn}.R${hg.round + 1} is late (${Date.now() - (scheduleEnds(hg.action).resolution - REVEAL_LATE_MS)}ms past the window) — I play my fallback like everyone else: ${myFallback.why}`);
+    myLastReveal = { ...myFallback.reveal }; myFallback.applied = true;
+    return;
+  }
   const targetObj = wrapTarget(myLastReveal.target);
   // E4: foreign effects committed this action that I cannot run (not fetched / refused) — every peer then
   // postpones those casts (effects-handshake.mjs gateReveals). Empty, and absent from the wire, in built-in play.
@@ -3849,35 +4271,7 @@ async function doReveal() {
       ...(fxMissing.length ? { fx_missing: fxMissing } : {}),
       ...(skMissing.length ? { sk_missing: skMissing } : {}), ...(myLastReveal.skillRefs?.length ? { sk_ref: myLastReveal.skillRefs } : {}),   // S4: a foreign skill resolves from sk_ref only
       ...(clMissing.length ? { cl_missing: clMissing } : {}), ...(myLastReveal.clRef ? { cl_ref: myLastReveal.clRef } : {}),   // CH: a revealer's foreign class resolves from cl_ref
-      action: myLastReveal.code,
-      trance: myLastReveal.trance || null,
-      effects: myLastReveal.effectId ? [{
-        effect_id: myLastReveal.effectId,
-        name: myLastReveal.effectName,
-        elements: myLastReveal.effectElements || [],
-        types: myLastReveal.effectTypes || [],
-        is_permanent: myLastReveal.effectPermanent,
-        is_damage: myLastReveal.effectDamage,
-        is_point_buy: myLastReveal.effectPointBuy,
-        scope: myLastReveal.effectScope,
-        is_instant: myLastReveal.effectInstant, every: myLastReveal.effectEvery, aura: myLastReveal.effectAura,
-        step: myLastReveal.effectStep, of: myLastReveal.effectOf, kept: myLastReveal.effectKept, summon: myLastReveal.effectSummon || null,
-        attach: myLastReveal.effectAttach || null, card_id: myLastReveal.effectCardId || null, link: myLastReveal.effectLink || null, elem: myLastReveal.effectElem || null, ...(myLastReveal.effectPossess ? { possess: myLastReveal.effectPossess } : {}),
-        ...(myLastReveal.effectFx ? { ref: myLastReveal.effectFx } : {}),   // E4: a foreign effect resolves from this ref only
-      }] : [],
-      skills: myLastReveal.skillIds, skill_names: myLastReveal.skillNames, class_ability_tapped: false,
-      destroy: myLastReveal.destroy || null,
-      phylactery: myLastReveal.phylactery || null,
-      proxy: myLastReveal.proxy ? { for: myLastReveal.proxy.for, action: myLastReveal.proxy.action, target: wrapTarget(myLastReveal.proxy.target) } : null,
-      class_ability: myLastReveal.classAbility ? { id: myLastReveal.classAbility.id, target: wrapTarget(myLastReveal.classAbility.target), attach: myLastReveal.classAbility.attach || null, stat: myLastReveal.classAbility.stat || null } : null,
-      bonus: bonusWire(myLastReveal.bonus),
-      manip_alt: myLastReveal.manipAlt ? { code: myLastReveal.manipAlt.code, target: wrapTarget(myLastReveal.manipAlt.target) } : null,
-      target: targetObj,
-      combo_step: null,
-      salt: myLastReveal.salt,
-      ...(myLastReveal.build ? { build: myLastReveal.build } : {}),
-      ...(myLastReveal.siege ? { siege: myLastReveal.siege } : {}),
-      ...(myLastReveal.say ? { say: myLastReveal.say } : {}),   // AI skirmish: UI speech balloon (llm-brain.mjs cleanSay on every side)
+      ...revealWire(myLastReveal),
     },
   });
   // Optional discovery mirror (buckets reveals by the global action index).
@@ -3888,6 +4282,7 @@ async function doReveal() {
 }
 
 async function doResolution() {
+  mark('doResolution');
   // Deterministic resolver over all revealed actions this round.
   const edges = data.battle_system.battle_system_core.data.resolution_matrix.edges;
   const edgeMap = {};
@@ -3916,10 +4311,13 @@ async function doResolution() {
   for (const env of hg.tape) {
     if (env.type !== 'evt_action_reveal' || env.turn !== hg.turn || env.round !== hg.round) continue;
     if (revealsThisTurn.some(r => r.actor === env.actor_peer_id)) continue;
+    takeReveal(env);
+  }
+  function takeReveal(env, extra = {}) {
+    noteRecentAct(env.actor_peer_id, env.payload.action);
     const effArr = Array.isArray(env.payload.effects) ? env.payload.effects : [];
     const eff0 = effArr[0] || null;
-    noteRecentAct(env.actor_peer_id, env.payload.action);
-    revealsThisTurn.push({ actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0, salt: env.payload.salt || '', destroy: env.payload.destroy || null, phylactery: env.payload.phylactery || null, proxy: env.payload.proxy || null, classAbility: env.payload.class_ability || null, bonus: env.payload.bonus || null, manipAlt: env.payload.manip_alt || null, build: env.payload.build || null, siege: env.payload.siege || null });
+    revealsThisTurn.push({ ...extra, actor: env.actor_peer_id, action: env.payload.action, target: env.payload.target || null, skills: Array.isArray(env.payload.skills) ? env.payload.skills : [], trance: Array.isArray(env.payload.trance) && env.payload.trance.length === 2 ? [...env.payload.trance] : null, effect: eff0, salt: env.payload.salt || '', destroy: env.payload.destroy || null, phylactery: env.payload.phylactery || null, proxy: env.payload.proxy || null, classAbility: env.payload.class_ability || null, bonus: env.payload.bonus || null, manipAlt: env.payload.manip_alt || null, build: env.payload.build || null, siege: env.payload.siege || null });
     const s = env.state;
     if (s && s.peer_id === env.actor_peer_id && Number.isInteger(s.tile_q) && Number.isInteger(s.tile_r)) {
       view.set(env.actor_peer_id, { ...(view.get(env.actor_peer_id) || {}), ...s });
@@ -3967,6 +4365,30 @@ async function doResolution() {
       revealsThisTurn.push({ actor: d.peer_id, action: d.action, target: d.target || null, skills: [], trance: null, effect: null });
     }
   } catch {}
+  // Late-reveal fallback (user 2026-11-27): a member of this action's frozen region with no reveal plays the fallback it
+  // published for this action itself (evt_fallback: its own cards, its snapshot) — resolved exactly like a reveal.
+  if (roundMembers.action === hg.action) for (const id of roundMembers.ids) {
+    if (revealsThisTurn.some(r => r.actor === id)) continue;
+    const fb = hg.tape.findLast(e => e.type === 'evt_fallback' && e.actor_peer_id === id && e.turn === hg.turn && e.round === hg.round);
+    if (!fb) continue;
+    takeReveal(fb, { fallback: true });
+    console.log(`[${PEER_LABEL}] fallback: ${id} T${hg.turn}.R${hg.round + 1} — no reveal in time, it plays its own fallback ${fb.payload.action}${fb.payload.effects?.[0] ? ` + ${fb.payload.effects[0].effect_id} ${fb.payload.effects[0].step}/${fb.payload.effects[0].of}` : ''}${fb.payload.skills?.length ? ` [${fb.payload.skills.join(',')}]` : ''}`);
+  }
+  // S7 standing orders: a member of this action's frozen region with no reveal plays the order its newest commit
+  // named, if that commit is one of the last STANDING_ACTIONS actions (every peer holds those commits — they went out
+  // at least an action ago). A late reveal costs one action; a frozen unit keeps walking for up to a round.
+  if (roundMembers.action === hg.action) {
+    for (const id of roundMembers.ids) {
+      if (revealsThisTurn.some(r => r.actor === id)) continue;
+      const prev = hg.tape.findLast(e => e.type === 'evt_action_commit' && e.actor_peer_id === id && actionKey(e.turn, e.round) < hg.action);
+      if (!prev || actionKey(prev.turn, prev.round) < hg.action - STANDING_ACTIONS) continue;
+      const so = prev?.payload?.standing;
+      if (!so || so.action !== 'EM' || !Number.isInteger(so.target?.q) || !Number.isInteger(so.target?.r)) continue;
+      if (Number(view.get(id)?.lost_actions) > 0) continue;   // a locked unit sits the action out (Lightning, Oblivion …) — no standing move
+      revealsThisTurn.push({ actor: id, action: 'EM', target: { kind: 'tile', ref: { q: so.target.q, r: so.target.r } }, skills: [], trance: null, effect: null, salt: '', destroy: null, phylactery: null, proxy: null, classAbility: null, bonus: null, manipAlt: null, build: null, siege: null, standing: true });
+      console.log(`[${PEER_LABEL}] standing order: ${id} T${hg.turn}.R${hg.round + 1} — no reveal in time, it plays its standing Empty Move toward (${so.target.q},${so.target.r})`);
+    }
+  }
   // Reveals from entities at 0 hp are ignored everywhere (stale discovery
   // mirrors, late gossip, a peer that died mid-handshake) so no resolver ever
   // lets a corpse deal damage or claim a tile. Life is public state, so every
@@ -4619,9 +5041,11 @@ async function doResolution() {
       const it = list[i];
       if (!obstacleBlocks(it.actor, oq, or)) continue;
       list.splice(i, 1);
-      const amount = roundHalfUp10(statOf(it.actor, 'matter'));
+      // Only an enemy wears it down: a building's wall stops its owner and allies too, but walking into your own wall
+      // used to knock round(Matter/10) off it — the hero's journey took the whole arc down (user 2026-11-28).
+      const amount = ob.owner !== it.actor && enemyOf(ob.owner, it.actor) ? roundHalfUp10(statOf(it.actor, 'matter')) : 0;
       if (amount > 0) obstacleHits.push({ owner: ob.owner, id: ob.id, by: it.actor, amount });
-      vetoed.set(it.actor, `held by an Earth obstacle (${amount} off it)`);
+      vetoed.set(it.actor, amount > 0 ? `held by an Earth obstacle (${amount} off it)` : 'stopped by a wall of its own side');
       journeyResults.set(it.actor, { outcome: 'blocked', q: oq, r: or, action: it.action });
       if (it.actor === PEER_ID_STRING || ob.owner === PEER_ID_STRING) log(`[${PEER_LABEL}] ${it.actor.slice(0, 8)} hits ${ob.owner.slice(0, 8)}'s obstacle at (${oq},${or}): −${amount} (hp ${ob.hp})`);
     }
@@ -5426,7 +5850,7 @@ async function doResolution() {
   for (const r of revealsThisTurn) {
     if (!r.siege || r.proxied || r.action !== 'EP' || r.effect) continue;
     const me = r.actor, vme = view.get(me), sg = GAMEMODELS?.npcs?.[vme?.npc_id]?.siege;
-    if (!sg || !vme?.follower || lifeOf(me) <= 0 || !Number.isInteger(r.siege.q) || !Number.isInteger(r.siege.r)) continue;
+    if (!sg || !(vme?.follower || vme?.village_id) || lifeOf(me) <= 0 || !Number.isInteger(r.siege.q) || !Number.isInteger(r.siege.r)) continue;   // a follower's, or a village's posted engine (2026-11-28)
     const from = { q: vme.tile_q, r: vme.tile_r }, to = { q: r.siege.q, r: r.siege.r }, who = vme.name || me.slice(0, 14);
     if (sg.kind === 'ram') {
       const wall = isLabyrinthWallAt(MAP_SEED, to.q, to.r), fz = wall ? null : fortressAt(MAP_SEED, to.q, to.r, worldEditsNow);
@@ -6695,6 +7119,7 @@ async function doResolution() {
       console.log(`[${PEER_LABEL}] permanent ${id} up: die ${entity.permPower[id]} (${Number.isInteger(power) ? 'fixed power' : `${st} ${entity.stats[st]}`})`);
     }
   }
+  capPermanents();
   // Publish immediately so the browser UI sees damage / movement at reveal
   // time, not only after cleanup fires a few seconds later.
   const effectStateChanged = healForMe > 0 || effectOutcomes.length > 0 || tokensSpent.length > 0 || counterPen.has(PEER_ID_STRING) || destroyOutcomes.length > 0 || classOutcomes.length > 0 || blessFired.length > 0 || Object.values(classAbilityOut).some(l => l.length > 0);
@@ -6783,6 +7208,9 @@ async function doResolution() {
   // sees: 'retry' (point-buy failed — the element re-emits next action, the
   // count stands), 'casting' (element out, more to come), 'done', 'blocked';
   // a channel whose stat no longer holds reports 'channel_broken'.
+  { const rec = revealsThisTurn.filter(r => r.fallback || r.standing).map(r => { const o = effectOutcomes.find(x => x.actor === r.actor && !x.bonus && !x.channel);
+      return { actor: r.actor, kind: r.fallback ? 'fallback' : 'standing', status: o?.oc?.status || null, kept: o?.oc?.kept || null }; });
+    playedFor.set(hg.action, rec); if (playedFor.size > 8) playedFor.delete(Math.min(...playedFor.keys())); }
   const castOutcome = (actorId, eff) => {
     if (!eff) return null;
     const o = effectOutcomes.find(x => x.actor === actorId && !x.bonus && !x.channel && x.eff?.effect_id === eff.effect_id);
@@ -6831,6 +7259,7 @@ function reshuffleIfEmpty() {
 // refills only at turn end), buffers reset, counters advance. Instants the
 // resolver judged useless (`returnedCardIds`) stay in hand (Rule 8 pc override).
 async function endRound() {
+  mark('endRound');
   // Autosave: an action has resolved — regardless of whether traps / tokens /
   // obstacles changed in this one, mark the state dirty so a quiet turn still
   // rolls to disk. The resolver's push / filter sites above also mark dirty
@@ -6929,7 +7358,7 @@ async function endRound() {
       casting = { entries: ch.entries, emitted, aura: ch.aura };
       carryOn = true;
     }
-  } else if (casting && !myLastReveal?.skipping) {
+  } else if (casting && !myLastReveal?.skipping && !myLastReveal?.holdCast) {   // holdCast: my fallback held it (its last element needs me)
     // Rule 19: an interrupted cast fails and the remaining card(s) are discarded.
     console.log(`[${PEER_LABEL}] cast of ${casting.entries.map(e => e.effectId).join('→')} failed — card(s) discarded`);
     const ends = chainEnds(casting.entries);
@@ -7336,7 +7765,7 @@ function llmApply() {
 // raise it one Barricade a turn on my own arc. Planning only — the resolver checks each Barricade as before.
 const BUILDER_CENTRE = (VILLAGE_ID && villageById(MAP_SEED, VILLAGE_ID)) || { q: 0, r: 0 };   // a village builder walls its village
 const BUILDER_RING = AI_ROLE === 'builder' ? ringHexes({ q: BUILDER_CENTRE.q, r: BUILDER_CENTRE.r }, Number(process.env.BUILDER_RING_RADIUS ?? 20)) : [];
-const BUILDER_HOME = homeIndex(PEER_LABEL, BUILDER_RING.length);
+const BUILDER_HOME = homeIndex(UNIT_LABEL, BUILDER_RING.length);
 const ringSkip = new Set();   // sites I could not reach (walled off): the next one along
 let ringWalk = { site: '', at: '', still: 0, action: -1 };
 // Built = a Barricade on the map, or one of mine raised this turn (my world edit is there before the overlay syncs) or
@@ -7459,7 +7888,11 @@ function agendaContext() {
   }
   const leaderSnap = ownerPeerId ? peersPublic.get(ownerPeerId) : null;
   const ctx = {
-    me: { life: entity.life, life_max: entity.lifeMax, q: me.q, r: me.r, dist_home: NPC_HOME ? _hd(me, NPC_HOME) : 0, role: NPC_DEF?.role || 'monster' },
+    // foes_near / friends_near (me counted): within 3 hexes — the `outnumbered` condition (a guard monster runs only at
+    // 1 life AND outnumbered, user 2026-11-28)
+    me: { life: entity.life, life_max: entity.lifeMax, q: me.q, r: me.r, dist_home: NPC_HOME ? _hd(me, NPC_HOME) : 0, role: NPC_DEF?.role || 'monster',
+      foes_near: npcEnemies().filter(p => Number.isInteger(p.tile_q) && _hd(me, _tq(p)) <= 3).length,
+      friends_near: 1 + peers.filter(p => p.peer_id !== PEER_ID_STRING && (p.life ?? 0) > 0 && sideOf(p.alliance) === MY_SIDE && Number.isInteger(p.tile_q) && _hd(me, _tq(p)) <= 3).length },
     home: NPC_HOME || me, foe, friend: unit(friends[0]), stranger, leader: leaderSnap && Number.isInteger(leaderSnap.tile_q) ? unit(leaderSnap) : null,
     village: v ? { id: v.id, name: v.name, q: v.q, r: v.r, radius: v.radius, cap: v.cap, units: peers.filter(p => p.village_id === v.id && !p.follower).length + 1,
       alarm: villageHostile.size > 0 && !!foe && villageHostile.has(foe.id), rep: v.reputation } : null,
@@ -7535,7 +7968,7 @@ function goalPlan(goal, ctx) {
     case 'post': {   // go to the spot and hold it: the gate itself (barred), its inner hex, or home (the gate guard's post outside)
       if (goal.at === 'wall' && wall) {   // a wall guard (2026-11-25): walks the ring inside the wall, two apart
         const ring = ringHexes({ q: centre.q, r: centre.r }, wall.radius - 1);
-        return walkTo(ring[(homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]);
+        return walkTo(ring[(homeIndex(UNIT_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]);
       }
       const spot = goal.at === 'gate' ? wall?.gate : goal.at === 'gate_inner' ? wall?.inner : NPC_HOME;
       return spot && _hd(me, spot) > 0 ? walkTo(spot) : has('B') && ctx.foe && ctx.foe.dist <= 2 ? { code: 'B' } : still;
@@ -7544,7 +7977,7 @@ function goalPlan(goal, ctx) {
     case 'return': return NPC_HOME ? walkTo(NPC_HOME) : still;
     case 'patrol': {
       const ring = ringHexes({ q: centre.q, r: centre.r }, Math.max(1, goal.radius ?? 4));
-      const i = (homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 3)) % ring.length;
+      const i = (homeIndex(UNIT_LABEL, ring.length) + Math.floor(hg.action / 3)) % ring.length;
       return walkTo(ring[i]);
     }
     case 'wander': {
@@ -7555,7 +7988,8 @@ function goalPlan(goal, ctx) {
     }
     case 'roam': {
       if (!ctx.village) return still;
-      const d = _hd(me, centre), lo = goal.min ?? 50, hi = goal.max ?? 100;
+      const half = agendaCtxCache?.v?.layout === 2 ? 0.5 : 1;   // layout 2: half the distances (2026-11-28)
+      const d = _hd(me, centre), lo = Math.round((goal.min ?? 50) * half), hi = Math.round((goal.max ?? 100) * half);
       if (d > hi) return walkTo(centre);
       if (d < lo) { const out = npcFreeNeighbours(me.q, me.r).sort((a, b) => _hd(b, centre) - _hd(a, centre))[0]; return out ? { code: moveCode, target: out } : still; }
       if (Math.random() < 0.35) return still;
@@ -7564,7 +7998,7 @@ function goalPlan(goal, ctx) {
       return walkTo(ring[(at + 3) % ring.length]);
     }
     case 'build': {   // inside a walled village the wall stands: the builder walks its inner ring and tends it
-      if (wall) { const ring = ringHexes({ q: centre.q, r: centre.r }, wall.radius - 1); return walkTo(ring[(homeIndex(PEER_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]); }
+      if (wall) { const ring = ringHexes({ q: centre.q, r: centre.r }, wall.radius - 1); return walkTo(ring[(homeIndex(UNIT_LABEL, ring.length) + Math.floor(hg.action / 2)) % ring.length]); }
       return AI_ROLE === 'builder' ? 'build' : still;
     }
     case 'repair': {   // the village mason (2026-11-25): the nearest broken building / wall hex of my village, else tend the wall
@@ -7673,7 +8107,7 @@ function spawnVillager(v, u, extra = {}) {
   villageSpawning.add(u.label);
   const env = { CHARACTER_ID: '', CREATURE_ID: u.npc, ENTITY_NAME: u.name, ALLIANCE: v.alliance, NPC_ID: u.npc, VILLAGE_ID: v.id, HOME_Q: String(u.q), HOME_R: String(u.r),
     PROFILE_TEAM: v.team, AI_ROLE: npc.role === 'builder' && !v.wall ? 'builder' : '', BUILDER_RING_RADIUS: String(Math.max(3, (v.clear_radius ?? 9) - 1)), WILD_LURKERS: '0', ...extra };
-  spawnCompanion(null, { creature_id: u.npc, name: u.name, at: { q: u.q, r: u.r }, wild: true, label: u.label, env })
+  spawnCompanion(null, { creature_id: u.npc, name: u.name, at: u.at || { q: u.q, r: u.r }, wild: true, label: u.label, ignore: u.ignore || null, env })
     .then(tag => { const c = companions.find(x => x.label === tag); if (c) c.village = v.id; if (tag) console.log(`[${PEER_LABEL}] village: ${u.name} walks out of ${v.team} at (${u.q},${u.r})`); })
     .catch(e => console.warn(`[${PEER_LABEL}] village: ${u.name} could not walk out: ${e.message}`))
     .finally(() => setTimeout(() => villageSpawning.delete(u.label), 15_000));
@@ -7692,6 +8126,7 @@ function villageGoneMap(edits) {
   return out;
 }
 function villageTick() {
+  mark('villageTick');
   if (!GAMEMODELS || !IS_HUMAN || IS_COMPANION || SHADOW_OF || entity.life <= 0 || !dimMap || selfStalled() || process.env.VILLAGES === '0') return;
   const me = { q: entity.tile.q, r: entity.tile.r };
   const peers = livePeers().filter(Boolean);
@@ -7700,11 +8135,12 @@ function villageTick() {
   // villageUnits), null = led away by a hero and still alive there (no rebirth yet)
   const gone = villageGoneMap(edits);
   const known = (q, r) => dimMap.has(q, r);
-  const livePeer = (label) => peersPublic.has(`peer:${label}`) || companions.some(c => c.label === label);
+    // a stand-in (S6) answers for the villager it stands in for
+  const livePeer = (label) => peersPublic.has(`peer:${label}`) || companions.some(c => c.label === label || c.standinOf === `peer:${label}`) || livePeers().some(x => x?.standin_of === `peer:${label}`);
   // dead villagers of any village I can see — and villagers a hero led away that died there (their `_f` follower):
   // the hero who sees it first records it, with the turn (the rebirth clock)
   for (const p of peers) if (p.npc_id && p.village_id && (p.life ?? 1) <= 0 && !p.village_leaving) {
-    const label = String(p.peer_id).replace(/^peer:/, '').replace(/_f$/, '');
+    const label = unitLabelOf(p).replace(/_f$/, '');
     if (p.follower && !/_[rw]\d+(_g\d+)?$/.test(label)) continue;   // a quest's new recruit is no resident
     if (Number.isFinite(gone.get(label)) || (entity.worldEdits || []).some(e => e.id === `vgone:${label}`)) continue;   // (an envoy that stayed: venvoy, no death)
     entity.worldEdits.push({ id: `vgone:${label}`, v: p.village_id, at: hg.action, turn: hg.turn }); gone.set(label, hg.turn);
@@ -7728,7 +8164,10 @@ function villageTick() {
     const isFighter = (u) => GAMEMODELS.npcs[u.npc]?.role === 'fighter';
     const war = villageRelations(MAP_SEED, v, ledger).some(x => x.war);
     const can = units.filter(u => livePeer(u.label) || known(u.q, u.r));
-    const pick = [...activeUnits(can.filter(u => !isFighter(u)), VILLAGE_ACTIVE), ...(war ? activeUnits(can.filter(isFighter), VILLAGE_FIGHTERS) : [])];
+    // a layout-2 village's posted engines (2026-11-28) are active units too — on slots of their own, so no villager
+    // gives its slot up for them (desktop; the phone's worker cap stays what it is)
+    const sieges = IS_MOBILE ? 0 : can.filter(u => u.post === 'siege').length;
+    const pick = [...activeUnits(can.filter(u => !isFighter(u)), VILLAGE_ACTIVE + sieges), ...(war ? activeUnits(can.filter(isFighter), VILLAGE_FIGHTERS) : [])];
     if (war !== villageAtWar.get(v.id)) { villageAtWar.set(v.id, war); if (war) console.log(`[${PEER_LABEL}] village: ${v.team} is at war — its fighters walk out`); }
     for (const u of pick) if (!livePeer(u.label)) spawnVillager(v, u);
     const sum = `${units.length}/${v.cap} units, ${out.length} out`;
@@ -7772,7 +8211,7 @@ if (NPC_DEF && !IS_FOLLOWER) setInterval(() => {
   if (livePeers().some(p => heroSnap(p) && _hd(me, _tq(p)) <= VILLAGER_LEAVE)) villagerHeroAt = Date.now();
   const recs = ledgerEdits(villageLedger()).filter(e => typeof e.id === 'string' && e.id.startsWith('vrec:')).map(e => e.id).sort().join(',');
   if (recs !== villagerRecsSeen) { villagerRecsSeen = recs; console.log(`[${PEER_LABEL}] village recruits seen: ${recs || 'none'}`); }
-  const recruited = recs.split(',').includes(`vrec:${PEER_LABEL}`);
+  const recruited = recs.split(',').includes(`vrec:${UNIT_LABEL}`);
   if (recruited || Date.now() - villagerHeroAt > 90_000) { villageLeaving = true; vanish(recruited ? 'I leave the village to follow a hero' : 'no hero near — I walk back into the village'); }
 }, 5_000).unref?.();
 
@@ -7789,7 +8228,7 @@ function noteVillageHits(res) {
     if (!(list || []).some(d => d.amount > 0 && mineIds.has(d.attacker))) continue;
     const snap = peersPublic.get(victim);
     if (!snap?.npc_id || snap.follower || !snap.village_id) continue;
-    const label = String(victim).replace(/^peer:/, '');
+    const label = unitLabelOf(snap);
     if ((entity.worldEdits || []).some(e => e.id === `vhit:${label}`)) continue;
     entity.worldEdits.push({ id: `vhit:${label}`, v: snap.village_id, at: hg.action });
     // attacking a not hostile creature (2026-11-25): my alignment −5 (once per unit, like the relationship)
@@ -7853,7 +8292,7 @@ function spyMissionsLeft(v) {
 // A wanderer of a village, out in the land, not mine yet: it may ask to be walked home.
 const homewardOk = (c) => c.def.role === 'wanderer' && !!c.v && !c.follower && !c.hired && _hd(_tq(c.p), c.v) > (c.v.clear_radius ?? 9);
 function wandererHomeTick(p) {
-  const to = villageById(MAP_SEED, p.homeward_to), label = String(p.peer_id).replace(/^peer:/, '').replace(/_f$/, '');
+  const to = villageById(MAP_SEED, p.homeward_to), label = unitLabelOf(p).replace(/_f$/, '');
   if (!to || _hd(_tq(p), to) > (to.clear_radius ?? 9) || (entity.worldEdits || []).some(e => e.id === `vhome:${label}`)) return;
   entity.worldEdits.push({ id: `vhome:${label}`, v: to.id, d: DIPLOMACY_STEP, turn: hg.turn, at: hg.action });
   alignDeed(`home:${label}`, ALIGN_STEP, `you walked ${p.name || 'a wanderer'} home`);
@@ -7868,7 +8307,7 @@ function diplomacyTick() {
   for (const p of livePeers().filter(x => x?.owner_peer_id === PEER_ID_STRING && x.follower && x.homeward_to && (x.life ?? 0) > 0 && Number.isInteger(x.tile_q))) wandererHomeTick(p);
   for (const p of livePeers().filter(x => x?.owner_peer_id === PEER_ID_STRING && x.follower && x.diplomat_to && (x.life ?? 0) > 0 && Number.isInteger(x.tile_q))) {
     const to = villageById(MAP_SEED, p.diplomat_to), from = villageById(MAP_SEED, p.village_id);
-    const label = String(p.peer_id).replace(/^peer:/, '').replace(/_f$/, '');
+    const label = unitLabelOf(p).replace(/_f$/, '');
     if (!to || !from || _hd(_tq(p), to) > (to.clear_radius ?? 9) || (entity.worldEdits || []).some(e => e.id === `venvoy:${label}`)) continue;
     if (p.diplomat_spy) {   // the paid mission: it whispers and sabotages — the two villages −5 % (each mission), I +5 % with its own
       const n = (entity.worldEdits || []).filter(e => typeof e.id === 'string' && e.id.startsWith(`vspy:${pairKey(from.id, to.id)}#`)).length + 1;
@@ -7936,7 +8375,7 @@ function talkCtx(npcPeerId) {
     const busy = questBusy.has(id), was = done.has(id) && !q.repeatable;
     return { id, q, barter: !!q.consume, done: was || busy, ready: !was && !busy && questMet(q, { archive: items }) };
   }).filter(Boolean);
-  const hired = (entity.worldEdits || []).some(e => e.id === `vrec:${String(p.peer_id).replace(/^peer:/, '')}`);
+  const hired = (entity.worldEdits || []).some(e => e.id === `vrec:${unitLabelOf(p)}`);
   return { p, def, v, me, dist, rep, quests, follower: !!p.follower, hired, mine: !!p.follower && p.owner_peer_id === PEER_ID_STRING };
 }
 // The questions a villager answers (user 2026-11-24: "different dialogue options of different roles"): who it is, what
@@ -8086,7 +8525,7 @@ function talkAnswer(c, topic) {
       : 'You carry no magic at all! Kill a caster, explore a dungeon or rest at a school — then come back.' };
   }
   if (topic === 'arms') {   // a smith points at the village's forge-like buildings: stat-buy them for a bonus token
-    const b = (GAMEMODELS.villages?.[c.v?.template]?.layout || []).map(l => ({ ...GAMEMODELS.buildings[l.building], at: l.at })).find(x => x?.bank && /smith|range|forge/i.test(x.name || '')) || null;
+    const b = (villageTemplate(c.v)?.layout || []).map(l => ({ ...GAMEMODELS.buildings[l.building], at: l.at })).find(x => x?.bank && /smith|range|forge/i.test(x.name || '')) || null;
     return { text: b
       ? `Stand by our ${b.name} and pour your ${b.bank.stat} into it, one emission each action. At ${b.bank.value} it breaks — and you walk away with a ${b.bank.stat} token on your character. The village will not love you for it, mind.`
       : 'Strength? Fight, survive, and take the cards of what you kill. That is how heroes are forged.' };
@@ -8095,7 +8534,7 @@ function talkAnswer(c, topic) {
     if (c.hired) return { text: 'I already ride with you.' };
     if (c.rep < rp.enter) return { text: `${line('warn') || 'Not yet.'} Earn the village's trust first — ${rp.enter}%; you stand at ${c.rep}%.` };
     if (c.dist > 2) return { text: 'Come closer, and we shake on it.' };
-    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    const label = unitLabelOf(c.p);
     entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_hire: c.def.id, at: hg.action });
     spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
       env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '' } })
@@ -8137,7 +8576,7 @@ function talkAnswer(c, topic) {
     if (c.rep < rp.hostile) return { text: line('warn') || 'I do not travel with enemies of my village.' };
     if (myDiplomat()) return { text: `You already lead ${myDiplomat()} — one embassy at a time.` };
     if (c.dist > 2) return { text: 'Come closer, and we set out together.' };
-    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    const label = unitLabelOf(c.p);
     entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_escort: to.id, at: hg.action });
     spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
       env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '', DIPLOMAT_TO: to.id } })
@@ -8153,7 +8592,7 @@ function talkAnswer(c, topic) {
     if (topic === 'homeward_how') { const to = villageById(MAP_SEED, c.p.homeward_to); return { text: to ? `${to.team} — ${compassOf(_tq(c.p), to)}, ${walkWords(_hd(_tq(c.p), to), ROUND_SEC)}. Walk me up to the village and I am home.` : 'Not far now, I hope.' }; }
     if (!homewardOk(c)) return { text: line('greet') || 'I know my way, thank you.' };
     if (c.dist > 2) return { text: 'Come closer, and we walk together.' };
-    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    const label = unitLabelOf(c.p);
     entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_homeward: 1, at: hg.action });
     spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
       env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '', HOMEWARD_TO: c.v.id } })
@@ -8169,7 +8608,7 @@ function talkAnswer(c, topic) {
     if (!to || to.id === c.v.id || !spyMissionsLeft(c.v)) return { text: 'Pay me first — and we never spoke of it.' };
     if (myDiplomat()) return { text: `You already lead ${myDiplomat()} — one embassy at a time.` };
     if (c.dist > 2) return { text: 'Closer. These things are not shouted.' };
-    const label = String(c.p.peer_id).replace(/^peer:/, '');
+    const label = unitLabelOf(c.p);
     entity.worldEdits.push({ id: `vrec:${label}`, v: c.v.id, by_spy: to.id, at: hg.action });
     spawnCompanion(null, { creature_id: c.p.npc_id, name: c.p.name || c.def.name, at: { q: c.p.tile_q, r: c.p.tile_r }, wild: false, label: `${label}_f`,
       env: { CHARACTER_ID: '', CREATURE_ID: c.p.npc_id, ENTITY_NAME: c.p.name || c.def.name, NPC_ID: c.p.npc_id, VILLAGE_ID: c.v.id, FOLLOWER: '1', PROFILE_TEAM: '', DIPLOMAT_TO: to.id, DIPLOMAT_SPY: '1' } })
@@ -8270,7 +8709,7 @@ function recruitFollowers(v, r, qid, giver = null, n = 0) {
       : livePeers().filter(p => p?.village_id === v.id && p.npc_id === npc && !p.follower && (p.life ?? 0) > 0 && !taken.has(p.peer_id) && Number.isInteger(p.tile_q))
         .sort((a, b) => _hd(me, _tq(a)) - _hd(me, _tq(b)))[0];
     if (hireOfGiver && !vill) continue;
-    const label = vill ? String(vill.peer_id).replace(/^peer:/, '') : `${v.id.replace(/[^a-z0-9]+/gi, '_')}_q_${qid}${n ? `_${n}` : ''}_${i}`;
+    const label = vill ? unitLabelOf(vill) : `${v.id.replace(/[^a-z0-9]+/gi, '_')}_q_${qid}${n ? `_${n}` : ''}_${i}`;
     if (vill) { taken.add(vill.peer_id); entity.worldEdits.push({ id: `vrec:${label}`, v: v.id, by_quest: qid, at: hg.action }); }
     const name = `${vill?.name || `${GAMEMODELS.npcs[npc].name} of ${v.name}`}`;
     spawnCompanion(null, { creature_id: npc, name, at: vill ? { q: vill.tile_q, r: vill.tile_r } : null, wild: false, label: `${label}_f`,
@@ -8282,6 +8721,7 @@ function recruitFollowers(v, r, qid, giver = null, n = 0) {
   return out;
 }
 async function npcPlan() {
+  mark('npcPlan');
   npcFree = false; queuedBuild = null; queuedSiege = null;
   await npcPlanRules();
   if (HIRED_BUILDER && hiredBuildPlan()) return;   // an order from my leader comes before following it
@@ -8405,8 +8845,76 @@ async function npcPlanRules() {
 // for the same action can be compared and a divergence named entity by entity.
 const lastStateHashes = new Map();   // action -> { hash, region }
 let divergenceCount = 0;
+// S7 catch-up: what the others resolved for MY unit in the actions a clock catch-up skipped (frozen: standing orders
+// moved me, or I was hit) — the newest such action, by how many peers report it. Applied at the catch-up and again
+// whenever a newer skipped action's report arrives (a freeze drops my links, so their state hashes often land after
+// the jump), so my own snapshot does not drag my unit back to where it stood when I froze.
+function noteCohortSelf(k, region) {
+  if (lastStateHashes.has(k)) return;
+  const e = (region || []).find(x => x.id === PEER_ID_STRING);
+  if (!e || !Array.isArray(e.tile) || !Number.isInteger(e.tile[0]) || !Number.isInteger(e.tile[1]) || typeof e.life !== 'number') return;
+  const byVal = cohortSelf.get(k) || new Map(), key = `${e.tile[0]},${e.tile[1]}|${e.life}`;
+  const v = byVal.get(key) || { tile: e.tile, life: e.life, n: 0 }; v.n++; byVal.set(key, v); cohortSelf.set(k, byVal);
+  if (cohortSelf.size > 12) for (const old of [...cohortSelf.keys()].sort((a, b) => a - b).slice(0, cohortSelf.size - 12)) cohortSelf.delete(old);
+  if (catchUpSpan && k >= catchUpSpan.from && k < catchUpSpan.to) adoptCohortSelf();
+}
+function adoptCohortSelf() {
+  if (!catchUpSpan || entity.life <= 0 || currentPhase !== 'planning') return;   // never under my own running resolver
+  if (hg.action > catchUpSpan.to + 6) { catchUpSpan = null; return; }   // long past the jump: my own resolver rules again
+  const ks = [...cohortSelf.keys()].filter(k => k >= catchUpSpan.from && k < catchUpSpan.to && k > catchUpSpan.adopted && !lastStateHashes.has(k)).sort((a, b) => b - a);
+  if (!ks.length) return;
+  const best = [...cohortSelf.get(ks[0]).values()].sort((a, b) => b.n - a.n)[0];
+  catchUpSpan.adopted = ks[0];
+  if (best.tile[0] === entity.tile.q && best.tile[1] === entity.tile.r && best.life === entity.life) return;
+  console.log(`[${PEER_LABEL}] clock catch-up: the cohort resolved my unit at action ${ks[0]} — (${entity.tile.q},${entity.tile.r}) hp${entity.life} → (${best.tile[0]},${best.tile[1]}) hp${best.life} (${best.n} peer(s))`);
+  entity.tile = { q: best.tile[0], r: best.tile[1] };
+  if (best.life > 0) entity.life = Math.min(entity.lifeMax, best.life);   // a death while frozen is left to the normal damage path
+  publishPublicState().catch(() => {});
+}
+// A freeze closes my links, so the state hashes of the actions I skipped mostly never reach me: I ask (evt_self_query,
+// at the jump and twice more while my links come back) and every peer that resolved my unit in one of them answers
+// with its newest such entry (evt_self_report). Diagnostics-free: an answer is only a region entry it published anyway.
+function askCohortSelf(span) {
+  const ask = (n) => { if (catchUpSpan !== span || span.adopted >= 0) return;
+    emitEnvelope({ type: 'evt_self_query', payload: { from: span.from, to: span.to }, viaBus: true }).catch(() => {});
+    if (n < 2) setTimeout(() => ask(n + 1), n ? 5000 : 2500); };
+  ask(0);
+}
+const selfQueryAnswered = new Set();
+function answerSelfQuery(env) {
+  const who = env.actor_peer_id, p = env.payload || {};
+  if (!who || who === PEER_ID_STRING || !Number.isInteger(p.from) || !Number.isInteger(p.to)) return;
+  const k = [...lastStateHashes.keys()].filter(a => a >= p.from && a < p.to && lastStateHashes.get(a).region.some(e => e.id === who)).sort((a, b) => b - a)[0];
+  if (k === undefined || selfQueryAnswered.has(`${who}@${k}`)) return;   // (a unit I played a fallback for is in my region that action)
+  selfQueryAnswered.add(`${who}@${k}`); if (selfQueryAnswered.size > 200) selfQueryAnswered.clear();
+  const e = lastStateHashes.get(k).region.find(x => x.id === who);
+  const played = [...playedFor.entries()].filter(([a]) => a >= p.from && a < p.to).flatMap(([a, list]) => list.filter(x => x.actor === who).map(x => ({ action: a, kind: x.kind, status: x.status, kept: x.kept })));
+  emitEnvelope({ type: 'evt_self_report', payload: { for_peer: who, action: k, tile: e.tile, life: e.life, played }, viaBus: true }).catch(() => {});
+}
+// My fallback was played for me while I was frozen (a self report says so): its cards leave my hand like a played plan's,
+// a cast it carried on advances (a point-buy roll that failed re-emits, as endRound does); the queued pick keeps its cards.
+function applyMissedFallback(played) {
+  const fbr = myFallback, x = (played || []).find(y => y.kind === 'fallback' && y.action === fbr?.action);
+  if (!x || fbr.applied || lastStateHashes.has(fbr.action) || hg.action <= fbr.action) return;
+  fbr.applied = true;
+  const r = fbr.reveal, ids = (sel) => sel.map(i => typeof i === 'number' ? hand[i]?.card_id ?? null : i);
+  const keep = { q: ids(queued), s: ids(queuedSkills), e: typeof queuedEffect === 'number' ? hand[queuedEffect]?.card_id : null, e2: typeof queuedEffect2 === 'number' ? hand[queuedEffect2]?.card_id : null };
+  const spent = [r.cardId, ...(r.skillCardIds || [])].filter(Boolean);
+  for (const cid of spent) { const i = hand.findIndex(c => c.card_id === cid); if (i >= 0) discard.push(...hand.splice(i, 1)); }
+  const back = (cid) => { const i = hand.findIndex(c => c.card_id === cid); return i >= 0 ? i : null; };
+  queued = keep.q.map(v => ['EMPTY', 'EP', 'EM'].includes(v) ? v : back(v)).filter(v => v !== null);
+  queuedSkills = keep.s.map(back).filter(v => v !== null); queuedEffect = keep.e ? back(keep.e) : null; queuedEffect2 = keep.e2 ? back(keep.e2) : null;
+  if (r.chain && casting) {
+    const ch = r.chain, retry = x.status === 'retry', at = chainAt(ch.entries, ch.step);
+    if (x.kept && at) at.entry.kept = x.kept;
+    casting = { entries: ch.entries, emitted: retry ? ch.step - 1 : ch.step, aura: ch.aura };
+  }
+  console.log(`[${PEER_LABEL}] my fallback was played for me at action ${fbr.action} (${fbr.why}) — ${spent.length} card(s) spent${r.chain ? `, cast ${x.status === 'retry' ? 're-emits' : 'advanced'}` : ''}`);
+  broadcastUI(handMsg());
+}
 function checkStateHash(env) {
   const k = actionKey(env.turn, env.round);
+  noteCohortSelf(k, env.payload?.region);
   const mine = lastStateHashes.get(k);
   if (!mine || !env.payload?.state_hash || mine.hash === env.payload.state_hash) return;
   const theirs = new Map((env.payload.region || []).map(e => [e.id, e]));
@@ -8454,6 +8962,8 @@ function inboxApply(env) {
     if (pending) { clearTimeout(pending.timer); handRequestsMap().delete(env.payload.req_id); pending.resolve({ peer_id: env.actor_peer_id, name: who, cards: env.payload.cards, hand_count: env.payload.hand_count ?? null }); }
   }
   if (env.type === 'evt_hand_request' && env.payload?.for_peer === PEER_ID_STRING) answerHandRequest(env);
+  if (env.type === 'evt_self_query') answerSelfQuery(env);   // S7 catch-up
+  if (env.type === 'evt_self_report' && env.payload?.for_peer === PEER_ID_STRING && Number.isInteger(env.payload.action)) { noteCohortSelf(env.payload.action, [{ id: PEER_ID_STRING, tile: env.payload.tile, life: env.payload.life }]); applyMissedFallback(env.payload.played); }
 }
 // -------- hand queries (user rework 2026-11-14: Prophet's first-contact look; reusable — e.g. Manipulator) --------
 // requestHand(peerId, {n, why}) asks another peer to show me its hand — `n` random cards, or all (n null).
@@ -8806,10 +9316,12 @@ async function tick() {
     // check the lagged peer only noticed at the end of its own resolution,
     // which meant a stable "one round behind forever" state once drift
     // slipped past a single phase.
+    if (CLOCK_SCHEDULE) adoptEpoch();
     if (catchUpClock()) {
       currentPhase = 'planning';
       phaseEndsAt = roundDeadline;
-      broadcastUI({ kind: 'phase', name: 'planning', seconds: Math.max(0, Math.round((phaseEndsAt - Date.now()) / 100) / 10), heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN });
+      adoptCohortSelf();
+      broadcastUI({ kind: 'phase', name: 'planning', seconds: Math.max(0, Math.round((phaseEndsAt - Date.now()) / 100) / 10), heartbeat: anyAdjacentOpponents(), turn: hg.turn, round: hg.round, rounds_per_turn: ROUNDS_PER_TURN, catchup: true });
       broadcastUI(handMsg());
       await publishPublicState();
       return;
@@ -8823,7 +9335,7 @@ async function tick() {
       // Reveal once everyone has committed (so nobody adapts to an early
       // reveal), or when the cap expires and stragglers are treated as EP.
       if (!allIn(commitsSeen)) await pullFromDiscovery('commits', commitsSeen);
-      if (!allIn(commitsSeen) && (!expired || waitingOnBusyMember(commitsSeen, 'planning'))) return;
+      if (!allIn(commitsSeen) && (!expired || (!CLOCK_SCHEDULE && waitingOnBusyMember(commitsSeen, 'planning')))) return;
       await doReveal();
       enterPhase('resolution');
     } else if (currentPhase === 'resolution') {
@@ -8855,7 +9367,7 @@ async function tick() {
         return;
       }
       if (!allIn(revealsSeen)) await pullFromDiscovery('reveals', revealsSeen);
-      if (!allIn(revealsSeen) && (!expired || waitingOnBusyMember(revealsSeen, 'reveal') || waitingOnCommitter())) return;
+      if (!allIn(revealsSeen) && (!expired || (!CLOCK_SCHEDULE && (waitingOnBusyMember(revealsSeen, 'reveal') || waitingOnCommitter())))) return;
       await doResolution();
       await endRound();
       checkStandoff();
@@ -8893,7 +9405,16 @@ function checkStandoff() {
 // drift up to a full round build up between runs.
 function catchUpClock() {
   let ref = null;
-  for (const p of clockPeers()) {
+  if (CLOCK_SCHEDULE && clockEpoch !== null) {
+    // Behind the schedule: while planning, any action; mid-handshake only once the next action has passed as well
+    // (the handshake I am in closes at its boundary by itself).
+    const due = scheduledAction();
+    if (!(due > hg.action && (currentPhase === 'planning' || due > hg.action + 1))) return false;
+    // Less than a second of the due action's planning left: land in the next one — a commit that late reaches the
+    // others after their window and its reveal is late everywhere (s7probe: the resumed villager's T5.R1).
+    const land = scheduleEnds(due).planning - Date.now() < 1000 ? due + 1 : due;
+    ref = { action: land, peer_id: 'the clock schedule', phase: 'planning' };
+  } else for (const p of clockPeers()) {
     if (p.peer_id === PEER_ID_STRING || typeof p.action !== 'number') continue;
     if (p.action > hg.action && (!ref || p.action > ref.action)) ref = p;
   }
@@ -8907,7 +9428,7 @@ function catchUpClock() {
   // frozen, so other peers see us stuck while our browser renders mid-slide —
   // the "hero dancing / stuck in place" symptom. endRound at the natural
   // tail of this handshake will land us at ref.action with no drift.
-  if (skipped === 1 && (currentPhase === 'reveal' || currentPhase === 'resolution')) return false;
+  if (!CLOCK_SCHEDULE && skipped === 1 && (currentPhase === 'reveal' || currentPhase === 'resolution')) return false;
   // One behind while planning: only a member of OUR strong region counts as
   // evidence that we are late. Such a member waits for our commit, so if it
   // is already planning the next action it resolved this one without us —
@@ -8917,20 +9438,24 @@ function catchUpClock() {
   // 8.4 s rounds while their caps waited on it). A far peer one ahead is not
   // evidence of anything — a lone explorer with an empty region closes its
   // rounds the instant its deadline passes and must not pace the dimension.
-  if (skipped === 1) {
+  if (skipped === 1 && !CLOCK_SCHEDULE) {
     const strong = new Set(expectedMembers());
     const ahead = livePeers().find(p => p.peer_id !== PEER_ID_STRING && p.action === hg.action + 1 && strong.has(p.peer_id));
     if (!ahead) return false;
     ref = ahead;
   }
-  const oldTurn = hg.turn;
+  const oldTurn = hg.turn, oldAction = hg.action;
   hg.action = ref.action;
   hg.turn = Math.floor(hg.action / ROUNDS_PER_TURN);
   hg.round = hg.action % ROUNDS_PER_TURN;
-  // Forfeit any in-flight pick for the old action. The handshake buffers
-  // (commitsSeen / revealsSeen) are keyed by action so they'll just be
-  // ignored once we move past them.
-  queued = []; target = null; locked = false; myLastReveal = null;
+  // The skipped actions are forfeited, but the pick I had staged is KEPT for the action I land in (user 2026-11-27:
+  // the hero caught up 392 times in hollow-hollows-5 and lost its planning window each time). The hand only grows
+  // below (refill pushes at the end), so the staged hand indices still name the same cards; the UI gets
+  // `catchup` on the planning message and re-sends or re-aims it (a journey: an EM at its destination). The
+  // handshake buffers (commitsSeen / revealsSeen) are keyed by action so the old action's are just ignored.
+  locked = false; myLastReveal = null;
+  catchUpSpan = { from: oldAction, to: hg.action, adopted: -1 };   // adoptCohortSelf once I am planning again
+  askCohortSelf(catchUpSpan);
   // Crossed a turn boundary (ROUNDS_PER_TURN actions)? Refill the hand up to
   // HAND_SIZE and clear the discard-flag set so the player isn't stuck with a
   // depleted hand after a jump. Monsters never discard leftovers, so skip the
@@ -8952,7 +9477,7 @@ function catchUpClock() {
     if (p.peer_id === PEER_ID_STRING || p.action !== hg.action || p.phase !== 'planning') continue;
     if (typeof p.phase_ends_at === 'number' && p.phase_ends_at > latest) latest = p.phase_ends_at;
   }
-  roundDeadline = Math.max(latest, Date.now() + 2000);
+  roundDeadline = CLOCK_SCHEDULE && clockEpoch !== null ? scheduleEnds(hg.action).planning : Math.max(latest, Date.now() + 2000);
   console.log(`[${PEER_LABEL}] clock catch-up: +${skipped} action(s) to turn ${hg.turn} round ${hg.round} (from ${ref.peer_id}, ref.phase=${ref.phase})`);
   return true;
 }
@@ -9020,7 +9545,7 @@ function buildDoor(now) {
     profile_char_id: profileChar ? PROFILE_CHAR_ID : (process.env.SHADOW_PROFILE_CHAR_ID || ''), team_name: PROFILE_TEAM,
     // Hero shadows (rule_hero_shadow): a shadow's hero and, once it fell, who killed it with which card — the
     // player's device settles its profile from these (join-plan.mjs resolveShadows, game/shadow-settle.mjs).
-    shadow_of: SHADOW_OF, ...(shadowDeath ? { shadow_death: shadowDeath } : {}),
+    shadow_of: SHADOW_OF, standin_of: STANDIN_OF, ...(shadowDeath ? { shadow_death: shadowDeath } : {}),
     // Unattended characters (rule_unattended_character): link, master, followers, combo (the launcher's unit list)
     // and `out` (I left the dimension — not alive here any more).
     ...doorUnitFields({ ally_of: allyOfNow, led_by: ledBy, leader: SHADOW_OF ? 0 : followersOf(PEER_ID_STRING), human: IS_HUMAN ? 1 : 0, joined_at: JOINED_AT,
@@ -9049,6 +9574,7 @@ function buildDoor(now) {
   return { dimensionDoc, door };
 }
 async function publishDoor() {
+  mark('publishDoor');
   // Test games are local and private (user 2026-11-16): no Door ever leaves this box (DIM_PRIVATE, set by the
   // launcher / phone menu for Test my character / team / random).
   if (DIM_PRIVATE) return;
@@ -9322,6 +9848,7 @@ wss.on('connection', (ws) => {
         else target = null;
         if (queuedEffect !== null && !casting && EFFECT_RULES[hand[queuedEffect]?.effect_id]?.resurrect) { prepareSummon(hand[queuedEffect], false); broadcastUI(handMsg()); }
       }
+      if (m.kind === 'standing') { const t = m.target; standingTarget = t && Number.isInteger(t.q) && Number.isInteger(t.r) ? { q: t.q, r: t.r } : null; }   // S7: my journey's next hex
       if (m.kind === 'lock') { locked = true; }
       if (m.kind === 'bonus') {
         if (locked) return;
@@ -9601,3 +10128,6 @@ async function _gracefulShutdown(sig) {
 process.on('SIGINT',  () => { _gracefulShutdown('SIGINT').catch(() => process.exit(1)); });
 process.on('SIGTERM', () => { _gracefulShutdown('SIGTERM').catch(() => process.exit(1)); });
 process.on('beforeExit', () => { try { _autosave?.hardSave(); } catch {} });
+
+// S6: every declaration above has run — the timers may reach all of it now.
+moduleReady = true;

@@ -240,8 +240,9 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
     if (!/\{name\}/.test(v.team || '')) e(id, 'team must contain {name} ("{name} Village")');
     if (!(Number.isInteger(v.cap) && v.cap >= 1 && v.cap <= 20)) e(id, 'cap 1..20');
     if (!(Number.isInteger(v.radius) && v.radius >= 3 && v.radius <= 12)) e(id, 'radius 3..12');
-    if (v.size !== undefined && v.size !== 'hamlet') e(id, 'size: "hamlet" or none (a full village)');
-    if (v.size === 'hamlet' && !Object.values(m.village).some(o => o.race === v.race && o.size === undefined)) e(id, 'a hamlet needs a full village of its race');
+    // "rename the hamlet to outpost" (user 2026-11-28)
+    if (v.size !== undefined && v.size !== 'outpost') e(id, 'size: "outpost" or none (a full village)');
+    if (v.size === 'outpost' && !Object.values(m.village).some(o => o.race === v.race && o.size === undefined)) e(id, 'an outpost needs a full village of its race');
     const hexes = new Set();
     const dist = ([q, r]) => Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
     for (const l of v.layout || []) {

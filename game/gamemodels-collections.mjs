@@ -25,12 +25,12 @@ function source(dataDir, { dir = GAMEMODELS_DIR } = {}) {
 }
 
 // A village template has no name of its own (its team is "{name} Village", the name rolled per map): the editor calls
-// it after its race — vil_barbarians "Barbarian Village", vil_barbarians_hamlet "Barbarian Hamlet" (user 2026-11-25).
+// it after its race — vil_barbarians "Barbarian Village", vil_barbarians_outpost "Barbarian Outpost" (user 2026-11-25; hamlet → outpost 2026-11-28).
 const singular = (name) => String(name).replace(/ves$/, 'f').replace(/s$/, '');
 export function villageName(def, races = {}) {
   const race = races[def.race];
-  const who = singular(race?.name || String(def.race || def.id).replace(/^(race|vil)_/, '').replace(/_hamlet$/, '').split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '));
-  return `${who} ${def.size === 'hamlet' ? 'Hamlet' : 'Village'}`;
+  const who = singular(race?.name || String(def.race || def.id).replace(/^(race|vil)_/, '').replace(/_(hamlet|outpost)$/, '').split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' '));
+  return `${who} ${def.size === 'outpost' || def.size === 'hamlet' ? 'Outpost' : 'Village'}`;
 }
 
 const entryOf = (def, kind, defs) => {

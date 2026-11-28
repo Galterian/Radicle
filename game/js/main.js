@@ -7,7 +7,7 @@ import { hexDistance as hexDistanceQR, stepToward, findPath } from './hex.js';
 import { createKnownMap, initialBlock, HERO_SIGHT_RADIUS, ALLY_SIGHT_RADIUS, DEFAULT_REVEAL_RADIUS, featureAt as worldItemAt } from './map.js';   // worldItemAt: the seed's bonus items (Shrine, Crystal …), NOT features.js featureAt (buildings / walls)
 import { createSoundBank, resourcesFor, loadResources, assetUrl, onAssetsChanged } from './sprites.js';
 import { featureAt, isLabyrinthWallAt, onFeaturesChanged, placedBuildingsFrom, setPlacedBuildings } from './features.js';
-import { loadVillageCatalog, villageCatalog, villageOfCell, villageRep, questsDone, sameRace, villagesNear, brokenHexes, villageRelations, villageById, compass, alignmentWords, ALIGN_HOSTILE_GAP } from './villages.js';
+import { loadVillageCatalog, villageCatalog, villageTemplate, villageOfCell, villageRep, questsDone, sameRace, villagesNear, brokenHexes, villageRelations, villageById, compass, alignmentWords, ALIGN_HOSTILE_GAP } from './villages.js';
 import { ledgerUnits } from './world-ledger.js';
 // Buildings created during play (Animator copy / Priest Shrine, 2026-11-14): everyone's world_edits_json
 // `made:q,r` → the features.js overlay (renderer + object cards repaint through onFeaturesChanged).
@@ -523,8 +523,29 @@ function resumeJourney() {
   state.target = { q: step.q, r: step.r };
   state.ui.selectedTarget = step;
   send({ kind: 'target', target: state.target });
+  // S7 standing order, played as an Empty Move if a reveal of mine misses the deadline: from this step, the farthest
+  // path hex still in a straight line (like journeyLeap), so the half-way walk stays on the path.
+  let far = 0;
+  for (let i = 1; i < path.length; i++) if (hexDistance({ tile_q: step.q, tile_r: step.r }, { tile_q: path[i].q, tile_r: path[i].r }) === i) far = i; else break;
+  send({ kind: 'standing', target: far ? { q: path[far].q, r: path[far].r } : null });
   logUI(`journey → (${step.q},${step.r}) toward (${dest.q},${dest.r}) [EM, auto]`, 'phase');
   return true;
+}
+
+// After a clock catch-up the staged journey step becomes one EM aimed down the path: the farthest path hex still in a
+// straight line from me (hex distance = its index + 1), so the resolver's half-way walk (round(d/2) steps) stays on
+// the path and makes up some of the skipped actions.
+function journeyLeap() {
+  const me = state.entities.find(p => p.peer_id === driverId());
+  const path = state.ui.pathPlan;
+  if (!me || !Array.isArray(path) || path.length < 2) return;
+  let far = 0;
+  for (let i = 1; i < path.length; i++) if (hexDistance({ tile_q: me.tile_q, tile_r: me.tile_r }, { tile_q: path[i].q, tile_r: path[i].r }) === i + 1) far = i; else break;
+  if (!far) return;
+  state.target = { q: path[far].q, r: path[far].r };
+  state.ui.selectedTarget = path[Math.round((far + 1) / 2) - 1];
+  send({ kind: 'target', target: state.target });
+  logUI(`clock catch-up — journey goes on: EM toward (${path[far].q},${path[far].r}), ${Math.round((far + 1) / 2)} hex(es) this action`, 'phase');
 }
 
 // --- event-log filter: click an entity to narrow the log to its events ---
@@ -1028,7 +1049,7 @@ function renderDeck() {
       const hints = [
         fxUi(card.effect_id).target_hint ? fxUi(card.effect_id).target_hint
           : card.tile_target ? 'Left-click a tile for its target (general_ux_range_cast_target).' : '',
-        card.takes_attach ? 'Click a second effect card in hand — it rides on this cast.' : '',
+        card.takes_attach ? 'Click a second effect card in hand — it rides on this cast (Traps Mastery: that card becomes the trap under the permanent; none clicked: the effect with the most elements; no other effect in hand: the cast fizzles).' : '',
         card.takes_link ? 'Click an ally stat in the unit list to link it.' : '',
         card.takes_elem ? (card.elem_choice ? 'Bonus tile token: click your Vitality pill (Vitality) or Matter pill (Earth)… or the engine takes the higher of the two stats.' : 'Pick the token element by clicking one of your stat pills… or let the engine choose.') : '',
         card.takes_possess ? 'Possess: open the archive (double-click the pile) and press 👁 on a creature you killed to play it — none picked: your strongest one. No creature in your archive: you get the Phylactery permanent.' : '',
@@ -1058,6 +1079,11 @@ function renderDeck() {
         if (iconMount) iconMount.appendChild(makeSkillIcon(card.skill_id, { size: 28, title: card.name, srcMark: false }));   // the slot has the full badge
       }
       slot.title = text || card.name;
+    } else if (card && (card.kind === 'creature' || card.kind === 'class')) {
+      delete slot.dataset.code; delete cardDiv.dataset.code;
+      const cre = card.kind === 'creature';
+      setCardHtml(cardDiv, `<div class="nm">${cre ? '🐾' : '⚜'} ${escHtml(card.name || card.creature_id || card.class_id || 'card')}</div><div class="ds">${cre ? `creature · Σ${card.stat_sum ?? '?'}` : 'class card'} — no action: archive it again (archive pile, then this card)</div><div class="cd">${card.card_id.slice(-5)}</div>`);
+      slot.title = `${card.name}: a ${cre ? 'creature' : 'class'} card plays no action from the hand. Click the archive pile, then this card — it goes back to the archive at this resolution${cre ? ', where Possess and Summoning can use it' : ''}.`;
     } else if (card) {
       const code = card.code;
       slot.dataset.code = code;
@@ -1131,6 +1157,11 @@ function renderArchivePopup() {
   const sub = document.getElementById('ap-sub');
   if (!list) return;
   if (sub) sub.textContent = `${state.archive.length} archived · ${state.circulating} circulating (min ${state.deckMin})`;
+  // Rebuilt only when what it shows changed (2026-11-28): every pile update used to rewrite it — several times a
+  // second — so the cards flickered and a click whose mouse-down and mouse-up straddled a rewrite was lost.
+  const sig = JSON.stringify([state.archive.map(c => [c.card_id, c.killed, c.stat_sum]), state.possessPick]);
+  if (list.dataset.sig === sig && list.childElementCount) return;
+  list.dataset.sig = sig;
   if (!state.archive.length) { list.innerHTML = '<div class="empty">nothing archived yet — click the pile, then a hand card</div>'; return; }
   list.innerHTML = state.archive.map(c => {
     const creature = c.kind === 'creature', klass = c.kind === 'class';
@@ -1142,7 +1173,18 @@ function renderArchivePopup() {
   // and class cards (user override of the "creatures stay for Summoning"
   // default). The peer accepts the id regardless of kind now.
   list.querySelectorAll('.possess-pick').forEach(b => b.addEventListener('click', (ev) => { ev.stopPropagation(); send({ kind: 'possess_pick', card_id: b.dataset.pick }); uilog('possess_pick', { detail: b.dataset.pick }); }));
-  list.querySelectorAll('.ac').forEach(d => d.addEventListener('click', () => { send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id }); }));
+  // A creature asks for a second click (2026-11-28: one stray click sent the creature Possess was to play to the
+  // discard pile, and Possess landed as the Phylactery).
+  list.querySelectorAll('.ac').forEach(d => d.addEventListener('click', () => {
+    const c = state.archive.find(x => x.card_id === d.dataset.id);
+    if (c?.kind === 'creature' && renderArchivePopup.armed !== c.card_id) {
+      renderArchivePopup.armed = c.card_id; setTimeout(() => { if (renderArchivePopup.armed === c.card_id) renderArchivePopup.armed = null; }, 4000);
+      logUI(`${c.name}: click again to put it onto your discard pile — it leaves the archive, so Possess / Summoning cannot use it then`, 'phase');
+      return;
+    }
+    renderArchivePopup.armed = null;
+    send({ kind: 'unarchive', card_id: d.dataset.id }); uilog('unarchive', { detail: d.dataset.id });
+  }));
 }
 // Combo marker (user ruling 2026-11-05): renders the 3 slot pips in the
 // deck-bar aside#combo-marker. Shows my character's `combo` sequence and
@@ -2261,7 +2303,7 @@ function villageCardText(o, broken) {
   const p = v.produces && cat.npcs[v.produces.npc];
   if (p && !broken) lines.push(`Makes a ${p.name} every ${v.produces.every_turns} turns while the village has fewer than ${full?.cap ?? 20} units.`);
   // whom it brings back when they fall (2026-11-25, village-life.mjs rebirthSite: the npc's home; the builders: the centre)
-  const t = cat.villages[full?.template];
+  const t = villageTemplate(full);
   const homeOf = (n) => n?.role === 'builder' ? (t?.layout || []).find(l => cat.buildings[l.building]?.role === 'centre')?.building : n?.home;
   const reborn = [...new Set((t?.residents || []).map(rs => cat.npcs[rs.npc]).filter(n => n && homeOf(n) === v.building).map(n => n.role === 'fighter' ? `${n.name} (50 turns)` : `${n.name} (20 turns)`))];
   if (reborn.length) lines.push(`${broken ? 'Once mended it brings back' : 'Brings back'} who falls: ${reborn.join(', ')}.`);
@@ -2334,7 +2376,7 @@ function gmProposalTick() {
   }
   const bld = refs.filter(x => /^bld_/.test(x.id)), cat = villageCatalog();
   if (!bld.length || !cat || !state.map?.seed) return;
-  for (const v of villagesNear(state.map.seed, at.q, at.r, 40)) for (const l of cat.villages[v.template]?.layout || []) {
+  for (const v of villagesNear(state.map.seed, at.q, at.r, 40)) for (const l of villageTemplate(v)?.layout || []) {
     const r = bld.find(x => x.id === l.building);
     if (r && hexDistanceQR(at, { q: v.q + l.at[0], r: v.r + l.at[1] }) <= HERO_SIGHT_RADIUS) pvSeen(gmVoteRef(r), `${v.name} ${cat.buildings[l.building]?.name || l.building}`);
   }
@@ -2557,21 +2599,36 @@ function renderPerms() {
     const active = (p.action === 'aura' && state.withAura) || (p.action === 'bonus' && !hasteSpent && (state.bonusMode || plans.length > 0)) || (p.action === 'bless' && state.blessMode) || (p.action === 'phylactery' && !!state.queuedPhylactery);
     // Phylactery with nothing to shatter in reach: greyed, the click does nothing (user ruling 2026-11-17).
     const phylInactive = p.action === 'phylactery' && !state.queuedPhylactery && !state.phylacteryTarget;
-    const title = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
+    const hint = p.action === 'aura' ? `Aura ∀ — cast the queued effect on everyone within 10 hexes; the Aura is spent (key ${key || '·'})`
       : p.action === 'bonus' ? `Bonus rounds (${state.bonus?.max || 0}) — pick an action, skills and an effect, Space commits each; they resolve first, alone, against everyone's Empty Posture; then pick your normal action (key ${key || '·'})`
       : fxUi(p.id).summon ? `${p.name} (6) — holds ${mySummoned().map(x => x.name).join(', ') || 'your creature / ward'}; an enemy needs a 6 to destroy it, then the creature vanishes and its card goes to your archive`
       : p.action === 'bless' ? `${fxUi(p.id).perm_help || p.name} — holds ${blessed?.name || 'nothing'} (key ${key || '·'})`
-      : fxUi(p.id).perm_help ? `${fxUi(p.id).perm_help}${key ? ` (key ${key})` : ''}` : p.name;
+      : fxUi(p.id).perm_help ? `${fxUi(p.id).perm_help}${key ? ` (key ${key})` : ''}` : '';
+    // Every permanent's hover / tap shows its card's full rule first, then what the holder does with it (2026-11-28:
+    // Barricade / Force Shield showed only their name, Aura only its key hint).
+    const rule = skillInfo(p.id)?.text || '';
+    // Phylactery: why it is one, and the way back to Possess (2026-11-28)
+    const phylWhy = fxUi(p.id).possess && state.possessMode === 'phylactery' ? 'Possess found no creature in your archive when it landed, so it is the Phylactery: click it while an enemy with a permanent is within reach — the best permanent of that enemy shatters. To play a creature instead: put the creature card back into your archive (archive pile, then the card) and cast a Possess card again.' : '';
+    // Traps Mastery: the trap lying under it (my traps_json, holder = this permanent)
+    const meE = state.entities.find(e => e.peer_id === state.myPeerId);
+    const trapUnder = fxUi(p.id).trap_attach || /trap/i.test(p.id) ? (() => { try { return JSON.parse(meE?.traps_json || '[]').find(t => t.holder === p.id); } catch { return null; } })() : null;
+    const trapLine = trapUnder ? `🪤 ${skillInfo(trapUnder.effect_id)?.name || trapUnder.effect_id}` : '';
+    const trapHow = trapUnder ? `Under it: ${skillInfo(trapUnder.effect_id)?.name || trapUnder.effect_id} (power ${trapUnder.power} per element) — it springs on the first enemy that targets you while you stand on (${trapUnder.q},${trapUnder.r}).`
+      : /trap/i.test(p.id) ? 'No trap under it. To lay one: queue the Traps Mastery card, then click a second effect card in your hand — it rides on the cast and becomes the trap.' : '';
+    const title = [`${p.name}${rule ? ` — ${rule}` : ''}`, hint && hint !== rule ? `▸ ${hint}` : '', phylWhy ? `▸ ${phylWhy}` : '', trapHow ? `▸ ${trapHow}` : ''].filter(Boolean).join('\n');
     const cd = hasteSpent ? (plans.length ? `⚡ ${plans.map(b => b.action).join('▸')} ✓` : '⚡ next turn') : p.action === 'bonus' && plans.length ? `⚡ ${plans.map(b => b.action).join('▸')}` : p.action === 'bonus' && state.bonusMode ? `⚡ pick ${plans.length + 1}/${state.bonus?.max || 1}`
       : p.action === 'bless' ? (state.blessMode ? '📎 pick a card' : blessed ? `📎 ${blessed.name}` : 'empty')
       : fxUi(p.id).possess ? possessPermLine()
+      : trapLine ? `${trapLine}${p.die ? ` ⚄${p.die}` : ''}`
       : p.die ? `⚄${p.die}` : 'perm';
     const powerBadge = p.die ? `<span class="perm-power" title="power ${p.die} — an enemy's emission must beat it to destroy this perm (Rule 24)">${p.die}</span>` : '';
-    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}${votedLow(p.id) ? ' voted-low' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="nm">${p.every ? '∀ ' : ''}${fxUi(p.id).summon ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div>${permDesc(p.id)}</div>`;
+    return `<div class="perm${p.action && !hasteSpent && !phylInactive ? ' clickable' : ''}${active ? ' active' : ''}${hasteSpent || phylInactive ? ' spent' : ''}${votedLow(p.id) ? ' voted-low' : ''}" data-k="${k}" title="${hasteSpent ? `Haste — used this turn; it comes back next turn. ${title}` : title}">${powerBadge}${key ? `<div class="k">${key}</div>` : ''}<div class="pi" data-icon="${escHtml(p.id)}"></div><div class="nm">${p.every ? '∀ ' : ''}${fxUi(p.id).summon ? '🐾 ' : ''}${p.name}</div>${effectSourceBadge(p.id, { compact: true })}<div class="cd">${cd}</div>${permDesc(p.id)}</div>`;
   }).join('');
   if (html === lastPermsHtml) return;
   lastPermsHtml = html;
   el.innerHTML = html;
+  // the card's icon (2026-11-28: the holder showed none, the roster did) — a live node, as the roster's stack
+  for (const m of el.querySelectorAll('.pi[data-icon]')) m.appendChild(makeSkillIcon(m.dataset.icon, { size: IS_MOBILE_UI ? 18 : 22, srcMark: false }));
   el.classList.toggle('many', perms.length + (classHtml ? 1 : 0) > 3);   // two rows: six fit where three did
   el.hidden = perms.length === 0 && !classHtml;
   moveTitlesToData(el);
@@ -2872,6 +2929,19 @@ function setPhase(name, seconds, heartbeat, m = {}) {
   // flash by in well under a second when the mesh is healthy.
   if (name === 'planning') logUI(`→ turn ${state.turn} · round ${state.round + 1}/${state.roundsPerTurn} (${seconds}s)`, 'phase');
   else if (name === 'game over') logUI(`→ game over${m.winner ? ` — ${m.winner}` : ''}`, 'phase');
+  // Clock catch-up (2026-11-27): my peer was behind and jumped ahead; the skipped actions are gone but my staged pick
+  // is kept for this one — a journey goes on as one EM at the farthest straight hex of its path (EM walks half the
+  // way), anything else is re-sent as it was.
+  if (name === 'planning' && m.catchup && (state.ui.pathPlan || state.queued.length)) {
+    state.locked = false;
+    if (state.ui.pathPlan && !state.ui.chasePeerId && resumeJourney()) { journeyLeap(); return; }
+    if (!state.ui.pathPlan && state.queued.length) {
+      sendQueue();
+      if (state.target) send({ kind: 'target', target: state.target });
+      logUI('clock catch-up — skipped actions forfeited, your pick is kept', 'phase');
+      return;
+    }
+  }
   if (name === 'planning') {
     // New action — unlock, drop the stale target, auto-select a card. Discard
     // marks persist across the turn's rounds; the peer clears them at turn end.
@@ -3229,6 +3299,21 @@ function connect() {
             for (const id of a.skills || []) sounds.play(resourcesFor(id), 'fx', { volume: 0.55 });
             for (const e of a.effects || []) icons.push({ effect: e.effect_id, glyph: `✺${elemGlyphs(e.elements)}` });
             const startAt = at0;
+            // A cast that completed (the "✓ cast" pill, user 2026-11-28): its WBC3 strip (resources.sprites.effect) plays
+            // big over the target hex — the caster's own hex for a self / area effect — with the spell sound as it starts
+            // and the impact (fx) sound a beat later. Desktop and phone share this canvas.
+            if (cs && cs.status !== 'retry' && cs.status !== 'blocked' && !(cs.step < cs.of) && !a.bonus) {
+              const res = resourcesFor(cs.effect_id);
+              const bq = hasAim ? a.target_q : fromQ, br = hasAim ? a.target_r : fromR;
+              const burstAt = startAt + 450;
+              (state.ui.castBursts ||= []).push({ effect_id: cs.effect_id, q: bq, r: br, startAt: burstAt, duration: 1600 });
+              if (res) {
+                const lag = Math.max(0, burstAt - performance.now());
+                const spell = !!res.sounds?.spell?.length;
+                setTimeout(() => sounds.play(res, spell ? 'spell' : 'fx', { volume: 0.6 }), lag);
+                if (spell && res.sounds?.fx?.length) setTimeout(() => sounds.play(res, 'fx', { volume: 0.55 }), lag + 380);
+              }
+            }
             icons.forEach((ic, i) => state.ui.floatingIcons.push({
               ...ic,
               dx: (i - (icons.length - 1) / 2) * 22,
@@ -3740,6 +3825,9 @@ function queueSlot(key) {
     renderDeck();
     return;
   }
+  // A creature / class card back from the archive plays no action (2026-11-28: it showed as "undefined"): the way
+  // back is the archive pile — Possess and Summoning take their creature from there.
+  if (card?.kind === 'creature' || card?.kind === 'class') { logUI(`${card.name} does nothing in your hand — click the archive pile, then this card: it goes back to the archive at this resolution${card.kind === 'creature' ? ' (Possess / Summoning take creatures from there)' : ''}`, 'phase'); return; }
   if (inBonusPlan(card)) { logUI('that card is already committed to a bonus round', 'phase'); return; }
   if (isEffect(card)) {
     const first = state.queuedEffect !== null ? state.hand[state.queuedEffect] : null;
@@ -4591,17 +4679,30 @@ function wireInput() {
     document.getElementById('timer').textContent = `${state.seconds.toFixed(0)}s`;
     document.getElementById('turn').textContent = `turn ${state.turn} · round ${state.round + 1}/${state.roundsPerTurn}`;
   }, 250);
-  function raf() {
-    renderRoster();
-    renderPerms();
-    renderDeck();
-    renderHeroCard();
-    if (!readyPlayed && state.myPeerId) {
-      const me = state.entities.find(p => p.peer_id === state.myPeerId);
-      const res = me ? resOf(me) : null;
-      if (res) { readyPlayed = true; sounds.play(res, 'ready', { volume: 0.7 }); }
+  // The frame loop (2026-11-27 "irresponsive on desktop and mobile"): it rebuilt the unit list, permanents, hand and
+  // hero card (each serialising every unit to see whether anything changed), the sight set (every hex in sight, as
+  // strings) and the whole map canvas 60 times a second. Now the map draws at FRAME_MS (30 fps; the phone 20), the
+  // panels and the sight set at PANEL_MS (10 a second — every click and message still repaints them at once), and
+  // nothing while the page is hidden.
+  const FRAME_MS = IS_MOBILE_UI ? 50 : 33, PANEL_MS = 100;
+  let lastFrame = 0, lastPanels = 0;
+  function raf(now = performance.now()) {
+    requestAnimationFrame(raf);
+    if (document.hidden || now - lastFrame < FRAME_MS - 4) return;
+    lastFrame = now;
+    if (now - lastPanels >= PANEL_MS) {
+      lastPanels = now;
+      renderRoster();
+      renderPerms();
+      renderDeck();
+      renderHeroCard();
+      if (!readyPlayed && state.myPeerId) {
+        const me = state.entities.find(p => p.peer_id === state.myPeerId);
+        const res = me ? resOf(me) : null;
+        if (res) { readyPlayed = true; sounds.play(res, 'ready', { volume: 0.7 }); }
+      }
+      recomputeSightSet();
     }
-    recomputeSightSet();
     renderer.render();
     // Floating SkillCard DOM over revealing units — pinned to the canvas each
     // frame so it tracks the camera / zoom (positions read renderer.toWorld
@@ -4609,7 +4710,6 @@ function wireInput() {
     renderRevealOverlay();
     renderElementEmitOverlay();
     renderFeatureVanishOverlay();
-    requestAnimationFrame(raf);
   }
   raf();
 }

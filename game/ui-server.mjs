@@ -39,7 +39,7 @@ import { isTestMode, PRIVATE_TEST_ENV, privateDimId } from './join-plan.mjs';
 import { lastKnownClock, doorClockCands, saveClockCand } from './merge-order.mjs';   // start clock of a join (user 2026-11-17)
 import { DOOR_LIVE_MS, dimIdOf, unionMembers, mapFromDoors, placeFromDoors, tileInRing, describeDimension, doorMapSummaries, validTile,
   dimensionUnits, newTeamSide, NO_FREE_SIDE, teamBotSide, aliveInDimensions, aliveWhereText, knownMonsterType, quietMonsters, nearestMonsters, asMembers, REGEN_MAX, probeDimensionLive, networkFromDoors, restoreHereTarget, heroShadowIn } from './join-plan.mjs';
-import { seedForDimension } from './js/map.js';
+import { seedForDimension, seedForNewDimension } from './js/map.js';
 import { hexDistance } from './js/hex.js';
 import { setVillageCatalog, villageCatalogReady, villageOfCell, testCatalogOverrides, gameModelsCatalogTries } from './js/villages.js';
 // The spawn cell's village (GameModels catalog loaded once, lazily) — TEST_NEAR_VILLAGE starts the roster next to it.
@@ -294,6 +294,8 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag, propo
   if (override?.hero && !test) await refuseAliveHere(null, [override.hero, ...(override.allies || [])]);
   const DIM_NAME = (dimensionName || 'Ashfall-Micro').trim();
   const DIM_ID   = test ? privateDimId(DIM_NAME) : `dim-${slug(DIM_NAME)}`;
+  // a fresh dimension: the layout-2 seed (half-size villages, dens — user 2026-11-28); it rides in its Door from here on
+  const MAP_SEED = seedForNewDimension(DIM_ID);
   const DOOR_ID  = 'door-primary';
   const ip = test ? '127.0.0.1' : ((publicIp || '').trim() || defaultPublicIp());
   if (!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) throw new Error(`"${ip}" is not an IPv4 address`);
@@ -350,7 +352,7 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag, propo
   // quests and centre card at once; the test foes start ~20 hexes further out so they don't kill the hero first.
   // TEST_NEAR_VILLAGE=inside: the hero starts at the village centre instead (meets the smith, wizard, mercenary, trader).
   if (test && /^(1|inside)$/.test(process.env.TEST_NEAR_VILLAGE || '')) {
-    const seed = seedForDimension(DIM_ID);
+    const seed = MAP_SEED;
     const v = villageNearSpawn(seed);
     if (v) {
       // walled: one hex beyond the gate guard's post, straight out from the gate
@@ -369,7 +371,7 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag, propo
     // "Test my team": the next characters of the team order replace the Pride
     // Guardian, each on a walkable hex at the tier's distance from player-1.
     const ring = TEAM_TIER_RING[override.tier] || TEAM_TIER_RING.reachable;
-    const seed = seedForDimension(DIM_ID);
+    const seed = MAP_SEED;
     roster.splice(1, 1);
     const occupied = new Set(roster.map(p => `${p.tile.q},${p.tile.r}`));
     override.allies.forEach((c, i) => {
@@ -381,7 +383,7 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag, propo
   }
   if (ai) {
     // The rival team walks in from 7–9 hexes; the builders start 2–3 hexes from the hero.
-    const seed = seedForDimension(DIM_ID);
+    const seed = MAP_SEED;
     const occupied = new Set(roster.map(p => `${p.tile.q},${p.tile.r}`));
     // A seed whose ring is all water / mountain / taken (user 2026-11-23: "no walkable hex 2–3 hexes from player-1
     // for builder-1" failed the whole launch): widen the ring 3 hexes at a time, then skip that unit — never fail.
@@ -439,7 +441,7 @@ async function startDimension({ dimensionName, publicIp, mode, ai: aiFlag, propo
       PEER_PORT_LIBP2P:  String(p.libp2p),
       PEER_PORT_HTTP:    String(p.http),
       PEER_PORT_GUN:     String(p.gun),
-      DIM_NAME, DIM_ID, DOOR_ID,
+      DIM_NAME, DIM_ID, DOOR_ID, MAP_SEED,
       PEER_GUN_URLS:     others.join(','),
       // The first peer has nobody to sync with; don't make it wait.
       JOIN_SYNC_WAIT_MS: p === peers[0] ? '500' : '8000',

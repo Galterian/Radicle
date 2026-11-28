@@ -213,14 +213,14 @@ assert.equal(compass({ q: 0, r: 0 }, { q: -3, r: 6 }), 'south'); assert.equal(co
   assert.equal(Qs.quest_empire_trade_creature.consume && Qs.quest_empire_trade_creature.repeatable, true);
   console.log('dialogues: walking-time lore, role people in both villages, quest givers + storyteller outside the wall');
 }
-// hired builders + hamlets (user 2026-11-24): a builder's price is a barter whose reward is the builder; its menu
-// names race buildings and a power; some villages are hamlets (no wall, few people), never the spawn one
+// hired builders + outposts (user 2026-11-24; hamlet → outpost 2026-11-28): a builder's price is a barter whose reward is the builder; its menu
+// names race buildings and a power; some villages are outposts (no wall, few people), never the spawn one
 {
   planted(c => { c.npc.npc_empire_trader.builds = c.npc.npc_empire_builder.builds; c.npc.npc_empire_trader.build_max = 2; }, /builds: only a builder builds/);
   planted(c => { c.npc.npc_empire_builder.builds[0].power = { kind: 'fly' }; }, /power.kind not in/);
   planted(c => { c.npc.npc_empire_builder.builds[0].building = 'bld_high_elves_healer'; }, /missing or of another race/);
   planted(c => { c.npc.npc_empire_builder.quests = []; c.quest.quest_empire_hire_builder.giver = 'npc_empire_reeve'; c.npc.npc_empire_reeve.quests.push('quest_empire_hire_builder'); }, /needs its price/);
-  planted(c => { c.village.vil_empire_hamlet.size = 'tiny'; }, /size: "hamlet" or none/);
+  planted(c => { c.village.vil_empire_outpost.size = 'tiny'; }, /size: "outpost" or none/);
   for (const id of ['npc_empire_builder', 'npc_high_elves_builder']) {
     const n = cat.npcs[id], price = cat.quests[n.quests[0]];
     assert.ok(price.consume && price.repeatable && price.rewards.some(r => r.kind === 'allies' && r.units.includes(id)), `${id}: hire price`);
@@ -230,21 +230,21 @@ assert.equal(compass({ q: 0, r: 0 }, { q: -3, r: 6 }), 'south'); assert.equal(co
   assert.equal(goal(npc('npc_empire_builder'), { stranger: { dist: 5, rep: 30 } }), 'build', 'but not to a hostile one');
   assert.equal(questMet(Qs.quest_empire_hire_builder, { archive: [{ kind: 'effect', id: 'effect_haste' }] }), true);
   assert.equal(questMet(Qs.quest_high_elves_hire_builder, { archive: [{ kind: 'effect', id: 'effect_haste' }] }), false);
-  let hamlets = 0, full = 0;
+  let outposts = 0, full = 0;
   for (let s = 0; s < 40; s++) for (let cx = -3; cx <= 3; cx++) for (let cy = -3; cy <= 3; cy++) {
     const v = villageOfCell(`seed${s}`, cx, cy);
     if (!v) continue;
     const t = cat.villages[v.template];
-    if (t.size === 'hamlet') {
-      hamlets++;
-      assert.ok(cx || cy, 'the spawn village is never a hamlet');
-      assert.equal(v.wall, null, 'a hamlet has no wall'); assert.ok(v.team.endsWith('Hamlet'));
+    if (t.size === 'outpost') {
+      outposts++;
+      assert.ok(cx || cy, 'the spawn village is never an outpost');
+      assert.equal(v.wall, null, 'an outpost has no wall'); assert.ok(v.team.endsWith('Outpost'));
       const roles = new Set(villageResidents(`seed${s}`, v).map(rs => cat.npcs[rs.npc].role));
       for (const r of ['quest_giver', 'storyteller', 'builder', 'trader']) assert.ok(roles.has(r), `${v.team} has a ${r}`);
     } else full++;
   }
-  assert.ok(hamlets > 0.25 * (hamlets + full) && hamlets < 0.5 * (hamlets + full), `hamlets ${hamlets} of ${hamlets + full}`);
-  console.log(`builders for hire (price + menu) and hamlets: ${hamlets} hamlets, ${full} villages`);
+  assert.ok(outposts > 0.25 * (outposts + full) && outposts < 0.5 * (outposts + full), `outposts ${outposts} of ${outposts + full}`);
+  console.log(`builders for hire (price + menu) and outposts: ${outposts} outposts, ${full} villages`);
   // villages are neutral in the resolver (contact / area / autotarget): only wild monsters and heroes on the list
   const { villageNeutral } = await import('../village-life.mjs');
   const vil = { peer_id: 'peer:v1', npc_id: 'npc_empire_healer', village_id: 'vil:0,0', alliance: 'village_x', hostile_to_csv: '' };
@@ -310,7 +310,7 @@ assert.equal(compass({ q: 0, r: 0 }, { q: -3, r: 6 }), 'south'); assert.equal(co
     for (const role of ['quest_giver', 'storyteller', 'trader', 'smith', 'wizard', 'mercenary', 'healer', 'engineer', 'diplomat']) assert.equal(count(n => n.role === role), 1, `${race}: one ${role}`);
     assert.ok(vt.layout.some(l => cat.buildings[l.building].role === 'ministry'), `${race}: its Ministry`);
     for (const r of vt.residents) { const n = cat.npcs[r.npc]; if (n.home && n.role !== 'builder') assert.ok(vt.layout.some(l => l.building === n.home), `${race}: ${r.npc} is reborn in its home ${n.home}`); }
-    assert.ok(Object.values(cat.villages).some(v => v.race === race && v.size === 'hamlet'), `${race} hamlet`);
+    assert.ok(Object.values(cat.villages).some(v => v.race === race && v.size === 'outpost'), `${race} outpost`);
     for (const b of vt.layout) assert.ok(!cat.buildings[b.building].produces, `${race}: ${b.building} produces nobody (they are reborn)`);
   }
   // relations: 100 − 2·gap, +5 per diplomat led, −5 per spy mission, war under 40

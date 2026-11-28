@@ -188,6 +188,12 @@ if (isMainThread && (!process.env.CHARACTER_ID || process.env.CHARACTER_ID === '
         // builders (npc_a) as workers. No llama on the phone: they ask the OCI 1.7B (llm.json), else the rules play them.
         if (process.env.AI_SKIRMISH !== '0') teamAllies = { allies: [], tier: 'strong', file, profileEnv, bots: await skirmishBots() };
       }
+      // A fresh dimension (Create / the tests): the layout-2 seed (half-size villages, dens — user 2026-11-28), as the
+      // desktop launcher's startDimension; a restore keeps its saved seed (below), a join takes the Door's.
+      if (plan.mode === 'host' || String(plan.mode || '').startsWith('test')) {
+        const { seedForNewDimension } = await import('./js/map.js');
+        process.env.MAP_SEED ||= seedForNewDimension(process.env.DIM_ID || 'dim-ashfall-micro');
+      }
       // Load old Dimension: peer.mjs hydrates map / obstacles / tokens / traps from the TMJ (RESTORE_FROM_TMJ).
       if (plan.mode === 'restore') {
         Object.assign(process.env, { DIM_NAME: plan.dimName, DIM_ID: plan.dimId, RESTORE_FROM_TMJ: plan.tmjPath, ...(plan.seed ? { MAP_SEED: plan.seed } : {}) });
@@ -333,7 +339,10 @@ async function startTeamAllies({ allies, tier, file, profileEnv, keepMap = false
     };
     delete env.JOIN_URI;
     if (!keepMap) { delete env.MAP_BLOCKS_FILE; delete env.MAP_BLOCKS; }
-    const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true });
+    // S5 (2026-11-27): the same small young generation + old-space ceiling as peer.mjs gives its companions (COMPANION_LIMITS).
+    const semi = Number(process.env.COMPANION_SEMI_MB ?? 2), old = Number(process.env.COMPANION_OLD_MB ?? 384);
+    const resourceLimits = { ...(semi > 0 ? { maxYoungGenerationSizeMb: semi * 3 } : {}), ...(old > 0 ? { maxOldGenerationSizeMb: old } : {}) };
+    const w = new Worker(new URL('./mobile-entry.mjs', import.meta.url), { env, stdout: true, stderr: true, resourceLimits });
     (globalThis.__chaosWorkers ||= []).push(w);   // stopped with my peer after a Dimension Out (the loop below)
     w.stdout.pipe(relabel()).on('data', b => process.stdout.write(b));
     w.stderr.pipe(relabel()).on('data', b => process.stderr.write(b));

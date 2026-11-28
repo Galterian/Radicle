@@ -247,6 +247,7 @@ const ONE_SHOT = new Set(['attack', 'cast', 'special', 'death', 'fidget']);
 
 export function createUnitAnim(resources, opts = {}) {
   const team = opts.team || null;   // CSS hex colour for the player-colour ramp
+  const size = Number(opts.size) > 0 ? Number(opts.size) : 1;   // × UNIT_TARGET_H (a dragon stands twice as tall, 2026-11-28)
   const sprites = resources?.sprites || {};
   const sheetFor = (name) => sprites[name]?.path ? getSheet(sprites[name].path) : null;
   const has = (name) => !!sprites[name]?.path;
@@ -265,7 +266,7 @@ export function createUnitAnim(resources, opts = {}) {
     if (st.scale) return st.scale;
     const ref = sheetFor('idle') || sheetFor('walk') || sheetFor('attack');
     if (!ref || !ref.ready) return null;
-    st.scale = UNIT_TARGET_H / Math.max(1, ref.ch * (1 - FOOT_OFFSET));
+    st.scale = UNIT_TARGET_H * size / Math.max(1, ref.ch * (1 - FOOT_OFFSET));
     return st.scale;
   }
 
@@ -331,7 +332,7 @@ export function createUnitAnim(resources, opts = {}) {
   }
 
   // Footprint (world px) of the current frame — used for hit-testing / labels.
-  function height() { const s = scaleFor(); const sh = sheetFor('idle') || sheetFor('walk'); return s && sh && sh.ready ? sh.ch * s * (1 - FOOT_OFFSET) : UNIT_TARGET_H; }
+  function height() { const s = scaleFor(); const sh = sheetFor('idle') || sheetFor('walk'); return s && sh && sh.ready ? sh.ch * s * (1 - FOOT_OFFSET) : UNIT_TARGET_H * size; }
 
   return { tick, trigger, draw, height, get name() { return st.name; } };
 }

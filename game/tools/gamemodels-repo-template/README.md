@@ -5,7 +5,7 @@ live in their villages or wander 50–100 hexes around them, the **monsters**' a
 map builds named villages from ("Silverleaf Village", "Ashford Village"), and the **quests** village NPCs give.
 Every NPC and monster carries its **agenda** in JsonLogic; chaosD6 plays them all with one generic engine.
 
-So far: the **High Elves** and the **Empire** (a village and a hamlet each, 18 buildings, 32 NPCs, 18 quests) and one agenda per
+So far: the **High Elves** and the **Empire** (a village and an outpost each, 18 buildings, 32 NPCs, 18 quests) and one agenda per
 chaosD6 monster. The field reference is [SCHEMA.md](SCHEMA.md).
 
 This repo is the **only** home of the definitions. chaosD6 finds the checkout next to it (or `CHAOSD6_GAMEMODELS_REPO`)
@@ -16,8 +16,8 @@ every peer (and the phone) reads, so the deterministic map is the same everywher
 
 - **Villages** stand ≥ 100 hexes apart (one per 200×200-hex cell, and one 35–55 hexes from the spawn point). Each has a
   name from its race, a team `"<Name> Village"`, its buildings around a centre, and up to **20** units.
-- **Hamlets**: 40 % of the villages away from the spawn are smaller — no wall, three buildings, a quest giver, a
-  storyteller, a builder for hire and a trader (`"<Name> Hamlet"`).
+- **Outposts** (called hamlets until 2026-11-28): 40 % of the villages away from the spawn are smaller — no wall, three buildings, a quest giver, a
+  storyteller, a builder for hire and a trader (`"<Name> Outpost"`). In dimensions hosted from 2026-11-28 on (layout 2: half-size villages, half the spacing) an outpost also has one tower and a ballista; a village has four towers on its wall and two catapults and a ballista inside.
 - An unpassable **wall** rings the village with one **gate**. The gate guard steps onto it to bar strangers and steps
   aside once the village welcomes you; until then the quest givers talk to you across the gate.
 - **Buildings** have a **bank** threshold like the Dwarven Citadel: stand next to one and stat-buy it with the stat it

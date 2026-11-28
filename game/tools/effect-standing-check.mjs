@@ -174,7 +174,8 @@ console.log('-- 7. card blocks (F9): the cards the game deals = the definitions\
 {
   // data/effects.json was checked byte-equal to the cards until the user deleted it (2026-11-22, with "definition names
   // win" for the 11 renamed cards); since then the definitions are the only record.
-  const cardOf = (d) => ({ id: d.id, name: d.card.name, tags: d.card.tags || [], data: d.card.data });
+  // + resources.summon_unit when the card names the unit it summons (builtinEffectEntries carries it for the resolver)
+  const cardOf = (d) => ({ id: d.id, name: d.card.name, tags: d.card.tags || [], ...(d.card.resources?.summon_unit ? { resources: { summon_unit: d.card.resources.summon_unit } } : {}), data: d.card.data });
   const fromDefs = Object.fromEntries([...defs.values()].filter(d => d.card).map(d => [d.id, cardOf(d)]));
   eq('data/effects.json is gone (the definitions are the only card record)', fs.existsSync(path.join(HERE, '..', '..', 'data', 'effects.json')), false);
   eq('every built-in has a card', [...defs.values()].filter(d => !d.card).map(d => d.id), []);

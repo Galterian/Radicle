@@ -306,15 +306,17 @@ export function teleportTargets(seed, q, r) {
   }
   return out;
 }
-// The wall arc a walls building raises on turn `turn`: 5 connected hexes on the radius-5 ring around it,
-// centred on a direction that turns with the turn number.
+// The wall arc a walls building raises on turn `turn`: 5 connected hexes on the radius-5 ring around it. Each turn's
+// arc continues where the previous turn's ended (user 2026-11-28: "not built in a consistent way" — it used to land
+// in a random direction every turn), so the arcs that stand at once (3 turns) make one unbroken wall going round;
+// where on the ring it starts is fixed per building.
 export function wallArc(seed, q, r, turn) {
   const R = 5;
   const ring = [];
   let cq = q + DIRS[4][0] * R, cr = r + DIRS[4][1] * R;
   for (let side = 0; side < 6; side++) for (let i = 0; i < R; i++) { ring.push({ q: cq, r: cr }); cq += DIRS[side][0]; cr += DIRS[side][1]; }
-  const start = Math.floor(roll(seed, q, r, `arc${turn}`) * ring.length);
-  return [-2, -1, 0, 1, 2].map(k => ring[(start + k + ring.length) % ring.length]);
+  const start = Math.floor(roll(seed, q, r, 'arc') * ring.length) + 5 * turn;
+  return [-2, -1, 0, 1, 2].map(k => ring[(((start + k) % ring.length) + ring.length) % ring.length]);
 }
 // A place 20–28 hexes away an explore building shows on turn `turn`.
 export function exploreTarget(seed, q, r, turn) {

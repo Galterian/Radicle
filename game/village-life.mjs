@@ -13,10 +13,10 @@
 // Only a few are ACTIVE (a running peer) at a time — the nearest-to-a-hero villages, the most useful roles first —
 // the others are the village's count (its centre card shows it). A villager far from every hero leaves the map
 // (it is not gone: it walks out again when a hero comes near).
-import { villageResidents, villageWanderers, villagesNear, compass, villageCatalog, personName } from './js/villages.js';
+import { villageResidents, villageWanderers, villagesNear, compass, villageCatalog, personName, villageTemplate } from './js/villages.js';
 
 const dist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
-export const ROLE_PRIORITY = { dragon: -0.5, quest_giver: 0, storyteller: 1, trader: 2, builder: 3, engineer: 3.5, diplomat: 3.7, smith: 4, wizard: 5, mercenary: 6, guard: 7, healer: 8, fighter: 8.5, villager: 9, wanderer: 10 };   // + diplomat, fighter (2026-11-25)   // the builder before the guards: it is for hire (2026-11-24); the dragon always out, the engineer for hire too (2026-11-25)
+export const ROLE_PRIORITY = { dragon: -0.5, quest_giver: 0, storyteller: 1, trader: 2, builder: 3, engineer: 3.5, diplomat: 3.7, siege: 3.8, smith: 4, wizard: 5, mercenary: 6, guard: 7, healer: 8, fighter: 8.5, villager: 9, wanderer: 10 };   // + diplomat, fighter (2026-11-25)   // the builder before the guards: it is for hire (2026-11-24); the dragon always out, the engineer for hire too (2026-11-25)
 export const MAX_PRODUCED = 64;   // safety bound on the production timeline
 
 export const RESPAWN_TURNS = 20, FIGHTER_RESPAWN_TURNS = 50;
@@ -26,7 +26,7 @@ export const homeLabel = (label) => String(label || '').replace(/_f$/, '').repla
 // The hex a resident is (re)born at: its home building's when that building is in the layout (the builders: the
 // centre), else the centre. → { q, r, building } or null.
 export function rebirthSite(v, npcId) {
-  const cat = villageCatalog(), t = cat?.villages?.[v.template], n = cat?.npcs?.[npcId];
+  const cat = villageCatalog(), t = villageTemplate(v), n = cat?.npcs?.[npcId];   // layout 2: the half-size template
   if (!t) return null;
   const centre = (t.layout || []).find(l => cat.buildings[l.building]?.role === 'centre') || (t.layout || [])[0];
   const home = n?.role === 'builder' ? centre : (t.layout || []).find(l => l.building === n?.home) || centre;
@@ -37,7 +37,7 @@ export function rebirthSite(v, npcId) {
 // for good" (older callers); `broken`: Set of 'q,r' of broken buildings), oldest first, at most the village cap.
 export function villageUnits(seed, v, { turn, founded, gone = new Map(), broken = new Set() }) {
   const cat = villageCatalog();
-  const t = cat?.villages?.[v.template];
+  const t = villageTemplate(v);
   if (!t || !Number.isInteger(founded)) return [];
   const goneTurn = (l) => gone instanceof Map ? (gone.has(l) ? gone.get(l) : undefined) : gone.has(l) ? null : undefined;
   const events = [];
@@ -175,5 +175,5 @@ export function villageNeutral(a, b, war = null) {
   const vil = va ? a : b, other = va ? b : a;
   if (!other || isWildMonsterSnap(other)) return false;
   const hostile = String(vil.hostile_to_csv || '').split(',').filter(Boolean);
-  return ![other.peer_id, other.owner_peer_id, other.shadow_of].some(k => k && hostile.includes(k));
+  return ![other.peer_id, other.owner_peer_id, other.shadow_of, other.standin_of].some(k => k && hostile.includes(k));
 }

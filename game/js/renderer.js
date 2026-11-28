@@ -9,6 +9,7 @@ import { loadScatter, scatterAt, scatterImage, onScatterChanged } from './scatte
 // Speech balloons (AI skirmish): the speaker's name on top, the line word-wrapped to ~180 px (≤ 3 lines), the tail
 // pointing down at the unit. Friends get a blue rim, foes a red one. Drawn AFTER every unit (a conversation layer on
 // top), a newer balloon lifted above an older one it would cover. Plain fillText — the text never reaches the DOM.
+const DRAGON_RE = /(^|[:_/])(mon_)?[a-z_]*dragon$/;   // a unit source id that is a dragon (npc_knights_dragon, mon_dragon) — not a dragon knight / rider
 const SPEECH_FONT = '12px system-ui, -apple-system, Segoe UI, sans-serif';
 const SPEECH_NAME_FONT = 'bold 10px system-ui, -apple-system, Segoe UI, sans-serif';
 function layoutSpeech(ctx, text, name) {
@@ -240,8 +241,14 @@ function wallLookAt(seed, q, r) {
 }
 const HEX_DIRS6 = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];   // d and d + 3 are opposite
 function buildBarricadeWalls(seed, features) {
-  const at = new Map(), pieces = [];
+  const at = new Map();
   for (const it of features) if (it.f.made_by === 'npc_builder' && it.f.kind === 'wall') at.set(`${it.q},${it.r}`, it);
+  return joinedWalls(seed, at);
+}
+// Wall pieces for a set of wall hexes ("q,r" → {q, r}): neighbours joined, a joint tower where a run ends or turns.
+// Barricades and the obstacles (Creation, a building's wall arc — user 2026-11-28: "holes between the wall images").
+function joinedWalls(seed, at) {
+  const pieces = [];
   for (const it of at.values()) {
     const look = wallLookAt(seed, it.q, it.r), A = hexToPixel(it.q, it.r);
     const add = (p, key) => pieces.push({ ...p, key, ...look });
@@ -522,7 +529,8 @@ export function createRenderer(canvas, state) {
     const stillBadges = Object.values(state.ui.revealBadges || {}).some(b => now - b.startAt < b.duration);
     const stillToasts = (state.ui.effectToasts || []).some(f => now - f.startAt < f.duration);
     const stillSpeech = Object.values(state.ui.speech || {}).some(b => now - b.startAt < b.duration);
-    if ((stillMoving || stillFloating || stillIcons || stillBadges || stillToasts || stillSpeech) && !rafId) {
+    const stillBursts = (state.ui.castBursts || []).some(f => now - f.startAt < f.duration);
+    if ((stillMoving || stillFloating || stillIcons || stillBadges || stillToasts || stillSpeech || stillBursts) && !rafId) {
       rafId = requestAnimationFrame(() => { rafId = 0; render(); scheduleIfAnimating(); });
     }
   }
@@ -901,13 +909,19 @@ export function createRenderer(canvas, state) {
     }
 
     // Obstacles (Creation, building walls): a WBC3 wall tower (the 🧱 glyph until its sprite is in) with its hit points.
-    for (const o of (state.obstacles || [])) {
+    // Neighbouring obstacles join into one wall (horizontal / staircase pieces, joints where a run ends or turns).
+    const obsList = (state.obstacles || []).filter(o => Number.isInteger(o.q) && Number.isInteger(o.r));
+    const obsAt = new Map(obsList.map(o => [`${o.q},${o.r}`, o]));
+    const obsSprites = obsList.length && featureImage(wallLookAt(state.map.seed, obsList[0].q, obsList[0].r).sprites.joint)?.ready;
+    if (obsSprites) for (const p of joinedWalls(state.map.seed, obsAt)) {
+      const px = p.kind === 'horizontal' ? (p.x0 + p.x1) / 2 : p.x, py = p.kind === 'vertical' ? (p.y0 + p.y1) / 2 : p.y;
+      if (inView(px, py)) drawWallPiece(ctx, p, state.map.seed, HEX_SIZE * H_SQUASH * 2);
+    }
+    for (const o of obsList) {
       const { x, y } = tilePx(o.q, o.r);
       if (!inView(x, y)) continue;
-      const look = wallLookAt(state.map.seed, o.q, o.r);
       ctx.textAlign = 'center';
-      if (featureImage(look.sprites.joint)?.ready) drawWallPiece(ctx, { kind: 'joint', x, y, ...look }, state.map.seed, HEX_SIZE * H_SQUASH * 2);
-      else { ctx.font = `${Math.round(HEX_SIZE * 0.9)}px sans-serif`; ctx.fillStyle = '#c9a56a'; ctx.fillText('🧱', x, y + HEX_SIZE * 0.3); }
+      if (!obsSprites) { ctx.font = `${Math.round(HEX_SIZE * 0.9)}px sans-serif`; ctx.fillStyle = '#c9a56a'; ctx.fillText('🧱', x, y + HEX_SIZE * 0.3); }
       ctx.font = 'bold 8px ui-monospace, Consolas, monospace';
       ctx.fillStyle = '#ffe6b0';
       ctx.fillText(`${o.hp}`, x + HEX_SIZE * 0.4, y - HEX_SIZE * 0.35);
@@ -979,7 +993,8 @@ export function createRenderer(canvas, state) {
       if (!a) { a = { anim: null, sourceId: null, lastX: x, lastY: y, dir: 4, wasDead: dead }; anims.set(e.peerId, a); }
       if (!a.anim || a.sourceId !== e.sourceId || a.team !== color) {
         const res = resourcesFor(e.sourceId);
-        if (res) { a.anim = createUnitAnim(res, { team: color }); a.sourceId = e.sourceId; a.team = color; }
+        // dragons (a village's npc_<race>_dragon, the wild mon_dragon) twice as big as other units (user 2026-11-28)
+        if (res) { a.anim = createUnitAnim(res, { team: color, size: DRAGON_RE.test(String(e.sourceId || '')) ? 2 : 1 }); a.sourceId = e.sourceId; a.team = color; }
       }
       const mv = moves.get(e.peerId);
       const moving = !!mv && (now - mv.startAt) < MOVE_DURATION_MS && (mv.fromPx.x !== tilePx(mv.toQ, mv.toR).x || mv.fromPx.y !== tilePx(mv.toQ, mv.toR).y);
@@ -1338,6 +1353,44 @@ export function createRenderer(canvas, state) {
         ctx.restore();
       }
       icons.length = liveWriteIdx;
+    }
+
+    // Completed casts (user 2026-11-28): the effect's WBC3 strip, once through, over the target hex — fitted into a
+    // ~2.4-hex box standing on the hex (a lightning pillar comes down onto it, a burst sits on it), additive when the
+    // mapping says so. Fed by main.js from the action's cast outcome; ✺ ring while the strip is still loading.
+    const bursts = state.ui.castBursts || [];
+    if (bursts.length) {
+      let live = 0;
+      for (let i = 0; i < bursts.length; i++) {
+        const f = bursts[i];
+        const t = (now - f.startAt) / f.duration;
+        if (t >= 1) continue;
+        if (live !== i) bursts[live] = f;
+        live++;
+        if (t < 0) continue;
+        const p = tilePx(f.q, f.r);
+        if (!inView(p.x, p.y)) continue;
+        const spr = resourcesFor(f.effect_id)?.sprites?.effect;
+        const strip = effectStrip(spr?.path);
+        ctx.save();
+        ctx.globalAlpha = t > 0.85 ? Math.max(0, (1 - t) / 0.15) : 1;
+        if (strip) {
+          const cw = strip.img.width / strip.cols, ch = strip.img.height;
+          const box = HEX_SIZE * 2.4, k = box / Math.max(cw, ch);
+          const w = cw * k, h = ch * k;
+          const fi = Math.min(strip.cols - 1, Math.floor(t * strip.cols));
+          if (spr.blend === 'additive') ctx.globalCompositeOperation = 'lighter';
+          ctx.drawImage(strip.img, fi * cw, 0, cw, ch, p.x - w / 2, p.y + HEX_SIZE * 0.35 - h, w, h);
+        } else {
+          ctx.strokeStyle = '#ffd27a';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, HEX_SIZE * (0.3 + t), HEX_SIZE * (0.3 + t) * 0.6, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      bursts.length = live;
     }
 
     // Effect result toasts (user request 2026-11-17): "<effect> success" (green) / "<effect> failed" (red) over

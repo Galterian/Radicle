@@ -38,6 +38,10 @@ export function hash32(str) {
 export function seedForDimension(dimId) {
   return '0x' + hash32(`chaosd6:${dimId}`).toString(16).padStart(8, '0');
 }
+// The seed a dimension hosted from now on starts with (user 2026-11-28: the half-size villages and dens apply to new
+// dimensions only): the id's seed + the layout mark (js/villages.js LAYOUT_V2_MARK). It rides in every Door
+// (map.seed), so joiners, restores and browsers all read it; an older dimension's seed has no mark.
+export const seedForNewDimension = (dimId) => `${seedForDimension(dimId)}~v2`;
 
 export function initialBlock(size = INITIAL_SIZE) {
   return { id: `rect:0,0,${size}x${size}`, kind: 'rect', q: 0, r: 0, w: size, h: size, by: 'genesis' };

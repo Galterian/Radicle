@@ -9,8 +9,8 @@
       "versions": [
         {
           "version": "1.0.0",
-          "weight": 1.0,
-          "status": "canonical",
+          "weight": 0.99,
+          "status": "superseded",
           "origin": "paper_rules",
           "author_peer_id": "",
           "created_at": "2026-10-19",
@@ -30,6 +30,165 @@
                 "sync_mode": "handshake_per_action",
                 "consensus": "every action is a signed hashgraph event; the action resolves only when all strong-region members have gossiped it (virtual voting, no leader)",
                 "failure_mode": "a member that does not answer the handshake within handshake_timeout_s is treated as playing Empty Posture for that action (rule_6) and marked lagging"
+              },
+              {
+                "tier": "reachable",
+                "label": "One-interval reach region",
+                "membership": "players that could enter each other's strong region before the next Radicle push (max move distance x actions x rounds per radicle_push_interval_s)",
+                "reach_formula": "reach_tiles = move_tiles_per_action(1) * actions_per_round(3) * rounds_per_interval",
+                "shared_state": ["map_tiles_revealed", "tile_owners", "permanents_on_tiles", "player_positions"],
+                "sync_mode": "turn_commit",
+                "consensus": "members exchange a signed TurnCommit at the end of each turn so that the shared map hashgraph is identical before any first contact",
+                "failure_mode": "missing commits are filled on first contact via hashgraph merge (see sync_divergence_merge)"
+              },
+              {
+                "tier": "far",
+                "label": "Unmet / distant region",
+                "membership": "everyone else inside the Dimension, including clans and new players that have never met",
+                "shared_state": ["dimension_descriptor", "turn_counter", "door_ids"],
+                "sync_mode": "radicle_push",
+                "consensus": "none in real time; the Radicle branch ActiveDimensions/<DimensionName>/ is the eventual rendezvous point",
+                "failure_mode": "state is allowed to diverge; divergence is reconciled on first contact or at the next push"
+              }
+            ],
+            "tier_promotion": "a far/reachable peer is promoted to strong as soon as a position event places it inside strong_radius_tiles; promotion triggers a full state handshake (sync_join_flow step adopt_hashgraph_part)"
+          },
+          "logic": {
+            "description": "Governs which peers of a Dimension share live turn state (strong), which only share the map hashgraph (reachable) and which merely share the descriptor (far). Tunables: tiers[0].strong_radius_tiles (2) is the hex distance at or under which two live units are strong-region members; the reachable tier has no number of its own, its reach_tiles is derived as move_tiles_per_action(1) x actions_per_round(3) x turns per radicle_push_interval_s. The runtime (peer.mjs) deviates: STRONG_RADIUS defaults to 2*EM_MAX_STEPS+2 = 8 axial hexes (not 2 tiles on an 8-neighbour grid), REACH_RADIUS is STRONG_RADIUS + reveal radius (10) = 18, a member must also be alive and heard from within the last 20 s, the strong set is recomputed every action and frozen at commit (no full-state handshake on promotion), and every reveal the peer holds is resolved whatever tier its actor is in; members that did not reveal are resolved from their last published snapshot. Battle context assumed: a / b = units with tile {q,r}, life, target, tier, last_seen_age_s; me, peers = my unit and the live roster; region.reach_tiles = the derived reach; runtime.em_max_steps.",
+            "prerequisites": [
+              {"id": "strong_tier_membership", "description": "Two units are strong-region members when their hex distance is at or under tiers[0].strong_radius_tiles, or when either currently targets the other.", "when": {"or": [{"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}, {"==": [{"var": "a.target"}, {"var": "b.id"}]}, {"==": [{"var": "b.target"}, {"var": "a.id"}]}]}},
+              {"id": "member_is_live", "description": "Only living units count as region members; the runtime additionally drops a peer whose last snapshot is older than 20 s (contract is silent on liveness).", "when": {"and": [{">": [{"var": "b.life"}, 0]}, {"<=": [{"var": "b.last_seen_age_s"}, 20]}]}}
+            ],
+            "effects": [
+              {"id": "reach_tiles", "description": "reach_formula: 1 tile per action x 3 actions per turn x turns per Radicle push interval (radicle_push_interval_s / clock.turn_seconds, floored).", "target": "everyone", "unit": "hexes", "value": {"*": [1, 3, {"floor": [{"/": [{"entry": ["sync_radicle_push", "radicle_push_interval_s"]}, {"var": "clock.turn_seconds"}]}]}]}},
+              {"id": "tier_of_peer", "description": "The tier name of unit b relative to unit a: strong when within the strong radius, reachable when within region.reach_tiles, far otherwise (peer.mjs tierOf).", "target": "target", "value": {"if": [{"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}, "strong", {"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "region.reach_tiles"}]}, "reachable", "far"]}},
+              {"id": "is_reachable", "description": "Unit b is in a's reachable tier: outside the strong radius but within region.reach_tiles.", "target": "target", "value": {"and": [{">": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}, {"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "region.reach_tiles"}]}]}},
+              {"id": "strong_region_members", "description": "Ids of the live peers within the strong radius of me — the set the handshake waits for and the state hash covers (peer.mjs computeStrongMembers).", "target": "everyone", "value": {"map": [{"filter": [{"var": "peers"}, {"and": [{"!=": [{"var": "id"}, {"root": "me.id"}]}, {">": [{"var": "life"}, 0]}, {"<=": [{"hex_distance": [{"root": "me.tile"}, {"var": "tile"}]}, {"root": "entry.data.tiers.0.strong_radius_tiles"}]}]}]}, {"var": "id"}]}},
+              {"id": "promotion_to_strong", "description": "tier_promotion: a peer not yet strong is promoted the moment a position event places it inside the strong radius.", "target": "target", "value": {"and": [{"!=": [{"var": "b.tier"}, "strong"]}, {"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}]}},
+              {"id": "runtime_strong_radius", "description": "Deviation: peer.mjs derives its strong radius from movement, 2*EM_MAX_STEPS+2 (8 with the default 3 Empty-Move steps), instead of the contract's 2 tiles.", "target": "everyone", "unit": "hexes", "value": {"+": [{"*": [2, {"var": "runtime.em_max_steps"}]}, 2]}},
+              {"id": "runtime_reach_radius", "description": "Deviation: peer.mjs reach radius = strong radius + reveal radius (default 10), not the move x actions x turns formula.", "target": "everyone", "unit": "hexes", "value": {"+": [{"*": [2, {"var": "runtime.em_max_steps"}]}, 2, {"var": "runtime.reveal_radius"}]}}
+            ],
+            "validation": [
+              {"id": "tier_names_unchanged", "description": "Exactly the three tiers strong / reachable / far, each once.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.tiers"}]}, 3]}, {"subset_of": [{"map": [{"var": "proposal.data.tiers"}, {"var": "tier"}]}, ["strong", "reachable", "far"]]}, {"distinct": [{"map": [{"var": "proposal.data.tiers"}, {"var": "tier"}]}]}]}},
+              {"id": "strong_tier_first_with_radius", "description": "tiers[0] is the strong tier, synced per action, with an integer strong_radius_tiles between 1 and 9 (it must stay under the 10-hex view radius so the reachable ring is wider than the strong disc).", "assert": {"and": [{"==": [{"var": "proposal.data.tiers.0.tier"}, "strong"]}, {"==": [{"var": "proposal.data.tiers.0.sync_mode"}, "handshake_per_action"]}, {"==": [{"typeof": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}]}, "number"]}, {">=": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}, 1]}, {"<": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}, 10]}, {"==": [{"floor": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}]}, {"var": "proposal.data.tiers.0.strong_radius_tiles"}]}]}},
+              {"id": "sync_modes_in_vocabulary", "description": "Every tier syncs by handshake_per_action, turn_commit or radicle_push and names at least one shared_state item.", "assert": {"and": [{"subset_of": [{"map": [{"var": "proposal.data.tiers"}, {"var": "sync_mode"}]}, ["handshake_per_action", "turn_commit", "radicle_push"]]}, {"none": [{"var": "proposal.data.tiers"}, {"<": [{"count": [{"var": "shared_state"}]}, 1]}]}]}},
+              {"id": "tier_promotion_text_kept", "description": "tier_adjacency and tier_promotion stay documented strings.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.tile_adjacency"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.tier_promotion"}]}, 20]}]}}
+            ],
+            "references": []
+          }
+        },
+        {
+          "version": "1.1.0",
+          "weight": 0.99,
+          "status": "superseded",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-11-27",
+          "parent_version": "1.0.0",
+          "rebalance_links": ["sync_handshake_per_action", "sync_turn_commit", "rule_14"],
+          "vote_log": [],
+          "notes": "User answer 2026-11-27 (scale to ~20 nodes, S7): \"standing order, but in case it was on journey continue the journey\". A strong-region member whose reveal misses the window no longer plays a bare Empty Posture: every commit carries a standing order (an Empty Move along where the unit is heading — the hero's journey path, a bot's latest move target), which every peer plays for it in the following actions (up to one round) when its reveal is missing. Nothing while casting or not moving. Optional fixed wall-clock schedule (CLOCK_SCHEDULE=1): hard commit / reveal windows, no waiting on busy members; a unit that catches up takes the cohort's resolved tile / life for the actions it skipped.",
+          "data": {
+            "tile_adjacency": "8-neighbour (horizontal, vertical, diagonal)",
+            "tiers": [
+              {
+                "tier": "strong",
+                "label": "Contact region",
+                "membership": "players/creatures whose tiles are adjacent or within strong_radius_tiles of each other, or that currently target each other (attack/move/follow)",
+                "strong_radius_tiles": 2,
+                "shared_state": ["turn_state", "face_down_declarations", "effect_tokens_on_tiles", "life_tokens", "traps_on_tiles"],
+                "sync_mode": "handshake_per_action",
+                "consensus": "every action is a signed hashgraph event; the action resolves only when all strong-region members have gossiped it (virtual voting, no leader)",
+                "failure_mode": "a member whose reveal does not arrive within the reveal window plays the standing order of its newest commit (an Empty Move toward where it is heading: journey path or latest move target; none while casting or standing still → Empty Posture, rule_6) for up to one round of actions, and is marked lagging; on catching up it adopts the tile / life its region resolved for it",
+                "standing_order": {
+                  "action": "EM",
+                  "source": "newest commit of the last actions_per_round actions",
+                  "none_when": ["casting", "not_moving", "locked"],
+                  "catch_up": "adopt_region_tile_and_life"
+                }
+              },
+              {
+                "tier": "reachable",
+                "label": "One-interval reach region",
+                "membership": "players that could enter each other's strong region before the next Radicle push (max move distance x actions x rounds per radicle_push_interval_s)",
+                "reach_formula": "reach_tiles = move_tiles_per_action(1) * actions_per_round(3) * rounds_per_interval",
+                "shared_state": ["map_tiles_revealed", "tile_owners", "permanents_on_tiles", "player_positions"],
+                "sync_mode": "turn_commit",
+                "consensus": "members exchange a signed TurnCommit at the end of each turn so that the shared map hashgraph is identical before any first contact",
+                "failure_mode": "missing commits are filled on first contact via hashgraph merge (see sync_divergence_merge)"
+              },
+              {
+                "tier": "far",
+                "label": "Unmet / distant region",
+                "membership": "everyone else inside the Dimension, including clans and new players that have never met",
+                "shared_state": ["dimension_descriptor", "turn_counter", "door_ids"],
+                "sync_mode": "radicle_push",
+                "consensus": "none in real time; the Radicle branch ActiveDimensions/<DimensionName>/ is the eventual rendezvous point",
+                "failure_mode": "state is allowed to diverge; divergence is reconciled on first contact or at the next push"
+              }
+            ],
+            "tier_promotion": "a far/reachable peer is promoted to strong as soon as a position event places it inside strong_radius_tiles; promotion triggers a full state handshake (sync_join_flow step adopt_hashgraph_part)"
+          },
+          "logic": {
+            "description": "Governs which peers of a Dimension share live turn state (strong), which only share the map hashgraph (reachable) and which merely share the descriptor (far). Tunables: tiers[0].strong_radius_tiles (2) is the hex distance at or under which two live units are strong-region members; the reachable tier has no number of its own, its reach_tiles is derived as move_tiles_per_action(1) x actions_per_round(3) x turns per radicle_push_interval_s. The runtime (peer.mjs) deviates: STRONG_RADIUS defaults to 2*EM_MAX_STEPS+2 = 8 axial hexes (not 2 tiles on an 8-neighbour grid), REACH_RADIUS is STRONG_RADIUS + reveal radius (10) = 18, a member must also be alive and heard from within the last 20 s, the strong set is recomputed every action and frozen at commit (no full-state handshake on promotion), and every reveal the peer holds is resolved whatever tier its actor is in; members that did not reveal are resolved from their last published snapshot. Battle context assumed: a / b = units with tile {q,r}, life, target, tier, last_seen_age_s; me, peers = my unit and the live roster; region.reach_tiles = the derived reach; runtime.em_max_steps.",
+            "prerequisites": [
+              {"id": "strong_tier_membership", "description": "Two units are strong-region members when their hex distance is at or under tiers[0].strong_radius_tiles, or when either currently targets the other.", "when": {"or": [{"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}, {"==": [{"var": "a.target"}, {"var": "b.id"}]}, {"==": [{"var": "b.target"}, {"var": "a.id"}]}]}},
+              {"id": "member_is_live", "description": "Only living units count as region members; the runtime additionally drops a peer whose last snapshot is older than 20 s (contract is silent on liveness).", "when": {"and": [{">": [{"var": "b.life"}, 0]}, {"<=": [{"var": "b.last_seen_age_s"}, 20]}]}}
+            ],
+            "effects": [
+              {"id": "reach_tiles", "description": "reach_formula: 1 tile per action x 3 actions per turn x turns per Radicle push interval (radicle_push_interval_s / clock.turn_seconds, floored).", "target": "everyone", "unit": "hexes", "value": {"*": [1, 3, {"floor": [{"/": [{"entry": ["sync_radicle_push", "radicle_push_interval_s"]}, {"var": "clock.turn_seconds"}]}]}]}},
+              {"id": "tier_of_peer", "description": "The tier name of unit b relative to unit a: strong when within the strong radius, reachable when within region.reach_tiles, far otherwise (peer.mjs tierOf).", "target": "target", "value": {"if": [{"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}, "strong", {"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "region.reach_tiles"}]}, "reachable", "far"]}},
+              {"id": "is_reachable", "description": "Unit b is in a's reachable tier: outside the strong radius but within region.reach_tiles.", "target": "target", "value": {"and": [{">": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}, {"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "region.reach_tiles"}]}]}},
+              {"id": "strong_region_members", "description": "Ids of the live peers within the strong radius of me — the set the handshake waits for and the state hash covers (peer.mjs computeStrongMembers).", "target": "everyone", "value": {"map": [{"filter": [{"var": "peers"}, {"and": [{"!=": [{"var": "id"}, {"root": "me.id"}]}, {">": [{"var": "life"}, 0]}, {"<=": [{"hex_distance": [{"root": "me.tile"}, {"var": "tile"}]}, {"root": "entry.data.tiers.0.strong_radius_tiles"}]}]}]}, {"var": "id"}]}},
+              {"id": "promotion_to_strong", "description": "tier_promotion: a peer not yet strong is promoted the moment a position event places it inside the strong radius.", "target": "target", "value": {"and": [{"!=": [{"var": "b.tier"}, "strong"]}, {"<=": [{"hex_distance": [{"var": "a.tile"}, {"var": "b.tile"}]}, {"var": "entry.data.tiers.0.strong_radius_tiles"}]}]}},
+              {"id": "runtime_strong_radius", "description": "Deviation: peer.mjs derives its strong radius from movement, 2*EM_MAX_STEPS+2 (8 with the default 3 Empty-Move steps), instead of the contract's 2 tiles.", "target": "everyone", "unit": "hexes", "value": {"+": [{"*": [2, {"var": "runtime.em_max_steps"}]}, 2]}},
+              {"id": "runtime_reach_radius", "description": "Deviation: peer.mjs reach radius = strong radius + reveal radius (default 10), not the move x actions x turns formula.", "target": "everyone", "unit": "hexes", "value": {"+": [{"*": [2, {"var": "runtime.em_max_steps"}]}, 2, {"var": "runtime.reveal_radius"}]}}
+            ],
+            "validation": [
+              {"id": "tier_names_unchanged", "description": "Exactly the three tiers strong / reachable / far, each once.", "assert": {"and": [{"==": [{"count": [{"var": "proposal.data.tiers"}]}, 3]}, {"subset_of": [{"map": [{"var": "proposal.data.tiers"}, {"var": "tier"}]}, ["strong", "reachable", "far"]]}, {"distinct": [{"map": [{"var": "proposal.data.tiers"}, {"var": "tier"}]}]}]}},
+              {"id": "strong_tier_first_with_radius", "description": "tiers[0] is the strong tier, synced per action, with an integer strong_radius_tiles between 1 and 9 (it must stay under the 10-hex view radius so the reachable ring is wider than the strong disc).", "assert": {"and": [{"==": [{"var": "proposal.data.tiers.0.tier"}, "strong"]}, {"==": [{"var": "proposal.data.tiers.0.sync_mode"}, "handshake_per_action"]}, {"==": [{"typeof": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}]}, "number"]}, {">=": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}, 1]}, {"<": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}, 10]}, {"==": [{"floor": [{"var": "proposal.data.tiers.0.strong_radius_tiles"}]}, {"var": "proposal.data.tiers.0.strong_radius_tiles"}]}]}},
+              {"id": "sync_modes_in_vocabulary", "description": "Every tier syncs by handshake_per_action, turn_commit or radicle_push and names at least one shared_state item.", "assert": {"and": [{"subset_of": [{"map": [{"var": "proposal.data.tiers"}, {"var": "sync_mode"}]}, ["handshake_per_action", "turn_commit", "radicle_push"]]}, {"none": [{"var": "proposal.data.tiers"}, {"<": [{"count": [{"var": "shared_state"}]}, 1]}]}]}},
+              {"id": "tier_promotion_text_kept", "description": "tier_adjacency and tier_promotion stay documented strings.", "assert": {"and": [{"==": [{"typeof": [{"var": "proposal.data.tile_adjacency"}]}, "string"]}, {">": [{"len": [{"var": "proposal.data.tier_promotion"}]}, 20]}]}}
+            ],
+            "references": []
+          }
+        },
+        {
+          "version": "1.2.0",
+          "weight": 1.0,
+          "status": "canonical",
+          "origin": "paper_rules",
+          "author_peer_id": "",
+          "created_at": "2026-11-27",
+          "parent_version": "1.1.0",
+          "rebalance_links": ["sync_handshake_per_action", "sync_turn_commit", "rule_14"],
+          "vote_log": [],
+          "notes": "User ruling 2026-11-27: \"Late reveal due to peer irresponsiveness should be the most beneficial for me, not no action\" + the priority list: a. casting → the cast goes on and emits its next element; b. an enemy in contact → the armed combo's next card, else an Attack / Block / Move card held, with the instants that ride on it, else Empty Posture; c. on a journey or chase → keep walking; d. otherwise Empty Posture. \"The peer prepares this fallback itself every action, so it only uses cards it really holds.\" Implementation: published early in the window (evt_fallback; only the fallback is public, the real plan stays committed); at a cast's last element the fallback holds the cast (the landing needs its owner). Actions after the first missed one fall back to the commit's standing walk. One action = 6 s with every phase included (CLOCK_SCHEDULE=1).",
+          "data": {
+            "tile_adjacency": "8-neighbour (horizontal, vertical, diagonal)",
+            "tiers": [
+              {
+                "tier": "strong",
+                "label": "Contact region",
+                "membership": "players/creatures whose tiles are adjacent or within strong_radius_tiles of each other, or that currently target each other (attack/move/follow)",
+                "strong_radius_tiles": 2,
+                "shared_state": ["turn_state", "face_down_declarations", "effect_tokens_on_tiles", "life_tokens", "traps_on_tiles"],
+                "sync_mode": "handshake_per_action",
+                "consensus": "every action is a signed hashgraph event; the action resolves only when all strong-region members have gossiped it (virtual voting, no leader)",
+                "failure_mode": "a member whose reveal does not arrive within the reveal window plays the fallback it published itself for that action (priority: continue its cast; in contact its combo card, else an Attack / Block / Move card it holds with riding instants, else Empty Posture; on a journey keep walking; else Empty Posture); without one, its commit's standing walk for up to one round; on catching up it spends the fallback's cards and adopts the tile / life its region resolved for it",
+                "standing_order": {
+                  "action": "EM",
+                  "source": "newest commit of the last actions_per_round actions",
+                  "none_when": ["casting", "not_moving", "locked"],
+                  "catch_up": "adopt_region_tile_and_life"
+                },
+                "fallback": {
+                  "published": "early in the planning window, by the unit itself",
+                  "priority": ["continue_cast", "contact_combo_or_A_B_M_with_instants", "keep_walking", "empty_posture"],
+                  "last_cast_element": "hold",
+                  "later_missed_actions": "standing_walk"
+                },
+                "action_seconds_all_phases": 6
               },
               {
                 "tier": "reachable",

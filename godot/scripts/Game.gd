@@ -103,6 +103,11 @@ func _ready() -> void:
 	# still run and bring up the peer + WebView independently.)
 	if OS.get_name() == "Android":
 		print("[Game] mobile — scene build skipped (WebView renders the UI)")
+		# Nothing Godot draws is ever seen (the WebView covers the screen), yet it redrew an empty scene every frame:
+		# its GL thread was ~12 % CPU on the start menu (2026-11-27). Low-processor mode redraws only when something
+		# changes; the main loop (autoloads, HTTP downloads, the peer bridge) still runs, ~60 times a second.
+		OS.low_processor_usage_mode = true
+		OS.low_processor_usage_mode_sleep_usec = 16000
 		return
 	rng.randomize()
 	dl.load_all()

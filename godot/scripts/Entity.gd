@@ -40,6 +40,10 @@ var _scale_fix := 1.0
 var _last_play_key: String = ""   # (sheet|state|facing|anim) of the most recent mutation; guards against per-tick re-plays that reset frame to 0 (observed as flicker on mobile GL compat).
 
 
+# A dragon's unit id (npc_<race>_dragon, mon_dragon) — not a dragon knight / rider. Same test as js/renderer.js DRAGON_RE.
+static func _is_dragon(ent_id: String) -> bool:
+	return RegEx.create_from_string("(^|[:_/])(mon_)?[a-z_]*dragon$").search(ent_id) != null
+
 func setup(ent_id: String, ent_kind: String, dl: DataLoader, start: Vector2i, fac: String, fallback_sheets: Dictionary = {}) -> void:
 	id = ent_id
 	kind = ent_kind
@@ -124,6 +128,9 @@ func _build_nodes() -> void:
 		var ch := float(g.cell_h)
 		var target := Hex.HEX_SIZE * 1.9
 		_scale_fix = clampf(target / ch, 0.35, 1.6) if ch > target else 1.0
+	# Dragons stand twice as big as other units (user 2026-11-28; = js/renderer.js DRAGON_RE / sprites.js size 2).
+	if _is_dragon(id):
+		_scale_fix *= 2.0
 	_sprites.scale = Vector2.ONE * _scale_fix
 
 	_label = Label.new()
