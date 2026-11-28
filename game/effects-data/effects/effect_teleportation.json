@@ -3,23 +3,619 @@
   "id": "effect_teleportation",
   "name": "Teleportation",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_space"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_space"
+  ],
   "cost": 1,
   "kind": "relocation",
   "duration": "instant",
-  "every": {"behaviour":"none","note":"paper ∀ (instant, unknown location) not modelled"},
+  "every": {
+    "behaviour": "none",
+    "note": "paper ∀ (instant, unknown location) not modelled"
+  },
   "text": "You or a subject teleport willingly to a known location.",
   "every_text": "Instant. You or a subject teleport willingly to an unknown location.",
-  "flags": {"teleportSelf":true,"tileTarget":true,"everyInstant":true},
-  "card": {"name":"Teleportation","tags":["relocate"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Bluewhite ring burst","wbc3_code":"EZ64","wbc3_race":"Effects1","match_reason":"ring burst at origin and destination hex","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Bluewhite ring burst/Bluewhite ring burst - idle [EZ64].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Sparkles.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/Fade.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["relocate"],"element_cost":["elem_space"],"every_bonus":"Instant. You or a subject teleport willingly to an unknown location.","text":"You or a subject teleport willingly to a known location."},"rebalance_links":["effect_banish"],"logic":{"description":"Implemented (2026-10-29). The left-clicked free tile within 10 hexes (general_ux_range_cast_target; none chosen or not free → a random free known tile within 10) receives me or the adjacent ally with less life (tie → me). ∀: instant (general_ux_instants).","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"free_tile_target","description":"Either no tile was chosen (random free tile within 10) or the chosen tile is within 10 hexes of the caster; it must be free at resolution.","when":{"or":[{"==":[{"var":"target"},null]},{"<=":[{"var":"dist"},10]}]}}],"effects":[{"id":"teleport_distance","description":"Hex distance the caster jumps (any free tile; no range cap in the engine).","target":"caster","unit":"hexes","value":{"hex_distance":[{"var":"caster.tile"},{"var":"target"}]}},{"id":"who_moves","description":"The adjacent ally with the lowest life below mine moves; otherwise I do.","target":"self_or_ally","unit":"subject","value":{"if":[{"<":[{"var":"target.life"},{"var":"caster.life"}]},"ally","self"]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_space (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_space"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_relocate","description":"effect_types keeps \"relocate\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"relocate"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}}],"references":["action_can_cast_non_instant","elements_not_disabled"]}},
-  "uses": ["std","e2b"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"set":["tmp",{"if":[{"===":[{"var":"cast.target.kind"},"tile"]},{"var":"cast.target.ref"},null]}]},
-      {"if":[{"and":[{"var":"tmp"},{"!":[{"and":[{"is_free":[{"var":"tmp.q"},{"var":"tmp.r"}]},{"<=":[{"hex_dist":[{"var":"my_tile"},{"var":"tmp"}]},10]}]}]}]},{"seq":[{"note":["tile (",{"var":"tmp.q"},",",{"var":"tmp.r"},") not free within 10 — random tile instead"]},{"set":["tmp",null]}]}]},
-      {"if":[{"!":[{"var":"tmp"}]},{"let":[{"free":{"free_tiles_within":[{"var":"my_tile.q"},{"var":"my_tile.r"},10]}},{"if":[{"len":[{"var":"free"}]},{"set":["tmp",{"at":[{"var":"free"},{"rng":["teleport",{"len":[{"var":"free"}]}]}]}]}]}]}]},
-      {"if":[{"!":[{"var":"tmp"}]},{"call":["fizzle","no free tile within 10"]},{"let":[{"ally":{"at":[{"sort_by":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"id"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},1]},{"<":[{"life_of":[{"var":"id"}]},{"life_of":[{"var":"me"}]}]}]},"id"]},{"asc":{"life_of":[{"var":"it"}]}},{"locale":{"var":"it"}}]},0]}},{"seq":[{"emit":["moves",{"obj":{"who":{"or":[{"var":"ally"},{"var":"me"}]},"q":{"var":"tmp.q"},"r":{"var":"tmp.r"},"reason":"teleported"}}]},{"if":[{"var":"ally"},{"note":["teleports ally ",{"var":"ally"}," (life ",{"life_of":[{"var":"ally"}]}," < mine ",{"life_of":[{"var":"me"}]},")"]}]}]}]}]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "teleportSelf": true,
+    "tileTarget": true,
+    "everyInstant": true
+  },
+  "card": {
+    "name": "Teleportation",
+    "tags": [
+      "relocate"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Bluewhite ring burst",
+      "wbc3_code": "EZ64",
+      "wbc3_race": "Effects1",
+      "match_reason": "ring burst at origin and destination hex",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Bluewhite ring burst/Bluewhite ring burst - idle [EZ64].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Sparkles.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/Fade.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "relocate"
+      ],
+      "element_cost": [
+        "elem_space"
+      ],
+      "every_bonus": "Instant. You or a subject teleport willingly to an unknown location.",
+      "text": "You or a subject teleport willingly to a known location."
+    },
+    "rebalance_links": [
+      "effect_banish"
+    ],
+    "logic": {
+      "description": "Implemented (2026-10-29). The left-clicked free tile within 10 hexes (general_ux_range_cast_target; none chosen or not free → a random free known tile within 10) receives me or the adjacent ally with less life (tie → me). ∀: instant (general_ux_instants).",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "free_tile_target",
+          "description": "Either no tile was chosen (random free tile within 10) or the chosen tile is within 10 hexes of the caster; it must be free at resolution.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "dist"
+                  },
+                  10
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "teleport_distance",
+          "description": "Hex distance the caster jumps (any free tile; no range cap in the engine).",
+          "target": "caster",
+          "unit": "hexes",
+          "value": {
+            "hex_distance": [
+              {
+                "var": "caster.tile"
+              },
+              {
+                "var": "target"
+              }
+            ]
+          }
+        },
+        {
+          "id": "who_moves",
+          "description": "The adjacent ally with the lowest life below mine moves; otherwise I do.",
+          "target": "self_or_ally",
+          "unit": "subject",
+          "value": {
+            "if": [
+              {
+                "<": [
+                  {
+                    "var": "target.life"
+                  },
+                  {
+                    "var": "caster.life"
+                  }
+                ]
+              },
+              "ally",
+              "self"
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_space (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_space"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_relocate",
+          "description": "effect_types keeps \"relocate\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "relocate"
+            ]
+          }
+        },
+        {
+          "id": "keeps_every_bonus",
+          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.every_bonus"
+                  }
+                ]
+              },
+              "string"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2b"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "set": [
+          "tmp",
+          {
+            "if": [
+              {
+                "===": [
+                  {
+                    "var": "cast.target.kind"
+                  },
+                  "tile"
+                ]
+              },
+              {
+                "var": "cast.target.ref"
+              },
+              null
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "and": [
+              {
+                "var": "tmp"
+              },
+              {
+                "!": [
+                  {
+                    "and": [
+                      {
+                        "is_free": [
+                          {
+                            "var": "tmp.q"
+                          },
+                          {
+                            "var": "tmp.r"
+                          }
+                        ]
+                      },
+                      {
+                        "<=": [
+                          {
+                            "hex_dist": [
+                              {
+                                "var": "my_tile"
+                              },
+                              {
+                                "var": "tmp"
+                              }
+                            ]
+                          },
+                          10
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "seq": [
+              {
+                "note": [
+                  "tile (",
+                  {
+                    "var": "tmp.q"
+                  },
+                  ",",
+                  {
+                    "var": "tmp.r"
+                  },
+                  ") not free within 10 — random tile instead"
+                ]
+              },
+              {
+                "set": [
+                  "tmp",
+                  null
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "!": [
+              {
+                "var": "tmp"
+              }
+            ]
+          },
+          {
+            "let": [
+              {
+                "free": {
+                  "free_tiles_within": [
+                    {
+                      "var": "my_tile.q"
+                    },
+                    {
+                      "var": "my_tile.r"
+                    },
+                    10
+                  ]
+                }
+              },
+              {
+                "if": [
+                  {
+                    "len": [
+                      {
+                        "var": "free"
+                      }
+                    ]
+                  },
+                  {
+                    "set": [
+                      "tmp",
+                      {
+                        "at": [
+                          {
+                            "var": "free"
+                          },
+                          {
+                            "rng": [
+                              "teleport",
+                              {
+                                "len": [
+                                  {
+                                    "var": "free"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "!": [
+              {
+                "var": "tmp"
+              }
+            ]
+          },
+          {
+            "call": [
+              "fizzle",
+              "no free tile within 10"
+            ]
+          },
+          {
+            "let": [
+              {
+                "ally": {
+                  "at": [
+                    {
+                      "sort_by": [
+                        {
+                          "filter": [
+                            {
+                              "peers": []
+                            },
+                            {
+                              "and": [
+                                {
+                                  "!==": [
+                                    {
+                                      "var": "id"
+                                    },
+                                    {
+                                      "var": "me"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "call": [
+                                    "alive",
+                                    {
+                                      "var": "id"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "!": [
+                                    {
+                                      "enemy_of": [
+                                        {
+                                          "var": "me"
+                                        },
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "<=": [
+                                    {
+                                      "dist": [
+                                        {
+                                          "var": "me"
+                                        },
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    },
+                                    1
+                                  ]
+                                },
+                                {
+                                  "<": [
+                                    {
+                                      "life_of": [
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "life_of": [
+                                        {
+                                          "var": "me"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "id"
+                          ]
+                        },
+                        {
+                          "asc": {
+                            "life_of": [
+                              {
+                                "var": "it"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "locale": {
+                            "var": "it"
+                          }
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "seq": [
+                  {
+                    "emit": [
+                      "moves",
+                      {
+                        "obj": {
+                          "who": {
+                            "or": [
+                              {
+                                "var": "ally"
+                              },
+                              {
+                                "var": "me"
+                              }
+                            ]
+                          },
+                          "q": {
+                            "var": "tmp.q"
+                          },
+                          "r": {
+                            "var": "tmp.r"
+                          },
+                          "reason": "teleported"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "var": "ally"
+                      },
+                      {
+                        "note": [
+                          "teleports ally ",
+                          {
+                            "var": "ally"
+                          },
+                          " (life ",
+                          {
+                            "life_of": [
+                              {
+                                "var": "ally"
+                              }
+                            ]
+                          },
+                          " < mine ",
+                          {
+                            "life_of": [
+                              {
+                                "var": "me"
+                              }
+                            ]
+                          },
+                          ")"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

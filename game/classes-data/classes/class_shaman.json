@@ -3,11 +3,40 @@
   "id": "class_shaman",
   "name": "Shaman",
   "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
-  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_souls","elem_water"],"text":"Return an effect card from your deck discard pile to your hand."},
-  "flags": {"phase":"local","local":{"op":"recover","kind":"effect","what":"an effect card"},"hooks":["local"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.1.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_vitality",
+      "elem_souls",
+      "elem_water"
+    ],
+    "text": "Return an effect card from your deck discard pile to your hand."
+  },
+  "flags": {
+    "phase": "local",
+    "local": {
+      "op": "recover",
+      "kind": "effect",
+      "what": "an effect card"
+    },
+    "hooks": [
+      "local"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "local": {"quote":{"op":"recover","kind":"effect","what":"an effect card"}}
+    "local": {
+      "quote": {
+        "op": "recover",
+        "kind": "effect",
+        "what": "an effect card"
+      }
+    }
   }
 }

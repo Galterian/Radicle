@@ -3,21 +3,673 @@
   "id": "effect_mutate",
   "name": "Mutate",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_water","elem_harmony"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_water",
+    "elem_harmony"
+  ],
   "cost": 2,
   "kind": "stat_token",
   "duration": "permanent",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "Choose an element: put the lowest element token upside-down as a penalty, then put the highest element token as a permanent bonus. May target yourself, ally, or enemy.",
-  "flags": {"scope":"self_or_enemy","swapTokens":true},
-  "bot": {"defence":true},
-  "card": {"name":"Mutate","tags":["permanent","swap"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Green dome arcs","wbc3_code":"EZ43","wbc3_race":"Effects1","match_reason":"green dome + WBC3 Morph sound","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Green dome arcs/Green dome arcs - idle [EZ43].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Morph.WAV","usage":"sound effect on resolution / impact of the effect"}],"spell":[{"path":"assets/Sounds/SoundFX/STEZ43.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}]}},"data":{"effect_types":["permanent","point_buy"],"element_cost":["elem_water","elem_harmony"],"text":"Choose an element: put the lowest element token upside-down as a penalty, then put the highest element token as a permanent bonus. May target yourself, ally, or enemy."},"rebalance_links":["effect_nature_embrace"],"logic":{"description":"Implemented. One point-buy on the caster stat of the first element (Water→Matter): on the caster (default) or a right-clicked ally the highest die becomes a + token on the recipient SMALLEST stat and the smallest die a − token on its BIGGEST stat (ties: vitality < world < will < matter; 10/10/10/10 → +6 Vitality, −2 Matter); on a right-clicked adjacent enemy it is mirrored (−big on their biggest, +small on their smallest). Tokens are permanents removable by Rule 24. A failed roll retries.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"self_or_adjacent_enemy","description":"The recipient is the caster, or a living enemy in contact that the caster right-clicked.","when":{"or":[{"==":[{"var":"target"},null]},{"==":[{"var":"target.id"},{"var":"caster.id"}]},{"and":[{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]},{"rule":["in_contact",{"dist":{"var":"dist"}}]},{">":[{"var":"target.life"},0]}]}]}}],"effects":[{"id":"swap_bonus_die","description":"One point-buy on the caster stat of the first cast element: the highest die lifts the recipient SMALLEST stat (ties: vitality, world, will, matter order); on an enemy it is mirrored (−big on their biggest stat).","target":"target","unit":"stat","value":{"rule":["point_buy_token_value",{"dice":{"var":"cast.kept"}}]}},{"id":"swap_penalty_die","description":"The smallest die of the same roll dents the recipient BIGGEST stat (enemy: +small on their smallest); 0 when the roll failed.","target":"target","unit":"stat","value":{"max0":[{"min_of":[{"var":"cast.kept"}]}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_water (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_water"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"keeps_type_point_buy","description":"effect_types keeps \"point_buy\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"point_buy"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_contact","is_enemy","point_buy_token_value"]}},
-  "uses": ["std"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","self_or_enemy",1,false]},
-      {"map":[{"var":"recipients"},{"let":[{"st":{"sort_by":[{"map":[["vitality","world","will","matter"],[{"var":"it"},{"base_stat":[{"var":"who"},{"var":"it"}]},{"var":"i"}]]},{"asc":{"at":[{"var":"it"},1]}},{"asc":{"at":[{"var":"it"},2]}}]},"pb":{"call":["buy_pb",{"call":["my_stat",{"at":[{"var":"elems"},0]}]},{"cat":["swap:",{"var":"who"}]}]}},{"let":[{"low":{"at":[{"var":"st"},0]},"high":{"last":[{"var":"st"}]},"big":{"var":"pb.value"},"small":{"if":[{"var":"pb.fail"},0,{"min_of":[{"var":"pb.dice"}]}]}},{"if":[{">":[{"var":"big"},0]},{"if":[{"and":[{"!==":[{"var":"who"},{"var":"me"}]},{"enemy_of":[{"var":"me"},{"var":"who"}]}]},{"seq":[{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"high"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"-":[{"var":"big"}]},"effect_id":{"var":"effect_id"}}}]},{"if":[{">":[{"var":"small"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"low"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"var":"small"},"effect_id":{"var":"effect_id"}}}]}]}]},{"seq":[{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"low"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"var":"big"},"effect_id":{"var":"effect_id"}}}]},{"if":[{">":[{"var":"small"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"high"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"-":[{"var":"small"}]},"effect_id":{"var":"effect_id"}}}]}]}]}]}]}]}]},"who"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "scope": "self_or_enemy",
+    "swapTokens": true
+  },
+  "bot": {
+    "defence": true
+  },
+  "card": {
+    "name": "Mutate",
+    "tags": [
+      "permanent",
+      "swap"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Green dome arcs",
+      "wbc3_code": "EZ43",
+      "wbc3_race": "Effects1",
+      "match_reason": "green dome + WBC3 Morph sound",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Green dome arcs/Green dome arcs - idle [EZ43].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Morph.WAV",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ],
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ43.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "permanent",
+        "point_buy"
+      ],
+      "element_cost": [
+        "elem_water",
+        "elem_harmony"
+      ],
+      "text": "Choose an element: put the lowest element token upside-down as a penalty, then put the highest element token as a permanent bonus. May target yourself, ally, or enemy."
+    },
+    "rebalance_links": [
+      "effect_nature_embrace"
+    ],
+    "logic": {
+      "description": "Implemented. One point-buy on the caster stat of the first element (Water→Matter): on the caster (default) or a right-clicked ally the highest die becomes a + token on the recipient SMALLEST stat and the smallest die a − token on its BIGGEST stat (ties: vitality < world < will < matter; 10/10/10/10 → +6 Vitality, −2 Matter); on a right-clicked adjacent enemy it is mirrored (−big on their biggest, +small on their smallest). Tokens are permanents removable by Rule 24. A failed roll retries.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "self_or_adjacent_enemy",
+          "description": "The recipient is the caster, or a living enemy in contact that the caster right-clicked.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "target.id"
+                  },
+                  {
+                    "var": "caster.id"
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "rule": [
+                      "is_enemy",
+                      {
+                        "a_alliance": {
+                          "var": "caster.alliance"
+                        },
+                        "b_alliance": {
+                          "var": "target.alliance"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    ">": [
+                      {
+                        "var": "target.life"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "swap_bonus_die",
+          "description": "One point-buy on the caster stat of the first cast element: the highest die lifts the recipient SMALLEST stat (ties: vitality, world, will, matter order); on an enemy it is mirrored (−big on their biggest stat).",
+          "target": "target",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "point_buy_token_value",
+              {
+                "dice": {
+                  "var": "cast.kept"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "swap_penalty_die",
+          "description": "The smallest die of the same roll dents the recipient BIGGEST stat (enemy: +small on their smallest); 0 when the roll failed.",
+          "target": "target",
+          "unit": "stat",
+          "value": {
+            "max0": [
+              {
+                "min_of": [
+                  {
+                    "var": "cast.kept"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_water (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_water"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_point_buy",
+          "description": "effect_types keeps \"point_buy\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "point_buy"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_contact",
+        "is_enemy",
+        "point_buy_token_value"
+      ]
+    }
+  },
+  "uses": [
+    "std"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "self_or_enemy",
+          1,
+          false
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "let": [
+              {
+                "st": {
+                  "sort_by": [
+                    {
+                      "map": [
+                        [
+                          "vitality",
+                          "world",
+                          "will",
+                          "matter"
+                        ],
+                        [
+                          {
+                            "var": "it"
+                          },
+                          {
+                            "base_stat": [
+                              {
+                                "var": "who"
+                              },
+                              {
+                                "var": "it"
+                              }
+                            ]
+                          },
+                          {
+                            "var": "i"
+                          }
+                        ]
+                      ]
+                    },
+                    {
+                      "asc": {
+                        "at": [
+                          {
+                            "var": "it"
+                          },
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "asc": {
+                        "at": [
+                          {
+                            "var": "it"
+                          },
+                          2
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "pb": {
+                  "call": [
+                    "buy_pb",
+                    {
+                      "call": [
+                        "my_stat",
+                        {
+                          "at": [
+                            {
+                              "var": "elems"
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "cat": [
+                        "swap:",
+                        {
+                          "var": "who"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": [
+                  {
+                    "low": {
+                      "at": [
+                        {
+                          "var": "st"
+                        },
+                        0
+                      ]
+                    },
+                    "high": {
+                      "last": [
+                        {
+                          "var": "st"
+                        }
+                      ]
+                    },
+                    "big": {
+                      "var": "pb.value"
+                    },
+                    "small": {
+                      "if": [
+                        {
+                          "var": "pb.fail"
+                        },
+                        0,
+                        {
+                          "min_of": [
+                            {
+                              "var": "pb.dice"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "if": [
+                      {
+                        ">": [
+                          {
+                            "var": "big"
+                          },
+                          0
+                        ]
+                      },
+                      {
+                        "if": [
+                          {
+                            "and": [
+                              {
+                                "!==": [
+                                  {
+                                    "var": "who"
+                                  },
+                                  {
+                                    "var": "me"
+                                  }
+                                ]
+                              },
+                              {
+                                "enemy_of": [
+                                  {
+                                    "var": "me"
+                                  },
+                                  {
+                                    "var": "who"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "seq": [
+                              {
+                                "emit": [
+                                  "statTokens",
+                                  {
+                                    "obj": {
+                                      "on": {
+                                        "var": "who"
+                                      },
+                                      "stat": {
+                                        "at": [
+                                          {
+                                            "var": "high"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "elem": {
+                                        "at": [
+                                          {
+                                            "var": "elems"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "value": {
+                                        "-": [
+                                          {
+                                            "var": "big"
+                                          }
+                                        ]
+                                      },
+                                      "effect_id": {
+                                        "var": "effect_id"
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "if": [
+                                  {
+                                    ">": [
+                                      {
+                                        "var": "small"
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  {
+                                    "emit": [
+                                      "statTokens",
+                                      {
+                                        "obj": {
+                                          "on": {
+                                            "var": "who"
+                                          },
+                                          "stat": {
+                                            "at": [
+                                              {
+                                                "var": "low"
+                                              },
+                                              0
+                                            ]
+                                          },
+                                          "elem": {
+                                            "at": [
+                                              {
+                                                "var": "elems"
+                                              },
+                                              0
+                                            ]
+                                          },
+                                          "value": {
+                                            "var": "small"
+                                          },
+                                          "effect_id": {
+                                            "var": "effect_id"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "seq": [
+                              {
+                                "emit": [
+                                  "statTokens",
+                                  {
+                                    "obj": {
+                                      "on": {
+                                        "var": "who"
+                                      },
+                                      "stat": {
+                                        "at": [
+                                          {
+                                            "var": "low"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "elem": {
+                                        "at": [
+                                          {
+                                            "var": "elems"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "value": {
+                                        "var": "big"
+                                      },
+                                      "effect_id": {
+                                        "var": "effect_id"
+                                      }
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "if": [
+                                  {
+                                    ">": [
+                                      {
+                                        "var": "small"
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  {
+                                    "emit": [
+                                      "statTokens",
+                                      {
+                                        "obj": {
+                                          "on": {
+                                            "var": "who"
+                                          },
+                                          "stat": {
+                                            "at": [
+                                              {
+                                                "var": "high"
+                                              },
+                                              0
+                                            ]
+                                          },
+                                          "elem": {
+                                            "at": [
+                                              {
+                                                "var": "elems"
+                                              },
+                                              0
+                                            ]
+                                          },
+                                          "value": {
+                                            "-": [
+                                              {
+                                                "var": "small"
+                                              }
+                                            ]
+                                          },
+                                          "effect_id": {
+                                            "var": "effect_id"
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "who"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

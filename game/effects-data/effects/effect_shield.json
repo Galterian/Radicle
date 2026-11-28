@@ -3,22 +3,316 @@
   "id": "effect_shield",
   "name": "Shield",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_concentration"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_concentration"
+  ],
   "cost": 1,
   "kind": "counter",
   "duration": "instant",
-  "every": {"behaviour":"becomes permanent","note":"Rule 23 ∀: the shield lands as a permanent"},
+  "every": {
+    "behaviour": "becomes permanent",
+    "note": "Rule 23 ∀: the shield lands as a permanent"
+  },
   "text": "Invulnerability of the chosen element until end of round (playable as a counter action).",
   "every_text": "Permanent. Take an element token and put it over these two permanent cards.",
-  "flags": {"shieldElem":true,"everyPermanent":true},
-  "bot": {"tags":["defender","dragon-kin","support"],"names":["angel|mercy"],"defence":true},
-  "card": {"name":"Shield","tags":["instant","permanent","counter"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Cyan dome shield arcs","wbc3_code":"EZ41","wbc3_race":"Effects1","match_reason":"WBC3 dome shield","confidence":"high","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ41.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/DoubleClang.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["instant","permanent"],"element_cost":["elem_concentration"],"every_bonus":"Permanent. Take an element token and put it over these two permanent cards.","text":"Invulnerability of the chosen element until end of round (playable as a counter action)."},"rebalance_links":["effect_disable","effect_light_darkness"],"logic":{"description":"Implemented instant counter. On completion the caster is invulnerable for the rest of the turn to one element — the element that would hurt it most this round (threatElem), else the cast element; a shielded element contributes 0 to Rule 21 / point-buy sums against the holder. ∀ double cast: the shield becomes a permanent in front of the deck (shieldElems permanent) instead of lapsing at turn end. Rule 8 pc override: a Shield that saved nothing returns to hand.","prerequisites":[{"id":"action_may_cast","description":"An instant rides on any action (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":true}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"elements_shielded","description":"Elements the holder is immune to this turn.","target":"caster","unit":"tokens","value":1},{"id":"permanent_when_every","description":"Whether the shield outlives the turn as a permanent (1 on a ∀ double cast, else 0).","target":"caster","unit":"tokens","value":{"if":[{"var":"cast.every"},1,0]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_concentration"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_instant","description":"effect_types keeps \"instant\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"instant"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}}],"references":["action_can_cast_non_instant","elements_not_disabled"]}},
-  "uses": ["std"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"put":["shieldElem",{"obj":{"on":{"var":"me"},"elem":{"if":[{"ctx_has":["threatElem"]},{"threat_elem":[{"var":"me"}]},{"at":[{"var":"elems"},0]}]}}}]},
-      {"if":[{"var":"cast.every"},{"emit":["permanents",{"obj":{"on":{"var":"me"},"id":{"var":"effect_id"}}}]}]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "shieldElem": true,
+    "everyPermanent": true
+  },
+  "bot": {
+    "tags": [
+      "defender",
+      "dragon-kin",
+      "support"
+    ],
+    "names": [
+      "angel|mercy"
+    ],
+    "defence": true
+  },
+  "card": {
+    "name": "Shield",
+    "tags": [
+      "instant",
+      "permanent",
+      "counter"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Cyan dome shield arcs",
+      "wbc3_code": "EZ41",
+      "wbc3_race": "Effects1",
+      "match_reason": "WBC3 dome shield",
+      "confidence": "high",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ41.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "instant",
+        "permanent"
+      ],
+      "element_cost": [
+        "elem_concentration"
+      ],
+      "every_bonus": "Permanent. Take an element token and put it over these two permanent cards.",
+      "text": "Invulnerability of the chosen element until end of round (playable as a counter action)."
+    },
+    "rebalance_links": [
+      "effect_disable",
+      "effect_light_darkness"
+    ],
+    "logic": {
+      "description": "Implemented instant counter. On completion the caster is invulnerable for the rest of the turn to one element — the element that would hurt it most this round (threatElem), else the cast element; a shielded element contributes 0 to Rule 21 / point-buy sums against the holder. ∀ double cast: the shield becomes a permanent in front of the deck (shieldElems permanent) instead of lapsing at turn end. Rule 8 pc override: a Shield that saved nothing returns to hand.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "An instant rides on any action (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "elements_shielded",
+          "description": "Elements the holder is immune to this turn.",
+          "target": "caster",
+          "unit": "tokens",
+          "value": 1
+        },
+        {
+          "id": "permanent_when_every",
+          "description": "Whether the shield outlives the turn as a permanent (1 on a ∀ double cast, else 0).",
+          "target": "caster",
+          "unit": "tokens",
+          "value": {
+            "if": [
+              {
+                "var": "cast.every"
+              },
+              1,
+              0
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_concentration"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_instant",
+          "description": "effect_types keeps \"instant\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "instant"
+            ]
+          }
+        },
+        {
+          "id": "keeps_every_bonus",
+          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.every_bonus"
+                  }
+                ]
+              },
+              "string"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled"
+      ]
+    }
+  },
+  "uses": [
+    "std"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "put": [
+          "shieldElem",
+          {
+            "obj": {
+              "on": {
+                "var": "me"
+              },
+              "elem": {
+                "if": [
+                  {
+                    "ctx_has": [
+                      "threatElem"
+                    ]
+                  },
+                  {
+                    "threat_elem": [
+                      {
+                        "var": "me"
+                      }
+                    ]
+                  },
+                  {
+                    "at": [
+                      {
+                        "var": "elems"
+                      },
+                      0
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "var": "cast.every"
+          },
+          {
+            "emit": [
+              "permanents",
+              {
+                "obj": {
+                  "on": {
+                    "var": "me"
+                  },
+                  "id": {
+                    "var": "effect_id"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

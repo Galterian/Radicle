@@ -3,22 +3,448 @@
   "id": "skill_force_shield",
   "name": "Force Shield",
   "version": "1.2.0",
-  "source": {"collection":"skills","version":"1.1.0"},
+  "source": {
+    "collection": "skills",
+    "version": "1.1.0"
+  },
   "deal_order": 13,
   "action_type": "B",
   "is_permanent": true,
   "point_buy_stat": "stat_vitality",
   "fixed_power": 6,
   "text": "Permanent, always power 6: no point-buy roll — it lands with power 6 (its Rule 24 power). Subtract the shield's 6 from effect damage before rounding (the first effect-damage hit on you that would land). Destroy this permanent if effect damage is taken.",
-  "flags": {"action":"B","permanent":true,"pointBuyStat":"vitality","negating":false,"hooks":["effect_in","effect_leg","end_round","perm_landing","perm_stats"],"effectShield":true},
-  "uses": ["skills_std"],
-  "hooks": {
-    "effect_in": {"if":[{"bool":{"has_perm":[{"var":"defender"},{"var":"skill"}]}},{"or":[{"get":[{"perm_power":{"var":"defender"}},{"var":"skill"}]},0]},0]},
-    "effect_leg": {"if":[{"and":[{"bool":{"var":"shield"}},{">":[{"round_div10":{"var":"sum"}},0]}]},{"obj":{"shield":0,"sum":{"max":[0,{"-":[{"var":"sum"},{"var":"shield"}]}]},"spent":{"var":"shield"}}},{"obj":{"shield":{"var":"shield"},"sum":{"var":"sum"},"spent":0}}]},
-    "end_round": {"engine":"js","impl":"peer.mjs#endRound","note":"the die spent by effect_leg (spent → brokenShield) drops the permanent at the end of the round — peer bookkeeping, no rule left to run"},
-    "perm_landing": {"let":[{"l":{"call":["perm_landing"]},"fp":{"get":[{"skill_data":{"var":"skill"}},"fixed_power"]}},{"if":[{"and":[{"var":"l"},{"===":[{"floor":{"var":"fp"}},{"var":"fp"}]}]},{"obj":{"id":{"var":"l.id"},"stat":{"var":"l.stat"},"power":{"var":"fp"}}},{"var":"l"}]}]},
-    "perm_stats": {"call":["perm_stats"]}
+  "flags": {
+    "action": "B",
+    "permanent": true,
+    "pointBuyStat": "vitality",
+    "negating": false,
+    "hooks": [
+      "effect_in",
+      "effect_leg",
+      "end_round",
+      "perm_landing",
+      "perm_stats"
+    ],
+    "effectShield": true
   },
-  "ui": {"tag":"Fs","glyph":"🔰","color":"#6ad99f"},
-  "card": {"name":"Force Shield","tags":["block","permanent"],"resources":{"source":"warlords3_battlecry","match_reason":"dome shield + metal clang","confidence":"high","wbc3_name":"Cyan dome shield arcs","wbc3_code":"EZ41","wbc3_race":"Effects1","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Clank.wav","usage":"play when the skill resolves (pick randomly if several)"},{"path":"assets/Sounds/SoundFX/DoubleClang.wav","usage":"play when the skill resolves (pick randomly if several)"}]}},"data":{"action_type":"B","is_permanent":true,"point_buy_stat":"stat_vitality","text":"Permanent, always power 6: no point-buy roll — it lands with power 6 (its Rule 24 power). Subtract the shield's 6 from effect damage before rounding (the first effect-damage hit on you that would land). Destroy this permanent if effect damage is taken.","fixed_power":6},"rebalance_links":["effect_shield"],"logic":{"description":"Permanent skill played with a Block card; always power 6 (user ruling 2026-11-16, agent interpretation: no point-buy roll — it lands with power 6). While held: the first effect-damage leg that would land on the holder has 6 subtracted from its stat sum BEFORE the /10 rounding (Σ16 → 10 → 1); the shield is then spent (removed from the holding) whether or not damage remained. Also destroyable under Rule 24 like any power-6 permanent (Vitality).","prerequisites":[{"id":"rides_on_block","description":"The caster's action this turn is a Block card.","when":{"in":[{"var":"caster.action"},["B"]]}},{"id":"not_already_held","description":"The permanent is not already in the caster's holding.","when":{"!":{"includes":[{"var":"caster.permanents"},"skill_force_shield"]}}}],"effects":[{"id":"placement_power","description":"The landing power: always 6 (no roll; data.fixed_power).","target":"caster","unit":"die","value":6},{"id":"effect_damage_after_shield","description":"Rule 21 damage of a cast (defender = the enemy caster, caster = the holder) after the shield's 6 is taken off the UNROUNDED summed stat delta, then /10 rounded half up.","target":"caster","unit":"damage","value":{"round_div10":[{"max0":[{"-":[{"sum":[{"map":[{"var":"elements"},{"max0":[{"-":[{"stat_of":[{"root":"defender"},{"var":""}]},{"stat_of":[{"root":"caster"},{"var":""}]}]}]}]}]},6]}]}]}},{"id":"shield_spent","description":"The shield is consumed when the incoming leg would have landed without it (Rule 21 damage before the shield >= 1).","target":"caster","unit":"tokens","value":{">=":[{"rule":["rule_21_delta_damage",{"caster":{"root":"defender"},"defender":{"root":"caster"},"elements":{"root":"elements"}}]},1]}},{"id":"destroyed_by_rule_24","description":"A Rule 24 point-buy die destroys the permanent when it reaches the placement power.","target":"caster","unit":"tokens","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"var":"caster.perm_power.skill_force_shield"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Block skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"stays_permanent","description":"Remains a permanent.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"A permanent needs a point-buy stat: 'any' or one of the four stats.","assert":{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}}],"references":["rule_21_delta_damage","using_rule_24"]}}
+  "uses": [
+    "skills_std"
+  ],
+  "hooks": {
+    "effect_in": {
+      "if": [
+        {
+          "bool": {
+            "has_perm": [
+              {
+                "var": "defender"
+              },
+              {
+                "var": "skill"
+              }
+            ]
+          }
+        },
+        {
+          "or": [
+            {
+              "get": [
+                {
+                  "perm_power": {
+                    "var": "defender"
+                  }
+                },
+                {
+                  "var": "skill"
+                }
+              ]
+            },
+            0
+          ]
+        },
+        0
+      ]
+    },
+    "effect_leg": {
+      "if": [
+        {
+          "and": [
+            {
+              "bool": {
+                "var": "shield"
+              }
+            },
+            {
+              ">": [
+                {
+                  "round_div10": {
+                    "var": "sum"
+                  }
+                },
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "obj": {
+            "shield": 0,
+            "sum": {
+              "max": [
+                0,
+                {
+                  "-": [
+                    {
+                      "var": "sum"
+                    },
+                    {
+                      "var": "shield"
+                    }
+                  ]
+                }
+              ]
+            },
+            "spent": {
+              "var": "shield"
+            }
+          }
+        },
+        {
+          "obj": {
+            "shield": {
+              "var": "shield"
+            },
+            "sum": {
+              "var": "sum"
+            },
+            "spent": 0
+          }
+        }
+      ]
+    },
+    "end_round": {
+      "engine": "js",
+      "impl": "peer.mjs#endRound",
+      "note": "the die spent by effect_leg (spent → brokenShield) drops the permanent at the end of the round — peer bookkeeping, no rule left to run"
+    },
+    "perm_landing": {
+      "let": [
+        {
+          "l": {
+            "call": [
+              "perm_landing"
+            ]
+          },
+          "fp": {
+            "get": [
+              {
+                "skill_data": {
+                  "var": "skill"
+                }
+              },
+              "fixed_power"
+            ]
+          }
+        },
+        {
+          "if": [
+            {
+              "and": [
+                {
+                  "var": "l"
+                },
+                {
+                  "===": [
+                    {
+                      "floor": {
+                        "var": "fp"
+                      }
+                    },
+                    {
+                      "var": "fp"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "obj": {
+                "id": {
+                  "var": "l.id"
+                },
+                "stat": {
+                  "var": "l.stat"
+                },
+                "power": {
+                  "var": "fp"
+                }
+              }
+            },
+            {
+              "var": "l"
+            }
+          ]
+        }
+      ]
+    },
+    "perm_stats": {
+      "call": [
+        "perm_stats"
+      ]
+    }
+  },
+  "ui": {
+    "tag": "Fs",
+    "glyph": "🔰",
+    "color": "#6ad99f"
+  },
+  "card": {
+    "name": "Force Shield",
+    "tags": [
+      "block",
+      "permanent"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "match_reason": "dome shield + metal clang",
+      "confidence": "high",
+      "wbc3_name": "Cyan dome shield arcs",
+      "wbc3_code": "EZ41",
+      "wbc3_race": "Effects1",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Cyan dome shield arcs/Cyan dome shield arcs - idle [EZ41].png",
+          "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Clank.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/DoubleClang.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          }
+        ]
+      }
+    },
+    "data": {
+      "action_type": "B",
+      "is_permanent": true,
+      "point_buy_stat": "stat_vitality",
+      "text": "Permanent, always power 6: no point-buy roll — it lands with power 6 (its Rule 24 power). Subtract the shield's 6 from effect damage before rounding (the first effect-damage hit on you that would land). Destroy this permanent if effect damage is taken.",
+      "fixed_power": 6
+    },
+    "rebalance_links": [
+      "effect_shield"
+    ],
+    "logic": {
+      "description": "Permanent skill played with a Block card; always power 6 (user ruling 2026-11-16, agent interpretation: no point-buy roll — it lands with power 6). While held: the first effect-damage leg that would land on the holder has 6 subtracted from its stat sum BEFORE the /10 rounding (Σ16 → 10 → 1); the shield is then spent (removed from the holding) whether or not damage remained. Also destroyable under Rule 24 like any power-6 permanent (Vitality).",
+      "prerequisites": [
+        {
+          "id": "rides_on_block",
+          "description": "The caster's action this turn is a Block card.",
+          "when": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "B"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "not_already_held",
+          "description": "The permanent is not already in the caster's holding.",
+          "when": {
+            "!": {
+              "includes": [
+                {
+                  "var": "caster.permanents"
+                },
+                "skill_force_shield"
+              ]
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "placement_power",
+          "description": "The landing power: always 6 (no roll; data.fixed_power).",
+          "target": "caster",
+          "unit": "die",
+          "value": 6
+        },
+        {
+          "id": "effect_damage_after_shield",
+          "description": "Rule 21 damage of a cast (defender = the enemy caster, caster = the holder) after the shield's 6 is taken off the UNROUNDED summed stat delta, then /10 rounded half up.",
+          "target": "caster",
+          "unit": "damage",
+          "value": {
+            "round_div10": [
+              {
+                "max0": [
+                  {
+                    "-": [
+                      {
+                        "sum": [
+                          {
+                            "map": [
+                              {
+                                "var": "elements"
+                              },
+                              {
+                                "max0": [
+                                  {
+                                    "-": [
+                                      {
+                                        "stat_of": [
+                                          {
+                                            "root": "defender"
+                                          },
+                                          {
+                                            "var": ""
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "stat_of": [
+                                          {
+                                            "root": "caster"
+                                          },
+                                          {
+                                            "var": ""
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      6
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "shield_spent",
+          "description": "The shield is consumed when the incoming leg would have landed without it (Rule 21 damage before the shield >= 1).",
+          "target": "caster",
+          "unit": "tokens",
+          "value": {
+            ">=": [
+              {
+                "rule": [
+                  "rule_21_delta_damage",
+                  {
+                    "caster": {
+                      "root": "defender"
+                    },
+                    "defender": {
+                      "root": "caster"
+                    },
+                    "elements": {
+                      "root": "elements"
+                    }
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "A Rule 24 point-buy die destroys the permanent when it reaches the placement power.",
+          "target": "caster",
+          "unit": "tokens",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "var": "caster.perm_power.skill_force_shield"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "action_type_unchanged",
+          "description": "Stays a Block skill.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.action_type"
+              },
+              {
+                "var": "entry.data.action_type"
+              }
+            ]
+          }
+        },
+        {
+          "id": "stays_permanent",
+          "description": "Remains a permanent.",
+          "assert": {
+            "==": [
+              {
+                "!!": {
+                  "var": "proposal.data.is_permanent"
+                }
+              },
+              {
+                "!!": {
+                  "var": "entry.data.is_permanent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_stat_valid",
+          "description": "A permanent needs a point-buy stat: 'any' or one of the four stats.",
+          "assert": {
+            "in": [
+              {
+                "var": "proposal.data.point_buy_stat"
+              },
+              [
+                "any",
+                "stat_vitality",
+                "stat_world",
+                "stat_matter",
+                "stat_will",
+                "vitality",
+                "world",
+                "matter",
+                "will"
+              ]
+            ]
+          }
+        }
+      ],
+      "references": [
+        "rule_21_delta_damage",
+        "using_rule_24"
+      ]
+    }
+  }
 }

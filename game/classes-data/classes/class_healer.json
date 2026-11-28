@@ -3,11 +3,264 @@
   "id": "class_healer",
   "name": "Healer",
   "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
-  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_souls","elem_water"],"text":"Tap, only on an action in which you do not move and with an ally next to you: restore one life token to yourself and one to an adjacent ally (the one you point at, else the first one next to you). Untap: 4 successful colour emissions in all — each colour once per round, then the round starts again.","unmoved_only":true,"ally_required":true,"untap_emissions":4},
-  "flags": {"phase":"post","needs":"ally_or_self","hooks":["ability"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.1.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_vitality",
+      "elem_souls",
+      "elem_water"
+    ],
+    "text": "Tap, only on an action in which you do not move and with an ally next to you: restore one life token to yourself and one to an adjacent ally (the one you point at, else the first one next to you). Untap: 4 successful colour emissions in all — each colour once per round, then the round starts again.",
+    "unmoved_only": true,
+    "ally_required": true,
+    "untap_emissions": 4
+  },
+  "flags": {
+    "phase": "post",
+    "needs": "ally_or_self",
+    "hooks": [
+      "ability"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "ability": {"if":[{"and":[{"===":[{"get":[{"class_data":[{"var":"class"}]},"unmoved_only"]},true]},{"===":[{"var":"moved"},true]}]},{"call":["not_done",[{"cat":["[",{"ctx_label":[]},"] class healer: I move this action — the card stays untapped"]}]]},{"let":[{"ally":{"or":[{"call":["near_ally",{"var":"actor"},{"call":["ab_peer"]}]},{"at":[{"sort":{"filter":[{"call":["adjacent_of",{"var":"actor"}]},{"!":{"enemy_of":[{"var":"actor"},{"var":"o"}]}},"o"]}},0]},null]}},{"if":[{"and":[{"===":[{"get":[{"class_data":[{"var":"class"}]},"ally_required"]},true]},{"!":{"bool":{"var":"ally"}}}]},{"call":["not_done",[{"cat":["[",{"ctx_label":[]},"] class healer: no ally next to me — the card stays untapped"]}]]},{"call":["done",{"cat":["one life token restored to me",{"if":[{"bool":{"var":"ally"}},{"cat":[" and to ",{"slice":[{"var":"ally"},0,8]}]},""]}]},{"obj":{"heals":{"concat":[[{"obj":{"on":{"var":"actor"},"amount":1,"by":{"var":"actor"}}}],{"if":[{"bool":{"var":"ally"}},[{"obj":{"on":{"var":"ally"},"amount":1,"by":{"var":"actor"}}}],[]]}]}}},[]]}]}]}]}
+    "ability": {
+      "if": [
+        {
+          "and": [
+            {
+              "===": [
+                {
+                  "get": [
+                    {
+                      "class_data": [
+                        {
+                          "var": "class"
+                        }
+                      ]
+                    },
+                    "unmoved_only"
+                  ]
+                },
+                true
+              ]
+            },
+            {
+              "===": [
+                {
+                  "var": "moved"
+                },
+                true
+              ]
+            }
+          ]
+        },
+        {
+          "call": [
+            "not_done",
+            [
+              {
+                "cat": [
+                  "[",
+                  {
+                    "ctx_label": []
+                  },
+                  "] class healer: I move this action — the card stays untapped"
+                ]
+              }
+            ]
+          ]
+        },
+        {
+          "let": [
+            {
+              "ally": {
+                "or": [
+                  {
+                    "call": [
+                      "near_ally",
+                      {
+                        "var": "actor"
+                      },
+                      {
+                        "call": [
+                          "ab_peer"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "at": [
+                      {
+                        "sort": {
+                          "filter": [
+                            {
+                              "call": [
+                                "adjacent_of",
+                                {
+                                  "var": "actor"
+                                }
+                              ]
+                            },
+                            {
+                              "!": {
+                                "enemy_of": [
+                                  {
+                                    "var": "actor"
+                                  },
+                                  {
+                                    "var": "o"
+                                  }
+                                ]
+                              }
+                            },
+                            "o"
+                          ]
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  null
+                ]
+              }
+            },
+            {
+              "if": [
+                {
+                  "and": [
+                    {
+                      "===": [
+                        {
+                          "get": [
+                            {
+                              "class_data": [
+                                {
+                                  "var": "class"
+                                }
+                              ]
+                            },
+                            "ally_required"
+                          ]
+                        },
+                        true
+                      ]
+                    },
+                    {
+                      "!": {
+                        "bool": {
+                          "var": "ally"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "call": [
+                    "not_done",
+                    [
+                      {
+                        "cat": [
+                          "[",
+                          {
+                            "ctx_label": []
+                          },
+                          "] class healer: no ally next to me — the card stays untapped"
+                        ]
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "call": [
+                    "done",
+                    {
+                      "cat": [
+                        "one life token restored to me",
+                        {
+                          "if": [
+                            {
+                              "bool": {
+                                "var": "ally"
+                              }
+                            },
+                            {
+                              "cat": [
+                                " and to ",
+                                {
+                                  "slice": [
+                                    {
+                                      "var": "ally"
+                                    },
+                                    0,
+                                    8
+                                  ]
+                                }
+                              ]
+                            },
+                            ""
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "obj": {
+                        "heals": {
+                          "concat": [
+                            [
+                              {
+                                "obj": {
+                                  "on": {
+                                    "var": "actor"
+                                  },
+                                  "amount": 1,
+                                  "by": {
+                                    "var": "actor"
+                                  }
+                                }
+                              }
+                            ],
+                            {
+                              "if": [
+                                {
+                                  "bool": {
+                                    "var": "ally"
+                                  }
+                                },
+                                [
+                                  {
+                                    "obj": {
+                                      "on": {
+                                        "var": "ally"
+                                      },
+                                      "amount": 1,
+                                      "by": {
+                                        "var": "actor"
+                                      }
+                                    }
+                                  }
+                                ],
+                                []
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    []
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   }
 }

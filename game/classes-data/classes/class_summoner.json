@@ -3,11 +3,40 @@
   "id": "class_summoner",
   "name": "Summoner",
   "version": "1.0.0",
-  "source": {"collection":"classes","version":"1.0.0"},
-  "data": {"ability_kind":"tap","colors":["elem_time","elem_space","elem_souls","elem_concentration","elem_harmony"],"text":"Stat buy (channeling) in all character colors. Summon a creature from the Library at this location as an ally. On removal: creatures go to your archive."},
-  "flags": {"phase":"local","local":{"op":"grant","effect_id":"effect_summoning"},"hooks":["local"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.0.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_time",
+      "elem_space",
+      "elem_souls",
+      "elem_concentration",
+      "elem_harmony"
+    ],
+    "text": "Stat buy (channeling) in all character colors. Summon a creature from the Library at this location as an ally. On removal: creatures go to your archive."
+  },
+  "flags": {
+    "phase": "local",
+    "local": {
+      "op": "grant",
+      "effect_id": "effect_summoning"
+    },
+    "hooks": [
+      "local"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "local": {"quote":{"op":"grant","effect_id":"effect_summoning"}}
+    "local": {
+      "quote": {
+        "op": "grant",
+        "effect_id": "effect_summoning"
+      }
+    }
   }
 }

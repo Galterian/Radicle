@@ -7,47 +7,1036 @@
     "e2c_surgery_ok": {
       "params": [],
       "doc": "a tile was chosen and the map can be read (ctx.tileTokensAt + ctx.trapsAt)",
-      "body": {"and":[{"===":[{"var":"cast.target.kind"},"tile"]},{"ctx_has":["tileTokensAt"]},{"ctx_has":["trapsAt"]}]}
+      "body": {
+        "and": [
+          {
+            "===": [
+              {
+                "var": "cast.target.kind"
+              },
+              "tile"
+            ]
+          },
+          {
+            "ctx_has": [
+              "tileTokensAt"
+            ]
+          },
+          {
+            "ctx_has": [
+              "trapsAt"
+            ]
+          }
+        ]
+      }
     },
     "e2c_things_at": {
-      "params": ["q","r"],
+      "params": [
+        "q",
+        "r"
+      ],
       "doc": "everything on a tile but its unit: bonus tokens / features ('token'), traps ('trap'), the obstacle ('obstacle'), each {kind, owner, id, label, by: me}",
-      "body": {"concat":[{"map":[{"filter":[{"tile_tokens_at":[{"var":"q"},{"var":"r"}]},{"===":[{"var":"t.kind"},"bonus"]},"t"]},{"obj":{"kind":"token","owner":{"var":"t.owner"},"id":{"var":"t.id"},"label":{"or":[{"var":"t.item"},{"var":"t.elem"}]},"by":{"var":"me"}}},"t"]},{"map":[{"traps_at":[{"var":"q"},{"var":"r"}]},{"obj":{"kind":"trap","owner":{"var":"t.owner"},"id":{"var":"t.id"},"label":{"var":"t.effect_id"},"by":{"var":"me"}}},"t"]},{"let":[{"o":{"obstacle_at":[{"var":"q"},{"var":"r"}]}},{"if":[{"var":"o"},[{"obj":{"kind":"obstacle","owner":{"var":"o.owner"},"id":{"var":"o.id"},"label":"obstacle","by":{"var":"me"}}}],[]]}]}]}
+      "body": {
+        "concat": [
+          {
+            "map": [
+              {
+                "filter": [
+                  {
+                    "tile_tokens_at": [
+                      {
+                        "var": "q"
+                      },
+                      {
+                        "var": "r"
+                      }
+                    ]
+                  },
+                  {
+                    "===": [
+                      {
+                        "var": "t.kind"
+                      },
+                      "bonus"
+                    ]
+                  },
+                  "t"
+                ]
+              },
+              {
+                "obj": {
+                  "kind": "token",
+                  "owner": {
+                    "var": "t.owner"
+                  },
+                  "id": {
+                    "var": "t.id"
+                  },
+                  "label": {
+                    "or": [
+                      {
+                        "var": "t.item"
+                      },
+                      {
+                        "var": "t.elem"
+                      }
+                    ]
+                  },
+                  "by": {
+                    "var": "me"
+                  }
+                }
+              },
+              "t"
+            ]
+          },
+          {
+            "map": [
+              {
+                "traps_at": [
+                  {
+                    "var": "q"
+                  },
+                  {
+                    "var": "r"
+                  }
+                ]
+              },
+              {
+                "obj": {
+                  "kind": "trap",
+                  "owner": {
+                    "var": "t.owner"
+                  },
+                  "id": {
+                    "var": "t.id"
+                  },
+                  "label": {
+                    "var": "t.effect_id"
+                  },
+                  "by": {
+                    "var": "me"
+                  }
+                }
+              },
+              "t"
+            ]
+          },
+          {
+            "let": [
+              {
+                "o": {
+                  "obstacle_at": [
+                    {
+                      "var": "q"
+                    },
+                    {
+                      "var": "r"
+                    }
+                  ]
+                }
+              },
+              {
+                "if": [
+                  {
+                    "var": "o"
+                  },
+                  [
+                    {
+                      "obj": {
+                        "kind": "obstacle",
+                        "owner": {
+                          "var": "o.owner"
+                        },
+                        "id": {
+                          "var": "o.id"
+                        },
+                        "label": "obstacle",
+                        "by": {
+                          "var": "me"
+                        }
+                      }
+                    }
+                  ],
+                  []
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     "e2c_unit_at": {
-      "params": ["q","r"],
+      "params": [
+        "q",
+        "r"
+      ],
       "doc": "the first living unit standing on (q, r), else null",
-      "body": {"or":[{"find":[{"peers":[]},{"and":[{">":[{"life_of":[{"var":"id"}]},0]},{"let":[{"t":{"tile_of":[{"var":"id"}]}},{"and":[{"var":"t"},{"===":[{"var":"t.q"},{"var":"q"}]},{"===":[{"var":"t.r"},{"var":"r"}]}]}]}]},"id"]},null]}
+      "body": {
+        "or": [
+          {
+            "find": [
+              {
+                "peers": []
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "life_of": [
+                          {
+                            "var": "id"
+                          }
+                        ]
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "let": [
+                      {
+                        "t": {
+                          "tile_of": [
+                            {
+                              "var": "id"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "and": [
+                          {
+                            "var": "t"
+                          },
+                          {
+                            "===": [
+                              {
+                                "var": "t.q"
+                              },
+                              {
+                                "var": "q"
+                              }
+                            ]
+                          },
+                          {
+                            "===": [
+                              {
+                                "var": "t.r"
+                              },
+                              {
+                                "var": "r"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "id"
+            ]
+          },
+          null
+        ]
+      }
     },
     "e2c_dest_free": {
       "params": [],
       "doc": "the chosen tile holds no unit and nothing else",
-      "body": {"and":[{"is_free":[{"var":"cast.target.ref.q"},{"var":"cast.target.ref.r"}]},{"!":[{"len":[{"call":["e2c_things_at",{"var":"cast.target.ref.q"},{"var":"cast.target.ref.r"}]}]}]}]}
+      "body": {
+        "and": [
+          {
+            "is_free": [
+              {
+                "var": "cast.target.ref.q"
+              },
+              {
+                "var": "cast.target.ref.r"
+              }
+            ]
+          },
+          {
+            "!": [
+              {
+                "len": [
+                  {
+                    "call": [
+                      "e2c_things_at",
+                      {
+                        "var": "cast.target.ref.q"
+                      },
+                      {
+                        "var": "cast.target.ref.r"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     "e2c_dest_ok": {
       "params": [],
       "doc": "the chosen tile is free and within 10 hexes (else fizzled)",
-      "body": {"if":[{"or":[{"!":[{"call":["e2c_dest_free"]}]},{">":[{"hex_dist":[{"var":"my_tile"},{"var":"cast.target.ref"}]},10]}]},{"seq":[{"put":["status","fizzled"]},{"note":["no free tile within 10 chosen"]},false]},true]}
+      "body": {
+        "if": [
+          {
+            "or": [
+              {
+                "!": [
+                  {
+                    "call": [
+                      "e2c_dest_free"
+                    ]
+                  }
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "hex_dist": [
+                      {
+                        "var": "my_tile"
+                      },
+                      {
+                        "var": "cast.target.ref"
+                      }
+                    ]
+                  },
+                  10
+                ]
+              }
+            ]
+          },
+          {
+            "seq": [
+              {
+                "put": [
+                  "status",
+                  "fizzled"
+                ]
+              },
+              {
+                "note": [
+                  "no free tile within 10 chosen"
+                ]
+              },
+              false
+            ]
+          },
+          true
+        ]
+      }
     },
     "e2c_first_by_id": {
-      "params": ["things"],
+      "params": [
+        "things"
+      ],
       "doc": "the first thing by id (String#localeCompare, stable sort). effects.mjs dedupes (kind, id) first; with a stable sort the first occurrence of a duplicate already precedes it, so the pick is the same",
-      "body": {"at":[{"sort_by":[{"var":"things"},{"locale":{"var":"it.id"}}]},0]}
+      "body": {
+        "at": [
+          {
+            "sort_by": [
+              {
+                "var": "things"
+              },
+              {
+                "locale": {
+                  "var": "it.id"
+                }
+              }
+            ]
+          },
+          0
+        ]
+      }
     },
     "e2c_move_one": {
-      "params": ["mode"],
+      "params": [
+        "mode"
+      ],
       "doc": "Metaphysics (unite): a feature / trap next to me; Disruption (split): any trap in view (free tiles within 10 + every unit's tile) — the first by id goes onto the chosen free tile",
-      "body": {"if":[{"call":["e2c_dest_ok"]},{"let":[{"pick":{"call":["e2c_first_by_id",{"if":[{"===":[{"var":"mode"},"unite"]},{"reduce":[{"map":[{"neighbours":[{"var":"my_tile.q"},{"var":"my_tile.r"}]},{"filter":[{"call":["e2c_things_at",{"var":"n.q"},{"var":"n.r"}]},{"!==":[{"var":"th.kind"},"obstacle"]},"th"]},"n"]},{"concat":[{"var":"acc"},{"var":"current"}]},[]]},{"reduce":[{"map":[{"if":[{"ctx_has":["freeTilesWithin"]},{"concat":[{"free_tiles_within":[{"var":"my_tile.q"},{"var":"my_tile.r"},10]},{"filter":[{"map":[{"peers":[]},{"tile_of":[{"var":"id"}]},"id"]},{"var":"t"},"t"]}]},[]]},{"map":[{"traps_at":[{"var":"n.q"},{"var":"n.r"}]},{"obj":{"kind":"trap","owner":{"var":"t.owner"},"id":{"var":"t.id"},"label":{"var":"t.effect_id"}}},"t"]},"n"]},{"concat":[{"var":"acc"},{"var":"current"}]},[]]}]}]}},{"if":[{"!":[{"var":"pick"}]},{"seq":[{"put":["status","fizzled"]},{"note":[{"if":[{"===":[{"var":"mode"},"unite"]},"nothing nearby to move","no trap in view to move"]}]}]},{"seq":[{"emit":["relocations",{"obj":{"kind":{"var":"pick.kind"},"owner":{"var":"pick.owner"},"id":{"var":"pick.id"},"label":{"var":"pick.label"},"by":{"var":"pick.by"},"q":{"var":"cast.target.ref.q"},"r":{"var":"cast.target.ref.r"}}}]},{"note":[{"var":"pick.label"}," moved to (",{"var":"cast.target.ref.q"},",",{"var":"cast.target.ref.r"},")"]},{"set":["recipients",[]]}]}]}]}]}
+      "body": {
+        "if": [
+          {
+            "call": [
+              "e2c_dest_ok"
+            ]
+          },
+          {
+            "let": [
+              {
+                "pick": {
+                  "call": [
+                    "e2c_first_by_id",
+                    {
+                      "if": [
+                        {
+                          "===": [
+                            {
+                              "var": "mode"
+                            },
+                            "unite"
+                          ]
+                        },
+                        {
+                          "reduce": [
+                            {
+                              "map": [
+                                {
+                                  "neighbours": [
+                                    {
+                                      "var": "my_tile.q"
+                                    },
+                                    {
+                                      "var": "my_tile.r"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "filter": [
+                                    {
+                                      "call": [
+                                        "e2c_things_at",
+                                        {
+                                          "var": "n.q"
+                                        },
+                                        {
+                                          "var": "n.r"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "!==": [
+                                        {
+                                          "var": "th.kind"
+                                        },
+                                        "obstacle"
+                                      ]
+                                    },
+                                    "th"
+                                  ]
+                                },
+                                "n"
+                              ]
+                            },
+                            {
+                              "concat": [
+                                {
+                                  "var": "acc"
+                                },
+                                {
+                                  "var": "current"
+                                }
+                              ]
+                            },
+                            []
+                          ]
+                        },
+                        {
+                          "reduce": [
+                            {
+                              "map": [
+                                {
+                                  "if": [
+                                    {
+                                      "ctx_has": [
+                                        "freeTilesWithin"
+                                      ]
+                                    },
+                                    {
+                                      "concat": [
+                                        {
+                                          "free_tiles_within": [
+                                            {
+                                              "var": "my_tile.q"
+                                            },
+                                            {
+                                              "var": "my_tile.r"
+                                            },
+                                            10
+                                          ]
+                                        },
+                                        {
+                                          "filter": [
+                                            {
+                                              "map": [
+                                                {
+                                                  "peers": []
+                                                },
+                                                {
+                                                  "tile_of": [
+                                                    {
+                                                      "var": "id"
+                                                    }
+                                                  ]
+                                                },
+                                                "id"
+                                              ]
+                                            },
+                                            {
+                                              "var": "t"
+                                            },
+                                            "t"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    []
+                                  ]
+                                },
+                                {
+                                  "map": [
+                                    {
+                                      "traps_at": [
+                                        {
+                                          "var": "n.q"
+                                        },
+                                        {
+                                          "var": "n.r"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "obj": {
+                                        "kind": "trap",
+                                        "owner": {
+                                          "var": "t.owner"
+                                        },
+                                        "id": {
+                                          "var": "t.id"
+                                        },
+                                        "label": {
+                                          "var": "t.effect_id"
+                                        }
+                                      }
+                                    },
+                                    "t"
+                                  ]
+                                },
+                                "n"
+                              ]
+                            },
+                            {
+                              "concat": [
+                                {
+                                  "var": "acc"
+                                },
+                                {
+                                  "var": "current"
+                                }
+                              ]
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "if": [
+                  {
+                    "!": [
+                      {
+                        "var": "pick"
+                      }
+                    ]
+                  },
+                  {
+                    "seq": [
+                      {
+                        "put": [
+                          "status",
+                          "fizzled"
+                        ]
+                      },
+                      {
+                        "note": [
+                          {
+                            "if": [
+                              {
+                                "===": [
+                                  {
+                                    "var": "mode"
+                                  },
+                                  "unite"
+                                ]
+                              },
+                              "nothing nearby to move",
+                              "no trap in view to move"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "seq": [
+                      {
+                        "emit": [
+                          "relocations",
+                          {
+                            "obj": {
+                              "kind": {
+                                "var": "pick.kind"
+                              },
+                              "owner": {
+                                "var": "pick.owner"
+                              },
+                              "id": {
+                                "var": "pick.id"
+                              },
+                              "label": {
+                                "var": "pick.label"
+                              },
+                              "by": {
+                                "var": "pick.by"
+                              },
+                              "q": {
+                                "var": "cast.target.ref.q"
+                              },
+                              "r": {
+                                "var": "cast.target.ref.r"
+                              }
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "note": [
+                          {
+                            "var": "pick.label"
+                          },
+                          " moved to (",
+                          {
+                            "var": "cast.target.ref.q"
+                          },
+                          ",",
+                          {
+                            "var": "cast.target.ref.r"
+                          },
+                          ")"
+                        ]
+                      },
+                      {
+                        "set": [
+                          "recipients",
+                          []
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     "e2c_switch": {
       "params": [],
       "doc": "Mind Blast: swap my tile with the chosen one (1–10 hexes) — units (moves), tokens, traps, obstacles (relocations)",
-      "body": {"let":[{"d":{"hex_dist":[{"var":"my_tile"},{"var":"cast.target.ref"}]},"dq":{"var":"cast.target.ref.q"},"dr":{"var":"cast.target.ref.r"}},{"if":[{"and":[{">=":[{"var":"d"},1]},{"<=":[{"var":"d"},10]}]},{"let":[{"other":{"call":["e2c_unit_at",{"var":"dq"},{"var":"dr"}]}},{"seq":[{"emit":["moves",{"obj":{"who":{"var":"me"},"q":{"var":"dq"},"r":{"var":"dr"},"reason":"switched"}}]},{"if":[{"var":"other"},{"emit":["moves",{"obj":{"who":{"var":"other"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"},"reason":"switched"}}]}]},{"map":[{"call":["e2c_things_at",{"var":"my_tile.q"},{"var":"my_tile.r"}]},{"emit":["relocations",{"obj":{"kind":{"var":"th.kind"},"owner":{"var":"th.owner"},"id":{"var":"th.id"},"label":{"var":"th.label"},"by":{"var":"th.by"},"q":{"var":"dq"},"r":{"var":"dr"}}}]},"th"]},{"map":[{"call":["e2c_things_at",{"var":"dq"},{"var":"dr"}]},{"emit":["relocations",{"obj":{"kind":{"var":"th.kind"},"owner":{"var":"th.owner"},"id":{"var":"th.id"},"label":{"var":"th.label"},"by":{"var":"th.by"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]},"th"]},{"note":["switch (",{"var":"my_tile.q"},",",{"var":"my_tile.r"},") ⇄ (",{"var":"dq"},",",{"var":"dr"},")",{"if":[{"var":"other"},{"cat":[" with ",{"var":"other"}]},""]}]},{"set":["recipients",[]]}]}]},{"note":["tile to switch must be 1–10 hexes away"]}]}]}
+      "body": {
+        "let": [
+          {
+            "d": {
+              "hex_dist": [
+                {
+                  "var": "my_tile"
+                },
+                {
+                  "var": "cast.target.ref"
+                }
+              ]
+            },
+            "dq": {
+              "var": "cast.target.ref.q"
+            },
+            "dr": {
+              "var": "cast.target.ref.r"
+            }
+          },
+          {
+            "if": [
+              {
+                "and": [
+                  {
+                    ">=": [
+                      {
+                        "var": "d"
+                      },
+                      1
+                    ]
+                  },
+                  {
+                    "<=": [
+                      {
+                        "var": "d"
+                      },
+                      10
+                    ]
+                  }
+                ]
+              },
+              {
+                "let": [
+                  {
+                    "other": {
+                      "call": [
+                        "e2c_unit_at",
+                        {
+                          "var": "dq"
+                        },
+                        {
+                          "var": "dr"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "seq": [
+                      {
+                        "emit": [
+                          "moves",
+                          {
+                            "obj": {
+                              "who": {
+                                "var": "me"
+                              },
+                              "q": {
+                                "var": "dq"
+                              },
+                              "r": {
+                                "var": "dr"
+                              },
+                              "reason": "switched"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "if": [
+                          {
+                            "var": "other"
+                          },
+                          {
+                            "emit": [
+                              "moves",
+                              {
+                                "obj": {
+                                  "who": {
+                                    "var": "other"
+                                  },
+                                  "q": {
+                                    "var": "my_tile.q"
+                                  },
+                                  "r": {
+                                    "var": "my_tile.r"
+                                  },
+                                  "reason": "switched"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "map": [
+                          {
+                            "call": [
+                              "e2c_things_at",
+                              {
+                                "var": "my_tile.q"
+                              },
+                              {
+                                "var": "my_tile.r"
+                              }
+                            ]
+                          },
+                          {
+                            "emit": [
+                              "relocations",
+                              {
+                                "obj": {
+                                  "kind": {
+                                    "var": "th.kind"
+                                  },
+                                  "owner": {
+                                    "var": "th.owner"
+                                  },
+                                  "id": {
+                                    "var": "th.id"
+                                  },
+                                  "label": {
+                                    "var": "th.label"
+                                  },
+                                  "by": {
+                                    "var": "th.by"
+                                  },
+                                  "q": {
+                                    "var": "dq"
+                                  },
+                                  "r": {
+                                    "var": "dr"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "th"
+                        ]
+                      },
+                      {
+                        "map": [
+                          {
+                            "call": [
+                              "e2c_things_at",
+                              {
+                                "var": "dq"
+                              },
+                              {
+                                "var": "dr"
+                              }
+                            ]
+                          },
+                          {
+                            "emit": [
+                              "relocations",
+                              {
+                                "obj": {
+                                  "kind": {
+                                    "var": "th.kind"
+                                  },
+                                  "owner": {
+                                    "var": "th.owner"
+                                  },
+                                  "id": {
+                                    "var": "th.id"
+                                  },
+                                  "label": {
+                                    "var": "th.label"
+                                  },
+                                  "by": {
+                                    "var": "th.by"
+                                  },
+                                  "q": {
+                                    "var": "my_tile.q"
+                                  },
+                                  "r": {
+                                    "var": "my_tile.r"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "th"
+                        ]
+                      },
+                      {
+                        "note": [
+                          "switch (",
+                          {
+                            "var": "my_tile.q"
+                          },
+                          ",",
+                          {
+                            "var": "my_tile.r"
+                          },
+                          ") ⇄ (",
+                          {
+                            "var": "dq"
+                          },
+                          ",",
+                          {
+                            "var": "dr"
+                          },
+                          ")",
+                          {
+                            "if": [
+                              {
+                                "var": "other"
+                              },
+                              {
+                                "cat": [
+                                  " with ",
+                                  {
+                                    "var": "other"
+                                  }
+                                ]
+                              },
+                              ""
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "set": [
+                          "recipients",
+                          []
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "note": [
+                  "tile to switch must be 1–10 hexes away"
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     "e2c_awake": {
       "params": [],
       "doc": "Awake: the chosen free tile within 10 receives the first adjacent ally (by id), else me",
-      "body": {"if":[{"call":["e2c_dest_ok"]},{"let":[{"ally":{"at":[{"sort":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{">":[{"life_of":[{"var":"id"}]},0]},{"!":[{"enemy_of":[{"var":"me"},{"var":"id"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"id"}]},1]}]},"id"]}]},0]}},{"seq":[{"emit":["moves",{"obj":{"who":{"or":[{"var":"ally"},{"var":"me"}]},"q":{"var":"cast.target.ref.q"},"r":{"var":"cast.target.ref.r"},"reason":"awakened"}}]},{"note":["awake moves ",{"or":[{"var":"ally"},"me"]}," to (",{"var":"cast.target.ref.q"},",",{"var":"cast.target.ref.r"},")"]}]}]}]}
+      "body": {
+        "if": [
+          {
+            "call": [
+              "e2c_dest_ok"
+            ]
+          },
+          {
+            "let": [
+              {
+                "ally": {
+                  "at": [
+                    {
+                      "sort": [
+                        {
+                          "filter": [
+                            {
+                              "peers": []
+                            },
+                            {
+                              "and": [
+                                {
+                                  "!==": [
+                                    {
+                                      "var": "id"
+                                    },
+                                    {
+                                      "var": "me"
+                                    }
+                                  ]
+                                },
+                                {
+                                  ">": [
+                                    {
+                                      "life_of": [
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                {
+                                  "!": [
+                                    {
+                                      "enemy_of": [
+                                        {
+                                          "var": "me"
+                                        },
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "<=": [
+                                    {
+                                      "dist": [
+                                        {
+                                          "var": "me"
+                                        },
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    },
+                                    1
+                                  ]
+                                }
+                              ]
+                            },
+                            "id"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "seq": [
+                  {
+                    "emit": [
+                      "moves",
+                      {
+                        "obj": {
+                          "who": {
+                            "or": [
+                              {
+                                "var": "ally"
+                              },
+                              {
+                                "var": "me"
+                              }
+                            ]
+                          },
+                          "q": {
+                            "var": "cast.target.ref.q"
+                          },
+                          "r": {
+                            "var": "cast.target.ref.r"
+                          },
+                          "reason": "awakened"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "note": [
+                      "awake moves ",
+                      {
+                        "or": [
+                          {
+                            "var": "ally"
+                          },
+                          "me"
+                        ]
+                      },
+                      " to (",
+                      {
+                        "var": "cast.target.ref.q"
+                      },
+                      ",",
+                      {
+                        "var": "cast.target.ref.r"
+                      },
+                      ")"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

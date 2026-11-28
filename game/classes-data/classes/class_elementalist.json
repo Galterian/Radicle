@@ -3,11 +3,156 @@
   "id": "class_elementalist",
   "name": "Elementalist",
   "version": "1.2.0",
-  "source": {"collection":"classes","version":"1.2.0"},
-  "data": {"ability_kind":"tap","colors":["elem_air","elem_water","elem_earth","elem_fire","elem_harmony","elem_concentration","elem_vitality"],"text":"Passive, once per action: when one of your damage spells completes, roll a point-buy on your highest stat among that spell's elements — the die is added to its damage."},
-  "flags": {"phase":null,"passiveTurn":true,"perAction":true,"hooks":["pre_cast"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.2.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_air",
+      "elem_water",
+      "elem_earth",
+      "elem_fire",
+      "elem_harmony",
+      "elem_concentration",
+      "elem_vitality"
+    ],
+    "text": "Passive, once per action: when one of your damage spells completes, roll a point-buy on your highest stat among that spell's elements — the die is added to its damage."
+  },
+  "flags": {
+    "phase": null,
+    "passiveTurn": true,
+    "perAction": true,
+    "hooks": [
+      "pre_cast"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "pre_cast": {"let":[{"best":{"or":[{"at":[{"sort_by":[{"uniq":{"filter":[{"map":[{"or":[{"var":"elements"},[]]},{"elem_stat":[{"var":"e"}]},"e"]},{"bool":{"var":"x"}},"x"]}},{"desc":{"stat_of":[{"var":"actor"},{"var":"s"}]}},{"locale":{"var":"s"}},"s"]},0]},"matter"]}},{"let":[{"pb":{"point_buy_seed":[{"stat_of":[{"var":"actor"},{"var":"best"}]},{"cat":[{"or":[{"var":"salt"},""]},":elementalist:",{"ctx_action":[]}]}]}},{"obj":{"stat":{"var":"best"},"fail":{"var":"pb.fail"},"dice":{"var":"pb.dice"},"value":{"var":"pb.value"}}}]}]}
+    "pre_cast": {
+      "let": [
+        {
+          "best": {
+            "or": [
+              {
+                "at": [
+                  {
+                    "sort_by": [
+                      {
+                        "uniq": {
+                          "filter": [
+                            {
+                              "map": [
+                                {
+                                  "or": [
+                                    {
+                                      "var": "elements"
+                                    },
+                                    []
+                                  ]
+                                },
+                                {
+                                  "elem_stat": [
+                                    {
+                                      "var": "e"
+                                    }
+                                  ]
+                                },
+                                "e"
+                              ]
+                            },
+                            {
+                              "bool": {
+                                "var": "x"
+                              }
+                            },
+                            "x"
+                          ]
+                        }
+                      },
+                      {
+                        "desc": {
+                          "stat_of": [
+                            {
+                              "var": "actor"
+                            },
+                            {
+                              "var": "s"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "locale": {
+                          "var": "s"
+                        }
+                      },
+                      "s"
+                    ]
+                  },
+                  0
+                ]
+              },
+              "matter"
+            ]
+          }
+        },
+        {
+          "let": [
+            {
+              "pb": {
+                "point_buy_seed": [
+                  {
+                    "stat_of": [
+                      {
+                        "var": "actor"
+                      },
+                      {
+                        "var": "best"
+                      }
+                    ]
+                  },
+                  {
+                    "cat": [
+                      {
+                        "or": [
+                          {
+                            "var": "salt"
+                          },
+                          ""
+                        ]
+                      },
+                      ":elementalist:",
+                      {
+                        "ctx_action": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "obj": {
+                "stat": {
+                  "var": "best"
+                },
+                "fail": {
+                  "var": "pb.fail"
+                },
+                "dice": {
+                  "var": "pb.dice"
+                },
+                "value": {
+                  "var": "pb.value"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 }

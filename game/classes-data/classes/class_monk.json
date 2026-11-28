@@ -3,11 +3,39 @@
   "id": "class_monk",
   "name": "Monk",
   "version": "1.2.0",
-  "source": {"collection":"classes","version":"1.2.0"},
-  "data": {"ability_kind":"static","colors":["elem_time","elem_space","elem_souls","elem_concentration","elem_harmony"],"text":"You may emit elements during your Move and your Empty Move: moving does not interrupt your cast."},
-  "flags": {"phase":null,"emits":{"M":true,"EM":true},"hooks":["emits"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.2.0"
+  },
+  "data": {
+    "ability_kind": "static",
+    "colors": [
+      "elem_time",
+      "elem_space",
+      "elem_souls",
+      "elem_concentration",
+      "elem_harmony"
+    ],
+    "text": "You may emit elements during your Move and your Empty Move: moving does not interrupt your cast."
+  },
+  "flags": {
+    "phase": null,
+    "emits": {
+      "M": true,
+      "EM": true
+    },
+    "hooks": [
+      "emits"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "emits": {"call":["emits_by_flag"]}
+    "emits": {
+      "call": [
+        "emits_by_flag"
+      ]
+    }
   }
 }

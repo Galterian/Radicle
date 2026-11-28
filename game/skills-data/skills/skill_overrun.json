@@ -3,17 +3,618 @@
   "id": "skill_overrun",
   "name": "Overrun / Push",
   "version": "1.2.0",
-  "source": {"collection":"skills","version":"1.1.0"},
+  "source": {
+    "collection": "skills",
+    "version": "1.1.0"
+  },
   "deal_order": 2,
   "action_type": "A",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "Swap places with the enemy you Attack (walk over them and go behind): you take their hex and they take yours. Negate the enemy's Move. Alt: the enemy or ally is moved one tile away; step over them.",
-  "flags": {"action":"A","permanent":false,"negating":true,"hooks":["negate_kind","move"],"range":1,"negates":["M","EM"],"negate":{"codes":["M","EM"],"who":"target","mode":"no_move"},"swap":true,"passOrder":{"negate_kind":3}},
-  "uses": ["skills_std", "skills_pass"],
-  "hooks": {
-    "negate_kind": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"A"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"if":[{"and":[{"bool":[{"var":"t"}]},{"<=":[{"dist":[{"var":"actor"},{"var":"t"}]},1]}]},{"let":[{"mv":{"if":[{"code_is":[{"var":"t"},"M"]},"M",{"code_is":[{"var":"t"},"EM"]},"EM",null]}},{"let":[{"sw":{"and":[{"has_register":["swaps"]},{"enemy_of":[{"var":"actor"},{"var":"t"}]},{"!==":[{"var":"r.target.kind"},"tile"]},{"none":[{"swaps":[]},{"or":[{"in":[{"var":"actor"},[{"var":"s.by"},{"var":"s.on"}]]},{"in":[{"var":"t"},[{"var":"s.by"},{"var":"s.on"}]]}]},"s"]}]}},{"concat":[[{"obj":{"op":"no_move","id":{"var":"t"}}}],{"if":[{"var":"mv"},{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},{"var":"mv"}]},[]]},{"if":[{"var":"sw"},{"concat":[[{"obj":{"op":"swap","by":{"var":"actor"},"on":{"var":"t"}}}],{"if":[{"var":"mv"},[],[{"obj":{"op":"fx","fx":{"obj":{"by":{"var":"actor"},"skill":{"var":"skill"},"on":{"var":"t"},"what":"swap","building":{"from_building":[{"var":"actor"},{"var":"skill"}]}}}}}]]}]},[]]}]}]}]},[]]}]}]}
+  "flags": {
+    "action": "A",
+    "permanent": false,
+    "negating": true,
+    "hooks": [
+      "negate_kind",
+      "move"
+    ],
+    "range": 1,
+    "negates": [
+      "M",
+      "EM"
+    ],
+    "negate": {
+      "codes": [
+        "M",
+        "EM"
+      ],
+      "who": "target",
+      "mode": "no_move"
+    },
+    "swap": true,
+    "passOrder": {
+      "negate_kind": 3
+    }
   },
-  "ui": {"tag":"Ov","glyph":"🐂","color":"#ff6b6b"},
-  "card": {"name":"Overrun / Push","tags":["attack","move"],"resources":{"source":"warlords3_battlecry","match_reason":"stomp through the enemy, dust at the swap","confidence":"medium","wbc3_name":"Smokedust puff animation","wbc3_code":"EMX0","wbc3_race":"Effects1","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Stomp.wav","usage":"play when the skill resolves (pick randomly if several)"},{"path":"assets/Sounds/SoundFX/Whack.wav","usage":"play when the skill resolves (pick randomly if several)"}]}},"data":{"action_type":"A","is_permanent":false,"point_buy_stat":null,"text":"Swap places with the enemy you Attack (walk over them and go behind): you take their hex and they take yours. Negate the enemy's Move. Alt: the enemy or ally is moved one tile away; step over them."},"rebalance_links":["skill_powerful_attack"],"logic":{"description":"Instant riding on an Attack card against an enemy in contact. The target's Move this round is negated (they stay on their tile) and — paper swap implemented (user ruling 2026-11-16) — when the Attack targets that adjacent enemy the attacker and the enemy swap places (walk over them and go behind): each takes the other's hex after the moves, if neither moved otherwise this action; one swap per unit and action (actor order). The Alt (push one tile away) is still not implemented. Judged by whether it did its job (negated a Move or swapped); with nothing to do it returns to hand.","prerequisites":[{"id":"rides_on_attack","description":"The caster's action this turn is an Attack card.","when":{"in":[{"var":"caster.action"},["A"]]}},{"id":"enemy_in_contact","description":"The target is an enemy in contact.","when":{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}}],"effects":[{"id":"negate_target_move","description":"True when the target's Move / Empty Move is cancelled this round (target in contact and playing M or EM).","target":"target","unit":"hexes","value":{"if":[{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"in":[{"var":"target.action"},["M","EM"]]}]},0,1]}},{"id":"swap_places","description":"1 when the attacker and the adjacent enemy target trade hexes this action.","target":"target","unit":"hexes","value":{"if":[{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]},1,0]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays an Attack skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["in_contact","is_enemy","rule_8_instant_returns"]}}
+  "uses": [
+    "skills_std",
+    "skills_pass"
+  ],
+  "hooks": {
+    "negate_kind": {
+      "if": [
+        {
+          "!": [
+            {
+              "and": [
+                {
+                  "bool": [
+                    {
+                      "len": [
+                        {
+                          "or": [
+                            {
+                              "var": "r.skills"
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "call": [
+                    "ps_rides",
+                    {
+                      "var": "r"
+                    },
+                    "A"
+                  ]
+                },
+                {
+                  "has_skill": [
+                    {
+                      "var": "actor"
+                    },
+                    {
+                      "var": "skill"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        [],
+        {
+          "let": [
+            {
+              "t": {
+                "call": [
+                  "ps_foe_for",
+                  {
+                    "var": "r"
+                  }
+                ]
+              }
+            },
+            {
+              "if": [
+                {
+                  "and": [
+                    {
+                      "bool": [
+                        {
+                          "var": "t"
+                        }
+                      ]
+                    },
+                    {
+                      "<=": [
+                        {
+                          "dist": [
+                            {
+                              "var": "actor"
+                            },
+                            {
+                              "var": "t"
+                            }
+                          ]
+                        },
+                        1
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "let": [
+                    {
+                      "mv": {
+                        "if": [
+                          {
+                            "code_is": [
+                              {
+                                "var": "t"
+                              },
+                              "M"
+                            ]
+                          },
+                          "M",
+                          {
+                            "code_is": [
+                              {
+                                "var": "t"
+                              },
+                              "EM"
+                            ]
+                          },
+                          "EM",
+                          null
+                        ]
+                      }
+                    },
+                    {
+                      "let": [
+                        {
+                          "sw": {
+                            "and": [
+                              {
+                                "has_register": [
+                                  "swaps"
+                                ]
+                              },
+                              {
+                                "enemy_of": [
+                                  {
+                                    "var": "actor"
+                                  },
+                                  {
+                                    "var": "t"
+                                  }
+                                ]
+                              },
+                              {
+                                "!==": [
+                                  {
+                                    "var": "r.target.kind"
+                                  },
+                                  "tile"
+                                ]
+                              },
+                              {
+                                "none": [
+                                  {
+                                    "swaps": []
+                                  },
+                                  {
+                                    "or": [
+                                      {
+                                        "in": [
+                                          {
+                                            "var": "actor"
+                                          },
+                                          [
+                                            {
+                                              "var": "s.by"
+                                            },
+                                            {
+                                              "var": "s.on"
+                                            }
+                                          ]
+                                        ]
+                                      },
+                                      {
+                                        "in": [
+                                          {
+                                            "var": "t"
+                                          },
+                                          [
+                                            {
+                                              "var": "s.by"
+                                            },
+                                            {
+                                              "var": "s.on"
+                                            }
+                                          ]
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  "s"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "concat": [
+                            [
+                              {
+                                "obj": {
+                                  "op": "no_move",
+                                  "id": {
+                                    "var": "t"
+                                  }
+                                }
+                              }
+                            ],
+                            {
+                              "if": [
+                                {
+                                  "var": "mv"
+                                },
+                                {
+                                  "call": [
+                                    "ps_negate",
+                                    {
+                                      "var": "actor"
+                                    },
+                                    {
+                                      "var": "skill"
+                                    },
+                                    {
+                                      "var": "t"
+                                    },
+                                    {
+                                      "var": "mv"
+                                    }
+                                  ]
+                                },
+                                []
+                              ]
+                            },
+                            {
+                              "if": [
+                                {
+                                  "var": "sw"
+                                },
+                                {
+                                  "concat": [
+                                    [
+                                      {
+                                        "obj": {
+                                          "op": "swap",
+                                          "by": {
+                                            "var": "actor"
+                                          },
+                                          "on": {
+                                            "var": "t"
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    {
+                                      "if": [
+                                        {
+                                          "var": "mv"
+                                        },
+                                        [],
+                                        [
+                                          {
+                                            "obj": {
+                                              "op": "fx",
+                                              "fx": {
+                                                "obj": {
+                                                  "by": {
+                                                    "var": "actor"
+                                                  },
+                                                  "skill": {
+                                                    "var": "skill"
+                                                  },
+                                                  "on": {
+                                                    "var": "t"
+                                                  },
+                                                  "what": "swap",
+                                                  "building": {
+                                                    "from_building": [
+                                                      {
+                                                        "var": "actor"
+                                                      },
+                                                      {
+                                                        "var": "skill"
+                                                      }
+                                                    ]
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                },
+                                []
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                []
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "ui": {
+    "tag": "Ov",
+    "glyph": "🐂",
+    "color": "#ff6b6b"
+  },
+  "card": {
+    "name": "Overrun / Push",
+    "tags": [
+      "attack",
+      "move"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "match_reason": "stomp through the enemy, dust at the swap",
+      "confidence": "medium",
+      "wbc3_name": "Smokedust puff animation",
+      "wbc3_code": "EMX0",
+      "wbc3_race": "Effects1",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png",
+          "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Stomp.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/Whack.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          }
+        ]
+      }
+    },
+    "data": {
+      "action_type": "A",
+      "is_permanent": false,
+      "point_buy_stat": null,
+      "text": "Swap places with the enemy you Attack (walk over them and go behind): you take their hex and they take yours. Negate the enemy's Move. Alt: the enemy or ally is moved one tile away; step over them."
+    },
+    "rebalance_links": [
+      "skill_powerful_attack"
+    ],
+    "logic": {
+      "description": "Instant riding on an Attack card against an enemy in contact. The target's Move this round is negated (they stay on their tile) and — paper swap implemented (user ruling 2026-11-16) — when the Attack targets that adjacent enemy the attacker and the enemy swap places (walk over them and go behind): each takes the other's hex after the moves, if neither moved otherwise this action; one swap per unit and action (actor order). The Alt (push one tile away) is still not implemented. Judged by whether it did its job (negated a Move or swapped); with nothing to do it returns to hand.",
+      "prerequisites": [
+        {
+          "id": "rides_on_attack",
+          "description": "The caster's action this turn is an Attack card.",
+          "when": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "A"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "enemy_in_contact",
+          "description": "The target is an enemy in contact.",
+          "when": {
+            "and": [
+              {
+                "rule": [
+                  "in_contact",
+                  {
+                    "dist": {
+                      "var": "dist"
+                    }
+                  }
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "negate_target_move",
+          "description": "True when the target's Move / Empty Move is cancelled this round (target in contact and playing M or EM).",
+          "target": "target",
+          "unit": "hexes",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "in": [
+                      {
+                        "var": "target.action"
+                      },
+                      [
+                        "M",
+                        "EM"
+                      ]
+                    ]
+                  }
+                ]
+              },
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "id": "swap_places",
+          "description": "1 when the attacker and the adjacent enemy target trade hexes this action.",
+          "target": "target",
+          "unit": "hexes",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "is_enemy",
+                      {
+                        "a_alliance": {
+                          "var": "caster.alliance"
+                        },
+                        "b_alliance": {
+                          "var": "target.alliance"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              1,
+              0
+            ]
+          }
+        },
+        {
+          "id": "rule_8_return_to_hand",
+          "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "rule_8_instant_returns",
+              {
+                "took_with": {
+                  "var": "outcome.took_with"
+                },
+                "took_without": {
+                  "var": "outcome.took_without"
+                },
+                "dealt_with": {
+                  "var": "outcome.dealt_with"
+                },
+                "dealt_without": {
+                  "var": "outcome.dealt_without"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "action_type_unchanged",
+          "description": "Stays an Attack skill.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.action_type"
+              },
+              {
+                "var": "entry.data.action_type"
+              }
+            ]
+          }
+        },
+        {
+          "id": "is_permanent_unchanged",
+          "description": "Remains an instant.",
+          "assert": {
+            "==": [
+              {
+                "!!": {
+                  "var": "proposal.data.is_permanent"
+                }
+              },
+              {
+                "!!": {
+                  "var": "entry.data.is_permanent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_stat_valid",
+          "description": "point_buy_stat is null, 'any' or one of the four stats.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  [
+                    "any",
+                    "stat_vitality",
+                    "stat_world",
+                    "stat_matter",
+                    "stat_will",
+                    "vitality",
+                    "world",
+                    "matter",
+                    "will"
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "in_contact",
+        "is_enemy",
+        "rule_8_instant_returns"
+      ]
+    }
+  }
 }

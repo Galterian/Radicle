@@ -3,11 +3,160 @@
   "id": "class_guardian",
   "name": "Guardian",
   "version": "1.2.0",
-  "source": {"collection":"classes","version":"1.2.0"},
-  "data": {"ability_kind":"static","colors":["elem_air","elem_water","elem_earth","elem_fire","elem_harmony"],"text":"When you stay on your tile on the 2nd and the 3rd action of a turn, restore one life token at the end of the turn (never above your maximum).","still_actions":[2,3]},
-  "flags": {"phase":null,"hooks":["end_turn"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.2.0"
+  },
+  "data": {
+    "ability_kind": "static",
+    "colors": [
+      "elem_air",
+      "elem_water",
+      "elem_earth",
+      "elem_fire",
+      "elem_harmony"
+    ],
+    "text": "When you stay on your tile on the 2nd and the 3rd action of a turn, restore one life token at the end of the turn (never above your maximum).",
+    "still_actions": [
+      2,
+      3
+    ]
+  },
+  "flags": {
+    "phase": null,
+    "hooks": [
+      "end_turn"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "end_turn": {"let":[{"still":{"if":[{"is_array":{"get":[{"class_data":[{"var":"class"}]},"still_actions"]}},{"get":[{"class_data":[{"var":"class"}]},"still_actions"]},{"quote":[1,2,3]}]}},{"let":[{"mv":{"if":[{"is_array":{"var":"movedRounds"}},{"some":[{"var":"movedRounds"},{"in":[{"+":[{"var":"x"},1]},{"var":"still"}]},"x"]},{"bool":{"var":"moved"}}]}},{"if":[{"and":[{"bool":{"var":"held"}},{"!":{"bool":{"var":"mv"}}},{">":[{"var":"life"},0]},{"<":[{"var":"life"},{"var":"lifeMax"}]}]},1,0]}]}]}
+    "end_turn": {
+      "let": [
+        {
+          "still": {
+            "if": [
+              {
+                "is_array": {
+                  "get": [
+                    {
+                      "class_data": [
+                        {
+                          "var": "class"
+                        }
+                      ]
+                    },
+                    "still_actions"
+                  ]
+                }
+              },
+              {
+                "get": [
+                  {
+                    "class_data": [
+                      {
+                        "var": "class"
+                      }
+                    ]
+                  },
+                  "still_actions"
+                ]
+              },
+              {
+                "quote": [
+                  1,
+                  2,
+                  3
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "let": [
+            {
+              "mv": {
+                "if": [
+                  {
+                    "is_array": {
+                      "var": "movedRounds"
+                    }
+                  },
+                  {
+                    "some": [
+                      {
+                        "var": "movedRounds"
+                      },
+                      {
+                        "in": [
+                          {
+                            "+": [
+                              {
+                                "var": "x"
+                              },
+                              1
+                            ]
+                          },
+                          {
+                            "var": "still"
+                          }
+                        ]
+                      },
+                      "x"
+                    ]
+                  },
+                  {
+                    "bool": {
+                      "var": "moved"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "if": [
+                {
+                  "and": [
+                    {
+                      "bool": {
+                        "var": "held"
+                      }
+                    },
+                    {
+                      "!": {
+                        "bool": {
+                          "var": "mv"
+                        }
+                      }
+                    },
+                    {
+                      ">": [
+                        {
+                          "var": "life"
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "<": [
+                        {
+                          "var": "life"
+                        },
+                        {
+                          "var": "lifeMax"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    }
   }
 }

@@ -3,11 +3,39 @@
   "id": "class_enchanter",
   "name": "Enchanter",
   "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
-  "data": {"ability_kind":"static","colors":["elem_air","elem_water","elem_earth","elem_fire"],"text":"You may emit elements during your Attack, Block and Move."},
-  "flags": {"phase":null,"emits":{"A":true,"B":true,"M":true},"hooks":["emits"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.1.0"
+  },
+  "data": {
+    "ability_kind": "static",
+    "colors": [
+      "elem_air",
+      "elem_water",
+      "elem_earth",
+      "elem_fire"
+    ],
+    "text": "You may emit elements during your Attack, Block and Move."
+  },
+  "flags": {
+    "phase": null,
+    "emits": {
+      "A": true,
+      "B": true,
+      "M": true
+    },
+    "hooks": [
+      "emits"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "emits": {"call":["emits_by_flag"]}
+    "emits": {
+      "call": [
+        "emits_by_flag"
+      ]
+    }
   }
 }

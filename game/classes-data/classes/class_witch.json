@@ -3,12 +3,395 @@
   "id": "class_witch",
   "name": "Witch",
   "version": "1.2.0",
-  "source": {"collection":"classes","version":"1.2.0"},
-  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_air","elem_water"],"range":1,"hand_discard":{"n":3},"text":"Tap: an adjacent enemy puts 3 random cards from its hand onto its discard pile, and you put 1 random card from your own hand onto yours. Untap to use it again.","self_discard":1},
-  "flags": {"phase":"post","needs":"enemy_near","handDefaults":{"hand_discard":{"n":3}},"hooks":["ability","config"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.2.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_vitality",
+      "elem_air",
+      "elem_water"
+    ],
+    "range": 1,
+    "hand_discard": {
+      "n": 3
+    },
+    "text": "Tap: an adjacent enemy puts 3 random cards from its hand onto its discard pile, and you put 1 random card from your own hand onto yours. Untap to use it again.",
+    "self_discard": 1
+  },
+  "flags": {
+    "phase": "post",
+    "needs": "enemy_near",
+    "handDefaults": {
+      "hand_discard": {
+        "n": 3
+      }
+    },
+    "hooks": [
+      "ability",
+      "config"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "ability": {"let":[{"cfg":{"call":["cfg_witch"]},"p":{"call":["ab_peer"]}},{"let":[{"foes":{"call":["foes_nearby",{"var":"actor"},{"var":"cfg.range"}]},"seed":{"cat":[{"or":[{"var":"salt"},""]},":witch:",{"ctx_action":[]},":",{"var":"actor"}]}},{"let":[{"on":{"if":[{"in":[{"var":"p"},{"var":"foes"}]},{"var":"p"},{"call":["pick_by_salt",{"cat":[{"var":"seed"},":who"]},{"var":"foes"}]}]}},{"if":[{"!":{"bool":{"var":"on"}}},{"call":["not_done",[{"cat":["[",{"ctx_label":[]},"] class witch: no enemy within ",{"var":"cfg.range"}," hexes — the card stays untapped"]}]]},{"let":[{"n":{"or":[{"+":[{"var":"cfg.hand_discard.n"}]},3]},"own":{"let":[{"sd":{"get":[{"class_data":[{"var":"class"}]},"self_discard"]}},{"if":[{"and":[{"is_int":{"var":"sd"}},{">":[{"var":"sd"},0]}]},{"var":"sd"},0]}]}},{"call":["done",{"cat":[{"slice":[{"var":"on"},0,8]}," puts ",{"var":"n"}," random hand cards onto its discard pile",{"if":[{"var":"own"},{"cat":[" — and I discard ",{"var":"own"}," of mine"]},""]}]},{"obj":{"discards":{"concat":[[{"obj":{"on":{"var":"on"},"by":{"var":"actor"},"n":{"var":"n"},"seed":{"var":"seed"},"why":"witch"}}],{"if":[{"var":"own"},[{"obj":{"on":{"var":"actor"},"by":{"var":"actor"},"n":{"var":"own"},"seed":{"cat":[{"var":"seed"},":self"]},"why":"witch","self":true}}],[]]}]}}},[{"cat":["[",{"ctx_label":[]},"] witch: ",{"slice":[{"var":"actor"},0,14]}," makes ",{"slice":[{"var":"on"},0,14]}," discard ",{"var":"n"},{"if":[{"var":"own"},{"cat":[" and discards ",{"var":"own"}," of its own"]},""]}," (seed ",{"slice":[{"sha_hex":[{"var":"seed"}]},0,8]},")"]}]]}]}]}]}]}]},
-    "config": {"call":["cfg_witch"]}
+    "ability": {
+      "let": [
+        {
+          "cfg": {
+            "call": [
+              "cfg_witch"
+            ]
+          },
+          "p": {
+            "call": [
+              "ab_peer"
+            ]
+          }
+        },
+        {
+          "let": [
+            {
+              "foes": {
+                "call": [
+                  "foes_nearby",
+                  {
+                    "var": "actor"
+                  },
+                  {
+                    "var": "cfg.range"
+                  }
+                ]
+              },
+              "seed": {
+                "cat": [
+                  {
+                    "or": [
+                      {
+                        "var": "salt"
+                      },
+                      ""
+                    ]
+                  },
+                  ":witch:",
+                  {
+                    "ctx_action": []
+                  },
+                  ":",
+                  {
+                    "var": "actor"
+                  }
+                ]
+              }
+            },
+            {
+              "let": [
+                {
+                  "on": {
+                    "if": [
+                      {
+                        "in": [
+                          {
+                            "var": "p"
+                          },
+                          {
+                            "var": "foes"
+                          }
+                        ]
+                      },
+                      {
+                        "var": "p"
+                      },
+                      {
+                        "call": [
+                          "pick_by_salt",
+                          {
+                            "cat": [
+                              {
+                                "var": "seed"
+                              },
+                              ":who"
+                            ]
+                          },
+                          {
+                            "var": "foes"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                {
+                  "if": [
+                    {
+                      "!": {
+                        "bool": {
+                          "var": "on"
+                        }
+                      }
+                    },
+                    {
+                      "call": [
+                        "not_done",
+                        [
+                          {
+                            "cat": [
+                              "[",
+                              {
+                                "ctx_label": []
+                              },
+                              "] class witch: no enemy within ",
+                              {
+                                "var": "cfg.range"
+                              },
+                              " hexes — the card stays untapped"
+                            ]
+                          }
+                        ]
+                      ]
+                    },
+                    {
+                      "let": [
+                        {
+                          "n": {
+                            "or": [
+                              {
+                                "+": [
+                                  {
+                                    "var": "cfg.hand_discard.n"
+                                  }
+                                ]
+                              },
+                              3
+                            ]
+                          },
+                          "own": {
+                            "let": [
+                              {
+                                "sd": {
+                                  "get": [
+                                    {
+                                      "class_data": [
+                                        {
+                                          "var": "class"
+                                        }
+                                      ]
+                                    },
+                                    "self_discard"
+                                  ]
+                                }
+                              },
+                              {
+                                "if": [
+                                  {
+                                    "and": [
+                                      {
+                                        "is_int": {
+                                          "var": "sd"
+                                        }
+                                      },
+                                      {
+                                        ">": [
+                                          {
+                                            "var": "sd"
+                                          },
+                                          0
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "var": "sd"
+                                  },
+                                  0
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "call": [
+                            "done",
+                            {
+                              "cat": [
+                                {
+                                  "slice": [
+                                    {
+                                      "var": "on"
+                                    },
+                                    0,
+                                    8
+                                  ]
+                                },
+                                " puts ",
+                                {
+                                  "var": "n"
+                                },
+                                " random hand cards onto its discard pile",
+                                {
+                                  "if": [
+                                    {
+                                      "var": "own"
+                                    },
+                                    {
+                                      "cat": [
+                                        " — and I discard ",
+                                        {
+                                          "var": "own"
+                                        },
+                                        " of mine"
+                                      ]
+                                    },
+                                    ""
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "obj": {
+                                "discards": {
+                                  "concat": [
+                                    [
+                                      {
+                                        "obj": {
+                                          "on": {
+                                            "var": "on"
+                                          },
+                                          "by": {
+                                            "var": "actor"
+                                          },
+                                          "n": {
+                                            "var": "n"
+                                          },
+                                          "seed": {
+                                            "var": "seed"
+                                          },
+                                          "why": "witch"
+                                        }
+                                      }
+                                    ],
+                                    {
+                                      "if": [
+                                        {
+                                          "var": "own"
+                                        },
+                                        [
+                                          {
+                                            "obj": {
+                                              "on": {
+                                                "var": "actor"
+                                              },
+                                              "by": {
+                                                "var": "actor"
+                                              },
+                                              "n": {
+                                                "var": "own"
+                                              },
+                                              "seed": {
+                                                "cat": [
+                                                  {
+                                                    "var": "seed"
+                                                  },
+                                                  ":self"
+                                                ]
+                                              },
+                                              "why": "witch",
+                                              "self": true
+                                            }
+                                          }
+                                        ],
+                                        []
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            [
+                              {
+                                "cat": [
+                                  "[",
+                                  {
+                                    "ctx_label": []
+                                  },
+                                  "] witch: ",
+                                  {
+                                    "slice": [
+                                      {
+                                        "var": "actor"
+                                      },
+                                      0,
+                                      14
+                                    ]
+                                  },
+                                  " makes ",
+                                  {
+                                    "slice": [
+                                      {
+                                        "var": "on"
+                                      },
+                                      0,
+                                      14
+                                    ]
+                                  },
+                                  " discard ",
+                                  {
+                                    "var": "n"
+                                  },
+                                  {
+                                    "if": [
+                                      {
+                                        "var": "own"
+                                      },
+                                      {
+                                        "cat": [
+                                          " and discards ",
+                                          {
+                                            "var": "own"
+                                          },
+                                          " of its own"
+                                        ]
+                                      },
+                                      ""
+                                    ]
+                                  },
+                                  " (seed ",
+                                  {
+                                    "slice": [
+                                      {
+                                        "sha_hex": [
+                                          {
+                                            "var": "seed"
+                                          }
+                                        ]
+                                      },
+                                      0,
+                                      8
+                                    ]
+                                  },
+                                  ")"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "config": {
+      "call": [
+        "cfg_witch"
+      ]
+    }
   }
 }

@@ -3,22 +3,755 @@
   "id": "effect_throw",
   "name": "Throw",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_air"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_air"
+  ],
   "cost": 1,
   "kind": "damage",
   "duration": "instant",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "You may also throw a location-token permanent (yours or a nearby location's) to a nearby location (point-buy ability): must beat the permanent token element with your point-buy die for that element.",
-  "flags": {"damage":"delta","scope":"target","pullToken":true},
-  "bot": {"tags":["bruiser","brute","flyer","pack"],"names":["apes|rhox|nacatl","cloud|cliff|storm"]},
-  "card": {"name":"Throw","tags":["damage"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Thrown stonerock projectile","wbc3_code":"EMA3","wbc3_race":"Effects1","match_reason":"thrown rock projectile strip (directions)","confidence":"high","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Thrown stonerock projectile/Thrown stonerock projectile - idle [EMA3].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/swoosh.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/Thump.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage"],"element_cost":["elem_air"],"text":"You may also throw a location-token permanent (yours or a nearby location's) to a nearby location (point-buy ability): must beat the permanent token element with your point-buy die for that element."},"rebalance_links":["effect_super_force"],"logic":{"description":"Reworked 2026-10-29 as Force Smash / Pull. With an enemy in contact: delta damage on Air (Will). Otherwise Force Pull: a bonus tile token on an adjacent tile not under an ally (the element where my stat is biggest first) is contested with an Air point-buy as under Rule 24 — the die ≥ the token value moves the token onto my tile (general_ux_tokens: one per element, bigger wins).","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"force_pull","description":"No enemy in reach → the adjacent bonus token (not under an ally; my biggest stat's element first) is pulled onto my tile when my Air die is at least its value.","target":"tile","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"var":"token.value"}}]}},{"id":"one_token_per_element","description":"general_ux_tokens: one token per element on a tile — the new one stands only if it is bigger than the one already there.","target":"tile","unit":"rule","value":{">":[{"var":"token.value"},{"max_of":[{"map":[{"filter":[{"var":"tile.tokens"},{"==":[{"var":"elem"},{"root":"token.elem"}]}]},{"var":"value"}]}]}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_air (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_air"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","rule_21_delta_damage","using_rule_24"]}},
-  "uses": ["std"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,true]},
-      {"if":[{"ctx_has":["tileTokensAt"]},{"let":[{"ally_tiles":{"filter":[{"map":[{"filter":[{"peers":[]},{"and":[{"!==":[{"var":"id"},{"var":"me"}]},{"call":["alive",{"var":"id"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"id"}]}]}]},"id"]},{"tile_of":[{"var":"id"}]},"id"]},{"var":"t"},"t"]}},{"let":[{"cands":{"sort_by":[{"reduce":[{"map":[{"filter":[{"neighbours":[{"var":"my_tile.q"},{"var":"my_tile.r"}]},{"none":[{"var":"ally_tiles"},{"and":[{"===":[{"var":"a.q"},{"var":"n.q"}]},{"===":[{"var":"a.r"},{"var":"n.r"}]}]},"a"]},"n"]},{"filter":[{"tile_tokens_at":[{"var":"n.q"},{"var":"n.r"}]},{"and":[{"===":[{"var":"tk.kind"},"bonus"]},{"!==":[{"var":"tk.owner"},{"var":"me"}]}]},"tk"]},"n"]},{"concat":[{"var":"acc"},{"var":"current"}]},[]]},{"desc":{"call":["my_stat",{"var":"it.elem"}]}},{"locale":{"var":"it.id"}}]}},{"if":[{"len":[{"var":"cands"}]},{"let":[{"tk":{"at":[{"var":"cands"},0]}},{"let":[{"pb":{"call":["buy_pb",{"call":["my_stat",{"var":"tk.elem"}]},{"cat":["pull:",{"var":"tk.id"}]}]}},{"if":[{"!":[{"var":"pb.fail"}]},{"seq":[{"if":[{">=":[{"var":"pb.value"},{"var":"tk.value"}]},{"seq":[{"emit":["pulls",{"obj":{"by":{"var":"me"},"token_id":{"var":"tk.id"},"owner":{"var":"tk.owner"},"elem":{"var":"tk.elem"},"value":{"var":"tk.value"},"item":{"or":[{"var":"tk.item"},null]},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]},{"note":["pulled ",{"or":[{"var":"tk.item"},{"var":"tk.elem"}]}," (",{"var":"tk.value"},") with a ",{"var":"pb.value"}]}]},{"note":["pull failed: die ",{"var":"pb.value"}," < token ",{"var":"tk.value"}]}]},{"set":["recipients",[]]}]}]}]}]}]}]}]}]},
-      {"if":[{"and":[{"!":[{"len":[{"out":"pulls"}]}]},{"!":[{"some":[{"out":"notes"},{"starts_with":[{"var":"n"},"pull failed"]},"n"]}]}]},{"seq":[{"call":["require_recipients"]},{"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},"def"]}]}]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "pullToken": true
+  },
+  "bot": {
+    "tags": [
+      "bruiser",
+      "brute",
+      "flyer",
+      "pack"
+    ],
+    "names": [
+      "apes|rhox|nacatl",
+      "cloud|cliff|storm"
+    ]
+  },
+  "card": {
+    "name": "Throw",
+    "tags": [
+      "damage"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Thrown stonerock projectile",
+      "wbc3_code": "EMA3",
+      "wbc3_race": "Effects1",
+      "match_reason": "thrown rock projectile strip (directions)",
+      "confidence": "high",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Thrown stonerock projectile/Thrown stonerock projectile - idle [EMA3].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/swoosh.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/Thump.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage"
+      ],
+      "element_cost": [
+        "elem_air"
+      ],
+      "text": "You may also throw a location-token permanent (yours or a nearby location's) to a nearby location (point-buy ability): must beat the permanent token element with your point-buy die for that element."
+    },
+    "rebalance_links": [
+      "effect_super_force"
+    ],
+    "logic": {
+      "description": "Reworked 2026-10-29 as Force Smash / Pull. With an enemy in contact: delta damage on Air (Will). Otherwise Force Pull: a bonus tile token on an adjacent tile not under an ally (the element where my stat is biggest first) is contested with an Air point-buy as under Rule 24 — the die ≥ the token value moves the token onto my tile (general_ux_tokens: one per element, bigger wins).",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "force_pull",
+          "description": "No enemy in reach → the adjacent bonus token (not under an ally; my biggest stat's element first) is pulled onto my tile when my Air die is at least its value.",
+          "target": "tile",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "var": "token.value"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "one_token_per_element",
+          "description": "general_ux_tokens: one token per element on a tile — the new one stands only if it is bigger than the one already there.",
+          "target": "tile",
+          "unit": "rule",
+          "value": {
+            ">": [
+              {
+                "var": "token.value"
+              },
+              {
+                "max_of": [
+                  {
+                    "map": [
+                      {
+                        "filter": [
+                          {
+                            "var": "tile.tokens"
+                          },
+                          {
+                            "==": [
+                              {
+                                "var": "elem"
+                              },
+                              {
+                                "root": "token.elem"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "var": "value"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_air (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_air"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "rule_21_delta_damage",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "if": [
+          {
+            "ctx_has": [
+              "tileTokensAt"
+            ]
+          },
+          {
+            "let": [
+              {
+                "ally_tiles": {
+                  "filter": [
+                    {
+                      "map": [
+                        {
+                          "filter": [
+                            {
+                              "peers": []
+                            },
+                            {
+                              "and": [
+                                {
+                                  "!==": [
+                                    {
+                                      "var": "id"
+                                    },
+                                    {
+                                      "var": "me"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "call": [
+                                    "alive",
+                                    {
+                                      "var": "id"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "!": [
+                                    {
+                                      "enemy_of": [
+                                        {
+                                          "var": "me"
+                                        },
+                                        {
+                                          "var": "id"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "id"
+                          ]
+                        },
+                        {
+                          "tile_of": [
+                            {
+                              "var": "id"
+                            }
+                          ]
+                        },
+                        "id"
+                      ]
+                    },
+                    {
+                      "var": "t"
+                    },
+                    "t"
+                  ]
+                }
+              },
+              {
+                "let": [
+                  {
+                    "cands": {
+                      "sort_by": [
+                        {
+                          "reduce": [
+                            {
+                              "map": [
+                                {
+                                  "filter": [
+                                    {
+                                      "neighbours": [
+                                        {
+                                          "var": "my_tile.q"
+                                        },
+                                        {
+                                          "var": "my_tile.r"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "none": [
+                                        {
+                                          "var": "ally_tiles"
+                                        },
+                                        {
+                                          "and": [
+                                            {
+                                              "===": [
+                                                {
+                                                  "var": "a.q"
+                                                },
+                                                {
+                                                  "var": "n.q"
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "===": [
+                                                {
+                                                  "var": "a.r"
+                                                },
+                                                {
+                                                  "var": "n.r"
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "a"
+                                      ]
+                                    },
+                                    "n"
+                                  ]
+                                },
+                                {
+                                  "filter": [
+                                    {
+                                      "tile_tokens_at": [
+                                        {
+                                          "var": "n.q"
+                                        },
+                                        {
+                                          "var": "n.r"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "and": [
+                                        {
+                                          "===": [
+                                            {
+                                              "var": "tk.kind"
+                                            },
+                                            "bonus"
+                                          ]
+                                        },
+                                        {
+                                          "!==": [
+                                            {
+                                              "var": "tk.owner"
+                                            },
+                                            {
+                                              "var": "me"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "tk"
+                                  ]
+                                },
+                                "n"
+                              ]
+                            },
+                            {
+                              "concat": [
+                                {
+                                  "var": "acc"
+                                },
+                                {
+                                  "var": "current"
+                                }
+                              ]
+                            },
+                            []
+                          ]
+                        },
+                        {
+                          "desc": {
+                            "call": [
+                              "my_stat",
+                              {
+                                "var": "it.elem"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "locale": {
+                            "var": "it.id"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "if": [
+                      {
+                        "len": [
+                          {
+                            "var": "cands"
+                          }
+                        ]
+                      },
+                      {
+                        "let": [
+                          {
+                            "tk": {
+                              "at": [
+                                {
+                                  "var": "cands"
+                                },
+                                0
+                              ]
+                            }
+                          },
+                          {
+                            "let": [
+                              {
+                                "pb": {
+                                  "call": [
+                                    "buy_pb",
+                                    {
+                                      "call": [
+                                        "my_stat",
+                                        {
+                                          "var": "tk.elem"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "cat": [
+                                        "pull:",
+                                        {
+                                          "var": "tk.id"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "if": [
+                                  {
+                                    "!": [
+                                      {
+                                        "var": "pb.fail"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "seq": [
+                                      {
+                                        "if": [
+                                          {
+                                            ">=": [
+                                              {
+                                                "var": "pb.value"
+                                              },
+                                              {
+                                                "var": "tk.value"
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "seq": [
+                                              {
+                                                "emit": [
+                                                  "pulls",
+                                                  {
+                                                    "obj": {
+                                                      "by": {
+                                                        "var": "me"
+                                                      },
+                                                      "token_id": {
+                                                        "var": "tk.id"
+                                                      },
+                                                      "owner": {
+                                                        "var": "tk.owner"
+                                                      },
+                                                      "elem": {
+                                                        "var": "tk.elem"
+                                                      },
+                                                      "value": {
+                                                        "var": "tk.value"
+                                                      },
+                                                      "item": {
+                                                        "or": [
+                                                          {
+                                                            "var": "tk.item"
+                                                          },
+                                                          null
+                                                        ]
+                                                      },
+                                                      "q": {
+                                                        "var": "my_tile.q"
+                                                      },
+                                                      "r": {
+                                                        "var": "my_tile.r"
+                                                      }
+                                                    }
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "note": [
+                                                  "pulled ",
+                                                  {
+                                                    "or": [
+                                                      {
+                                                        "var": "tk.item"
+                                                      },
+                                                      {
+                                                        "var": "tk.elem"
+                                                      }
+                                                    ]
+                                                  },
+                                                  " (",
+                                                  {
+                                                    "var": "tk.value"
+                                                  },
+                                                  ") with a ",
+                                                  {
+                                                    "var": "pb.value"
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "note": [
+                                              "pull failed: die ",
+                                              {
+                                                "var": "pb.value"
+                                              },
+                                              " < token ",
+                                              {
+                                                "var": "tk.value"
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "set": [
+                                          "recipients",
+                                          []
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "and": [
+              {
+                "!": [
+                  {
+                    "len": [
+                      {
+                        "out": "pulls"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "!": [
+                  {
+                    "some": [
+                      {
+                        "out": "notes"
+                      },
+                      {
+                        "starts_with": [
+                          {
+                            "var": "n"
+                          },
+                          "pull failed"
+                        ]
+                      },
+                      "n"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "seq": [
+              {
+                "call": [
+                  "require_recipients"
+                ]
+              },
+              {
+                "map": [
+                  {
+                    "var": "recipients"
+                  },
+                  {
+                    "call": [
+                      "hit",
+                      {
+                        "var": "def"
+                      },
+                      [
+                        {
+                          "obj": {
+                            "kind": "main",
+                            "sum": {
+                              "call": [
+                                "main_delta",
+                                {
+                                  "var": "def"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    ]
+                  },
+                  "def"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

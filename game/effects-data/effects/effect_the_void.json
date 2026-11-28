@@ -3,25 +3,309 @@
   "id": "effect_the_void",
   "name": "The Void",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_concentration"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_concentration"
+  ],
   "cost": 1,
   "kind": "counter",
   "duration": "channel",
-  "every": {"behaviour":"resolver","note":"∀ instant (peer.mjs EVERY_INSTANT); channel ticks via cast._channel_tick"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "∀ instant (peer.mjs EVERY_INSTANT); channel ticks via cast._channel_tick"
+  },
   "text": "You take no damage this action. Channel: put a Concentration token every action over the effect for the action's duration.",
   "every_text": "Instant.",
-  "flags": {"voidThisAction":true,"selfTileTokens":["elem_concentration"],"permanent":true,"channel":{"stop":"break"},"everyInstant":true},
-  "bot": {"tags":["caster","defender","flyer","mental"],"defence":true},
-  "ui": {"perm_help":"The Void (channel) — you take no damage while you keep the channel"},
-  "card": {"name":"The Void","tags":["channeling","defense"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Objectivetarget ring marker - black","wbc3_code":"EOSK","wbc3_race":"Effects1","match_reason":"black ring = void absorbing all damage","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Objectivetarget ring marker - black/Objectivetarget ring marker - black - idle [EOSK].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Fade.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["point_buy","channeling"],"element_cost":["elem_concentration"],"every_bonus":"Instant.","text":"You take no damage this action. Channel: put a Concentration token every action over the effect for the action's duration."},"rebalance_links":["effect_shield"],"logic":{"description":"Implemented as a channel (general_ux_channeling, 2026-10-29). I take no damage on the cast action and on every subsequent action while I keep the Concentration channel (no A/B/M/EM, no other element); a Concentration bonus token goes on my tile. ∀: instant.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"channel_holds","description":"general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.","when":{"!":{"in":[{"var":"caster.action"},["A","B","M","EM"]]}}}],"effects":[{"id":"damage_taken_this_action","description":"Damage the caster takes this action: none.","target":"caster","unit":"damage","value":0},{"id":"channel_tick","description":"Every subsequent action the channel re-fires its leg (take no damage this action + a Concentration bonus token on my tile) with the caster's current stats, at no further cost, until broken.","target":"caster","unit":"per_action","value":true},{"id":"channel_permanent_power","description":"The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).","target":"caster","unit":"die","value":{"min_of":[{"var":"cast.dice"}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_concentration"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_channeling","description":"effect_types keeps \"channeling\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"channeling"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}}],"references":["action_can_cast_non_instant","elements_not_disabled"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["self_tile_token","elem_concentration","bonus","tile"]},
-      {"emit":["voidFor",{"var":"me"}]},
-      {"call":["land_permanent"]},
-      {"call":["channel_reg","break"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "voidThisAction": true,
+    "selfTileTokens": [
+      "elem_concentration"
+    ],
+    "permanent": true,
+    "channel": {
+      "stop": "break"
+    },
+    "everyInstant": true
+  },
+  "bot": {
+    "tags": [
+      "caster",
+      "defender",
+      "flyer",
+      "mental"
+    ],
+    "defence": true
+  },
+  "ui": {
+    "perm_help": "The Void (channel) — you take no damage while you keep the channel"
+  },
+  "card": {
+    "name": "The Void",
+    "tags": [
+      "channeling",
+      "defense"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Objectivetarget ring marker - black",
+      "wbc3_code": "EOSK",
+      "wbc3_race": "Effects1",
+      "match_reason": "black ring = void absorbing all damage",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Objectivetarget ring marker - black/Objectivetarget ring marker - black - idle [EOSK].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Fade.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "point_buy",
+        "channeling"
+      ],
+      "element_cost": [
+        "elem_concentration"
+      ],
+      "every_bonus": "Instant.",
+      "text": "You take no damage this action. Channel: put a Concentration token every action over the effect for the action's duration."
+    },
+    "rebalance_links": [
+      "effect_shield"
+    ],
+    "logic": {
+      "description": "Implemented as a channel (general_ux_channeling, 2026-10-29). I take no damage on the cast action and on every subsequent action while I keep the Concentration channel (no A/B/M/EM, no other element); a Concentration bonus token goes on my tile. ∀: instant.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "channel_holds",
+          "description": "general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.",
+          "when": {
+            "!": {
+              "in": [
+                {
+                  "var": "caster.action"
+                },
+                [
+                  "A",
+                  "B",
+                  "M",
+                  "EM"
+                ]
+              ]
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "damage_taken_this_action",
+          "description": "Damage the caster takes this action: none.",
+          "target": "caster",
+          "unit": "damage",
+          "value": 0
+        },
+        {
+          "id": "channel_tick",
+          "description": "Every subsequent action the channel re-fires its leg (take no damage this action + a Concentration bonus token on my tile) with the caster's current stats, at no further cost, until broken.",
+          "target": "caster",
+          "unit": "per_action",
+          "value": true
+        },
+        {
+          "id": "channel_permanent_power",
+          "description": "The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "min_of": [
+              {
+                "var": "cast.dice"
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_concentration"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_channeling",
+          "description": "effect_types keeps \"channeling\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "channeling"
+            ]
+          }
+        },
+        {
+          "id": "keeps_every_bonus",
+          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.every_bonus"
+                  }
+                ]
+              },
+              "string"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "self_tile_token",
+          "elem_concentration",
+          "bonus",
+          "tile"
+        ]
+      },
+      {
+        "emit": [
+          "voidFor",
+          {
+            "var": "me"
+          }
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "channel_reg",
+          "break"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

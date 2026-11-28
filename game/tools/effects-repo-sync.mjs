@@ -31,7 +31,10 @@ const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 const flag = (k) => argv.includes(k);
 const REPO = path.resolve(opt('--repo', process.env.CHAOSD6_EFFECTS_REPO || '/home/galt/chaosd6-effects-repo'));
-const SRC = path.resolve(opt('--src', path.join(GAME, 'effects-data', 'effects')));
+// Since the defs flip (2026-11-28) the REPO is the source of the definitions and game/effects-data is built from it
+// (tools/defs-build.mjs): by default this tool reads the repo's own effects/ (only the repo tooling + index.json change);
+// the game copy is the source only when seeding a repo that has no effects/ yet.
+const SRC = path.resolve(opt('--src', fs.existsSync(path.join(REPO, 'effects')) ? path.join(REPO, 'effects') : path.join(GAME, 'effects-data', 'effects')));
 const SCHEMA_SRC = path.join(path.dirname(SRC), 'SCHEMA.md');
 const HOOKS_OPT = opt('--hooks-src', path.join(path.dirname(SRC), 'hooks'));
 const HOOKS_SRC = HOOKS_OPT === 'none' ? null : path.resolve(HOOKS_OPT);

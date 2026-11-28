@@ -3,20 +3,405 @@
   "id": "effect_elementals_earth",
   "name": "Earth Elemental",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_harmony","elem_concentration"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_harmony",
+    "elem_concentration"
+  ],
   "cost": 2,
   "kind": "summon",
   "duration": "cast",
-  "every": {"behaviour":"resolver","note":"∀ binds a creature in view (cast.summon.bind, prepared by peer.mjs prepareSummon)"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "∀ binds a creature in view (cast.summon.bind, prepared by peer.mjs prepareSummon)"
+  },
   "text": "Σstat 30. Earth elemental stats 20/5/5/0. 3 hits, 1 action.",
-  "flags": {"permanent":true,"statBuy":true,"fixedPower":6,"summon":{"kind":"elemental","label":"Elementals","need":30}},
-  "card": {"name":"Earth Elemental","tags":["permanent","stat_buy","ally"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Greybrown dust puffs","wbc3_code":"EZ39","wbc3_race":"Effects1","match_reason":"dust on cast; summoned creature uses the WBC3 Earth Elemental unit","confidence":"high","summon_unit":{"wbc3_name":"Earth Elemental","wbc3_code":"AAEE","wbc3_race":"Temples"},"sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"},"attack":{"path":"assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - attack [AAEEa].png","usage":"8-direction attack, play when the summon deals damage"},"death":{"path":"assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - death [AAEEd].png","usage":"death strip, play once when the summon vanishes"},"fidget":{"path":"assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - fidget [AAEEf].png","usage":"8-direction idle variation, play randomly while idle"},"idle":{"path":"assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - idle [AAEE].png","usage":"8-direction idle loop (rows = directions N,NE,E,SE,S,SW,W,NW; cols = frames), grid in assets/frames.json"},"info":{"path":"assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - info [AAEEi].png","usage":"info panel image: portrait on top, team-coloured UI icons below"},"walk":{"path":"assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - walk [AAEEw].png","usage":"8-direction walk cycle, play while moving along the hex path"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ09.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/Stomp.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["permanent","stat_buy","channeling"],"element_cost":["elem_harmony","elem_concentration"],"stat_buy_total":30,"text":"Σstat 30. Earth elemental stats 20/5/5/0. 3 hits, 1 action."},"rebalance_links":["effect_elementals_air","effect_elementals_water"],"logic":{"description":"Implemented stat buy (channeling). Summons the Earth elemental (V/W/M/Wi 20/5/5/0, 3 hits, 1 action) that follows the caster and stays on its tile; the need is Σ 30 (stat_buy_total). Every emission banks the caster stat behind the element going out (card elements round-robin) until the bank is at least the need (30); no dice, so nothing fails — a low stat only takes longer. The creature appears as the caster ally on completion and the card stays as a permanent with FIXED power 6 (Rule 24: the destroyer needs a 6); on destruction the creature vanishes and its card goes to the owner archive. Elements Harmony then Concentration (both Will) alternate. No ∀ bonus on the card.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"stat_buy_bank_this_emission","description":"Every emission banks the caster stat behind the element going out (card elements round-robin: emission k banks element k mod |elements|); no dice, nothing fails.","target":"caster","unit":"stat","value":{"stat_of":[{"var":"caster"},{"var":{"cat":["elements.",{"%":[{"max0":[{"-":[{"var":"cast.step"},1]}]},{"max":[1,{"count":[{"var":"elements"}]}]}]}]}}]}},{"id":"stat_buy_paid","description":"The cast completes once the bank is at least the need (stat_buy_total 30).","target":"caster","unit":"stat","value":{"rule":["stat_buy_paid",{"bank":{"var":"cast.bank"},"need":{"var":"entry.data.stat_buy_total"}}]}},{"id":"emissions_needed","description":"Upper bound of emissions at the caster current stats: need ÷ the smallest stat the card elements bank, rounded up (the k/n cast length shown in the UI).","target":"caster","unit":"actions","value":{"rule":["stat_buy_emissions_needed",{"need":{"var":"entry.data.stat_buy_total"},"caster":{"root":"caster"},"elements":{"root":"elements"}}]}},{"id":"permanent_power","description":"Stat-buy summons are always cast with tokens of value 6 (fixed power, no die rolled at placement).","target":"caster","unit":"die","value":{"rule":["fixed_power_6",{}]}},{"id":"destroyed_by_rule_24","description":"Rule 24 with fixed power: the destroyer needs a 6. On destruction the creature vanishes and its card goes to the owner archive.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"rule":["fixed_power_6",{}]}}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_harmony"]}]}},{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_concentration"]}]}},{"id":"stat_buy_total_30","description":"stat_buy_total stays 30 (the author-side unified Σ for this summon family).","assert":{"==":[{"var":"proposal.data.stat_buy_total"},30]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"keeps_type_stat_buy","description":"effect_types keeps \"stat_buy\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"stat_buy"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","fixed_power_6","stat_buy_emissions_needed","stat_buy_paid","using_rule_24"]}},
-  "uses": ["std","e2b"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["stat_buy",false]},
-      {"call":["land_permanent"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "permanent": true,
+    "statBuy": true,
+    "fixedPower": 6,
+    "summon": {
+      "kind": "elemental",
+      "label": "Elementals",
+      "need": 30
+    }
+  },
+  "card": {
+    "name": "Earth Elemental",
+    "tags": [
+      "permanent",
+      "stat_buy",
+      "ally"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Greybrown dust puffs",
+      "wbc3_code": "EZ39",
+      "wbc3_race": "Effects1",
+      "match_reason": "dust on cast; summoned creature uses the WBC3 Earth Elemental unit",
+      "confidence": "high",
+      "summon_unit": {
+        "wbc3_name": "Earth Elemental",
+        "wbc3_code": "AAEE",
+        "wbc3_race": "Temples"
+      },
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Greybrown dust puffs/Greybrown dust puffs - idle [EZ39].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        },
+        "attack": {
+          "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - attack [AAEEa].png",
+          "usage": "8-direction attack, play when the summon deals damage"
+        },
+        "death": {
+          "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - death [AAEEd].png",
+          "usage": "death strip, play once when the summon vanishes"
+        },
+        "fidget": {
+          "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - fidget [AAEEf].png",
+          "usage": "8-direction idle variation, play randomly while idle"
+        },
+        "idle": {
+          "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - idle [AAEE].png",
+          "usage": "8-direction idle loop (rows = directions N,NE,E,SE,S,SW,W,NW; cols = frames), grid in assets/frames.json"
+        },
+        "info": {
+          "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - info [AAEEi].png",
+          "usage": "info panel image: portrait on top, team-coloured UI icons below"
+        },
+        "walk": {
+          "path": "assets/Sprites/Units/Temples/Earth Elemental/Earth Elemental - walk [AAEEw].png",
+          "usage": "8-direction walk cycle, play while moving along the hex path"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ09.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Stomp.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "permanent",
+        "stat_buy",
+        "channeling"
+      ],
+      "element_cost": [
+        "elem_harmony",
+        "elem_concentration"
+      ],
+      "stat_buy_total": 30,
+      "text": "Σstat 30. Earth elemental stats 20/5/5/0. 3 hits, 1 action."
+    },
+    "rebalance_links": [
+      "effect_elementals_air",
+      "effect_elementals_water"
+    ],
+    "logic": {
+      "description": "Implemented stat buy (channeling). Summons the Earth elemental (V/W/M/Wi 20/5/5/0, 3 hits, 1 action) that follows the caster and stays on its tile; the need is Σ 30 (stat_buy_total). Every emission banks the caster stat behind the element going out (card elements round-robin) until the bank is at least the need (30); no dice, so nothing fails — a low stat only takes longer. The creature appears as the caster ally on completion and the card stays as a permanent with FIXED power 6 (Rule 24: the destroyer needs a 6); on destruction the creature vanishes and its card goes to the owner archive. Elements Harmony then Concentration (both Will) alternate. No ∀ bonus on the card.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "stat_buy_bank_this_emission",
+          "description": "Every emission banks the caster stat behind the element going out (card elements round-robin: emission k banks element k mod |elements|); no dice, nothing fails.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "caster"
+              },
+              {
+                "var": {
+                  "cat": [
+                    "elements.",
+                    {
+                      "%": [
+                        {
+                          "max0": [
+                            {
+                              "-": [
+                                {
+                                  "var": "cast.step"
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "max": [
+                            1,
+                            {
+                              "count": [
+                                {
+                                  "var": "elements"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_buy_paid",
+          "description": "The cast completes once the bank is at least the need (stat_buy_total 30).",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "rule": [
+              "stat_buy_paid",
+              {
+                "bank": {
+                  "var": "cast.bank"
+                },
+                "need": {
+                  "var": "entry.data.stat_buy_total"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "emissions_needed",
+          "description": "Upper bound of emissions at the caster current stats: need ÷ the smallest stat the card elements bank, rounded up (the k/n cast length shown in the UI).",
+          "target": "caster",
+          "unit": "actions",
+          "value": {
+            "rule": [
+              "stat_buy_emissions_needed",
+              {
+                "need": {
+                  "var": "entry.data.stat_buy_total"
+                },
+                "caster": {
+                  "root": "caster"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "permanent_power",
+          "description": "Stat-buy summons are always cast with tokens of value 6 (fixed power, no die rolled at placement).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "fixed_power_6",
+              {}
+            ]
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24 with fixed power: the destroyer needs a 6. On destruction the creature vanishes and its card goes to the owner archive.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "rule": [
+                    "fixed_power_6",
+                    {}
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_harmony"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_concentration"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "stat_buy_total_30",
+          "description": "stat_buy_total stays 30 (the author-side unified Σ for this summon family).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.stat_buy_total"
+              },
+              30
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_stat_buy",
+          "description": "effect_types keeps \"stat_buy\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "stat_buy"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "fixed_power_6",
+        "stat_buy_emissions_needed",
+        "stat_buy_paid",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2b"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "stat_buy",
+          false
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

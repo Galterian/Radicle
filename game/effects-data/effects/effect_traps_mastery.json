@@ -3,21 +3,404 @@
   "id": "effect_traps_mastery",
   "name": "Traps Mastery",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_space"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_space"
+  ],
   "cost": 1,
   "kind": "trap",
   "duration": "permanent",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "Put an effect beneath this card as a trap (cast with power 20 × number of times this effect has been cast). It will not trigger from your character but from an approaching enemy.",
-  "flags": {"permanent":true,"trapAttach":true,"fixedPower":6},
-  "ui": {"perm_help":"Traps Mastery (6) — the effect card under you is a trap (power 20 per element): it springs on the first enemy that targets you while you stand on it"},
-  "card": {"name":"Traps Mastery","tags":["permanent","trap"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Particle set yellow sparks + X marks","wbc3_code":"EPA5","wbc3_race":"Effects1","match_reason":"X marks = hidden trap markers (owner-only)","confidence":"low","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Particle set yellow sparks + X marks/Particle set yellow sparks + X marks - idle [EPA5].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Clank.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["permanent"],"element_cost":["elem_space"],"text":"Put an effect beneath this card as a trap (cast with power 20 × number of times this effect has been cast). It will not trigger from your character but from an approaching enemy."},"logic":{"description":"Implemented (2026-10-29). A permanent (fixed power 6) that lays an effect card from my hand (the one I clicked; else the one with most elements) face down under me as a trap with power 20 per element. It springs on the first enemy that targets me while I stand on it (Σ max(0, 20 − stat) ÷10), then both cards are discarded. Destroying the permanent (Rule 24) springs the trap for nothing.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"effect_attached","description":"A second effect card from the hand is attached as the trap payload (cast.attach); without one the cast fizzles.","when":{"!=":[{"var":"cast.attach"},null]}}],"effects":[{"id":"trap_power","description":"Power the trapped effect is cast with: 20 per Traps mastery.","target":"tile","unit":"die","value":{"*":[20,{"if":[{"var":"cast.every"},2,1]}]}},{"id":"effects_trapped","description":"Effect cards beneath this permanent.","target":"tile","unit":"tokens","value":1},{"id":"permanent_power","description":"Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.","target":"caster","unit":"die","value":{"var":"die"}},{"id":"destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"max_of":[{"map":[{"filter":[{"var":"caster.tokens"},{"==":[{"var":"elem"},{"root":"elements.0"}]}]},{"var":"value"}]}]}}]}},{"id":"trap_trigger","description":"Springs on the first enemy whose reveal declares the trap owner as target while the owner stands on the trap tile; the card then goes to the discard pile.","target":"tile","unit":"trigger","value":"targeted"},{"id":"trap_damage","description":"When the trap springs: Σ over its elements of max(0, 20 − victim stat) ÷10 rounded half up (the same shields / zones / Void as a cast apply).","target":"target","unit":"damage","value":{"round_div10":[{"sum":[{"map":[{"var":"elements"},{"max0":[{"-":[20,{"stat_of":[{"root":"target"},{"var":""}]}]}]}]}]}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_space (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_space"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","using_rule_24"]}},
-  "uses": ["std","e2b"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"if":[{"!":[{"call":["attached"]}]},{"call":["fizzle","no effect attached as the trap"]},{"emit":["traps",{"obj":{"by":{"var":"me"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"},"effect_id":{"var":"cast.attach.effect_id"},"elements":{"merge":[{"var":"cast.attach.elements"}]},"card_id":{"or":[{"var":"cast.attach.card_id"},null]},"power":20,"trigger":"targeted","mode":"damage","holder":{"var":"effect_id"}}}]}]},
-      {"call":["land_permanent"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "permanent": true,
+    "trapAttach": true,
+    "fixedPower": 6
+  },
+  "ui": {
+    "perm_help": "Traps Mastery (6) — the effect card under you is a trap (power 20 per element): it springs on the first enemy that targets you while you stand on it"
+  },
+  "card": {
+    "name": "Traps Mastery",
+    "tags": [
+      "permanent",
+      "trap"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Particle set yellow sparks + X marks",
+      "wbc3_code": "EPA5",
+      "wbc3_race": "Effects1",
+      "match_reason": "X marks = hidden trap markers (owner-only)",
+      "confidence": "low",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Particle set yellow sparks + X marks/Particle set yellow sparks + X marks - idle [EPA5].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Clank.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "permanent"
+      ],
+      "element_cost": [
+        "elem_space"
+      ],
+      "text": "Put an effect beneath this card as a trap (cast with power 20 × number of times this effect has been cast). It will not trigger from your character but from an approaching enemy."
+    },
+    "logic": {
+      "description": "Implemented (2026-10-29). A permanent (fixed power 6) that lays an effect card from my hand (the one I clicked; else the one with most elements) face down under me as a trap with power 20 per element. It springs on the first enemy that targets me while I stand on it (Σ max(0, 20 − stat) ÷10), then both cards are discarded. Destroying the permanent (Rule 24) springs the trap for nothing.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "effect_attached",
+          "description": "A second effect card from the hand is attached as the trap payload (cast.attach); without one the cast fizzles.",
+          "when": {
+            "!=": [
+              {
+                "var": "cast.attach"
+              },
+              null
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "trap_power",
+          "description": "Power the trapped effect is cast with: 20 per Traps mastery.",
+          "target": "tile",
+          "unit": "die",
+          "value": {
+            "*": [
+              20,
+              {
+                "if": [
+                  {
+                    "var": "cast.every"
+                  },
+                  2,
+                  1
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "effects_trapped",
+          "description": "Effect cards beneath this permanent.",
+          "target": "tile",
+          "unit": "tokens",
+          "value": 1
+        },
+        {
+          "id": "permanent_power",
+          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "var": "die"
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "max_of": [
+                    {
+                      "map": [
+                        {
+                          "filter": [
+                            {
+                              "var": "caster.tokens"
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "elem"
+                                },
+                                {
+                                  "root": "elements.0"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "var": "value"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "trap_trigger",
+          "description": "Springs on the first enemy whose reveal declares the trap owner as target while the owner stands on the trap tile; the card then goes to the discard pile.",
+          "target": "tile",
+          "unit": "trigger",
+          "value": "targeted"
+        },
+        {
+          "id": "trap_damage",
+          "description": "When the trap springs: Σ over its elements of max(0, 20 − victim stat) ÷10 rounded half up (the same shields / zones / Void as a cast apply).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "round_div10": [
+              {
+                "sum": [
+                  {
+                    "map": [
+                      {
+                        "var": "elements"
+                      },
+                      {
+                        "max0": [
+                          {
+                            "-": [
+                              20,
+                              {
+                                "stat_of": [
+                                  {
+                                    "root": "target"
+                                  },
+                                  {
+                                    "var": ""
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_space (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_space"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2b"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "if": [
+          {
+            "!": [
+              {
+                "call": [
+                  "attached"
+                ]
+              }
+            ]
+          },
+          {
+            "call": [
+              "fizzle",
+              "no effect attached as the trap"
+            ]
+          },
+          {
+            "emit": [
+              "traps",
+              {
+                "obj": {
+                  "by": {
+                    "var": "me"
+                  },
+                  "q": {
+                    "var": "my_tile.q"
+                  },
+                  "r": {
+                    "var": "my_tile.r"
+                  },
+                  "effect_id": {
+                    "var": "cast.attach.effect_id"
+                  },
+                  "elements": {
+                    "merge": [
+                      {
+                        "var": "cast.attach.elements"
+                      }
+                    ]
+                  },
+                  "card_id": {
+                    "or": [
+                      {
+                        "var": "cast.attach.card_id"
+                      },
+                      null
+                    ]
+                  },
+                  "power": 20,
+                  "trigger": "targeted",
+                  "mode": "damage",
+                  "holder": {
+                    "var": "effect_id"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

@@ -3,11 +3,62 @@
   "id": "class_restaurateur",
   "name": "Restaurateur",
   "version": "1.0.0",
-  "source": {"collection":"classes","version":"1.0.0"},
-  "data": {"ability_kind":"static","colors":["elem_space","elem_air","elem_water","elem_earth","elem_fire"],"text":"Instead of destroying tokens you may put them under your control on the same tile or over your permanent (as replacement if applicable)."},
-  "flags": {"phase":null,"hooks":["destroy_result"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.0.0"
+  },
+  "data": {
+    "ability_kind": "static",
+    "colors": [
+      "elem_space",
+      "elem_air",
+      "elem_water",
+      "elem_earth",
+      "elem_fire"
+    ],
+    "text": "Instead of destroying tokens you may put them under your control on the same tile or over your permanent (as replacement if applicable)."
+  },
+  "flags": {
+    "phase": null,
+    "hooks": [
+      "destroy_result"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "destroy_result": {"if":[{"and":[{"===":[{"var":"d.result"},"destroyed"]},{"!":{"bool":{"var":"d.phylactery"}}},{"bool":{"var":"d.tok"}}]},"taken",{"var":"d.result"}]}
+    "destroy_result": {
+      "if": [
+        {
+          "and": [
+            {
+              "===": [
+                {
+                  "var": "d.result"
+                },
+                "destroyed"
+              ]
+            },
+            {
+              "!": {
+                "bool": {
+                  "var": "d.phylactery"
+                }
+              }
+            },
+            {
+              "bool": {
+                "var": "d.tok"
+              }
+            }
+          ]
+        },
+        "taken",
+        {
+          "var": "d.result"
+        }
+      ]
+    }
   }
 }

@@ -3,17 +3,510 @@
   "id": "skill_intimidation",
   "name": "Intimidation",
   "version": "1.1.0",
-  "source": {"collection":"skills","version":"1.0.0"},
+  "source": {
+    "collection": "skills",
+    "version": "1.0.0"
+  },
   "deal_order": 10,
   "action_type": "P",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "The enemy cannot use Attack until end of round.",
-  "flags": {"action":"P","permanent":false,"negating":true,"hooks":["negate_action"],"range":1,"negates":["A"],"negate":{"codes":["A"],"who":"adjacent","mode":"ep"},"altCounterSkill":true,"passOrder":{"negate_action":2},"buildingSkill":2},
-  "uses": ["skills_std", "skills_pass"],
-  "hooks": {
-    "negate_action": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"P"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"atk":{"filter":[{"call":["ps_adjacent_foes",{"var":"actor"}]},{"code_is":[{"var":"id"},"A"]},"id"]}},{"if":[{"var":"atk"},{"reduce":[{"var":"atk"},{"concat":[{"var":"acc"},[{"obj":{"op":"replace","id":{"var":"current"},"from":"A","to":"EP"}}],{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"current"},"A"]}]},[]]},{"let":[{"o":{"find":[{"map":[{"filter":[{"concat":[[{"call":["ps_foe_for",{"var":"r"}]}],{"call":["ps_adjacent_foes",{"var":"actor"}]}]},{"bool":[{"var":"id"}]},"id"]},{"reveal_of":[{"var":"id"}]},"id"]},{"and":[{"bool":[{"var":"x"}]},{"<=":[{"dist":[{"var":"actor"},{"var":"x.actor"}]},1]},{"some":[{"or":[{"var":"x.skills"},[]]},{"call":["ps_non_perm",{"var":"s"}]},"s"]}]},"x"]}},{"if":[{"var":"o"},{"call":["ps_counter",{"var":"actor"},{"var":"skill"},{"var":"o.actor"}]},[]]}]}]}]}]}
+  "flags": {
+    "action": "P",
+    "permanent": false,
+    "negating": true,
+    "hooks": [
+      "negate_action"
+    ],
+    "range": 1,
+    "negates": [
+      "A"
+    ],
+    "negate": {
+      "codes": [
+        "A"
+      ],
+      "who": "adjacent",
+      "mode": "ep"
+    },
+    "altCounterSkill": true,
+    "passOrder": {
+      "negate_action": 2
+    },
+    "buildingSkill": 2
   },
-  "ui": {"tag":"In","glyph":"😠","color":"#dfe3e8"},
-  "card": {"name":"Intimidation","tags":["posture","lock"],"resources":{"source":"warlords3_battlecry","match_reason":"drum + racing heartbeat of the intimidated enemy; red arcs of the fear aura","confidence":"low","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Red crescent arcs/Red crescent arcs - idle [EZ55].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/drum.wav","usage":"play when the skill resolves (pick randomly if several)"},{"path":"assets/Sounds/SoundFX/HeartBeatFast.wav","usage":"play when the skill resolves (pick randomly if several)"}]},"wbc3_name":"Red crescent arcs","wbc3_code":"EZ55","wbc3_race":"Effects1"},"data":{"action_type":"P","is_permanent":false,"point_buy_stat":null,"text":"The enemy cannot use Attack until end of round."},"rebalance_links":["skill_grapple"],"logic":{"description":"Instant riding on a Posture card (or an empty action). Every enemy in contact with the caster who declared Attack has it replaced by Empty Posture for this action (no target needed; class stances such as Reaver may lift the EP back afterwards). The paper 'until end of round' lock is applied per action in the pc game. Rule 8 pc override: returns to hand when no adjacent enemy was Attacking.","prerequisites":[{"id":"rides_on_posture","description":"The caster's action is Posture (or an empty action, which carries Posture skills).","when":{"in":[{"var":"caster.action"},["P","EP","EM"]]}}],"effects":[{"id":"enemy_action_after","description":"For each enemy in contact: Attack becomes Empty Posture, anything else unchanged.","target":"all_enemies","unit":"actions","value":{"if":[{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]},{"==":[{"var":"target.action"},"A"]}]},"EP",{"var":"target.action"}]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Posture skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["in_contact","is_enemy","rule_8_instant_returns"]}}
+  "uses": [
+    "skills_std",
+    "skills_pass"
+  ],
+  "hooks": {
+    "negate_action": {
+      "if": [
+        {
+          "!": [
+            {
+              "and": [
+                {
+                  "bool": [
+                    {
+                      "len": [
+                        {
+                          "or": [
+                            {
+                              "var": "r.skills"
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "call": [
+                    "ps_rides",
+                    {
+                      "var": "r"
+                    },
+                    "P"
+                  ]
+                },
+                {
+                  "has_skill": [
+                    {
+                      "var": "actor"
+                    },
+                    {
+                      "var": "skill"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        [],
+        {
+          "let": [
+            {
+              "atk": {
+                "filter": [
+                  {
+                    "call": [
+                      "ps_adjacent_foes",
+                      {
+                        "var": "actor"
+                      }
+                    ]
+                  },
+                  {
+                    "code_is": [
+                      {
+                        "var": "id"
+                      },
+                      "A"
+                    ]
+                  },
+                  "id"
+                ]
+              }
+            },
+            {
+              "if": [
+                {
+                  "var": "atk"
+                },
+                {
+                  "reduce": [
+                    {
+                      "var": "atk"
+                    },
+                    {
+                      "concat": [
+                        {
+                          "var": "acc"
+                        },
+                        [
+                          {
+                            "obj": {
+                              "op": "replace",
+                              "id": {
+                                "var": "current"
+                              },
+                              "from": "A",
+                              "to": "EP"
+                            }
+                          }
+                        ],
+                        {
+                          "call": [
+                            "ps_negate",
+                            {
+                              "var": "actor"
+                            },
+                            {
+                              "var": "skill"
+                            },
+                            {
+                              "var": "current"
+                            },
+                            "A"
+                          ]
+                        }
+                      ]
+                    },
+                    []
+                  ]
+                },
+                {
+                  "let": [
+                    {
+                      "o": {
+                        "find": [
+                          {
+                            "map": [
+                              {
+                                "filter": [
+                                  {
+                                    "concat": [
+                                      [
+                                        {
+                                          "call": [
+                                            "ps_foe_for",
+                                            {
+                                              "var": "r"
+                                            }
+                                          ]
+                                        }
+                                      ],
+                                      {
+                                        "call": [
+                                          "ps_adjacent_foes",
+                                          {
+                                            "var": "actor"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "bool": [
+                                      {
+                                        "var": "id"
+                                      }
+                                    ]
+                                  },
+                                  "id"
+                                ]
+                              },
+                              {
+                                "reveal_of": [
+                                  {
+                                    "var": "id"
+                                  }
+                                ]
+                              },
+                              "id"
+                            ]
+                          },
+                          {
+                            "and": [
+                              {
+                                "bool": [
+                                  {
+                                    "var": "x"
+                                  }
+                                ]
+                              },
+                              {
+                                "<=": [
+                                  {
+                                    "dist": [
+                                      {
+                                        "var": "actor"
+                                      },
+                                      {
+                                        "var": "x.actor"
+                                      }
+                                    ]
+                                  },
+                                  1
+                                ]
+                              },
+                              {
+                                "some": [
+                                  {
+                                    "or": [
+                                      {
+                                        "var": "x.skills"
+                                      },
+                                      []
+                                    ]
+                                  },
+                                  {
+                                    "call": [
+                                      "ps_non_perm",
+                                      {
+                                        "var": "s"
+                                      }
+                                    ]
+                                  },
+                                  "s"
+                                ]
+                              }
+                            ]
+                          },
+                          "x"
+                        ]
+                      }
+                    },
+                    {
+                      "if": [
+                        {
+                          "var": "o"
+                        },
+                        {
+                          "call": [
+                            "ps_counter",
+                            {
+                              "var": "actor"
+                            },
+                            {
+                              "var": "skill"
+                            },
+                            {
+                              "var": "o.actor"
+                            }
+                          ]
+                        },
+                        []
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "ui": {
+    "tag": "In",
+    "glyph": "😠",
+    "color": "#dfe3e8"
+  },
+  "card": {
+    "name": "Intimidation",
+    "tags": [
+      "posture",
+      "lock"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "match_reason": "drum + racing heartbeat of the intimidated enemy; red arcs of the fear aura",
+      "confidence": "low",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Red crescent arcs/Red crescent arcs - idle [EZ55].png",
+          "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/drum.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/HeartBeatFast.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          }
+        ]
+      },
+      "wbc3_name": "Red crescent arcs",
+      "wbc3_code": "EZ55",
+      "wbc3_race": "Effects1"
+    },
+    "data": {
+      "action_type": "P",
+      "is_permanent": false,
+      "point_buy_stat": null,
+      "text": "The enemy cannot use Attack until end of round."
+    },
+    "rebalance_links": [
+      "skill_grapple"
+    ],
+    "logic": {
+      "description": "Instant riding on a Posture card (or an empty action). Every enemy in contact with the caster who declared Attack has it replaced by Empty Posture for this action (no target needed; class stances such as Reaver may lift the EP back afterwards). The paper 'until end of round' lock is applied per action in the pc game. Rule 8 pc override: returns to hand when no adjacent enemy was Attacking.",
+      "prerequisites": [
+        {
+          "id": "rides_on_posture",
+          "description": "The caster's action is Posture (or an empty action, which carries Posture skills).",
+          "when": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "P",
+                "EP",
+                "EM"
+              ]
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "enemy_action_after",
+          "description": "For each enemy in contact: Attack becomes Empty Posture, anything else unchanged.",
+          "target": "all_enemies",
+          "unit": "actions",
+          "value": {
+            "if": [
+              {
+                "and": [
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "is_enemy",
+                      {
+                        "a_alliance": {
+                          "var": "caster.alliance"
+                        },
+                        "b_alliance": {
+                          "var": "target.alliance"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "==": [
+                      {
+                        "var": "target.action"
+                      },
+                      "A"
+                    ]
+                  }
+                ]
+              },
+              "EP",
+              {
+                "var": "target.action"
+              }
+            ]
+          }
+        },
+        {
+          "id": "rule_8_return_to_hand",
+          "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "rule_8_instant_returns",
+              {
+                "took_with": {
+                  "var": "outcome.took_with"
+                },
+                "took_without": {
+                  "var": "outcome.took_without"
+                },
+                "dealt_with": {
+                  "var": "outcome.dealt_with"
+                },
+                "dealt_without": {
+                  "var": "outcome.dealt_without"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "action_type_unchanged",
+          "description": "Stays a Posture skill.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.action_type"
+              },
+              {
+                "var": "entry.data.action_type"
+              }
+            ]
+          }
+        },
+        {
+          "id": "is_permanent_unchanged",
+          "description": "Remains an instant.",
+          "assert": {
+            "==": [
+              {
+                "!!": {
+                  "var": "proposal.data.is_permanent"
+                }
+              },
+              {
+                "!!": {
+                  "var": "entry.data.is_permanent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_stat_valid",
+          "description": "point_buy_stat is null, 'any' or one of the four stats.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  [
+                    "any",
+                    "stat_vitality",
+                    "stat_world",
+                    "stat_matter",
+                    "stat_will",
+                    "vitality",
+                    "world",
+                    "matter",
+                    "will"
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "in_contact",
+        "is_enemy",
+        "rule_8_instant_returns"
+      ]
+    }
+  }
 }

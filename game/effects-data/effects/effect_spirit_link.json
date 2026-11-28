@@ -3,22 +3,557 @@
   "id": "effect_spirit_link",
   "name": "Spirit Link",
   "version": "1.4.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_souls"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_souls"
+  ],
   "cost": 1,
   "kind": "meta",
   "duration": "permanent",
-  "every": {"behaviour":"all stats","note":"Rule 23 ∀: all four stats of the ally are linked"},
+  "every": {
+    "behaviour": "all stats",
+    "note": "Rule 23 ∀: all four stats of the ally are linked"
+  },
   "text": "Connect two Stats of two friendly subjects (draw the chosen element value as dice and put over the card). The sum becomes the new Stat value.",
   "every_text": "Connect all elements.",
-  "flags": {"permanent":true,"spiritLink":true,"naturalKind":"link"},
-  "ui": {"perm_help":"Spirit Link — the linked ally stat is added to yours (not a token); your life maximum follows"},
-  "card": {"name":"Spirit Link","tags":["permanent","ally"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Cyan beams","wbc3_code":"EZ63","wbc3_race":"Effects1","match_reason":"beams connecting two subjects","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Cyan beams/Cyan beams - idle [EZ63].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Magic.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["permanent"],"element_cost":["elem_souls"],"every_bonus":"Connect all elements.","text":"Connect two Stats of two friendly subjects (draw the chosen element value as dice and put over the card). The sum becomes the new Stat value.","natural_permanent":{"copies":2,"power":6,"semantics":"link","holders":"monsters_with_this_innate_effect","text":"Monster natural permanent (Loxodon Mystic starts with 2, power 6 each): the monster is linked to its nearest allied creature — with both copies standing that is the ∀ double cast, all four of that creature's stats are added to its own; with one copy left only its Vitality; a lone monster gets nothing. A destroyed copy goes to the monster's archive (Rule 24, World). Players still cast Spirit Link on an ally stat.","every_with_copies":2}},"logic":{"description":"Implemented (2026-10-29). The clicked ally stat (else the biggest stat among my living allies) is added to my stat while the permanent stands — not a token, so it overrides nothing; my life maximum follows (general_ux_hitpoints_calculations). ∀: all four stats. Natural: the holder (after every action, its own state) links to its nearest living allied creature (distance, then id) — with both copies standing it is the ∀ double cast: all four of that creature's stats are added to its own (links_json, every_csv); with one copy left a plain Vitality link; a lone monster has no link. The link moves to whichever allied creature is nearest. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again. Players still cast it as described first; the natural reading applies only to a monster's starting copies.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"ally_alive","description":"The linked unit is a living ally (any distance).","when":{"and":[{"!":{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}},{">":[{"var":"target.life"},0]}]}}],"effects":[{"id":"linked_stat_sum","description":"My stat while linked = my base stat + the ally's current base stat for the chosen stat.","target":"caster","unit":"stat","value":{"+":[{"var":"caster.stats.world"},{"var":"target.stats.world"}]}},{"id":"stats_linked","description":"How many stats are linked: 1, all 4 on a ∀ double cast.","target":"target","unit":"stat","value":{"if":[{"var":"cast.every"},4,1]}},{"id":"permanent_power","description":"Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.","target":"caster","unit":"die","value":{"var":"die"}},{"id":"destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"max_of":[{"map":[{"filter":[{"var":"caster.tokens"},{"==":[{"var":"elem"},{"root":"elements.0"}]}]},{"var":"value"}]}]}}]}},{"id":"natural_link_stat","description":"Natural: the nearest allied creature's stat is added to the holder's — all four with 2 copies (∀), Vitality with 1.","target":"caster","unit":"stat","value":{"var":"ally.stats.vitality"}},{"id":"natural_copies","description":"Copies the monster starts with (rule_monster_natural_permanents).","target":"caster","unit":"cards","value":{"entry":["rule_monster_natural_permanents","natural_permanents.copies"]}},{"id":"natural_power","description":"Rule 24 power of each copy (fixed).","target":"caster","unit":"die","value":{"entry":["rule_monster_natural_permanents","natural_permanents.power"]}},{"id":"natural_copy_destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":6}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_souls"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}},{"id":"keeps_natural_permanent","description":"The natural_permanent block (copies, power, semantics) stays.","assert":{"and":[{"==":[{"typeof":[{"var":"proposal.data.natural_permanent"}]},"object"]},{">=":[{"var":"proposal.data.natural_permanent.copies"},1]}]}}],"references":["action_can_cast_non_instant","elements_not_disabled","is_enemy","using_rule_24"]}},
-  "uses": ["std","e2b"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"let":[{"ally":{"var":"cast.link.peer_id"}},{"if":[{"or":[{"!":[{"var":"ally"}]},{"===":[{"var":"ally"},{"var":"me"}]},{"!":[{"call":["alive",{"var":"ally"}]}]},{"enemy_of":[{"var":"me"},{"var":"ally"}]}]},{"call":["fizzle","no ally to link"]},{"map":[{"if":[{"var":"cast.every"},["vitality","world","will","matter"],[{"if":[{"in":[{"var":"cast.link.stat"},["vitality","world","will","matter"]]},{"var":"cast.link.stat"},"vitality"]}]]},{"emit":["links",{"obj":{"on":{"var":"me"},"from":{"var":"ally"},"stat":{"var":"sk"},"value":{"base_stat":[{"var":"ally"},{"var":"sk"}]}}}]},"sk"]}]}]},
-      {"call":["land_permanent"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "permanent": true,
+    "spiritLink": true,
+    "naturalKind": "link"
+  },
+  "ui": {
+    "perm_help": "Spirit Link — the linked ally stat is added to yours (not a token); your life maximum follows"
+  },
+  "card": {
+    "name": "Spirit Link",
+    "tags": [
+      "permanent",
+      "ally"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Cyan beams",
+      "wbc3_code": "EZ63",
+      "wbc3_race": "Effects1",
+      "match_reason": "beams connecting two subjects",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Cyan beams/Cyan beams - idle [EZ63].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Magic.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "permanent"
+      ],
+      "element_cost": [
+        "elem_souls"
+      ],
+      "every_bonus": "Connect all elements.",
+      "text": "Connect two Stats of two friendly subjects (draw the chosen element value as dice and put over the card). The sum becomes the new Stat value.",
+      "natural_permanent": {
+        "copies": 2,
+        "power": 6,
+        "semantics": "link",
+        "holders": "monsters_with_this_innate_effect",
+        "text": "Monster natural permanent (Loxodon Mystic starts with 2, power 6 each): the monster is linked to its nearest allied creature — with both copies standing that is the ∀ double cast, all four of that creature's stats are added to its own; with one copy left only its Vitality; a lone monster gets nothing. A destroyed copy goes to the monster's archive (Rule 24, World). Players still cast Spirit Link on an ally stat.",
+        "every_with_copies": 2
+      }
+    },
+    "logic": {
+      "description": "Implemented (2026-10-29). The clicked ally stat (else the biggest stat among my living allies) is added to my stat while the permanent stands — not a token, so it overrides nothing; my life maximum follows (general_ux_hitpoints_calculations). ∀: all four stats. Natural: the holder (after every action, its own state) links to its nearest living allied creature (distance, then id) — with both copies standing it is the ∀ double cast: all four of that creature's stats are added to its own (links_json, every_csv); with one copy left a plain Vitality link; a lone monster has no link. The link moves to whichever allied creature is nearest. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again. Players still cast it as described first; the natural reading applies only to a monster's starting copies.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "ally_alive",
+          "description": "The linked unit is a living ally (any distance).",
+          "when": {
+            "and": [
+              {
+                "!": {
+                  "rule": [
+                    "is_enemy",
+                    {
+                      "a_alliance": {
+                        "var": "caster.alliance"
+                      },
+                      "b_alliance": {
+                        "var": "target.alliance"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "linked_stat_sum",
+          "description": "My stat while linked = my base stat + the ally's current base stat for the chosen stat.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "+": [
+              {
+                "var": "caster.stats.world"
+              },
+              {
+                "var": "target.stats.world"
+              }
+            ]
+          }
+        },
+        {
+          "id": "stats_linked",
+          "description": "How many stats are linked: 1, all 4 on a ∀ double cast.",
+          "target": "target",
+          "unit": "stat",
+          "value": {
+            "if": [
+              {
+                "var": "cast.every"
+              },
+              4,
+              1
+            ]
+          }
+        },
+        {
+          "id": "permanent_power",
+          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "var": "die"
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "max_of": [
+                    {
+                      "map": [
+                        {
+                          "filter": [
+                            {
+                              "var": "caster.tokens"
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "elem"
+                                },
+                                {
+                                  "root": "elements.0"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "var": "value"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "natural_link_stat",
+          "description": "Natural: the nearest allied creature's stat is added to the holder's — all four with 2 copies (∀), Vitality with 1.",
+          "target": "caster",
+          "unit": "stat",
+          "value": {
+            "var": "ally.stats.vitality"
+          }
+        },
+        {
+          "id": "natural_copies",
+          "description": "Copies the monster starts with (rule_monster_natural_permanents).",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "entry": [
+              "rule_monster_natural_permanents",
+              "natural_permanents.copies"
+            ]
+          }
+        },
+        {
+          "id": "natural_power",
+          "description": "Rule 24 power of each copy (fixed).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "entry": [
+              "rule_monster_natural_permanents",
+              "natural_permanents.power"
+            ]
+          }
+        },
+        {
+          "id": "natural_copy_destroyed_by_rule_24",
+          "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": 6
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_souls"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        },
+        {
+          "id": "keeps_every_bonus",
+          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.every_bonus"
+                  }
+                ]
+              },
+              "string"
+            ]
+          }
+        },
+        {
+          "id": "keeps_natural_permanent",
+          "description": "The natural_permanent block (copies, power, semantics) stays.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.natural_permanent"
+                      }
+                    ]
+                  },
+                  "object"
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.natural_permanent.copies"
+                  },
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "is_enemy",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2b"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "let": [
+          {
+            "ally": {
+              "var": "cast.link.peer_id"
+            }
+          },
+          {
+            "if": [
+              {
+                "or": [
+                  {
+                    "!": [
+                      {
+                        "var": "ally"
+                      }
+                    ]
+                  },
+                  {
+                    "===": [
+                      {
+                        "var": "ally"
+                      },
+                      {
+                        "var": "me"
+                      }
+                    ]
+                  },
+                  {
+                    "!": [
+                      {
+                        "call": [
+                          "alive",
+                          {
+                            "var": "ally"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "enemy_of": [
+                      {
+                        "var": "me"
+                      },
+                      {
+                        "var": "ally"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "call": [
+                  "fizzle",
+                  "no ally to link"
+                ]
+              },
+              {
+                "map": [
+                  {
+                    "if": [
+                      {
+                        "var": "cast.every"
+                      },
+                      [
+                        "vitality",
+                        "world",
+                        "will",
+                        "matter"
+                      ],
+                      [
+                        {
+                          "if": [
+                            {
+                              "in": [
+                                {
+                                  "var": "cast.link.stat"
+                                },
+                                [
+                                  "vitality",
+                                  "world",
+                                  "will",
+                                  "matter"
+                                ]
+                              ]
+                            },
+                            {
+                              "var": "cast.link.stat"
+                            },
+                            "vitality"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  {
+                    "emit": [
+                      "links",
+                      {
+                        "obj": {
+                          "on": {
+                            "var": "me"
+                          },
+                          "from": {
+                            "var": "ally"
+                          },
+                          "stat": {
+                            "var": "sk"
+                          },
+                          "value": {
+                            "base_stat": [
+                              {
+                                "var": "ally"
+                              },
+                              {
+                                "var": "sk"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "sk"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

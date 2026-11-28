@@ -3,13 +3,212 @@
   "id": "class_manipulator",
   "name": "Manipulator",
   "version": "1.2.0",
-  "source": {"collection":"classes","version":"1.2.0"},
-  "data": {"ability_kind":"passive","colors":["elem_souls","elem_air","elem_concentration","elem_harmony"],"text":"Passive, once per turn: the first time in a turn an enemy Attack is about to deal you combat damage, this ability is used by itself and becomes inactive until the next turn. A random nearby enemy (within 3 hexes) returns its Action to its hand and must play another Action card from its hand instead — it may hold the same kind, so it can still go badly for you.","passive":true,"range":3,"publish_range":6,"trigger":"attack"},
-  "flags": {"phase":null,"passiveTurn":true,"hooks":["config","combat_in","pick_target","peer:manipAlt"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.2.0"
+  },
+  "data": {
+    "ability_kind": "passive",
+    "colors": [
+      "elem_souls",
+      "elem_air",
+      "elem_concentration",
+      "elem_harmony"
+    ],
+    "text": "Passive, once per turn: the first time in a turn an enemy Attack is about to deal you combat damage, this ability is used by itself and becomes inactive until the next turn. A random nearby enemy (within 3 hexes) returns its Action to its hand and must play another Action card from its hand instead — it may hold the same kind, so it can still go badly for you.",
+    "passive": true,
+    "range": 3,
+    "publish_range": 6,
+    "trigger": "attack"
+  },
+  "flags": {
+    "phase": null,
+    "passiveTurn": true,
+    "hooks": [
+      "config",
+      "combat_in",
+      "pick_target",
+      "peer:manipAlt"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "config": {"call":["cfg_manipulator"]},
-    "combat_in": {"if":[{"===":[{"get":[{"class_data":[{"var":"class"}]},"trigger"]},"attack"]},{"some":[{"or":[{"var":"list"},[]]},{"and":[{"bool":{"var":"d"}},{"===":[{"var":"d.source"},"action"]},{"!":{"bool":{"var":"d.bonus"}}},{">":[{"var":"d.amount"},0]},{"===":[{"var":"d.why"},"Attack"]}]},"d"]},{"some":[{"or":[{"var":"list"},[]]},{"and":[{"bool":{"var":"d"}},{"===":[{"var":"d.source"},"action"]},{"!":{"bool":{"var":"d.bonus"}}},{">":[{"var":"d.amount"},0]}]},"d"]}]},
-    "pick_target": {"let":[{"ids":{"sort":{"or":[{"var":"cands"},[]]}}},{"if":[{"len":{"var":"ids"}},{"at":[{"var":"ids"},{"%":[{"hash_int":[{"var":"seed"},0,8]},{"len":{"var":"ids"}}]}]},null]}]}
+    "config": {
+      "call": [
+        "cfg_manipulator"
+      ]
+    },
+    "combat_in": {
+      "if": [
+        {
+          "===": [
+            {
+              "get": [
+                {
+                  "class_data": [
+                    {
+                      "var": "class"
+                    }
+                  ]
+                },
+                "trigger"
+              ]
+            },
+            "attack"
+          ]
+        },
+        {
+          "some": [
+            {
+              "or": [
+                {
+                  "var": "list"
+                },
+                []
+              ]
+            },
+            {
+              "and": [
+                {
+                  "bool": {
+                    "var": "d"
+                  }
+                },
+                {
+                  "===": [
+                    {
+                      "var": "d.source"
+                    },
+                    "action"
+                  ]
+                },
+                {
+                  "!": {
+                    "bool": {
+                      "var": "d.bonus"
+                    }
+                  }
+                },
+                {
+                  ">": [
+                    {
+                      "var": "d.amount"
+                    },
+                    0
+                  ]
+                },
+                {
+                  "===": [
+                    {
+                      "var": "d.why"
+                    },
+                    "Attack"
+                  ]
+                }
+              ]
+            },
+            "d"
+          ]
+        },
+        {
+          "some": [
+            {
+              "or": [
+                {
+                  "var": "list"
+                },
+                []
+              ]
+            },
+            {
+              "and": [
+                {
+                  "bool": {
+                    "var": "d"
+                  }
+                },
+                {
+                  "===": [
+                    {
+                      "var": "d.source"
+                    },
+                    "action"
+                  ]
+                },
+                {
+                  "!": {
+                    "bool": {
+                      "var": "d.bonus"
+                    }
+                  }
+                },
+                {
+                  ">": [
+                    {
+                      "var": "d.amount"
+                    },
+                    0
+                  ]
+                }
+              ]
+            },
+            "d"
+          ]
+        }
+      ]
+    },
+    "pick_target": {
+      "let": [
+        {
+          "ids": {
+            "sort": {
+              "or": [
+                {
+                  "var": "cands"
+                },
+                []
+              ]
+            }
+          }
+        },
+        {
+          "if": [
+            {
+              "len": {
+                "var": "ids"
+              }
+            },
+            {
+              "at": [
+                {
+                  "var": "ids"
+                },
+                {
+                  "%": [
+                    {
+                      "hash_int": [
+                        {
+                          "var": "seed"
+                        },
+                        0,
+                        8
+                      ]
+                    },
+                    {
+                      "len": {
+                        "var": "ids"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            null
+          ]
+        }
+      ]
+    }
   }
 }

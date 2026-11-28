@@ -3,17 +3,301 @@
   "id": "effect_aura",
   "name": "Aura",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_souls"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_souls"
+  ],
   "cost": 1,
   "kind": "permanent",
   "duration": "permanent",
-  "every": {"behaviour":"resolver","note":"widens the holder's casts (std targets); ∀ = cast.aura on the widened cast"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "widens the holder's casts (std targets); ∀ = cast.aura on the widened cast"
+  },
   "text": "Each effect you cast becomes a mass effect, affecting all neighboring targets of your choice. Emit-an-element may target tokens/permanents and perform casting at the same time.",
   "every_text": "Each Permanent you cast may affect any known targets on the tileset chosen by you.",
-  "flags": {"permanent":true,"keepsCastOnDestroy":true,"everyWidens":true},
-  "bot": {"ai":false},
-  "card": {"name":"Aura","tags":["permanent","mass"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Purple domeshield arcs","wbc3_code":"EZ37","wbc3_race":"Effects1","match_reason":"dome around the caster = aura extending effects to neighbours","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Purple domeshield arcs/Purple domeshield arcs - idle [EZ37].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ37.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/Magic.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["permanent"],"element_cost":["elem_souls"],"every_bonus":"Each Permanent you cast may affect any known targets on the tileset chosen by you.","text":"Each effect you cast becomes a mass effect, affecting all neighboring targets of your choice. Emit-an-element may target tokens/permanents and perform casting at the same time."},"rebalance_links":["rule_24_destroy_permanent_token"],"logic":{"description":"Implemented permanent. Single: every effect the caster casts becomes a mass effect — target scope hits all adjacent enemies, self / self-or-ally scopes also reach adjacent allies. ∀ double cast: one later cast may be flagged aura and then reaches everyone it concerns within 10 hexes (enemies for hostile scopes, everyone for self scopes), after which the Aura permanent is spent. Placed with a Souls point-buy die as Rule 24 power.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"mass_radius","description":"Radius of the mass effect: 1 for the standing Aura, 10 for the one-shot Aura ∀ cast.","target":"caster","unit":"hexes","value":{"if":[{"var":"cast.every"},10,1]}},{"id":"permanent_power","description":"Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.","target":"caster","unit":"die","value":{"var":"die"}},{"id":"destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"max_of":[{"map":[{"filter":[{"var":"caster.tokens"},{"==":[{"var":"elem"},{"root":"elements.0"}]}]},{"var":"value"}]}]}}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_souls"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","using_rule_24"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+  "flags": {
+    "permanent": true,
+    "keepsCastOnDestroy": true,
+    "everyWidens": true
+  },
+  "bot": {
+    "ai": false
+  },
+  "card": {
+    "name": "Aura",
+    "tags": [
+      "permanent",
+      "mass"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Purple domeshield arcs",
+      "wbc3_code": "EZ37",
+      "wbc3_race": "Effects1",
+      "match_reason": "dome around the caster = aura extending effects to neighbours",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Purple domeshield arcs/Purple domeshield arcs - idle [EZ37].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ37.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Magic.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "permanent"
+      ],
+      "element_cost": [
+        "elem_souls"
+      ],
+      "every_bonus": "Each Permanent you cast may affect any known targets on the tileset chosen by you.",
+      "text": "Each effect you cast becomes a mass effect, affecting all neighboring targets of your choice. Emit-an-element may target tokens/permanents and perform casting at the same time."
+    },
+    "rebalance_links": [
+      "rule_24_destroy_permanent_token"
+    ],
+    "logic": {
+      "description": "Implemented permanent. Single: every effect the caster casts becomes a mass effect — target scope hits all adjacent enemies, self / self-or-ally scopes also reach adjacent allies. ∀ double cast: one later cast may be flagged aura and then reaches everyone it concerns within 10 hexes (enemies for hostile scopes, everyone for self scopes), after which the Aura permanent is spent. Placed with a Souls point-buy die as Rule 24 power.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "mass_radius",
+          "description": "Radius of the mass effect: 1 for the standing Aura, 10 for the one-shot Aura ∀ cast.",
+          "target": "caster",
+          "unit": "hexes",
+          "value": {
+            "if": [
+              {
+                "var": "cast.every"
+              },
+              10,
+              1
+            ]
+          }
+        },
+        {
+          "id": "permanent_power",
+          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "var": "die"
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "max_of": [
+                    {
+                      "map": [
+                        {
+                          "filter": [
+                            {
+                              "var": "caster.tokens"
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "elem"
+                                },
+                                {
+                                  "root": "elements.0"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "var": "value"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_souls"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        },
+        {
+          "id": "keeps_every_bonus",
+          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.every_bonus"
+                  }
+                ]
+              },
+              "string"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

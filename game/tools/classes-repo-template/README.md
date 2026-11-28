@@ -2,11 +2,18 @@
 
 The classes of chaosD6, defined as data (JsonLogic hooks). One class per file:
 
+**This repo is the source of truth** (since 2026-11-28). Edit the classes, libraries, oracles and docs here.
+chaosD6 builds its game copy `game/classes-data/` from this repo (`node game/tools/defs-build.mjs classes`) and
+pins the commit in `game/defs-pins.json`; never edit that copy — `defs-build.mjs --check` fails on it.
+`tools/engine/`, `tools/validator/` and `data/classes.json` stay copies OF the game (written by
+`game/tools/classes-repo-sync.mjs`; rebalance and proposals still write chaosD6 `data/classes.json`).
+Publish with `bash game/tools/oci/defs-publish.sh classes` (a delegate, with the Radicle key in the agent).
+
 ```
 classes/<id>.json       one class definition; "id" inside == file name
 lib/<id>.json          shared sub-routine libraries a class lists in "uses"
-SCHEMA.md              the definition format (mirrored from chaosD6 game/classes-data/SCHEMA.md)
-HOOKS.md               the resolver hook points a class can attach to (game/classes-data/HOOKS.md)
+SCHEMA.md              the definition format
+HOOKS.md               the resolver hook points a class can attach to
 index.json             manifest: id -> sha256 of the canonical JSON, for classes and lib
 data/classes.json      the class data versions + weights (rebalance / proposals collection; owned here, ruling 2026-11-20 #5)
 oracle/                JS TEST ORACLES: the reference hooks (classes-js.mjs) + class configs (class-configs.mjs) the

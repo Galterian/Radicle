@@ -3,13 +3,108 @@
   "id": "class_prophet",
   "name": "Prophet",
   "version": "1.3.0",
-  "source": {"collection":"classes","version":"1.3.0"},
-  "data": {"ability_kind":"once_per_round","colors":["elem_time","elem_space","elem_souls","elem_harmony","elem_concentration"],"passive":true,"range":3,"contact":3,"hand_reveal":{"n":"all"},"text":"Passive, once per turn: the first time in a turn a resolution leaves an enemy — hero or monster — within 3 hexes of you, its whole hand opens for you as a popup."},
-  "flags": {"phase":null,"handDefaults":{"hand_reveal":{"n":"all"},"passive":true},"hooks":["config","contact","peer:requestHand"]},
-  "ui": {"notice":"automatic — the first enemy you are in contact with each turn shows you its whole hand"},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.3.0"
+  },
+  "data": {
+    "ability_kind": "once_per_round",
+    "colors": [
+      "elem_time",
+      "elem_space",
+      "elem_souls",
+      "elem_harmony",
+      "elem_concentration"
+    ],
+    "passive": true,
+    "range": 3,
+    "contact": 3,
+    "hand_reveal": {
+      "n": "all"
+    },
+    "text": "Passive, once per turn: the first time in a turn a resolution leaves an enemy — hero or monster — within 3 hexes of you, its whole hand opens for you as a popup."
+  },
+  "flags": {
+    "phase": null,
+    "handDefaults": {
+      "hand_reveal": {
+        "n": "all"
+      },
+      "passive": true
+    },
+    "hooks": [
+      "config",
+      "contact",
+      "peer:requestHand"
+    ]
+  },
+  "ui": {
+    "notice": "automatic — the first enemy you are in contact with each turn shows you its whole hand"
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "config": {"call":["cfg_prophet"]},
-    "contact": {"or":[{"get":[{"at":[{"sort_by":[{"filter":[{"or":[{"var":"foes"},[]]},{"bool":{"var":"f"}},"f"]},{"desc":{"+":[{"bool":{"var":"f.fought"}}]}},{"locale":{"str":{"var":"f.id"}}},"f"]},0]},"id"]},null]}
+    "config": {
+      "call": [
+        "cfg_prophet"
+      ]
+    },
+    "contact": {
+      "or": [
+        {
+          "get": [
+            {
+              "at": [
+                {
+                  "sort_by": [
+                    {
+                      "filter": [
+                        {
+                          "or": [
+                            {
+                              "var": "foes"
+                            },
+                            []
+                          ]
+                        },
+                        {
+                          "bool": {
+                            "var": "f"
+                          }
+                        },
+                        "f"
+                      ]
+                    },
+                    {
+                      "desc": {
+                        "+": [
+                          {
+                            "bool": {
+                              "var": "f.fought"
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "locale": {
+                        "str": {
+                          "var": "f.id"
+                        }
+                      }
+                    },
+                    "f"
+                  ]
+                },
+                0
+              ]
+            },
+            "id"
+          ]
+        },
+        null
+      ]
+    }
   }
 }

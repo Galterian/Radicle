@@ -3,21 +3,387 @@
   "id": "effect_disruption",
   "name": "Disruption",
   "version": "1.1.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_souls","elem_harmony"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_souls",
+    "elem_harmony"
+  ],
   "cost": 2,
   "kind": "surgery",
   "duration": "instant",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "Damage by trying to split an object into two. + Split an unknown tile into two tiles (choose any cards and put them in adjacent tile face-down). If you beat the creature's Stats, you may split known tiles.",
-  "flags": {"damage":"delta","scope":"target","tileTarget":true,"surgery":"split"},
-  "card": {"name":"Disruption","tags":["damage","map"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Spell effect cyan energy shards","wbc3_code":"EZ03","wbc3_race":"Effects1","match_reason":"shards = object split apart","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect cyan energy shards/Spell effect cyan energy shards - idle [EZ03].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ03.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/electric.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage"],"element_cost":["elem_souls","elem_harmony"],"text":"Damage by trying to split an object into two. + Split an unknown tile into two tiles (choose any cards and put them in adjacent tile face-down). If you beat the creature's Stats, you may split known tiles."},"rebalance_links":["effect_metaphysics","effect_mind_blast"],"logic":{"description":"Reworked 2026-10-29 (split). With an enemy in contact: delta damage (Souls, Harmony). Otherwise the left-clicked tile receives a trap from ANY known location — even one under an enemy; without a trap in view the nearest building / artefact moves instead.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"tile_within_reach","description":"The left-clicked tile lies within 10 hexes of the caster (general_ux_range_cast_target); none chosen → the engine picks (random / nearest).","when":{"or":[{"==":[{"var":"target"},null]},{"<=":[{"var":"dist"},10]}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"map_surgery","description":"No enemy in reach → any known trap (closest first, even under an enemy) moves onto the chosen tile; else the nearest feature token.","target":"tile","unit":"relocation","value":true}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_souls"]}]}},{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_harmony"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","rule_21_delta_damage"]}},
-  "uses": ["std","e2c"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,true]},
-      {"if":[{"and":[{"call":["e2c_surgery_ok"]},{"!":[{"len":[{"call":["enemies_within",1]}]}]}]},{"call":["e2c_move_one","split"]}]},
-      {"if":[{"!":[{"len":[{"out":"relocations"}]}]},{"seq":[{"call":["require_recipients"]},{"map":[{"var":"recipients"},{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},"def"]}]}]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "tileTarget": true,
+    "surgery": "split"
+  },
+  "card": {
+    "name": "Disruption",
+    "tags": [
+      "damage",
+      "map"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Spell effect cyan energy shards",
+      "wbc3_code": "EZ03",
+      "wbc3_race": "Effects1",
+      "match_reason": "shards = object split apart",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect cyan energy shards/Spell effect cyan energy shards - idle [EZ03].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ03.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/electric.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage"
+      ],
+      "element_cost": [
+        "elem_souls",
+        "elem_harmony"
+      ],
+      "text": "Damage by trying to split an object into two. + Split an unknown tile into two tiles (choose any cards and put them in adjacent tile face-down). If you beat the creature's Stats, you may split known tiles."
+    },
+    "rebalance_links": [
+      "effect_metaphysics",
+      "effect_mind_blast"
+    ],
+    "logic": {
+      "description": "Reworked 2026-10-29 (split). With an enemy in contact: delta damage (Souls, Harmony). Otherwise the left-clicked tile receives a trap from ANY known location — even one under an enemy; without a trap in view the nearest building / artefact moves instead.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "tile_within_reach",
+          "description": "The left-clicked tile lies within 10 hexes of the caster (general_ux_range_cast_target); none chosen → the engine picks (random / nearest).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "<=": [
+                  {
+                    "var": "dist"
+                  },
+                  10
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "map_surgery",
+          "description": "No enemy in reach → any known trap (closest first, even under an enemy) moves onto the chosen tile; else the nearest feature token.",
+          "target": "tile",
+          "unit": "relocation",
+          "value": true
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_souls (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_souls"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_harmony"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "rule_21_delta_damage"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2c"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "if": [
+          {
+            "and": [
+              {
+                "call": [
+                  "e2c_surgery_ok"
+                ]
+              },
+              {
+                "!": [
+                  {
+                    "len": [
+                      {
+                        "call": [
+                          "enemies_within",
+                          1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "call": [
+              "e2c_move_one",
+              "split"
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "!": [
+              {
+                "len": [
+                  {
+                    "out": "relocations"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "seq": [
+              {
+                "call": [
+                  "require_recipients"
+                ]
+              },
+              {
+                "map": [
+                  {
+                    "var": "recipients"
+                  },
+                  {
+                    "call": [
+                      "hit",
+                      {
+                        "var": "def"
+                      },
+                      [
+                        {
+                          "obj": {
+                            "kind": "main",
+                            "sum": {
+                              "call": [
+                                "main_delta",
+                                {
+                                  "var": "def"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    ]
+                  },
+                  "def"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

@@ -3,13 +3,164 @@
   "id": "class_rogue",
   "name": "Rogue",
   "version": "1.3.0",
-  "source": {"collection":"classes","version":"1.3.0"},
-  "data": {"ability_kind":"tap","passive":true,"colors":["elem_space","elem_concentration","elem_harmony"],"trap_dodges_per_turn":1,"threat_dodges_per_turn":1,"threat_radius":2,"text":"Passive, one charge per turn, spent on the first of: Trap — your move over a building or a trap does not trigger it (a laid trap, a building's hidden trap or a dungeon's), the trap stays where it is; or Threat — you move into an enemy's threat area (2 hexes) unseen, that monster (or enemy) does not wake or chase you for the rest of the turn. A step that would need both dodges the trap.","shared_charge":true},
-  "flags": {"phase":null,"passiveTurn":true,"hooks":["config","step","dungeon_step"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.3.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "passive": true,
+    "colors": [
+      "elem_space",
+      "elem_concentration",
+      "elem_harmony"
+    ],
+    "trap_dodges_per_turn": 1,
+    "threat_dodges_per_turn": 1,
+    "threat_radius": 2,
+    "text": "Passive, one charge per turn, spent on the first of: Trap — your move over a building or a trap does not trigger it (a laid trap, a building's hidden trap or a dungeon's), the trap stays where it is; or Threat — you move into an enemy's threat area (2 hexes) unseen, that monster (or enemy) does not wake or chase you for the rest of the turn. A step that would need both dodges the trap.",
+    "shared_charge": true
+  },
+  "flags": {
+    "phase": null,
+    "passiveTurn": true,
+    "hooks": [
+      "config",
+      "step",
+      "dungeon_step"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "config": {"call":["cfg_rogue"]},
-    "step": {"let":[{"st":{"and":[{"bool":{"var":"threatReady"}},{">":[{"len":{"or":[{"var":"ring"},[]]}},0]}]},"dodge":{"and":[{"bool":{"var":"trap"}},{">":[{"var":"trapLeft"},0]}]}},{"obj":{"stealth":{"and":[{"var":"st"},{"!":{"and":[{"var":"dodge"},{"===":[{"get":[{"class_data":[{"var":"class"}]},"shared_charge"]},true]}]}}]},"trap":{"if":[{"!":{"bool":{"var":"trap"}}},"none",{"var":"dodge"},"dodge","spring"]}}}]},
-    "dungeon_step": {"if":[{"!":{"bool":{"var":"trap"}}},"none",{">":[{"var":"trapLeft"},0]},"dodge","spring"]}
+    "config": {
+      "call": [
+        "cfg_rogue"
+      ]
+    },
+    "step": {
+      "let": [
+        {
+          "st": {
+            "and": [
+              {
+                "bool": {
+                  "var": "threatReady"
+                }
+              },
+              {
+                ">": [
+                  {
+                    "len": {
+                      "or": [
+                        {
+                          "var": "ring"
+                        },
+                        []
+                      ]
+                    }
+                  },
+                  0
+                ]
+              }
+            ]
+          },
+          "dodge": {
+            "and": [
+              {
+                "bool": {
+                  "var": "trap"
+                }
+              },
+              {
+                ">": [
+                  {
+                    "var": "trapLeft"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "obj": {
+            "stealth": {
+              "and": [
+                {
+                  "var": "st"
+                },
+                {
+                  "!": {
+                    "and": [
+                      {
+                        "var": "dodge"
+                      },
+                      {
+                        "===": [
+                          {
+                            "get": [
+                              {
+                                "class_data": [
+                                  {
+                                    "var": "class"
+                                  }
+                                ]
+                              },
+                              "shared_charge"
+                            ]
+                          },
+                          true
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "trap": {
+              "if": [
+                {
+                  "!": {
+                    "bool": {
+                      "var": "trap"
+                    }
+                  }
+                },
+                "none",
+                {
+                  "var": "dodge"
+                },
+                "dodge",
+                "spring"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "dungeon_step": {
+      "if": [
+        {
+          "!": {
+            "bool": {
+              "var": "trap"
+            }
+          }
+        },
+        "none",
+        {
+          ">": [
+            {
+              "var": "trapLeft"
+            },
+            0
+          ]
+        },
+        "dodge",
+        "spring"
+      ]
+    }
   }
 }

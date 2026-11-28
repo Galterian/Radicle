@@ -5,24 +5,691 @@
   "description": "E2b building blocks: fizzle, stat buy (Summoning / Golems / Elementals / Resurrect), Possess Σ, attached card. Uses std (alive, visible, my_stat). Pure; mirrors effects.mjs#resolveEffectJs.",
   "subs": {
     "fizzle": {
-      "params": ["msg"],
+      "params": [
+        "msg"
+      ],
       "doc": "status fizzled + a note; the remaining legs still run (as in effects.mjs)",
-      "body": {"seq":[{"put":["status","fizzled"]},{"note":[{"var":"msg"}]}]}
+      "body": {
+        "seq": [
+          {
+            "put": [
+              "status",
+              "fizzled"
+            ]
+          },
+          {
+            "note": [
+              {
+                "var": "msg"
+              }
+            ]
+          }
+        ]
+      }
     },
     "stat_sum": {
-      "params": ["id"],
+      "params": [
+        "id"
+      ],
       "doc": "Σ of the four base stats (Possess)",
-      "body": {"+":[{"base_stat":[{"var":"id"},"vitality"]},{"base_stat":[{"var":"id"},"world"]},{"base_stat":[{"var":"id"},"matter"]},{"base_stat":[{"var":"id"},"will"]}]}
+      "body": {
+        "+": [
+          {
+            "base_stat": [
+              {
+                "var": "id"
+              },
+              "vitality"
+            ]
+          },
+          {
+            "base_stat": [
+              {
+                "var": "id"
+              },
+              "world"
+            ]
+          },
+          {
+            "base_stat": [
+              {
+                "var": "id"
+              },
+              "matter"
+            ]
+          },
+          {
+            "base_stat": [
+              {
+                "var": "id"
+              },
+              "will"
+            ]
+          }
+        ]
+      }
     },
     "attached": {
       "params": [],
       "doc": "a card is attached to the cast (cast.attach.elements non-empty)",
-      "body": {"!!":[{"len":[{"var":"cast.attach.elements"}]}]}
+      "body": {
+        "!!": [
+          {
+            "len": [
+              {
+                "var": "cast.attach.elements"
+              }
+            ]
+          }
+        ]
+      }
     },
     "stat_buy": {
-      "params": ["resurrect"],
+      "params": [
+        "resurrect"
+      ],
       "doc": "Stat buy (Summoning, Golems, Elementals, Resurrect): emission k banks my stat for the k-th element round-robin until the bank covers cast.summon.need; then the ∀ bind / revive / Death Ward checks and the summon object. Fizzles stop the program (nothing else runs, as in effects.mjs).",
-      "body": {"seq":[{"if":[{"and":[{"var":"resurrect"},{"!":[{"var":"cast.summon.revive"}]},{"!":[{"var":"cast.summon.creature_id"}]},{"!":[{"var":"cast.summon.ward"}]}]},{"seq":[{"call":["fizzle","nothing to raise or ward"]},{"return":null}]}]},{"let":[{"of":{"??":[{"var":"cast.of"},{"len":[{"var":"elems"}]}]},"need":{"max":[{"if":[{"var":"cast.summon.ward"},0,1]},{"or":[{"+":[{"var":"cast.summon.need"}]},0]}]},"step":{"min":[{"??":[{"var":"cast.step"},{"var":"of"}]},{"max":[1,{"var":"of"}]}]},"kept0":{"if":[{"is_array":[{"var":"cast.kept"}]},{"slice":[{"var":"cast.kept"},0]},[]]},"kept":{"concat":[{"var":"kept0"},{"map":[{"range":[{"len":[{"var":"kept0"}]},{"var":"step"}]},{"stat_of":[{"var":"me"},{"at":[{"var":"elems"},{"%":[{"var":"it"},{"max":[1,{"len":[{"var":"elems"}]}]}]}]}]}]}]},"bank":{"reduce":[{"var":"kept"},{"+":[{"var":"acc"},{"or":[{"var":"it"},0]}]},0]}},{"seq":[{"put":["kept",{"var":"kept"}]},{"note":["stat buy ",{"var":"bank"},"/",{"var":"need"}]},{"if":[{"<":[{"var":"bank"},{"var":"need"}]},{"return_empty":"casting"}]},{"if":[{"and":[{"var":"cast.summon.bind"},{"!":[{"and":[{">":[{"life_of":[{"var":"cast.summon.bind"}]},0]},{"or":[{"!":[{"and":[{"invisible":[{"var":"cast.summon.bind"}]},{"enemy_of":[{"var":"me"},{"var":"cast.summon.bind"}]}]}]},{"invisible":[{"var":"me"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"cast.summon.bind"}]},10]}]}]}]},{"seq":[{"call":["fizzle","the creature is gone"]},{"return":null}]}]},{"if":[{"var":"cast.summon.revive"},{"let":[{"life":{"life_of":[{"var":"cast.summon.revive"}]},"d":{"dist":[{"var":"me"},{"var":"cast.summon.revive"}]}},{"if":[{"!":[{"and":[{"<=":[{"var":"life"},0]},{"<=":[{"var":"d"},1]}]}]},{"seq":[{"put":["status","fizzled"]},{"note":["nothing to raise here (",{"var":"cast.summon.revive"}," life ",{"var":"life"},", ",{"var":"d"}," away)"]},{"return":null}]},{"note":["raise ",{"var":"cast.summon.revive"}," (life ",{"var":"life"},", ",{"var":"d"}," away)"]}]}]}]},{"if":[{"and":[{"var":"cast.summon.ward"},{"!":[{"and":[{">":[{"life_of":[{"var":"cast.summon.ward"}]},0]},{"!":[{"enemy_of":[{"var":"me"},{"var":"cast.summon.ward"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"cast.summon.ward"}]},1]}]}]}]},{"seq":[{"call":["fizzle","no ally to ward"]},{"return":null}]}]},{"put":["summon",{"obj":{"owner":{"var":"me"},"creature_id":{"or":[{"var":"cast.summon.creature_id"},null]},"name":{"or":[{"var":"cast.summon.name"},null]},"need":{"var":"need"},"bind":{"or":[{"var":"cast.summon.bind"},null]},"archive_card_id":{"or":[{"var":"cast.summon.archive_card_id"},null]},"revive":{"or":[{"var":"cast.summon.revive"},null]},"is_player":{"!!":[{"var":"cast.summon.is_player"}]},"ward":{"or":[{"var":"cast.summon.ward"},null]}}}]}]}]}]}
+      "body": {
+        "seq": [
+          {
+            "if": [
+              {
+                "and": [
+                  {
+                    "var": "resurrect"
+                  },
+                  {
+                    "!": [
+                      {
+                        "var": "cast.summon.revive"
+                      }
+                    ]
+                  },
+                  {
+                    "!": [
+                      {
+                        "var": "cast.summon.creature_id"
+                      }
+                    ]
+                  },
+                  {
+                    "!": [
+                      {
+                        "var": "cast.summon.ward"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "seq": [
+                  {
+                    "call": [
+                      "fizzle",
+                      "nothing to raise or ward"
+                    ]
+                  },
+                  {
+                    "return": null
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "let": [
+              {
+                "of": {
+                  "??": [
+                    {
+                      "var": "cast.of"
+                    },
+                    {
+                      "len": [
+                        {
+                          "var": "elems"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "need": {
+                  "max": [
+                    {
+                      "if": [
+                        {
+                          "var": "cast.summon.ward"
+                        },
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "or": [
+                        {
+                          "+": [
+                            {
+                              "var": "cast.summon.need"
+                            }
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "step": {
+                  "min": [
+                    {
+                      "??": [
+                        {
+                          "var": "cast.step"
+                        },
+                        {
+                          "var": "of"
+                        }
+                      ]
+                    },
+                    {
+                      "max": [
+                        1,
+                        {
+                          "var": "of"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "kept0": {
+                  "if": [
+                    {
+                      "is_array": [
+                        {
+                          "var": "cast.kept"
+                        }
+                      ]
+                    },
+                    {
+                      "slice": [
+                        {
+                          "var": "cast.kept"
+                        },
+                        0
+                      ]
+                    },
+                    []
+                  ]
+                },
+                "kept": {
+                  "concat": [
+                    {
+                      "var": "kept0"
+                    },
+                    {
+                      "map": [
+                        {
+                          "range": [
+                            {
+                              "len": [
+                                {
+                                  "var": "kept0"
+                                }
+                              ]
+                            },
+                            {
+                              "var": "step"
+                            }
+                          ]
+                        },
+                        {
+                          "stat_of": [
+                            {
+                              "var": "me"
+                            },
+                            {
+                              "at": [
+                                {
+                                  "var": "elems"
+                                },
+                                {
+                                  "%": [
+                                    {
+                                      "var": "it"
+                                    },
+                                    {
+                                      "max": [
+                                        1,
+                                        {
+                                          "len": [
+                                            {
+                                              "var": "elems"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "bank": {
+                  "reduce": [
+                    {
+                      "var": "kept"
+                    },
+                    {
+                      "+": [
+                        {
+                          "var": "acc"
+                        },
+                        {
+                          "or": [
+                            {
+                              "var": "it"
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "seq": [
+                  {
+                    "put": [
+                      "kept",
+                      {
+                        "var": "kept"
+                      }
+                    ]
+                  },
+                  {
+                    "note": [
+                      "stat buy ",
+                      {
+                        "var": "bank"
+                      },
+                      "/",
+                      {
+                        "var": "need"
+                      }
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "<": [
+                          {
+                            "var": "bank"
+                          },
+                          {
+                            "var": "need"
+                          }
+                        ]
+                      },
+                      {
+                        "return_empty": "casting"
+                      }
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "and": [
+                          {
+                            "var": "cast.summon.bind"
+                          },
+                          {
+                            "!": [
+                              {
+                                "and": [
+                                  {
+                                    ">": [
+                                      {
+                                        "life_of": [
+                                          {
+                                            "var": "cast.summon.bind"
+                                          }
+                                        ]
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  {
+                                    "or": [
+                                      {
+                                        "!": [
+                                          {
+                                            "and": [
+                                              {
+                                                "invisible": [
+                                                  {
+                                                    "var": "cast.summon.bind"
+                                                  }
+                                                ]
+                                              },
+                                              {
+                                                "enemy_of": [
+                                                  {
+                                                    "var": "me"
+                                                  },
+                                                  {
+                                                    "var": "cast.summon.bind"
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "invisible": [
+                                          {
+                                            "var": "me"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "<=": [
+                                      {
+                                        "dist": [
+                                          {
+                                            "var": "me"
+                                          },
+                                          {
+                                            "var": "cast.summon.bind"
+                                          }
+                                        ]
+                                      },
+                                      10
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "seq": [
+                          {
+                            "call": [
+                              "fizzle",
+                              "the creature is gone"
+                            ]
+                          },
+                          {
+                            "return": null
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "var": "cast.summon.revive"
+                      },
+                      {
+                        "let": [
+                          {
+                            "life": {
+                              "life_of": [
+                                {
+                                  "var": "cast.summon.revive"
+                                }
+                              ]
+                            },
+                            "d": {
+                              "dist": [
+                                {
+                                  "var": "me"
+                                },
+                                {
+                                  "var": "cast.summon.revive"
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "if": [
+                              {
+                                "!": [
+                                  {
+                                    "and": [
+                                      {
+                                        "<=": [
+                                          {
+                                            "var": "life"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      {
+                                        "<=": [
+                                          {
+                                            "var": "d"
+                                          },
+                                          1
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "seq": [
+                                  {
+                                    "put": [
+                                      "status",
+                                      "fizzled"
+                                    ]
+                                  },
+                                  {
+                                    "note": [
+                                      "nothing to raise here (",
+                                      {
+                                        "var": "cast.summon.revive"
+                                      },
+                                      " life ",
+                                      {
+                                        "var": "life"
+                                      },
+                                      ", ",
+                                      {
+                                        "var": "d"
+                                      },
+                                      " away)"
+                                    ]
+                                  },
+                                  {
+                                    "return": null
+                                  }
+                                ]
+                              },
+                              {
+                                "note": [
+                                  "raise ",
+                                  {
+                                    "var": "cast.summon.revive"
+                                  },
+                                  " (life ",
+                                  {
+                                    "var": "life"
+                                  },
+                                  ", ",
+                                  {
+                                    "var": "d"
+                                  },
+                                  " away)"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "and": [
+                          {
+                            "var": "cast.summon.ward"
+                          },
+                          {
+                            "!": [
+                              {
+                                "and": [
+                                  {
+                                    ">": [
+                                      {
+                                        "life_of": [
+                                          {
+                                            "var": "cast.summon.ward"
+                                          }
+                                        ]
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  {
+                                    "!": [
+                                      {
+                                        "enemy_of": [
+                                          {
+                                            "var": "me"
+                                          },
+                                          {
+                                            "var": "cast.summon.ward"
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "<=": [
+                                      {
+                                        "dist": [
+                                          {
+                                            "var": "me"
+                                          },
+                                          {
+                                            "var": "cast.summon.ward"
+                                          }
+                                        ]
+                                      },
+                                      1
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "seq": [
+                          {
+                            "call": [
+                              "fizzle",
+                              "no ally to ward"
+                            ]
+                          },
+                          {
+                            "return": null
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "put": [
+                      "summon",
+                      {
+                        "obj": {
+                          "owner": {
+                            "var": "me"
+                          },
+                          "creature_id": {
+                            "or": [
+                              {
+                                "var": "cast.summon.creature_id"
+                              },
+                              null
+                            ]
+                          },
+                          "name": {
+                            "or": [
+                              {
+                                "var": "cast.summon.name"
+                              },
+                              null
+                            ]
+                          },
+                          "need": {
+                            "var": "need"
+                          },
+                          "bind": {
+                            "or": [
+                              {
+                                "var": "cast.summon.bind"
+                              },
+                              null
+                            ]
+                          },
+                          "archive_card_id": {
+                            "or": [
+                              {
+                                "var": "cast.summon.archive_card_id"
+                              },
+                              null
+                            ]
+                          },
+                          "revive": {
+                            "or": [
+                              {
+                                "var": "cast.summon.revive"
+                              },
+                              null
+                            ]
+                          },
+                          "is_player": {
+                            "!!": [
+                              {
+                                "var": "cast.summon.is_player"
+                              }
+                            ]
+                          },
+                          "ward": {
+                            "or": [
+                              {
+                                "var": "cast.summon.ward"
+                              },
+                              null
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

@@ -5,34 +5,809 @@
   "description": "E2a building blocks (hits with heal / self-damage flags, zones, channel / trap registration, stat penalties, swap tokens, Ageing feature). Pure; mirrors effects.mjs#resolveEffectJs. Builds on std.",
   "subs": {
     "hit_with": {
-      "params": ["def","legs","heal","self_eq"],
+      "params": [
+        "def",
+        "legs",
+        "heal",
+        "self_eq"
+      ],
       "doc": "a damage hit with the healDealt (Drain) / selfDamageEqual flags set explicitly",
-      "body": {"emit":["hits",{"obj":{"victim":{"var":"def"},"legs":{"var":"legs"},"healDealt":{"var":"heal"},"selfDamageEqual":{"var":"self_eq"}}}]}
+      "body": {
+        "emit": [
+          "hits",
+          {
+            "obj": {
+              "victim": {
+                "var": "def"
+              },
+              "legs": {
+                "var": "legs"
+              },
+              "healDealt": {
+                "var": "heal"
+              },
+              "selfDamageEqual": {
+                "var": "self_eq"
+              }
+            }
+          }
+        ]
+      }
     },
     "zone_around": {
       "params": [],
       "doc": "zone 'no_damage': my tile and its six neighbours",
-      "body": {"seq":[{"emit":["zones",{"obj":{"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"}}}]},{"map":[{"neighbours":[{"var":"my_tile.q"},{"var":"my_tile.r"}]},{"emit":["zones",{"obj":{"q":{"var":"n.q"},"r":{"var":"n.r"}}}]},"n"]}]}
+      "body": {
+        "seq": [
+          {
+            "emit": [
+              "zones",
+              {
+                "obj": {
+                  "q": {
+                    "var": "my_tile.q"
+                  },
+                  "r": {
+                    "var": "my_tile.r"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "map": [
+              {
+                "neighbours": [
+                  {
+                    "var": "my_tile.q"
+                  },
+                  {
+                    "var": "my_tile.r"
+                  }
+                ]
+              },
+              {
+                "emit": [
+                  "zones",
+                  {
+                    "obj": {
+                      "q": {
+                        "var": "n.q"
+                      },
+                      "r": {
+                        "var": "n.r"
+                      }
+                    }
+                  }
+                ]
+              },
+              "n"
+            ]
+          }
+        ]
+      }
     },
     "channel_reg": {
-      "params": ["stop"],
+      "params": [
+        "stop"
+      ],
       "doc": "general_ux_channeling: a completed original cast (not a tick) registers its channel",
-      "body": {"if":[{"and":[{"===":[{"out":"status"},"done"]},{"!":[{"var":"cast._channel_tick"}]}]},{"emit":["channels",{"obj":{"on":{"var":"me"},"effect_id":{"var":"effect_id"},"target":{"if":[{"===":[{"var":"cast.target.kind"},"character"]},{"var":"cast.target.ref"},null]},"elements":{"var":"elems"},"salt":{"or":[{"var":"cast.salt"},""]},"stop":{"var":"stop"}}}]}]}
+      "body": {
+        "if": [
+          {
+            "and": [
+              {
+                "===": [
+                  {
+                    "out": "status"
+                  },
+                  "done"
+                ]
+              },
+              {
+                "!": [
+                  {
+                    "var": "cast._channel_tick"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "emit": [
+              "channels",
+              {
+                "obj": {
+                  "on": {
+                    "var": "me"
+                  },
+                  "effect_id": {
+                    "var": "effect_id"
+                  },
+                  "target": {
+                    "if": [
+                      {
+                        "===": [
+                          {
+                            "var": "cast.target.kind"
+                          },
+                          "character"
+                        ]
+                      },
+                      {
+                        "var": "cast.target.ref"
+                      },
+                      null
+                    ]
+                  },
+                  "elements": {
+                    "var": "elems"
+                  },
+                  "salt": {
+                    "or": [
+                      {
+                        "var": "cast.salt"
+                      },
+                      ""
+                    ]
+                  },
+                  "stop": {
+                    "var": "stop"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     "trap_self": {
-      "params": ["trigger","mode"],
+      "params": [
+        "trigger",
+        "mode"
+      ],
       "doc": "Rule 2/4: a completed original cast leaves the card as a trap under me (power 20)",
-      "body": {"if":[{"and":[{"===":[{"out":"status"},"done"]},{"!":[{"var":"cast._channel_tick"}]}]},{"emit":["traps",{"obj":{"by":{"var":"me"},"q":{"var":"my_tile.q"},"r":{"var":"my_tile.r"},"effect_id":{"var":"effect_id"},"elements":{"slice":[{"var":"elems"},0]},"card_id":{"or":[{"var":"cast.card_id"},null]},"power":20,"trigger":{"var":"trigger"},"mode":{"var":"mode"},"holder":null}}]}]}
+      "body": {
+        "if": [
+          {
+            "and": [
+              {
+                "===": [
+                  {
+                    "out": "status"
+                  },
+                  "done"
+                ]
+              },
+              {
+                "!": [
+                  {
+                    "var": "cast._channel_tick"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "emit": [
+              "traps",
+              {
+                "obj": {
+                  "by": {
+                    "var": "me"
+                  },
+                  "q": {
+                    "var": "my_tile.q"
+                  },
+                  "r": {
+                    "var": "my_tile.r"
+                  },
+                  "effect_id": {
+                    "var": "effect_id"
+                  },
+                  "elements": {
+                    "slice": [
+                      {
+                        "var": "elems"
+                      },
+                      0
+                    ]
+                  },
+                  "card_id": {
+                    "or": [
+                      {
+                        "var": "cast.card_id"
+                      },
+                      null
+                    ]
+                  },
+                  "power": 20,
+                  "trigger": {
+                    "var": "trigger"
+                  },
+                  "mode": {
+                    "var": "mode"
+                  },
+                  "holder": null
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     "swap_tokens": {
-      "params": ["who","pb"],
+      "params": [
+        "who",
+        "pb"
+      ],
       "doc": "Mutate / Nature Embrace: pb = the one recorded point-buy (std buy_pb, tag swap:<who>); big die lifts the smallest stat, small die dents the biggest (mirrored on an enemy)",
-      "body": {"let":[{"st":{"sort_by":[{"map":[["vitality","world","will","matter"],[{"var":"it"},{"base_stat":[{"var":"who"},{"var":"it"}]},{"var":"i"}]]},{"asc":{"at":[{"var":"it"},1]}},{"asc":{"at":[{"var":"it"},2]}}]}},{"let":[{"low":{"at":[{"var":"st"},0]},"high":{"last":[{"var":"st"}]},"big":{"var":"pb.value"},"small":{"if":[{"var":"pb.fail"},0,{"min_of":[{"var":"pb.dice"}]}]}},{"if":[{">":[{"var":"big"},0]},{"if":[{"and":[{"!==":[{"var":"who"},{"var":"me"}]},{"enemy_of":[{"var":"me"},{"var":"who"}]}]},{"seq":[{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"high"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"-":[{"var":"big"}]},"effect_id":{"var":"effect_id"}}}]},{"if":[{">":[{"var":"small"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"low"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"var":"small"},"effect_id":{"var":"effect_id"}}}]}]}]},{"seq":[{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"low"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"var":"big"},"effect_id":{"var":"effect_id"}}}]},{"if":[{">":[{"var":"small"},0]},{"emit":["statTokens",{"obj":{"on":{"var":"who"},"stat":{"at":[{"var":"high"},0]},"elem":{"at":[{"var":"elems"},0]},"value":{"-":[{"var":"small"}]},"effect_id":{"var":"effect_id"}}}]}]}]}]}]}]}]}
+      "body": {
+        "let": [
+          {
+            "st": {
+              "sort_by": [
+                {
+                  "map": [
+                    [
+                      "vitality",
+                      "world",
+                      "will",
+                      "matter"
+                    ],
+                    [
+                      {
+                        "var": "it"
+                      },
+                      {
+                        "base_stat": [
+                          {
+                            "var": "who"
+                          },
+                          {
+                            "var": "it"
+                          }
+                        ]
+                      },
+                      {
+                        "var": "i"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "asc": {
+                    "at": [
+                      {
+                        "var": "it"
+                      },
+                      1
+                    ]
+                  }
+                },
+                {
+                  "asc": {
+                    "at": [
+                      {
+                        "var": "it"
+                      },
+                      2
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "let": [
+              {
+                "low": {
+                  "at": [
+                    {
+                      "var": "st"
+                    },
+                    0
+                  ]
+                },
+                "high": {
+                  "last": [
+                    {
+                      "var": "st"
+                    }
+                  ]
+                },
+                "big": {
+                  "var": "pb.value"
+                },
+                "small": {
+                  "if": [
+                    {
+                      "var": "pb.fail"
+                    },
+                    0,
+                    {
+                      "min_of": [
+                        {
+                          "var": "pb.dice"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "if": [
+                  {
+                    ">": [
+                      {
+                        "var": "big"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "and": [
+                          {
+                            "!==": [
+                              {
+                                "var": "who"
+                              },
+                              {
+                                "var": "me"
+                              }
+                            ]
+                          },
+                          {
+                            "enemy_of": [
+                              {
+                                "var": "me"
+                              },
+                              {
+                                "var": "who"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "seq": [
+                          {
+                            "emit": [
+                              "statTokens",
+                              {
+                                "obj": {
+                                  "on": {
+                                    "var": "who"
+                                  },
+                                  "stat": {
+                                    "at": [
+                                      {
+                                        "var": "high"
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  "elem": {
+                                    "at": [
+                                      {
+                                        "var": "elems"
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  "value": {
+                                    "-": [
+                                      {
+                                        "var": "big"
+                                      }
+                                    ]
+                                  },
+                                  "effect_id": {
+                                    "var": "effect_id"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "if": [
+                              {
+                                ">": [
+                                  {
+                                    "var": "small"
+                                  },
+                                  0
+                                ]
+                              },
+                              {
+                                "emit": [
+                                  "statTokens",
+                                  {
+                                    "obj": {
+                                      "on": {
+                                        "var": "who"
+                                      },
+                                      "stat": {
+                                        "at": [
+                                          {
+                                            "var": "low"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "elem": {
+                                        "at": [
+                                          {
+                                            "var": "elems"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "value": {
+                                        "var": "small"
+                                      },
+                                      "effect_id": {
+                                        "var": "effect_id"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "seq": [
+                          {
+                            "emit": [
+                              "statTokens",
+                              {
+                                "obj": {
+                                  "on": {
+                                    "var": "who"
+                                  },
+                                  "stat": {
+                                    "at": [
+                                      {
+                                        "var": "low"
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  "elem": {
+                                    "at": [
+                                      {
+                                        "var": "elems"
+                                      },
+                                      0
+                                    ]
+                                  },
+                                  "value": {
+                                    "var": "big"
+                                  },
+                                  "effect_id": {
+                                    "var": "effect_id"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "if": [
+                              {
+                                ">": [
+                                  {
+                                    "var": "small"
+                                  },
+                                  0
+                                ]
+                              },
+                              {
+                                "emit": [
+                                  "statTokens",
+                                  {
+                                    "obj": {
+                                      "on": {
+                                        "var": "who"
+                                      },
+                                      "stat": {
+                                        "at": [
+                                          {
+                                            "var": "high"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "elem": {
+                                        "at": [
+                                          {
+                                            "var": "elems"
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "value": {
+                                        "-": [
+                                          {
+                                            "var": "small"
+                                          }
+                                        ]
+                                      },
+                                      "effect_id": {
+                                        "var": "effect_id"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     "alt_feature": {
-      "params": ["d"],
+      "params": [
+        "d"
+      ],
       "doc": "Ageing alt: a random building / artefact (effects.mjs FEATURES) on a free tile within d that carries no feature yet",
-      "body": {"let":[{"free":{"filter":[{"free_tiles_within":[{"var":"my_tile.q"},{"var":"my_tile.r"},{"var":"d"}]},{"!":[{"some":[{"tile_tokens_at":[{"var":"t.q"},{"var":"t.r"}]},{"var":"tk.item"},"tk"]}]},"t"]}},{"if":[{"!":[{"len":[{"var":"free"}]}]},{"seq":[{"put":["status","fizzled"]},{"note":["no free tile for a feature"]}]},{"let":[{"fs":{"quote":[{"item":"Sacred Land","elem":"elem_souls","value":6},{"item":"Sphere of Fire","elem":"elem_fire","value":5},{"item":"Fountain of Vitality","elem":"elem_vitality","value":5},{"item":"Standing Stones","elem":"elem_earth","value":5},{"item":"Wind Shrine","elem":"elem_air","value":5},{"item":"Clock Tower","elem":"elem_time","value":4},{"item":"Rift","elem":"elem_space","value":4},{"item":"Monastery","elem":"elem_concentration","value":5},{"item":"Choir","elem":"elem_harmony","value":5},{"item":"Spring","elem":"elem_water","value":5}]},"h0":{"hash_int":[{"seed":"feature"},0,8]},"h1":{"hash_int":[{"seed":"feature"},8,16]}},{"let":[{"t":{"at":[{"var":"free"},{"%":[{"var":"h0"},{"len":[{"var":"free"}]}]}]},"f":{"at":[{"var":"fs"},{"%":[{"var":"h1"},{"len":[{"var":"fs"}]}]}]}},{"seq":[{"emit":["tokens",{"obj":{"kind":"bonus","elem":{"var":"f.elem"},"value":{"var":"f.value"},"q":{"var":"t.q"},"r":{"var":"t.r"},"item":{"var":"f.item"}}}]},{"note":[{"var":"f.item"}," rises at (",{"var":"t.q"},",",{"var":"t.r"},")"]}]}]}]}]}]}
+      "body": {
+        "let": [
+          {
+            "free": {
+              "filter": [
+                {
+                  "free_tiles_within": [
+                    {
+                      "var": "my_tile.q"
+                    },
+                    {
+                      "var": "my_tile.r"
+                    },
+                    {
+                      "var": "d"
+                    }
+                  ]
+                },
+                {
+                  "!": [
+                    {
+                      "some": [
+                        {
+                          "tile_tokens_at": [
+                            {
+                              "var": "t.q"
+                            },
+                            {
+                              "var": "t.r"
+                            }
+                          ]
+                        },
+                        {
+                          "var": "tk.item"
+                        },
+                        "tk"
+                      ]
+                    }
+                  ]
+                },
+                "t"
+              ]
+            }
+          },
+          {
+            "if": [
+              {
+                "!": [
+                  {
+                    "len": [
+                      {
+                        "var": "free"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "seq": [
+                  {
+                    "put": [
+                      "status",
+                      "fizzled"
+                    ]
+                  },
+                  {
+                    "note": [
+                      "no free tile for a feature"
+                    ]
+                  }
+                ]
+              },
+              {
+                "let": [
+                  {
+                    "fs": {
+                      "quote": [
+                        {
+                          "item": "Sacred Land",
+                          "elem": "elem_souls",
+                          "value": 6
+                        },
+                        {
+                          "item": "Sphere of Fire",
+                          "elem": "elem_fire",
+                          "value": 5
+                        },
+                        {
+                          "item": "Fountain of Vitality",
+                          "elem": "elem_vitality",
+                          "value": 5
+                        },
+                        {
+                          "item": "Standing Stones",
+                          "elem": "elem_earth",
+                          "value": 5
+                        },
+                        {
+                          "item": "Wind Shrine",
+                          "elem": "elem_air",
+                          "value": 5
+                        },
+                        {
+                          "item": "Clock Tower",
+                          "elem": "elem_time",
+                          "value": 4
+                        },
+                        {
+                          "item": "Rift",
+                          "elem": "elem_space",
+                          "value": 4
+                        },
+                        {
+                          "item": "Monastery",
+                          "elem": "elem_concentration",
+                          "value": 5
+                        },
+                        {
+                          "item": "Choir",
+                          "elem": "elem_harmony",
+                          "value": 5
+                        },
+                        {
+                          "item": "Spring",
+                          "elem": "elem_water",
+                          "value": 5
+                        }
+                      ]
+                    },
+                    "h0": {
+                      "hash_int": [
+                        {
+                          "seed": "feature"
+                        },
+                        0,
+                        8
+                      ]
+                    },
+                    "h1": {
+                      "hash_int": [
+                        {
+                          "seed": "feature"
+                        },
+                        8,
+                        16
+                      ]
+                    }
+                  },
+                  {
+                    "let": [
+                      {
+                        "t": {
+                          "at": [
+                            {
+                              "var": "free"
+                            },
+                            {
+                              "%": [
+                                {
+                                  "var": "h0"
+                                },
+                                {
+                                  "len": [
+                                    {
+                                      "var": "free"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "f": {
+                          "at": [
+                            {
+                              "var": "fs"
+                            },
+                            {
+                              "%": [
+                                {
+                                  "var": "h1"
+                                },
+                                {
+                                  "len": [
+                                    {
+                                      "var": "fs"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "seq": [
+                          {
+                            "emit": [
+                              "tokens",
+                              {
+                                "obj": {
+                                  "kind": "bonus",
+                                  "elem": {
+                                    "var": "f.elem"
+                                  },
+                                  "value": {
+                                    "var": "f.value"
+                                  },
+                                  "q": {
+                                    "var": "t.q"
+                                  },
+                                  "r": {
+                                    "var": "t.r"
+                                  },
+                                  "item": {
+                                    "var": "f.item"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          {
+                            "note": [
+                              {
+                                "var": "f.item"
+                              },
+                              " rises at (",
+                              {
+                                "var": "t.q"
+                              },
+                              ",",
+                              {
+                                "var": "t.r"
+                              },
+                              ")"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     }
   }
 }

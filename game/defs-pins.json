@@ -1,0 +1,28 @@
+{
+  "format": "chaosd6-defs-pins/1",
+  "note": "written by tools/defs-build.mjs — the repo commit each game/*-data copy was built from",
+  "effects": {
+    "repo": "chaosD6-Effects",
+    "rid": "z9X3fYPnz8QZnBmfnCaoY73zeKRZ",
+    "commit": "1351efe691321a3c00acc44280c298e1d1038eec",
+    "dirty": false,
+    "files": 82,
+    "tree_sha256": "547382e61da0798e3051c73feea817c1f8b66625b8c10962b3b5a7119f9e268b"
+  },
+  "skills": {
+    "repo": "chaosD6-Skills",
+    "rid": "z2L7U9KeYdiynSmeg9gNoE84BP3i5",
+    "commit": "8b9b938269b7efc85c5fe66d4505c395fc54991f",
+    "dirty": false,
+    "files": 21,
+    "tree_sha256": "92966b23fd52075b2544532fb536fd6a4e2c883badeac1697d013c37beb9587a"
+  },
+  "classes": {
+    "repo": "chaosD6-Classes",
+    "rid": "zBCekM1pp1DM1WcVZFFXWH3FGXsi",
+    "commit": "64b4500607830a528186330619d7dd7e6a3243fe",
+    "dirty": false,
+    "files": 39,
+    "tree_sha256": "0004b3a2fc43a9281206d28acfe6607508c8a0710b4d1457ff89b4d5e88d189a"
+  }
+}

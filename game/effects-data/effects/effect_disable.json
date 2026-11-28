@@ -3,18 +3,335 @@
   "id": "effect_disable",
   "name": "Disable",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_concentration"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_concentration"
+  ],
   "cost": 1,
   "kind": "counter",
   "duration": "permanent",
-  "every": {"behaviour":"resolver","note":"fires by itself on the defender side in peer.mjs; ∀ bars everyone (every_csv)"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "fires by itself on the defender side in peer.mjs; ∀ bars everyone (every_csv)"
+  },
   "text": "Put any element as a permanent defense token. Target cannot make effects with this element for a round (counter action).",
   "every_text": "Globally no one can make effects with this element for the round.",
-  "flags": {"permanent":true},
-  "bot": {"tags":["boss","caster","control","mental"],"defence":true},
-  "standing": {"cast_in":{"obj":{"bar":{"if":[{"var":"every"},"all","caster"]},"elem":{"var":"last_elem"},"spend":true}}},
-  "card": {"name":"Disable","tags":["instant","permanent","counter"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Red X cancel marker (sizes)","wbc3_code":"EMC0","wbc3_race":"Effects1","match_reason":"red X over the disabled element","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Red X cancel marker (sizes)/Red X cancel marker (sizes) - idle [EMC0].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Error.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/Fade.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["instant","permanent"],"element_cost":["elem_concentration"],"every_bonus":"Globally no one can make effects with this element for the round.","text":"Put any element as a permanent defense token. Target cannot make effects with this element for a round (counter action)."},"rebalance_links":["effect_shield","skill_counter_spell"],"logic":{"description":"Implemented permanent counter (pc ruling). It sits on the caster and fires by itself: when an enemy cast is about to hurt the holder (hit, lock, penalty, forced move) that cast is discarded and its LAST element is barred to that enemy for the rest of the turn; with the ∀ double cast the element is barred to everyone. One Disable stops one cast and is then dropped. Placed with a Concentration point-buy die as Rule 24 power.","prerequisites":[{"id":"action_may_cast","description":"An instant rides on any action (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":true}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"casts_stopped","description":"Enemy casts one Disable stops before it is spent.","target":"all_enemies","unit":"tokens","value":1},{"id":"elements_barred","description":"Elements barred for the turn: the stopped cast last element (to that enemy; ∀: to everyone).","target":"all_enemies","unit":"tokens","value":1},{"id":"permanent_power","description":"Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.","target":"caster","unit":"die","value":{"var":"die"}},{"id":"destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"max_of":[{"map":[{"filter":[{"var":"caster.tokens"},{"==":[{"var":"elem"},{"root":"elements.0"}]}]},{"var":"value"}]}]}}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_concentration"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_instant","description":"effect_types keeps \"instant\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"instant"]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"keeps_every_bonus","description":"The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).","assert":{"==":[{"typeof":[{"var":"proposal.data.every_bonus"}]},"string"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","using_rule_24"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+  "flags": {
+    "permanent": true
+  },
+  "bot": {
+    "tags": [
+      "boss",
+      "caster",
+      "control",
+      "mental"
+    ],
+    "defence": true
+  },
+  "standing": {
+    "cast_in": {
+      "obj": {
+        "bar": {
+          "if": [
+            {
+              "var": "every"
+            },
+            "all",
+            "caster"
+          ]
+        },
+        "elem": {
+          "var": "last_elem"
+        },
+        "spend": true
+      }
+    }
+  },
+  "card": {
+    "name": "Disable",
+    "tags": [
+      "instant",
+      "permanent",
+      "counter"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Red X cancel marker (sizes)",
+      "wbc3_code": "EMC0",
+      "wbc3_race": "Effects1",
+      "match_reason": "red X over the disabled element",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Red X cancel marker (sizes)/Red X cancel marker (sizes) - idle [EMC0].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Error.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/Fade.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "instant",
+        "permanent"
+      ],
+      "element_cost": [
+        "elem_concentration"
+      ],
+      "every_bonus": "Globally no one can make effects with this element for the round.",
+      "text": "Put any element as a permanent defense token. Target cannot make effects with this element for a round (counter action)."
+    },
+    "rebalance_links": [
+      "effect_shield",
+      "skill_counter_spell"
+    ],
+    "logic": {
+      "description": "Implemented permanent counter (pc ruling). It sits on the caster and fires by itself: when an enemy cast is about to hurt the holder (hit, lock, penalty, forced move) that cast is discarded and its LAST element is barred to that enemy for the rest of the turn; with the ∀ double cast the element is barred to everyone. One Disable stops one cast and is then dropped. Placed with a Concentration point-buy die as Rule 24 power.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "An instant rides on any action (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "casts_stopped",
+          "description": "Enemy casts one Disable stops before it is spent.",
+          "target": "all_enemies",
+          "unit": "tokens",
+          "value": 1
+        },
+        {
+          "id": "elements_barred",
+          "description": "Elements barred for the turn: the stopped cast last element (to that enemy; ∀: to everyone).",
+          "target": "all_enemies",
+          "unit": "tokens",
+          "value": 1
+        },
+        {
+          "id": "permanent_power",
+          "description": "Rule 12: the permanent is placed with a point-buy die (re-rolled until the sum fits); that die is its power under Rule 24.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "var": "die"
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an enemy point-buy die of the matching stat destroys this permanent when it is at least the token value behind the cast element.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "max_of": [
+                    {
+                      "map": [
+                        {
+                          "filter": [
+                            {
+                              "var": "caster.tokens"
+                            },
+                            {
+                              "==": [
+                                {
+                                  "var": "elem"
+                                },
+                                {
+                                  "root": "elements.0"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "var": "value"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_concentration (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_concentration"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_instant",
+          "description": "effect_types keeps \"instant\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "instant"
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        },
+        {
+          "id": "keeps_every_bonus",
+          "description": "The ∀ double-cast bonus text stays present (the engine unlocks it on a Rule 23 chained cast).",
+          "assert": {
+            "==": [
+              {
+                "typeof": [
+                  {
+                    "var": "proposal.data.every_bonus"
+                  }
+                ]
+              },
+              "string"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

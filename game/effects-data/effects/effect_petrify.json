@@ -3,15 +3,341 @@
   "id": "effect_petrify",
   "name": "Petrify",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_vitality","elem_harmony"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_vitality",
+    "elem_harmony"
+  ],
   "cost": 2,
   "kind": "permanent",
   "duration": "permanent",
-  "every": {"behaviour":"resolver","note":"monster natural permanent (stone): 2 copies at power 6; behaviour lives in peer.mjs"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "monster natural permanent (stone): 2 copies at power 6; behaviour lives in peer.mjs"
+  },
   "text": "Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will).",
-  "flags": {"permanent":true,"fixedPower":6,"naturalKind":"stone"},
-  "card": {"name":"Petrify","tags":["creature_innate","permanent","channeling"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Grey crescent arcs","wbc3_code":"EZ61","wbc3_race":"Effects1","match_reason":"grey arcs + WBC3 Petrify sound","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Petrify.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["permanent","channeling"],"element_cost":["elem_vitality","elem_harmony"],"text":"Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will).","creature_innate":true,"in_player_deck":false,"natural_permanent":{"copies":2,"power":6,"semantics":"stone","holders":"monsters_with_this_innate_effect","text":"Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will)."}},"rebalance_links":["effect_fossilization","effect_sleep"],"logic":{"description":"Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy that plans an action in contact with a holder is stone for the rest of that turn (entity.petrifiedTurn; every remaining action is a bare Empty Posture like a lock — a Rule 24 destroy emission still rides), and again every turn it is found in contact while the copies stand. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.","prerequisites":[{"id":"natural_holder","description":"Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).","when":{"and":[{"==":[{"var":"caster.kind"},"creature"]},{"!":{"var":"caster.is_companion"}}]}},{"id":"natural_contact","description":"The enemy is in contact with the holder.","when":{"rule":["in_contact",{"dist":{"var":"dist"}}]}}],"effects":[{"id":"actions_while_petrified","description":"Actions the target may take while petrified.","target":"target","unit":"actions","value":0},{"id":"petrify_radius","description":"Contact distance that keeps the petrification up.","target":"target","unit":"hexes","value":1},{"id":"natural_locked_rest_of_turn","description":"Natural: an enemy in contact sits out the rest of the turn.","target":"target","unit":"actions","value":{"-":[2,{"var":"round"}]}},{"id":"natural_copies","description":"Copies the monster starts with (rule_monster_natural_permanents).","target":"caster","unit":"cards","value":{"entry":["rule_monster_natural_permanents","natural_permanents.copies"]}},{"id":"natural_power","description":"Rule 24 power of each copy (fixed).","target":"caster","unit":"die","value":{"entry":["rule_monster_natural_permanents","natural_permanents.power"]}},{"id":"natural_copy_destroyed_by_rule_24","description":"Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":6}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_vitality"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_permanent","description":"effect_types keeps \"permanent\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"permanent"]}},{"id":"stays_creature_innate","description":"The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).","assert":{"==":[{"var":"proposal.data.creature_innate"},true]}},{"id":"keeps_type_channeling","description":"effect_types keeps \"channeling\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"channeling"]}},{"id":"keeps_natural_permanent","description":"The natural_permanent block (copies, power, semantics) stays.","assert":{"and":[{"==":[{"typeof":[{"var":"proposal.data.natural_permanent"}]},"object"]},{">=":[{"var":"proposal.data.natural_permanent.copies"},1]}]}}],"references":["in_contact","using_rule_24"]}},
-  "uses": ["std"],
-  "logic": {"seq":[{"call":["prelude"]},{"call":["land_permanent"]},{"call":["finish"]}]}
+  "flags": {
+    "permanent": true,
+    "fixedPower": 6,
+    "naturalKind": "stone"
+  },
+  "card": {
+    "name": "Petrify",
+    "tags": [
+      "creature_innate",
+      "permanent",
+      "channeling"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Grey crescent arcs",
+      "wbc3_code": "EZ61",
+      "wbc3_race": "Effects1",
+      "match_reason": "grey arcs + WBC3 Petrify sound",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Grey crescent arcs/Grey crescent arcs - idle [EZ61].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Petrify.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "permanent",
+        "channeling"
+      ],
+      "element_cost": [
+        "elem_vitality",
+        "elem_harmony"
+      ],
+      "text": "Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will).",
+      "creature_innate": true,
+      "in_player_deck": false,
+      "natural_permanent": {
+        "copies": 2,
+        "power": 6,
+        "semantics": "stone",
+        "holders": "monsters_with_this_innate_effect",
+        "text": "Monster natural permanent (Greater Basilisk starts with 2, power 6 each): an enemy in contact is turned to stone for the rest of the turn, every turn it is found in contact, while the copies stand (Rule 24, Vitality / Will)."
+      }
+    },
+    "rebalance_links": [
+      "effect_fossilization",
+      "effect_sleep"
+    ],
+    "logic": {
+      "description": "Implemented as a monster natural permanent — never cast (creature innate, in_player_deck false). Natural: an enemy that plans an action in contact with a holder is stone for the rest of that turn (entity.petrifiedTurn; every remaining action is a bare Empty Posture like a lock — a Rule 24 destroy emission still rides), and again every turn it is found in contact while the copies stand. Monster natural permanent (user rulings 2026-11-15, rule_monster_natural_permanents): a monster whose creature card has this innate effect starts with 2 copies already cast — one permanent id in permanents_csv plus a copy count in perm_copies_json, power 6 each (perm_power_json), both cards in its permanents holding (they count toward DECK_MIN), none in its deck, never cast (not in its deck, and destroyed copies are archived, so npcCastChoice never sees it). Rule 24 (a die of 6 of the stat of the effect's elements) destroys ONE copy per success (dropPermanent decrements, the destroyed copy's card goes to the monster's ARCHIVE — out of circulation); the effect lasts until both are gone. Wild monsters only (no companion / summon / human or npc_b hero); a restart / rejoin boots with exactly 2 again.",
+      "prerequisites": [
+        {
+          "id": "natural_holder",
+          "description": "Held only by a wild monster whose creature card has this innate effect (no companion / summon / hero).",
+          "when": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "caster.kind"
+                  },
+                  "creature"
+                ]
+              },
+              {
+                "!": {
+                  "var": "caster.is_companion"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "natural_contact",
+          "description": "The enemy is in contact with the holder.",
+          "when": {
+            "rule": [
+              "in_contact",
+              {
+                "dist": {
+                  "var": "dist"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "actions_while_petrified",
+          "description": "Actions the target may take while petrified.",
+          "target": "target",
+          "unit": "actions",
+          "value": 0
+        },
+        {
+          "id": "petrify_radius",
+          "description": "Contact distance that keeps the petrification up.",
+          "target": "target",
+          "unit": "hexes",
+          "value": 1
+        },
+        {
+          "id": "natural_locked_rest_of_turn",
+          "description": "Natural: an enemy in contact sits out the rest of the turn.",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "-": [
+              2,
+              {
+                "var": "round"
+              }
+            ]
+          }
+        },
+        {
+          "id": "natural_copies",
+          "description": "Copies the monster starts with (rule_monster_natural_permanents).",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "entry": [
+              "rule_monster_natural_permanents",
+              "natural_permanents.copies"
+            ]
+          }
+        },
+        {
+          "id": "natural_power",
+          "description": "Rule 24 power of each copy (fixed).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "entry": [
+              "rule_monster_natural_permanents",
+              "natural_permanents.power"
+            ]
+          }
+        },
+        {
+          "id": "natural_copy_destroyed_by_rule_24",
+          "description": "Rule 24: an enemy point-buy die of the matching stat destroys ONE copy when it is at least 6.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": 6
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_vitality"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_permanent",
+          "description": "effect_types keeps \"permanent\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "permanent"
+            ]
+          }
+        },
+        {
+          "id": "stays_creature_innate",
+          "description": "The effect stays flagged creature_innate (it is dealt to the awakened creature per Rule 3; a vote may still change in_player_deck).",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.creature_innate"
+              },
+              true
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_channeling",
+          "description": "effect_types keeps \"channeling\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "channeling"
+            ]
+          }
+        },
+        {
+          "id": "keeps_natural_permanent",
+          "description": "The natural_permanent block (copies, power, semantics) stays.",
+          "assert": {
+            "and": [
+              {
+                "==": [
+                  {
+                    "typeof": [
+                      {
+                        "var": "proposal.data.natural_permanent"
+                      }
+                    ]
+                  },
+                  "object"
+                ]
+              },
+              {
+                ">=": [
+                  {
+                    "var": "proposal.data.natural_permanent.copies"
+                  },
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "in_contact",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

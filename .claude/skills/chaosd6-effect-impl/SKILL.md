@@ -29,8 +29,9 @@ Order of work (each step has a verification; stop at the first failure):
    - UI: `game/js/main.js` perms strip `action:` map (~line 720: `'aura'|'bonus'|null`), `SUMMON_PERM_IDS`, labels; hand msg fields in peer `uiHttp`/WS handler (`m.kind === …`).
    Verify: `node --check game/peer.mjs`.
 
-4. **Data logic description** — the definition's `card.logic` block (game/effects-data/effects/<id>.json; since F9 the
-   cards live there — data/effects.json and tools/logic/effects.logic.json were deleted 2026-11-22): update `description`
+4. **Data logic description** — the definition's `card.logic` block (edit `effects/<id>.json` in the chaosD6-Effects repo
+   `/home/galt/chaosd6-effects-repo`, then `node tools/defs-build.mjs effects` — game/effects-data is a built copy since
+   2026-11-28; data/effects.json and tools/logic/effects.logic.json were deleted 2026-11-22): update `description`
    (say it is implemented / how), prerequisites/effects blocks if the maths changed, bump the definition's version, then
    `node tools/logic-check.mjs` → `all logic checks passed`. (See skill `chaosd6-logic-layer`.)
 

@@ -48,7 +48,10 @@ const GAME = path.resolve(opt('--game-root', path.resolve(HERE, '..')));
 const CHAOS_ROOT = path.dirname(GAME);
 const TOOLS_DIR = path.join(GAME, 'tools');
 const REPO = path.resolve(opt('--repo', process.env.CHAOSD6_SKILLS_REPO || '/home/galt/chaosd6-skills-repo'));
-const SRC = path.resolve(opt('--src', path.join(GAME, 'skills-data')));
+// Since the defs flip (2026-11-28) the REPO is the source of the definitions and game/skills-data is built from it
+// (tools/defs-build.mjs): by default this tool reads the repo itself (only the tooling, pins + index.json change);
+// the game copy is the source only when seeding a repo that has no skills/ yet.
+const SRC = path.resolve(opt('--src', fs.existsSync(path.join(REPO, 'skills')) ? REPO : path.join(GAME, 'skills-data')));
 const BRANCH = opt('--branch', 'main');
 const DRY = flag('--dry-run');
 const COMMIT = !flag('--no-commit') && !DRY;

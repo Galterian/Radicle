@@ -3,11 +3,303 @@
   "id": "class_alchemist",
   "name": "Alchemist",
   "version": "1.0.0",
-  "source": {"collection":"classes","version":"1.0.0"},
-  "data": {"ability_kind":"tap","colors":["elem_earth","elem_fire","elem_concentration","elem_harmony"],"text":"Draw an effect card from the Library, look at it, depose it to your or nearby location as a trap."},
-  "flags": {"phase":"post","needs":"tile","hooks":["ability"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.0.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_earth",
+      "elem_fire",
+      "elem_concentration",
+      "elem_harmony"
+    ],
+    "text": "Draw an effect card from the Library, look at it, depose it to your or nearby location as a trap."
+  },
+  "flags": {
+    "phase": "post",
+    "needs": "tile",
+    "hooks": [
+      "ability"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "ability": {"let":[{"lib":{"library":[]},"v":{"call":["me_view"]},"t":{"call":["ab_tile"]}},{"let":[{"card":{"if":[{"len":{"var":"lib"}},{"at":[{"var":"lib"},{"%":[{"hash_int":[{"cat":[{"or":[{"var":"salt"},""]},":alchemist:",{"ctx_action":[]}]},0,8]},{"len":{"var":"lib"}}]}]},null]}},{"if":[{"!":{"bool":{"var":"card"}}},{"call":["not_done",[]]},{"let":[{"near":{"and":[{"bool":{"var":"t"}},{"is_int":[{"var":"t.q"}]},{"is_int":[{"var":"t.r"}]},{"<=":[{"/":[{"+":[{"abs":{"-":[{"var":"v.tile_q"},{"var":"t.q"}]}},{"abs":{"-":[{"var":"v.tile_r"},{"var":"t.r"}]}},{"abs":{"-":[{"+":[{"var":"v.tile_q"},{"var":"v.tile_r"}]},{"+":[{"var":"t.q"},{"var":"t.r"}]}]}}]},2]},1]}]}},{"let":[{"sq":{"if":[{"var":"near"},{"var":"t.q"},{"var":"v.tile_q"}]},"sr":{"if":[{"var":"near"},{"var":"t.r"},{"var":"v.tile_r"}]}},{"call":["done",{"cat":["a ",{"var":"card.effect_id"}," from the Library lies as a trap at (",{"var":"sq"},",",{"var":"sr"},")"]},{"obj":{"traps":[{"obj":{"by":{"var":"actor"},"q":{"var":"sq"},"r":{"var":"sr"},"effect_id":{"var":"card.effect_id"},"elements":{"var":"card.elements"},"card_id":null,"library":true,"power":{"call":["trap_power"]},"trigger":"enter","mode":"damage","holder":null}}]}},[]]}]}]}]}]}]}
+    "ability": {
+      "let": [
+        {
+          "lib": {
+            "library": []
+          },
+          "v": {
+            "call": [
+              "me_view"
+            ]
+          },
+          "t": {
+            "call": [
+              "ab_tile"
+            ]
+          }
+        },
+        {
+          "let": [
+            {
+              "card": {
+                "if": [
+                  {
+                    "len": {
+                      "var": "lib"
+                    }
+                  },
+                  {
+                    "at": [
+                      {
+                        "var": "lib"
+                      },
+                      {
+                        "%": [
+                          {
+                            "hash_int": [
+                              {
+                                "cat": [
+                                  {
+                                    "or": [
+                                      {
+                                        "var": "salt"
+                                      },
+                                      ""
+                                    ]
+                                  },
+                                  ":alchemist:",
+                                  {
+                                    "ctx_action": []
+                                  }
+                                ]
+                              },
+                              0,
+                              8
+                            ]
+                          },
+                          {
+                            "len": {
+                              "var": "lib"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  null
+                ]
+              }
+            },
+            {
+              "if": [
+                {
+                  "!": {
+                    "bool": {
+                      "var": "card"
+                    }
+                  }
+                },
+                {
+                  "call": [
+                    "not_done",
+                    []
+                  ]
+                },
+                {
+                  "let": [
+                    {
+                      "near": {
+                        "and": [
+                          {
+                            "bool": {
+                              "var": "t"
+                            }
+                          },
+                          {
+                            "is_int": [
+                              {
+                                "var": "t.q"
+                              }
+                            ]
+                          },
+                          {
+                            "is_int": [
+                              {
+                                "var": "t.r"
+                              }
+                            ]
+                          },
+                          {
+                            "<=": [
+                              {
+                                "/": [
+                                  {
+                                    "+": [
+                                      {
+                                        "abs": {
+                                          "-": [
+                                            {
+                                              "var": "v.tile_q"
+                                            },
+                                            {
+                                              "var": "t.q"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      {
+                                        "abs": {
+                                          "-": [
+                                            {
+                                              "var": "v.tile_r"
+                                            },
+                                            {
+                                              "var": "t.r"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      {
+                                        "abs": {
+                                          "-": [
+                                            {
+                                              "+": [
+                                                {
+                                                  "var": "v.tile_q"
+                                                },
+                                                {
+                                                  "var": "v.tile_r"
+                                                }
+                                              ]
+                                            },
+                                            {
+                                              "+": [
+                                                {
+                                                  "var": "t.q"
+                                                },
+                                                {
+                                                  "var": "t.r"
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  2
+                                ]
+                              },
+                              1
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "let": [
+                        {
+                          "sq": {
+                            "if": [
+                              {
+                                "var": "near"
+                              },
+                              {
+                                "var": "t.q"
+                              },
+                              {
+                                "var": "v.tile_q"
+                              }
+                            ]
+                          },
+                          "sr": {
+                            "if": [
+                              {
+                                "var": "near"
+                              },
+                              {
+                                "var": "t.r"
+                              },
+                              {
+                                "var": "v.tile_r"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "call": [
+                            "done",
+                            {
+                              "cat": [
+                                "a ",
+                                {
+                                  "var": "card.effect_id"
+                                },
+                                " from the Library lies as a trap at (",
+                                {
+                                  "var": "sq"
+                                },
+                                ",",
+                                {
+                                  "var": "sr"
+                                },
+                                ")"
+                              ]
+                            },
+                            {
+                              "obj": {
+                                "traps": [
+                                  {
+                                    "obj": {
+                                      "by": {
+                                        "var": "actor"
+                                      },
+                                      "q": {
+                                        "var": "sq"
+                                      },
+                                      "r": {
+                                        "var": "sr"
+                                      },
+                                      "effect_id": {
+                                        "var": "card.effect_id"
+                                      },
+                                      "elements": {
+                                        "var": "card.elements"
+                                      },
+                                      "card_id": null,
+                                      "library": true,
+                                      "power": {
+                                        "call": [
+                                          "trap_power"
+                                        ]
+                                      },
+                                      "trigger": "enter",
+                                      "mode": "damage",
+                                      "holder": null
+                                    }
+                                  }
+                                ]
+                              }
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   }
 }

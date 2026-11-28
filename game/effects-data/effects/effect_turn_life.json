@@ -3,24 +3,491 @@
   "id": "effect_turn_life",
   "name": "Turn life",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_vitality","elem_harmony"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_vitality",
+    "elem_harmony"
+  ],
   "cost": 2,
   "kind": "damage",
   "duration": "instant",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "Damage by spreading inverted vital energy. Alt: restore life = Vitality stat after calculations instead of dealing damage.",
-  "flags": {"damage":"delta","scope":"target","healIfNoTarget":true},
-  "bot": {"tags":["support"],"names":["angel|mercy"]},
-  "card": {"name":"Turn life","tags":["damage","heal","instant"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Spell effect starburst sparkles","wbc3_code":"EZ15","wbc3_race":"Effects1","match_reason":"starburst sparkles for inverted vital energy","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect starburst sparkles/Spell effect starburst sparkles - idle [EZ15].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ15.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/Disease.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage","instant"],"element_cost":["elem_vitality","elem_harmony"],"text":"Damage by spreading inverted vital energy. Alt: restore life = Vitality stat after calculations instead of dealing damage."},"rebalance_links":["effect_drain","effect_harm"],"logic":{"description":"Implemented, instant. Three-way resolution (pc ruling): a right-clicked adjacent living ally is healed round(caster Vitality ÷10) and nothing is damaged; otherwise an enemy in contact (right-clicked, else the one hurt most) takes Rule 21 delta damage over Vitality and Harmony; if no enemy is in reach the caster heals itself by round(Vitality ÷10). Heals are capped at max life by the peer. Rule 8 pc override: an instant that gave no benefit returns to hand.","prerequisites":[{"id":"action_may_cast","description":"An instant rides on any action (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":true}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"target_in_reach_or_none","description":"No declared target, or a living unit in contact (ally to heal, enemy to damage); Aura ∀ reaches the view.","when":{"or":[{"==":[{"var":"target"},null]},{"and":[{">":[{"var":"target.life"},0]},{"if":[{"var":"cast.aura"},{"rule":["in_view",{"dist":{"var":"dist"},"radius":10}]},{"rule":["in_contact",{"dist":{"var":"dist"}}]}]}]}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"heal_amount","description":"Life restored to the right-clicked adjacent ally, or to the caster when no enemy is in reach: caster Vitality ÷10 rounded half up.","target":"target","unit":"life","value":{"round_div10":[{"var":"caster.stats.vitality"}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_vitality"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}},{"id":"keeps_type_instant","description":"effect_types keeps \"instant\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"instant"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_contact","in_view","rule_21_delta_damage"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,true]},
-      {"set":["tmp",{"if":[{"and":[{"var":"declared"},{"!==":[{"var":"declared"},{"var":"me"}]},{"call":["alive",{"var":"declared"}]},{"!":[{"enemy_of":[{"var":"me"},{"var":"declared"}]}]},{"<=":[{"dist":[{"var":"me"},{"var":"declared"}]},1]}]},{"var":"declared"},null]}]},
-      {"if":[{"var":"tmp"},{"set":["recipients",[]]}]},
-      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"emit":["heals",{"obj":{"on":{"or":[{"var":"tmp"},{"var":"me"}]},"amount":{"round_div10":[{"base_stat":[{"var":"me"},"vitality"]}]}}}]}]},
-      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}],false,false]},"def"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "healIfNoTarget": true
+  },
+  "bot": {
+    "tags": [
+      "support"
+    ],
+    "names": [
+      "angel|mercy"
+    ]
+  },
+  "card": {
+    "name": "Turn life",
+    "tags": [
+      "damage",
+      "heal",
+      "instant"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Spell effect starburst sparkles",
+      "wbc3_code": "EZ15",
+      "wbc3_race": "Effects1",
+      "match_reason": "starburst sparkles for inverted vital energy",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect starburst sparkles/Spell effect starburst sparkles - idle [EZ15].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ15.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Disease.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage",
+        "instant"
+      ],
+      "element_cost": [
+        "elem_vitality",
+        "elem_harmony"
+      ],
+      "text": "Damage by spreading inverted vital energy. Alt: restore life = Vitality stat after calculations instead of dealing damage."
+    },
+    "rebalance_links": [
+      "effect_drain",
+      "effect_harm"
+    ],
+    "logic": {
+      "description": "Implemented, instant. Three-way resolution (pc ruling): a right-clicked adjacent living ally is healed round(caster Vitality ÷10) and nothing is damaged; otherwise an enemy in contact (right-clicked, else the one hurt most) takes Rule 21 delta damage over Vitality and Harmony; if no enemy is in reach the caster heals itself by round(Vitality ÷10). Heals are capped at max life by the peer. Rule 8 pc override: an instant that gave no benefit returns to hand.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "An instant rides on any action (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_in_reach_or_none",
+          "description": "No declared target, or a living unit in contact (ally to heal, enemy to damage); Aura ∀ reaches the view.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "and": [
+                  {
+                    ">": [
+                      {
+                        "var": "target.life"
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "var": "cast.aura"
+                      },
+                      {
+                        "rule": [
+                          "in_view",
+                          {
+                            "dist": {
+                              "var": "dist"
+                            },
+                            "radius": 10
+                          }
+                        ]
+                      },
+                      {
+                        "rule": [
+                          "in_contact",
+                          {
+                            "dist": {
+                              "var": "dist"
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "heal_amount",
+          "description": "Life restored to the right-clicked adjacent ally, or to the caster when no enemy is in reach: caster Vitality ÷10 rounded half up.",
+          "target": "target",
+          "unit": "life",
+          "value": {
+            "round_div10": [
+              {
+                "var": "caster.stats.vitality"
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_vitality"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_instant",
+          "description": "effect_types keeps \"instant\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "instant"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_contact",
+        "in_view",
+        "rule_21_delta_damage"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "set": [
+          "tmp",
+          {
+            "if": [
+              {
+                "and": [
+                  {
+                    "var": "declared"
+                  },
+                  {
+                    "!==": [
+                      {
+                        "var": "declared"
+                      },
+                      {
+                        "var": "me"
+                      }
+                    ]
+                  },
+                  {
+                    "call": [
+                      "alive",
+                      {
+                        "var": "declared"
+                      }
+                    ]
+                  },
+                  {
+                    "!": [
+                      {
+                        "enemy_of": [
+                          {
+                            "var": "me"
+                          },
+                          {
+                            "var": "declared"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "<=": [
+                      {
+                        "dist": [
+                          {
+                            "var": "me"
+                          },
+                          {
+                            "var": "declared"
+                          }
+                        ]
+                      },
+                      1
+                    ]
+                  }
+                ]
+              },
+              {
+                "var": "declared"
+              },
+              null
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "var": "tmp"
+          },
+          {
+            "set": [
+              "recipients",
+              []
+            ]
+          }
+        ]
+      },
+      {
+        "if": [
+          {
+            "!": [
+              {
+                "len": [
+                  {
+                    "var": "recipients"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "emit": [
+              "heals",
+              {
+                "obj": {
+                  "on": {
+                    "or": [
+                      {
+                        "var": "tmp"
+                      },
+                      {
+                        "var": "me"
+                      }
+                    ]
+                  },
+                  "amount": {
+                    "round_div10": [
+                      {
+                        "base_stat": [
+                          {
+                            "var": "me"
+                          },
+                          "vitality"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "call": [
+              "hit_with",
+              {
+                "var": "def"
+              },
+              [
+                {
+                  "obj": {
+                    "kind": "main",
+                    "sum": {
+                      "call": [
+                        "main_delta",
+                        {
+                          "var": "def"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              false,
+              false
+            ]
+          },
+          "def"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

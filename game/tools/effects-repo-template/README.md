@@ -2,6 +2,11 @@
 
 The effects (and later skills) of chaosD6, defined as data. One effect per file:
 
+**This repo is the source of truth** (since 2026-11-28). Edit the effects, hooks, libraries, oracles and docs
+here. chaosD6 builds its game copy `game/effects-data/` from this repo (`node game/tools/defs-build.mjs effects`)
+and pins the commit in `game/defs-pins.json`; never edit that copy — `defs-build.mjs --check` fails on it.
+Publish with `bash game/tools/oci/defs-publish.sh effects` (a delegate, with the Radicle key in the agent).
+
 ```
 effects/<id>.json      one definition; "id" inside == file name
 hooks/<family>.json    peer-side effect hook programs (channel, trap, holdings, summon; schema
@@ -10,7 +15,9 @@ hooks/<family>.json    peer-side effect hook programs (channel, trap, holdings, 
 lib/<id>.json          libraries of sub-routines the effects `use` (std, e2a, e2b, e2c; schema chaosd6.effect-lib/1).
                        Changed by the delegates only. A ref pins each used lib by sha256 (ref.libs), so a peer
                        fetches lib/<id>.json at the ref's commit; commits without lib/ use the game's bundled libs
-SCHEMA.md              the definition format (mirrored from chaosD6 game/effects-data/SCHEMA.md)
+SCHEMA.md              the definition format (effect.schema.json: its structural JSON schema)
+HANDSHAKE.md           how peers agree on the effect set and fetch a foreign effect
+PROPOSAL_VOTES.md      votes on player-made effects / skills / classes
 index.json             manifest: effects + hooks + libs, id -> sha256 of the canonical JSON (node tools/manifest.mjs)
 validator/pin.json     which validator build checks this repo (commit + sha256 of the validator)
 tools/manifest.mjs     manifest generator / checker (standalone, Node >= 18)

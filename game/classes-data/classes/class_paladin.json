@@ -3,11 +3,40 @@
   "id": "class_paladin",
   "name": "Paladin",
   "version": "1.0.0",
-  "source": {"collection":"classes","version":"1.0.0"},
-  "data": {"ability_kind":"tap","colors":["elem_vitality","elem_souls","elem_water"],"text":"Return an action card from your deck discard pile to your hand."},
-  "flags": {"phase":"local","local":{"op":"recover","kind":"action","what":"an action card"},"hooks":["local"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.0.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_vitality",
+      "elem_souls",
+      "elem_water"
+    ],
+    "text": "Return an action card from your deck discard pile to your hand."
+  },
+  "flags": {
+    "phase": "local",
+    "local": {
+      "op": "recover",
+      "kind": "action",
+      "what": "an action card"
+    },
+    "hooks": [
+      "local"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "local": {"quote":{"op":"recover","kind":"action","what":"an action card"}}
+    "local": {
+      "quote": {
+        "op": "recover",
+        "kind": "action",
+        "what": "an action card"
+      }
+    }
   }
 }

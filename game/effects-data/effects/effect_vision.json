@@ -3,21 +3,405 @@
   "id": "effect_vision",
   "name": "Vision",
   "version": "1.1.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_time"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_time"
+  ],
   "cost": 1,
   "kind": "scouting",
   "duration": "instant",
-  "every": {"behaviour":"none","note":"paper ∀ (take a Library effect) not modelled"},
+  "every": {
+    "behaviour": "none",
+    "note": "paper ∀ (take a Library effect) not modelled"
+  },
   "text": "Look at any unknown tile from the tileset or look at the enemy's hand (stat vs stat).",
   "every_text": "Take a chosen effect from the Dimension Library and put into your discard pile.",
-  "flags": {"scope":"target","vision":true,"tileTarget":true},
-  "card": {"name":"Vision","tags":["scout"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Spell effect orange glowing ring eye","wbc3_code":"EZ06","wbc3_race":"Effects1","match_reason":"WBC3 glowing eye ring = vision/scrying","confidence":"high","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect orange glowing ring eye/Spell effect orange glowing ring eye - idle [EZ06].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ06.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/Highlight.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["scout"],"element_cost":["elem_time"],"every_bonus":"Take a chosen effect from the Dimension Library and put into your discard pile.","text":"Look at any unknown tile from the tileset or look at the enemy's hand (stat vs stat)."},"rebalance_links":["effect_super_sense"],"logic":{"description":"Implemented 2026-10-29 (scout). A left-clicked tile → the map around it is revealed to me and a popup names what lies there (units, traps, obstacles, tokens). An enemy in contact instead → if my World beats theirs, they show me their hand (popup with the card names; the peek travels as an evt_peek envelope to me only). ∀ library leg: not implemented.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"tile_or_enemy","description":"Either a tile was chosen or an enemy stands in reach.","when":{"!=":[{"var":"target"},null]}}],"effects":[{"id":"tiles_revealed","description":"A chosen tile → the disc around it becomes known to me (reveal radius).","target":"tile","unit":"tiles","value":1},{"id":"hand_peek","description":"An enemy in reach → I see their hand when my World is strictly above theirs.","target":"target","unit":"peek","value":{">":[{"var":"caster.stats.world"},{"var":"defender.stats.world"}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_time (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_time"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_scout","description":"effect_types keeps \"scout\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"scout"]}}],"references":["action_can_cast_non_instant","elements_not_disabled"]}},
-  "uses": ["std","e2b"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,false]},
-      {"if":[{"===":[{"var":"cast.target.kind"},"tile"]},{"seq":[{"emit":["peeks",{"obj":{"by":{"var":"me"},"kind":"tile","q":{"var":"cast.target.ref.q"},"r":{"var":"cast.target.ref.r"}}}]},{"set":["recipients",[]]}]},{"let":[{"tgt":{"at":[{"var":"recipients"},0]},"el":{"at":[{"var":"elems"},0]}},{"if":[{"!":[{"var":"tgt"}]},{"call":["fizzle","nobody in reach and no tile"]},{"<=":[{"call":["my_stat",{"var":"el"}]},{"stat_of":[{"var":"tgt"},{"var":"el"}]}]},{"seq":[{"put":["status","fizzled"]},{"note":[{"var":"tgt"}," keeps their hand hidden (World ",{"stat_of":[{"var":"tgt"},{"var":"el"}]}," ≥ mine ",{"call":["my_stat",{"var":"el"}]},")"]}]},{"emit":["peeks",{"obj":{"by":{"var":"me"},"kind":"hand","of":{"var":"tgt"}}}]}]}]}]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "scope": "target",
+    "vision": true,
+    "tileTarget": true
+  },
+  "card": {
+    "name": "Vision",
+    "tags": [
+      "scout"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Spell effect orange glowing ring eye",
+      "wbc3_code": "EZ06",
+      "wbc3_race": "Effects1",
+      "match_reason": "WBC3 glowing eye ring = vision/scrying",
+      "confidence": "high",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect orange glowing ring eye/Spell effect orange glowing ring eye - idle [EZ06].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ06.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Highlight.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "scout"
+      ],
+      "element_cost": [
+        "elem_time"
+      ],
+      "every_bonus": "Take a chosen effect from the Dimension Library and put into your discard pile.",
+      "text": "Look at any unknown tile from the tileset or look at the enemy's hand (stat vs stat)."
+    },
+    "rebalance_links": [
+      "effect_super_sense"
+    ],
+    "logic": {
+      "description": "Implemented 2026-10-29 (scout). A left-clicked tile → the map around it is revealed to me and a popup names what lies there (units, traps, obstacles, tokens). An enemy in contact instead → if my World beats theirs, they show me their hand (popup with the card names; the peek travels as an evt_peek envelope to me only). ∀ library leg: not implemented.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "tile_or_enemy",
+          "description": "Either a tile was chosen or an enemy stands in reach.",
+          "when": {
+            "!=": [
+              {
+                "var": "target"
+              },
+              null
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "tiles_revealed",
+          "description": "A chosen tile → the disc around it becomes known to me (reveal radius).",
+          "target": "tile",
+          "unit": "tiles",
+          "value": 1
+        },
+        {
+          "id": "hand_peek",
+          "description": "An enemy in reach → I see their hand when my World is strictly above theirs.",
+          "target": "target",
+          "unit": "peek",
+          "value": {
+            ">": [
+              {
+                "var": "caster.stats.world"
+              },
+              {
+                "var": "defender.stats.world"
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_time (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_time"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_scout",
+          "description": "effect_types keeps \"scout\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "scout"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2b"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          false
+        ]
+      },
+      {
+        "if": [
+          {
+            "===": [
+              {
+                "var": "cast.target.kind"
+              },
+              "tile"
+            ]
+          },
+          {
+            "seq": [
+              {
+                "emit": [
+                  "peeks",
+                  {
+                    "obj": {
+                      "by": {
+                        "var": "me"
+                      },
+                      "kind": "tile",
+                      "q": {
+                        "var": "cast.target.ref.q"
+                      },
+                      "r": {
+                        "var": "cast.target.ref.r"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "set": [
+                  "recipients",
+                  []
+                ]
+              }
+            ]
+          },
+          {
+            "let": [
+              {
+                "tgt": {
+                  "at": [
+                    {
+                      "var": "recipients"
+                    },
+                    0
+                  ]
+                },
+                "el": {
+                  "at": [
+                    {
+                      "var": "elems"
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "if": [
+                  {
+                    "!": [
+                      {
+                        "var": "tgt"
+                      }
+                    ]
+                  },
+                  {
+                    "call": [
+                      "fizzle",
+                      "nobody in reach and no tile"
+                    ]
+                  },
+                  {
+                    "<=": [
+                      {
+                        "call": [
+                          "my_stat",
+                          {
+                            "var": "el"
+                          }
+                        ]
+                      },
+                      {
+                        "stat_of": [
+                          {
+                            "var": "tgt"
+                          },
+                          {
+                            "var": "el"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "seq": [
+                      {
+                        "put": [
+                          "status",
+                          "fizzled"
+                        ]
+                      },
+                      {
+                        "note": [
+                          {
+                            "var": "tgt"
+                          },
+                          " keeps their hand hidden (World ",
+                          {
+                            "stat_of": [
+                              {
+                                "var": "tgt"
+                              },
+                              {
+                                "var": "el"
+                              }
+                            ]
+                          },
+                          " ≥ mine ",
+                          {
+                            "call": [
+                              "my_stat",
+                              {
+                                "var": "el"
+                              }
+                            ]
+                          },
+                          ")"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "emit": [
+                      "peeks",
+                      {
+                        "obj": {
+                          "by": {
+                            "var": "me"
+                          },
+                          "kind": "hand",
+                          "of": {
+                            "var": "tgt"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

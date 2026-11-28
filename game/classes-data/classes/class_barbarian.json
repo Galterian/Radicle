@@ -3,12 +3,45 @@
   "id": "class_barbarian",
   "name": "Barbarian",
   "version": "1.3.0",
-  "source": {"collection":"classes","version":"1.3.0"},
-  "data": {"ability_kind":"static","colors":["elem_vitality","elem_fire"],"text":"Your Empty Posture and your Empty Move are treated as a Block action. You may emit elements during your Block."},
-  "flags": {"phase":null,"stance":{"EP":"B","EM":"B"},"emits":{"B":true},"hooks":["stance","emits"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.3.0"
+  },
+  "data": {
+    "ability_kind": "static",
+    "colors": [
+      "elem_vitality",
+      "elem_fire"
+    ],
+    "text": "Your Empty Posture and your Empty Move are treated as a Block action. You may emit elements during your Block."
+  },
+  "flags": {
+    "phase": null,
+    "stance": {
+      "EP": "B",
+      "EM": "B"
+    },
+    "emits": {
+      "B": true
+    },
+    "hooks": [
+      "stance",
+      "emits"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "stance": {"call":["stance_by_flag"]},
-    "emits": {"call":["emits_by_flag"]}
+    "stance": {
+      "call": [
+        "stance_by_flag"
+      ]
+    },
+    "emits": {
+      "call": [
+        "emits_by_flag"
+      ]
+    }
   }
 }

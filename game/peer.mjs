@@ -1379,10 +1379,10 @@ const foreignBootClass = await clPeer.boot(process.env.FORCE_FOREIGN_CLASS ? { f
     : profileChar && data.classes[profileChar.class_id] ? profileChar.class_id : forced && data.classes[forced] ? forced : null;
   // A monster's class follows from its creature id (every peer derives the same one); a character draws one.
   // A village's fighting people — guards (gate, wall), mercenaries, fighters — hold a fighting class (user 2026-11-28:
-  // "The Guards also should have a class and should be able to fight … like the mercenaries and the fighter units").
-  const FIGHT_CLASSES = ['class_warrior', 'class_reaver', 'class_barbarian', 'class_noble', 'class_assassin', 'class_guardian', 'class_overlord', 'class_weapon_master', 'class_kensei', 'class_paladin'].filter(c => data.classes[c]);
-  const npcRoleNow = GAMEMODELS?.npcs?.[CREATURE_ID]?.role;
-  const fightPool = ['guard', 'mercenary', 'fighter'].includes(npcRoleNow) && FIGHT_CLASSES.length ? FIGHT_CLASSES : null;
+  // "The Guards also should have a class and should be able to fight … like the mercenaries and the fighter units"):
+  // their GameModels entry names the pool (unit.classes), so no class id lives in the game code.
+  const npcClasses = (GAMEMODELS?.npcs?.[CREATURE_ID]?.unit?.classes || []).filter(c => data.classes[c]);
+  const fightPool = npcClasses.length ? npcClasses : null;
   if (!cls && entity.kind === 'creature') { const pl = fightPool || pool; cls = pl[parseInt(sha256Hex(`class:${CREATURE_ID}`).slice(0, 8), 16) % pl.length]; }
   if (!cls) cls = pool[Math.floor(Math.random() * pool.length)];
   entity.classId = cls;

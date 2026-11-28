@@ -3,18 +3,1045 @@
   "id": "skill_counter_spell",
   "name": "Counter spell",
   "version": "1.1.0",
-  "source": {"collection":"skills","version":"1.0.0"},
+  "source": {
+    "collection": "skills",
+    "version": "1.0.0"
+  },
   "deal_order": 14,
   "action_type": "P",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "Counter target non-permanent skill; emit an element against the enemy, subtract the element stat from the enemy's stat.",
-  "flags": {"action":"P","permanent":false,"negating":true,"keepsTarget":true,"hooks":["plan_target","counter_pre"],"range":1,"counterSkill":true,"counterElement":true,"passOrder":{"counter_pre":1},"buildingSkill":6},
-  "uses": ["skills_std", "skills_pass"],
-  "hooks": {
-    "plan_target": {"call":["plan_target"]},
-    "counter_pre": {"if":[{"===":[{"var":"phase"},0]},{"if":[{"!":[{"and":[{"in":[{"var":"skill"},{"or":[{"var":"r.skills"},[]]}]},{"call":["ps_rides",{"var":"r"},"P"]},{"bool":[{"view":[{"var":"actor"}]}]}]}]},[],{"let":[{"declared":{"if":[{"===":[{"var":"r.target.kind"},"character"]},{"var":"r.target.ref"},null]},"cands":{"filter":[{"reveals":[]},{"and":[{"!==":[{"var":"c.actor"},{"var":"actor"}]},{"enemy_of":[{"var":"actor"},{"var":"c.actor"}]},{"!":[{"hidden_from":[{"var":"actor"},{"var":"c.actor"}]}]},{"<=":[{"dist":[{"var":"actor"},{"var":"c.actor"}]},1]}]},"c"]}},{"if":[{"!":[{"var":"cands"}]},[],{"let":[{"casters":{"filter":[{"var":"cands"},{"casts_damage":[{"var":"c"}]},"c"]},"o1":{"find":[{"var":"cands"},{"and":[{"===":[{"var":"c.actor"},{"var":"declared"}]},{"casts_damage":[{"var":"c"}]}]},"c"]}},{"let":[{"o2":{"if":[{"var":"o1"},{"var":"o1"},{"var":"casters"},{"get":[{"at":[{"sort_by":[{"map":[{"var":"casters"},{"obj":{"c":{"var":"c"},"b":{"call":["ps_counter_best",{"var":"c"},{"var":"actor"}]}}},"c"]},{"desc":{"??":[{"var":"x.b.saved"},-1]}},{"asc":{"life_of":[{"var":"x.c.actor"}]}},{"locale":{"var":"x.c.actor"}},"x"]},0]},"c"]},null]}},{"let":[{"o":{"if":[{"var":"o2"},{"var":"o2"},{"find":[{"var":"cands"},{"===":[{"var":"c.actor"},{"var":"declared"}]},"c"]}]}},{"if":[{"!":[{"var":"o"}]},[],{"let":[{"kept":{"filter":[{"or":[{"var":"o.skills"},[]]},{"bool":[{"get":[{"skill_data":[{"var":"id"}]},"is_permanent"]}]},"id"]}},[{"obj":{"op":"skills","id":{"var":"o.actor"},"skills":{"var":"kept"}}},{"obj":{"op":"continue","carry":{"obj":{"tgt":{"var":"o.actor"},"stripped":{"filter":[{"or":[{"var":"o.skills"},[]]},{"!":[{"in":[{"var":"id"},{"var":"kept"}]}]},"id"]}}}}}]]}]}]}]}]}]}]}]},{"===":[{"var":"phase"},1]},{"let":[{"o":{"reveal_of":[{"var":"carry.tgt"}]},"st":{"var":"carry.stripped"}},{"let":[{"bcs":{"call":["ps_counter_best",{"var":"o"},{"var":"actor"}]}},{"concat":[{"if":[{"or":[{"bool":[{"len":[{"var":"st"}]}]},{"bool":[{"var":"bcs"}]}]},[{"obj":{"op":"fx","fx":{"obj":{"by":{"var":"actor"},"skill":{"var":"skill"},"on":{"var":"carry.tgt"},"what":"skills","countered":{"filter":[{"var":"st"},{"!==":[{"var":"id"},"skill_battle_trance"]},"id"]},"building":{"from_building":[{"var":"actor"},{"var":"skill"}]}}}}}],[]]},{"if":[{"and":[{"in":["skill_battle_trance",{"var":"st"}]},{"bool":[{"var":"o.trance"}]}]},[{"obj":{"op":"trance_collapse","id":{"var":"carry.tgt"},"code":{"at":[{"var":"o.trance"},0]}}}],[]]},[{"obj":{"op":"continue","carry":{"var":"carry"}}}]]}]}]},{"let":[{"b":{"call":["ps_counter_best",{"reveal_of":[{"var":"carry.tgt"}]},{"var":"actor"}]}},{"concat":[{"if":[{"var":"b"},[{"obj":{"op":"pen","id":{"var":"carry.tgt"},"elem":{"var":"b.el"},"amount":{"var":"b.amount"}}}],[]]},{"if":[{"or":[{"===":[{"var":"actor"},{"ctx_self":[]}]},{"===":[{"var":"carry.tgt"},{"ctx_self":[]}]}]},[{"obj":{"op":"log","text":{"cat":["[",{"ctx_label":[]},"] counter spell ",{"slice":[{"var":"actor"},0,8]}," → ",{"slice":[{"var":"carry.tgt"},0,8]},": stripped [",{"join":[{"var":"carry.stripped"},","]},"]",{"if":[{"var":"b"},{"cat":[", −",{"var":"b.amount"}," on ",{"var":"b.el"}," (saves ",{"var":"b.saved"},")"]},", nothing to counter"]}]}}}],[]]}]}]}]}
+  "flags": {
+    "action": "P",
+    "permanent": false,
+    "negating": true,
+    "keepsTarget": true,
+    "hooks": [
+      "plan_target",
+      "counter_pre"
+    ],
+    "range": 1,
+    "counterSkill": true,
+    "counterElement": true,
+    "passOrder": {
+      "counter_pre": 1
+    },
+    "buildingSkill": 6
   },
-  "ui": {"tag":"Cs","glyph":"✨","color":"#dfe3e8"},
-  "card": {"name":"Counter spell","tags":["posture","counter"],"resources":{"source":"warlords3_battlecry","match_reason":"cancel X over the countered skill","confidence":"medium","wbc3_name":"Red X cancel marker variant","wbc3_code":"EMC1","wbc3_race":"Effects1","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Red X cancel marker variant/Red X cancel marker variant - idle [EMC1].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Magic.wav","usage":"play when the skill resolves (pick randomly if several)"}]}},"data":{"action_type":"P","is_permanent":false,"point_buy_stat":null,"text":"Counter target non-permanent skill; emit an element against the enemy, subtract the element stat from the enemy's stat."},"rebalance_links":["effect_disable","effect_shield"],"logic":{"description":"Instant riding on a Posture card (or an empty action) against an enemy in contact (the right-clicked one; otherwise the adjacent damaging caster it saves the most against). The target loses every non-permanent skill played this action (a trance collapses to its first card). Then the caster emits one element of the target's cast: the caster's stat for that element is subtracted from the target's stat for EVERY instance of that element in the cast before Rule 21 — effective stat per instance = max0(target_stat - caster_stat). Two counters aimed at each other resolve in actor order. Rule 8 pc override: returns to hand when nothing was stripped or saved.","prerequisites":[{"id":"rides_on_posture","description":"The caster's action is Posture (or an empty action, which carries Posture skills).","when":{"in":[{"var":"caster.action"},["P","EP","EM"]]}},{"id":"enemy_in_contact","description":"The target is an enemy in contact.","when":{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}}],"effects":[{"id":"stat_penalty_per_instance","description":"Amount taken off the target's stat for each instance of the countered element: the caster's own stat behind that element.","target":"target","unit":"stat","value":{"stat_of":[{"var":"caster"},{"var":"cast.counter_element"}]}},{"id":"target_effective_stat","description":"The target's effective stat for the countered element after the penalty: max0(target_stat - caster_stat).","target":"target","unit":"stat","value":{"max0":[{"-":[{"stat_of":[{"var":"target"},{"var":"cast.counter_element"}]},{"stat_of":[{"var":"caster"},{"var":"cast.counter_element"}]}]}]}},{"id":"counter_element_is_in_cast","description":"The emitted element must be one of the elements of the target's cast.","target":"target","unit":"tokens","value":{"includes":[{"var":"elements"},{"var":"cast.counter_element"}]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Posture skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["in_contact","is_enemy","rule_8_instant_returns"]}}
+  "uses": [
+    "skills_std",
+    "skills_pass"
+  ],
+  "hooks": {
+    "plan_target": {
+      "call": [
+        "plan_target"
+      ]
+    },
+    "counter_pre": {
+      "if": [
+        {
+          "===": [
+            {
+              "var": "phase"
+            },
+            0
+          ]
+        },
+        {
+          "if": [
+            {
+              "!": [
+                {
+                  "and": [
+                    {
+                      "in": [
+                        {
+                          "var": "skill"
+                        },
+                        {
+                          "or": [
+                            {
+                              "var": "r.skills"
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "call": [
+                        "ps_rides",
+                        {
+                          "var": "r"
+                        },
+                        "P"
+                      ]
+                    },
+                    {
+                      "bool": [
+                        {
+                          "view": [
+                            {
+                              "var": "actor"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            [],
+            {
+              "let": [
+                {
+                  "declared": {
+                    "if": [
+                      {
+                        "===": [
+                          {
+                            "var": "r.target.kind"
+                          },
+                          "character"
+                        ]
+                      },
+                      {
+                        "var": "r.target.ref"
+                      },
+                      null
+                    ]
+                  },
+                  "cands": {
+                    "filter": [
+                      {
+                        "reveals": []
+                      },
+                      {
+                        "and": [
+                          {
+                            "!==": [
+                              {
+                                "var": "c.actor"
+                              },
+                              {
+                                "var": "actor"
+                              }
+                            ]
+                          },
+                          {
+                            "enemy_of": [
+                              {
+                                "var": "actor"
+                              },
+                              {
+                                "var": "c.actor"
+                              }
+                            ]
+                          },
+                          {
+                            "!": [
+                              {
+                                "hidden_from": [
+                                  {
+                                    "var": "actor"
+                                  },
+                                  {
+                                    "var": "c.actor"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "<=": [
+                              {
+                                "dist": [
+                                  {
+                                    "var": "actor"
+                                  },
+                                  {
+                                    "var": "c.actor"
+                                  }
+                                ]
+                              },
+                              1
+                            ]
+                          }
+                        ]
+                      },
+                      "c"
+                    ]
+                  }
+                },
+                {
+                  "if": [
+                    {
+                      "!": [
+                        {
+                          "var": "cands"
+                        }
+                      ]
+                    },
+                    [],
+                    {
+                      "let": [
+                        {
+                          "casters": {
+                            "filter": [
+                              {
+                                "var": "cands"
+                              },
+                              {
+                                "casts_damage": [
+                                  {
+                                    "var": "c"
+                                  }
+                                ]
+                              },
+                              "c"
+                            ]
+                          },
+                          "o1": {
+                            "find": [
+                              {
+                                "var": "cands"
+                              },
+                              {
+                                "and": [
+                                  {
+                                    "===": [
+                                      {
+                                        "var": "c.actor"
+                                      },
+                                      {
+                                        "var": "declared"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "casts_damage": [
+                                      {
+                                        "var": "c"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              "c"
+                            ]
+                          }
+                        },
+                        {
+                          "let": [
+                            {
+                              "o2": {
+                                "if": [
+                                  {
+                                    "var": "o1"
+                                  },
+                                  {
+                                    "var": "o1"
+                                  },
+                                  {
+                                    "var": "casters"
+                                  },
+                                  {
+                                    "get": [
+                                      {
+                                        "at": [
+                                          {
+                                            "sort_by": [
+                                              {
+                                                "map": [
+                                                  {
+                                                    "var": "casters"
+                                                  },
+                                                  {
+                                                    "obj": {
+                                                      "c": {
+                                                        "var": "c"
+                                                      },
+                                                      "b": {
+                                                        "call": [
+                                                          "ps_counter_best",
+                                                          {
+                                                            "var": "c"
+                                                          },
+                                                          {
+                                                            "var": "actor"
+                                                          }
+                                                        ]
+                                                      }
+                                                    }
+                                                  },
+                                                  "c"
+                                                ]
+                                              },
+                                              {
+                                                "desc": {
+                                                  "??": [
+                                                    {
+                                                      "var": "x.b.saved"
+                                                    },
+                                                    -1
+                                                  ]
+                                                }
+                                              },
+                                              {
+                                                "asc": {
+                                                  "life_of": [
+                                                    {
+                                                      "var": "x.c.actor"
+                                                    }
+                                                  ]
+                                                }
+                                              },
+                                              {
+                                                "locale": {
+                                                  "var": "x.c.actor"
+                                                }
+                                              },
+                                              "x"
+                                            ]
+                                          },
+                                          0
+                                        ]
+                                      },
+                                      "c"
+                                    ]
+                                  },
+                                  null
+                                ]
+                              }
+                            },
+                            {
+                              "let": [
+                                {
+                                  "o": {
+                                    "if": [
+                                      {
+                                        "var": "o2"
+                                      },
+                                      {
+                                        "var": "o2"
+                                      },
+                                      {
+                                        "find": [
+                                          {
+                                            "var": "cands"
+                                          },
+                                          {
+                                            "===": [
+                                              {
+                                                "var": "c.actor"
+                                              },
+                                              {
+                                                "var": "declared"
+                                              }
+                                            ]
+                                          },
+                                          "c"
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "if": [
+                                    {
+                                      "!": [
+                                        {
+                                          "var": "o"
+                                        }
+                                      ]
+                                    },
+                                    [],
+                                    {
+                                      "let": [
+                                        {
+                                          "kept": {
+                                            "filter": [
+                                              {
+                                                "or": [
+                                                  {
+                                                    "var": "o.skills"
+                                                  },
+                                                  []
+                                                ]
+                                              },
+                                              {
+                                                "bool": [
+                                                  {
+                                                    "get": [
+                                                      {
+                                                        "skill_data": [
+                                                          {
+                                                            "var": "id"
+                                                          }
+                                                        ]
+                                                      },
+                                                      "is_permanent"
+                                                    ]
+                                                  }
+                                                ]
+                                              },
+                                              "id"
+                                            ]
+                                          }
+                                        },
+                                        [
+                                          {
+                                            "obj": {
+                                              "op": "skills",
+                                              "id": {
+                                                "var": "o.actor"
+                                              },
+                                              "skills": {
+                                                "var": "kept"
+                                              }
+                                            }
+                                          },
+                                          {
+                                            "obj": {
+                                              "op": "continue",
+                                              "carry": {
+                                                "obj": {
+                                                  "tgt": {
+                                                    "var": "o.actor"
+                                                  },
+                                                  "stripped": {
+                                                    "filter": [
+                                                      {
+                                                        "or": [
+                                                          {
+                                                            "var": "o.skills"
+                                                          },
+                                                          []
+                                                        ]
+                                                      },
+                                                      {
+                                                        "!": [
+                                                          {
+                                                            "in": [
+                                                              {
+                                                                "var": "id"
+                                                              },
+                                                              {
+                                                                "var": "kept"
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      },
+                                                      "id"
+                                                    ]
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "===": [
+            {
+              "var": "phase"
+            },
+            1
+          ]
+        },
+        {
+          "let": [
+            {
+              "o": {
+                "reveal_of": [
+                  {
+                    "var": "carry.tgt"
+                  }
+                ]
+              },
+              "st": {
+                "var": "carry.stripped"
+              }
+            },
+            {
+              "let": [
+                {
+                  "bcs": {
+                    "call": [
+                      "ps_counter_best",
+                      {
+                        "var": "o"
+                      },
+                      {
+                        "var": "actor"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "concat": [
+                    {
+                      "if": [
+                        {
+                          "or": [
+                            {
+                              "bool": [
+                                {
+                                  "len": [
+                                    {
+                                      "var": "st"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "bool": [
+                                {
+                                  "var": "bcs"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        [
+                          {
+                            "obj": {
+                              "op": "fx",
+                              "fx": {
+                                "obj": {
+                                  "by": {
+                                    "var": "actor"
+                                  },
+                                  "skill": {
+                                    "var": "skill"
+                                  },
+                                  "on": {
+                                    "var": "carry.tgt"
+                                  },
+                                  "what": "skills",
+                                  "countered": {
+                                    "filter": [
+                                      {
+                                        "var": "st"
+                                      },
+                                      {
+                                        "!==": [
+                                          {
+                                            "var": "id"
+                                          },
+                                          "skill_battle_trance"
+                                        ]
+                                      },
+                                      "id"
+                                    ]
+                                  },
+                                  "building": {
+                                    "from_building": [
+                                      {
+                                        "var": "actor"
+                                      },
+                                      {
+                                        "var": "skill"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ],
+                        []
+                      ]
+                    },
+                    {
+                      "if": [
+                        {
+                          "and": [
+                            {
+                              "in": [
+                                "skill_battle_trance",
+                                {
+                                  "var": "st"
+                                }
+                              ]
+                            },
+                            {
+                              "bool": [
+                                {
+                                  "var": "o.trance"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        [
+                          {
+                            "obj": {
+                              "op": "trance_collapse",
+                              "id": {
+                                "var": "carry.tgt"
+                              },
+                              "code": {
+                                "at": [
+                                  {
+                                    "var": "o.trance"
+                                  },
+                                  0
+                                ]
+                              }
+                            }
+                          }
+                        ],
+                        []
+                      ]
+                    },
+                    [
+                      {
+                        "obj": {
+                          "op": "continue",
+                          "carry": {
+                            "var": "carry"
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "let": [
+            {
+              "b": {
+                "call": [
+                  "ps_counter_best",
+                  {
+                    "reveal_of": [
+                      {
+                        "var": "carry.tgt"
+                      }
+                    ]
+                  },
+                  {
+                    "var": "actor"
+                  }
+                ]
+              }
+            },
+            {
+              "concat": [
+                {
+                  "if": [
+                    {
+                      "var": "b"
+                    },
+                    [
+                      {
+                        "obj": {
+                          "op": "pen",
+                          "id": {
+                            "var": "carry.tgt"
+                          },
+                          "elem": {
+                            "var": "b.el"
+                          },
+                          "amount": {
+                            "var": "b.amount"
+                          }
+                        }
+                      }
+                    ],
+                    []
+                  ]
+                },
+                {
+                  "if": [
+                    {
+                      "or": [
+                        {
+                          "===": [
+                            {
+                              "var": "actor"
+                            },
+                            {
+                              "ctx_self": []
+                            }
+                          ]
+                        },
+                        {
+                          "===": [
+                            {
+                              "var": "carry.tgt"
+                            },
+                            {
+                              "ctx_self": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    [
+                      {
+                        "obj": {
+                          "op": "log",
+                          "text": {
+                            "cat": [
+                              "[",
+                              {
+                                "ctx_label": []
+                              },
+                              "] counter spell ",
+                              {
+                                "slice": [
+                                  {
+                                    "var": "actor"
+                                  },
+                                  0,
+                                  8
+                                ]
+                              },
+                              " → ",
+                              {
+                                "slice": [
+                                  {
+                                    "var": "carry.tgt"
+                                  },
+                                  0,
+                                  8
+                                ]
+                              },
+                              ": stripped [",
+                              {
+                                "join": [
+                                  {
+                                    "var": "carry.stripped"
+                                  },
+                                  ","
+                                ]
+                              },
+                              "]",
+                              {
+                                "if": [
+                                  {
+                                    "var": "b"
+                                  },
+                                  {
+                                    "cat": [
+                                      ", −",
+                                      {
+                                        "var": "b.amount"
+                                      },
+                                      " on ",
+                                      {
+                                        "var": "b.el"
+                                      },
+                                      " (saves ",
+                                      {
+                                        "var": "b.saved"
+                                      },
+                                      ")"
+                                    ]
+                                  },
+                                  ", nothing to counter"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    []
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "ui": {
+    "tag": "Cs",
+    "glyph": "✨",
+    "color": "#dfe3e8"
+  },
+  "card": {
+    "name": "Counter spell",
+    "tags": [
+      "posture",
+      "counter"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "match_reason": "cancel X over the countered skill",
+      "confidence": "medium",
+      "wbc3_name": "Red X cancel marker variant",
+      "wbc3_code": "EMC1",
+      "wbc3_race": "Effects1",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Red X cancel marker variant/Red X cancel marker variant - idle [EMC1].png",
+          "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Magic.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          }
+        ]
+      }
+    },
+    "data": {
+      "action_type": "P",
+      "is_permanent": false,
+      "point_buy_stat": null,
+      "text": "Counter target non-permanent skill; emit an element against the enemy, subtract the element stat from the enemy's stat."
+    },
+    "rebalance_links": [
+      "effect_disable",
+      "effect_shield"
+    ],
+    "logic": {
+      "description": "Instant riding on a Posture card (or an empty action) against an enemy in contact (the right-clicked one; otherwise the adjacent damaging caster it saves the most against). The target loses every non-permanent skill played this action (a trance collapses to its first card). Then the caster emits one element of the target's cast: the caster's stat for that element is subtracted from the target's stat for EVERY instance of that element in the cast before Rule 21 — effective stat per instance = max0(target_stat - caster_stat). Two counters aimed at each other resolve in actor order. Rule 8 pc override: returns to hand when nothing was stripped or saved.",
+      "prerequisites": [
+        {
+          "id": "rides_on_posture",
+          "description": "The caster's action is Posture (or an empty action, which carries Posture skills).",
+          "when": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "P",
+                "EP",
+                "EM"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "enemy_in_contact",
+          "description": "The target is an enemy in contact.",
+          "when": {
+            "and": [
+              {
+                "rule": [
+                  "in_contact",
+                  {
+                    "dist": {
+                      "var": "dist"
+                    }
+                  }
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "stat_penalty_per_instance",
+          "description": "Amount taken off the target's stat for each instance of the countered element: the caster's own stat behind that element.",
+          "target": "target",
+          "unit": "stat",
+          "value": {
+            "stat_of": [
+              {
+                "var": "caster"
+              },
+              {
+                "var": "cast.counter_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_effective_stat",
+          "description": "The target's effective stat for the countered element after the penalty: max0(target_stat - caster_stat).",
+          "target": "target",
+          "unit": "stat",
+          "value": {
+            "max0": [
+              {
+                "-": [
+                  {
+                    "stat_of": [
+                      {
+                        "var": "target"
+                      },
+                      {
+                        "var": "cast.counter_element"
+                      }
+                    ]
+                  },
+                  {
+                    "stat_of": [
+                      {
+                        "var": "caster"
+                      },
+                      {
+                        "var": "cast.counter_element"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "counter_element_is_in_cast",
+          "description": "The emitted element must be one of the elements of the target's cast.",
+          "target": "target",
+          "unit": "tokens",
+          "value": {
+            "includes": [
+              {
+                "var": "elements"
+              },
+              {
+                "var": "cast.counter_element"
+              }
+            ]
+          }
+        },
+        {
+          "id": "rule_8_return_to_hand",
+          "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "rule_8_instant_returns",
+              {
+                "took_with": {
+                  "var": "outcome.took_with"
+                },
+                "took_without": {
+                  "var": "outcome.took_without"
+                },
+                "dealt_with": {
+                  "var": "outcome.dealt_with"
+                },
+                "dealt_without": {
+                  "var": "outcome.dealt_without"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "action_type_unchanged",
+          "description": "Stays a Posture skill.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.action_type"
+              },
+              {
+                "var": "entry.data.action_type"
+              }
+            ]
+          }
+        },
+        {
+          "id": "is_permanent_unchanged",
+          "description": "Remains an instant.",
+          "assert": {
+            "==": [
+              {
+                "!!": {
+                  "var": "proposal.data.is_permanent"
+                }
+              },
+              {
+                "!!": {
+                  "var": "entry.data.is_permanent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_stat_valid",
+          "description": "point_buy_stat is null, 'any' or one of the four stats.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  [
+                    "any",
+                    "stat_vitality",
+                    "stat_world",
+                    "stat_matter",
+                    "stat_will",
+                    "vitality",
+                    "world",
+                    "matter",
+                    "will"
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "in_contact",
+        "is_enemy",
+        "rule_8_instant_returns"
+      ]
+    }
+  }
 }

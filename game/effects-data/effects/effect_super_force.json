@@ -3,22 +3,486 @@
   "id": "effect_super_force",
   "name": "Super Force",
   "version": "1.3.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_vitality","elem_vitality"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_vitality",
+    "elem_vitality"
+  ],
   "cost": 2,
   "kind": "damage",
   "duration": "instant",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "You or a creature moves forcefully to a neighboring tile. Variants: super throw, super leap, super push.",
-  "flags": {"damage":"delta","scope":"target","push":1},
-  "bot": {"tags":["bruiser","brute","pack"],"names":["apes|rhox|nacatl","giant|behemoth|gargantuan|ogre|minotaur|thoctar"]},
-  "card": {"name":"Super Force","tags":["damage","push"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Smokedust puff animation","wbc3_code":"EMX0","wbc3_race":"Effects1","match_reason":"impact dust puff where the pushed/thrown body lands","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/Thump.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/Whack.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage"],"element_cost":["elem_vitality","elem_vitality"],"text":"You or a creature moves forcefully to a neighboring tile. Variants: super throw, super leap, super push."},"rebalance_links":["effect_throw"],"logic":{"description":"Implemented. Delta damage (Rule 21, Vitality twice) to one enemy in contact, then the target is pushed one hex straight away from the caster if that hex is free (no push otherwise, no damage change). The paper variants (super throw / leap / push on yourself or a creature) are not yet implemented beyond the push. Aura / Aura ∀ widen the hit as usual.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"target_in_reach","description":"No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).","when":{"or":[{"==":[{"var":"target"},null]},{"if":[{"var":"cast.aura"},{"rule":["in_view",{"dist":{"var":"dist"},"radius":10}]},{"rule":["in_contact",{"dist":{"var":"dist"}}]}]}]}},{"id":"target_is_enemy","description":"A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.","when":{"or":[{"==":[{"var":"target"},null]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}},{"id":"target_alive","description":"A declared target must still be alive (life > 0); dead units are skipped.","when":{"or":[{"==":[{"var":"target"},null]},{">":[{"var":"target.life"},0]}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"push_hexes","description":"The hit target is moved one hex along the caster→target line when that hex is free.","target":"target","unit":"hexes","value":1}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_vitality"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_contact","in_view","is_enemy","rule_21_delta_damage"]}},
-  "uses": ["std","e2b"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,true]},
-      {"call":["require_recipients"]},
-      {"map":[{"var":"recipients"},{"let":[{"t":{"tile_of":[{"var":"def"}]}},{"seq":[{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},{"if":[{"var":"t"},{"let":[{"aq":{"+":[{"var":"t.q"},{"-":[{"var":"t.q"},{"var":"my_tile.q"}]}]},"ar":{"+":[{"var":"t.r"},{"-":[{"var":"t.r"},{"var":"my_tile.r"}]}]}},{"if":[{"is_free":[{"var":"aq"},{"var":"ar"}]},{"emit":["moves",{"obj":{"who":{"var":"def"},"q":{"var":"aq"},"r":{"var":"ar"},"reason":"pushed"}}]}]}]}]}]}]},"def"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "push": 1
+  },
+  "bot": {
+    "tags": [
+      "bruiser",
+      "brute",
+      "pack"
+    ],
+    "names": [
+      "apes|rhox|nacatl",
+      "giant|behemoth|gargantuan|ogre|minotaur|thoctar"
+    ]
+  },
+  "card": {
+    "name": "Super Force",
+    "tags": [
+      "damage",
+      "push"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Smokedust puff animation",
+      "wbc3_code": "EMX0",
+      "wbc3_race": "Effects1",
+      "match_reason": "impact dust puff where the pushed/thrown body lands",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Smokedust puff animation/Smokedust puff animation - idle [EMX0].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Thump.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/Whack.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage"
+      ],
+      "element_cost": [
+        "elem_vitality",
+        "elem_vitality"
+      ],
+      "text": "You or a creature moves forcefully to a neighboring tile. Variants: super throw, super leap, super push."
+    },
+    "rebalance_links": [
+      "effect_throw"
+    ],
+    "logic": {
+      "description": "Implemented. Delta damage (Rule 21, Vitality twice) to one enemy in contact, then the target is pushed one hex straight away from the caster if that hex is free (no push otherwise, no damage change). The paper variants (super throw / leap / push on yourself or a creature) are not yet implemented beyond the push. Aura / Aura ∀ widen the hit as usual.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_in_reach",
+          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "if": [
+                  {
+                    "var": "cast.aura"
+                  },
+                  {
+                    "rule": [
+                      "in_view",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        },
+                        "radius": 10
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_is_enemy",
+          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_alive",
+          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "push_hexes",
+          "description": "The hit target is moved one hex along the caster→target line when that hex is free.",
+          "target": "target",
+          "unit": "hexes",
+          "value": 1
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_vitality"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_contact",
+        "in_view",
+        "is_enemy",
+        "rule_21_delta_damage"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2b"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "call": [
+          "require_recipients"
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "let": [
+              {
+                "t": {
+                  "tile_of": [
+                    {
+                      "var": "def"
+                    }
+                  ]
+                }
+              },
+              {
+                "seq": [
+                  {
+                    "call": [
+                      "hit",
+                      {
+                        "var": "def"
+                      },
+                      [
+                        {
+                          "obj": {
+                            "kind": "main",
+                            "sum": {
+                              "call": [
+                                "main_delta",
+                                {
+                                  "var": "def"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "var": "t"
+                      },
+                      {
+                        "let": [
+                          {
+                            "aq": {
+                              "+": [
+                                {
+                                  "var": "t.q"
+                                },
+                                {
+                                  "-": [
+                                    {
+                                      "var": "t.q"
+                                    },
+                                    {
+                                      "var": "my_tile.q"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "ar": {
+                              "+": [
+                                {
+                                  "var": "t.r"
+                                },
+                                {
+                                  "-": [
+                                    {
+                                      "var": "t.r"
+                                    },
+                                    {
+                                      "var": "my_tile.r"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "if": [
+                              {
+                                "is_free": [
+                                  {
+                                    "var": "aq"
+                                  },
+                                  {
+                                    "var": "ar"
+                                  }
+                                ]
+                              },
+                              {
+                                "emit": [
+                                  "moves",
+                                  {
+                                    "obj": {
+                                      "who": {
+                                        "var": "def"
+                                      },
+                                      "q": {
+                                        "var": "aq"
+                                      },
+                                      "r": {
+                                        "var": "ar"
+                                      },
+                                      "reason": "pushed"
+                                    }
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "def"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

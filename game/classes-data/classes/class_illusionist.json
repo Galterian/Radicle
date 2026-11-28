@@ -3,11 +3,198 @@
   "id": "class_illusionist",
   "name": "Illusionist",
   "version": "1.1.0",
-  "source": {"collection":"classes","version":"1.1.0"},
-  "data": {"ability_kind":"tap","colors":["elem_air","elem_space","elem_concentration"],"text":"Tap: you and every ally within 10 hexes gain one illusion life point (shown cyan). It is the first life lost when damage lands, and fades after the 3rd action of the turn."},
-  "flags": {"phase":"pre","illusionRange":10,"hooks":["ability"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.1.0"
+  },
+  "data": {
+    "ability_kind": "tap",
+    "colors": [
+      "elem_air",
+      "elem_space",
+      "elem_concentration"
+    ],
+    "text": "Tap: you and every ally within 10 hexes gain one illusion life point (shown cyan). It is the first life lost when damage lands, and fades after the 3rd action of the turn."
+  },
+  "flags": {
+    "phase": "pre",
+    "illusionRange": 10,
+    "hooks": [
+      "ability"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "ability": {"let":[{"R":{"let":[{"f":{"class_flag":[{"var":"class"},"illusionRange"]}},{"if":[{"is_null":{"var":"f"}},10,{"var":"f"}]}]}},{"let":[{"allies":{"sort":{"filter":[{"view_ids":[]},{"and":[{"!==":[{"var":"o"},{"var":"actor"}]},{">":[{"life_of":[{"var":"o"}]},0]},{"!":{"enemy_of":[{"var":"actor"},{"var":"o"}]}},{"<=":[{"dist":[{"var":"actor"},{"var":"o"}]},{"var":"R"}]}]},"o"]}}},{"call":["done",{"cat":["an illusion life point for me and ",{"len":{"var":"allies"}}," all",{"if":[{"===":[{"len":{"var":"allies"}},1]},"y","ies"]}," until the turn's 3rd action"]},{"obj":{"illusion":{"map":[{"concat":[[{"var":"actor"}],{"var":"allies"}]},{"obj":{"on":{"var":"o"},"by":{"var":"actor"}}},"o"]}}},[]]}]}]}
+    "ability": {
+      "let": [
+        {
+          "R": {
+            "let": [
+              {
+                "f": {
+                  "class_flag": [
+                    {
+                      "var": "class"
+                    },
+                    "illusionRange"
+                  ]
+                }
+              },
+              {
+                "if": [
+                  {
+                    "is_null": {
+                      "var": "f"
+                    }
+                  },
+                  10,
+                  {
+                    "var": "f"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "let": [
+            {
+              "allies": {
+                "sort": {
+                  "filter": [
+                    {
+                      "view_ids": []
+                    },
+                    {
+                      "and": [
+                        {
+                          "!==": [
+                            {
+                              "var": "o"
+                            },
+                            {
+                              "var": "actor"
+                            }
+                          ]
+                        },
+                        {
+                          ">": [
+                            {
+                              "life_of": [
+                                {
+                                  "var": "o"
+                                }
+                              ]
+                            },
+                            0
+                          ]
+                        },
+                        {
+                          "!": {
+                            "enemy_of": [
+                              {
+                                "var": "actor"
+                              },
+                              {
+                                "var": "o"
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "<=": [
+                            {
+                              "dist": [
+                                {
+                                  "var": "actor"
+                                },
+                                {
+                                  "var": "o"
+                                }
+                              ]
+                            },
+                            {
+                              "var": "R"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "o"
+                  ]
+                }
+              }
+            },
+            {
+              "call": [
+                "done",
+                {
+                  "cat": [
+                    "an illusion life point for me and ",
+                    {
+                      "len": {
+                        "var": "allies"
+                      }
+                    },
+                    " all",
+                    {
+                      "if": [
+                        {
+                          "===": [
+                            {
+                              "len": {
+                                "var": "allies"
+                              }
+                            },
+                            1
+                          ]
+                        },
+                        "y",
+                        "ies"
+                      ]
+                    },
+                    " until the turn's 3rd action"
+                  ]
+                },
+                {
+                  "obj": {
+                    "illusion": {
+                      "map": [
+                        {
+                          "concat": [
+                            [
+                              {
+                                "var": "actor"
+                              }
+                            ],
+                            {
+                              "var": "allies"
+                            }
+                          ]
+                        },
+                        {
+                          "obj": {
+                            "on": {
+                              "var": "o"
+                            },
+                            "by": {
+                              "var": "actor"
+                            }
+                          }
+                        },
+                        "o"
+                      ]
+                    }
+                  }
+                },
+                []
+              ]
+            }
+          ]
+        }
+      ]
+    }
   }
 }

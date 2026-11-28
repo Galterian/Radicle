@@ -3,22 +3,465 @@
   "id": "effect_lightning",
   "name": "Lightning",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_fire","elem_air"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_fire",
+    "elem_air"
+  ],
   "cost": 2,
   "kind": "damage",
   "duration": "instant",
-  "every": {"behaviour":"lock ×2","note":"Rule 23 ∀: each hit target loses 2 actions"},
+  "every": {
+    "behaviour": "lock ×2",
+    "note": "Rule 23 ∀: each hit target loses 2 actions"
+  },
   "text": "Target loses next N actions, where N = number of Lightnings cast.",
-  "flags": {"damage":"delta","scope":"target","lock":1},
-  "bot": {"tags":["boss","caster","flyer"],"names":["battlemage|mind","cloud|cliff|storm"]},
-  "card": {"name":"Lightning","tags":["damage","lock","channeling"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Spell effect vertical lightning boltspillars","wbc3_code":"EZ11","wbc3_race":"Effects1","match_reason":"WBC3 vertical lightning bolts","confidence":"high","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect vertical lightning boltspillars/Spell effect vertical lightning boltspillars - idle [EZ11].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ11.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/LightningL1.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/LightningH1.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/LightningM1.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage","channeling"],"element_cost":["elem_fire","elem_air"],"text":"Target loses next N actions, where N = number of Lightnings cast."},"rebalance_links":["effect_fireball","effect_dark_matter"],"logic":{"description":"Implemented. Delta damage (Rule 21) to one enemy in contact, and the hit target loses its next action; on a ∀ double cast the lock is doubled (2 actions). Paper text says N locks for N Lightnings — the pc game resolves it as 1 per cast, ×2 on ∀. Targeting: right-clicked enemy within 1, else the enemy hurt most; Aura widens to all adjacent enemies, Aura ∀ to enemies within 10.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"target_in_reach","description":"No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).","when":{"or":[{"==":[{"var":"target"},null]},{"if":[{"var":"cast.aura"},{"rule":["in_view",{"dist":{"var":"dist"},"radius":10}]},{"rule":["in_contact",{"dist":{"var":"dist"}}]}]}]}},{"id":"target_is_enemy","description":"A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.","when":{"or":[{"==":[{"var":"target"},null]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}},{"id":"target_alive","description":"A declared target must still be alive (life > 0); dead units are skipped.","when":{"or":[{"==":[{"var":"target"},null]},{">":[{"var":"target.life"},0]}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"actions_lost","description":"The hit target loses its next 1 action; doubled on a ∀ double cast (Rule 23).","target":"target","unit":"actions","value":{"if":[{"var":"cast.every"},2,1]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_fire (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_fire"]}]}},{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_air (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_air"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_contact","in_view","is_enemy","rule_21_delta_damage"]}},
-  "uses": ["std"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,true]},
-      {"call":["require_recipients"]},
-      {"map":[{"var":"recipients"},{"seq":[{"call":["hit",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}]]},{"call":["lock_n",{"var":"def"},{"*":[1,{"if":[{"var":"cast.every"},2,1]}]}]}]},"def"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "lock": 1
+  },
+  "bot": {
+    "tags": [
+      "boss",
+      "caster",
+      "flyer"
+    ],
+    "names": [
+      "battlemage|mind",
+      "cloud|cliff|storm"
+    ]
+  },
+  "card": {
+    "name": "Lightning",
+    "tags": [
+      "damage",
+      "lock",
+      "channeling"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Spell effect vertical lightning boltspillars",
+      "wbc3_code": "EZ11",
+      "wbc3_race": "Effects1",
+      "match_reason": "WBC3 vertical lightning bolts",
+      "confidence": "high",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect vertical lightning boltspillars/Spell effect vertical lightning boltspillars - idle [EZ11].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ11.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/LightningL1.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/LightningH1.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/LightningM1.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage",
+        "channeling"
+      ],
+      "element_cost": [
+        "elem_fire",
+        "elem_air"
+      ],
+      "text": "Target loses next N actions, where N = number of Lightnings cast."
+    },
+    "rebalance_links": [
+      "effect_fireball",
+      "effect_dark_matter"
+    ],
+    "logic": {
+      "description": "Implemented. Delta damage (Rule 21) to one enemy in contact, and the hit target loses its next action; on a ∀ double cast the lock is doubled (2 actions). Paper text says N locks for N Lightnings — the pc game resolves it as 1 per cast, ×2 on ∀. Targeting: right-clicked enemy within 1, else the enemy hurt most; Aura widens to all adjacent enemies, Aura ∀ to enemies within 10.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_in_reach",
+          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "if": [
+                  {
+                    "var": "cast.aura"
+                  },
+                  {
+                    "rule": [
+                      "in_view",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        },
+                        "radius": 10
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_is_enemy",
+          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_alive",
+          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "actions_lost",
+          "description": "The hit target loses its next 1 action; doubled on a ∀ double cast (Rule 23).",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "if": [
+              {
+                "var": "cast.every"
+              },
+              2,
+              1
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_fire (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_fire"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_air (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_air"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_contact",
+        "in_view",
+        "is_enemy",
+        "rule_21_delta_damage"
+      ]
+    }
+  },
+  "uses": [
+    "std"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "call": [
+          "require_recipients"
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "seq": [
+              {
+                "call": [
+                  "hit",
+                  {
+                    "var": "def"
+                  },
+                  [
+                    {
+                      "obj": {
+                        "kind": "main",
+                        "sum": {
+                          "call": [
+                            "main_delta",
+                            {
+                              "var": "def"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                ]
+              },
+              {
+                "call": [
+                  "lock_n",
+                  {
+                    "var": "def"
+                  },
+                  {
+                    "*": [
+                      1,
+                      {
+                        "if": [
+                          {
+                            "var": "cast.every"
+                          },
+                          2,
+                          1
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "def"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

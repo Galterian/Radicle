@@ -84,7 +84,7 @@ export function knownIds(game = HERE) {
   const ids = (d) => new Set(fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.json')).map(f => f.replace(/\.json$/, '')) : []);
   const bf = path.resolve(game, '..', 'data', 'creatures_builtin.json');
   const bi = fs.existsSync(bf) ? JSON.parse(fs.readFileSync(bf, 'utf8')) : { entries: [] };
-  return { effects: ids(path.join(game, 'effects-data', 'effects')), skills: ids(path.join(game, 'skills-data', 'skills')), creatures: new Set((bi.entries || []).map(e => e.id)) };
+  return { effects: ids(path.join(game, 'effects-data', 'effects')), skills: ids(path.join(game, 'skills-data', 'skills')), classes: ids(path.join(game, 'classes-data', 'classes')), creatures: new Set((bi.entries || []).map(e => e.id)) };
 }
 
 // Every problem as one line. `known` = { effects: Set, skills: Set, creatures: Set } (ids the game has) and
@@ -142,6 +142,9 @@ export function checkGameModels(m, { known = null, assetFile = null } = {}) {
     else if (u.life !== Math.round(STATS.reduce((a, k) => a + u.stats[k], 0) / 10)) e(id, `unit.life ${u.life} ≠ round(Σstats/10) (ruling 2026-10-28)`);
     if (!Number.isInteger(u.actions_per_round) || u.actions_per_round < 1 || u.actions_per_round > 4) e(id, 'unit.actions_per_round 1..4');
     for (const fx of u.deck_effects || []) if (known?.effects && !known.effects.has(fx)) e(id, `unknown deck effect ${fx}`);
+    // classes (user 2026-11-28: guards / mercenaries / fighters fight with a class): the pool the unit's class is drawn from
+    if (u.classes !== undefined && !(Array.isArray(u.classes) && u.classes.length && u.classes.every(c => typeof c === 'string' && /^class_[a-z0-9_]+$/.test(c)))) e(id, 'unit.classes: a non-empty list of class ids');
+    else for (const c of u.classes || []) if (known?.classes && !known.classes.has(c)) e(id, `unknown class ${c}`);
     if (u.tags !== undefined && !(Array.isArray(u.tags) && u.tags.every(t => UNIT_TAGS.includes(t)))) e(id, `unit.tags: a list of ${UNIT_TAGS.join('|')}`);
     // breath (a dragon's Breath Attack): its Attack strikes every enemy within `range`
     if (u.breath !== undefined && !(Number.isInteger(u.breath?.range) && u.breath.range >= 1 && u.breath.range <= 3)) e(id, 'unit.breath: { range 1..3 }');

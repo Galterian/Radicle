@@ -3,11 +3,345 @@
   "id": "class_transmuter",
   "name": "Transmuter",
   "version": "1.0.0",
-  "source": {"collection":"classes","version":"1.0.0"},
-  "data": {"ability_kind":"static","colors":["elem_water","elem_earth","elem_fire","elem_concentration","elem_harmony"],"text":"You may cast the effect of a nearby ally or provide such castable by nearby players."},
-  "flags": {"phase":null,"hooks":["transmute"]},
-  "uses": ["classes_std"],
+  "source": {
+    "collection": "classes",
+    "version": "1.0.0"
+  },
+  "data": {
+    "ability_kind": "static",
+    "colors": [
+      "elem_water",
+      "elem_earth",
+      "elem_fire",
+      "elem_concentration",
+      "elem_harmony"
+    ],
+    "text": "You may cast the effect of a nearby ally or provide such castable by nearby players."
+  },
+  "flags": {
+    "phase": null,
+    "hooks": [
+      "transmute"
+    ]
+  },
+  "uses": [
+    "classes_std"
+  ],
   "hooks": {
-    "transmute": {"let":[{"rows":{"filter":[{"map":[{"or":[{"var":"outcomes"},[]]},{"if":[{"or":[{"===":[{"var":"o.actor"},{"var":"id"}]},{"!==":[{"var":"o.status"},"done"]},{"enemy_of":[{"var":"id"},{"var":"o.actor"}]},{">":[{"dist":[{"var":"id"},{"var":"o.actor"}]},1]}]},null,{"let":[{"dup":{"map":[{"filter":[{"or":[{"var":"o.statTokens"},[]]},{"and":[{"===":[{"var":"t.on"},{"var":"o.actor"}]},{">":[{"var":"t.value"},0]}]},"t"]},{"with_key":[{"var":"t"},"on",{"var":"id"}]},"t"]},"heals":{"map":[{"filter":[{"or":[{"var":"o.heals"},[]]},{"===":[{"var":"h.on"},{"var":"o.actor"}]},"h"]},{"with_key":[{"var":"h"},"on",{"var":"id"}]},"h"]}},{"if":[{"or":[{"len":{"var":"dup"}},{"len":{"var":"heals"}}]},{"obj":{"i":{"var":"i"},"statTokens":{"var":"dup"},"heals":{"var":"heals"},"actor":{"var":"o.actor"}}},null]}]}]},"o"]},{"bool":{"var":"y"}},"y"]}},{"obj":{"edits":{"map":[{"var":"rows"},{"obj":{"i":{"var":"e.i"},"statTokens":{"var":"e.statTokens"},"heals":{"var":"e.heals"}}},"e"]},"log":{"map":[{"filter":[{"var":"rows"},{"or":[{"===":[{"var":"id"},{"ctx_self":[]}]},{"===":[{"var":"e.actor"},{"ctx_self":[]}]}]},"e"]},{"cat":["[",{"ctx_label":[]},"] transmuter ",{"slice":[{"var":"id"},0,8]}," shares ",{"slice":[{"var":"e.actor"},0,8]},"'s cast (",{"len":{"var":"e.statTokens"}}," token(s), ",{"len":{"var":"e.heals"}}," heal(s))"]},"e"]}}}]}
+    "transmute": {
+      "let": [
+        {
+          "rows": {
+            "filter": [
+              {
+                "map": [
+                  {
+                    "or": [
+                      {
+                        "var": "outcomes"
+                      },
+                      []
+                    ]
+                  },
+                  {
+                    "if": [
+                      {
+                        "or": [
+                          {
+                            "===": [
+                              {
+                                "var": "o.actor"
+                              },
+                              {
+                                "var": "id"
+                              }
+                            ]
+                          },
+                          {
+                            "!==": [
+                              {
+                                "var": "o.status"
+                              },
+                              "done"
+                            ]
+                          },
+                          {
+                            "enemy_of": [
+                              {
+                                "var": "id"
+                              },
+                              {
+                                "var": "o.actor"
+                              }
+                            ]
+                          },
+                          {
+                            ">": [
+                              {
+                                "dist": [
+                                  {
+                                    "var": "id"
+                                  },
+                                  {
+                                    "var": "o.actor"
+                                  }
+                                ]
+                              },
+                              1
+                            ]
+                          }
+                        ]
+                      },
+                      null,
+                      {
+                        "let": [
+                          {
+                            "dup": {
+                              "map": [
+                                {
+                                  "filter": [
+                                    {
+                                      "or": [
+                                        {
+                                          "var": "o.statTokens"
+                                        },
+                                        []
+                                      ]
+                                    },
+                                    {
+                                      "and": [
+                                        {
+                                          "===": [
+                                            {
+                                              "var": "t.on"
+                                            },
+                                            {
+                                              "var": "o.actor"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          ">": [
+                                            {
+                                              "var": "t.value"
+                                            },
+                                            0
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "t"
+                                  ]
+                                },
+                                {
+                                  "with_key": [
+                                    {
+                                      "var": "t"
+                                    },
+                                    "on",
+                                    {
+                                      "var": "id"
+                                    }
+                                  ]
+                                },
+                                "t"
+                              ]
+                            },
+                            "heals": {
+                              "map": [
+                                {
+                                  "filter": [
+                                    {
+                                      "or": [
+                                        {
+                                          "var": "o.heals"
+                                        },
+                                        []
+                                      ]
+                                    },
+                                    {
+                                      "===": [
+                                        {
+                                          "var": "h.on"
+                                        },
+                                        {
+                                          "var": "o.actor"
+                                        }
+                                      ]
+                                    },
+                                    "h"
+                                  ]
+                                },
+                                {
+                                  "with_key": [
+                                    {
+                                      "var": "h"
+                                    },
+                                    "on",
+                                    {
+                                      "var": "id"
+                                    }
+                                  ]
+                                },
+                                "h"
+                              ]
+                            }
+                          },
+                          {
+                            "if": [
+                              {
+                                "or": [
+                                  {
+                                    "len": {
+                                      "var": "dup"
+                                    }
+                                  },
+                                  {
+                                    "len": {
+                                      "var": "heals"
+                                    }
+                                  }
+                                ]
+                              },
+                              {
+                                "obj": {
+                                  "i": {
+                                    "var": "i"
+                                  },
+                                  "statTokens": {
+                                    "var": "dup"
+                                  },
+                                  "heals": {
+                                    "var": "heals"
+                                  },
+                                  "actor": {
+                                    "var": "o.actor"
+                                  }
+                                }
+                              },
+                              null
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "o"
+                ]
+              },
+              {
+                "bool": {
+                  "var": "y"
+                }
+              },
+              "y"
+            ]
+          }
+        },
+        {
+          "obj": {
+            "edits": {
+              "map": [
+                {
+                  "var": "rows"
+                },
+                {
+                  "obj": {
+                    "i": {
+                      "var": "e.i"
+                    },
+                    "statTokens": {
+                      "var": "e.statTokens"
+                    },
+                    "heals": {
+                      "var": "e.heals"
+                    }
+                  }
+                },
+                "e"
+              ]
+            },
+            "log": {
+              "map": [
+                {
+                  "filter": [
+                    {
+                      "var": "rows"
+                    },
+                    {
+                      "or": [
+                        {
+                          "===": [
+                            {
+                              "var": "id"
+                            },
+                            {
+                              "ctx_self": []
+                            }
+                          ]
+                        },
+                        {
+                          "===": [
+                            {
+                              "var": "e.actor"
+                            },
+                            {
+                              "ctx_self": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "e"
+                  ]
+                },
+                {
+                  "cat": [
+                    "[",
+                    {
+                      "ctx_label": []
+                    },
+                    "] transmuter ",
+                    {
+                      "slice": [
+                        {
+                          "var": "id"
+                        },
+                        0,
+                        8
+                      ]
+                    },
+                    " shares ",
+                    {
+                      "slice": [
+                        {
+                          "var": "e.actor"
+                        },
+                        0,
+                        8
+                      ]
+                    },
+                    "'s cast (",
+                    {
+                      "len": {
+                        "var": "e.statTokens"
+                      }
+                    },
+                    " token(s), ",
+                    {
+                      "len": {
+                        "var": "e.heals"
+                      }
+                    },
+                    " heal(s))"
+                  ]
+                },
+                "e"
+              ]
+            }
+          }
+        }
+      ]
+    }
   }
 }

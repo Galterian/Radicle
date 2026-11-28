@@ -3,24 +3,368 @@
   "id": "effect_balefire",
   "name": "Fiery Beam / Balefire",
   "version": "1.4.0",
-  "source": {"collection":"effects","version":"1.1.0"},
-  "elements": ["elem_fire","elem_harmony","elem_time"],
+  "source": {
+    "collection": "effects",
+    "version": "1.1.0"
+  },
+  "elements": [
+    "elem_fire",
+    "elem_harmony",
+    "elem_time"
+  ],
   "cost": 3,
   "kind": "damage",
   "duration": "permanent",
-  "every": {"behaviour":"resolver","note":"perm 6 until the end of my next turn, 9 bonus plans, instants (peer.mjs)"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "perm 6 until the end of my next turn, 9 bonus plans, instants (peer.mjs)"
+  },
   "text": "On successful cast, earn an extra round just for you (only you may take new actions during it).",
-  "flags": {"damage":"delta","scope":"target","permanent":true,"fixedPower":6,"draw":5,"completesWithoutTarget":true,"permTurns":1,"bonusPlans":9,"bonusOneEmission":true},
-  "ui": {"perm_help":"Balefire (6) — until the end of your next turn every card in hand is an instant: queue up to 9 bonus plans per action (one element emission per action still); falls to a Fire/Harmony/Time die of 6"},
-  "card": {"name":"Fiery Beam / Balefire","tags":["damage"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Red beamline effect","wbc3_code":"EMF0","wbc3_race":"Effects1","match_reason":"red beam = Fiery Beam","confidence":"high","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Red beamline effect/Red beamline effect - idle [Emf0].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/fireball.wav","usage":"sound effect on resolution / impact of the effect"},{"path":"assets/Sounds/SoundFX/ElectricCrit.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage"],"element_cost":["elem_fire","elem_harmony","elem_time"],"text":"On successful cast, earn an extra round just for you (only you may take new actions during it)."},"rebalance_links":["effect_fireball"],"logic":{"description":"Reworked 2026-10-29 (user spec). Delta damage (Fire, Harmony, Time) to one enemy in contact — the cast completes even with nobody in reach. On completion the caster holds Balefire as a temporary permanent (fixed power 6; falls at the end of the caster's NEXT turn, or to a Fire/Harmony/Time point-buy rolling 6) and draws 5 cards. While it stands every card in hand — basic actions included — is an instant: up to 9 bonus plans ride on each action (10 cards a round), yet only ONE element is emitted per action (general_ux_instants / Rule 20).","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"cards_drawn_on_land","description":"Cards drawn when the Balefire completes.","target":"caster","unit":"cards","value":5},{"id":"bonus_plans_while_held","description":"Bonus plans (instants) the holder may queue on each action while Balefire stands — every card is an instant then; still one element emission per action.","target":"caster","unit":"actions","value":9},{"id":"permanent_turns","description":"Turns the temporary permanent lasts: until the end of the caster's next turn.","target":"caster","unit":"turns","value":1},{"id":"permanent_power","description":"Rule 24 threshold of the permanent: fixed 6 (no placement die).","target":"caster","unit":"die","value":{"rule":["fixed_power_6",{}]}},{"id":"destroyed_by_rule_24","description":"Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.","target":"caster","unit":"die","value":{"rule":["using_rule_24",{"die":{"var":"die"},"power":{"rule":["fixed_power_6",{}]}}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_fire (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_fire"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","fixed_power_6","rule_21_delta_damage","using_rule_24"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,true]},
-      {"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"note":["nobody in reach — the cast still completes"]}]},
-      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}],false,false]},"def"]},
-      {"put":["draw",5]},
-      {"call":["land_permanent"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "permanent": true,
+    "fixedPower": 6,
+    "draw": 5,
+    "completesWithoutTarget": true,
+    "permTurns": 1,
+    "bonusPlans": 9,
+    "bonusOneEmission": true
+  },
+  "ui": {
+    "perm_help": "Balefire (6) — until the end of your next turn every card in hand is an instant: queue up to 9 bonus plans per action (one element emission per action still); falls to a Fire/Harmony/Time die of 6"
+  },
+  "card": {
+    "name": "Fiery Beam / Balefire",
+    "tags": [
+      "damage"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Red beamline effect",
+      "wbc3_code": "EMF0",
+      "wbc3_race": "Effects1",
+      "match_reason": "red beam = Fiery Beam",
+      "confidence": "high",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Red beamline effect/Red beamline effect - idle [Emf0].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/fireball.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/ElectricCrit.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage"
+      ],
+      "element_cost": [
+        "elem_fire",
+        "elem_harmony",
+        "elem_time"
+      ],
+      "text": "On successful cast, earn an extra round just for you (only you may take new actions during it)."
+    },
+    "rebalance_links": [
+      "effect_fireball"
+    ],
+    "logic": {
+      "description": "Reworked 2026-10-29 (user spec). Delta damage (Fire, Harmony, Time) to one enemy in contact — the cast completes even with nobody in reach. On completion the caster holds Balefire as a temporary permanent (fixed power 6; falls at the end of the caster's NEXT turn, or to a Fire/Harmony/Time point-buy rolling 6) and draws 5 cards. While it stands every card in hand — basic actions included — is an instant: up to 9 bonus plans ride on each action (10 cards a round), yet only ONE element is emitted per action (general_ux_instants / Rule 20).",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "cards_drawn_on_land",
+          "description": "Cards drawn when the Balefire completes.",
+          "target": "caster",
+          "unit": "cards",
+          "value": 5
+        },
+        {
+          "id": "bonus_plans_while_held",
+          "description": "Bonus plans (instants) the holder may queue on each action while Balefire stands — every card is an instant then; still one element emission per action.",
+          "target": "caster",
+          "unit": "actions",
+          "value": 9
+        },
+        {
+          "id": "permanent_turns",
+          "description": "Turns the temporary permanent lasts: until the end of the caster's next turn.",
+          "target": "caster",
+          "unit": "turns",
+          "value": 1
+        },
+        {
+          "id": "permanent_power",
+          "description": "Rule 24 threshold of the permanent: fixed 6 (no placement die).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "fixed_power_6",
+              {}
+            ]
+          }
+        },
+        {
+          "id": "destroyed_by_rule_24",
+          "description": "Rule 24: an adjacent enemy emitting the matching stat destroys this permanent when their highest die is at least its power.",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "rule": [
+              "using_rule_24",
+              {
+                "die": {
+                  "var": "die"
+                },
+                "power": {
+                  "rule": [
+                    "fixed_power_6",
+                    {}
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_fire (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_fire"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "fixed_power_6",
+        "rule_21_delta_damage",
+        "using_rule_24"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "if": [
+          {
+            "!": [
+              {
+                "len": [
+                  {
+                    "var": "recipients"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "note": [
+              "nobody in reach — the cast still completes"
+            ]
+          }
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "call": [
+              "hit_with",
+              {
+                "var": "def"
+              },
+              [
+                {
+                  "obj": {
+                    "kind": "main",
+                    "sum": {
+                      "call": [
+                        "main_delta",
+                        {
+                          "var": "def"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              false,
+              false
+            ]
+          },
+          "def"
+        ]
+      },
+      {
+        "put": [
+          "draw",
+          5
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

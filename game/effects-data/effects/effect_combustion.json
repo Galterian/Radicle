@@ -3,24 +3,502 @@
   "id": "effect_combustion",
   "name": "Combustion",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_harmony"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_harmony"
+  ],
   "cost": 1,
   "kind": "stat_token",
   "duration": "channel",
-  "every": {"behaviour":"resolver","note":"channel ticks re-enter with cast._channel_tick (peer.mjs)"},
+  "every": {
+    "behaviour": "resolver",
+    "note": "channel ticks re-enter with cast._channel_tick (peer.mjs)"
+  },
   "text": "Channel: put an element token every action until contact; put it in front of enemy's deck upside-down as stat penalty + defense token over this effect for duration.",
-  "flags": {"scope":"target","statPenalty":["elem_harmony"],"permanent":true,"channel":{"stop":"break"}},
-  "bot": {"tags":["caster","mental"],"names":["battlemage|mind","horror|infect|abomination"]},
-  "ui": {"perm_help":"Combustion (channel) — a Harmony penalty token on the target every action while you keep the channel"},
-  "card": {"name":"Combustion","tags":["instant","penalty","channeling"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Fire flames (torchburning)","wbc3_code":"EZ42","wbc3_race":"Effects1","match_reason":"burning flames on the target","confidence":"high","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex","blend":"additive"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ42.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/Fire.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["instant","permanent","point_buy","channeling"],"element_cost":["elem_harmony"],"text":"Channel: put an element token every action until contact; put it in front of enemy's deck upside-down as stat penalty + defense token over this effect for duration."},"logic":{"description":"Implemented as a channel (general_ux_channeling, 2026-10-29). Each action a Harmony point-buy penalty token lands on the target while the caster keeps the Harmony channel; the card is a temporary permanent with power = smallest die.","prerequisites":[{"id":"action_may_cast","description":"An instant rides on any action (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":true}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"target_in_reach","description":"No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).","when":{"or":[{"==":[{"var":"target"},null]},{"if":[{"var":"cast.aura"},{"rule":["in_view",{"dist":{"var":"dist"},"radius":10}]},{"rule":["in_contact",{"dist":{"var":"dist"}}]}]}]}},{"id":"target_is_enemy","description":"A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.","when":{"or":[{"==":[{"var":"target"},null]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}},{"id":"target_alive","description":"A declared target must still be alive (life > 0); dead units are skipped.","when":{"or":[{"==":[{"var":"target"},null]},{">":[{"var":"target.life"},0]}]}},{"id":"channel_holds","description":"general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.","when":{"!":{"in":[{"var":"caster.action"},["A","B","M","EM"]]}}}],"effects":[{"id":"stat_penalty_tokens","description":"One point-buy per penalty element (elem_harmony) on the caster stat; each die lands as a −die token on the target stat behind that element. Total dice rolled for the penalties.","target":"target","unit":"stat","value":{"sum":[{"map":[["elem_harmony"],{"rule":["point_buy_dice_count",{"stat":{"stat_of":[{"root":"caster"},{"var":""}]}}]}]}]}},{"id":"penalty_token_power","description":"The penalty token value / Rule 24 power is the highest die rolled.","target":"target","unit":"die","value":{"var":"die"}},{"id":"channel_tick","description":"Every subsequent action the channel re-fires its leg (a Harmony penalty token on the target) with the caster's current stats, at no further cost, until broken.","target":"caster","unit":"per_action","value":true},{"id":"channel_permanent_power","description":"The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).","target":"caster","unit":"die","value":{"min_of":[{"var":"cast.dice"}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_harmony"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_instant","description":"effect_types keeps \"instant\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"instant"]}},{"id":"keeps_type_point_buy","description":"effect_types keeps \"point_buy\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"point_buy"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_contact","in_view","is_enemy","point_buy_dice_count"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",1,false]},
-      {"seq":[{"if":[{"!":[{"len":[{"var":"recipients"}]}]},{"seq":[{"put":["status","fizzled"]},{"note":["nobody in reach"]}]}]},{"map":[{"var":"recipients"},{"map":[["elem_harmony"],{"call":["stat_token",{"var":"def"},{"var":"el"},-1,"pen"]},"el"]},"def"]}]},
-      {"call":["land_permanent"]},
-      {"call":["channel_reg","break"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "scope": "target",
+    "statPenalty": [
+      "elem_harmony"
+    ],
+    "permanent": true,
+    "channel": {
+      "stop": "break"
+    }
+  },
+  "bot": {
+    "tags": [
+      "caster",
+      "mental"
+    ],
+    "names": [
+      "battlemage|mind",
+      "horror|infect|abomination"
+    ]
+  },
+  "ui": {
+    "perm_help": "Combustion (channel) — a Harmony penalty token on the target every action while you keep the channel"
+  },
+  "card": {
+    "name": "Combustion",
+    "tags": [
+      "instant",
+      "penalty",
+      "channeling"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Fire flames (torchburning)",
+      "wbc3_code": "EZ42",
+      "wbc3_race": "Effects1",
+      "match_reason": "burning flames on the target",
+      "confidence": "high",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Fire flames (torchburning)/Fire flames (torchburning) - idle [EZ42].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex",
+          "blend": "additive"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ42.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/Fire.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "instant",
+        "permanent",
+        "point_buy",
+        "channeling"
+      ],
+      "element_cost": [
+        "elem_harmony"
+      ],
+      "text": "Channel: put an element token every action until contact; put it in front of enemy's deck upside-down as stat penalty + defense token over this effect for duration."
+    },
+    "logic": {
+      "description": "Implemented as a channel (general_ux_channeling, 2026-10-29). Each action a Harmony point-buy penalty token lands on the target while the caster keeps the Harmony channel; the card is a temporary permanent with power = smallest die.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "An instant rides on any action (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": true
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_in_reach",
+          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "if": [
+                  {
+                    "var": "cast.aura"
+                  },
+                  {
+                    "rule": [
+                      "in_view",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        },
+                        "radius": 10
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_is_enemy",
+          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_alive",
+          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "channel_holds",
+          "description": "general_ux_channeling: the channel stands while the caster neither Attacks, Blocks, Moves, Empty-Moves nor emits an element other than the cost element; any of those breaks it and the permanent falls.",
+          "when": {
+            "!": {
+              "in": [
+                {
+                  "var": "caster.action"
+                },
+                [
+                  "A",
+                  "B",
+                  "M",
+                  "EM"
+                ]
+              ]
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "stat_penalty_tokens",
+          "description": "One point-buy per penalty element (elem_harmony) on the caster stat; each die lands as a −die token on the target stat behind that element. Total dice rolled for the penalties.",
+          "target": "target",
+          "unit": "stat",
+          "value": {
+            "sum": [
+              {
+                "map": [
+                  [
+                    "elem_harmony"
+                  ],
+                  {
+                    "rule": [
+                      "point_buy_dice_count",
+                      {
+                        "stat": {
+                          "stat_of": [
+                            {
+                              "root": "caster"
+                            },
+                            {
+                              "var": ""
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "penalty_token_power",
+          "description": "The penalty token value / Rule 24 power is the highest die rolled.",
+          "target": "target",
+          "unit": "die",
+          "value": {
+            "var": "die"
+          }
+        },
+        {
+          "id": "channel_tick",
+          "description": "Every subsequent action the channel re-fires its leg (a Harmony penalty token on the target) with the caster's current stats, at no further cost, until broken.",
+          "target": "caster",
+          "unit": "per_action",
+          "value": true
+        },
+        {
+          "id": "channel_permanent_power",
+          "description": "The channel permanent stands on the SMALLEST die of its placement roll (Rule 24 threshold).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "min_of": [
+              {
+                "var": "cast.dice"
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_harmony (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_harmony"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_instant",
+          "description": "effect_types keeps \"instant\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "instant"
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_point_buy",
+          "description": "effect_types keeps \"point_buy\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "point_buy"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_contact",
+        "in_view",
+        "is_enemy",
+        "point_buy_dice_count"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          false
+        ]
+      },
+      {
+        "seq": [
+          {
+            "if": [
+              {
+                "!": [
+                  {
+                    "len": [
+                      {
+                        "var": "recipients"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "seq": [
+                  {
+                    "put": [
+                      "status",
+                      "fizzled"
+                    ]
+                  },
+                  {
+                    "note": [
+                      "nobody in reach"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "map": [
+              {
+                "var": "recipients"
+              },
+              {
+                "map": [
+                  [
+                    "elem_harmony"
+                  ],
+                  {
+                    "call": [
+                      "stat_token",
+                      {
+                        "var": "def"
+                      },
+                      {
+                        "var": "el"
+                      },
+                      -1,
+                      "pen"
+                    ]
+                  },
+                  "el"
+                ]
+              },
+              "def"
+            ]
+          }
+        ]
+      },
+      {
+        "call": [
+          "land_permanent"
+        ]
+      },
+      {
+        "call": [
+          "channel_reg",
+          "break"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

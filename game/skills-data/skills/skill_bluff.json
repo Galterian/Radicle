@@ -3,17 +3,487 @@
   "id": "skill_bluff",
   "name": "Bluff / Feint",
   "version": "1.1.0",
-  "source": {"collection":"skills","version":"1.0.0"},
+  "source": {
+    "collection": "skills",
+    "version": "1.0.0"
+  },
   "deal_order": 9,
   "action_type": "M",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "Negate enemy's action and replace it with Empty Posture.",
-  "flags": {"action":"M","permanent":false,"negating":true,"hooks":["negate_action"],"range":1,"negate":{"codes":["A","M","B","P","EM"],"who":"target","mode":"ep"},"passOrder":{"negate_action":1},"buildingSkill":5},
-  "uses": ["skills_std", "skills_pass"],
-  "hooks": {
-    "negate_action": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"M"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"let":[{"o":{"if":[{"bool":[{"var":"t"}]},{"reveal_of":[{"var":"t"}]},{"var":"t"}]}},{"if":[{"and":[{"bool":[{"var":"o"}]},{"<=":[{"dist":[{"var":"actor"},{"var":"t"}]},1]},{"or":[{"trance_has":[{"var":"t"}]},{"!==":[{"eff_action":[{"var":"t"}]},"EP"]}]}]},{"let":[{"what":{"if":[{"trance_has":[{"var":"t"}]},{"join":[{"trance_opts":[{"var":"t"}]},"+"]},{"eff_action":[{"var":"t"}]}]}},{"concat":[[{"obj":{"op":"set_code","id":{"var":"t"},"code":"EP"}},{"obj":{"op":"drop_trance","id":{"var":"t"}}}],{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},{"var":"what"}]}]}]},[]]}]}]}]}
+  "flags": {
+    "action": "M",
+    "permanent": false,
+    "negating": true,
+    "hooks": [
+      "negate_action"
+    ],
+    "range": 1,
+    "negate": {
+      "codes": [
+        "A",
+        "M",
+        "B",
+        "P",
+        "EM"
+      ],
+      "who": "target",
+      "mode": "ep"
+    },
+    "passOrder": {
+      "negate_action": 1
+    },
+    "buildingSkill": 5
   },
-  "ui": {"tag":"Bl","glyph":"🎭","color":"#6ad9ff"},
-  "card": {"name":"Bluff / Feint","tags":["move","counter"],"resources":{"source":"warlords3_battlecry","match_reason":"feint whoosh + soft click; purple spiral for the feint/illusion","confidence":"low","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/swooshrl.wav","usage":"play when the skill resolves (pick randomly if several)"},{"path":"assets/Sounds/SoundFX/ClickSft.wav","usage":"play when the skill resolves (pick randomly if several)"}]},"wbc3_name":"Spell effect: small purple ring/spiral","wbc3_code":"EZ02","wbc3_race":"Effects1"},"data":{"action_type":"M","is_permanent":false,"point_buy_stat":null,"text":"Negate enemy's action and replace it with Empty Posture."},"rebalance_links":["skill_dodge","skill_intimidation"],"logic":{"description":"Instant riding on a Move card (or an empty action) against an enemy in contact. The target's declared action is replaced by Empty Posture (a Battle Trance collapses too); the target then resolves as EP against everyone. Rule 8 pc override: returns to hand when the target was already on EP or the replacement changed nothing.","prerequisites":[{"id":"rides_on_move","description":"The caster's action is Move (or an empty action, which carries Move skills).","when":{"in":[{"var":"caster.action"},["M","EM","EP"]]}},{"id":"enemy_in_contact","description":"The target is an enemy in contact.","when":{"and":[{"rule":["in_contact",{"dist":{"var":"dist"}}]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}}],"effects":[{"id":"target_action_after","description":"The target's action is forced to Empty Posture.","target":"target","unit":"actions","value":"EP"},{"id":"caster_damage_from_target","description":"Combat damage the target can still deal to the caster: the EP row of the matrix (always 0).","target":"caster","unit":"damage","value":{"rule":["rps_edge",{"actor":"EP","defender":{"var":"caster.action"}}]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Move skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["in_contact","is_enemy","rps_edge","rule_8_instant_returns"]}}
+  "uses": [
+    "skills_std",
+    "skills_pass"
+  ],
+  "hooks": {
+    "negate_action": {
+      "if": [
+        {
+          "!": [
+            {
+              "and": [
+                {
+                  "bool": [
+                    {
+                      "len": [
+                        {
+                          "or": [
+                            {
+                              "var": "r.skills"
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "call": [
+                    "ps_rides",
+                    {
+                      "var": "r"
+                    },
+                    "M"
+                  ]
+                },
+                {
+                  "has_skill": [
+                    {
+                      "var": "actor"
+                    },
+                    {
+                      "var": "skill"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        [],
+        {
+          "let": [
+            {
+              "t": {
+                "call": [
+                  "ps_foe_for",
+                  {
+                    "var": "r"
+                  }
+                ]
+              }
+            },
+            {
+              "let": [
+                {
+                  "o": {
+                    "if": [
+                      {
+                        "bool": [
+                          {
+                            "var": "t"
+                          }
+                        ]
+                      },
+                      {
+                        "reveal_of": [
+                          {
+                            "var": "t"
+                          }
+                        ]
+                      },
+                      {
+                        "var": "t"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "if": [
+                    {
+                      "and": [
+                        {
+                          "bool": [
+                            {
+                              "var": "o"
+                            }
+                          ]
+                        },
+                        {
+                          "<=": [
+                            {
+                              "dist": [
+                                {
+                                  "var": "actor"
+                                },
+                                {
+                                  "var": "t"
+                                }
+                              ]
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "or": [
+                            {
+                              "trance_has": [
+                                {
+                                  "var": "t"
+                                }
+                              ]
+                            },
+                            {
+                              "!==": [
+                                {
+                                  "eff_action": [
+                                    {
+                                      "var": "t"
+                                    }
+                                  ]
+                                },
+                                "EP"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "let": [
+                        {
+                          "what": {
+                            "if": [
+                              {
+                                "trance_has": [
+                                  {
+                                    "var": "t"
+                                  }
+                                ]
+                              },
+                              {
+                                "join": [
+                                  {
+                                    "trance_opts": [
+                                      {
+                                        "var": "t"
+                                      }
+                                    ]
+                                  },
+                                  "+"
+                                ]
+                              },
+                              {
+                                "eff_action": [
+                                  {
+                                    "var": "t"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "concat": [
+                            [
+                              {
+                                "obj": {
+                                  "op": "set_code",
+                                  "id": {
+                                    "var": "t"
+                                  },
+                                  "code": "EP"
+                                }
+                              },
+                              {
+                                "obj": {
+                                  "op": "drop_trance",
+                                  "id": {
+                                    "var": "t"
+                                  }
+                                }
+                              }
+                            ],
+                            {
+                              "call": [
+                                "ps_negate",
+                                {
+                                  "var": "actor"
+                                },
+                                {
+                                  "var": "skill"
+                                },
+                                {
+                                  "var": "t"
+                                },
+                                {
+                                  "var": "what"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    []
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "ui": {
+    "tag": "Bl",
+    "glyph": "🎭",
+    "color": "#6ad9ff"
+  },
+  "card": {
+    "name": "Bluff / Feint",
+    "tags": [
+      "move",
+      "counter"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "match_reason": "feint whoosh + soft click; purple spiral for the feint/illusion",
+      "confidence": "low",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect small purple ringspiral/Spell effect small purple ringspiral - idle [EZ02].png",
+          "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/swooshrl.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          },
+          {
+            "path": "assets/Sounds/SoundFX/ClickSft.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          }
+        ]
+      },
+      "wbc3_name": "Spell effect: small purple ring/spiral",
+      "wbc3_code": "EZ02",
+      "wbc3_race": "Effects1"
+    },
+    "data": {
+      "action_type": "M",
+      "is_permanent": false,
+      "point_buy_stat": null,
+      "text": "Negate enemy's action and replace it with Empty Posture."
+    },
+    "rebalance_links": [
+      "skill_dodge",
+      "skill_intimidation"
+    ],
+    "logic": {
+      "description": "Instant riding on a Move card (or an empty action) against an enemy in contact. The target's declared action is replaced by Empty Posture (a Battle Trance collapses too); the target then resolves as EP against everyone. Rule 8 pc override: returns to hand when the target was already on EP or the replacement changed nothing.",
+      "prerequisites": [
+        {
+          "id": "rides_on_move",
+          "description": "The caster's action is Move (or an empty action, which carries Move skills).",
+          "when": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "M",
+                "EM",
+                "EP"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "enemy_in_contact",
+          "description": "The target is an enemy in contact.",
+          "when": {
+            "and": [
+              {
+                "rule": [
+                  "in_contact",
+                  {
+                    "dist": {
+                      "var": "dist"
+                    }
+                  }
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "target_action_after",
+          "description": "The target's action is forced to Empty Posture.",
+          "target": "target",
+          "unit": "actions",
+          "value": "EP"
+        },
+        {
+          "id": "caster_damage_from_target",
+          "description": "Combat damage the target can still deal to the caster: the EP row of the matrix (always 0).",
+          "target": "caster",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rps_edge",
+              {
+                "actor": "EP",
+                "defender": {
+                  "var": "caster.action"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "rule_8_return_to_hand",
+          "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "rule_8_instant_returns",
+              {
+                "took_with": {
+                  "var": "outcome.took_with"
+                },
+                "took_without": {
+                  "var": "outcome.took_without"
+                },
+                "dealt_with": {
+                  "var": "outcome.dealt_with"
+                },
+                "dealt_without": {
+                  "var": "outcome.dealt_without"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "action_type_unchanged",
+          "description": "Stays a Move skill.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.action_type"
+              },
+              {
+                "var": "entry.data.action_type"
+              }
+            ]
+          }
+        },
+        {
+          "id": "is_permanent_unchanged",
+          "description": "Remains an instant.",
+          "assert": {
+            "==": [
+              {
+                "!!": {
+                  "var": "proposal.data.is_permanent"
+                }
+              },
+              {
+                "!!": {
+                  "var": "entry.data.is_permanent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_stat_valid",
+          "description": "point_buy_stat is null, 'any' or one of the four stats.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  [
+                    "any",
+                    "stat_vitality",
+                    "stat_world",
+                    "stat_matter",
+                    "stat_will",
+                    "vitality",
+                    "world",
+                    "matter",
+                    "will"
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "in_contact",
+        "is_enemy",
+        "rps_edge",
+        "rule_8_instant_returns"
+      ]
+    }
+  }
 }

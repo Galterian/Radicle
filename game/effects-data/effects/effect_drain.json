@@ -3,23 +3,438 @@
   "id": "effect_drain",
   "name": "Drain",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_vitality","elem_harmony"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_vitality",
+    "elem_harmony"
+  ],
   "cost": 2,
   "kind": "damage",
   "duration": "instant",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "Channel: draw Vitality and Harmony tokens every action until contact; at each resolution calculate damage. You gain the same calculated points as life tokens. Inverse option: convert the life gain into point-buy damage.",
-  "flags": {"damage":"pointbuy","scope":"target","healDealt":true},
-  "bot": {"tags":["caster"],"names":["horror|infect|abomination","spider|tangle"]},
-  "card": {"name":"Drain","tags":["damage","heal","channeling"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Spell effect red oval blobs","wbc3_code":"EZ17","wbc3_race":"Effects1","match_reason":"red life blobs flowing from target to caster","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect red oval blobs/Spell effect red oval blobs - idle [EZ17].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ17.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/HeartBeatSlow.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["point_buy","channeling"],"element_cost":["elem_vitality","elem_harmony"],"text":"Channel: draw Vitality and Harmony tokens every action until contact; at each resolution calculate damage. You gain the same calculated points as life tokens. Inverse option: convert the life gain into point-buy damage."},"rebalance_links":["effect_turn_life","effect_harm"],"logic":{"description":"Implemented point-buy damage: one die per emission (Vitality, then Harmony→Will), Σ kept dice ÷10 rounded half up to one enemy in contact, and the caster is healed by the damage actually dealt (healDealt, capped at max life). A failed roll re-emits only that element. The paper inverse option is the default pc behaviour (damage + life). Aura / Aura ∀ widen the hit.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"target_in_reach","description":"No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).","when":{"or":[{"==":[{"var":"target"},null]},{"if":[{"var":"cast.aura"},{"rule":["in_view",{"dist":{"var":"dist"},"radius":10}]},{"rule":["in_contact",{"dist":{"var":"dist"}}]}]}]}},{"id":"target_is_enemy","description":"A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.","when":{"or":[{"==":[{"var":"target"},null]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}},{"id":"target_alive","description":"A declared target must still be alive (life > 0); dead units are skipped.","when":{"or":[{"==":[{"var":"target"},null]},{">":[{"var":"target.life"},0]}]}}],"effects":[{"id":"point_buy_dice","description":"Rule 20: one point-buy per emission on the caster stat behind the element going out; this is the total number of d6 the whole cast rolls (6·n nearest the stat, ties to more dice).","target":"caster","unit":"die","value":{"sum":[{"map":[{"var":"elements"},{"rule":["point_buy_dice_count",{"stat":{"stat_of":[{"root":"caster"},{"var":""}]}}]}]}]}},{"id":"point_buy_damage","description":"Σ of the kept dice (one per element, the highest die of each successful roll) ÷10, rounded half up; a failed roll re-emits only that element (cast status retry).","target":"target","unit":"damage","value":{"round_div10":[{"sum":[{"var":"cast.kept"}]}]}},{"id":"heal_dealt","description":"Life the caster regains: equal to the damage dealt.","target":"caster","unit":"life","value":{"round_div10":[{"sum":[{"var":"cast.kept"}]}]}}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_vitality"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_channeling","description":"effect_types keeps \"channeling\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"channeling"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_contact","in_view","is_enemy","point_buy_dice_count"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["pointbuy_bank"]},
-      {"call":["targets","target",1,true]},
-      {"call":["require_recipients"]},
-      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_kept",{"var":"def"}]}}}],true,false]},"def"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "pointbuy",
+    "scope": "target",
+    "healDealt": true
+  },
+  "bot": {
+    "tags": [
+      "caster"
+    ],
+    "names": [
+      "horror|infect|abomination",
+      "spider|tangle"
+    ]
+  },
+  "card": {
+    "name": "Drain",
+    "tags": [
+      "damage",
+      "heal",
+      "channeling"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Spell effect red oval blobs",
+      "wbc3_code": "EZ17",
+      "wbc3_race": "Effects1",
+      "match_reason": "red life blobs flowing from target to caster",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect red oval blobs/Spell effect red oval blobs - idle [EZ17].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ17.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/HeartBeatSlow.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "point_buy",
+        "channeling"
+      ],
+      "element_cost": [
+        "elem_vitality",
+        "elem_harmony"
+      ],
+      "text": "Channel: draw Vitality and Harmony tokens every action until contact; at each resolution calculate damage. You gain the same calculated points as life tokens. Inverse option: convert the life gain into point-buy damage."
+    },
+    "rebalance_links": [
+      "effect_turn_life",
+      "effect_harm"
+    ],
+    "logic": {
+      "description": "Implemented point-buy damage: one die per emission (Vitality, then Harmony→Will), Σ kept dice ÷10 rounded half up to one enemy in contact, and the caster is healed by the damage actually dealt (healDealt, capped at max life). A failed roll re-emits only that element. The paper inverse option is the default pc behaviour (damage + life). Aura / Aura ∀ widen the hit.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_in_reach",
+          "description": "No declared target (the engine picks the enemy the cast hurts most within 1) or the right-clicked target is within 1 hex; through an Aura ∀ the reach is the whole view (10).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "if": [
+                  {
+                    "var": "cast.aura"
+                  },
+                  {
+                    "rule": [
+                      "in_view",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        },
+                        "radius": 10
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "in_contact",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_is_enemy",
+          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_alive",
+          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "point_buy_dice",
+          "description": "Rule 20: one point-buy per emission on the caster stat behind the element going out; this is the total number of d6 the whole cast rolls (6·n nearest the stat, ties to more dice).",
+          "target": "caster",
+          "unit": "die",
+          "value": {
+            "sum": [
+              {
+                "map": [
+                  {
+                    "var": "elements"
+                  },
+                  {
+                    "rule": [
+                      "point_buy_dice_count",
+                      {
+                        "stat": {
+                          "stat_of": [
+                            {
+                              "root": "caster"
+                            },
+                            {
+                              "var": ""
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_damage",
+          "description": "Σ of the kept dice (one per element, the highest die of each successful roll) ÷10, rounded half up; a failed roll re-emits only that element (cast status retry).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "round_div10": [
+              {
+                "sum": [
+                  {
+                    "var": "cast.kept"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "heal_dealt",
+          "description": "Life the caster regains: equal to the damage dealt.",
+          "target": "caster",
+          "unit": "life",
+          "value": {
+            "round_div10": [
+              {
+                "sum": [
+                  {
+                    "var": "cast.kept"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_vitality (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_vitality"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_channeling",
+          "description": "effect_types keeps \"channeling\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "channeling"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_contact",
+        "in_view",
+        "is_enemy",
+        "point_buy_dice_count"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "pointbuy_bank"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          1,
+          true
+        ]
+      },
+      {
+        "call": [
+          "require_recipients"
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "call": [
+              "hit_with",
+              {
+                "var": "def"
+              },
+              [
+                {
+                  "obj": {
+                    "kind": "main",
+                    "sum": {
+                      "call": [
+                        "main_kept",
+                        {
+                          "var": "def"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              true,
+              false
+            ]
+          },
+          "def"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }

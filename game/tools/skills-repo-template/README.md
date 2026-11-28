@@ -2,11 +2,18 @@
 
 The skills of chaosD6, defined as data (JsonLogic hooks). One skill per file:
 
+**This repo is the source of truth** (since 2026-11-28). Edit the skills, libraries, oracles and docs here.
+chaosD6 builds its game copy `game/skills-data/` from this repo (`node game/tools/defs-build.mjs skills`) and
+pins the commit in `game/defs-pins.json`; never edit that copy — `defs-build.mjs --check` fails on it.
+`tools/engine/` and `tools/validator/` stay copies OF the game (written by `game/tools/skills-repo-sync.mjs`).
+Publish with `bash game/tools/oci/defs-publish.sh skills` (a delegate, with the Radicle key in the agent).
+
 ```
 skills/<id>.json       one skill definition; "id" inside == file name
 lib/<id>.json          shared sub-routine libraries a skill lists in "uses"
-SCHEMA.md              the definition format (mirrored from chaosD6 game/skills-data/SCHEMA.md)
-HOOKS.md               the resolver hook points a skill can attach to (game/skills-data/HOOKS.md)
+SCHEMA.md              the definition format
+HOOKS.md               the resolver hook points a skill can attach to
+HANDSHAKE.md           how peers agree on the skill set and fetch a foreign skill
 oracle/                JS TEST ORACLES: the reference hooks of the built-ins (skills-js.mjs) the definitions are
                        checked against (chaosD6 tools/skills-check.mjs, skill-engine-check.mjs); the game never runs them
 index.json             manifest: id -> sha256 of the canonical JSON, for skills and lib

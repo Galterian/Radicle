@@ -3,17 +3,566 @@
   "id": "skill_disruption_move",
   "name": "Disruption",
   "version": "1.2.0",
-  "source": {"collection":"skills","version":"1.1.0"},
+  "source": {
+    "collection": "skills",
+    "version": "1.1.0"
+  },
   "deal_order": 11,
   "action_type": "M",
   "is_permanent": false,
   "point_buy_stat": null,
   "text": "The enemy cannot use Posture; any Empty Posture is always played as Empty Move (enemy cannot emit non-instant effects): their Posture or Empty Posture becomes an Empty Move that goes nowhere and emits nothing — a cast in progress is interrupted.",
-  "flags": {"action":"M","permanent":false,"negating":true,"hooks":["negate_kind"],"negates":["P","EP"],"negate":{"codes":["P"],"who":"target","mode":"em"},"voidEmission":true,"passOrder":{"negate_kind":2},"buildingSkill":4},
-  "uses": ["skills_std", "skills_pass"],
-  "hooks": {
-    "negate_kind": {"if":[{"!":[{"and":[{"bool":[{"len":[{"or":[{"var":"r.skills"},[]]}]}]},{"call":["ps_rides",{"var":"r"},"M"]},{"has_skill":[{"var":"actor"},{"var":"skill"}]}]}]},[],{"let":[{"t":{"call":["ps_foe_for",{"var":"r"}]}},{"if":[{"and":[{"bool":[{"var":"t"}]},{"enemy_of":[{"var":"actor"},{"var":"t"}]},{"or":[{"code_is":[{"var":"t"},"P"]},{"code_is":[{"var":"t"},"EP"]}]}]},{"let":[{"o":{"reveal_of":[{"var":"t"}]},"wasP":{"code_is":[{"var":"t"},"P"]}},{"let":[{"voids":{"and":[{"has_register":["noEmit"]},{"bool":[{"var":"o.effect"}]},{"!":[{"bool":[{"var":"o.effect.is_instant"}]}]}]}},{"concat":[[{"obj":{"op":"replace","id":{"var":"t"},"from":"P","to":"EM"}},{"obj":{"op":"replace","id":{"var":"t"},"from":"EP","to":"EM"}}],{"if":[{"trance_has":[{"var":"t"}]},[],[{"obj":{"op":"no_move","id":{"var":"t"}}}]]},{"if":[{"var":"voids"},[{"obj":{"op":"no_emit","id":{"var":"t"}}}],[]]},{"if":[{"var":"wasP"},{"call":["ps_negate",{"var":"actor"},{"var":"skill"},{"var":"t"},"P"]},{"var":"voids"},[{"obj":{"op":"fx","fx":{"obj":{"by":{"var":"actor"},"skill":{"var":"skill"},"on":{"var":"t"},"what":"EP","building":{"from_building":[{"var":"actor"},{"var":"skill"}]}}}}}],[]]}]}]}]},[]]}]}]}
+  "flags": {
+    "action": "M",
+    "permanent": false,
+    "negating": true,
+    "hooks": [
+      "negate_kind"
+    ],
+    "negates": [
+      "P",
+      "EP"
+    ],
+    "negate": {
+      "codes": [
+        "P"
+      ],
+      "who": "target",
+      "mode": "em"
+    },
+    "voidEmission": true,
+    "passOrder": {
+      "negate_kind": 2
+    },
+    "buildingSkill": 4
   },
-  "ui": {"tag":"Di","glyph":"🌪","color":"#6ad9ff"},
-  "card": {"name":"Disruption","tags":["move","lock"],"resources":{"source":"warlords3_battlecry","match_reason":"quick dash sound; sweeping arcs for the disruptive dash","confidence":"low","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png","usage":"marker/animation strip shown on the skill target hex (cols = frames)"}},"sounds":{"fx":[{"path":"assets/Sounds/SoundFX/ShortWhoosh.wav","usage":"play when the skill resolves (pick randomly if several)"}]},"wbc3_name":"Grey arc sweeps","wbc3_code":"EZ66","wbc3_race":"Effects1"},"data":{"action_type":"M","is_permanent":false,"point_buy_stat":null,"text":"The enemy cannot use Posture; any Empty Posture is always played as Empty Move (enemy cannot emit non-instant effects): their Posture or Empty Posture becomes an Empty Move that goes nowhere and emits nothing — a cast in progress is interrupted."},"rebalance_links":["skill_ranged_weapon"],"logic":{"description":"Instant riding on a Move card (also Empty Move / Empty Posture per the pc implementation) against an enemy target. Paper text implemented (user ruling 2026-11-16): the enemy cannot use Posture — a declared Posture is negated (card and riding instants back to their hand) — and any Empty Posture is always played as Empty Move: either way the target plays an Empty Move that goes nowhere and emits nothing, so a non-instant effect it was emitting is voided and a cast in progress is interrupted (Rule 19); instants still go out. Judged by whether it did its job (negated a Posture or stopped an emission); otherwise it returns to hand.","prerequisites":[{"id":"rides_on_move","description":"The caster's action is Move (or an empty action, which carries Move skills).","when":{"in":[{"var":"caster.action"},["M","EM","EP"]]}},{"id":"enemy_target","description":"The target is an enemy unit.","when":{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}}],"effects":[{"id":"target_action_after","description":"Posture and Empty Posture become Empty Move; anything else unchanged.","target":"target","unit":"actions","value":{"if":[{"in":[{"var":"target.action"},["P","EP"]]},"EM",{"var":"target.action"}]}},{"id":"target_may_cast_non_instant","description":"Whether the target may still emit a non-instant effect after the disruption (an Empty Move emits nothing).","target":"target","unit":"actions","value":{"rule":["action_can_cast_non_instant",{"action":{"if":[{"in":[{"var":"target.action"},["P","EP"]]},"EM",{"var":"target.action"}]}}]}},{"id":"rule_8_return_to_hand","description":"Rule 8 pc override: the card returns to hand when the round gave no benefit.","target":"caster","unit":"cards","value":{"rule":["rule_8_instant_returns",{"took_with":{"var":"outcome.took_with"},"took_without":{"var":"outcome.took_without"},"dealt_with":{"var":"outcome.dealt_with"},"dealt_without":{"var":"outcome.dealt_without"}}]}}],"validation":[{"id":"action_type_unchanged","description":"Stays a Move skill.","assert":{"==":[{"var":"proposal.data.action_type"},{"var":"entry.data.action_type"}]}},{"id":"is_permanent_unchanged","description":"Remains an instant.","assert":{"==":[{"!!":{"var":"proposal.data.is_permanent"}},{"!!":{"var":"entry.data.is_permanent"}}]}},{"id":"point_buy_stat_valid","description":"point_buy_stat is null, 'any' or one of the four stats.","assert":{"or":[{"==":[{"var":"proposal.data.point_buy_stat"},null]},{"in":[{"var":"proposal.data.point_buy_stat"},["any","stat_vitality","stat_world","stat_matter","stat_will","vitality","world","matter","will"]]}]}}],"references":["action_can_cast_non_instant","is_enemy","rule_8_instant_returns"]}}
+  "uses": [
+    "skills_std",
+    "skills_pass"
+  ],
+  "hooks": {
+    "negate_kind": {
+      "if": [
+        {
+          "!": [
+            {
+              "and": [
+                {
+                  "bool": [
+                    {
+                      "len": [
+                        {
+                          "or": [
+                            {
+                              "var": "r.skills"
+                            },
+                            []
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "call": [
+                    "ps_rides",
+                    {
+                      "var": "r"
+                    },
+                    "M"
+                  ]
+                },
+                {
+                  "has_skill": [
+                    {
+                      "var": "actor"
+                    },
+                    {
+                      "var": "skill"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        [],
+        {
+          "let": [
+            {
+              "t": {
+                "call": [
+                  "ps_foe_for",
+                  {
+                    "var": "r"
+                  }
+                ]
+              }
+            },
+            {
+              "if": [
+                {
+                  "and": [
+                    {
+                      "bool": [
+                        {
+                          "var": "t"
+                        }
+                      ]
+                    },
+                    {
+                      "enemy_of": [
+                        {
+                          "var": "actor"
+                        },
+                        {
+                          "var": "t"
+                        }
+                      ]
+                    },
+                    {
+                      "or": [
+                        {
+                          "code_is": [
+                            {
+                              "var": "t"
+                            },
+                            "P"
+                          ]
+                        },
+                        {
+                          "code_is": [
+                            {
+                              "var": "t"
+                            },
+                            "EP"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "let": [
+                    {
+                      "o": {
+                        "reveal_of": [
+                          {
+                            "var": "t"
+                          }
+                        ]
+                      },
+                      "wasP": {
+                        "code_is": [
+                          {
+                            "var": "t"
+                          },
+                          "P"
+                        ]
+                      }
+                    },
+                    {
+                      "let": [
+                        {
+                          "voids": {
+                            "and": [
+                              {
+                                "has_register": [
+                                  "noEmit"
+                                ]
+                              },
+                              {
+                                "bool": [
+                                  {
+                                    "var": "o.effect"
+                                  }
+                                ]
+                              },
+                              {
+                                "!": [
+                                  {
+                                    "bool": [
+                                      {
+                                        "var": "o.effect.is_instant"
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "concat": [
+                            [
+                              {
+                                "obj": {
+                                  "op": "replace",
+                                  "id": {
+                                    "var": "t"
+                                  },
+                                  "from": "P",
+                                  "to": "EM"
+                                }
+                              },
+                              {
+                                "obj": {
+                                  "op": "replace",
+                                  "id": {
+                                    "var": "t"
+                                  },
+                                  "from": "EP",
+                                  "to": "EM"
+                                }
+                              }
+                            ],
+                            {
+                              "if": [
+                                {
+                                  "trance_has": [
+                                    {
+                                      "var": "t"
+                                    }
+                                  ]
+                                },
+                                [],
+                                [
+                                  {
+                                    "obj": {
+                                      "op": "no_move",
+                                      "id": {
+                                        "var": "t"
+                                      }
+                                    }
+                                  }
+                                ]
+                              ]
+                            },
+                            {
+                              "if": [
+                                {
+                                  "var": "voids"
+                                },
+                                [
+                                  {
+                                    "obj": {
+                                      "op": "no_emit",
+                                      "id": {
+                                        "var": "t"
+                                      }
+                                    }
+                                  }
+                                ],
+                                []
+                              ]
+                            },
+                            {
+                              "if": [
+                                {
+                                  "var": "wasP"
+                                },
+                                {
+                                  "call": [
+                                    "ps_negate",
+                                    {
+                                      "var": "actor"
+                                    },
+                                    {
+                                      "var": "skill"
+                                    },
+                                    {
+                                      "var": "t"
+                                    },
+                                    "P"
+                                  ]
+                                },
+                                {
+                                  "var": "voids"
+                                },
+                                [
+                                  {
+                                    "obj": {
+                                      "op": "fx",
+                                      "fx": {
+                                        "obj": {
+                                          "by": {
+                                            "var": "actor"
+                                          },
+                                          "skill": {
+                                            "var": "skill"
+                                          },
+                                          "on": {
+                                            "var": "t"
+                                          },
+                                          "what": "EP",
+                                          "building": {
+                                            "from_building": [
+                                              {
+                                                "var": "actor"
+                                              },
+                                              {
+                                                "var": "skill"
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ],
+                                []
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                []
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "ui": {
+    "tag": "Di",
+    "glyph": "🌪",
+    "color": "#6ad9ff"
+  },
+  "card": {
+    "name": "Disruption",
+    "tags": [
+      "move",
+      "lock"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "match_reason": "quick dash sound; sweeping arcs for the disruptive dash",
+      "confidence": "low",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Grey arc sweeps/Grey arc sweeps - idle [EZ66].png",
+          "usage": "marker/animation strip shown on the skill target hex (cols = frames)"
+        }
+      },
+      "sounds": {
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/ShortWhoosh.wav",
+            "usage": "play when the skill resolves (pick randomly if several)"
+          }
+        ]
+      },
+      "wbc3_name": "Grey arc sweeps",
+      "wbc3_code": "EZ66",
+      "wbc3_race": "Effects1"
+    },
+    "data": {
+      "action_type": "M",
+      "is_permanent": false,
+      "point_buy_stat": null,
+      "text": "The enemy cannot use Posture; any Empty Posture is always played as Empty Move (enemy cannot emit non-instant effects): their Posture or Empty Posture becomes an Empty Move that goes nowhere and emits nothing — a cast in progress is interrupted."
+    },
+    "rebalance_links": [
+      "skill_ranged_weapon"
+    ],
+    "logic": {
+      "description": "Instant riding on a Move card (also Empty Move / Empty Posture per the pc implementation) against an enemy target. Paper text implemented (user ruling 2026-11-16): the enemy cannot use Posture — a declared Posture is negated (card and riding instants back to their hand) — and any Empty Posture is always played as Empty Move: either way the target plays an Empty Move that goes nowhere and emits nothing, so a non-instant effect it was emitting is voided and a cast in progress is interrupted (Rule 19); instants still go out. Judged by whether it did its job (negated a Posture or stopped an emission); otherwise it returns to hand.",
+      "prerequisites": [
+        {
+          "id": "rides_on_move",
+          "description": "The caster's action is Move (or an empty action, which carries Move skills).",
+          "when": {
+            "in": [
+              {
+                "var": "caster.action"
+              },
+              [
+                "M",
+                "EM",
+                "EP"
+              ]
+            ]
+          }
+        },
+        {
+          "id": "enemy_target",
+          "description": "The target is an enemy unit.",
+          "when": {
+            "rule": [
+              "is_enemy",
+              {
+                "a_alliance": {
+                  "var": "caster.alliance"
+                },
+                "b_alliance": {
+                  "var": "target.alliance"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "target_action_after",
+          "description": "Posture and Empty Posture become Empty Move; anything else unchanged.",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "if": [
+              {
+                "in": [
+                  {
+                    "var": "target.action"
+                  },
+                  [
+                    "P",
+                    "EP"
+                  ]
+                ]
+              },
+              "EM",
+              {
+                "var": "target.action"
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_may_cast_non_instant",
+          "description": "Whether the target may still emit a non-instant effect after the disruption (an Empty Move emits nothing).",
+          "target": "target",
+          "unit": "actions",
+          "value": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "if": [
+                    {
+                      "in": [
+                        {
+                          "var": "target.action"
+                        },
+                        [
+                          "P",
+                          "EP"
+                        ]
+                      ]
+                    },
+                    "EM",
+                    {
+                      "var": "target.action"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "rule_8_return_to_hand",
+          "description": "Rule 8 pc override: the card returns to hand when the round gave no benefit.",
+          "target": "caster",
+          "unit": "cards",
+          "value": {
+            "rule": [
+              "rule_8_instant_returns",
+              {
+                "took_with": {
+                  "var": "outcome.took_with"
+                },
+                "took_without": {
+                  "var": "outcome.took_without"
+                },
+                "dealt_with": {
+                  "var": "outcome.dealt_with"
+                },
+                "dealt_without": {
+                  "var": "outcome.dealt_without"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "validation": [
+        {
+          "id": "action_type_unchanged",
+          "description": "Stays a Move skill.",
+          "assert": {
+            "==": [
+              {
+                "var": "proposal.data.action_type"
+              },
+              {
+                "var": "entry.data.action_type"
+              }
+            ]
+          }
+        },
+        {
+          "id": "is_permanent_unchanged",
+          "description": "Remains an instant.",
+          "assert": {
+            "==": [
+              {
+                "!!": {
+                  "var": "proposal.data.is_permanent"
+                }
+              },
+              {
+                "!!": {
+                  "var": "entry.data.is_permanent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "point_buy_stat_valid",
+          "description": "point_buy_stat is null, 'any' or one of the four stats.",
+          "assert": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  null
+                ]
+              },
+              {
+                "in": [
+                  {
+                    "var": "proposal.data.point_buy_stat"
+                  },
+                  [
+                    "any",
+                    "stat_vitality",
+                    "stat_world",
+                    "stat_matter",
+                    "stat_will",
+                    "vitality",
+                    "world",
+                    "matter",
+                    "will"
+                  ]
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "is_enemy",
+        "rule_8_instant_returns"
+      ]
+    }
+  }
 }

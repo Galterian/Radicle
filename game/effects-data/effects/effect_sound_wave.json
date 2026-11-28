@@ -3,22 +3,389 @@
   "id": "effect_sound_wave",
   "name": "Sound wave",
   "version": "1.2.0",
-  "source": {"collection":"effects","version":"1.0.0"},
-  "elements": ["elem_vitality","elem_air","elem_space"],
+  "source": {
+    "collection": "effects",
+    "version": "1.0.0"
+  },
+  "elements": [
+    "elem_vitality",
+    "elem_air",
+    "elem_space"
+  ],
   "cost": 3,
   "kind": "damage",
   "duration": "instant",
-  "every": {"behaviour":"none"},
+  "every": {
+    "behaviour": "none"
+  },
   "text": "Damage from a distance. Deal damage with sound at some place.",
-  "flags": {"damage":"delta","scope":"target","range":2},
-  "bot": {"tags":["flyer"]},
-  "card": {"name":"Sound wave","tags":["damage","range"],"resources":{"source":"warlords3_battlecry","wbc3_name":"Spell effect white rings","wbc3_code":"EZ04","wbc3_race":"Effects1","match_reason":"expanding rings read as a sound wave","confidence":"medium","sprites":{"effect":{"path":"assets/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png","usage":"effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"}},"sounds":{"spell":[{"path":"assets/Sounds/SoundFX/STEZ04.wav","usage":"WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"}],"fx":[{"path":"assets/Sounds/SoundFX/LongWhoosh.wav","usage":"sound effect on resolution / impact of the effect"}]}},"data":{"effect_types":["damage"],"element_cost":["elem_vitality","elem_air","elem_space"],"text":"Damage from a distance. Deal damage with sound at some place."},"rebalance_links":["effect_meteor_shower"],"logic":{"description":"Implemented. Delta damage (Rule 21) to one enemy within 2 hexes (ranged: the only target-scope effect with range 2). Right-clicked enemy within 2, else the enemy hurt most within 2; Aura widens to all enemies within 2, Aura ∀ to enemies within 10. ∀ double cast has no extra bonus.","prerequisites":[{"id":"action_may_cast","description":"Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).","when":{"rule":["action_can_cast_non_instant",{"action":{"var":"caster.action"},"is_instant":false}]}},{"id":"elements_not_disabled","description":"No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).","when":{"rule":["elements_not_disabled",{"elements":{"root":"elements"},"disabled":{"root":"caster.disabled_elems"}}]}},{"id":"target_in_reach","description":"No declared target (the engine picks the enemy the cast hurts most within 2) or the right-clicked target is within 2 hexes; through an Aura ∀ the reach is the whole view (10).","when":{"or":[{"==":[{"var":"target"},null]},{"if":[{"var":"cast.aura"},{"rule":["in_view",{"dist":{"var":"dist"},"radius":10}]},{"rule":["in_view",{"dist":{"var":"dist"},"radius":2}]}]}]}},{"id":"target_is_enemy","description":"A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.","when":{"or":[{"==":[{"var":"target"},null]},{"rule":["is_enemy",{"a_alliance":{"var":"caster.alliance"},"b_alliance":{"var":"target.alliance"}}]}]}},{"id":"target_alive","description":"A declared target must still be alive (life > 0); dead units are skipped.","when":{"or":[{"==":[{"var":"target"},null]},{">":[{"var":"target.life"},0]}]}}],"effects":[{"id":"delta_damage","description":"Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).","target":"target","unit":"damage","value":{"rule":["rule_21_delta_damage",{"caster":{"root":"caster"},"defender":{"root":"defender"},"elements":{"root":"elements"}}]}},{"id":"reach","description":"Hex reach of the cast (the \"from a distance\" of the paper).","target":"target","unit":"hexes","value":2}],"validation":[{"id":"cost_keeps_key_element","description":"element_cost stays non-empty and still carries elem_air (the element family that defines the effect).","assert":{"and":[{">=":[{"count":[{"var":"proposal.data.element_cost"}]},1]},{"includes":[{"var":"proposal.data.element_cost"},"elem_air"]}]}},{"id":"cost_count_within_one","description":"The number of elements stays within ±1 of the canonical cost.","assert":{"<=":[{"abs":[{"-":[{"count":[{"var":"proposal.data.element_cost"}]},{"count":[{"var":"entry.data.element_cost"}]}]}]},1]}},{"id":"keeps_type_damage","description":"effect_types keeps \"damage\".","assert":{"includes":[{"var":"proposal.data.effect_types"},"damage"]}}],"references":["action_can_cast_non_instant","elements_not_disabled","in_view","is_enemy","rule_21_delta_damage"]}},
-  "uses": ["std","e2a"],
-  "logic": {"seq": [
-      {"call":["prelude"]},
-      {"call":["targets","target",2,true]},
-      {"call":["require_recipients"]},
-      {"map":[{"var":"recipients"},{"call":["hit_with",{"var":"def"},[{"obj":{"kind":"main","sum":{"call":["main_delta",{"var":"def"}]}}}],false,false]},"def"]},
-      {"call":["finish"]}
-    ]}
+  "flags": {
+    "damage": "delta",
+    "scope": "target",
+    "range": 2
+  },
+  "bot": {
+    "tags": [
+      "flyer"
+    ]
+  },
+  "card": {
+    "name": "Sound wave",
+    "tags": [
+      "damage",
+      "range"
+    ],
+    "resources": {
+      "source": "warlords3_battlecry",
+      "wbc3_name": "Spell effect white rings",
+      "wbc3_code": "EZ04",
+      "wbc3_race": "Effects1",
+      "match_reason": "expanding rings read as a sound wave",
+      "confidence": "medium",
+      "sprites": {
+        "effect": {
+          "path": "assets/Sprites/Effects/Effects1/Spell effect white rings/Spell effect white rings - idle [EZ04].png",
+          "usage": "effect animation strip (cols = frames; grid in assets/frames.json), play once at the target hex"
+        }
+      },
+      "sounds": {
+        "spell": [
+          {
+            "path": "assets/Sounds/SoundFX/STEZ04.wav",
+            "usage": "WBC3 spell-cast sound paired with the EZ effect; play when the effect is cast"
+          }
+        ],
+        "fx": [
+          {
+            "path": "assets/Sounds/SoundFX/LongWhoosh.wav",
+            "usage": "sound effect on resolution / impact of the effect"
+          }
+        ]
+      }
+    },
+    "data": {
+      "effect_types": [
+        "damage"
+      ],
+      "element_cost": [
+        "elem_vitality",
+        "elem_air",
+        "elem_space"
+      ],
+      "text": "Damage from a distance. Deal damage with sound at some place."
+    },
+    "rebalance_links": [
+      "effect_meteor_shower"
+    ],
+    "logic": {
+      "description": "Implemented. Delta damage (Rule 21) to one enemy within 2 hexes (ranged: the only target-scope effect with range 2). Right-clicked enemy within 2, else the enemy hurt most within 2; Aura widens to all enemies within 2, Aura ∀ to enemies within 10. ∀ double cast has no extra bonus.",
+      "prerequisites": [
+        {
+          "id": "action_may_cast",
+          "description": "Only Posture / Empty Posture emit the elements of a non-instant cast (Rule 20).",
+          "when": {
+            "rule": [
+              "action_can_cast_non_instant",
+              {
+                "action": {
+                  "var": "caster.action"
+                },
+                "is_instant": false
+              }
+            ]
+          }
+        },
+        {
+          "id": "elements_not_disabled",
+          "description": "No element of the cast is barred for the caster by a fired Disable (Rule 20 pc override).",
+          "when": {
+            "rule": [
+              "elements_not_disabled",
+              {
+                "elements": {
+                  "root": "elements"
+                },
+                "disabled": {
+                  "root": "caster.disabled_elems"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_in_reach",
+          "description": "No declared target (the engine picks the enemy the cast hurts most within 2) or the right-clicked target is within 2 hexes; through an Aura ∀ the reach is the whole view (10).",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "if": [
+                  {
+                    "var": "cast.aura"
+                  },
+                  {
+                    "rule": [
+                      "in_view",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        },
+                        "radius": 10
+                      }
+                    ]
+                  },
+                  {
+                    "rule": [
+                      "in_view",
+                      {
+                        "dist": {
+                          "var": "dist"
+                        },
+                        "radius": 2
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_is_enemy",
+          "description": "A declared target must be an enemy (exactly one side is npc_b); without one the engine aims at an enemy itself.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                "rule": [
+                  "is_enemy",
+                  {
+                    "a_alliance": {
+                      "var": "caster.alliance"
+                    },
+                    "b_alliance": {
+                      "var": "target.alliance"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "target_alive",
+          "description": "A declared target must still be alive (life > 0); dead units are skipped.",
+          "when": {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "target"
+                  },
+                  null
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "target.life"
+                  },
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "id": "delta_damage",
+          "description": "Rule 21 (pc): Σ over the cast elements of max(caster stat − defender stat, 0), ÷10, rounded half up; a Force Shield die is subtracted from the Σ before rounding (peer side).",
+          "target": "target",
+          "unit": "damage",
+          "value": {
+            "rule": [
+              "rule_21_delta_damage",
+              {
+                "caster": {
+                  "root": "caster"
+                },
+                "defender": {
+                  "root": "defender"
+                },
+                "elements": {
+                  "root": "elements"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "reach",
+          "description": "Hex reach of the cast (the \"from a distance\" of the paper).",
+          "target": "target",
+          "unit": "hexes",
+          "value": 2
+        }
+      ],
+      "validation": [
+        {
+          "id": "cost_keeps_key_element",
+          "description": "element_cost stays non-empty and still carries elem_air (the element family that defines the effect).",
+          "assert": {
+            "and": [
+              {
+                ">=": [
+                  {
+                    "count": [
+                      {
+                        "var": "proposal.data.element_cost"
+                      }
+                    ]
+                  },
+                  1
+                ]
+              },
+              {
+                "includes": [
+                  {
+                    "var": "proposal.data.element_cost"
+                  },
+                  "elem_air"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cost_count_within_one",
+          "description": "The number of elements stays within ±1 of the canonical cost.",
+          "assert": {
+            "<=": [
+              {
+                "abs": [
+                  {
+                    "-": [
+                      {
+                        "count": [
+                          {
+                            "var": "proposal.data.element_cost"
+                          }
+                        ]
+                      },
+                      {
+                        "count": [
+                          {
+                            "var": "entry.data.element_cost"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              1
+            ]
+          }
+        },
+        {
+          "id": "keeps_type_damage",
+          "description": "effect_types keeps \"damage\".",
+          "assert": {
+            "includes": [
+              {
+                "var": "proposal.data.effect_types"
+              },
+              "damage"
+            ]
+          }
+        }
+      ],
+      "references": [
+        "action_can_cast_non_instant",
+        "elements_not_disabled",
+        "in_view",
+        "is_enemy",
+        "rule_21_delta_damage"
+      ]
+    }
+  },
+  "uses": [
+    "std",
+    "e2a"
+  ],
+  "logic": {
+    "seq": [
+      {
+        "call": [
+          "prelude"
+        ]
+      },
+      {
+        "call": [
+          "targets",
+          "target",
+          2,
+          true
+        ]
+      },
+      {
+        "call": [
+          "require_recipients"
+        ]
+      },
+      {
+        "map": [
+          {
+            "var": "recipients"
+          },
+          {
+            "call": [
+              "hit_with",
+              {
+                "var": "def"
+              },
+              [
+                {
+                  "obj": {
+                    "kind": "main",
+                    "sum": {
+                      "call": [
+                        "main_delta",
+                        {
+                          "var": "def"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              false,
+              false
+            ]
+          },
+          "def"
+        ]
+      },
+      {
+        "call": [
+          "finish"
+        ]
+      }
+    ]
+  }
 }
